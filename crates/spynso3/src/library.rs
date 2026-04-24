@@ -9,6 +9,7 @@ use pyo3_stub_gen::{
     derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
 };
 
+use spenso::network::library::Library;
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
 use spenso::network::parsing::{SPENSO_TAG, ShadowedStructure};
 use spenso::tensors::complex::RealOrComplexTensor;
@@ -247,6 +248,45 @@ impl SpensorLibrary {
         Ok(())
     }
 
+    /// Return whether the library has at least one explicitly registered tensor with this name.
+    pub fn contains(&self, key: ConvertibleToSymbol) -> eyre::Result<bool> {
+        Ok(self.library.contains_explicit_name(key.symbol()?))
+    }
+
+    /// Python containment hook for `name in lib`.
+    pub fn __contains__(&self, key: ConvertibleToSymbol) -> eyre::Result<bool> {
+        self.contains(key)
+    }
+
+    /// Return the names of explicitly registered tensors.
+    pub fn names(&self) -> Vec<String> {
+        let mut names: Vec<_> = self
+            .library
+            .explicit_names()
+            .into_iter()
+            .map(|name| name.to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Retrieve a registered tensor by name.
+    ///
+    /// This returns the stored tensor data, unlike `__getitem__`, which only returns
+    /// the registered tensor structure.
+    pub fn get_tensor(&self, key: ConvertibleToSymbol) -> eyre::Result<LibrarySpensor> {
+        let symbol = key.symbol()?;
+        let key = self.library.get_key_from_name(symbol)?;
+        let tensor = <TensorLibrary<
+            MixedTensor<f64, ExplicitKey<AbstractIndex>>,
+            AbstractIndex,
+        > as Library<ExplicitKey<AbstractIndex>>>::get(&self.library, &key)?;
+
+        Ok(LibrarySpensor {
+            tensor: tensor.into_owned(),
+        })
+    }
+
     /// Retrieve a registered tensor structure by name.
     ///
     /// Looks up a previously registered tensor by its name and returns
@@ -346,3 +386,63 @@ pub enum TensorNamespace {
 
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tensor_is_sparse;
+    use spenso::{
+        network::library::symbolic::ExplicitKey,
+        structure::{HasName, ScalarStructure, abstract_index::AbstractIndex},
+        tensors::data::{DataTensor, SparseTensor},
+    };
+    use symbolica::symbol;
+
+    #[test]
+    fn library_reports_names_and_contains_registered_tensor() {
+        let mut library = SpensorLibrary::new();
+        let mut tensor = LibrarySpensor::from(DataTensor::Sparse(SparseTensor::<
+            f64,
+            ExplicitKey<AbstractIndex>,
+        >::empty(
+            ExplicitKey::scalar_structure(),
+            0.0,
+        )));
+        tensor.tensor.structure.set_name(symbol!("A"));
+
+        library
+            .register(ConvertibleToLibraryTensor(tensor))
+            .unwrap();
+
+        assert!(
+            library
+                .contains(ConvertibleToSymbol::Name("A".to_owned()))
+                .unwrap()
+        );
+        assert_eq!(library.names(), vec!["A".to_owned()]);
+    }
+
+    #[test]
+    fn library_get_tensor_returns_registered_data() {
+        let mut library = SpensorLibrary::new();
+        let mut tensor = LibrarySpensor::from(DataTensor::Sparse(SparseTensor::<
+            f64,
+            ExplicitKey<AbstractIndex>,
+        >::empty(
+            ExplicitKey::scalar_structure(),
+            0.0,
+        )));
+        tensor.tensor.structure.set_name(symbol!("A"));
+
+        library
+            .register(ConvertibleToLibraryTensor(tensor))
+            .unwrap();
+
+        let retrieved = library
+            .get_tensor(ConvertibleToSymbol::Name("A".to_owned()))
+            .unwrap();
+
+        assert_eq!(retrieved.tensor.structure.name(), Some(symbol!("A")));
+        assert!(tensor_is_sparse(&retrieved.tensor.structure));
+    }
+}

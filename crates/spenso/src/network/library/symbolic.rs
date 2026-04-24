@@ -551,6 +551,19 @@ impl<
         + PermuteTensor<Permuted = T>,
 > TensorLibrary<T, Aind>
 {
+    pub fn contains_explicit_name(&self, name: Symbol) -> bool {
+        self.explicit_dimension
+            .keys()
+            .any(|key| key.name().is_some_and(|key_name| key_name == name))
+    }
+
+    pub fn explicit_names(&self) -> Vec<Symbol> {
+        self.explicit_dimension
+            .keys()
+            .filter_map(|key| key.name())
+            .collect()
+    }
+
     pub fn get_key_from_name(
         &self,
         name: Symbol,

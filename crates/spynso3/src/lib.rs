@@ -33,8 +33,8 @@ use spenso::{
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
-        HasName, HasStructure, PermutedStructure, ScalarTensor, TensorStructure,
-        abstract_index::AbstractIndex, permuted::Perm,
+        HasName, HasStructure, OrderedStructure, PermutedStructure, ScalarTensor, TensorStructure,
+        abstract_index::AbstractIndex, permuted::Perm, slot::DummyAind,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -195,6 +195,71 @@ pub(crate) fn to_library_spensor(tensor: &Spensor) -> library_tensor::LibrarySpe
             .clone()
             .map_structure(|tensor| tensor.map_structure(Into::into)),
     }
+}
+
+pub(crate) fn to_spensor(tensor: &library_tensor::LibrarySpensor) -> Spensor {
+    Spensor {
+        tensor: tensor
+            .tensor
+            .clone()
+            .map_structure(|tensor| tensor.map_structure(explicit_key_to_shadowed_structure)),
+    }
+}
+
+fn explicit_key_to_shadowed_structure(
+    structure: spenso::network::library::symbolic::ExplicitKey<AbstractIndex>,
+) -> ShadowedStructure<AbstractIndex> {
+    ShadowedStructure {
+        structure: OrderedStructure::new(
+            structure
+                .structure
+                .structure
+                .into_iter()
+                .enumerate()
+                .map(|(i, rep)| rep.slot(AbstractIndex::new_dummy_at(i)))
+                .collect(),
+        )
+        .structure,
+        global_name: structure.global_name,
+        additional_args: structure.additional_args,
+    }
+}
+
+pub(crate) fn tensor_is_sparse<S>(tensor: &MixedTensor<f64, S>) -> bool
+where
+    S: TensorStructure,
+{
+    match tensor {
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Sparse(_))) => true,
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(DataTensor::Sparse(_))) => true,
+        ParamOrConcrete::Param(tensor) => matches!(&tensor.tensor, DataTensor::Sparse(_)),
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Dense(_)))
+        | ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(DataTensor::Dense(_))) => false,
+    }
+}
+
+pub(crate) fn concrete_shape_or_error<S>(tensor: &S) -> PyResult<Vec<usize>>
+where
+    S: TensorStructure,
+{
+    tensor
+        .shape()
+        .into_iter()
+        .map(|dim| {
+            usize::try_from(dim).map_err(|err| {
+                PyRuntimeError::new_err(format!("shape() requires concrete dimensions: {err}"))
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn tensor_size_or_error<S>(tensor: &S) -> PyResult<usize>
+where
+    S: TensorStructure,
+{
+    tensor
+        .size()
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))
 }
 
 pub(crate) fn tensor_sparse_density<S>(tensor: &MixedTensor<f64, S>) -> Option<f64>
@@ -484,6 +549,31 @@ impl Spensor {
     /// Dense tensors raise an error to keep the meaning aligned with sparse storage.
     fn nnz(&self) -> PyResult<usize> {
         sparse_nnz_or_error(&self.tensor.structure)
+    }
+
+    /// Return whether this tensor currently uses sparse storage.
+    fn is_sparse(&self) -> bool {
+        tensor_is_sparse(&self.tensor.structure)
+    }
+
+    /// Return whether this tensor currently uses dense storage.
+    fn is_dense(&self) -> bool {
+        !self.is_sparse()
+    }
+
+    /// Return the tensor rank, i.e. the number of indices.
+    fn rank(&self) -> usize {
+        self.tensor.structure.order()
+    }
+
+    /// Return the concrete tensor shape as a list of dimensions.
+    fn shape(&self) -> PyResult<Vec<usize>> {
+        concrete_shape_or_error(&self.tensor.structure)
+    }
+
+    /// Return the total number of tensor entries.
+    fn size(&self) -> PyResult<usize> {
+        tensor_size_or_error(&self.tensor.structure)
     }
 
     /// Convert this tensor to a library tensor while preserving its structure and data.

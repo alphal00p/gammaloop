@@ -3,8 +3,13 @@ use crate::{
 };
 use spenso::{
     network::{library::symbolic::ExplicitKey, parsing::ShadowedStructure},
-    structure::{HasName, HasStructure, ScalarStructure, abstract_index::AbstractIndex},
-    tensors::data::{DataTensor, SetTensorData, SparseTensor},
+    structure::{
+        HasName, HasStructure, OrderedStructure, ScalarStructure,
+        abstract_index::AbstractIndex,
+        representation::{ExtendibleReps, RepName},
+        slot::DummyAind,
+    },
+    tensors::data::{DataTensor, DenseTensor, SetTensorData, SparseTensor},
 };
 use symbolica::symbol;
 
@@ -82,4 +87,29 @@ fn library_conversion_changes_structure_key_type() {
 
     let library_tensor = tensor.to_library_tensor();
     let _: ExplicitKey<AbstractIndex> = library_tensor.tensor.structure.structure().clone();
+}
+
+#[test]
+fn tensor_reports_storage_and_shape_metadata() {
+    let structure = ShadowedStructure {
+        structure: OrderedStructure::new(vec![
+            ExtendibleReps::EUCLIDEAN
+                .new_rep(2)
+                .slot(AbstractIndex::new_dummy_at(0)),
+            ExtendibleReps::EUCLIDEAN
+                .new_rep(3)
+                .slot(AbstractIndex::new_dummy_at(1)),
+        ])
+        .structure,
+        global_name: None,
+        additional_args: None,
+    };
+    let dense = DenseTensor::<f64, _>::from_data(vec![0.0; 6], structure).unwrap();
+    let tensor = Spensor::from(DataTensor::Dense(dense));
+
+    assert!(tensor.is_dense());
+    assert!(!tensor.is_sparse());
+    assert_eq!(tensor.rank(), 2);
+    assert_eq!(tensor.shape().unwrap(), vec![2, 3]);
+    assert_eq!(tensor.size().unwrap(), 6);
 }

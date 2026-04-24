@@ -45,9 +45,10 @@ use symbolica::api::python::PythonExpression;
 use pyo3_stub_gen::{define_stub_info_gatherer, derive::*};
 
 use super::{
-    ModuleInit, TensorElements, set_tensor_name, sparse_density_or_error, sparse_nnz_or_error,
+    ModuleInit, TensorElements, concrete_shape_or_error, set_tensor_name, sparse_density_or_error,
+    sparse_nnz_or_error,
     structure::{ConvertibleToIndexLess, ConvertibleToSpensoName, SpensoName, SpensoStructure},
-    tensor_name,
+    tensor_is_sparse, tensor_name, tensor_size_or_error, to_spensor,
 };
 
 /// A library tensor class optimized for use in tensor libraries and networks.
@@ -351,6 +352,36 @@ impl LibrarySpensor {
         sparse_nnz_or_error(&self.tensor.structure)
     }
 
+    /// Return whether this tensor currently uses sparse storage.
+    fn is_sparse(&self) -> bool {
+        tensor_is_sparse(&self.tensor.structure)
+    }
+
+    /// Return whether this tensor currently uses dense storage.
+    fn is_dense(&self) -> bool {
+        !self.is_sparse()
+    }
+
+    /// Return the tensor rank, i.e. the number of indices.
+    fn rank(&self) -> usize {
+        self.tensor.structure.order()
+    }
+
+    /// Return the concrete tensor shape as a list of dimensions.
+    fn shape(&self) -> PyResult<Vec<usize>> {
+        concrete_shape_or_error(&self.tensor.structure)
+    }
+
+    /// Return the total number of tensor entries.
+    fn size(&self) -> PyResult<usize> {
+        tensor_size_or_error(&self.tensor.structure)
+    }
+
+    /// Convert this library tensor back to a regular tensor.
+    fn to_tensor(&self) -> crate::Spensor {
+        to_spensor(self)
+    }
+
     fn __repr__(&self) -> String {
         format!("Spensor(\n{})", self.tensor)
     }
@@ -623,8 +654,12 @@ mod tests {
     use super::*;
     use spenso::{
         network::library::symbolic::ExplicitKey,
-        structure::{ScalarStructure, abstract_index::AbstractIndex},
-        tensors::data::{DataTensor, SetTensorData},
+        structure::{
+            ScalarStructure,
+            abstract_index::AbstractIndex,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::{DataTensor, DenseTensor, SetTensorData},
     };
     use symbolica::symbol;
 
@@ -665,5 +700,42 @@ mod tests {
         let tensor = LibrarySpensor::from(DataTensor::Sparse(sparse));
 
         assert_eq!(tensor.nnz().unwrap(), 1);
+    }
+
+    #[test]
+    fn library_tensor_reports_storage_and_shape_metadata() {
+        let structure: ExplicitKey<AbstractIndex> = ExplicitKey::from_iter(
+            [Euclidean {}.new_rep(2), Euclidean {}.new_rep(3)],
+            symbol!("A"),
+            None,
+        )
+        .structure;
+        let dense = DenseTensor::<f64, _>::from_data(vec![0.0; 6], structure).unwrap();
+        let tensor = LibrarySpensor::from(DataTensor::Dense(dense));
+
+        assert!(tensor.is_dense());
+        assert!(!tensor.is_sparse());
+        assert_eq!(tensor.rank(), 2);
+        assert_eq!(tensor.shape().unwrap(), vec![2, 3]);
+        assert_eq!(tensor.size().unwrap(), 6);
+    }
+
+    #[test]
+    fn library_tensor_to_tensor_preserves_name() {
+        let mut tensor = LibrarySpensor::from(DataTensor::Sparse(SparseTensor::<
+            f64,
+            ExplicitKey<AbstractIndex>,
+        >::empty(
+            ExplicitKey::scalar_structure(),
+            0.0,
+        )));
+        tensor.set_name(ConvertibleToSpensoName(SpensoName { name: symbol!("L") }));
+
+        let plain_tensor = tensor.to_tensor();
+
+        assert_eq!(
+            plain_tensor.get_name().map(|name| name.name),
+            Some(symbol!("L"))
+        );
     }
 }
