@@ -18,7 +18,7 @@ use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::algebra::complex::Complex;
+use spenso::{algebra::complex::Complex, network::library::TensorLibraryData};
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -1410,11 +1410,15 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
     let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
 
     for pow in 2..=order {
-        result += laurent_coeffs.next().unwrap() * &jacobian_ratio
-            / &factors_of_pi
-            / delta_r_plus.pow(pow as i64);
+        result += laurent_coeffs.next().unwrap() * &jacobian_ratio / &factors_of_pi
+            * (Atom::one() / delta_r_plus.pow(pow as i64)
+                + Atom::one() / delta_r_minus.pow(pow as i64));
     }
 
+    debug!(
+        "Threshold counterterm helper atom for order {} and loop number {}: {}",
+        order, loop_number, result
+    );
     result
 }
 

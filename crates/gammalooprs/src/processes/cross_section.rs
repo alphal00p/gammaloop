@@ -1827,8 +1827,8 @@ pub(crate) fn build_derivative_structure_atom(
         .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
         .unwrap();
 
-    let factorial_prefactor = (2..=(order + laurent_coefficient as i32)).product::<i32>();
-
+    let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();
+    debug!("factorial prefactor: {}", factorial_prefactor);
     let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
 
     expression_to_derive = expression_to_derive

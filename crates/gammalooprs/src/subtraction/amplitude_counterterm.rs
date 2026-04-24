@@ -22,9 +22,8 @@ use crate::{
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            GenericEvaluator, ParamBuilder, ThresholdParams,
+            GenericEvaluator, ParamBuilder,
             evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
-            param_builder::LUParams,
         },
     },
     model::Model,
@@ -39,7 +38,7 @@ use crate::{
         overlap::{OverlapGroup, OverlapStructure},
     },
     utils::{
-        F, FloatLike, h, h_dual,
+        F, FloatLike,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_for_t_derivatives,
@@ -666,46 +665,19 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let h_function =
             evaluate_integrated_ct_normalisation(&radius, &radius_star, e_cm, integrated_settings);
 
-        let threshold_params = ThresholdParams {
-            radius: DualOrNot::NonDual(radius.clone()),
-            radius_star: DualOrNot::NonDual(radius_star.clone()),
-            esurface_derivative: DualOrNot::NonDual(
-                self.rstar_solution.solution.derivative_at_solution.clone(),
-            ),
-            uv_damp_plus: DualOrNot::NonDual(uv_damp_plus.clone()),
-            uv_damp_minus: DualOrNot::NonDual(uv_damp_minus.clone()),
-            h_function: DualOrNot::NonDual(h_function.clone()),
-        };
-
         let mut total_ct = Complex::new_re(self.rstar_sample.zero());
 
         for (order_index, evaluator_stack) in ct_evaluator.evaluator_stacks.iter_mut().enumerate() {
-            let (sample_for_order, lu_params) = if order_index == 0 {
+            let sample_for_order = if order_index == 0 {
                 debug!(
                     "rescaled loop momenta at rstar:\n{}",
                     self.rstar_sample.loop_moms()
                 );
-                (
-                    self.rstar_sample.clone(),
-                    LUParams {
-                        tstar: DualOrNot::NonDual(radius_star.clone()),
-                        h_function: DualOrNot::NonDual(h(
-                            &radius_star,
-                            None,
-                            None,
-                            &ct_builder.settings.lu_h_function,
-                        )),
-                    },
-                )
+                self.rstar_sample.clone()
             } else {
                 let dual_shape = HyperDual::<F<T>>::new(shape_for_t_derivatives(order_index));
                 let dual_radius_star = dual_shape.variable(0, radius_star.clone());
-                let dual_h_function = h_dual(
-                    &dual_radius_star,
-                    None,
-                    None,
-                    &ct_builder.settings.lu_h_function,
-                );
+
                 let dualized_center = self
                     .rstar_solution
                     .esurface_ct_builder
@@ -730,13 +702,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 let mut sample_with_duals = self.rstar_sample.clone();
                 sample_with_duals.sample.dual_loop_moms = Some(dual_loop_momenta);
 
-                (
-                    sample_with_duals,
-                    LUParams {
-                        tstar: DualOrNot::Dual(dual_radius_star),
-                        h_function: DualOrNot::Dual(dual_h_function),
-                    },
-                )
+                sample_with_duals
             };
 
             let esurface_derivatives = if order_index == 0 {
@@ -798,10 +764,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 )
             };
 
-            debug!(
-                "externals passed to evaluator:\n{:?}",
-                sample_for_order.external_moms()
-            );
             let params = T::get_parameters(
                 param_builder,
                 (false, false),
@@ -832,10 +794,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 order_index + 1,
                 pass_one_result
             );
-            debug!(
-                "param_builder: \n {}",
-                param_builder.table_with_value_index(order_index)
-            );
 
             let mut params_for_pass_two = vec![];
             match pass_one_result {
@@ -865,12 +823,21 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             params_for_pass_two.push(Complex::new_re(uv_damp_minus.clone()));
             params_for_pass_two.push(Complex::new_re(h_function.clone()));
 
-            total_ct += evaluate_evaluator_single(
+            let pass_two_result = evaluate_evaluator_single(
                 &mut helper_evaluators[order_index],
                 &params_for_pass_two,
                 evaluation_metadata,
                 record_primary_timing,
             );
+
+            debug!(
+                "Pass two result for esurface {} order {}: {}",
+                esurface_id.0,
+                order_index + 1,
+                pass_two_result
+            );
+
+            total_ct += pass_two_result;
         }
 
         debug!(

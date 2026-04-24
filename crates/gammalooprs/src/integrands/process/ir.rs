@@ -485,6 +485,13 @@ fn render_display_only_reports(
     write!(f, "{}", display_only_table.build().with(Style::rounded()))
 }
 
+fn format_missing_fit_item(label: String, fit_error: Option<&str>) -> String {
+    match fit_error {
+        Some(error) => format!("{label} (no fit: {error})"),
+        None => label,
+    }
+}
+
 fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 4] {
     let (scaling, exponent, r_squared) = match (&cut_report.power_law_fit, &cut_report.fit_error) {
         (Some(fit), None) => (
@@ -497,7 +504,10 @@ fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 4] {
     };
 
     [
-        format!("cut {}", cut_report.cut_id),
+        format_missing_fit_item(
+            format!("cut {}", cut_report.cut_id),
+            cut_report.fit_error.as_deref(),
+        ),
         scaling,
         exponent,
         r_squared,
@@ -522,7 +532,10 @@ fn display_only_report_display_row(display_only_report: &DisplayOnlyLimitReport)
     };
 
     [
-        display_only_report.label.clone(),
+        format_missing_fit_item(
+            display_only_report.label.clone(),
+            display_only_report.fit_error.as_deref(),
+        ),
         scaling,
         exponent,
         r_squared,
@@ -2043,18 +2056,21 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         true,
     )? {
         PreciseEvaluationResult::Arb(result) => {
-            let zero = result.integrand_result.re.zero();
+            let zero_complex = result.integrand_result.clone() - result.integrand_result.clone();
             let per_cut = if show_per_cut_info {
                 let mut per_cut = BTreeMap::new();
                 for event_group in result.event_groups.iter() {
                     for event in event_group.iter() {
                         let entry = per_cut
                             .entry(event.cut_info.cut_id)
-                            .or_insert_with(|| zero.clone());
-                        *entry += event.weight.re.clone();
+                            .or_insert_with(|| zero_complex.clone());
+                        *entry += event.weight.clone();
                     }
                 }
                 per_cut
+                    .into_iter()
+                    .map(|(cut_id, weight)| (cut_id, weight.norm_squared().sqrt()))
+                    .collect()
             } else {
                 BTreeMap::new()
             };
@@ -2073,14 +2089,18 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
 
                         let entry = display_only_components
                             .entry(*key)
-                            .or_insert_with(|| zero.clone());
-                        *entry += weight.re.clone();
+                            .or_insert_with(|| zero_complex.clone());
+                        *entry += weight.clone();
                     }
                 }
             }
+            let display_only_components = display_only_components
+                .into_iter()
+                .map(|(key, weight)| (key, weight.norm_squared().sqrt()))
+                .collect();
 
             Ok(ProfilePointValue {
-                total: result.integrand_result.re,
+                total: result.integrand_result.norm_squared().sqrt(),
                 per_cut,
                 display_only_components,
             })
@@ -2876,6 +2896,54 @@ mod tests {
         assert!(rendered.contains("original"));
         assert!(rendered.contains("ct_0"));
         assert!(!rendered.contains("note"));
+    }
+
+    #[test]
+    fn single_limit_display_includes_display_only_fit_error_reason() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let mut report = build_single_limit_report(&ir_limit, None, total_fit, Vec::new());
+        report.display_only_reports = build_display_only_limit_reports(vec![(
+            AdditionalWeightKey::Original,
+            Err(eyre!("fit_power_law requires at least three observations")),
+        )]);
+
+        let rendered = format!("{report}");
+
+        assert!(
+            rendered
+                .contains("original (no fit: fit_power_law requires at least three observations)")
+        );
+    }
+
+    #[test]
+    fn graph_limit_display_includes_per_cut_fit_error_reason() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let graph_report = GraphIRLimitReport {
+            graph_name: "GL0".to_string(),
+            all_limits_passed: true,
+            cut_definitions: Vec::new(),
+            single_limit_reports: vec![build_single_limit_report(
+                &ir_limit,
+                None,
+                total_fit,
+                build_cut_limit_reports(
+                    ir_limit.num_soft(),
+                    vec![(0, Err(eyre!("fit_power_law requires finite y values")))],
+                ),
+            )],
+        };
+
+        let rendered = format!("{graph_report}");
+
+        assert!(rendered.contains("cut 0 (no fit: fit_power_law requires finite y values)"));
     }
 
     #[test]
