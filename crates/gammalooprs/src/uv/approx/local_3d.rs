@@ -17,7 +17,7 @@ use crate::{
     cff::CutCFFIndex,
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    settings::global::OrientationPattern,
+    settings::global::{MediumMode, OrientationPattern},
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
@@ -38,6 +38,7 @@ impl Local3DApproximation {
         to_contract: &SuBitGraph,
         cuts: &CutSet,
         orientation_pattern: &OrientationPattern,
+        medium_mode: MediumMode,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let cff = graph
             .cff(
@@ -46,6 +47,7 @@ impl Local3DApproximation {
                     .subtract(&graph.initial_state_cut),
                 cuts,
                 orientation_pattern,
+                medium_mode,
             )?
             .expression_with_selectors();
 
@@ -63,12 +65,14 @@ impl Local3DApproximation {
         graph: &mut Graph,
         cuts: &CutSet,
         orientation_pattern: &OrientationPattern,
+        medium_mode: MediumMode,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         Self::dependent(
             graph,
             &graph.empty_subgraph::<SuBitGraph>(),
             cuts,
             orientation_pattern,
+            medium_mode,
         )
     }
 
@@ -80,7 +84,7 @@ impl Local3DApproximation {
         cff: &Atom,
     ) -> Result<Atom> {
         let graph = ctx.graph;
-        let settings = ctx.settings;
+        let settings = &ctx.settings.uv;
         let reduced = current.reduced_subgraph(given);
 
         // split numerator momenta into OSEs and spatial parts
@@ -283,7 +287,7 @@ impl Local3DApproximation {
                     ei,
                     e_mass,
                     None,
-                    settings.inner_products,
+                    settings.uv.inner_products,
                 ));
             }
         }
@@ -293,7 +297,7 @@ impl Local3DApproximation {
         for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+                reps.push(GS.split_mom_pattern(eid, e_mass, settings.uv.inner_products));
             }
         }
         Ok(atomarg.replace_multiple(&reps))

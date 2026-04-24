@@ -69,7 +69,7 @@ fn scalar_bubble_root_integrand_reference(
     let cutstructure = CutStructure {
         cuts: vec![CutSet::empty(amplitude_graph.graph.n_hedges())],
     };
-    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
+    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings);
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
     let valid_orientations: Vec<_> = amplitude_graph
@@ -86,8 +86,7 @@ fn scalar_bubble_root_integrand_reference(
             &mut amplitude_graph.graph,
             vakint,
             &valid_orientations,
-            &reference_settings.uv,
-            &generation_settings.orientation_pattern,
+            &reference_settings,
         )
         .unwrap();
 
@@ -1528,7 +1527,8 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
+        amp.generate_cff(&OrientationPattern::default(), set.medium.mode)
+            .unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
@@ -1569,7 +1569,8 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
+        amp.generate_cff(&OrientationPattern::default(), set.medium.mode)
+            .unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);

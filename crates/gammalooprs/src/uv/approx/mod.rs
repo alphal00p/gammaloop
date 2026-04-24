@@ -4,10 +4,10 @@ use crate::{
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::global::OrientationPattern,
+    settings::global::GenerationSettings,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
-        ApproximationType, Spinney, UVgenerationSettings,
+        ApproximationType, Spinney,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
     },
 };
@@ -58,7 +58,7 @@ pub trait ApproximationKernel<C> {
 
 pub struct UVCtx<'a> {
     pub graph: &'a Graph,
-    pub settings: &'a UVgenerationSettings,
+    pub settings: &'a GenerationSettings,
 }
 
 pub trait ApproxKernel {
@@ -204,8 +204,7 @@ impl CFFapprox {
         graph: &mut Graph,
         to_contract: &SuBitGraph,
         cuts: &CutSet,
-        _settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<CFFapprox> {
         let cff = graph
             .cff(
@@ -213,7 +212,8 @@ impl CFFapprox {
                     .union(&graph.tree_edges)
                     .subtract(&graph.initial_state_cut),
                 cuts,
-                orientation_pattern,
+                &settings.orientation_pattern,
+                settings.medium.mode,
             )?
             .expression_with_selectors();
 
@@ -235,16 +235,9 @@ impl CFFapprox {
     pub(crate) fn root(
         graph: &mut Graph,
         cuts: &CutSet,
-        settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<CFFapprox> {
-        Self::dependent(
-            graph,
-            &graph.empty_subgraph::<SuBitGraph>(),
-            cuts,
-            settings,
-            orientation_pattern,
-        )
+        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts, settings)
     }
 }
 
@@ -264,7 +257,7 @@ fn localized_integrated_reduced_factor(
     expr: &Atom,
     cuts: &CutSet,
     valid_orientations: &[EdgeVec<Orientation>],
-    orientation_pattern: &OrientationPattern,
+    settings: &GenerationSettings,
 ) -> Result<IntegrandExpr> {
     debug_tags!(#uv;graph.name=%graph.name , expr=%expr.log_print(Some(80)),"Localizing integrated UV CT");
     let cff = graph.cff(
@@ -272,7 +265,8 @@ fn localized_integrated_reduced_factor(
             .union(&graph.tree_edges)
             .subtract(&graph.initial_state_cut),
         cuts,
-        orientation_pattern,
+        &settings.orientation_pattern,
+        settings.medium.mode,
     )?;
 
     let fourddenoms = GS.wrap_tree_denoms(
@@ -302,11 +296,11 @@ fn localized_integrated_reduced_factor(
 }
 
 impl Approximation {
-    fn filtered_integrated_uv_mode_is_active(settings: &UVgenerationSettings) -> bool {
-        settings.generate_integrated && settings.filtered_integrated_uv_loop_count().is_some()
+    fn filtered_integrated_uv_mode_is_active(settings: &GenerationSettings) -> bool {
+        settings.uv.generate_integrated && settings.uv.filtered_integrated_uv_loop_count().is_some()
     }
 
-    fn initialize_filtered_integrated_uv_root(&mut self, settings: &UVgenerationSettings) {
+    fn initialize_filtered_integrated_uv_root(&mut self, settings: &GenerationSettings) {
         self.generate_only_integrated_uv_chain_matches =
             Self::filtered_integrated_uv_mode_is_active(settings);
     }
@@ -315,9 +309,10 @@ impl Approximation {
         &mut self,
         graph: &Graph,
         dependent: &Self,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) {
         self.generate_only_integrated_uv_chain_matches = settings
+            .uv
             .filtered_integrated_uv_loop_count()
             .is_some_and(|target_loop_count| {
                 dependent.generate_only_integrated_uv_chain_matches
@@ -338,7 +333,7 @@ impl Approximation {
         };
     }
 
-    fn should_keep_only_integrated_uv_terms(&self, settings: &UVgenerationSettings) -> bool {
+    fn should_keep_only_integrated_uv_terms(&self, settings: &GenerationSettings) -> bool {
         Self::filtered_integrated_uv_mode_is_active(settings)
             && self.generate_only_integrated_uv_chain_matches
     }
@@ -348,16 +343,15 @@ impl Approximation {
         graph: &mut Graph,
         cuts: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(settings);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
-        if settings.only_integrated {
+        if settings.uv.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
-            self.local_3d = CFFapprox::root(graph, cuts, settings, orientation_pattern)?;
+            self.local_3d = CFFapprox::root(graph, cuts, settings)?;
             if Self::filtered_integrated_uv_mode_is_active(settings) {
                 let (_, _) = self
                     .local_3d
@@ -367,13 +361,8 @@ impl Approximation {
                     &cuts.residue_selector.generate_allowed_keys(),
                 ));
             } else {
-                self.final_integrand = Some(self.final_integrand(
-                    graph,
-                    cuts,
-                    valid_orientations,
-                    settings,
-                    orientation_pattern,
-                )?);
+                self.final_integrand =
+                    Some(self.final_integrand(graph, cuts, valid_orientations, settings)?);
             }
         }
 
@@ -398,7 +387,7 @@ impl Approximation {
         graph: &Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
         dependent: &Self,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         if Self::filtered_integrated_uv_mode_is_active(settings)
             && !self.generate_only_integrated_uv_chain_matches
@@ -417,11 +406,13 @@ impl Approximation {
 
         let ctx = UVCtx { graph, settings };
 
+        let uv_settings = &settings.uv;
+
         let Some((current, sign)) = &dependent.integrated_4d.expr() else {
             return Err(eyre!("integrated_4d not computed"));
         };
 
-        debug!(pole_part = %settings.pole_part,
+        debug!(pole_part = %uv_settings.pole_part,
             simple = % self.simple_approx
                 .as_ref()
                 .unwrap()
@@ -455,8 +446,7 @@ impl Approximation {
         cuts: &CutSet,
         dependent: &Self,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
@@ -498,7 +488,7 @@ impl Approximation {
             &finite,
             cuts,
             valid_orientations,
-            orientation_pattern,
+            settings,
         )?;
 
         let ctx = UVCtx { graph, settings };
@@ -509,13 +499,7 @@ impl Approximation {
                 cuts.residue_selector.generate_allowed_keys().as_slice(),
             );
             self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
-                self.final_integrand(
-                    graph,
-                    cuts,
-                    valid_orientations,
-                    settings,
-                    orientation_pattern,
-                )?
+                self.final_integrand(graph, cuts, valid_orientations, settings)?
             } else {
                 Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
             });
@@ -544,13 +528,8 @@ impl Approximation {
             t_arg: IntegrandExpr { integrands },
         };
 
-        self.final_integrand = Some(self.final_integrand(
-            graph,
-            cuts,
-            valid_orientations,
-            settings,
-            orientation_pattern,
-        )?);
+        self.final_integrand =
+            Some(self.final_integrand(graph, cuts, valid_orientations, settings)?);
         Ok(())
     }
 
@@ -560,8 +539,7 @@ impl Approximation {
         graph: &mut Graph,
         cutset: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        _settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
@@ -608,7 +586,7 @@ impl Approximation {
             &finite,
             cutset,
             valid_orientations,
-            orientation_pattern,
+            settings,
         )?;
 
         let reduced = graph

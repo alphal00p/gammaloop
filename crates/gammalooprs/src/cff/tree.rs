@@ -224,10 +224,11 @@ impl<T> Tree<T> {
         }
     }
 
-    pub(crate) fn keep_branches_with_value_count_mut(&mut self, value: &T, n: usize)
-    where
-        T: Eq,
-    {
+    pub(crate) fn keep_branches_with_predicate_count_mut(
+        &mut self,
+        predicate: impl Fn(&T) -> bool,
+        n: usize,
+    ) {
         if self.nodes.is_empty() {
             return;
         }
@@ -240,7 +241,7 @@ impl<T> Tree<T> {
             let path = self.path_to_root(leaf);
             let count = path
                 .iter()
-                .filter(|&&node_id| self.nodes[node_id].data == *value)
+                .filter(|&&node_id| predicate(&self.nodes[node_id].data))
                 .count();
 
             if count == n {
@@ -271,10 +272,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub(crate) fn max_value_count_on_branch(&self, value: &T) -> usize
-    where
-        T: Eq,
-    {
+    pub(crate) fn max_predicate_count_on_branch(&self, predicate: impl Fn(&T) -> bool) -> usize {
         if self.nodes.is_empty() {
             return 0;
         }
@@ -284,7 +282,7 @@ impl<T> Tree<T> {
             .map(|leaf| {
                 self.path_to_root(leaf)
                     .into_iter()
-                    .filter(|&node_id| self.nodes[node_id].data == *value)
+                    .filter(|&node_id| predicate(&self.nodes[node_id].data))
                     .count()
             })
             .max()
@@ -370,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keep_branches_with_value_count_mut() {
+    fn test_keep_branches_with_predicate_count_mut() {
         let mut tree = Tree::from_root(0);
         tree.insert_node(NodeId(0), 1);
         tree.insert_node(NodeId(1), 2);
@@ -379,7 +377,7 @@ mod tests {
         tree.insert_node(NodeId(4), 3);
         tree.insert_node(NodeId(5), 4);
 
-        tree.keep_branches_with_value_count_mut(&1, 1);
+        tree.keep_branches_with_predicate_count_mut(|value| *value == 1, 1);
 
         let mut expected_tree = Tree::from_root(0);
         expected_tree.insert_node(NodeId(0), 1);
@@ -390,26 +388,26 @@ mod tests {
     }
 
     #[test]
-    fn test_keep_branches_with_value_count_mut_no_match() {
+    fn test_keep_branches_with_predicate_count_mut_no_match() {
         let mut tree = Tree::from_root(0);
         tree.insert_node(NodeId(0), 1);
         tree.insert_node(NodeId(1), 2);
         tree.insert_node(NodeId(2), 1);
 
-        tree.keep_branches_with_value_count_mut(&1, 3);
+        tree.keep_branches_with_predicate_count_mut(|value| *value == 1, 3);
 
         assert_eq!(tree.get_num_nodes(), 0);
     }
 
     #[test]
-    fn test_keep_branches_with_value_count_mut_zero_occurrences() {
+    fn test_keep_branches_with_predicate_count_mut_zero_occurrences() {
         let mut tree = Tree::from_root(0);
         tree.insert_node(NodeId(0), 2);
         tree.insert_node(NodeId(1), 3);
         tree.insert_node(NodeId(0), 1);
         tree.insert_node(NodeId(3), 4);
 
-        tree.keep_branches_with_value_count_mut(&1, 0);
+        tree.keep_branches_with_predicate_count_mut(|value| *value == 1, 0);
 
         let mut expected_tree = Tree::from_root(0);
         expected_tree.insert_node(NodeId(0), 2);
@@ -419,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keep_branches_with_value_count_mut_keeps_shared_prefix() {
+    fn test_keep_branches_with_predicate_count_mut_keeps_shared_prefix() {
         let mut tree = Tree::from_root(0);
         tree.insert_node(NodeId(0), 9);
         tree.insert_node(NodeId(1), 1);
@@ -427,7 +425,7 @@ mod tests {
         tree.insert_node(NodeId(1), 2);
         tree.insert_node(NodeId(4), 6);
 
-        tree.keep_branches_with_value_count_mut(&1, 1);
+        tree.keep_branches_with_predicate_count_mut(|value| *value == 1, 1);
 
         let mut expected_tree = Tree::from_root(0);
         expected_tree.insert_node(NodeId(0), 9);
@@ -438,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn test_max_value_count_on_branch() {
+    fn test_max_predicate_count_on_branch() {
         let mut tree = Tree::from_root(1);
         tree.insert_node(NodeId(0), 1);
         tree.insert_node(NodeId(1), 2);
@@ -446,24 +444,24 @@ mod tests {
         tree.insert_node(NodeId(0), 3);
         tree.insert_node(NodeId(4), 1);
 
-        assert_eq!(tree.max_value_count_on_branch(&1), 3);
+        assert_eq!(tree.max_predicate_count_on_branch(|value| *value == 1), 3);
     }
 
     #[test]
-    fn test_max_value_count_on_branch_value_absent() {
+    fn test_max_predicate_count_on_branch_value_absent() {
         let mut tree = Tree::from_root(0);
         tree.insert_node(NodeId(0), 2);
         tree.insert_node(NodeId(1), 3);
         tree.insert_node(NodeId(0), 4);
 
-        assert_eq!(tree.max_value_count_on_branch(&1), 0);
+        assert_eq!(tree.max_predicate_count_on_branch(|value| *value == 1), 0);
     }
 
     #[test]
-    fn test_max_value_count_on_branch_single_branch() {
+    fn test_max_predicate_count_on_branch_single_branch() {
         let mut tree = Tree::from_root(1);
         tree.insert_node(NodeId(0), 1);
 
-        assert_eq!(tree.max_value_count_on_branch(&1), 2);
+        assert_eq!(tree.max_predicate_count_on_branch(|value| *value == 1), 2);
     }
 }

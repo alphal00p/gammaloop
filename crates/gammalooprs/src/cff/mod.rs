@@ -10,7 +10,7 @@ use symbolica::atom::{Atom, AtomCore};
 use crate::{
     cff::expression::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
-    settings::global::OrientationPattern,
+    settings::global::{MediumMode, OrientationPattern},
 };
 use color_eyre::Result;
 
@@ -100,6 +100,7 @@ impl Graph {
         contract_subgraph: &S,
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
+        medium_mode: MediumMode,
     ) -> Result<CutCFF> {
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
@@ -112,7 +113,12 @@ impl Graph {
 
         let cff = [(
             CutCFFIndex::new_all_none(),
-            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
+            self.generate_cff(
+                &contract_edges,
+                &canonize_esurface,
+                orientation_pattern,
+                medium_mode,
+            )?,
         )];
 
         let mut residues = BTreeMap::new();

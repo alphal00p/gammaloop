@@ -5,7 +5,7 @@ use crate::{
     cff::CutCFFIndex,
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    settings::global::OrientationPattern,
+    settings::global::GenerationSettings,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
@@ -26,7 +26,7 @@ use tracing::instrument;
 use vakint::Vakint;
 
 use super::{
-    RenormalizationPart, UVgenerationSettings,
+    RenormalizationPart,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -74,8 +74,7 @@ impl CutForests {
         graph: &mut Graph,
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
@@ -89,7 +88,6 @@ impl CutForests {
                 cuts,
                 valid_orientations,
                 settings,
-                orientation_pattern,
             )?;
         }
         Ok(())
@@ -98,7 +96,7 @@ impl CutForests {
     pub(crate) fn orientation_parametric_exprs(
         self,
         graph: &Graph,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Vec<ParametricIntegrands>> {
         let mut exprs = vec![];
 
@@ -108,7 +106,8 @@ impl CutForests {
             .zip(self.cuts.cuts.into_iter())
             .enumerate()
         {
-            let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
+            let mut integrands =
+                forest.orientation_parametric_expr(graph, settings.uv.add_sigma)?;
 
             debug_tags!(#generation, #uv, #graph, #dump;
                 n_terms =%forest.n_terms(),
@@ -118,7 +117,7 @@ impl CutForests {
                 file.integrands = %integrands.iter().map(|s| s.1.to_canonical_string()).join(";"),
                 "Orientation Parametric integrand {i}",
             );
-            if !settings.keep_sigma {
+            if !settings.uv.keep_sigma {
                 integrands.values_mut().for_each(|s| {
                     *s = s
                         .replace(function!(GS.if_sigma, W_.a___))
@@ -148,22 +147,18 @@ impl Forest {
         vakint: (&Vakint, &vakint::VakintSettings),
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
+        let uv_settings = &settings.uv;
 
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.topo_order = i;
-                    self.dag.nodes[n].data.root(
-                        graph,
-                        cut_data,
-                        valid_orientations,
-                        settings,
-                        orientation_pattern,
-                    )?;
+                    self.dag.nodes[n]
+                        .data
+                        .root(graph, cut_data, valid_orientations, settings)?;
                 }
                 1 => {
                     // debug!("")
@@ -185,12 +180,12 @@ impl Forest {
                     );
 
                     current.data.topo_order = i;
-                    if settings.generate_integrated {
+                    if uv_settings.generate_integrated {
                         current
                             .data
                             .compute_integrated(graph, vakint, &parent.data, settings)?;
                     }
-                    if settings.only_integrated {
+                    if uv_settings.only_integrated {
                         continue;
                     }
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
@@ -200,7 +195,6 @@ impl Forest {
                         &parent.data,
                         valid_orientations,
                         settings,
-                        orientation_pattern,
                     )?;
                 }
                 _ => {

@@ -235,6 +235,24 @@ enum VertexType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChildWithContractedEdges {
+    pub child: CFFGenerationGraph,
+    pub contracted_edges: ContractedEdges,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GenerateChildrenResult {
+    pub children: Option<Vec<ChildWithContractedEdges>>,
+    pub surface: HybridSurface,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContractedEdges {
+    pub incoming_edges: Vec<EdgeIndex>,
+    pub outgoing_edges: Vec<EdgeIndex>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CFFGenerationGraph {
     pub vertices: Vec<CFFVertex>,
     pub global_orientation: EdgeVec<Orientation>,
@@ -300,6 +318,36 @@ impl CFFGenerationGraph {
     fn are_adjacent(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> bool {
         self.are_directed_adjacent(vertex_1, vertex_2)
             || self.are_directed_adjacent(vertex_2, vertex_1)
+    }
+
+    fn get_connecting_edges(
+        &self,
+        from_vertex: &VertexSet,
+        to_vertex: &VertexSet,
+    ) -> ContractedEdges {
+        let from_v = self.get_vertex(from_vertex);
+        let to_v = self.get_vertex(to_vertex);
+
+        // Edges that go from from_vertex to to_vertex (outgoing from from_vertex, incoming to to_vertex)
+        let outgoing_edges = from_v
+            .outgoing_edges
+            .iter()
+            .filter(|edge| to_v.incoming_edges.contains(edge))
+            .map(|edge| edge.edge_id)
+            .collect_vec();
+
+        // Edges that go from to_vertex to from_vertex (outgoing from to_vertex, incoming to from_vertex)
+        let incoming_edges = from_v
+            .incoming_edges
+            .iter()
+            .filter(|edge| to_v.outgoing_edges.contains(edge))
+            .map(|edge| edge.edge_id)
+            .collect_vec();
+
+        ContractedEdges {
+            incoming_edges,
+            outgoing_edges,
+        }
     }
 
     // helper function for tests
@@ -558,6 +606,23 @@ impl CFFGenerationGraph {
             } else {
                 self.has_connected_complement(&vertex.vertex_set)
             }
+        })
+    }
+
+    fn get_vertex_for_thermal_greedy(&self) -> Option<&CFFVertex> {
+        // First, try to find a source or sink with connected complement
+        if let Some(vertex) = self.vertices.iter().find(|vertex| {
+            let vertex_type = vertex.get_vertex_type();
+            (vertex_type == VertexType::Sink || vertex_type == VertexType::Source)
+                && self.has_connected_complement(&vertex.vertex_set)
+        }) {
+            return Some(vertex);
+        }
+
+        // If no source/sink found, find any vertex with degree >= 3 and connected complement
+        self.vertices.iter().find(|vertex| {
+            let degree = vertex.incoming_edges.len() + vertex.outgoing_edges.len();
+            degree >= 3 && self.has_connected_complement(&vertex.vertex_set)
         })
     }
 
@@ -836,6 +901,167 @@ impl CFFGenerationGraph {
             (Some(children), surface)
         } else {
             (None, surface)
+        }
+    }
+
+    pub(crate) fn generate_children_thermal(&self) -> GenerateChildrenResult {
+        if self.vertices.len() < 2 {
+            return GenerateChildrenResult {
+                children: None,
+                surface: HybridSurface::Unit(UnitSurface {}),
+            };
+        }
+
+        let vertex = if let Some(vertex) = self.get_vertex_for_thermal_greedy() {
+            vertex
+        } else {
+            panic!(
+                "could not find vertex to contract from for graph {:#?}",
+                self
+            );
+        };
+
+        // Flip signs to canonicalize the H-surface: prefer the configuration
+        // where positive_energies is lexicographically smaller than negative_energies.
+        // Primary criterion: fewer virtual incoming than outgoing means no flip.
+        // Tiebreaker when counts are equal: compare sorted virtual edge ID vectors.
+        let virtual_edge_ids_sorted = |edges: &[CFFEdge]| {
+            edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+                .map(|edge| edge.edge_id)
+                .sorted()
+                .collect_vec()
+        };
+
+        let incoming_virtual = virtual_edge_ids_sorted(&vertex.incoming_edges);
+        let outgoing_virtual = virtual_edge_ids_sorted(&vertex.outgoing_edges);
+
+        let flip_signs = match incoming_virtual.len().cmp(&outgoing_virtual.len()) {
+            std::cmp::Ordering::Greater => true,
+            std::cmp::Ordering::Less => false,
+            // Equal count: flip so that the smaller IDs end up in positive_energies.
+            // Without flip, positive = outgoing, negative = incoming.
+            // Flip when outgoing > incoming lexicographically (so incoming becomes positive).
+            std::cmp::Ordering::Equal => outgoing_virtual > incoming_virtual,
+        };
+
+        let external_shift: ExternalShift = vertex
+            .incoming_edges
+            .iter()
+            .filter(|edge| edge.edge_type == CFFEdgeType::External)
+            .map(|edge| {
+                let edge_id = edge.edge_id;
+                let shift_sign = if flip_signs { 1 } else { -1 };
+                (edge_id, shift_sign)
+            })
+            .chain(
+                vertex
+                    .outgoing_edges
+                    .iter()
+                    .filter(|edge| edge.edge_type == CFFEdgeType::External)
+                    .map(|edge| {
+                        let edge_id = edge.edge_id;
+                        let shift_sign = if flip_signs { -1 } else { 1 };
+                        (edge_id, shift_sign)
+                    }),
+            )
+            .sorted_by(|(edge_1, _), (edge_2, _)| edge_1.cmp(edge_2))
+            .collect_vec();
+
+        let (positive_edges, negative_edges) = if flip_signs {
+            (&vertex.incoming_edges, &vertex.outgoing_edges)
+        } else {
+            (&vertex.outgoing_edges, &vertex.incoming_edges)
+        };
+
+        let virtual_edge_ids = |edges: &[CFFEdge]| {
+            edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+                .map(|edge| edge.edge_id)
+                .sorted()
+                .collect_vec()
+        };
+
+        let positive_energies = virtual_edge_ids(positive_edges);
+        let negative_energies = virtual_edge_ids(negative_edges);
+
+        let surface = if vertex.generates_esurface() {
+            let mut extra_positive_energies = vertex
+                .iter_all_edges()
+                .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                .map(|edge| edge.edge_id)
+                .collect();
+
+            let mut positive_energies = positive_energies;
+            positive_energies.append(&mut extra_positive_energies);
+            positive_energies.sort();
+
+            let esurface = Esurface {
+                energies: positive_energies,
+                external_shift,
+                vertex_set: vertex.vertex_set,
+                //subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
+            };
+
+            HybridSurface::Esurface(esurface)
+        } else {
+            let virtual_external_ids = |edges: &[CFFEdge]| {
+                edges
+                    .iter()
+                    .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                    .map(|edge| edge.edge_id)
+                    .collect_vec()
+            };
+
+            let mut extra_positive_energies = virtual_external_ids(positive_edges);
+            let mut extra_negative_energies = virtual_external_ids(negative_edges);
+
+            let mut positive_energies = positive_energies;
+            positive_energies.append(&mut extra_positive_energies);
+            positive_energies.sort();
+
+            let mut negative_energies = negative_energies;
+            negative_energies.append(&mut extra_negative_energies);
+            negative_energies.sort();
+
+            let hsurface = Hsurface {
+                positive_energies,
+                negative_energies,
+                external_shift,
+                vertex_set: vertex.vertex_set,
+            };
+
+            HybridSurface::Hsurface(hsurface)
+        };
+
+        let adjacent_vertices = self.get_undirected_neighbours(&vertex.vertex_set);
+
+        let children_with_contracted_edges = adjacent_vertices
+            .iter()
+            .map(|adjacent_vertex| {
+                let child = self.contract_vertices(&vertex.vertex_set, &adjacent_vertex.vertex_set);
+                let mut contracted_edges =
+                    self.get_connecting_edges(&vertex.vertex_set, &adjacent_vertex.vertex_set);
+                // Keep numerator sign convention aligned with canonicalized surface sign.
+                // If we flipped the surface signs, swap numerator sign as well.
+                if flip_signs {
+                    std::mem::swap(
+                        &mut contracted_edges.incoming_edges,
+                        &mut contracted_edges.outgoing_edges,
+                    );
+                }
+                ChildWithContractedEdges {
+                    child,
+                    contracted_edges,
+                }
+            })
+            .collect_vec();
+
+        GenerateChildrenResult {
+            children: Some(children_with_contracted_edges),
+            surface,
         }
     }
 

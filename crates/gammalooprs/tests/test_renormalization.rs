@@ -4,6 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::{Amplitude, AmplitudeGraph},
+    settings::global::{GenerationSettings, MediumSettings},
     utils::{load_generic_model, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, UVgenerationSettings,
@@ -21,7 +22,15 @@ use symbolica::{
     parse, parse_lit,
 };
 
-fn finite_part_uv_settings() -> UVgenerationSettings {
+fn vacuum_generation_settings(uv: UVgenerationSettings) -> GenerationSettings {
+    GenerationSettings {
+        uv,
+        medium: MediumSettings::default(),
+        ..Default::default()
+    }
+}
+
+fn finite_part_settings() -> GenerationSettings {
     let undoing_normalization = parse!(
         "(
      𝑖*(𝜋^((4-2*eps)/2))
@@ -30,7 +39,7 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
   )^(-1*n_loops)",
         default_namespace = "vakint"
     );
-    UVgenerationSettings {
+    vacuum_generation_settings(UVgenerationSettings {
         softct: false,
         only_integrated: true,
         pole_part: true,
@@ -39,7 +48,7 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
             ..Default::default()
         },
         ..Default::default()
-    }
+    })
 }
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
     (model
@@ -81,18 +90,18 @@ fn scalar_pole_part() {
 
     let model = load_generic_model("scalars");
 
-    let a = amp.graphs[0]
-        .renormalization_part(&UVgenerationSettings {
-            softct: false,
-            only_integrated: true,
-            vakint: VakintSettings {
-                normalization: "MSbar".to_string(),
-                additional_normalization: "1".to_string(),
-                ..Default::default()
-            },
+    let settings = vacuum_generation_settings(UVgenerationSettings {
+        softct: false,
+        only_integrated: true,
+        vakint: VakintSettings {
+            normalization: "MSbar".to_string(),
+            additional_normalization: "1".to_string(),
             ..Default::default()
-        })
-        .unwrap();
+        },
+        ..Default::default()
+    });
+
+    let a = amp.graphs[0].renormalization_part(&settings).unwrap();
 
     println!("ren part: {:>}", a);
     println!(
@@ -130,7 +139,7 @@ fn finite_part_quark_lo() {
     let model = load_generic_model("sm");
 
     let a = amp.graphs[0]
-        .renormalization_part(&finite_part_uv_settings())
+        .renormalization_part(&finite_part_settings())
         .unwrap();
 
     println!("ren part: {:>}", a.log_print(Some(80)));
@@ -369,13 +378,13 @@ fn finite_part_ghost_2loop() {
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-    let settings = finite_part_uv_settings();
+    let settings = finite_part_settings();
 
-    let new_settings = UVgenerationSettings {
+    let new_settings = vacuum_generation_settings(UVgenerationSettings {
         use_legacy: false,
         cached: false,
-        ..settings.clone()
-    };
+        ..settings.uv.clone()
+    });
 
     let model = load_generic_model("sm");
 
@@ -399,7 +408,7 @@ fn finite_part_ghost_2loop() {
     fn assert_new_paths_match_legacy(
         amp: &mut AmplitudeGraph,
         a: RenormalizationPart,
-        new_settings: &UVgenerationSettings,
+        new_settings: &GenerationSettings,
     ) -> KernelStatsSnapshot {
         let new_part = amp.renormalization_part(new_settings).unwrap();
         let uncached_kernel_hits = new_part.stats.kernel_hits;
@@ -413,7 +422,7 @@ fn finite_part_ghost_2loop() {
         );
 
         let mut cached_settings = new_settings.clone();
-        cached_settings.cached = true;
+        cached_settings.uv.cached = true;
 
         let new_cached_part = amp.renormalization_part(&cached_settings).unwrap();
         let cached_kernel_hits = new_cached_part.stats.kernel_hits;
@@ -535,7 +544,7 @@ fn finit_part_ghlo() {
 
     let model = load_generic_model("sm");
     let a = amp.graphs[0]
-        .renormalization_part(&finite_part_uv_settings())
+        .renormalization_part(&finite_part_settings())
         .unwrap();
 
     println!("ren part: {:>}", a);
@@ -565,7 +574,7 @@ mod failing {
 
         let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-        let settings = UVgenerationSettings {
+        let uv_settings = UVgenerationSettings {
             softct: false,
             only_integrated: true,
             pole_part: true,
@@ -594,6 +603,8 @@ mod failing {
             },
             ..Default::default()
         };
+
+        let settings = vacuum_generation_settings(uv_settings);
 
         let a = amp.graphs[0].renormalization_part(&settings).unwrap();
         //p1.p1*gs^6*ca^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)
