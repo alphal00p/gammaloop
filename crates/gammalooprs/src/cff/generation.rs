@@ -9,6 +9,7 @@ use crate::{
     },
     graph::{Graph, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
+    settings::global::MediumMode,
 };
 use ahash::HashSet;
 use bincode::{Decode, Encode};
@@ -40,12 +41,32 @@ use super::{
     expression::{CFFExpression, OrientationID},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
+    thermal_numerator::{ThermalNumeratorCollection, ThermalNumeratorID},
 };
 
 #[derive(Debug, Clone)]
 struct GenerationData {
     graph: CFFGenerationGraph,
     surface_id: Option<HybridSurfaceID>,
+    thermal_numerator_id: Option<ThermalNumeratorID>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+pub struct CFFNodeData {
+    #[bincode(with_serde)]
+    pub surface_id: HybridSurfaceID,
+    #[bincode(with_serde)]
+    pub thermal_numerator_id: Option<ThermalNumeratorID>,
+}
+
+impl From<CFFNodeData> for Atom {
+    fn from(data: CFFNodeData) -> Atom {
+        let surface = Atom::from(data.surface_id);
+        match data.thermal_numerator_id {
+            Some(id) => surface / Atom::from(id),
+            None => surface,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -54,8 +75,11 @@ pub struct ShiftRewrite {
     pub dependent_momentum_expr: ExternalShift,
 }
 
-fn forget_graphs(data: GenerationData) -> HybridSurfaceID {
-    data.surface_id.expect("corrupted expression tree")
+fn forget_graphs(data: GenerationData) -> CFFNodeData {
+    CFFNodeData {
+        surface_id: data.surface_id.expect("corrupted expression tree"),
+        thermal_numerator_id: data.thermal_numerator_id,
+    }
 }
 
 impl GenerationData {
@@ -176,41 +200,46 @@ pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     reversed_dangling: &[EdgeIndex],
+    medium_mode: MediumMode,
 ) -> Vec<CFFGenerationGraph> {
     let num_virtual_edges = graph.count_internal_edges(subgraph);
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
-    virtual_possible_orientations
-        .map(|orientation_of_virtuals| {
-            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+    let orientations = virtual_possible_orientations.map(|orientation_of_virtuals| {
+        let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
-            let global_orientation = graph.new_edgevec(|_, edge_id, _| {
-                if let Some((pair, _, _)) = graph
-                    .iter_edges_of(subgraph)
-                    .find(|(_pair, id, _)| *id == edge_id)
-                {
-                    match pair {
-                        HedgePair::Paired { .. } => orientation_of_virtuals
-                            .next()
-                            .expect("orientation generation corrupted, not enough edges"),
-                        HedgePair::Unpaired { .. } => Orientation::Default,
-                        HedgePair::Split { .. } => {
-                            if reversed_dangling.contains(&edge_id) {
-                                Orientation::Reversed
-                            } else {
-                                Orientation::Default
-                            }
+        let global_orientation = graph.new_edgevec(|_, edge_id, _| {
+            if let Some((pair, _, _)) = graph
+                .iter_edges_of(subgraph)
+                .find(|(_pair, id, _)| *id == edge_id)
+            {
+                match pair {
+                    HedgePair::Paired { .. } => orientation_of_virtuals
+                        .next()
+                        .expect("orientation generation corrupted, not enough edges"),
+                    HedgePair::Unpaired { .. } => Orientation::Default,
+                    HedgePair::Split { .. } => {
+                        if reversed_dangling.contains(&edge_id) {
+                            Orientation::Reversed
+                        } else {
+                            Orientation::Default
                         }
                     }
-                } else {
-                    Orientation::Undirected
                 }
-            });
+            } else {
+                Orientation::Undirected
+            }
+        });
 
-            CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
-        })
-        .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
-        .collect()
+        CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
+    });
+
+    match medium_mode {
+        MediumMode::Vacuum => orientations
+            .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
+            .collect(),
+        MediumMode::ThermodynamicEquilibrium => orientations.collect(),
+    }
 }
 
 #[allow(unused)]
@@ -267,18 +296,21 @@ fn generate_cff_expression<E, V, H>(
     canonize_esurface: &Option<ShiftRewrite>,
     edges_in_initial_state_cut: &[EdgeIndex],
     dummy_edges: &[EdgeIndex],
+    medium_mode: MediumMode,
 ) -> Result<CFFExpression<OrientationID>> {
     let graphs = get_orientations(graph, dummy_edges);
     debug!("number of orientations: {}", graphs.len());
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        thermal_numerator_cache: ThermalNumeratorCollection::from_iter(std::iter::empty()),
     };
     let graph_cff = generate_cff_from_orientations(
         graphs,
         &mut surface_cache,
         edges_in_initial_state_cut,
         canonize_esurface,
+        medium_mode,
     )?;
 
     // patch the surface cache
@@ -290,6 +322,7 @@ impl Graph {
         &mut self,
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
+        medium_mode: MediumMode,
     ) -> Result<CFFExpression<OrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
 
@@ -312,18 +345,14 @@ impl Graph {
             let mut orientation_iterator = orientation.into_iter();
 
             let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
-                if hedge_pair.is_unpaired() {
+                if hedge_pair.is_unpaired() || contract_edges.contains(&edge_id) {
                     Orientation::Undirected
+                } else if edges_in_initial_state_cut.contains(&edge_id) {
+                    Orientation::Default
                 } else {
-                    if contract_edges.contains(&edge_id) {
-                        Orientation::Undirected
-                    } else if edges_in_initial_state_cut.contains(&edge_id) {
-                        Orientation::Default
-                    } else {
-                        orientation_iterator
-                            .next()
-                            .expect("orientation generation corrupted, not enough edges")
-                    }
+                    orientation_iterator
+                        .next()
+                        .expect("orientation generation corrupted, not enough edges")
                 }
             });
 
@@ -340,6 +369,7 @@ impl Graph {
             &mut self.surface_cache,
             &edges_in_initial_state_cut,
             canonize_esurface,
+            medium_mode,
         )
     }
 }
@@ -351,13 +381,15 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     reversed_dangling: &[EdgeIndex],
     edges_in_initial_state_cut: &[EdgeIndex],
     surface_cache: &mut SurfaceCache,
+    medium_mode: MediumMode,
 ) -> Result<CFFExpression<OrientationID>> {
-    let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
+    let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling, medium_mode);
     let cff = generate_cff_from_orientations(
         graphs,
         surface_cache,
         edges_in_initial_state_cut,
         canonize_esurface,
+        medium_mode,
     )?;
     Ok(cff)
 }
@@ -399,6 +431,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        thermal_numerator_cache: ThermalNumeratorCollection::from_iter(std::iter::empty()),
     };
 
     let generate_tree_for_orientation = generate_tree_for_orientation(
@@ -406,9 +439,10 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
         &mut surface_cache,
         topology.edges_in_initial_state_cut,
         canonize_esurface,
+        MediumMode::Vacuum,
     );
 
-    let mut tree = generate_tree_for_orientation.map(forget_graphs);
+    let mut tree: Tree<CFFNodeData> = generate_tree_for_orientation.map(forget_graphs);
 
     post_process(
         &mut tree,
@@ -446,24 +480,24 @@ pub struct EsurfaceRewritingInstructions<'a> {
 }
 
 fn post_process<S: SubGraphLike>(
-    tree: &mut Tree<HybridSurfaceID>,
+    tree: &mut Tree<CFFNodeData>,
     orientation: &EdgeVec<Orientation>,
     subgraph: &S,
     surface_cache: &SurfaceCache,
     setup: PostProcessingSetup<'_>,
 ) {
     if let Some(constraint_data) = setup.constraint_data {
-        tree.map_mut(|surface_id| {
-            let esurface_is_allowed = match surface_id {
+        tree.map_mut(|cff_node_data| {
+            let esurface_is_allowed = match cff_node_data.surface_id {
                 HybridSurfaceID::Esurface(esurface_id) => {
-                    let esurface_to_compare = &surface_cache.esurface_cache[*esurface_id];
+                    let esurface_to_compare = &surface_cache.esurface_cache[esurface_id];
                     constraint_data
                         .illegal_esurfaces
                         .iter()
                         .all(|illegal_esurface| esurface_to_compare != *illegal_esurface)
                 }
                 HybridSurfaceID::Hsurface(hsurface_id) => {
-                    let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
+                    let hsurface_to_compare = &surface_cache.hsurface_cache[hsurface_id];
                     constraint_data
                         .illegal_esurfaces
                         .iter()
@@ -483,7 +517,7 @@ fn post_process<S: SubGraphLike>(
             };
 
             if !esurface_is_allowed {
-                *surface_id = HybridSurfaceID::Infinite
+                cff_node_data.surface_id = HybridSurfaceID::Infinite
             }
         });
     }
@@ -491,7 +525,7 @@ fn post_process<S: SubGraphLike>(
     if let Some(rewrite_esurfaces) = setup.rewrite_esurfaces {
         let hashset_of_appearing_ids = tree
             .iter_nodes()
-            .map(|node| node.data)
+            .map(|node| node.data.surface_id)
             .collect::<HashSet<HybridSurfaceID>>();
 
         let mut id_map = HashMap::<HybridSurfaceID, HybridSurfaceID>::new();
@@ -668,7 +702,11 @@ fn post_process<S: SubGraphLike>(
             }
         }
 
-        tree.map_mut(|surface_id| *surface_id = id_map[surface_id]);
+        tree.map_mut(|node_data| {
+            node_data.surface_id = *id_map
+                .get(&node_data.surface_id)
+                .expect("missing rewritten surface id");
+        });
     }
 }
 
@@ -677,19 +715,23 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
     generator_cache: &mut SurfaceCache,
     edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
+    medium_mode: MediumMode,
 ) -> Result<CFFExpression<O>, Report> {
     // filter cyclic orientations beforehand
-    let acyclic_orientations_and_graphs = orientations_and_graphs
-        .into_iter()
-        .filter(|graph| !graph.has_directed_cycle_initial())
-        .collect_vec();
+    let filtered_orientations_and_graphs = match medium_mode {
+        MediumMode::Vacuum => orientations_and_graphs
+            .into_iter()
+            .filter(|graph| !graph.has_directed_cycle_initial())
+            .collect_vec(),
+        MediumMode::ThermodynamicEquilibrium => orientations_and_graphs,
+    };
 
     debug!(
-        "number of acyclic orientations: {}",
-        acyclic_orientations_and_graphs.len()
+        "number of contributing orientations: {}",
+        filtered_orientations_and_graphs.len()
     );
 
-    let terms = acyclic_orientations_and_graphs
+    let terms = filtered_orientations_and_graphs
         .into_iter()
         .map(|graph| {
             let global_orientation = graph.global_orientation.clone();
@@ -698,6 +740,7 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
                 generator_cache,
                 edges_in_initial_state_cut,
                 canonize_esurface,
+                medium_mode,
             );
             let expression = tree.map(forget_graphs);
 
@@ -722,6 +765,8 @@ pub struct SurfaceCache {
     pub esurface_cache: EsurfaceCollection, // Esurfaces of the supergraph
     #[bincode(with_serde)]
     pub hsurface_cache: HsurfaceCollection, // Anything else.
+    #[bincode(with_serde)]
+    pub thermal_numerator_cache: ThermalNumeratorCollection, // Thermal numerators.
 }
 
 impl SurfaceCache {
@@ -751,12 +796,23 @@ impl SurfaceCache {
     }
 
     pub(crate) fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
-        self.iter_all_surfaces()
-            .map(|(id, surface)| {
-                let id_atom = Pattern::from(Atom::from(id));
-                let surface_atom = Pattern::from(surface.to_atom(cut_edges));
-                Replacement::new(id_atom, surface_atom)
-            })
+        let surface_replacements = self.iter_all_surfaces().map(|(id, surface)| {
+            let id_atom = Pattern::from(Atom::from(id));
+            let surface_atom = Pattern::from(surface.to_atom(cut_edges));
+            Replacement::new(id_atom, surface_atom)
+        });
+
+        let thermal_numerator_replacements =
+            self.thermal_numerator_cache
+                .iter_enumerated()
+                .map(|(id, thermal_numerator)| {
+                    let id_atom = Pattern::from(Atom::from(id));
+                    let numerator_atom = Pattern::from(thermal_numerator.to_atom(cut_edges));
+                    Replacement::new(id_atom, numerator_atom)
+                });
+
+        surface_replacements
+            .chain(thermal_numerator_replacements)
             .collect()
     }
 
@@ -775,6 +831,7 @@ impl SurfaceCache {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+            thermal_numerator_cache: ThermalNumeratorCollection::from_iter(std::iter::empty()),
         }
     }
 }
@@ -784,18 +841,32 @@ fn generate_tree_for_orientation(
     generator_cache: &mut SurfaceCache,
     edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
+    medium_mode: MediumMode,
 ) -> Tree<GenerationData> {
     let mut tree = Tree::from_root(GenerationData {
         graph,
         surface_id: None,
+        thermal_numerator_id: None,
     });
 
-    while let Some(()) = advance_tree(
-        &mut tree,
-        generator_cache,
-        edges_in_initial_state_cut,
-        canonize_esurface,
-    ) {}
+    match medium_mode {
+        MediumMode::Vacuum => {
+            while let Some(()) = advance_tree(
+                &mut tree,
+                generator_cache,
+                edges_in_initial_state_cut,
+                canonize_esurface,
+            ) {}
+        }
+        MediumMode::ThermodynamicEquilibrium => {
+            while let Some(()) = advance_tree_thermal(
+                &mut tree,
+                generator_cache,
+                edges_in_initial_state_cut,
+                canonize_esurface,
+            ) {}
+        }
+    }
 
     tree
 }
@@ -955,7 +1026,10 @@ fn advance_tree(
 
                     HybridSurfaceID::Esurface(esurface_id)
                 }
-                HybridSurface::Hsurface(hsurface) => {
+                HybridSurface::Hsurface(mut hsurface) => {
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        hsurface.canonicalize_shift(shift_rewrite);
+                    }
                     let option_hsurface_id = generator_cache
                         .hsurface_cache
                         .position(|val| val == &hsurface);
@@ -1010,6 +1084,256 @@ fn advance_tree(
                 let child_node = GenerationData {
                     graph: child,
                     surface_id: None,
+                    thermal_numerator_id: None,
+                };
+
+                tree.insert_node(node_id, child_node);
+            });
+        });
+    Some(())
+}
+
+fn advance_tree_thermal(
+    tree: &mut Tree<GenerationData>,
+    generator_cache: &mut SurfaceCache,
+    edges_in_initial_state_cut: &[EdgeIndex],
+    canonize_esurface: &Option<ShiftRewrite>,
+) -> Option<()> {
+    use crate::cff::cff_graph::ChildWithContractedEdges;
+    use crate::cff::thermal_numerator::ThermalNumerator;
+
+    let bottom_layer = tree.get_bottom_layer();
+
+    let (children_optional, new_surfaces_for_tree): (
+        Vec<Option<Vec<ChildWithContractedEdges>>>,
+        Vec<HybridSurfaceID>,
+    ) = bottom_layer
+        .iter()
+        .map(|&node_id| {
+            let node = &tree.get_node(node_id);
+            let graph = &node.data.graph;
+
+            let generate_children_result = graph.generate_children_thermal();
+
+            // treat the edges in the initial state cut as true externals
+            let surface = match generate_children_result.surface {
+                HybridSurface::Esurface(esurface) => {
+                    let energies_to_be_moved = esurface
+                        .energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    if energies_to_be_moved.is_empty() {
+                        HybridSurface::Esurface(esurface)
+                    } else {
+                        let new_energies = esurface
+                            .energies
+                            .iter()
+                            .filter(|edge_id| !energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = esurface.external_shift.clone();
+                        for energy_to_move in energies_to_be_moved.iter() {
+                            new_shift.push((*energy_to_move, 1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        HybridSurface::Esurface(Esurface {
+                            energies: new_energies,
+                            external_shift: new_shift,
+                            vertex_set: esurface.vertex_set,
+                        })
+                    }
+                }
+                HybridSurface::Unit(unit) => HybridSurface::Unit(unit),
+                HybridSurface::Infinite(infinite) => HybridSurface::Infinite(infinite),
+                HybridSurface::Hsurface(hsurface) => {
+                    let positive_energies_to_be_moved = hsurface
+                        .positive_energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    let negative_energies_to_be_moved = hsurface
+                        .negative_energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    if positive_energies_to_be_moved.is_empty()
+                        && negative_energies_to_be_moved.is_empty()
+                    {
+                        HybridSurface::Hsurface(hsurface)
+                    } else if !positive_energies_to_be_moved.is_empty()
+                        && negative_energies_to_be_moved.is_empty()
+                    {
+                        let new_positive_energies = hsurface
+                            .positive_energies
+                            .iter()
+                            .filter(|edge_id| !positive_energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = hsurface.external_shift.clone();
+
+                        for positive_energy_to_move in positive_energies_to_be_moved.iter() {
+                            new_shift.push((*positive_energy_to_move, 1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        HybridSurface::Hsurface(Hsurface {
+                            positive_energies: new_positive_energies,
+                            negative_energies: hsurface.negative_energies.clone(),
+                            external_shift: new_shift,
+                            vertex_set: hsurface.vertex_set,
+                        })
+                    } else if !negative_energies_to_be_moved.is_empty()
+                        && positive_energies_to_be_moved.is_empty()
+                    {
+                        let new_negative_energies = hsurface
+                            .negative_energies
+                            .iter()
+                            .filter(|edge_id| !negative_energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = hsurface.external_shift.clone();
+
+                        for negative_energy_to_move in negative_energies_to_be_moved.iter() {
+                            new_shift.push((*negative_energy_to_move, -1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        if new_negative_energies.is_empty() {
+                            HybridSurface::Esurface(Esurface {
+                                energies: hsurface.positive_energies.clone(),
+                                external_shift: new_shift,
+                                vertex_set: hsurface.vertex_set,
+                            })
+                        } else {
+                            HybridSurface::Hsurface(Hsurface {
+                                positive_energies: hsurface.positive_energies.clone(),
+                                negative_energies: new_negative_energies,
+                                external_shift: new_shift,
+                                vertex_set: hsurface.vertex_set,
+                            })
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+            };
+
+            let surface_id = match surface {
+                HybridSurface::Esurface(mut esurface) => {
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        esurface.canonicalize_shift(shift_rewrite);
+                    }
+                    let option_esurface_id = generator_cache
+                        .esurface_cache
+                        .position(|val| *val == esurface);
+
+                    let esurface_id = match option_esurface_id {
+                        Some(esurface_id) => esurface_id,
+                        None => {
+                            generator_cache.esurface_cache.push(esurface);
+                            Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
+                        }
+                    };
+
+                    HybridSurfaceID::Esurface(esurface_id)
+                }
+                HybridSurface::Hsurface(mut hsurface) => {
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        hsurface.canonicalize_shift(shift_rewrite);
+                    }
+                    let option_hsurface_id = generator_cache
+                        .hsurface_cache
+                        .position(|val| val == &hsurface);
+
+                    let hsurface_id = match option_hsurface_id {
+                        Some(hsurface_id) => hsurface_id,
+                        None => {
+                            generator_cache.hsurface_cache.push(hsurface);
+                            Into::<HsurfaceID>::into(generator_cache.hsurface_cache.len() - 1)
+                        }
+                    };
+
+                    HybridSurfaceID::Hsurface(hsurface_id)
+                }
+                HybridSurface::Unit(_) => HybridSurfaceID::Unit,
+                HybridSurface::Infinite(_) => HybridSurfaceID::Infinite,
+            };
+
+            (generate_children_result.children, surface_id)
+        })
+        .unzip();
+
+    bottom_layer
+        .iter()
+        .zip(new_surfaces_for_tree)
+        .for_each(|(&node_id, surface_id)| {
+            tree.apply_mut_closure(node_id, |data| data.insert_esurface(surface_id))
+        });
+
+    let all_some = children_optional.iter().all(Option::is_some);
+    let all_none = children_optional.iter().all(Option::is_none);
+
+    assert!(
+        all_some || all_none,
+        "Some cff branches have finished earlier than others"
+    );
+
+    let children_with_edges = if all_some && !all_none {
+        children_optional
+            .into_iter()
+            .map(Option::unwrap)
+            .collect_vec()
+    } else {
+        return None;
+    };
+
+    bottom_layer
+        .iter()
+        .zip(children_with_edges)
+        .for_each(|(&node_id, children)| {
+            children.into_iter().for_each(|child_with_edges| {
+                let ChildWithContractedEdges {
+                    child,
+                    contracted_edges,
+                } = child_with_edges;
+
+                // Create thermal numerator from contracted edges
+                let thermal_numerator = ThermalNumerator {
+                    positive_energies: contracted_edges.outgoing_edges,
+                    negative_energies: contracted_edges.incoming_edges,
+                };
+
+                // Check if this thermal numerator already exists in the cache
+                let thermal_numerator_id = generator_cache
+                    .thermal_numerator_cache
+                    .position(|val| *val == thermal_numerator)
+                    .unwrap_or_else(|| {
+                        generator_cache
+                            .thermal_numerator_cache
+                            .push(thermal_numerator);
+                        Into::<ThermalNumeratorID>::into(
+                            generator_cache.thermal_numerator_cache.len() - 1,
+                        )
+                    });
+
+                let child_node = GenerationData {
+                    graph: child,
+                    surface_id: None,
+                    thermal_numerator_id: Some(thermal_numerator_id),
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1257,6 +1581,7 @@ mod tests_cff {
             &mut surface_cache,
             &[],
             &Some(shift_rewrite),
+            MediumMode::Vacuum,
         )
         .unwrap();
 
@@ -1314,6 +1639,7 @@ mod tests_cff {
             &mut surface_cache,
             &[],
             &Some(shift_rewrite),
+            MediumMode::Vacuum,
         )
         .unwrap();
 
@@ -1321,7 +1647,7 @@ mod tests_cff {
     }
 
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
-        let cff = generate_cff_expression(graph, &None, &[], &[]).unwrap();
+        let cff = generate_cff_expression(graph, &None, &[], &[], MediumMode::Vacuum).unwrap();
 
         let mut cff_atom = cff.to_atom(OrientationPattern::default());
         cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
@@ -1438,6 +1764,7 @@ mod tests_cff {
             &mut surface_cache,
             &[],
             &shift_rewrite.clone(),
+            MediumMode::Vacuum,
         )
         .unwrap();
         assert_eq!(
@@ -1518,8 +1845,14 @@ mod tests_cff {
         let triangle_hedge_graph: HedgeGraph<(), (), ()> =
             triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
-        let cff_hedge =
-            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[], &[]).unwrap();
+        let cff_hedge = generate_cff_expression(
+            &triangle_hedge_graph,
+            &shift_rewrite,
+            &[],
+            &[],
+            MediumMode::Vacuum,
+        )
+        .unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
@@ -1565,6 +1898,7 @@ mod tests_cff {
                 &mut surface_cache,
                 &[],
                 &shift_rewrite,
+                MediumMode::Vacuum,
             )
             .unwrap();
 
@@ -1642,8 +1976,14 @@ mod tests_cff {
 
             let hedge_double_traingle: HedgeGraph<(), (), ()> =
                 hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
-            let cff_hedge =
-                generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
+            let cff_hedge = generate_cff_expression(
+                &hedge_double_traingle,
+                &shift_rewrite,
+                &[],
+                &[],
+                MediumMode::Vacuum,
+            )
+            .unwrap();
             let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
             let cff_res =
                 energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
@@ -1709,6 +2049,7 @@ mod tests_cff {
                 &mut surface_cache,
                 &[],
                 &shift_rewrite,
+                MediumMode::Vacuum,
             )
             .unwrap();
 
@@ -1776,7 +2117,9 @@ mod tests_cff {
             tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
 
             let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
-            let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
+            let cff_hedge =
+                generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[], MediumMode::Vacuum)
+                    .unwrap();
 
             let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
             let res =
@@ -1871,6 +2214,7 @@ mod tests_cff {
                 &mut surface_cache,
                 &[],
                 &Some(shift_rewrite),
+                MediumMode::Vacuum,
             )
             .unwrap();
             let finish = std::time::Instant::now();

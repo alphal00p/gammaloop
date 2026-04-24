@@ -768,9 +768,9 @@ impl CrossSectionGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let global_cff = self
-            .graph
-            .generate_cff(&contract_edges, &canonize_esurface)?;
+        let global_cff =
+            self.graph
+                .generate_cff(&contract_edges, &canonize_esurface, settings.medium.mode)?;
 
         let cut_esurface_map = self
             .cut_esurface
@@ -948,7 +948,7 @@ impl CrossSectionGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
+        let cut_woods = CutWoods::new(cut_structure, &self.graph, settings);
         let valid_orientations: Vec<_> = self
             .derived_data
             .global_cff_expression
@@ -962,7 +962,7 @@ impl CrossSectionGraph {
         let lu_prefactor = self.lu_prefactor_helper();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, settings)?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
@@ -1455,7 +1455,7 @@ impl CrossSectionGraph {
             cuts: cut_structure,
         };
 
-        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
+        let cut_woods = CutWoods::new(cut_structure, &self.graph, settings);
         let mut cut_forests = cut_woods.unfold(&self.graph);
         let valid_orientations: Vec<_> = self
             .derived_data
@@ -1467,7 +1467,7 @@ impl CrossSectionGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, settings)?;
 
         let mut threshold_counterterms = cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?

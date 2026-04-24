@@ -26,9 +26,10 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
+    settings::global::GenerationSettings,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
-        RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, Spinney, UltravioletGraph,
         approx::{
             ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
             local_3d::Local3DApproximation,
@@ -100,7 +101,7 @@ impl Wood {
         (current, given)
     }
 
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &GenerationSettings) -> Self {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
         let mut spinneys = Vec::new();
@@ -114,7 +115,7 @@ impl Wood {
             ));
         }
 
-        Self::from_spinneys(spinneys, graph, cuts, &settings.vakint)
+        Self::from_spinneys(spinneys, graph, cuts, &settings.uv.vakint)
     }
 
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
@@ -441,7 +442,7 @@ impl OperationNode {
         compute_store: &mut ComputeStore,
         wood: &Wood,
         vakint: &Vakint,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Atom> {
         let mut acc = Atom::one();
         let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
@@ -449,7 +450,7 @@ impl OperationNode {
 
         let mut order = 0;
         let mut levels = self.key.view();
-        if settings.cached
+        if settings.uv.cached
             && let Some((prefix, leaf_level)) = self.key.split_last_level()
         {
             let prefix_key = OperationNode {
@@ -488,7 +489,7 @@ impl OperationNode {
         cutset: &CutSet,
         compute_store: &mut ComputeStore,
         wood: &Wood,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Vec<Atom>> {
         let mut acc = None;
         let _local = Local3DApproximation {};
@@ -496,7 +497,7 @@ impl OperationNode {
 
         let mut order = 0;
         let mut levels = self.key.view();
-        if settings.cached
+        if settings.uv.cached
             && let Some((prefix, leaf_level)) = self.key.split_last_level()
         {
             let prefix_key = OperationNode {
@@ -647,10 +648,10 @@ impl Forests {
         &mut self,
         graph: &Graph,
         vakint: &Vakint,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
-            debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
+            debug!(order=%order,cache=%settings.uv.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
             let integrand = self.graph[*nidx].integrated(
                 graph,
                 &mut self.compute_store,
@@ -671,7 +672,7 @@ impl Forests {
     pub fn local_subtract(
         &mut self,
         graph: &mut Graph,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         for (cut_compatible_forest_subset, cuts) in &self.cuts {
             let mut first = true;
@@ -683,10 +684,10 @@ impl Forests {
                 .iter()
                 .enumerate()
             {
-                debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
+                debug!(order=%order,cache=%settings.uv.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
                 let integrands = if first {
                     first = false;
-                    Local3DApproximation::root(graph, cuts)
+                    Local3DApproximation::root(graph, cuts, settings.medium.mode)
                 } else {
                     self.graph[*nidx].local(
                         graph,
@@ -891,7 +892,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
 
         println!("{}", f);
@@ -942,7 +943,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
 
         println!("{}", f);
@@ -997,11 +998,7 @@ mod tests {
                     .into_iter()
                     .map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
                     .collect();
-                let f = Wood::new(
-                    CutStructure::empty(&g),
-                    &g,
-                    &UVgenerationSettings::default(),
-                );
+                let f = Wood::new(CutStructure::empty(&g), &g, &GenerationSettings::default());
 
                 println!("{}", f);
 
@@ -1069,7 +1066,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&mercedes),
             &mercedes,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1104,7 +1101,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1140,7 +1137,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1178,7 +1175,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1217,7 +1214,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&spectacles),
             &spectacles,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1251,7 +1248,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&basketball),
             &basketball,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1289,7 +1286,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&fourloop_b),
             &fourloop_b,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1326,7 +1323,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&four_loop_a),
             &four_loop_a,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -1368,7 +1365,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             );
 
             println!("{}", f);
@@ -1420,7 +1417,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             );
 
             println!("{}", f);
@@ -1460,7 +1457,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )
             .unfold_uncached();
             assert!(f.compute_store.entries.is_empty());

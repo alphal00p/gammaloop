@@ -1,6 +1,7 @@
 use crate::{
     graph::{Graph, LoopMomentumBasis},
-    uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
+    settings::global::GenerationSettings,
+    uv::{Spinney, approx::CutStructure, forest::CutForests},
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -27,7 +28,7 @@ pub struct CutWoods {
 
 impl CutWoods {
     #[instrument(skip_all)]
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &GenerationSettings) -> Self {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
         for cut in cuts.cuts.iter() {
@@ -40,7 +41,7 @@ impl CutWoods {
 
             let wood = Wood::from_spinneys(spinneys, graph);
 
-            let mut lvk_settings = settings.vakint.true_settings();
+            let mut lvk_settings = settings.uv.vakint.true_settings();
             // Keep the legacy wood path aligned with the hedge-poset path:
             // the downstream integrand builder extracts the epsilon^0 term, so
             // Vakint must provide one term beyond the maximal pole order.

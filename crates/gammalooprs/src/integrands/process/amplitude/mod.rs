@@ -152,7 +152,7 @@ impl AmplitudeGraphTerm {
             .iter()
             .flat_map(|orientation| {
                 orientation.expression.iter_nodes().filter_map(|tree_node| {
-                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data.surface_id {
                         Some(esurface_id)
                     } else {
                         None

@@ -13,6 +13,7 @@ use tracing::{debug, instrument};
 
 use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
+    settings::global::MediumMode,
     utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -29,6 +30,7 @@ impl Local3DApproximation {
         graph: &mut Graph,
         to_contract: &SuBitGraph,
         cuts: &CutSet,
+        medium_mode: MediumMode,
     ) -> Result<Vec<Atom>> {
         let cff = graph
             .cff(
@@ -36,6 +38,7 @@ impl Local3DApproximation {
                     .union(&graph.tree_edges)
                     .subtract(&graph.initial_state_cut),
                 cuts,
+                medium_mode,
             )?
             .expression_with_selectors();
 
@@ -46,8 +49,17 @@ impl Local3DApproximation {
         Ok(cff.iter().map(|a| a * &fourddenoms).collect())
     }
 
-    pub(crate) fn root(graph: &mut Graph, cuts: &CutSet) -> Result<Vec<Atom>> {
-        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts)
+    pub(crate) fn root(
+        graph: &mut Graph,
+        cuts: &CutSet,
+        medium_mode: MediumMode,
+    ) -> Result<Vec<Atom>> {
+        Self::dependent(
+            graph,
+            &graph.empty_subgraph::<SuBitGraph>(),
+            cuts,
+            medium_mode,
+        )
     }
 
     pub(crate) fn t_tilde<S: super::ForestNodeLike>(
@@ -58,7 +70,7 @@ impl Local3DApproximation {
         cff: &Atom,
     ) -> Result<Atom> {
         let graph = ctx.graph;
-        let settings = ctx.settings;
+        let settings = &ctx.settings.uv;
         let reduced = current.reduced_subgraph(given);
 
         // split numerator momenta into OSEs and spatial parts
@@ -261,7 +273,7 @@ impl Local3DApproximation {
                     ei,
                     e_mass,
                     None,
-                    settings.inner_products,
+                    settings.uv.inner_products,
                 ));
             }
         }
@@ -271,7 +283,7 @@ impl Local3DApproximation {
         for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+                reps.push(GS.split_mom_pattern(eid, e_mass, settings.uv.inner_products));
             }
         }
         Ok(atomarg.replace_multiple(&reps))

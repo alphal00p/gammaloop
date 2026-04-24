@@ -995,9 +995,15 @@ impl Graph {
                 .orientations
                 .iter()
                 .map(|orientation_expression| {
-                    orientation_expression.expression.max_value_count_on_branch(
-                        &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
-                    )
+                    orientation_expression
+                        .expression
+                        .max_predicate_count_on_branch(|node_data| {
+                            matches!(
+                                node_data.surface_id,
+                                crate::cff::surface::HybridSurfaceID::Esurface(id)
+                                    if id == representative_esurface_id
+                            )
+                        })
                 })
                 .max()
                 .unwrap_or(0);

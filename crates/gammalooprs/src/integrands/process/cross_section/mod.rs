@@ -511,7 +511,7 @@ impl CrossSectionGraphTerm {
                 settings.generation.orientation_pattern.filter(*orientation)
                     && orientation.expression.iter_nodes().any(|tree_node| {
                         graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
-                            tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
+                            tree_node.data.surface_id == HybridSurfaceID::Esurface(*cut_esurface_id)
                         })
                     })
             })
@@ -539,7 +539,7 @@ impl CrossSectionGraphTerm {
             .iter()
             .flat_map(|orientation| {
                 orientation.expression.iter_nodes().filter_map(|tree_node| {
-                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data.surface_id {
                         Some(esurface_id)
                     } else {
                         None

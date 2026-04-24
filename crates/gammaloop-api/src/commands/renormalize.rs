@@ -62,11 +62,11 @@ impl Renormalize {
             .process_list
             .get_amplitude_mut_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
 
-        let mut settings = global_cli_settings.global.generation.uv.clone();
+        let mut settings = global_cli_settings.global.generation.clone();
 
-        settings.only_integrated = true;
-        settings.generate_integrated = true;
-        settings.pole_part = true;
+        settings.uv.only_integrated = true;
+        settings.uv.generate_integrated = true;
+        settings.uv.pole_part = true;
 
         let mut renormalization_part: Vec<Atom> = Vec::new();
         let output_dir = if let Some(path) = self.result_path.clone() {

@@ -44,11 +44,13 @@ use crate::{
         DotExportSettings, GraphGenerationStats, NamedGraphGenerationReport,
         StandaloneExportSettings,
     },
-    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
+    settings::{
+        GlobalSettings, RuntimeSettings, global::MediumMode, runtime::LockedRuntimeSettings,
+    },
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
         hedge_poset::Wood as NewWood,
         settings::VakintSettings,
@@ -534,10 +536,11 @@ impl AmplitudeGraph {
 impl AmplitudeGraph {
     pub fn renormalization_part(
         &mut self,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
-            self.generate_cff()?;
+            let medium_mode = settings.medium.mode;
+            self.generate_cff(medium_mode)?;
         }
         let valid_orientations: Vec<_> = self
             .derived_data
@@ -549,8 +552,8 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        if settings.use_legacy {
-            let mut vk_settings = settings.vakint.true_settings();
+        if settings.uv.use_legacy {
+            let mut vk_settings = settings.uv.vakint.true_settings();
             let wood = self.graph.wood_with_settings(
                 &self.graph.no_dummy(),
                 settings,
@@ -594,7 +597,7 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
-    pub(crate) fn generate_cff(&mut self) -> Result<()> {
+    pub(crate) fn generate_cff(&mut self, medium_mode: MediumMode) -> Result<()> {
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -611,7 +614,9 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression = self.graph.generate_cff(&contract_edges, &shift_rewrite)?;
+        let cff_expression =
+            self.graph
+                .generate_cff(&contract_edges, &shift_rewrite, medium_mode)?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
@@ -627,7 +632,8 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.generate_cff()?;
+        let medium_mode = settings.medium.mode;
+        self.generate_cff(medium_mode)?;
 
         self.build_integrands(settings, vk)?;
 
@@ -928,9 +934,9 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
         let cutstructure = CutStructure::empty(&self.graph);
-        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
+        let woods = CutWoods::new(cutstructure, &self.graph, settings);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        forests.compute(&mut self.graph, vakint, &valid_orientations, settings)?;
         let exprs: Vec<_> = forests
             .orientation_parametric_exprs(&self.graph, false)?
             .into_iter()
@@ -1055,9 +1061,9 @@ impl AmplitudeGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
+        let woods = CutWoods::new(cut_structure, &self.graph, settings);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        forests.compute(&mut self.graph, vakint, &valid_orientations, settings)?;
 
         let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, false)?;
 
@@ -1364,7 +1370,9 @@ pub mod test {
         processes::AmplitudeGraph,
         settings::{
             GlobalSettings, RuntimeSettings,
-            global::{GenerationSettings, OrientationPattern, ThresholdSubtractionSettings},
+            global::{
+                GenerationSettings, MediumMode, OrientationPattern, ThresholdSubtractionSettings,
+            },
         },
         utils::load_generic_model,
     };
@@ -1388,7 +1396,7 @@ pub mod test {
 
         let _model = load_generic_model("sm");
 
-        graph.generate_cff().unwrap();
+        graph.generate_cff(MediumMode::Vacuum).unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
         let param_builder = &graph.graph.param_builder;

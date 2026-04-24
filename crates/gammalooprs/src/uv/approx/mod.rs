@@ -2,12 +2,13 @@ use crate::{
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
+    settings::global::GenerationSettings,
     utils::{
         GS, W_,
         symbolica_ext::{LOGPRINTOPTS, LogPrint},
     },
     uv::{
-        ApproximationType, Spinney, UVgenerationSettings,
+        ApproximationType, Spinney,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
     },
 };
@@ -58,7 +59,7 @@ pub trait ApproximationKernel<C> {
 
 pub struct UVCtx<'a> {
     pub graph: &'a Graph,
-    pub settings: &'a UVgenerationSettings,
+    pub settings: &'a GenerationSettings,
 }
 
 pub trait ApproxKernel {
@@ -204,7 +205,7 @@ impl CFFapprox {
         graph: &mut Graph,
         to_contract: &SuBitGraph,
         cuts: &CutSet,
-        _settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<CFFapprox> {
         let cff = graph
             .cff(
@@ -212,6 +213,7 @@ impl CFFapprox {
                     .union(&graph.tree_edges)
                     .subtract(&graph.initial_state_cut),
                 cuts,
+                settings.medium.mode,
             )?
             .expression_with_selectors();
 
@@ -230,7 +232,7 @@ impl CFFapprox {
     pub(crate) fn root(
         graph: &mut Graph,
         cuts: &CutSet,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<CFFapprox> {
         Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts, settings)
     }
@@ -251,12 +253,14 @@ fn localized_integrated_reduced_factor(
     to_contract: &SuBitGraph,
     cuts: &CutSet,
     valid_orientations: &[EdgeVec<Orientation>],
+    settings: &GenerationSettings,
 ) -> Result<IntegrandExpr> {
     let cff = graph.cff(
         &to_contract
             .union(&graph.tree_edges)
             .subtract(&graph.initial_state_cut),
         cuts,
+        settings.medium.mode,
     )?;
 
     let fourddenoms = GS.wrap_tree_denoms(
@@ -286,11 +290,11 @@ fn localized_integrated_reduced_factor(
 }
 
 impl Approximation {
-    fn filtered_integrated_uv_mode_is_active(settings: &UVgenerationSettings) -> bool {
-        settings.generate_integrated && settings.filtered_integrated_uv_loop_count().is_some()
+    fn filtered_integrated_uv_mode_is_active(settings: &GenerationSettings) -> bool {
+        settings.uv.generate_integrated && settings.uv.filtered_integrated_uv_loop_count().is_some()
     }
 
-    fn initialize_filtered_integrated_uv_root(&mut self, settings: &UVgenerationSettings) {
+    fn initialize_filtered_integrated_uv_root(&mut self, settings: &GenerationSettings) {
         self.generate_only_integrated_uv_chain_matches =
             Self::filtered_integrated_uv_mode_is_active(settings);
     }
@@ -299,9 +303,10 @@ impl Approximation {
         &mut self,
         graph: &Graph,
         dependent: &Self,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) {
         self.generate_only_integrated_uv_chain_matches = settings
+            .uv
             .filtered_integrated_uv_loop_count()
             .is_some_and(|target_loop_count| {
                 dependent.generate_only_integrated_uv_chain_matches
@@ -322,7 +327,7 @@ impl Approximation {
         };
     }
 
-    fn should_keep_only_integrated_uv_terms(&self, settings: &UVgenerationSettings) -> bool {
+    fn should_keep_only_integrated_uv_terms(&self, settings: &GenerationSettings) -> bool {
         Self::filtered_integrated_uv_mode_is_active(settings)
             && self.generate_only_integrated_uv_chain_matches
     }
@@ -332,11 +337,11 @@ impl Approximation {
         graph: &mut Graph,
         cuts: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(settings);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
-        if settings.only_integrated {
+        if settings.uv.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
@@ -374,7 +379,7 @@ impl Approximation {
         graph: &Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
         dependent: &Self,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         if Self::filtered_integrated_uv_mode_is_active(settings)
             && !self.generate_only_integrated_uv_chain_matches
@@ -393,11 +398,13 @@ impl Approximation {
 
         let ctx = UVCtx { graph, settings };
 
+        let uv_settings = &settings.uv;
+
         let Some((current, sign)) = &dependent.integrated_4d.expr() else {
             return Err(eyre!("integrated_4d not computed"));
         };
 
-        debug!(pole_part = %settings.pole_part,
+        debug!(pole_part = %uv_settings.pole_part,
             simple = % self.simple_approx
                 .as_ref()
                 .unwrap()
@@ -427,7 +434,7 @@ impl Approximation {
         cuts: &CutSet,
         dependent: &Self,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
@@ -463,6 +470,7 @@ impl Approximation {
             dependent.spinney.filter(),
             cuts,
             valid_orientations,
+            settings,
         )?;
 
         let ctx = UVCtx { graph, settings };
@@ -502,7 +510,7 @@ impl Approximation {
         graph: &mut Graph,
         cutset: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        _settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Vec<Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
@@ -542,6 +550,7 @@ impl Approximation {
             self.spinney.filter(),
             cutset,
             valid_orientations,
+            settings,
         )?;
 
         let reduced = graph

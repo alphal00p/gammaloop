@@ -113,7 +113,7 @@ impl Integrated<'_> {
     ) -> Result<Atom> {
         let reduced = current.reduced_subgraph(given);
         let graph = ctx.graph;
-        let settings = ctx.settings;
+        let settings = &ctx.settings.uv;
         let mut t_arg = ctx
             .graph
             .numerator(&reduced, given.subgraph())
@@ -175,7 +175,7 @@ impl Integrated<'_> {
             graph,
             &reduced,
             given.subgraph(),
-            &settings.vakint,
+            &settings.uv.vakint,
             true,
         );
 
@@ -301,7 +301,7 @@ impl Integrated<'_> {
         for (power, p) in series.terms() {
             // println!("Power: {}", power);
             // println!("Coeff: {}", p.printer(LOGPRINTOPTS));
-            if settings.pole_part {
+            if settings.uv.pole_part {
                 if power < 0 {
                     pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
                 }
@@ -312,7 +312,7 @@ impl Integrated<'_> {
 
         res = pole_stripped;
 
-        if !settings.pole_part {
+        if !settings.uv.pole_part {
             // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV
             let pi_atom = (Symbol::PI).to_atom();
             let mut normalization_term_integral = (pi_atom.pow(2)) / GS.m_uv_int;
@@ -340,7 +340,7 @@ impl Integrated<'_> {
             }
         }
 
-        debug!(pole_part = %settings.pole_part,res = %res.log_print(None),"Final integrated 4d CT");
+        debug!(pole_part = %settings.uv.pole_part,res = %res.log_print(None),"Final integrated 4d CT");
 
         if res
             .replace(GS.dim)

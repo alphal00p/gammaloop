@@ -11,8 +11,8 @@ use symbolica::parse;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
-use super::esurface::Esurface;
-use super::esurface::ExternalShift;
+use super::esurface::{Esurface, ExternalShift, add_external_shifts};
+use super::generation::ShiftRewrite;
 
 #[derive(
     From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode, Hash,
@@ -34,6 +34,7 @@ impl PartialEq for Hsurface {
     fn eq(&self, other: &Self) -> bool {
         self.positive_energies == other.positive_energies
             && self.negative_energies == other.negative_energies
+            && self.external_shift == other.external_shift
     }
 }
 
@@ -126,6 +127,24 @@ impl Hsurface {
         };
 
         self_as_esurface == *other
+    }
+
+    pub(crate) fn canonicalize_shift(&mut self, shift_rewrite: &ShiftRewrite) {
+        if let Some(dep_mom_pos) = self
+            .external_shift
+            .iter()
+            .position(|(index, _)| *index == shift_rewrite.dependent_momentum)
+        {
+            let (_, dep_mom_sign) = self.external_shift.remove(dep_mom_pos);
+
+            let external_shift = shift_rewrite
+                .dependent_momentum_expr
+                .iter()
+                .map(|(index, sign)| (*index, dep_mom_sign * sign))
+                .collect();
+
+            self.external_shift = add_external_shifts(&self.external_shift, &external_shift);
+        }
     }
 }
 

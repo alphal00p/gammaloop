@@ -24,11 +24,12 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
+    settings::global::GenerationSettings,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, DOD},
     },
-    uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
+    uv::{ApproximationType, settings::CTIdentifier},
 };
 
 use super::{Spinney, Wood, spenso_lor_atom};
@@ -114,18 +115,20 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn approximation_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> ApproximationType
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        settings.approximation_scheme_for(&self.ct_identifier(subgraph))
+        settings
+            .uv
+            .approximation_scheme_for(&self.ct_identifier(subgraph))
     }
 
     fn classify_spinney<E: UVE, V, H>(
         &self,
         spinney: InternalSubGraph,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Option<Spinney>
     where
@@ -140,13 +143,13 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Vec<Spinney>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        if !settings.subtract_uv {
+        if !settings.uv.subtract_uv {
             return vec![Spinney::empty(self)];
         }
 
@@ -236,7 +239,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     {
         self.wood_with_settings(
             subgraph,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
             &self.as_ref().lmb_of(&self.as_ref().full_filter()),
         )
     }
@@ -244,7 +247,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn wood_with_settings<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Wood
     where

@@ -1,6 +1,7 @@
 use crate::{
     GammaLoopContext,
     graph::{Graph, LMBext, cuts::CutSet},
+    settings::global::GenerationSettings,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
@@ -21,7 +22,7 @@ use tracing::{debug, instrument};
 use vakint::Vakint;
 
 use super::{
-    RenormalizationPart, UVgenerationSettings,
+    RenormalizationPart,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -61,7 +62,7 @@ impl CutForests {
         graph: &mut Graph,
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
@@ -125,9 +126,10 @@ impl Forest {
         vakint: (&Vakint, &vakint::VakintSettings),
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
+        let uv_settings = &settings.uv;
 
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
@@ -157,12 +159,12 @@ impl Forest {
                     );
 
                     current.data.topo_order = i;
-                    if settings.generate_integrated {
+                    if uv_settings.generate_integrated {
                         current
                             .data
                             .compute_integrated(graph, vakint, &parent.data, settings)?;
                     }
-                    if settings.only_integrated {
+                    if uv_settings.only_integrated {
                         continue;
                     }
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
