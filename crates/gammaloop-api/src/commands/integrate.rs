@@ -1,8 +1,10 @@
 use std::{
+    any::Any,
     collections::{BTreeMap, HashSet},
     fmt, fs,
     io::{self, IsTerminal, Write},
     ops::Deref,
+    panic::{self, AssertUnwindSafe},
     path::PathBuf,
     sync::mpsc,
     thread,
@@ -638,6 +640,13 @@ impl StreamingDisplayController {
         emit_integration_status_via_tracing(kind, &status_block)
     }
 
+    fn shutdown(&mut self) -> Result<()> {
+        if let Some(mut renderer) = self.renderer.take() {
+            renderer.shutdown()?;
+        }
+        Ok(())
+    }
+
     fn render_stream_block(
         renderer_kind: RendererOption,
         tabled_options: TabledRenderOptions,
@@ -649,6 +658,16 @@ impl StreamingDisplayController {
             String::new()
         }
     }
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> &str {
+    if let Some(message) = payload.downcast_ref::<&'static str>() {
+        return message;
+    }
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.as_str();
+    }
+    "panic payload is not a string"
 }
 
 fn stream_terminal_width() -> usize {
@@ -1780,22 +1799,33 @@ impl Integrate {
         })
         .collect();
 
-        let result = havana_integrate(
-            HavanaIntegrateRequest {
-                slots,
-                sampling_correlation_mode: self.sampling_correlation_mode(),
-                n_cores,
-                state: integration_state,
-                workspace: Some(workspace_path.clone()),
-                output_control: self.workspace_snapshot_control(),
-                batching: self
-                    .build_batching_settings(stream_updates, stream_updates || stream_iterations),
-                view_options,
-            },
-            move |status_update: StatusUpdate| {
-                stream_controller.handle_status_update(status_update)
-            },
-        )?;
+        let result = match panic::catch_unwind(AssertUnwindSafe(|| {
+            havana_integrate(
+                HavanaIntegrateRequest {
+                    slots,
+                    sampling_correlation_mode: self.sampling_correlation_mode(),
+                    n_cores,
+                    state: integration_state,
+                    workspace: Some(workspace_path.clone()),
+                    output_control: self.workspace_snapshot_control(),
+                    batching: self.build_batching_settings(
+                        stream_updates,
+                        stream_updates || stream_iterations,
+                    ),
+                    view_options,
+                },
+                |status_update: StatusUpdate| stream_controller.handle_status_update(status_update),
+            )
+        })) {
+            Ok(result) => result?,
+            Err(payload) => {
+                let _ = stream_controller.shutdown();
+                return Err(eyre!(
+                    "Integration panicked: {}",
+                    panic_payload_message(payload.as_ref())
+                ));
+            }
+        };
 
         Ok(IntegrationOutput {
             observables: self.collect_workspace_observable_snapshots(
