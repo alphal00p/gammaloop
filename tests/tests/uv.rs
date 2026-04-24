@@ -394,7 +394,18 @@ fn dod2_bubble_uv() {
         min_change_sigma: Some(5.0),
     });
 }
-
+#[test]
+fn epem_a_bbx_amp_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "epem_a_bbx_amp",
+        test_name: "epem_a_bbx_amp",
+        no_integrated_process: "epem_a_bbx_no_integrated_UV",
+        integrated_process: "epem_a_bbx",
+        integrand_name: "epem_a_bbx",
+        targets: None,
+        min_change_sigma: Some(5.0),
+    });
+}
 mod slow {
     #[test]
     fn ad_ad_with_gluon_correction_uv() {
@@ -406,19 +417,6 @@ mod slow {
             integrand_name: "adad_gluon",
             targets: None,
             min_change_sigma: Some(5.0),
-        });
-    }
-
-    #[test]
-    fn epem_a_bbx_amp_uv() {
-        run_single_integrated_uv_case(&IntegratedUvCase {
-            run_card: "epem_a_bbx_amp",
-            test_name: "epem_a_bbx_amp",
-            no_integrated_process: "epem_a_bbx_no_integrated_UV",
-            integrated_process: "epem_a_bbx",
-            integrand_name: "epem_a_bbx",
-            targets: None,
-            min_change_sigma: None,
         });
     }
 

@@ -2,6 +2,7 @@ digraph adad {
 
     num =
     "spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(1))),spenso::cof(3,gammalooprs::hedge(3)))"
+    // projector = "spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(2)))*spenso::g(spenso::bis(4,gammalooprs::hedge(1)),spenso::bis(4,gammalooprs::hedge(3)))"
     ext [style=invis];
 
     ext -> v1:0 [id=0 particle="a"];

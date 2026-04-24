@@ -13,6 +13,9 @@ compile = false
 summed = false
 summed_function_map = true
 
+[cli_settings.global.generation.uv]
+generate_only_integrated_uv_with_n_loops = 1
+
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 check_esurface_at_generation = false
