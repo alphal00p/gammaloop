@@ -39,6 +39,8 @@ pub(crate) use tracing::info;
 
 #[path = "test_runs/aa_aa.rs"]
 mod aa_aa;
+#[path = "test_runs/adad_zero.rs"]
+mod adad_zero;
 #[path = "test_runs/differential.rs"]
 mod differential;
 #[path = "test_runs/events.rs"]
