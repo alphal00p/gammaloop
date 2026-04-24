@@ -17,7 +17,7 @@ summed_function_map = true
 generate_only_integrated_uv_with_n_loops = 1
 
 [cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = true
+enable_thresholds = false
 check_esurface_at_generation = false
 
 [cli_settings.state]
