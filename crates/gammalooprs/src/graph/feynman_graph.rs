@@ -129,6 +129,11 @@ where
         self.1.explicit_ose_atom(edge)
     }
 
+    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+        self.1
+            .explicit_thermal_distribution_atom(edge, thermal_sign)
+    }
+
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
         lmb.loop_edges
             .iter()
@@ -178,6 +183,21 @@ where
                 * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
         (dot + mass2).sqrt()
+    }
+
+    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+        let two = Atom::num(2);
+        let ose = ose_atom_from_index(edge);
+        let arg = Atom::var(GS.inverse_temperature) * ose / &two;
+        let tanh_arg = GS.tanh(arg.clone());
+
+        let is_fermion = self[edge].is_fermion();
+
+        if is_fermion {
+            (thermal_sign + tanh_arg) / two
+        } else {
+            (thermal_sign + Atom::num(1) / tanh_arg) / two
+        }
     }
 
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
@@ -265,6 +285,11 @@ impl ParamBuilderGraph for Graph {
 
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
         self.underlying.explicit_ose_atom(edge)
+    }
+
+    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+        self.underlying
+            .explicit_thermal_distribution_atom(edge, thermal_sign)
     }
 
     #[allow(unused_variables)]

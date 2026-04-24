@@ -108,7 +108,7 @@ pub trait ParamBuilderGraph {
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
-    // fn explicit_meduium_numerato(&self,edge)
+    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
@@ -141,12 +141,13 @@ pub struct GammaLoopPairs {
     uv_damp_minus_right: ParamValuePairs,
     radius_right: ParamValuePairs,
     radius_star_right: ParamValuePairs,
+    inverse_temperature: ParamValuePairs,
     pub additional_params: ParamValuePairs,
 }
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -173,6 +174,7 @@ impl IntoIterator for GammaLoopPairs {
             self.uv_damp_minus_right,
             self.radius_right,
             self.radius_star_right,
+            self.inverse_temperature,
             self.orientations,
             self.override_if,
             self.additional_params,
@@ -183,7 +185,7 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -210,6 +212,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.uv_damp_minus_right,
             &self.radius_right,
             &self.radius_star_right,
+            &self.inverse_temperature,
             &self.orientations,
             &self.override_if,
             &self.additional_params,
@@ -220,7 +223,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -247,6 +250,7 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.uv_damp_minus_right,
             &mut self.radius_right,
             &mut self.radius_star_right,
+            &mut self.inverse_temperature,
             &mut self.orientations,
             &mut self.override_if,
             &mut self.additional_params,
@@ -304,6 +308,8 @@ impl GammaLoopPairs {
         debug!("Validating radius_star");
         self.radius_star_left.validate();
         self.radius_star_right.validate();
+        debug!("Validating inverse_temperature");
+        self.inverse_temperature.validate();
     }
 
     pub(crate) fn new<
@@ -335,6 +341,7 @@ impl GammaLoopPairs {
             uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
             uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
             uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
+            inverse_temperature: ParamValuePairs::default_from_symbol(GS.inverse_temperature),
             additional_params: additional_params.into_iter().collect(),
             ..Default::default()
         };
@@ -1260,6 +1267,24 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
         }
 
+        let thermal_sign = symbol!("thermal_sign");
+        for e in graph.iter_edge_ids() {
+            if lmb.edge_signatures[e]
+                .internal
+                .iter()
+                .any(|sign| sign.is_sign())
+            {
+                new.add_tagged_function::<Symbol>(
+                    GS.thermal_distribution,
+                    vec![Atom::num(e.0 as i64)],
+                    format!("N{e}"),
+                    vec![thermal_sign],
+                    graph.explicit_thermal_distribution_atom(e, Atom::var(thermal_sign)),
+                )
+                .unwrap();
+            }
+        }
+
         for (edge_id, signature) in lmb.edge_signatures.iter() {
             // if !lmb.loop_edges.contains(&edge_id) {
             let start = if signature.internal.iter().any(|sign| sign.is_sign()) {
@@ -1300,6 +1325,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             parse_lit!(sqrt(x)),
         )
         .unwrap();
+        new.add_function(
+            GS.tanh,
+            "tanh".to_string(),
+            vec![symbol!("x")],
+            (parse_lit!(exp(x)) - parse_lit!(exp(-x))) / (parse_lit!(exp(x)) + parse_lit!(exp(-x))),
+        )
+        .unwrap();
         let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         // new.fn_map.add_conditional(GS.orientation_if);
@@ -1329,6 +1361,15 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
+        }
+    }
+
+    pub(crate) fn inverse_temperature_value(&mut self, inverse_temperature: Complex<F<T>>) {
+        debug_assert!(self.pairs.inverse_temperature.value_range.len() == 1);
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.inverse_temperature.value_range.start * multiplicative_offset] =
+                inverse_temperature.clone();
         }
     }
 
