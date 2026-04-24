@@ -558,6 +558,9 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph
             .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
+        self.graph
+            .param_builder
+            .inverse_temperature_value(Complex::new_re(F(settings.general.inverse_temperature)));
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();

@@ -339,7 +339,7 @@ impl Graph {
 
         let orientations = iterate_possible_orientations(virtual_edges_of_contracted_graph);
 
-        let mut oriented_acyclic_graphs = vec![];
+        let mut oriented_graphs = vec![];
 
         for orientation in orientations {
             let mut orientation_iterator = orientation.into_iter();
@@ -359,13 +359,21 @@ impl Graph {
             let mut cff_graph = seed_graph.clone();
             cff_graph.apply_orientation(global_orientation)?;
 
-            if !cff_graph.has_directed_cycle_initial() {
-                oriented_acyclic_graphs.push(cff_graph);
-            }
+            // filtering has been disabled here since it is done in generate_cff_from_orientations
+            // let keep_orientation = match medium_mode {
+            //     MediumMode::Vacuum => !cff_graph.has_directed_cycle_initial(),
+            //     MediumMode::ThermodynamicEquilibrium => true,
+            // };
+
+            // if keep_orientation {
+            //     oriented_graphs.push(cff_graph);
+            // }
+
+            oriented_graphs.push(cff_graph);
         }
 
         generate_cff_from_orientations(
-            oriented_acyclic_graphs,
+            oriented_graphs,
             &mut self.surface_cache,
             &edges_in_initial_state_cut,
             canonize_esurface,
