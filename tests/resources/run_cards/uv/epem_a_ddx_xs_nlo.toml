@@ -1,0 +1,497 @@
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ddx/NLO/state"
+
+# [cli_settings.global]
+# logfile_directive = "info,gammalooprs[kernel]=debug,gammalooprs[orientation_parametric_exprs]=debug,symbolica=off"  # ,gammalooprs[kernel]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"  # ,gammalooprs[build_original_parametric_integrand]=debug"
+# display_directive = "info,gammalooprs[kernel]=debug,gammalooprs[orientation_parametric_exprs]=debug"  # ,gammalooprs[final_integrand]=debug"
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = true
+compile = true
+summed = false
+summed_function_map = false
+# horner_iterations = 0
+# cpe_iterations = 0
+
+# [cli_settings.global.generation.orientation_pattern]
+# pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.uv]
+softct = false
+inner_products = true
+generate_integrated = false
+subtract_uv = true
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[[command_blocks]]
+name = "generate_diagrams"
+# Mapping of the 11 NLO diagrams w.r.t our notation in https://arxiv.org/pdf/2203.11038
+# Targets from the real part of the cross-section in the OS+MSbar scheme
+# (table 7 of https://arxiv.org/pdf/2203.11038 and model parameters defined therein)
+# TODO
+commands = [
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
+
+  "remove processes",
+  """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{2}} QCD=1]
+      --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+      --symmetrize-left-right-states true
+      -p epem_a_ddx -i NLO
+      --global-prefactor-num "1𝑖"
+      --only-diagrams""",
+  "save dot",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "run set_model_parameters",
+  "run set_differential_quantities",
+  "run set_differential_observables",
+  "run set_differential_selectors",
+
+  """set process -p epem_a_ddx string '
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = false
+    # For importance-sampling over channels, use the quantity below
+    # lmb_channels = "monte_carlo"
+    lmb_channels = "summed"
+    '""",
+
+  """set process -p epem_a_ddx string '
+  [[stability.rotation_axis]]
+  type = "x"
+  [[stability.rotation_axis]]
+  type = "y"
+
+  [[stability.levels]]
+  precision = "Double"
+  required_precision_for_re = 1.0e-5
+  required_precision_for_im = 1.0e-5
+  escalate_for_large_weight_threshold = 0.99
+
+  [[stability.levels]]
+  precision = "Arb"
+  required_precision_for_re = 1.0e-5
+  required_precision_for_im = 1.0e-5
+  escalate_for_large_weight_threshold = -1.0
+      '""",
+
+  """set process -p epem_a_ddx -i NLO kv
+        integrator.n_increase=0
+        integrator.n_start=10000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        general.m_uv=9.1188
+		general.mu_r=91.188e+10
+    """,
+  # --show-max-weight-info-for-discrete-bins
+  # --batch-size 100000
+  # --no-stream-iterations
+  # --show-max-weight-info-for-discrete-bins
+  # --no-stream-iterations
+  # 		 --show-phase both
+  # 		 --show-top-discrete-grid
+  # 		 --show-discrete-contributions-sum
+  # 		 --sort-contributions integral
+  # 		 --show-max-weight-info
+  # 		 --renderer tabled
+  # """integrate -p epem_a_ddx -i NLO -p epem_a_ddx -i NLO_semi_inclusive --n-cores 1
+  #                --target epem_a_ddx@NLO=-3.2336e-06,0.0
+  # 		 --renderer ratatui
+  # 		 --batch-size 1000
+  # 		 --show-phase imag
+  # 		 --show-max-weight-info
+  # 		 --show-top-discrete-grid
+  # 		 --show-discrete-contributions-sum
+  # 		 --write-results-for-each-iteration
+  #                --restart
+  #   """
+  """integrate -p epem_a_ddx -i NLO -p epem_a_ddx -i NLO_semi_inclusive --n-cores 10
+                 --target epem_a_ddx@NLO=0.0,1.163e-3 epem_a_ddx@NLO_semi_inclusive=0.0,1.003e-3
+				 --renderer ratatui
+				 --batch-size 1000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+  "generate existing -p epem_a_ddx -i NLO",
+  "duplicate integrand -p epem_a_ddx -i NLO --output_process_name epem_a_ddx --output_integrand_name NLO_semi_inclusive",
+  "save state -o"
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_differential_quantities"
+commands = [
+  """set process -p epem_a_ddx -i NLO string '
+
+[quantities.integral]
+type = "integral"
+
+[quantities.graph_id]
+type = "graph_id"
+
+[quantities.orientation_id]
+type = "orientation_id"
+
+[quantities.lmb_channel_id]
+type = "lmb_channel_id"
+
+[quantities.jet_pt]
+type = "jet"
+computation = "scalar"
+quantity = "PT"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_energy]
+type = "jet"
+computation = "scalar"
+quantity = "E"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_y]
+type = "jet"
+computation = "scalar"
+quantity = "y"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_eta]
+type = "jet"
+computation = "scalar"
+quantity = "eta"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_cos_theta]
+type = "jet"
+computation = "scalar"
+quantity = "CosTheta"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_count]
+type = "jet"
+computation = "count"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"'""",
+
+  """set process -p epem_a_ddx -i NLO_semi_inclusive string '
+
+[quantities.jet_pt]
+type = "jet"
+computation = "scalar"
+quantity = "PT"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+'"""
+]
+
+[[command_blocks]]
+name = "set_differential_selectors"
+commands = [
+  """set process -p epem_a_ddx -i NLO string '
+
+[selectors.graph_0_only]
+quantity = "graph_id"
+active = false
+selector = "discrete_range"
+min = 0
+max = 0
+
+[selectors.graph_1_only]
+quantity = "graph_id"
+active = false
+selector = "discrete_range"
+min = 1
+max = 1
+
+'""",
+  """set process -p epem_a_ddx -i NLO_semi_inclusive string '
+
+[selectors.jet_pt_cut]
+quantity = "jet_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 250.0
+max = 500.0
+
+'"""
+]
+
+[[command_blocks]]
+name = "set_differential_observables"
+commands = [
+  """set process -p epem_a_ddx -i NLO string '
+
+[observables.integral]
+title = "xs"
+type_description = "AL,NLO"
+quantity = "integral"
+phase = "real"
+kind = "discrete"
+domain = { type = "single_bin" }
+labels = { type = "custom", labels = ["total integral"] }
+
+[observables.graph_id]
+title = "graph"
+type_description = "AL,NLO"
+quantity = "graph_id"
+phase = "real"
+kind = "discrete"
+domain = { type = "graph_ids" }
+labels = { type = "graph_name" }
+
+[observables.graph_0_orientation_id]
+title = "graph 0 orientation"
+type_description = "AL,NLO"
+quantity = "orientation_id"
+selections = ["graph_0_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "orientation_ids" }
+labels = { type = "orientation" }
+
+[observables.graph_1_orientation_id]
+title = "graph 1 orientation"
+type_description = "AL,NLO"
+quantity = "orientation_id"
+selections = ["graph_1_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "orientation_ids" }
+labels = { type = "orientation" }
+
+[observables.graph_0_lmb_channel_id]
+title = "graph 0 lmb channel"
+type_description = "AL,NLO"
+quantity = "lmb_channel_id"
+selections = ["graph_0_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "lmb_channel_ids" }
+labels = { type = "lmb_channel_edge_ids" }
+
+[observables.graph_1_lmb_channel_id]
+title = "graph 1 lmb channel"
+type_description = "AL,NLO"
+quantity = "lmb_channel_id"
+selections = ["graph_1_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "lmb_channel_ids" }
+labels = { type = "lmb_channel_edge_ids" }
+
+# Jet observables
+
+[observables.jet_energy]
+title = "jet E"
+type_description = "AL,NLO"
+quantity = "jet_energy"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.jet_log_energy]
+title = "jet log E"
+type_description = "AL,NLO"
+quantity = "jet_energy"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.jet_pt]
+title = "jet pt"
+type_description = "AL,NLO"
+quantity = "jet_pt"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.jet_log_pt]
+title = "jet log pt"
+type_description = "AL,NLO"
+quantity = "jet_pt"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.jet_y]
+title = "jet y"
+type_description = "AL,NLO"
+quantity = "jet_y"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+[observables.jet_eta]
+title = "jet eta"
+type_description = "AL,NLO"
+quantity = "jet_eta"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+phase = "real"
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 1 }
+
+'"""
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [
+    500.0,
+    0.0,
+    0.0,
+    500.0,
+  ],
+  [
+    500.0,
+    0.0,
+    0.0,
+    -500.0,
+  ],
+]
+helicities = [
+  "summed_averaged",
+  "summed_averaged",
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 91.188
+
+# [default_runtime_settings.general.orientation_pat]
+# pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu", "json"]
+
+[default_runtime_settings.subtraction]
+# Threshold subtraction for LU not yet implemented
+disable_threshold_subtraction = false
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.0000000001
+required_precision_for_im = 0.0000000001
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0

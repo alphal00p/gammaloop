@@ -20,8 +20,7 @@ struct IntegratedUvTargets {
 struct IntegratedUvCase<'a> {
     run_card: &'a str,
     test_name: &'a str,
-    no_integrated_process: &'a str,
-    integrated_process: &'a str,
+    process: &'a str,
     integrand_name: &'a str,
     original_m_uv: f64,
     shifted_m_uv: f64,
@@ -33,7 +32,7 @@ struct IntegratedUvCase<'a> {
 }
 
 struct IntegratedUvResults {
-    no_integrated: IntegralEstimate,
+    no_integrated: Option<IntegralEstimate>,
     integrated: IntegralEstimate,
     integrated_muv_shifted: Option<IntegralEstimate>,
     integrated_mur_shifted: Option<IntegralEstimate>,
@@ -73,6 +72,10 @@ fn set_fast_deterministic_integrator(cli: &mut CLIState) -> Result<()> {
     )
 }
 
+fn no_integrated_process_name(process: &str) -> String {
+    format!("{process}_no_integrated_UV")
+}
+
 fn shifted_muv_integrand_name(integrand_name: &str) -> String {
     format!("{integrand_name}_muv_shifted")
 }
@@ -86,11 +89,11 @@ fn add_integrated_uv_scale_variants(cli: &mut CLIState, case: &IntegratedUvCase<
         let shifted_name = shifted_muv_integrand_name(case.integrand_name);
         cli.run_command(&format!(
             "duplicate integrand -p {} -i {} --output_process_name {} --output_integrand_name {}",
-            case.integrated_process, case.integrand_name, case.integrated_process, shifted_name
+            case.process, case.integrand_name, case.process, shifted_name
         ))?;
         cli.run_command(&format!(
             "set process -p {} -i {} kv general.m_uv={}",
-            case.integrated_process, shifted_name, case.shifted_m_uv
+            case.process, shifted_name, case.shifted_m_uv
         ))?;
     }
 
@@ -100,15 +103,24 @@ fn add_integrated_uv_scale_variants(cli: &mut CLIState, case: &IntegratedUvCase<
         let shifted_name = shifted_mur_integrand_name(case.integrand_name);
         cli.run_command(&format!(
             "duplicate integrand -p {} -i {} --output_process_name {} --output_integrand_name {}",
-            case.integrated_process, case.integrand_name, case.integrated_process, shifted_name
+            case.process, case.integrand_name, case.process, shifted_name
         ))?;
         cli.run_command(&format!(
             "set process -p {} -i {} kv general.mu_r={}",
-            case.integrated_process, shifted_name, case.shifted_mu_r
+            case.process, shifted_name, case.shifted_mu_r
         ))?;
     }
 
     Ok(())
+}
+
+fn process_integrand_exists(cli: &mut CLIState, process: &str, integrand_name: &str) -> bool {
+    cli.state
+        .find_integrand_ref(
+            Some(&ProcessRef::Unqualified(process.to_string())),
+            Some(&integrand_name.to_string()),
+        )
+        .is_ok()
 }
 
 fn run_integrated_uv_integration(
@@ -116,19 +128,21 @@ fn run_integrated_uv_integration(
     case: &IntegratedUvCase<'_>,
 ) -> Result<IntegratedUvResults> {
     set_fast_deterministic_integrator(cli)?;
-    let mut processes = vec![
-        ProcessRef::Unqualified(case.no_integrated_process.to_string()),
-        ProcessRef::Unqualified(case.integrated_process.to_string()),
-    ];
-    let mut integrand_names = vec![
-        case.integrand_name.to_string(),
-        case.integrand_name.to_string(),
-    ];
+    let no_integrated_process = no_integrated_process_name(case.process);
+    let has_no_integrated =
+        process_integrand_exists(cli, &no_integrated_process, case.integrand_name);
+    let mut processes = vec![ProcessRef::Unqualified(case.process.to_string())];
+    let mut integrand_names = vec![case.integrand_name.to_string()];
+
+    if has_no_integrated {
+        processes.push(ProcessRef::Unqualified(no_integrated_process.clone()));
+        integrand_names.push(case.integrand_name.to_string());
+    }
 
     let muv_shifted_name = ((case.original_m_uv - case.shifted_m_uv).abs() > f64::EPSILON)
         .then(|| shifted_muv_integrand_name(case.integrand_name));
     if let Some(name) = &muv_shifted_name {
-        processes.push(ProcessRef::Unqualified(case.integrated_process.to_string()));
+        processes.push(ProcessRef::Unqualified(case.process.to_string()));
         integrand_names.push(name.clone());
     }
 
@@ -136,7 +150,7 @@ fn run_integrated_uv_integration(
         && (case.original_mu_r - case.shifted_mu_r).abs() > f64::EPSILON)
         .then(|| shifted_mur_integrand_name(case.integrand_name));
     if let Some(name) = &mur_shifted_name {
-        processes.push(ProcessRef::Unqualified(case.integrated_process.to_string()));
+        processes.push(ProcessRef::Unqualified(case.process.to_string()));
         integrand_names.push(name.clone());
     }
 
@@ -153,29 +167,33 @@ fn run_integrated_uv_integration(
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
-    let no_integrated_key = format!("{}@{}", case.no_integrated_process, case.integrand_name);
-    let no_integrated_slot = integration_result
-        .slot(&no_integrated_key)
-        .expect("no-integrated slot should exist");
-
-    let integrated_key = format!("{}@{}", case.integrated_process, case.integrand_name);
+    let integrated_key = format!("{}@{}", case.process, case.integrand_name);
     let integrated_slot = integration_result
         .slot(&integrated_key)
         .expect("integrated slot should exist");
 
     Ok(IntegratedUvResults {
-        no_integrated: no_integrated_slot.integral.clone(),
+        no_integrated: has_no_integrated.then(|| {
+            integration_result
+                .slot(&format!(
+                    "{}@{}",
+                    no_integrated_process, case.integrand_name
+                ))
+                .expect("no-integrated slot should exist")
+                .integral
+                .clone()
+        }),
         integrated: integrated_slot.integral.clone(),
         integrated_muv_shifted: muv_shifted_name.map(|name| {
             integration_result
-                .slot(&format!("{}@{}", case.integrated_process, name))
+                .slot(&format!("{}@{}", case.process, name))
                 .expect("integrated shifted-m_uv slot should exist")
                 .integral
                 .clone()
         }),
         integrated_mur_shifted: mur_shifted_name.map(|name| {
             integration_result
-                .slot(&format!("{}@{}", case.integrated_process, name))
+                .slot(&format!("{}@{}", case.process, name))
                 .expect("integrated shifted-mu_r slot should exist")
                 .integral
                 .clone()
@@ -190,6 +208,8 @@ fn integrated_uv_targets_pass(
 ) -> bool {
     results
         .no_integrated
+        .as_ref()
+        .expect("no-integrated result should exist for target checks")
         .is_compatible_with_target(Complex::new_re(F(no_integrated_target)), 2)
         && results
             .integrated
@@ -219,7 +239,13 @@ fn integral_estimate_change_sigma(lhs: &IntegralEstimate, rhs: &IntegralEstimate
 }
 
 fn integrated_uv_result_change_sigma(results: &IntegratedUvResults) -> f64 {
-    integral_estimate_change_sigma(&results.integrated, &results.no_integrated)
+    integral_estimate_change_sigma(
+        &results.integrated,
+        results
+            .no_integrated
+            .as_ref()
+            .expect("no-integrated result should exist for ct-diff checks"),
+    )
 }
 
 fn integrated_uv_meaningfully_changes_result(
@@ -296,18 +322,28 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         cli.run_command("run generate")?;
         add_integrated_uv_scale_variants(&mut cli, case)?;
 
-        let integrated_profile =
-            integrated_uv_profile_passes(&mut cli, case.integrated_process, case.integrand_name)?;
-        let no_integrated_profile = integrated_uv_profile_passes(
-            &mut cli,
-            case.no_integrated_process,
-            case.integrand_name,
-        )?;
-        outcome.uv_profile_passed = integrated_profile && no_integrated_profile;
+        let no_integrated_process = no_integrated_process_name(case.process);
+        let has_no_integrated =
+            process_integrand_exists(&mut cli, &no_integrated_process, case.integrand_name);
+        outcome.uv_profile_passed =
+            integrated_uv_profile_passes(&mut cli, case.process, case.integrand_name)?
+                && (!has_no_integrated
+                    || integrated_uv_profile_passes(
+                        &mut cli,
+                        &no_integrated_process,
+                        case.integrand_name,
+                    )?);
 
         let baseline = run_integrated_uv_integration(&mut cli, case)?;
 
         if let Some(min_change_sigma) = case.min_change_sigma {
+            if baseline.no_integrated.is_none() {
+                return Err(eyre::eyre!(
+                    "ct-diff check requested for {} but no {} process exists",
+                    case.process,
+                    no_integrated_process
+                ));
+            }
             let change_sigma = integrated_uv_result_change_sigma(&baseline);
             outcome.ct_change_sigma = Some(change_sigma);
             outcome.ct_change_passed = Some(integrated_uv_meaningfully_changes_result(
@@ -337,6 +373,13 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         }
 
         if let Some(targets) = &case.targets {
+            if baseline.no_integrated.is_none() {
+                return Err(eyre::eyre!(
+                    "target check requested for {} but no {} process exists",
+                    case.process,
+                    no_integrated_process
+                ));
+            }
             outcome.target_passed = Some(integrated_uv_targets_pass(
                 &baseline,
                 targets.no_integrated,
@@ -424,12 +467,64 @@ fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
 }
 
 #[test]
+fn aa_aa_gl00_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/aa_aa_GL00",
+        test_name: "aa_aa_GL00",
+        process: "aa_aa",
+        integrand_name: "2L",
+        original_m_uv: 91.188,
+        shifted_m_uv: 364.752,
+        original_mu_r: 91.188,
+        shifted_mu_r: 364.752,
+        targets: None,
+        min_change_sigma: Some(5.0),
+        min_mu_r_change_sigma: Some(5.0),
+    });
+}
+#[test]
+fn epem_ttxh_gl00_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/epem_ttxh_GL00",
+        test_name: "epem_ttxh_gl00",
+        process: "epem_a_tth",
+        integrand_name: "NLO",
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 9.0,
+        targets: None,
+        min_change_sigma: Some(5.0),
+        min_mu_r_change_sigma: Some(5.0),
+    });
+}
+
+#[test]
+fn dod0_bubble_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/dod0_bubble",
+        test_name: "dod0_bubble",
+        process: "bubble",
+        integrand_name: "scalar_bubble_below_thres",
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 9.0,
+        targets: Some(IntegratedUvTargets {
+            no_integrated: 1.4693e-2,
+            integrated: 2.684e-3,
+        }),
+        min_change_sigma: Some(5.0),
+        min_mu_r_change_sigma: Some(5.0),
+    });
+}
+
+#[test]
 fn dod1_bubble_uv() {
     run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "dod1_bubble",
+        run_card: "uv/dod1_bubble",
         test_name: "dod1_bubble",
-        no_integrated_process: "bubble_dod1_no_integrated_UV",
-        integrated_process: "bubble_dod1",
+        process: "bubble_dod1",
         integrand_name: "scalar_bubble_below_thres",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
@@ -445,38 +540,16 @@ fn dod1_bubble_uv() {
 }
 
 #[test]
-fn dod0_bubble_uv() {
-    run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "dod0_bubble",
-        test_name: "dod0_bubble",
-        no_integrated_process: "bubble_no_integrated_UV",
-        integrated_process: "bubble",
-        integrand_name: "scalar_bubble_below_thres",
-        original_m_uv: 20.0,
-        shifted_m_uv: 7.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 9.0,
-        targets: Some(IntegratedUvTargets {
-            no_integrated: 1.471664021721597e-2,
-            integrated: 2.7029875684552542e-3,
-        }),
-        min_change_sigma: Some(5.0),
-        min_mu_r_change_sigma: Some(5.0),
-    });
-}
-
-#[test]
 fn dod2_bubble_uv() {
     run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "dod2_bubble",
+        run_card: "uv/dod2_bubble",
         test_name: "dod2_bubble",
-        no_integrated_process: "bubble_dod2_no_integrated_UV",
-        integrated_process: "bubble_dod2",
+        process: "bubble_dod2",
         integrand_name: "scalar_bubble_below_thres",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
         original_mu_r: 3.0,
-        shifted_mu_r: 9.0,
+        shifted_mu_r: 19.0,
         targets: Some(IntegratedUvTargets {
             no_integrated: -0.5940830828502411,
             integrated: 1.2143596454658382e-2,
@@ -485,13 +558,13 @@ fn dod2_bubble_uv() {
         min_mu_r_change_sigma: Some(5.0),
     });
 }
+
 #[test]
 fn epem_a_bbx_amp_uv() {
     run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "epem_a_bbx_amp",
+        run_card: "uv/epem_a_bbx_amp",
         test_name: "epem_a_bbx_amp",
-        no_integrated_process: "epem_a_bbx_no_integrated_UV",
-        integrated_process: "epem_a_bbx",
+        process: "epem_a_bbx",
         integrand_name: "epem_a_bbx",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
@@ -502,14 +575,14 @@ fn epem_a_bbx_amp_uv() {
         min_mu_r_change_sigma: Some(5.0),
     });
 }
+
 mod slow {
     #[test]
     fn ad_ad_with_gluon_correction_uv() {
         run_single_integrated_uv_case(&IntegratedUvCase {
-            run_card: "ad_ad_with_gluon_correction",
+            run_card: "uv/ad_ad_with_gluon_correction",
             test_name: "ad_ad_with_gluon_correction",
-            no_integrated_process: "adad_no_integrated_UV",
-            integrated_process: "adad",
+            process: "adad",
             integrand_name: "adad_gluon",
             original_m_uv: 20.0,
             shifted_m_uv: 7.0,

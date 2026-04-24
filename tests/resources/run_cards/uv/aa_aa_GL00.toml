@@ -1,0 +1,94 @@
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
+  "set global kv global.generation.uv.generate_integrated=true",
+  """generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        --symmetrize-initial-states=true --symmetrize-final-states=true
+        --select-graphs GL00
+        -p aa_aa -i 2L""",
+  "set global kv global.generation.uv.generate_integrated=false",
+  """generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        --symmetrize-initial-states=true --symmetrize-final-states=true
+        --select-graphs GL00
+        -p aa_aa_no_integrated_UV -i 2L""",
+]
+
+[cli_settings]
+[cli_settings.global]
+logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "info,gammalooprs[orientation_parametric_exprs]=debug"
+
+[cli_settings.global.log_style]
+include_fields = true
+full_line_source = true
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = true
+
+# [cli_settings.global.generation.uv]
+# generate_only_integrated_uv_with_n_loops = 1
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = false
+horner_iterations = 5
+cpe_iterations = 5
+
+[cli_settings.state]
+folder = "tests/artifacts/aa_aa_GL00"
+name = "aa_aa_GL00"
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [0.0, 500.0, 0.0, 0.0],
+  [0.0, 0.0, 500.0, 0.0],
+  [0.0, 0.0, 0.0, 500.0],
+  "dependent"
+]
+helicities = [+1, +1, -1, -1]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.integrator]
+integrated_phase = "real"
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0

@@ -29,18 +29,15 @@
       inherit (pkgs) lib;
 
       baseCraneLib = crane.mkLib pkgs;
-      fenixPkgs = fenix.packages.${system};
-      stableToolchain = fenixPkgs.stable;
+      stableToolchain = fenix.packages.${system}.stable;
 
-      ciToolchain = fenixPkgs.combine [
-        stableToolchain.cargo
-        stableToolchain.clippy
-        stableToolchain.rust-src
-        stableToolchain.rust-std
-        stableToolchain.rustc
-        stableToolchain.llvm-tools
-        stableToolchain.rustfmt
-        fenixPkgs.targets.wasm32-unknown-unknown.stable.rust-std
+      ciToolchain = stableToolchain.withComponents [
+        "cargo"
+        "clippy"
+        "llvm-tools"
+        "rust-std"
+        "rustc"
+        "rustfmt"
       ];
 
       craneLib =
@@ -171,9 +168,6 @@
 
       # Env var name Cargo uses to pick the linker for this target
       cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
-      wasmCargoLinkerVar = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER";
-      wasmCargoRustflagsVar = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS";
-      wasmLinker = "${ciToolchain}/lib/rustlib/${rustTarget}/bin/rust-lld";
 
       # Force GCC as both C/C++ compiler and Rust linker.
       nixCc = "${pkgs.gcc}/bin/gcc";
@@ -225,8 +219,7 @@
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
-        "${wasmCargoLinkerVar}" = wasmLinker;
-        "${wasmCargoRustflagsVar}" = ''--cfg getrandom_backend="wasm_js"'';
+        RUSTFLAGS = "-C linker=${nixCc}";
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
@@ -397,79 +390,73 @@
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
-        "${wasmCargoLinkerVar}" = wasmLinker;
-        "${wasmCargoRustflagsVar}" = ''--cfg getrandom_backend="wasm_js"'';
+        RUSTFLAGS = "-C linker=${nixCc}";
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
 
-        shellHook = ''
-          export CC="${nixCc}"
-          export CXX="${nixCxx}"
-          export ${cargoLinkerVar}="${nixCc}"
-          export ${wasmCargoLinkerVar}="${wasmLinker}"
-          export ${wasmCargoRustflagsVar}='--cfg getrandom_backend="wasm_js"'
-          unset RUSTFLAGS
-        '';
+        # shellHook = ''
+        #   export CC="${nixCc}"
+        #   export CXX="${nixCxx}"
+        #   export ${cargoLinkerVar}="${nixCc}"
+        # '';
 
-        packages =
-          [ciToolchain]
-          ++ (with pkgs; [
-            tdf
-            cargo-flamegraph
-            yaml-language-server
-            just
-            dot-language-server
-            cargo-insta
-            cargo-udeps
-            cargo-machete
-            openssl
-            pyright
-            gmp
-            mpfr
-            libmpc
-            form
-            gnum4
-            nickel
-            nls
-            typst
-            cargo-nextest
-            pkg-config
-            cargo-deny
-            cargo-edit
-            cargo-watch
-            bacon
-            gfortran
-            gcc
-            rust-script
-            uv
-            graphviz
-            mupdf
-            tinymist
-            typstyle
-            poppler-utils
-            rust-analyzer
-            maturin
-            virtualenv
-            (pkgs.rustPlatform.buildRustPackage rec {
-              pname = "clinnet";
-              version = "0.1.8";
-              src = pkgs.fetchCrate {
-                inherit pname version;
-                sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-              };
-              cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-            })
-            (pkgs.rustPlatform.buildRustPackage rec {
-              pname = "rscls";
-              version = "0.2.3";
-              src = pkgs.fetchCrate {
-                inherit pname version;
-                sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
-              };
-              cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
-            })
-          ]);
+        packages = with pkgs; [
+          tdf
+          cargo-flamegraph
+          yaml-language-server
+          just
+          dot-language-server
+          cargo-insta
+          cargo-udeps
+          cargo-machete
+          openssl
+          pyright
+          gmp
+          mpfr
+          libmpc
+          form
+          gnum4
+          nickel
+          nls
+          typst
+          cargo-nextest
+          pkg-config
+          cargo-deny
+          cargo-edit
+          cargo-watch
+          bacon
+          gfortran
+          gcc
+          rust-script
+          uv
+          graphviz
+          mupdf
+          tinymist
+          typstyle
+          poppler-utils
+          rust-analyzer
+          maturin
+          virtualenv
+          (pkgs.rustPlatform.buildRustPackage rec {
+            pname = "clinnet";
+            version = "0.1.8";
+            src = pkgs.fetchCrate {
+              inherit pname version;
+              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
+            };
+            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
+          })
+          (pkgs.rustPlatform.buildRustPackage rec {
+            pname = "rscls";
+            version = "0.2.3";
+            src = pkgs.fetchCrate {
+              inherit pname version;
+              sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+            };
+            cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+          })
+        ];
       };
     });
 }
