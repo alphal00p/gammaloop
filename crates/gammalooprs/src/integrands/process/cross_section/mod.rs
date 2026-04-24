@@ -1060,6 +1060,11 @@ impl GraphTerm for CrossSectionGraphTerm {
             &externals,
             settings.kinematics.externals.get_helicities(),
         );
+        self.graph.param_builder.pairs.warn_zero_polarizations(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
 
         for (value_index, values) in self.graph.param_builder.values.iter_mut().enumerate() {
             let multiplicative_offset = value_index + 1;

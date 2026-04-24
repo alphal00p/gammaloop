@@ -12,7 +12,10 @@ use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
-    algebra::{algebraic_traits::RefZero, complex::Complex},
+    algebra::{
+        algebraic_traits::{IsZero, RefZero},
+        complex::Complex,
+    },
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
@@ -498,6 +501,42 @@ impl GammaLoopPairs {
             }
         }
         values
+    }
+
+    pub(crate) fn warn_zero_polarizations<T: FloatLike>(
+        &self,
+        graph: &Graph,
+        ext: &ExternalFourMomenta<F<T>>,
+        helicities: &[Helicity],
+    ) {
+        for (p, atom) in &graph.polarizations {
+            if p.pol_type == PolType::Scalar {
+                continue;
+            }
+            let Some(extid) = graph.loop_momentum_basis.ext_from(p.eid) else {
+                continue;
+            };
+            let Helicity::Signed(hel) = helicities[extid.0] else {
+                continue;
+            };
+            let pol = match p.pol_type {
+                PolType::Epsilon => ext[extid].eps_pol(hel),
+                PolType::EpsilonBar => ext[extid].eps_pol(hel).bar(),
+                PolType::Scalar => unreachable!(),
+                PolType::U => ext[extid].u(hel.try_into().unwrap()),
+                PolType::V => ext[extid].v(hel.try_into().unwrap()),
+                PolType::UBar => ext[extid].u(hel.try_into().unwrap()).bar(),
+                PolType::VBar => ext[extid].v(hel.try_into().unwrap()).bar(),
+            };
+            if pol.tensor.data.iter().all(|c| c.is_zero()) {
+                warn!(
+                    "Polarization {} for edge {} (external index {}, param: {}) \
+                     evaluates to the zero vector/spinor at the warm-up kinematics. \
+                     Check that the helicity and momentum configuration are physical.",
+                    p.pol_type, p.eid.0, extid.0, atom
+                );
+            }
+        }
     }
 
     pub(crate) fn left_threshold_params<T: FloatLike>(

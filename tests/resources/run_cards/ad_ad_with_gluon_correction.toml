@@ -1,7 +1,7 @@
 [cli_settings]
 [cli_settings.global]
 logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "info,gammalooprs[orientation_parametric_exprs]=debug,gammalooprs[kernel]=debug,poly::gcd =off"
+display_directive = "info"  # ,gammalooprs[orientation_parametric_exprs]=debug,gammalooprs[kernel]=debug,poly::gcd =off"
 
 [cli_settings.global.log_style]
 include_fields = true
@@ -43,10 +43,11 @@ type = "constant"
 momenta = [
   [500.0, 0.0, 0.0, 500.0],
   [500.0, 0.0, 0.0, -500.0],
-  [500.0, 500.0, 0.0, 0.0],
+  [500.0, 300.0, 200.0, 346.4101615],
   "dependent"
 ]
-helicities = [+1, +1, -1, -1]
+# helicities = [+1, -1, +1, -1]#gives zero
+helicities = [+1, +1, -1, -1]  # integrates correctly
 
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
