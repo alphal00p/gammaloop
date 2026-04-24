@@ -1723,14 +1723,18 @@ impl LmbMultiChannelingSetup {
             .iter()
             .map(|&edge_index| {
                 let signature_of_edge_channel_lmb = &channel_lmb.edge_signatures[edge_index];
-
-                signature_of_edge_channel_lmb
+                let loop_part = signature_of_edge_channel_lmb
                     .internal
-                    .apply_typed(&momentum_sample.loop_moms)
-                    + signature_of_edge_channel_lmb
-                        .external
-                        .apply(&momentum_sample.external_moms.raw)
-                        .spatial
+                    .apply_typed(&momentum_sample.loop_moms);
+                if momentum_sample.external_moms.is_empty() {
+                    loop_part
+                } else {
+                    loop_part
+                        + signature_of_edge_channel_lmb
+                            .external
+                            .apply(&momentum_sample.external_moms.raw)
+                            .spatial
+                }
             })
             .collect();
 
