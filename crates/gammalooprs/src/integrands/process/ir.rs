@@ -16,7 +16,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor,
-    cff::esurface::{EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId},
+    cff::esurface::{ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId},
     graph::{FeynmanGraph, GraphGroupPosition, LmbError, lmb::LMBwithEdges},
     integrands::{
         evaluation::PreciseEvaluationResult,
@@ -1380,7 +1380,7 @@ struct IrLimit {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct ThresholdLimit {
-    esurface_id: EsurfaceID,
+    esurface_id: RaisedEsurfaceId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1445,7 +1445,7 @@ impl Display for ProfileLimit {
 impl ThresholdLimit {
     fn enumerate_from_overlap_structure(
         existing_esurfaces: &ExistingEsurfaces,
-        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         own_group_position: GraphGroupPosition,
     ) -> Vec<Self> {
         existing_esurfaces
@@ -1477,13 +1477,13 @@ impl ThresholdLimit {
             .map_err(|_| eyre!("Threshold must be a valid integer, got: {}", threshold))?;
 
         Ok(Self {
-            esurface_id: EsurfaceID::from(threshold_id),
+            esurface_id: RaisedEsurfaceId::from(threshold_id),
         })
     }
 
     fn resolve_existing_esurface_id(
         &self,
-        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         own_group_position: GraphGroupPosition,
         existing_esurfaces: &ExistingEsurfaces,
     ) -> Result<ExistingEsurfaceId> {
@@ -2308,7 +2308,7 @@ mod tests {
     #[test]
     fn test_threshold_display() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(8usize),
+            esurface_id: RaisedEsurfaceId::from(8usize),
         };
 
         let display = threshold_limit.to_string();
@@ -2337,7 +2337,7 @@ mod tests {
     fn parse_threshold() {
         let threshold_str = "t5";
         let threshold_limit = ThresholdLimit::parse_threshold(threshold_str).unwrap();
-        assert_eq!(threshold_limit.esurface_id, EsurfaceID::from(5usize));
+        assert_eq!(threshold_limit.esurface_id, RaisedEsurfaceId::from(5usize));
 
         let invalid_threshold_str = "5"; // missing 't'
         assert!(ThresholdLimit::parse_threshold(invalid_threshold_str).is_err());
@@ -2389,7 +2389,7 @@ mod tests {
         assert_eq!(
             threshold_limit,
             ProfileLimit::Threshold(ThresholdLimit {
-                esurface_id: EsurfaceID::from(8usize),
+                esurface_id: RaisedEsurfaceId::from(8usize),
             }),
             "Threshold limit does not match"
         );
@@ -2428,14 +2428,14 @@ mod tests {
     #[test]
     fn resolve_existing_esurface_id_for_threshold_limit() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
         let esurface_map = ti_vec![
             ti_vec![
-                Some(EsurfaceID::from(5usize)),
-                Some(EsurfaceID::from(6usize))
+                Some(RaisedEsurfaceId::from(5usize)),
+                Some(RaisedEsurfaceId::from(6usize))
             ],
-            ti_vec![Some(EsurfaceID::from(7usize)), None],
+            ti_vec![Some(RaisedEsurfaceId::from(7usize)), None],
         ];
         let existing_esurfaces =
             ti_vec![GroupEsurfaceId::from(0usize), GroupEsurfaceId::from(1usize)];
@@ -2454,11 +2454,11 @@ mod tests {
     #[test]
     fn resolve_existing_esurface_id_rejects_threshold_missing_from_graph() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(9usize),
+            esurface_id: RaisedEsurfaceId::from(9usize),
         };
         let esurface_map = ti_vec![ti_vec![
-            Some(EsurfaceID::from(5usize)),
-            Some(EsurfaceID::from(6usize))
+            Some(RaisedEsurfaceId::from(5usize)),
+            Some(RaisedEsurfaceId::from(6usize))
         ]];
         let existing_esurfaces = ti_vec![GroupEsurfaceId::from(0usize)];
 
@@ -2476,9 +2476,9 @@ mod tests {
     #[test]
     fn resolve_existing_esurface_id_rejects_threshold_missing_from_overlap() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
-        let esurface_map = ti_vec![ti_vec![Some(EsurfaceID::from(7usize))]];
+        let esurface_map = ti_vec![ti_vec![Some(RaisedEsurfaceId::from(7usize))]];
         let existing_esurfaces = ti_vec![GroupEsurfaceId::from(1usize)];
 
         assert!(
@@ -2496,15 +2496,15 @@ mod tests {
     fn enumerate_threshold_limits_from_overlap_structure() {
         let esurface_map = ti_vec![
             ti_vec![
-                Some(EsurfaceID::from(5usize)),
-                Some(EsurfaceID::from(8usize))
+                Some(RaisedEsurfaceId::from(5usize)),
+                Some(RaisedEsurfaceId::from(8usize))
             ],
-            ti_vec![Some(EsurfaceID::from(7usize)), None],
+            ti_vec![Some(RaisedEsurfaceId::from(7usize)), None],
             ti_vec![
-                Some(EsurfaceID::from(5usize)),
-                Some(EsurfaceID::from(9usize))
+                Some(RaisedEsurfaceId::from(5usize)),
+                Some(RaisedEsurfaceId::from(9usize))
             ],
-            ti_vec![None, Some(EsurfaceID::from(3usize))],
+            ti_vec![None, Some(RaisedEsurfaceId::from(3usize))],
         ];
         let existing_esurfaces = ti_vec![
             GroupEsurfaceId::from(2usize),
@@ -2528,10 +2528,10 @@ mod tests {
             threshold_limits,
             vec![
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(5usize),
+                    esurface_id: RaisedEsurfaceId::from(5usize),
                 },
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(7usize),
+                    esurface_id: RaisedEsurfaceId::from(7usize),
                 },
             ]
         );
@@ -2539,13 +2539,13 @@ mod tests {
             threshold_limits_for_other_group,
             vec![
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(3usize),
+                    esurface_id: RaisedEsurfaceId::from(3usize),
                 },
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(8usize),
+                    esurface_id: RaisedEsurfaceId::from(8usize),
                 },
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(9usize),
+                    esurface_id: RaisedEsurfaceId::from(9usize),
                 },
             ]
         );
@@ -2627,7 +2627,7 @@ mod tests {
     #[test]
     fn threshold_limit_builds_group_trajectories_for_matching_overlap_groups() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
         let threshold_point = test_momentum_sample(vec![ThreeMomentum::new(
             F::from_f64(1.0),
@@ -2704,7 +2704,7 @@ mod tests {
     #[test]
     fn threshold_limit_rejects_group_missing_threshold_kinematics() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
         let overlap_structure: OverlapStructureWithKinematics<f64> =
             OverlapStructureWithKinematics {
