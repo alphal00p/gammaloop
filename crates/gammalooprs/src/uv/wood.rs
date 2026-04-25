@@ -36,8 +36,13 @@ impl CutWoods {
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let spinneys =
+            let mut spinneys =
                 graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);
+            graph.add_vacuum_subtraction_spinney(
+                &mut spinneys,
+                settings,
+                &graph.loop_momentum_basis,
+            );
 
             let wood = Wood::from_spinneys(spinneys, graph);
 
