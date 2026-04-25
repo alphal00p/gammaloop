@@ -390,7 +390,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 )?,
             ),
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
-            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::VacuumLimit => Ok(Atom::Zero),
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
                 panic!("should have been kept out of the wood");

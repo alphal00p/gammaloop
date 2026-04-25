@@ -319,7 +319,7 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
                     given,
                     &self.t_tilde(ctx, current, given, integrand)?,
                 )?),
-            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::VacuumLimit => self.start(ctx, current, given, integrand),
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
                 panic!("should have been kept out of the wood");

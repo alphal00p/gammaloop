@@ -114,6 +114,7 @@ impl Wood {
                 &graph.loop_momentum_basis,
             ));
         }
+        graph.add_vacuum_subtraction_spinney(&mut spinneys, settings, &graph.loop_momentum_basis);
 
         Self::from_spinneys(spinneys, graph, cuts, &settings.uv.vakint)
     }

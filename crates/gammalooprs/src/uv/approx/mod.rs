@@ -627,7 +627,7 @@ impl Approximation {
                 //     .first()
                 //     .unwrap()
                 //     .select(&
-                debug_preview.log_print(None) // printer(LOGPRINTOPTS)
+                debug_preview.log_print(Some(100)) // printer(LOGPRINTOPTS)
             );
 
             integrands.push(resnum.replace_multiple(&reps))
