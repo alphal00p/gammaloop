@@ -890,15 +890,26 @@ impl GammaloopSymbols {
         &self,
         arg: impl Into<AtomOrView<'a>>,
         limit: ThermalDistributionLimit,
+        edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Atom {
-        let a = arg.into();
+        let mut atom = arg.into().as_view().into();
         match limit {
-            ThermalDistributionLimit::Default => a.as_view().into(),
-            ThermalDistributionLimit::Vacuum => a
-                .replace(self.thermal_distribution(W_.a_, Sign::Positive))
-                .with(Atom::one())
-                .replace(self.thermal_distribution(W_.a_, Sign::Negative))
-                .with(Atom::zero()),
+            ThermalDistributionLimit::Default => atom,
+            ThermalDistributionLimit::Vacuum => {
+                for edge in edges {
+                    atom = atom
+                        .replace(
+                            self.thermal_distribution(usize::from(edge) as i64, Sign::Positive),
+                        )
+                        .with(Atom::one());
+                    atom = atom
+                        .replace(
+                            self.thermal_distribution(usize::from(edge) as i64, Sign::Negative),
+                        )
+                        .with(Atom::zero());
+                }
+                atom
+            }
         }
     }
 

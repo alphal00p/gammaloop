@@ -254,7 +254,12 @@ impl Local3DApproximation {
         let graph = ctx.graph;
         let settings = ctx.settings;
         let reduced = current.reduced_subgraph(given);
-        let cff = GS.apply_thermal_distribution_limit(cff, ThermalDistributionLimit::Vacuum);
+        let reduced_graph_edges = graph.iter_edges_of(&reduced).map(|(_, edge_id, _)| edge_id);
+        let cff = GS.apply_thermal_distribution_limit(
+            cff,
+            ThermalDistributionLimit::Vacuum,
+            reduced_graph_edges,
+        );
         let mut atomarg = cff
             * graph
                 .numerator(&reduced, given.subgraph())
