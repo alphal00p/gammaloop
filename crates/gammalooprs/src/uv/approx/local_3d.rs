@@ -294,6 +294,31 @@ impl Local3DApproximation {
         }
         Ok(atomarg.replace_multiple(&reps))
     }
+
+    pub(crate) fn full_vacuum_limit<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        cff: &Atom,
+    ) -> Result<Atom> {
+        let graph = ctx.graph;
+        let reduced = current.reduced_subgraph(given);
+        let reduced_graph_edges = graph.iter_edges_of(&reduced).map(|(_, edge_id, _)| edge_id);
+        let cff = GS.apply_thermal_distribution_limit(
+            cff,
+            ThermalDistributionLimit::Vacuum,
+            reduced_graph_edges,
+        );
+
+        let atomarg = cff
+            * graph
+                .numerator(&reduced, given.subgraph())
+                .get_single_atom()
+                .unwrap();
+
+        Ok(atomarg)
+    }
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
@@ -324,7 +349,9 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
                     given,
                     &self.t_tilde(ctx, current, given, integrand)?,
                 )?),
-            ApproximationType::VacuumLimit => self.start(ctx, current, given, integrand),
+            ApproximationType::VacuumLimit => {
+                self.full_vacuum_limit(ctx, current, given, integrand)
+            }
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
                 panic!("should have been kept out of the wood");
