@@ -1,5 +1,5 @@
 use crate::{
-    GammaLoopContext,
+    GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
@@ -16,7 +16,7 @@ use symbolica::{
 };
 
 use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 use vakint::Vakint;
 
@@ -95,14 +95,13 @@ impl CutForests {
         {
             let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
 
-            debug!(
+            debug_tags!(#generation, #uv, #graph, #orientation, #dump;
                 n_terms =%forest.n_terms(),
                 graph = %graph.dot(&cuts.union),
                 name = %graph.name,
                 integrands=%integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
                 file.integrands = %integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
                 "Orientation Parametric integrand {i}",
-
             );
             exprs.push(ParametricIntegrands { integrands, cuts });
         }
@@ -220,7 +219,8 @@ impl Forest {
             //    expr = % atom,"Term before simplification"
             // );
             //
-            debug!(
+
+            debug_tags!(#generation, #uv, #graph, #term;
                 forest_term=%
                 n.data
                     .simple_approx
@@ -241,7 +241,7 @@ impl Forest {
             // .max_level(0)
             // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-            debug!(
+            debug_tags!(#generation, #uv, #graph, #term;
                 forest_term=%
                 n.data
                     .simple_approx
@@ -285,8 +285,9 @@ impl Forest {
         let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
-            debug!(
+            debug_tags!(#generation, #uv, #graph, #orientation, #term;
                 dod = %n.data.dod(),
+                graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
                 simple = %
                 n.data
                     .simple_approx
@@ -312,7 +313,8 @@ impl Forest {
                 .enumerate()
             {
                 let a = if add_sigma {
-                    debug!(
+                    debug_tags!(#generation, #uv, #graph, #orientation, #inspect;
+                        sigma = true,
                         "{}",
                         n.data
                             .simple_approx

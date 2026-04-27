@@ -9,6 +9,7 @@ use std::{
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
+use gammaloop_tracing_filter::GammaLogFilter;
 use gammalooprs::utils::tracing::{LogFormat, LogStyle};
 use indicatif::ProgressState;
 use tracing::{field::Visit, level_filters::LevelFilter, Event, Subscriber};
@@ -28,51 +29,17 @@ use tracing_subscriber::{
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter,
 };
 
 use color_eyre::Result;
 
-fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
-    // Start from a strict global default…
-    let mut filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::WARN.into()) // global floor
-        .parse_lossy(""); // no user rules yet
-
-    // for req in ["gammalooprs=debug", "gammaloop_api=info", "symbolica=off"] {
-    //     let Ok(d) = req.parse() else {
-    //         continue;
-    //     };
-    //     filter = filter.add_directive(d);
-    // }
-    for a in user_spec.split(",") {
-        if a.trim().is_empty() {
-            continue;
-        }
-        filter = filter.add_directive(a.trim().parse()?);
-    }
-    Ok(filter)
+fn file_filter_from(user_spec: &str) -> Result<GammaLogFilter> {
+    GammaLogFilter::parse_with_default(user_spec, Some(LevelFilter::WARN)).map_err(Into::into)
 }
 
-fn display_filter_from(user_spec: &str) -> Result<EnvFilter> {
-    // Default: only show `status` target, everything else OFF.
-    // Users can override/expand with their spec.
-    let mut f = EnvFilter::builder()
-        .with_default_directive(LevelFilter::OFF.into())
-        .parse_lossy("");
-
-    for a in user_spec.split(",") {
-        if a.trim().is_empty() {
-            continue;
-        }
-        f = f.add_directive(
-            a.trim()
-                .parse()
-                .context(format!("Trying to get directive from :{}", a))?,
-        );
-    }
-
-    Ok(f)
+fn display_filter_from(user_spec: &str) -> Result<GammaLogFilter> {
+    GammaLogFilter::parse_with_default(user_spec, Some(LevelFilter::OFF))
+        .context(format!("Trying to parse filter spec: {user_spec}"))
 }
 
 const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
@@ -152,7 +119,7 @@ static FILE_LOG_SPEC: LazyLock<Mutex<FileLogSpecState>> = LazyLock::new(|| {
 static STDERR_LOG_SPEC: LazyLock<Mutex<StderrLogSpecState>> =
     LazyLock::new(|| Mutex::new(StderrLogSpecState::default()));
 
-type ReloadFilterFn = Box<dyn Fn(EnvFilter) -> Result<()> + Send + Sync>;
+type ReloadFilterFn = Box<dyn Fn(GammaLogFilter) -> Result<()> + Send + Sync>;
 
 struct FilterHandles {
     file_reload: Option<ReloadFilterFn>,
@@ -448,15 +415,7 @@ fn strip_ansi_escape_codes(line: &str) -> String {
 }
 
 fn directive_is_effectively_off(spec: &str) -> bool {
-    let parts: Vec<_> = spec
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect();
-    !parts.is_empty()
-        && parts
-            .iter()
-            .all(|part| *part == "off" || part.ends_with("=off"))
+    GammaLogFilter::is_effectively_off(spec)
 }
 
 fn file_log_disabled_error(reason: &str) -> color_eyre::Report {
@@ -1142,6 +1101,29 @@ mod tests {
             file_filter_from("").unwrap().max_level_hint(),
             Some(LevelFilter::WARN)
         );
+    }
+
+    #[test]
+    fn display_filter_examples_with_multi_field_groups_parse() {
+        for spec in [
+            "gammalooprs::uv::forest[{generation,uv}]=debug",
+            "gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug",
+            "gammalooprs::uv::forest[{generation,uv,term}]=debug",
+            "gammalooprs::integrands::process::amplitude[{integration,subtraction}]=debug",
+            "gammalooprs::integrands::process::cross_section[{integration,sample,inspect}]=debug",
+            "gammalooprs::integrands::process::cross_section[{integration,cut,solver}]=debug",
+        ] {
+            assert!(
+                display_filter_from(spec).is_ok(),
+                "display filter example should parse: {spec}"
+            );
+        }
+    }
+
+    #[test]
+    fn file_filter_examples_with_multi_field_groups_parse() {
+        let spec = "gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug";
+        assert!(file_filter_from(spec).is_ok());
     }
 
     #[test]

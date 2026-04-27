@@ -1133,7 +1133,10 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.clone()
         };
 
-        debug!("loop moms: {}", momentum_sample.loop_moms());
+        crate::debug_tags!(#integration, #sample, #inspect;
+            "loop moms: {}",
+            momentum_sample.loop_moms()
+        );
 
         for (raised_cut, raised_cut_group) in self.raised_data.raised_cut_groups.iter_enumerated() {
             let max_occurance = raised_cut_group.related_esurface_group.max_occurence;
@@ -1145,10 +1148,16 @@ impl GraphTerm for CrossSectionGraphTerm {
                 cut_threshold_counterterms.push(zero);
                 continue;
             }
-            debug!("\n =====START EVALUTAION FOR CUT {}=====", raised_cut.0);
+            crate::debug_tags!(#integration, #cut;
+                "\n =====START EVALUTAION FOR CUT {}=====",
+                raised_cut.0
+            );
             let representative_esurface = &self.cut_esurface[raised_cut_group.cuts[0]];
 
-            debug!("representative esurface: {:#?}", representative_esurface);
+            crate::debug_tags!(#integration, #cut, #inspect;
+                "representative esurface: {:#?}",
+                representative_esurface
+            );
 
             let function = |t: &F<T>| {
                 representative_esurface.compute_self_and_r_derivative(
@@ -1175,12 +1184,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &F::from_f64(context.settings.kinematics.e_cm),
             );
 
-            debug!(
+            crate::debug_tags!(#integration, #cut, #solver;
                 "tolerance for newton solver: {}",
                 F::from_f64(context.settings.kinematics.e_cm) * guess.epsilon()
             );
 
-            debug!("solution: {:?}", solution);
+            crate::debug_tags!(#integration, #cut, #solver;
+                "solution: {:?}",
+                solution
+            );
 
             let prepared_event = prepare_buffered_event(
                 context.settings,

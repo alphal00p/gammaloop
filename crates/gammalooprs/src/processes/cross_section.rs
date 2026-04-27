@@ -25,7 +25,7 @@ use crate::{
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
         expression::{CFFExpression, OrientationID},
     },
-    define_index,
+    debug_tags, define_index,
     graph::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},
@@ -706,27 +706,27 @@ impl CrossSectionGraph {
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
         self.apply_spin_sum(model, settings, &runtime_default)?;
-        debug!("generating cuts");
+        debug_tags!(#generation; "generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
-        debug!("generating esurfaces corresponding to cuts");
+        debug_tags!(#generation; "generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
-        debug!("generating cff");
+        debug_tags!(#generation; "generating cff");
         stats.merge_in_place(&self.generate_cff(settings)?);
-        debug!("building lmbs");
+        debug_tags!(#generation; "building lmbs");
         self.build_lmbs()?;
-        debug!("building multi channeling channels");
+        debug_tags!(#generation; "building multi channeling channels");
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
         let vk = crate::utils::vakint()?;
-        debug!("building parametric integrand");
+        debug_tags!(#generation; "building parametric integrand");
         self.build_parametric_integrand(settings, vk)?;
         //self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
-            debug!("building threshold counterterm");
+            debug_tags!(#generation, #subtraction; "building threshold counterterm");
             self.build_subspace_data()?;
             self.build_threshold_counterterm(settings, vk)?;
         }

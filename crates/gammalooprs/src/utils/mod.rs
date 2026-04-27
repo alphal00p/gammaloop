@@ -86,6 +86,113 @@ macro_rules! disable {
     ($($tokens:tt)*) => {};
 }
 
+/// Shorthand for tagged debug events.
+///
+/// `#tag` expands to `tag = true` and the remaining tokens are forwarded to
+/// `tracing::debug!` unchanged.
+///
+/// GammaLoop's logging DSL treats tags as boolean event fields.
+///
+/// Emitting `#generation` makes directives such as `[{generation}]` eligible to
+/// match this event. A negated directive term such as `[{!inspect}]` matches
+/// events where the field is absent. If you need value-sensitive filtering, use
+/// an explicit field such as `inspect = false` or `mode = "summary"` at the
+/// callsite and a directive such as `[{inspect=false}]` or `[{mode=summary}]`.
+///
+/// Separately, the formatter supports sink-only field prefixes:
+/// - `file.<name>` is rendered only in the logfile/json sink
+/// - `display.<name>` is rendered only in the stderr/display sink
+///
+/// For example, `file.integrands = %expr` is useful for attaching large dumps
+/// to the logfile without printing them to stderr.
+///
+/// Pipeline-wide tag set:
+///
+/// Prefer a small stable vocabulary that cuts across the whole pipeline.
+///
+/// Primary phase tags:
+///
+/// | Tag | Meaning |
+/// | --- | --- |
+/// | `#generation` | Work that builds or prepares runtime objects before Monte Carlo integration starts |
+/// | `#integration` | Work performed while evaluating samples or managing the adaptive integration loop |
+/// | `#profile` | UV/IR/profile-style diagnostic scans and their analysis |
+/// | `#persistence` | Reading or writing saved state, manifests, checkpoints, and exported results |
+///
+/// Core domain tags:
+///
+/// | Tag | Meaning |
+/// | --- | --- |
+/// | `#uv` | Ultraviolet counterterms, UV forests, UV profiles, or UV-specific generation/evaluation logic |
+/// | `#ir` | Infrared subtraction, IR profiles, or IR-specific generation/evaluation logic |
+/// | `#subtraction` | Threshold, UV, or IR subtraction logic when the main concern is subtraction rather than the specific regime |
+/// | `#sampling` | Channel choice, discrete axes, parameterizations, or sample-generation choices |
+/// | `#stability` | Precision escalation, retries, instability diagnosis, and numerical safety checks |
+/// | `#observables` | Histogramming, event-to-observable projection, and observable snapshot production |
+/// | `#selectors` | Event-selection logic and selector decisions |
+/// | `#cache` | Cache lookup, reuse, invalidation, or cache-debug instrumentation |
+///
+/// Common work-unit tags:
+///
+/// | Tag | Meaning |
+/// | --- | --- |
+/// | `#graph` | The log is about one graph or graph-local data |
+/// | `#group` | The log is about a graph group or another explicitly grouped aggregate |
+/// | `#orientation` | The log is about orientation-dependent data or choosing/summing orientations |
+/// | `#channel` | The log is about multi-channeling or a particular channel |
+/// | `#cut` | The log is about a cut, raised cut, or cut-local computation |
+/// | `#event` | The log is about generated/retained event objects or event-group processing |
+/// | `#sample` | The log is about one evaluation sample, its coordinates, or per-sample intermediate values |
+/// | `#iteration` | The log is about one adaptive integration iteration or iteration-level summaries |
+/// | `#term` | The log is about one algebraic term, summand, or term-local contribution |
+///
+/// Common purpose tags:
+///
+/// | Tag | Meaning |
+/// | --- | --- |
+/// | `#solver` | The log is about root-finding, linear solves, fitting, or similar numerical solver state |
+/// | `#compile` | The log is about evaluator/code generation or compilation-oriented preparation |
+/// | `#inspect` | The log exposes detailed intermediate state for debugging, rather than a high-level milestone |
+/// | `#summary` | The log is a compact roll-up rather than a step-by-step trace |
+/// | `#dump` | The log emits large or structured payloads such as expressions, tables, or serialized views |
+///
+/// Tag boundaries:
+///
+/// - Prefer `#generation` over `#compile` when the message is a broad generation milestone.
+/// - Add `#compile` only when the message is specifically about evaluator construction or compilation-like work.
+/// - Prefer `#uv` or `#ir` when the regime matters to the user; use `#subtraction` when the subtraction mechanism is the real concern.
+/// - Prefer `#inspect` for verbose intermediate values that are mainly useful while debugging internals.
+/// - Add `#dump` when the payload is large enough that users may want to suppress it separately from lighter debug logs.
+/// - Do not use `#graph`, `#cut`, or `#sample` as substitutes for `#generation` or `#integration`; they refine phase tags rather than replace them.
+///
+/// Naming guidance:
+///
+/// - Use phase tags first. They answer "when in the pipeline did this happen?"
+/// - Use domain tags second. They answer "what subsystem is this about?"
+/// - Use work-unit tags third. They answer "what object is being worked on?"
+/// - Use purpose tags last for optional refinement.
+/// - Prefer tags that are meaningful across multiple modules.
+/// - Avoid tags that merely restate a function name.
+/// - Avoid tags tied to one internal representation unless that representation is a stable concept in user-facing debugging.
+///
+/// `parametric` is usually not a core pipeline tag. It is acceptable as a local refinement when needed, but should not be treated as part of the primary vocabulary unless it becomes a consistently useful cross-cutting concept.
+///
+/// Examples:
+/// - `debug_tags!(#generation, #uv, #graph, #dump; name = %graph.name, "generated graph payload");`
+/// - `debug_tags!(#integration, #summary; inspect = false, "iteration summary");`
+#[macro_export]
+macro_rules! debug_tags {
+    (@collect [$($acc:tt)*] # $tag:ident, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect [$($acc)* $tag = true,] $($tail)*)
+    };
+    (@collect [$($acc:tt)*] # $tag:ident; $($rest:tt)*) => {
+        tracing::debug!($($acc)* $tag = true, $($rest)*)
+    };
+    ($($input:tt)*) => {
+        $crate::debug_tags!(@collect [] $($input)*)
+    };
+}
+
 #[allow(unused)]
 const MAX_DIMENSION: usize = MAX_LOOP * 3;
 
@@ -109,6 +216,18 @@ impl From<Side> for usize {
 pub mod linnet_ext;
 pub mod symbolica_ext;
 pub mod tracing;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn debug_tags_macro_supports_tags_and_regular_fields() {
+        crate::debug_tags!(#integration, #summary;
+            inspect = false,
+            answer = 42,
+            "macro compiles with tag shorthands and regular fields"
+        );
+    }
+}
 
 pub trait FloatConvertFrom<U> {
     fn convert_from(x: &U) -> Self;

@@ -36,6 +36,7 @@ crossterm = "0.28.1"
 dirs = { workspace = true }
 eyre = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
+gammaloop-tracing-filter = { workspace = true }
 gammalooprs = { workspace = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }

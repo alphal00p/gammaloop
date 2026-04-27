@@ -15,6 +15,7 @@ colored = "3.0.0"
 dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
+gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammalooprs = { path = "crates/gammalooprs/" }
 idenso = { path = "crates/idenso/" }
