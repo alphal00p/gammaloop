@@ -1,0 +1,134 @@
+[cli_settings]
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = true
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
+  "remove processes",
+  "set global kv global.generation.uv.generate_integrated=true",
+  """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==0 QED^2==4 [{{1}} QCD=0]
+      --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+      --symmetrize-left-right-states true
+      -p epem_a_ddx -i LO""",
+  "set global kv global.generation.uv.generate_integrated=false",
+  """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==0 QED^2==4 [{{1}} QCD=0]
+          --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+          --symmetrize-left-right-states true
+          -p epem_a_ddx_no_integrated_UV -i LO""",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "run set_model_parameters",
+  "run set_differential_quantities",
+  "run set_differential_observables",
+  "run set_differential_selectors",
+
+  """set process string '
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    '""",
+
+  """set process -p epem_a_ddx -i LO kv
+        integrator.n_increase=0
+        integrator.n_start=50000
+        integrator.n_max=300000
+        integrator.seed=1337
+
+    """,
+  # --show-max-weight-info-for-discrete-bins
+  # --batch-size 100000
+  # --no-stream-iterations
+  # --show-max-weight-info-for-discrete-bins
+  # --no-stream-iterations
+  # 		 --show-phase both
+  # 		 --show-top-discrete-grid
+  # 		 --show-discrete-contributions-sum
+  # 		 --sort-contributions integral
+  # 		 --show-max-weight-info
+  # 		 --renderer tabled
+  """integrate -p epem_a_ddx -i LO -p epem_a_ddx -i LO_semi_inclusive --n-cores 5
+                 --target epem_a_ddx@LO=3.097e-02,0.0
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase real
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """,
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu", "json"]
+
+[default_runtime_settings.subtraction]
+# Threshold subtraction for LU not yet implemented
+disable_threshold_subtraction = true

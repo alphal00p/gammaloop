@@ -62,6 +62,12 @@ integral_unit = "none"
 mu_r = 20.0
 m_uv = 20.0
 
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+
 [default_runtime_settings.integrator]
 target_relative_accuracy = 0.00001
 n_increase = 0

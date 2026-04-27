@@ -95,11 +95,13 @@ impl CutForests {
         {
             let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
 
-            debug!(integrands=%integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
-                "Orientation Parametric integrand {i},with {} terms for \n{}\n{}",
-                forest.n_terms(),
-                graph.dot(&cuts.union),
-                integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
+            debug!(
+                n_terms =%forest.n_terms(),
+                graph = %graph.dot(&cuts.union),
+                name = %graph.name,
+                integrands=%integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
+                file.integrands = %integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
+                "Orientation Parametric integrand {i}",
 
             );
             exprs.push(ParametricIntegrands { integrands, cuts });

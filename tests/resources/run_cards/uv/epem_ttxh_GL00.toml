@@ -110,6 +110,12 @@ integral_unit = "picobarn"
 mu_r = 91.188
 m_uv = 91.188
 
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+
 # [default_runtime_settings.general.orientation_pat]
 # pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
 

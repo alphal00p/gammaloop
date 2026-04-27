@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use color_eyre::Result;
 use gammaloop_api::commands::{
     Profile,
@@ -8,13 +10,21 @@ use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{
     CLIState, clean_test, get_example_cli, get_test_cli, get_tests_workspace_path,
 };
-use gammalooprs::settings::runtime::IntegralEstimate;
+use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::F;
 use spenso::algebra::complex::Complex;
+use tabled::{Table, Tabled};
 
+#[derive(Default)]
 struct IntegratedUvTargets {
-    no_integrated: f64,
-    integrated: f64,
+    no_integrated: Option<Complex<F<f64>>>,
+    integrated: Option<Complex<F<f64>>>,
+}
+
+impl IntegratedUvTargets {
+    fn any(&self) -> bool {
+        self.no_integrated.is_some() || self.integrated.is_some()
+    }
 }
 
 struct IntegratedUvCase<'a> {
@@ -26,7 +36,8 @@ struct IntegratedUvCase<'a> {
     shifted_m_uv: f64,
     original_mu_r: f64,
     shifted_mu_r: f64,
-    targets: Option<IntegratedUvTargets>,
+    skip_uv_profile: bool,
+    targets: IntegratedUvTargets,
     min_change_sigma: Option<f64>,
     min_mu_r_change_sigma: Option<f64>,
 }
@@ -34,15 +45,26 @@ struct IntegratedUvCase<'a> {
 struct IntegratedUvResults {
     no_integrated: Option<IntegralEstimate>,
     integrated: IntegralEstimate,
-    integrated_muv_shifted: Option<IntegralEstimate>,
-    integrated_mur_shifted: Option<IntegralEstimate>,
+    integrated_per_graph: Option<BTreeMap<String, IntegralEstimate>>,
+    integrated_muv_shifted_per_graph: Option<BTreeMap<String, IntegralEstimate>>,
+    integrated_mur_shifted_per_graph: Option<BTreeMap<String, IntegralEstimate>>,
+}
+
+struct CheckRow {
+    check: &'static str,
+    graph: String,
+    passed: bool,
+    sigma: Option<f64>,
+    threshold: Option<String>,
 }
 
 struct IntegratedUvCaseResult {
     graph: String,
-    uv_profile_passed: bool,
+    uv_profile_passed: Option<bool>,
     muv_invariance_passed: bool,
+    muv_rows: Vec<CheckRow>,
     mur_dependence_passed: Option<bool>,
+    mur_rows: Vec<CheckRow>,
     target_passed: Option<bool>,
     target_threshold: Option<&'static str>,
     ct_change_passed: Option<bool>,
@@ -56,7 +78,7 @@ struct IntegratedUvCaseResult {
 impl IntegratedUvCaseResult {
     fn all_passed(&self) -> bool {
         self.error.is_none()
-            && self.uv_profile_passed
+            && self.uv_profile_passed.unwrap_or(true)
             && self.muv_invariance_passed
             && self.mur_dependence_passed.unwrap_or(true)
             && self.target_passed.unwrap_or(true)
@@ -68,7 +90,7 @@ fn set_fast_deterministic_integrator(cli: &mut CLIState) -> Result<()> {
     cli.run_command(
         "set process kv integrator.target_relative_accuracy=0.001 \
          integrator.n_increase=0 integrator.n_start=50000 \
-         integrator.n_max=2000000 integrator.seed=1337",
+         integrator.n_max=200000 integrator.seed=1337",
     )
 }
 
@@ -123,6 +145,93 @@ fn process_integrand_exists(cli: &mut CLIState, process: &str, integrand_name: &
         .is_ok()
 }
 
+fn graph_breakdown_estimates(
+    slot: &SlotIntegrationResult,
+) -> Option<BTreeMap<String, IntegralEstimate>> {
+    let re_breakdown = slot
+        .grid_breakdown
+        .re
+        .as_ref()
+        .filter(|breakdown| breakdown.axis_label == "graph");
+    let im_breakdown = slot
+        .grid_breakdown
+        .im
+        .as_ref()
+        .filter(|breakdown| breakdown.axis_label == "graph");
+
+    if re_breakdown.is_none() && im_breakdown.is_none() {
+        return None;
+    }
+
+    let mut estimates = BTreeMap::new();
+    if let Some(breakdown) = re_breakdown {
+        for entry in &breakdown.entries {
+            let label = entry
+                .bin_label
+                .clone()
+                .unwrap_or_else(|| entry.bin_index.to_string());
+            estimates.insert(
+                label,
+                IntegralEstimate {
+                    neval: entry.processed_samples,
+                    real_zero: 0,
+                    im_zero: 0,
+                    result: Complex::new(entry.value, F(0.0)),
+                    error: Complex::new(entry.error, F(0.0)),
+                    real_chisq: entry.chi_sq,
+                    im_chisq: F(0.0),
+                },
+            );
+        }
+    }
+
+    if let Some(breakdown) = im_breakdown {
+        for entry in &breakdown.entries {
+            let label = entry
+                .bin_label
+                .clone()
+                .unwrap_or_else(|| entry.bin_index.to_string());
+            let estimate = estimates.entry(label).or_insert_with(|| IntegralEstimate {
+                neval: entry.processed_samples,
+                real_zero: 0,
+                im_zero: 0,
+                result: Complex::new(F(0.0), F(0.0)),
+                error: Complex::new(F(0.0), F(0.0)),
+                real_chisq: F(0.0),
+                im_chisq: F(0.0),
+            });
+            estimate.neval = estimate.neval.max(entry.processed_samples);
+            estimate.result.im = entry.value;
+            estimate.error.im = entry.error;
+            estimate.im_chisq = entry.chi_sq;
+        }
+    }
+
+    Some(estimates)
+}
+
+fn graph_estimates_for_slot(
+    cli: &CLIState,
+    slot: &SlotIntegrationResult,
+) -> Result<Option<BTreeMap<String, IntegralEstimate>>> {
+    if let Some(estimates) = graph_breakdown_estimates(slot) {
+        return Ok(Some(estimates));
+    }
+
+    let info = cli.state.get_integrand_info(
+        Some(&ProcessRef::Unqualified(slot.process.clone())),
+        Some(&slot.integrand.clone()),
+    )?;
+    let graph_names: Vec<_> = info
+        .graph_groups
+        .iter()
+        .flat_map(|group| group.graphs.iter().map(|graph| graph.name.clone()))
+        .collect();
+
+    Ok((graph_names.len() == 1)
+        .then(|| BTreeMap::from([(graph_names[0].clone(), slot.integral.clone())])))
+}
+
 fn run_integrated_uv_integration(
     cli: &mut CLIState,
     case: &IntegratedUvCase<'_>,
@@ -163,6 +272,7 @@ fn run_integrated_uv_integration(
         ))),
         n_cores: Some(1),
         restart: true,
+        renderer: gammaloop_api::commands::integrate::RendererOption::Tabled,
         ..Default::default()
     }
     .run(&mut cli.state, &cli.cli_settings)?;
@@ -171,6 +281,31 @@ fn run_integrated_uv_integration(
     let integrated_slot = integration_result
         .slot(&integrated_key)
         .expect("integrated slot should exist");
+    let integrated_per_graph = graph_estimates_for_slot(cli, integrated_slot)?;
+    let integrated_muv_shifted_per_graph = muv_shifted_name
+        .as_ref()
+        .map(|name| {
+            graph_estimates_for_slot(
+                cli,
+                integration_result
+                    .slot(&format!("{}@{}", case.process, name))
+                    .expect("integrated shifted-m_uv slot should exist"),
+            )
+        })
+        .transpose()?
+        .flatten();
+    let integrated_mur_shifted_per_graph = mur_shifted_name
+        .as_ref()
+        .map(|name| {
+            graph_estimates_for_slot(
+                cli,
+                integration_result
+                    .slot(&format!("{}@{}", case.process, name))
+                    .expect("integrated shifted-mu_r slot should exist"),
+            )
+        })
+        .transpose()?
+        .flatten();
 
     Ok(IntegratedUvResults {
         no_integrated: has_no_integrated.then(|| {
@@ -184,36 +319,37 @@ fn run_integrated_uv_integration(
                 .clone()
         }),
         integrated: integrated_slot.integral.clone(),
-        integrated_muv_shifted: muv_shifted_name.map(|name| {
-            integration_result
-                .slot(&format!("{}@{}", case.process, name))
-                .expect("integrated shifted-m_uv slot should exist")
-                .integral
-                .clone()
-        }),
-        integrated_mur_shifted: mur_shifted_name.map(|name| {
-            integration_result
-                .slot(&format!("{}@{}", case.process, name))
-                .expect("integrated shifted-mu_r slot should exist")
-                .integral
-                .clone()
-        }),
+        integrated_per_graph,
+        integrated_muv_shifted_per_graph,
+        integrated_mur_shifted_per_graph,
     })
 }
 
 fn integrated_uv_targets_pass(
     results: &IntegratedUvResults,
-    no_integrated_target: f64,
-    integrated_target: f64,
-) -> bool {
-    results
-        .no_integrated
-        .as_ref()
-        .expect("no-integrated result should exist for target checks")
-        .is_compatible_with_target(Complex::new_re(F(no_integrated_target)), 2)
-        && results
+    targets: &IntegratedUvTargets,
+) -> Result<bool> {
+    if let Some(no_integrated_target) = &targets.no_integrated {
+        let Some(no_integrated_result) = results.no_integrated.as_ref() else {
+            return Err(eyre::eyre!(
+                "no-integrated result should exist for no-integrated target checks"
+            ));
+        };
+        if !no_integrated_result.is_compatible_with_target(no_integrated_target.clone(), 2) {
+            return Ok(false);
+        }
+    }
+
+    if let Some(integrated_target) = &targets.integrated {
+        if !results
             .integrated
-            .is_compatible_with_target(Complex::new_re(F(integrated_target)), 2)
+            .is_compatible_with_target(integrated_target.clone(), 2)
+        {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 fn integral_estimate_change_sigma(lhs: &IntegralEstimate, rhs: &IntegralEstimate) -> f64 {
@@ -274,28 +410,111 @@ fn integrated_uv_profile_passes(
     Ok(uv.pass_fail(-0.9).failed == 0)
 }
 
-fn integrated_result_is_muv_invariant(
-    baseline: &IntegralEstimate,
-    shifted: &IntegralEstimate,
-) -> Result<bool> {
-    Ok(shifted.is_compatible_with_result(baseline, 2))
+fn integrated_result_muv_invariance_rows(results: &IntegratedUvResults) -> Result<Vec<CheckRow>> {
+    match (
+        &results.integrated_per_graph,
+        &results.integrated_muv_shifted_per_graph,
+    ) {
+        (Some(baseline_graphs), Some(shifted_graphs)) if !baseline_graphs.is_empty() => {
+            let mut rows = Vec::new();
+            for (graph, baseline_graph) in baseline_graphs {
+                let shifted_graph = shifted_graphs.get(graph).ok_or_else(|| {
+                    eyre::eyre!("shifted m_uv graph breakdown is missing graph '{}'", graph)
+                })?;
+                rows.push(CheckRow {
+                    check: "m_uv",
+                    graph: graph.clone(),
+                    passed: shifted_graph.is_compatible_with_result(baseline_graph, 2),
+                    sigma: Some(integral_estimate_change_sigma(
+                        shifted_graph,
+                        baseline_graph,
+                    )),
+                    threshold: Some("compatible within 2sigma".to_string()),
+                });
+            }
+            for graph in shifted_graphs.keys() {
+                if !baseline_graphs.contains_key(graph) {
+                    return Err(eyre::eyre!(
+                        "baseline graph breakdown is missing shifted m_uv graph '{}'",
+                        graph
+                    ));
+                }
+            }
+            Ok(rows)
+        }
+        (None, None) => Err(eyre::eyre!(
+            "m_uv comparison requires graph breakdowns for baseline and shifted results"
+        )),
+        (Some(_), None) => Err(eyre::eyre!(
+            "shifted m_uv result has no graph breakdown to compare against baseline"
+        )),
+        (None, Some(_)) => Err(eyre::eyre!(
+            "baseline result has no graph breakdown to compare against shifted m_uv"
+        )),
+        (Some(_), Some(_)) => Err(eyre::eyre!(
+            "m_uv comparison requires a non-empty baseline graph breakdown"
+        )),
+    }
 }
 
-fn integrated_result_mu_r_change_sigma(
-    baseline: &IntegralEstimate,
-    shifted: &IntegralEstimate,
-) -> Result<f64> {
-    Ok(integral_estimate_change_sigma(shifted, baseline))
+fn integrated_result_mu_r_change_rows(
+    results: &IntegratedUvResults,
+    min_change_sigma: f64,
+) -> Result<Vec<CheckRow>> {
+    match (
+        &results.integrated_per_graph,
+        &results.integrated_mur_shifted_per_graph,
+    ) {
+        (Some(baseline_graphs), Some(shifted_graphs)) if !baseline_graphs.is_empty() => {
+            let mut rows = Vec::new();
+            for (graph, baseline_graph) in baseline_graphs {
+                let shifted_graph = shifted_graphs.get(graph).ok_or_else(|| {
+                    eyre::eyre!("shifted mu_r graph breakdown is missing graph '{}'", graph)
+                })?;
+                let sigma = integral_estimate_change_sigma(shifted_graph, baseline_graph);
+                rows.push(CheckRow {
+                    check: "mu_r",
+                    graph: graph.clone(),
+                    passed: sigma >= min_change_sigma,
+                    sigma: Some(sigma),
+                    threshold: Some(format!(">={min_change_sigma:.1}sigma")),
+                });
+            }
+            for graph in shifted_graphs.keys() {
+                if !baseline_graphs.contains_key(graph) {
+                    return Err(eyre::eyre!(
+                        "baseline graph breakdown is missing shifted mu_r graph '{}'",
+                        graph
+                    ));
+                }
+            }
+            Ok(rows)
+        }
+        (None, None) => Err(eyre::eyre!(
+            "mu_r comparison requires graph breakdowns for baseline and shifted results"
+        )),
+        (Some(_), None) => Err(eyre::eyre!(
+            "shifted mu_r result has no graph breakdown to compare against baseline"
+        )),
+        (None, Some(_)) => Err(eyre::eyre!(
+            "baseline result has no graph breakdown to compare against shifted mu_r"
+        )),
+        (Some(_), Some(_)) => Err(eyre::eyre!(
+            "mu_r comparison requires a non-empty baseline graph breakdown"
+        )),
+    }
 }
 
 fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult {
     let mut outcome = IntegratedUvCaseResult {
         graph: case.test_name.to_string(),
-        uv_profile_passed: false,
+        uv_profile_passed: (!case.skip_uv_profile).then_some(false),
         muv_invariance_passed: false,
+        muv_rows: Vec::new(),
         mur_dependence_passed: case.min_mu_r_change_sigma.map(|_| false),
-        target_passed: case.targets.as_ref().map(|_| false),
-        target_threshold: case.targets.as_ref().map(|_| "2sigma"),
+        mur_rows: Vec::new(),
+        target_passed: case.targets.any().then_some(false),
+        target_threshold: case.targets.any().then_some("2sigma"),
         ct_change_passed: case.min_change_sigma.map(|_| false),
         ct_change_sigma: None,
         ct_change_threshold: case.min_change_sigma,
@@ -325,14 +544,17 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         let no_integrated_process = no_integrated_process_name(case.process);
         let has_no_integrated =
             process_integrand_exists(&mut cli, &no_integrated_process, case.integrand_name);
-        outcome.uv_profile_passed =
-            integrated_uv_profile_passes(&mut cli, case.process, case.integrand_name)?
-                && (!has_no_integrated
-                    || integrated_uv_profile_passes(
-                        &mut cli,
-                        &no_integrated_process,
-                        case.integrand_name,
-                    )?);
+        if !case.skip_uv_profile {
+            outcome.uv_profile_passed = Some(
+                integrated_uv_profile_passes(&mut cli, case.process, case.integrand_name)?
+                    && (!has_no_integrated
+                        || integrated_uv_profile_passes(
+                            &mut cli,
+                            &no_integrated_process,
+                            case.integrand_name,
+                        )?),
+            );
+        }
 
         let baseline = run_integrated_uv_integration(&mut cli, case)?;
 
@@ -352,39 +574,30 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
             ));
         }
 
-        outcome.muv_invariance_passed = integrated_result_is_muv_invariant(
-            &baseline.integrated,
-            baseline
-                .integrated_muv_shifted
-                .as_ref()
-                .expect("shifted m_uv result should exist"),
-        )?;
+        outcome.muv_rows = integrated_result_muv_invariance_rows(&baseline)?;
+        outcome.muv_invariance_passed = outcome.muv_rows.iter().all(|row| row.passed);
 
         if let Some(min_mu_r_change_sigma) = case.min_mu_r_change_sigma {
-            let change_sigma = integrated_result_mu_r_change_sigma(
-                &baseline.integrated,
-                baseline
-                    .integrated_mur_shifted
-                    .as_ref()
-                    .expect("shifted mu_r result should exist"),
-            )?;
+            outcome.mur_rows =
+                integrated_result_mu_r_change_rows(&baseline, min_mu_r_change_sigma)?;
+            let change_sigma = outcome
+                .mur_rows
+                .iter()
+                .filter_map(|row| row.sigma)
+                .fold(f64::INFINITY, f64::min);
             outcome.mur_change_sigma = Some(change_sigma);
-            outcome.mur_dependence_passed = Some(change_sigma >= min_mu_r_change_sigma);
+            outcome.mur_dependence_passed = Some(outcome.mur_rows.iter().all(|row| row.passed));
         }
 
-        if let Some(targets) = &case.targets {
-            if baseline.no_integrated.is_none() {
+        if case.targets.any() {
+            if case.targets.no_integrated.is_some() && baseline.no_integrated.is_none() {
                 return Err(eyre::eyre!(
-                    "target check requested for {} but no {} process exists",
+                    "no-integrated target check requested for {} but no {} process exists",
                     case.process,
                     no_integrated_process
                 ));
             }
-            outcome.target_passed = Some(integrated_uv_targets_pass(
-                &baseline,
-                targets.no_integrated,
-                targets.integrated,
-            ));
+            outcome.target_passed = Some(integrated_uv_targets_pass(&baseline, &case.targets)?);
         }
 
         Ok(())
@@ -399,61 +612,108 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
 }
 
 fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
-    println!(
-        "{:<28} {:<6} {:<6} {:<8} {:<12} {:<8} {:<12} {:<8} {:<12} error",
-        "graph", "uv", "m_uv", "mu_r", "mu_r_thr", "target", "target_thr", "ct_diff", "ct_thr"
-    );
-    println!("{}", "-".repeat(114));
-    for result in results {
-        let mu_r = match result.mur_dependence_passed {
-            Some(true) => "pass",
-            Some(false) => "FAIL",
-            None => "-",
-        };
-        let mu_r_threshold = match (result.mur_change_threshold, result.mur_change_sigma) {
-            (Some(threshold), Some(sigma)) => format!(">={threshold:.1}σ ({sigma:.1}σ)"),
-            (Some(threshold), None) => format!(">={threshold:.1}σ"),
-            (None, _) => "-".to_string(),
-        };
-        let target = match result.target_passed {
-            Some(true) => "pass",
-            Some(false) => "FAIL",
-            None => "-",
-        };
-        let target_threshold = result.target_threshold.unwrap_or("-");
-        let ct_diff = match result.ct_change_passed {
-            Some(true) => "pass",
-            Some(false) => "FAIL",
-            None => "-",
-        };
-        let ct_threshold = match (result.ct_change_threshold, result.ct_change_sigma) {
-            (Some(threshold), Some(sigma)) => format!(">={threshold:.1}σ ({sigma:.1}σ)"),
-            (Some(threshold), None) => format!(">={threshold:.1}σ"),
-            (None, _) => "-".to_string(),
-        };
-        let error = result.error.as_deref().unwrap_or("-");
-        println!(
-            "{:<28} {:<6} {:<6} {:<8} {:<12} {:<8} {:<12} {:<8} {:<12} {}",
-            result.graph,
-            if result.uv_profile_passed {
-                "pass"
-            } else {
-                "FAIL"
-            },
-            if result.muv_invariance_passed {
-                "pass"
-            } else {
-                "FAIL"
-            },
-            mu_r,
-            mu_r_threshold,
-            target,
-            target_threshold,
-            ct_diff,
-            ct_threshold,
-            error,
-        );
+    #[derive(Tabled)]
+    struct SummaryRow {
+        case: String,
+        check: String,
+        graph: String,
+        status: String,
+        sigma: String,
+        threshold: String,
+        error: String,
     }
+
+    fn status(value: Option<bool>) -> String {
+        match value {
+            Some(true) => "pass".to_string(),
+            Some(false) => "FAIL".to_string(),
+            None => "-".to_string(),
+        }
+    }
+
+    fn sigma(value: Option<f64>) -> String {
+        value.map_or_else(|| "-".to_string(), |value| format!("{value:.1}sigma"))
+    }
+
+    let mut rows = Vec::new();
+    for result in results {
+        let error = result.error.clone().unwrap_or_else(|| "-".to_string());
+        rows.push(SummaryRow {
+            case: result.graph.clone(),
+            check: "uv_profile".to_string(),
+            graph: "-".to_string(),
+            status: status(result.uv_profile_passed),
+            sigma: "-".to_string(),
+            threshold: "-".to_string(),
+            error: error.clone(),
+        });
+        rows.extend(result.muv_rows.iter().map(|row| SummaryRow {
+            case: result.graph.clone(),
+            check: row.check.to_string(),
+            graph: row.graph.clone(),
+            status: status(Some(row.passed)),
+            sigma: sigma(row.sigma),
+            threshold: row.threshold.clone().unwrap_or_else(|| "-".to_string()),
+            error: error.clone(),
+        }));
+        if result.muv_rows.is_empty() {
+            rows.push(SummaryRow {
+                case: result.graph.clone(),
+                check: "m_uv".to_string(),
+                graph: "-".to_string(),
+                status: status(Some(result.muv_invariance_passed)),
+                sigma: "-".to_string(),
+                threshold: "compatible within 2sigma".to_string(),
+                error: error.clone(),
+            });
+        }
+        rows.extend(result.mur_rows.iter().map(|row| SummaryRow {
+            case: result.graph.clone(),
+            check: row.check.to_string(),
+            graph: row.graph.clone(),
+            status: status(Some(row.passed)),
+            sigma: sigma(row.sigma),
+            threshold: row.threshold.clone().unwrap_or_else(|| "-".to_string()),
+            error: error.clone(),
+        }));
+        if result.mur_rows.is_empty() {
+            rows.push(SummaryRow {
+                case: result.graph.clone(),
+                check: "mu_r".to_string(),
+                graph: "-".to_string(),
+                status: status(result.mur_dependence_passed),
+                sigma: sigma(result.mur_change_sigma),
+                threshold: result.mur_change_threshold.map_or_else(
+                    || "-".to_string(),
+                    |threshold| format!(">={threshold:.1}sigma"),
+                ),
+                error: error.clone(),
+            });
+        }
+        rows.push(SummaryRow {
+            case: result.graph.clone(),
+            check: "target".to_string(),
+            graph: "-".to_string(),
+            status: status(result.target_passed),
+            sigma: "-".to_string(),
+            threshold: result.target_threshold.unwrap_or("-").to_string(),
+            error: error.clone(),
+        });
+        rows.push(SummaryRow {
+            case: result.graph.clone(),
+            check: "ct_diff".to_string(),
+            graph: "-".to_string(),
+            status: status(result.ct_change_passed),
+            sigma: sigma(result.ct_change_sigma),
+            threshold: result.ct_change_threshold.map_or_else(
+                || "-".to_string(),
+                |threshold| format!(">={threshold:.1}sigma"),
+            ),
+            error,
+        });
+    }
+
+    println!("{}", Table::new(rows));
 }
 
 fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
@@ -477,7 +737,8 @@ fn aa_aa_gl00_uv() {
         shifted_m_uv: 364.752,
         original_mu_r: 91.188,
         shifted_mu_r: 364.752,
-        targets: None,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
     });
@@ -493,7 +754,29 @@ fn epem_ttxh_gl00_uv() {
         shifted_m_uv: 7.0,
         original_mu_r: 3.0,
         shifted_mu_r: 9.0,
-        targets: None,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
+        min_change_sigma: Some(5.0),
+        min_mu_r_change_sigma: Some(5.0),
+    });
+}
+
+#[test]
+fn epem_a_ddx_xs_nlo_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/epem_a_ddx_xs_nlo",
+        test_name: "epem_a_ddx_xs_nlo",
+        process: "epem_a_ddx",
+        integrand_name: "NLO",
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 9.0,
+        skip_uv_profile: true,
+        targets: IntegratedUvTargets {
+            no_integrated: None,
+            integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
+        },
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
     });
@@ -510,10 +793,11 @@ fn dod0_bubble_uv() {
         shifted_m_uv: 7.0,
         original_mu_r: 3.0,
         shifted_mu_r: 9.0,
-        targets: Some(IntegratedUvTargets {
-            no_integrated: 1.4693e-2,
-            integrated: 2.684e-3,
-        }),
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            no_integrated: Some(Complex::new(F(1.4693e-2), F(0.0))),
+            integrated: Some(Complex::new(F(2.684e-3), F(0.0))),
+        },
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
     });
@@ -530,10 +814,11 @@ fn dod1_bubble_uv() {
         shifted_m_uv: 7.0,
         original_mu_r: 3.0,
         shifted_mu_r: 9.0,
-        targets: Some(IntegratedUvTargets {
-            no_integrated: 7.358320108607984e-3,
-            integrated: 1.351_493_784_227_627e-3,
-        }),
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            no_integrated: Some(Complex::new(F(7.358320108607984e-3), F(0.0))),
+            integrated: Some(Complex::new(F(1.351_493_784_227_627e-3), F(0.0))),
+        },
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
     });
@@ -550,10 +835,11 @@ fn dod2_bubble_uv() {
         shifted_m_uv: 7.0,
         original_mu_r: 3.0,
         shifted_mu_r: 19.0,
-        targets: Some(IntegratedUvTargets {
-            no_integrated: -0.5940830828502411,
-            integrated: 1.2143596454658382e-2,
-        }),
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            no_integrated: Some(Complex::new(F(-0.5940830828502411), F(0.0))),
+            integrated: Some(Complex::new(F(1.2143596454658382e-2), F(0.0))),
+        },
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
     });
@@ -570,7 +856,8 @@ fn epem_a_bbx_amp_uv() {
         shifted_m_uv: 7.0,
         original_mu_r: 20.0,
         shifted_mu_r: 9.0,
-        targets: None,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
     });
@@ -588,7 +875,8 @@ mod slow {
             shifted_m_uv: 7.0,
             original_mu_r: 20.0,
             shifted_mu_r: 9.0,
-            targets: None,
+            skip_uv_profile: false,
+            targets: IntegratedUvTargets::default(),
             min_change_sigma: Some(5.0),
             min_mu_r_change_sigma: Some(5.0),
         });

@@ -191,7 +191,7 @@ impl Integrated<'_> {
 
         integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(None),integral_raw = %t.integral.to_plain_string(), numerator_raw = %t.numerator.to_plain_string(), numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
+            debug!(integral = %t.integral.log_print(None),file.integral = %t.integral.to_plain_string(), file.numerator = %t.numerator.to_plain_string(), numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
         for t in &integrand_vakint.0 {
