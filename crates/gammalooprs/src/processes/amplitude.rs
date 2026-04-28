@@ -44,7 +44,9 @@ use crate::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
         StandaloneExportSettings, build_derivative_structure_atom, params_for_derivative_order,
     },
-    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
+    settings::{
+        GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
+    },
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_, symbolica_ext::LogPrint},
     uv::{
@@ -551,7 +553,7 @@ impl AmplitudeGraph {
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
-            self.generate_cff()?;
+            self.generate_cff(&OrientationPattern::default())?;
         }
         let valid_orientations: Vec<_> = self
             .derived_data
@@ -577,7 +579,14 @@ impl AmplitudeGraph {
 
             let vk = (crate::utils::vakint()?, &vk_settings);
             let cuts = CutSet::empty(self.graph.n_hedges());
-            forest.compute(&mut self.graph, vk, &cuts, &valid_orientations, settings)?;
+            forest.compute(
+                &mut self.graph,
+                vk,
+                &cuts,
+                &valid_orientations,
+                settings,
+                &OrientationPattern::default(),
+            )?;
 
             forest.pole_part_of_ends(&self.graph)
         } else {
@@ -608,7 +617,7 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
-    pub(crate) fn generate_cff(&mut self) -> Result<()> {
+    pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -625,7 +634,10 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression = self.graph.generate_cff(&contract_edges, &shift_rewrite)?;
+        let cff_expression = self
+            .graph
+            .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
+
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
@@ -641,7 +653,7 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.generate_cff()?;
+        self.generate_cff(&settings.orientation_pattern)?;
 
         self.build_integrands(settings, vk)?;
 
@@ -976,7 +988,13 @@ impl AmplitudeGraph {
         let cutstructure = CutStructure::empty(&self.graph);
         let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            &settings.orientation_pattern,
+        )?;
         let exprs: Vec<_> = forests
             .orientation_parametric_exprs(&self.graph, &settings.uv)?
             .into_iter()
@@ -1111,7 +1129,13 @@ impl AmplitudeGraph {
 
         let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            &settings.orientation_pattern,
+        )?;
 
         let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
 
@@ -1405,7 +1429,7 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
     let local_prefactor = &jacobian_ratio / &factors_of_pi
         * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
 
-    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
+    let integrated_prefactor = i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
 
     let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
 
@@ -1508,7 +1532,7 @@ pub mod test {
 
         let _model = load_generic_model("sm");
 
-        graph.generate_cff().unwrap();
+        graph.generate_cff(&OrientationPattern::default()).unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
         let param_builder = &graph.graph.param_builder;

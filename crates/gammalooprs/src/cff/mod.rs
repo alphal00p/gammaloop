@@ -7,6 +7,7 @@ use symbolica::atom::{Atom, AtomCore};
 use crate::{
     cff::expression::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
+    settings::global::OrientationPattern,
 };
 use color_eyre::Result;
 
@@ -49,7 +50,12 @@ impl CutCFF {
 }
 
 impl Graph {
-    pub fn cff<S: SubSetLike>(&mut self, contract_subgraph: &S, cutset: &CutSet) -> Result<CutCFF> {
+    pub fn cff<S: SubSetLike>(
+        &mut self,
+        contract_subgraph: &S,
+        cutset: &CutSet,
+        orientation_pattern: &OrientationPattern,
+    ) -> Result<CutCFF> {
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
 
@@ -59,7 +65,7 @@ impl Graph {
             }
         }
 
-        let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
+        let cff = self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?;
         let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
             cff.select_esurface_residue(right_threshold).pop().unwrap()
         } else {

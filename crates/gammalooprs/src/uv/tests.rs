@@ -87,6 +87,7 @@ fn scalar_bubble_root_integrand_reference(
             vakint,
             &valid_orientations,
             &reference_settings.uv,
+            &generation_settings.orientation_pattern,
         )
         .unwrap();
 
@@ -1526,7 +1527,7 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff().unwrap();
+        amp.generate_cff(&OrientationPattern::default()).unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
@@ -1567,7 +1568,7 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff().unwrap();
+        amp.generate_cff(&OrientationPattern::default()).unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);

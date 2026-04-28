@@ -768,9 +768,11 @@ impl CrossSectionGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let global_cff = self
-            .graph
-            .generate_cff(&contract_edges, &canonize_esurface)?;
+        let global_cff = self.graph.generate_cff(
+            &contract_edges,
+            &canonize_esurface,
+            &settings.orientation_pattern,
+        )?;
 
         let cut_esurface_map = self
             .cut_esurface
@@ -962,7 +964,13 @@ impl CrossSectionGraph {
         let lu_prefactor = self.lu_prefactor_helper();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            &settings.orientation_pattern,
+        )?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
@@ -1467,7 +1475,13 @@ impl CrossSectionGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            &settings.orientation_pattern,
+        )?;
 
         let mut threshold_counterterms = cut_forests
             .orientation_parametric_exprs(&self.graph, &settings.uv)?

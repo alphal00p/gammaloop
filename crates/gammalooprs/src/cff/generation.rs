@@ -9,6 +9,7 @@ use crate::{
     },
     graph::{Graph, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
+    settings::global::OrientationPattern,
 };
 use ahash::HashSet;
 use bincode::{Decode, Encode};
@@ -290,6 +291,7 @@ impl Graph {
         &mut self,
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
+        orientation_pattern: &OrientationPattern,
     ) -> Result<CFFExpression<OrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
 
@@ -327,11 +329,13 @@ impl Graph {
                 }
             });
 
-            let mut cff_graph = seed_graph.clone();
-            cff_graph.apply_orientation(global_orientation)?;
+            if orientation_pattern.filter(&global_orientation) {
+                let mut cff_graph = seed_graph.clone();
+                cff_graph.apply_orientation(global_orientation)?;
 
-            if !cff_graph.has_directed_cycle_initial() {
-                oriented_acyclic_graphs.push(cff_graph);
+                if !cff_graph.has_directed_cycle_initial() {
+                    oriented_acyclic_graphs.push(cff_graph);
+                }
             }
         }
 
