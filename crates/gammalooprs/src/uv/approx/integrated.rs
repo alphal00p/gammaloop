@@ -19,10 +19,11 @@ use symbolica::{
     parse, parse_lit,
     solve::SolveError,
 };
-use tracing::{debug, instrument};
+use tracing::instrument;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
+    debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
     utils::{
         GS, W_,
@@ -62,7 +63,10 @@ impl Graph {
 
         let tsquare = Atom::var(GS.rescale).pow(2);
 
-        debug!(res = %atomarg.log_print(None),"Rescaled momenta expanded");
+        debug_tags!(#uv, #integrated, #inspect;
+            res = %atomarg.log_print(None),
+            "Rescaled momenta expanded"
+        );
         atomarg = atomarg
             .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
             .with(
@@ -121,9 +125,9 @@ impl Integrated<'_> {
             .get_single_atom()
             .unwrap();
 
-        debug!(t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg without denoms");
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg without denoms");
         t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
-        debug!(t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg
             .replace(GS.dim)
@@ -146,16 +150,16 @@ impl Integrated<'_> {
 
         let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
 
-        debug!(res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
+        debug_tags!(#uv,#integrated;res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
         let a = atomarg
             .series(GS.rescale, Atom::Zero, 1.into(), true)
             .unwrap();
 
         let mut a = a.to_atom();
 
-        debug!(res = %a.log_print(None),res_raw = %a.to_plain_string(),"Series expanded");
+        debug_tags!(#uv,#integrated;res = %a.log_print(None),file.res = %a.to_plain_string(),"Series expanded");
         a = a.replace(GS.rescale).with(Atom::num(1));
-        debug!(res = %a.log_print(None),"Series expanded");
+        debug_tags!(#uv,#integrated;res = %a.log_print(None),"Series expanded");
 
         Ok(a)
     }
@@ -180,9 +184,9 @@ impl Integrated<'_> {
         );
 
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term as input");
+            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term as input");
         }
-        debug!(settings = ?&self.vakint_settings,"Vakint args");
+        debug_tags!(#uv,#integrated,#vakint;settings = ?&self.vakint_settings,"Vakint args");
 
         // let mut res = vakint
         //     .0
@@ -191,20 +195,20 @@ impl Integrated<'_> {
 
         integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(None),file.integral = %t.integral.to_plain_string(), file.numerator = %t.numerator.to_plain_string(), numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
+            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),file.integral = %t.integral.to_plain_string(), file.numerator = %t.numerator.to_plain_string(), numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after tensor reduction");
+            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after tensor reduction");
         }
         integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after evaluation");
+            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after evaluation");
         }
 
         let mut res: Atom = integrand_vakint.into();
 
-        debug!(res = %res.expand().log_print(None),"Raw post vakint ");
+        debug_tags!(#uv,#integrated,#vakint;res = %res.expand().log_print(None),"Raw post vakint ");
 
         res = res
             .replace(parse_lit!(vakint::cl2))
@@ -282,7 +286,10 @@ impl Integrated<'_> {
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        debug!(res = %res.expand().log_print(None),"Replaced post vakint ");
+        debug_tags!(#uv, #integrated, #vakint, #inspect;
+            res = %res.expand().log_print(None),
+            "Replaced post vakint "
+        );
 
         let n_loops = graph.n_loops(&graph.full_filter());
         let series = res
@@ -294,7 +301,10 @@ impl Integrated<'_> {
             )
             .unwrap();
 
-        debug!(series = %series.to_atom().log_print(None),"Series ");
+        debug_tags!(#uv, #integrated, #inspect;
+            series = %series.to_atom().log_print(None),
+            "Series "
+        );
 
         let mut pole_stripped = Atom::Zero;
 
@@ -340,7 +350,11 @@ impl Integrated<'_> {
             }
         }
 
-        debug!(pole_part = %settings.pole_part,res = %res.log_print(None),"Final integrated 4d CT");
+        debug_tags!(#uv, #integrated;
+            pole_part = %settings.pole_part,
+            res = %res.log_print(None),
+            "Final integrated 4d CT"
+        );
 
         if res
             .replace(GS.dim)
@@ -416,7 +430,7 @@ pub(crate) fn to_vakint_integrand<
 ) -> VakintExpression {
     let mut integrand_vakint = integrand.clone();
 
-    debug!(
+    debug_tags!(#uv, #integrated, #vakint, #inspect;
         integrand = %integrand.log_print(None),
         "Integrand vakint init"
     );
@@ -447,7 +461,10 @@ pub(crate) fn to_vakint_integrand<
     //     .map(|(nid, c, v)| nid)
     //     .collect();
 
-    debug!(reduced = %graph.dot(reduced), "Den to prop for");
+    debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
+        reduced = %graph.dot(reduced),
+        "Den to prop for"
+    );
     // let first = contracted_nodes.first();
 
     for (pair, index, _data) in graph.iter_edges_of(reduced) {
@@ -494,13 +511,16 @@ pub(crate) fn to_vakint_integrand<
 
     let mut first: Option<NodeIndex> = None;
 
-    debug!(
+    debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
         reduced = %graph.dot(dependent_subgraph),
         "Shrinking subgraph for vakint"
     );
     // shrink vertices of the subgraph
     for (id, _crown, _data) in graph.iter_nodes_of(dependent_subgraph) {
-        debug!(id=%id,"Shrinking Node");
+        debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
+            id = %id,
+            "Shrinking Node"
+        );
 
         if let Some(first) = first {
             integrand_vakint = integrand_vakint
@@ -602,7 +622,10 @@ pub(crate) fn to_vakint_integrand<
     .unwrap();
 
     for t in a.0.iter_mut() {
-        debug!(integral=%t.integral,"Starting integral");
+        debug_tags!(#uv, #integrated, #vakint, #inspect;
+            integral = %t.integral,
+            "Starting integral"
+        );
 
         let mut graph = HedgeGraphBuilder::new();
         //prop(<id>, edge(<node_source>,<node_sink>), <mom>, <mass>, <power>)
@@ -687,7 +710,10 @@ pub(crate) fn to_vakint_integrand<
         }
 
         graph.forget_identification_history();
-        debug!(graph = %graph.base_dot(), "Graph");
+        debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
+            graph = %graph.base_dot(),
+            "Graph"
+        );
 
         let mut new_integral: Atom = 1.into();
         for (p, eid, e) in graph.iter_edges() {

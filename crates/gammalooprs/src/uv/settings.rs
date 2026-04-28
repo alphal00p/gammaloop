@@ -343,6 +343,8 @@ pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "is_false")]
     pub add_sigma: bool,
     #[serde(skip_serializing_if = "is_true")]
+    pub keep_sigma: bool,
+    #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub use_legacy: bool,
@@ -374,6 +376,7 @@ impl Default for UVgenerationSettings {
             cached: true,
             generate_only_integrated_uv_with_n_loops: None,
             add_sigma: false,
+            keep_sigma: true,
             renormalization_schemes: BTreeMap::default(),
             vakint: VakintSettings::default(),
         }

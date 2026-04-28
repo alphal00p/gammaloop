@@ -83,7 +83,7 @@ impl CutForests {
     pub(crate) fn orientation_parametric_exprs(
         self,
         graph: &Graph,
-        add_sigma: bool,
+        settings: &UVgenerationSettings,
     ) -> Result<Vec<ParametricIntegrands>> {
         let mut exprs = vec![];
 
@@ -93,16 +93,23 @@ impl CutForests {
             .zip(self.cuts.cuts.into_iter())
             .enumerate()
         {
-            let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
+            let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
 
-            debug_tags!(#generation, #uv, #graph,  #dump;
+            debug_tags!(#generation, #uv, #graph, #dump;
                 n_terms =%forest.n_terms(),
                 graph = %graph.dot(&cuts.union),
                 name = %graph.name,
-                integrands=%integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
-                file.integrands = %integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
+                integrands=%integrands.iter().enumerate().map(|(i, s)| format!("{}: {}", i, s.log_print(Some(100)))).join("\n"),
+                file.integrands = %integrands.iter().map(|s| s.to_canonical_string()).join(";"),
                 "Orientation Parametric integrand {i}",
             );
+            if !settings.keep_sigma {
+                integrands.iter_mut().for_each(|s| {
+                    *s = s
+                        .replace(function!(GS.if_sigma, W_.a___))
+                        .with(Atom::num(1))
+                });
+            }
             exprs.push(ParametricIntegrands { integrands, cuts });
         }
         Ok(exprs)
@@ -285,9 +292,11 @@ impl Forest {
         let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
-            debug_tags!(#generation, #uv, #graph, #orientation, #term;
+            debug_tags!(#generation, #uv, #graph, #term;
+
                 dod = %n.data.dod(),
                 graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
+                graph.name = %graph.name,
                 simple = %
                 n.data
                     .simple_approx
@@ -361,7 +370,7 @@ impl Forest {
 
         for s in &mut sum {
             *s = s.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_);
-            // .collect_factors(); Really
+            // .collect_factors(); Really bad ! Turns
         }
         Ok(sum)
     }

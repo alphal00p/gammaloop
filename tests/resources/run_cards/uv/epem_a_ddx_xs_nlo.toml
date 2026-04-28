@@ -5,7 +5,7 @@
 
 [cli_settings.global]
 logfile_directive = "off"
-display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug"
+display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug,gammalooprs::uv[{uv}]=debug"
 
 [cli_settings.global.log_style]
 include_fields = true
@@ -14,14 +14,14 @@ include_fields = true
 do_algebra = false
 iterative_orientation_optimization = false
 store_atom = true
-compile = true
+compile = false
 summed = false
 summed_function_map = false
 # horner_iterations = 0
 # cpe_iterations = 0
 
-# [cli_settings.global.generation.orientation_pattern]
-# pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
+[cli_settings.global.generation.orientation_pattern]
+pat = "(+,+,+,+,0,-,0,+,+)"
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]
@@ -39,7 +39,9 @@ custom = []
 [cli_settings.global.generation.uv]
 softct = false
 inner_products = true
-generate_integrated = false
+add_sigma = true
+keep_sigma = false
+generate_only_integrated_uv_with_n_loops = 1
 subtract_uv = true
 
 [cli_settings.global.generation.tropical_subgraph_table]
@@ -68,6 +70,7 @@ commands = [
       --symmetrize-left-right-states true
       -p epem_a_ddx -i NLO
       --global-prefactor-num "1𝑖"
+      --select-graphs GL0
       """,
   "set global kv global.generation.uv.generate_integrated=false",
   """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{2}} QCD=1]
@@ -75,86 +78,15 @@ commands = [
           --symmetrize-left-right-states true
           -p epem_a_ddx_no_integrated_UV -i NLO
           --global-prefactor-num "1𝑖"
+          --select-graphs GL0
           """,
+  "save standalone --json",
 ]
 
 [[command_blocks]]
-name = "integrate"
+name = "inspect"
 commands = [
-  "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
-  "run set_differential_selectors",
-
-  """set process -p epem_a_ddx string '
-    [sampling]
-    graphs = "monte_carlo"
-    orientations = "summed"
-    lmb_multichanneling = false
-    # For importance-sampling over channels, use the quantity below
-    # lmb_channels = "monte_carlo"
-    lmb_channels = "summed"
-    '""",
-
-  """set process -p epem_a_ddx string '
-  [[stability.rotation_axis]]
-  type = "x"
-  [[stability.rotation_axis]]
-  type = "y"
-
-  [[stability.levels]]
-  precision = "Double"
-  required_precision_for_re = 1.0e-5
-  required_precision_for_im = 1.0e-5
-  escalate_for_large_weight_threshold = 0.99
-
-  [[stability.levels]]
-  precision = "Arb"
-  required_precision_for_re = 1.0e-5
-  required_precision_for_im = 1.0e-5
-  escalate_for_large_weight_threshold = -1.0
-      '""",
-
-  """set process -p epem_a_ddx -i NLO kv
-        integrator.n_increase=0
-        integrator.n_start=10000
-        integrator.n_max=10000000000
-        integrator.seed=1337
-        general.m_uv=9.1188
-		general.mu_r=91.188e+10
-    """,
-  # --show-max-weight-info-for-discrete-bins
-  # --batch-size 100000
-  # --no-stream-iterations
-  # --show-max-weight-info-for-discrete-bins
-  # --no-stream-iterations
-  # 		 --show-phase both
-  # 		 --show-top-discrete-grid
-  # 		 --show-discrete-contributions-sum
-  # 		 --sort-contributions integral
-  # 		 --show-max-weight-info
-  # 		 --renderer tabled
-  # """integrate -p epem_a_ddx -i NLO -p epem_a_ddx -i NLO_semi_inclusive --n-cores 1
-  #                --target epem_a_ddx@NLO=-3.2336e-06,0.0
-  # 		 --renderer ratatui
-  # 		 --batch-size 1000
-  # 		 --show-phase imag
-  # 		 --show-max-weight-info
-  # 		 --show-top-discrete-grid
-  # 		 --show-discrete-contributions-sum
-  # 		 --write-results-for-each-iteration
-  #                --restart
-  #   """
-  """integrate -p epem_a_ddx -i NLO -p epem_a_ddx -i NLO_semi_inclusive --n-cores 10
-                 --target epem_a_ddx@NLO=0.0,1.163e-3 epem_a_ddx@NLO_semi_inclusive=0.0,1.003e-3
-				 --renderer ratatui
-				 --batch-size 1000
-				 --show-phase both
-				 --show-max-weight-info
-				 --show-top-discrete-grid
-				 --show-discrete-contributions-sum
-				 --write-results-for-each-iteration
-                 --restart
+  """inspect -p epem_a_ddx -i NLO -d 0 -x 0.1 0.2 0.3 0.4 0.5 0.6
     """
 ]
 

@@ -1,11 +1,9 @@
 use crate::{
+    debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
-    utils::{
-        GS, W_,
-        symbolica_ext::{LOGPRINTOPTS, LogPrint},
-    },
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
@@ -249,9 +247,11 @@ fn internal_paired_edges_of_subgraph(graph: &Graph, subgraph: &SuBitGraph) -> Ve
 fn localized_integrated_reduced_factor(
     graph: &mut Graph,
     to_contract: &SuBitGraph,
+    expr: &Atom,
     cuts: &CutSet,
     valid_orientations: &[EdgeVec<Orientation>],
 ) -> Result<IntegrandExpr> {
+    debug_tags!(#uv;graph.name=%graph.name , expr=%expr.log_print(Some(80)),"Localizing integrated UV CT");
     let cff = graph.cff(
         &to_contract
             .union(&graph.tree_edges)
@@ -278,7 +278,7 @@ fn localized_integrated_reduced_factor(
                     &internal_edges,
                 )?;
             }
-            Ok(localized)
+            Ok(localized * expr)
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -453,14 +453,17 @@ impl Approximation {
             .replace(GS.m_uv_int)
             .with(GS.m_uv)
             .map_mink_dim(4);
-        debug!(
-            "Integrated 4d finite part: {:#}",
-            finite.printer(LOGPRINTOPTS)
+        debug_tags!(
+            #uv;
+            finite = %finite.log_print(Some(80)),
+            t4 = %t4.iter().enumerate().map(|(i, t4)| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
+            "Computing UV subtraction",
         );
 
-        let t_arg = localized_integrated_reduced_factor(
+        let integrated_t = localized_integrated_reduced_factor(
             graph,
             dependent.spinney.filter(),
+            &finite,
             cuts,
             valid_orientations,
         )?;
@@ -478,11 +481,10 @@ impl Approximation {
         }
 
         let mut integrands = vec![];
-        for (local, t_arg) in cff.into_iter().zip(t_arg.integrands) {
+        for (local, integ) in cff.into_iter().zip(integrated_t.integrands) {
             let mut sum_3d = Atom::Zero;
             sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
-            sum_3d -=
-                Local3DApproximation {}.kernel(&ctx, &*self, dependent, &(&finite * t_arg))?;
+            sum_3d -= Local3DApproximation {}.kernel(&ctx, &*self, dependent, &integ)?;
             integrands.push(sum_3d);
         }
 
@@ -532,14 +534,17 @@ impl Approximation {
             .replace(function!(symbol!("vakint::g"), W_.a__))
             .with(function!(symbol!("spenso::g"), W_.a__));
 
-        debug!(
-            "Integrated 4d finite part: {:#}",
-            finite.printer(LOGPRINTOPTS)
+        debug_tags!(
+            #uv,#final;
+            finite = %finite.log_print(Some(80)),
+            t4 = %t4.iter().enumerate().map(|(i, t4)| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
+            "Computing Final integrand after uv subtraction",
         );
 
-        let t_arg = localized_integrated_reduced_factor(
+        let integrated_t = localized_integrated_reduced_factor(
             graph,
             self.spinney.filter(),
+            &finite,
             cutset,
             valid_orientations,
         )?;
@@ -551,8 +556,8 @@ impl Approximation {
 
         let mut integrands = vec![];
 
-        for (t, t_arg) in t.iter().zip(t_arg.integrands.iter()) {
-            let mut cff = s * t.clone() - s * (&finite * t_arg);
+        for (local, integ) in t.iter().zip(integrated_t.integrands.iter()) {
+            let mut cff = s * (local - integ);
 
             for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
                 let eid = usize::from(eid) as i64;

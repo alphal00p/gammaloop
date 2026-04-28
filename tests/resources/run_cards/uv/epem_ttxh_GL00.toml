@@ -6,6 +6,9 @@
 [cli_settings.global]
 display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug"
 
+[cli_settings.global.log_style]
+include_fields = true
+
 [cli_settings.global.generation.evaluator]
 do_algebra = false
 iterative_orientation_optimization = false

@@ -66,15 +66,15 @@ impl GammaLogFilter {
             directives.push(parse_directive(raw_directive, order)?);
         }
 
-        if directives.is_empty() {
-            if let Some(default_level) = default_level {
-                directives.push(Directive {
-                    target: None,
-                    tags: Vec::new(),
-                    level: default_level,
-                    order: 0,
-                });
-            }
+        if directives.is_empty()
+            && let Some(default_level) = default_level
+        {
+            directives.push(Directive {
+                target: None,
+                tags: Vec::new(),
+                level: default_level,
+                order: 0,
+            });
         }
 
         let max_level_hint = directives
@@ -433,13 +433,13 @@ impl TagRequirement {
 }
 
 fn parse_expected_value(raw: &str) -> String {
-    if raw.len() >= 2 {
-        if (raw.starts_with('"') && raw.ends_with('"'))
-            || (raw.starts_with('\'') && raw.ends_with('\''))
-        {
-            return raw[1..raw.len() - 1].to_string();
-        }
+    if raw.len() >= 2
+        && ((raw.starts_with('"') && raw.ends_with('"'))
+            || (raw.starts_with('\'') && raw.ends_with('\'')))
+    {
+        return raw[1..raw.len() - 1].to_string();
     }
+
     raw.to_string()
 }
 

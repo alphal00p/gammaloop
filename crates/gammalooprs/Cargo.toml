@@ -18,7 +18,7 @@ bench = false
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
-base62 = "2.0.2"
+base62 = "2.2.4"
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
 brotli = "7.0.0"
@@ -29,11 +29,11 @@ clap = { workspace = true, features = [
   "wrap_help",
 ] }
 clarabel = "0"
-color-eyre = { version = "0.6", default-features = false }
+color-eyre = { workspace = true }
 colored = { workspace = true }
-ctrlc = "3.4.4"
+ctrlc = "3.5.2"
 delegate = "0.12.0"
-derive_more = "0.99.17"
+derive_more = "0.99.20"
 dirs = { workspace = true }
 dot-parser = { workspace = true }
 enum_dispatch = "*"
@@ -41,10 +41,8 @@ eyre = { workspace = true }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
-libc = "0.2.0"
-
 itertools = { workspace = true }
-json5 = "0.4.1"
+json5 = { workspace = true }
 linnet = { workspace = true, features = [
   "bincode",
   # "drawing",
@@ -56,17 +54,12 @@ linnet = { workspace = true, features = [
 # by_address = "1.2.1"
 # pyo3-pylogger = { version = "0.3.0", optional = true }
 # humantime = "2.1.0"
-linreg = "0.2.0"
 # vakint = { git = "https://github.com/alphal00p/vakint", rev = "a32723f7c56ce73dd6a35713880e3a924e72c51b" } # "e44c210ded3936048615d39872022a0b6ef18454"
-momtrop = { version = "0.3.0" }
+momtrop = { workspace = true }
 # log = { version = "*", features = ["release_max_level_debug"] }
-# env_logger = "*"
-# pyo3-log = { version = "0.12.0", optional = true }
-nalgebra = "0.34.1"
 nu-ansi-term = { workspace = true }
 paste = "1.0.15"
-pathfinding = "4.11.0"
-pyo3-stub-gen = { workspace = true, optional = true }
+pathfinding = "4.15.0"
 rand = { workspace = true, features = ["small_rng"] }
 rayon = { workspace = true }
 ratatui = { workspace = true, features = ["crossterm_0_28"] }
@@ -74,19 +67,17 @@ ratatui = { workspace = true, features = ["crossterm_0_28"] }
 ref-ops = "0.2.5"
 ringbuffer = "0.16.0"
 # gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
-rug = { version = "1.27.0", features = ["serde"] }
+rug = { version = "1.29.0", features = ["serde"] }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-serde_repr = "0.1.19"
 serde_yaml = { workspace = true }
-slotmap = { version = "1.0.7", features = ["serde"] }
-smallvec = { version = "1.7", features = ["const_generics", "serde"] }
+slotmap = { version = "1.1.1", features = ["serde"] }
+smallvec = { version = "1.15.1", features = ["const_generics", "serde"] }
 smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { workspace = true }
-spenso-macros = { workspace = true }
-statrs = "0.16.0"
+statrs = "0.16.1"
 symbolica = { workspace = true, features = [
   "bincode",
   "serde",
@@ -106,14 +97,12 @@ tracing-subscriber = { workspace = true, features = [
   "json",
   "time",
 ] }
-twofloat = "0.8.4"
 typed-index-collections = { workspace = true, features = [
   "bincode",
   "serde",
   "serde-alloc",
 ] }
 vakint = { workspace = true }
-varpro = "0.14.0"
 vectorize = "0.2.0"
 
 [dependencies.pyo3]
@@ -139,6 +128,6 @@ pyo3-extension-module = ["pyo3/extension-module"]
 python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
 python_api = ["pyo3"]
 # insta.opt-level = 3
-python_stubgen = ["pyo3-stub-gen", "python_api"]
+python_stubgen = ["python_api"]
 
 # use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]

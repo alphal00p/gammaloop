@@ -12,6 +12,8 @@ use eyre::Context;
 use gammaloop_tracing_filter::GammaLogFilter;
 use gammalooprs::utils::tracing::{LogFormat, LogStyle};
 use indicatif::ProgressState;
+use itertools::Itertools;
+use tabled::{builder::Builder, settings::Style};
 use tracing::{field::Visit, level_filters::LevelFilter, Event, Subscriber};
 use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
 use tracing_subscriber::field::RecordFields;
@@ -254,34 +256,109 @@ impl Visit for RoutedFieldsVisitor {
     }
 }
 
-fn render_display_message(
-    style: &LogStyle,
-    message: &str,
-    fields: &serde_json::Map<String, serde_json::Value>,
-) -> String {
-    let field_suffix = if style.include_fields && !fields.is_empty() {
-        let mut s = String::new();
-        if !message.is_empty() {
-            s.push(' ');
-        }
-        s.push('{');
-        for (index, (key, value)) in fields.iter().enumerate() {
-            if index > 0 {
-                s.push_str(", ");
-            }
-            s.push_str(key);
-            s.push('=');
-            match value {
-                serde_json::Value::String(string) => s.push_str(string),
-                other => s.push_str(&other.to_string()),
-            }
-        }
-        s.push('}');
-        s
-    } else {
+fn render_display_message(message: &str) -> String {
+    message.to_string()
+}
+
+const DISPLAY_TAG_FIELDS: &[&str] = &[
+    "generation",
+    "integration",
+    "profile",
+    "persistence",
+    "uv",
+    "ir",
+    "subtraction",
+    "sampling",
+    "stability",
+    "observables",
+    "selectors",
+    "cache",
+    "graph",
+    "group",
+    "orientation",
+    "channel",
+    "cut",
+    "event",
+    "sample",
+    "iteration",
+    "term",
+    "solver",
+    "compile",
+    "inspect",
+    "summary",
+    "dump",
+];
+
+fn extract_display_tags(fields: &mut serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    let mut tags = fields
+        .iter()
+        .filter_map(|(name, value)| {
+            DISPLAY_TAG_FIELDS
+                .contains(&name.as_str())
+                .then_some(value)
+                .filter(|value| matches!(value, serde_json::Value::Bool(true)))
+                .map(|_| name.clone())
+        })
+        .collect_vec();
+
+    for tag in &tags {
+        fields.remove(tag);
+    }
+
+    tags.sort_by_key(|tag| {
+        DISPLAY_TAG_FIELDS
+            .iter()
+            .position(|known| known == &tag.as_str())
+            .unwrap_or(usize::MAX)
+    });
+    tags
+}
+
+fn render_display_tags(tags: &[String]) -> String {
+    if tags.is_empty() {
         String::new()
-    };
-    format!("{message}{field_suffix}")
+    } else {
+        format!(
+            " {}",
+            format!("[{}]", tags.iter().map(String::as_str).join(", ")).bright_black()
+        )
+    }
+}
+
+fn render_display_field_table(
+    style: &LogStyle,
+    fields: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    if !style.include_fields || fields.is_empty() {
+        return None;
+    }
+
+    let mut builder = Builder::new();
+    builder.push_record([
+        "field".bold().blue().to_string(),
+        "value".bold().blue().to_string(),
+    ]);
+
+    for (key, value) in fields {
+        builder.push_record([key.clone(), display_field_value(value)]);
+    }
+
+    let table = builder.build().with(Style::blank()).to_string();
+    Some(indent_block(&table, "    "))
+}
+
+fn display_field_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(string) => string.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn indent_block(block: &str, prefix: &str) -> String {
+    block
+        .lines()
+        .map(|line| format!("{prefix}{line}"))
+        .join("\n")
 }
 
 impl LazyJsonMakeWriter {
@@ -799,7 +876,10 @@ where
         let mut v = RoutedFieldsVisitor::for_sink(LogSink::Display);
         event.record(&mut v);
         let msg = v.message.as_deref().unwrap_or("");
-        let rendered = render_display_message(&style, msg, &v.fields);
+        let mut display_fields = v.fields;
+        let display_tags = extract_display_tags(&mut display_fields);
+        let rendered = render_display_message(msg);
+        let rendered_field_table = render_display_field_table(&style, &display_fields);
 
         let ts_long = format!(
             "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
@@ -830,6 +910,8 @@ where
         } else {
             format_target_full(meta.module_path().unwrap_or("").to_string())
         };
+        let long_source = format!("{}{}", long_source, render_display_tags(&display_tags));
+        let full_source = format!("{}{}", full_source, render_display_tags(&display_tags));
 
         match style.log_format {
             LogFormat::Long => {
@@ -877,6 +959,9 @@ where
             LogFormat::None => {
                 write!(w, "{}", rendered)?;
             }
+        }
+        if let Some(field_table) = rendered_field_table {
+            write!(w, "\n{field_table}")?;
         }
         writeln!(w)
     }
@@ -1019,10 +1104,11 @@ mod tests {
     use crate::tracing::strip_ansi_escape_codes;
 
     use super::{
-        collapse_scoped_gamma_level, display_filter_from, file_filter_from, format_target,
-        format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
-        render_display_message, route_field_name, set_stderr_log_filter,
-        set_stderr_log_filter_override, LogSink, StderrLogSpecState, STDERR_LOG_SPEC,
+        collapse_scoped_gamma_level, display_filter_from, extract_display_tags, file_filter_from,
+        format_target, format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
+        indent_block, render_display_field_table, render_display_message, render_display_tags,
+        route_field_name, set_stderr_log_filter, set_stderr_log_filter_override, LogSink,
+        StderrLogSpecState, STDERR_LOG_SPEC,
     };
 
     struct StderrStateRestore(StderrLogSpecState);
@@ -1165,25 +1251,71 @@ mod tests {
     }
 
     #[test]
-    fn display_message_renders_only_display_visible_fields() {
-        let style = gammalooprs::utils::tracing::LogStyle {
-            include_fields: true,
-            ..Default::default()
-        };
-        let fields = serde_json::Map::from_iter([
-            (
-                "shared".to_string(),
-                serde_json::Value::String("ok".to_string()),
-            ),
+    fn display_message_keeps_only_message_text() {
+        assert_eq!(render_display_message("hello"), "hello");
+    }
+
+    #[test]
+    fn display_formatter_extracts_true_tag_booleans_only() {
+        let mut fields = serde_json::Map::from_iter([
+            ("generation".to_string(), serde_json::Value::Bool(true)),
+            ("uv".to_string(), serde_json::Value::Bool(true)),
+            ("inspect".to_string(), serde_json::Value::Bool(false)),
             (
                 "progress".to_string(),
                 serde_json::Value::String("step-1".to_string()),
             ),
         ]);
 
+        let tags = extract_display_tags(&mut fields);
+        assert_eq!(tags, vec!["generation".to_string(), "uv".to_string()]);
+        assert_eq!(fields.get("generation"), None);
+        assert_eq!(fields.get("uv"), None);
+        assert_eq!(fields.get("inspect"), Some(&serde_json::Value::Bool(false)));
         assert_eq!(
-            render_display_message(&style, "hello", &fields),
-            "hello {progress=step-1, shared=ok}"
+            fields.get("progress"),
+            Some(&serde_json::Value::String("step-1".to_string()))
         );
+    }
+
+    #[test]
+    fn display_tags_render_next_to_source() {
+        assert_eq!(
+            strip_ansi_escape_codes(&render_display_tags(&[
+                "generation".to_string(),
+                "uv".to_string()
+            ])),
+            " [generation, uv]"
+        );
+    }
+
+    #[test]
+    fn display_field_table_renders_only_non_tag_fields() {
+        let style = gammalooprs::utils::tracing::LogStyle {
+            include_fields: true,
+            ..Default::default()
+        };
+        let fields = serde_json::Map::from_iter([
+            ("inspect".to_string(), serde_json::Value::Bool(false)),
+            (
+                "progress".to_string(),
+                serde_json::Value::String("step-1".to_string()),
+            ),
+        ]);
+
+        let rendered = render_display_field_table(&style, &fields).unwrap();
+        let rendered = strip_ansi_escape_codes(&rendered);
+        assert!(rendered.contains("field"));
+        assert!(rendered.contains("value"));
+        assert!(rendered.contains("inspect"));
+        assert!(rendered.contains("false"));
+        assert!(rendered.contains("progress"));
+        assert!(rendered.contains("step-1"));
+        assert!(rendered.lines().all(|line| line.starts_with("    ")));
+    }
+
+    #[test]
+    fn indent_block_prefixes_each_line() {
+        assert_eq!(indent_block("a\nb", "  "), "  a\n  b");
     }
 }

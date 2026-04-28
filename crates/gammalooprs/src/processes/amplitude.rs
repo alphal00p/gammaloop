@@ -932,7 +932,7 @@ impl AmplitudeGraph {
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
         let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, false)?
+            .orientation_parametric_exprs(&self.graph, &settings.uv)?
             .into_iter()
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .collect();
@@ -1059,7 +1059,7 @@ impl AmplitudeGraph {
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
-        let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, false)?;
+        let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
 
         for mut expr in exprs.into_iter() {
             assert!(

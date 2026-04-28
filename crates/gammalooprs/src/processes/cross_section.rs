@@ -965,7 +965,7 @@ impl CrossSectionGraph {
         cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let parametric_integrands =
-            cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
+            cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
 
         Ok(parametric_integrands
             .into_iter()
@@ -1470,7 +1470,7 @@ impl CrossSectionGraph {
         cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let mut threshold_counterterms = cut_forests
-            .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
+            .orientation_parametric_exprs(&self.graph, &settings.uv)?
             .into_iter();
 
         let lu_prefactor = self.lu_prefactor_helper();
