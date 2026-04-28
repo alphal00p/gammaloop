@@ -40,6 +40,8 @@ pub struct GenerationSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub uniform_numerator_sampling_scale: UniformNumeratorSamplingScale,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub compile: GammaloopCompileOptions,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table: TropicalSubgraphTableSettings,
@@ -94,6 +96,18 @@ pub enum VectorPolarizationSumGauge {
     #[default]
     #[serde(rename = "LightLikeAxial", alias = "light_like_axial")]
     LightLikeAxial,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(rename_all = "snake_case")]
+pub enum UniformNumeratorSamplingScale {
+    #[default]
+    None,
+    BeyondQuadratic,
+    All,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Copy, JsonSchema)]
@@ -524,6 +538,7 @@ impl OrientationPattern {
             .map(|arg| match arg.as_str() {
                 "+" | "+1" => "1".to_string(),
                 "-" | "-1" => "-1".to_string(),
+                "x" | "X" => "0".to_string(),
                 _ => arg,
             })
             .collect::<Vec<_>>()

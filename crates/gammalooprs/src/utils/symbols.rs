@@ -160,6 +160,7 @@ pub struct GammaloopSymbols {
     pub m_uv: Symbol,
     pub m_uv_int: Symbol,
     pub mu_r_sq: Symbol,
+    pub numerator_sampling_scale: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
@@ -725,6 +726,25 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                     let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
                     if SpensoPrintSettings::from(i).is_typst() {
                         Some("mu_r^2".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
+    numerator_sampling_scale: symbol!(
+        "M",
+        print = |a, opt| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                    if SpensoPrintSettings::from(i).is_typst() {
+                        Some("M".to_string())
                     } else {
                         None
                     }

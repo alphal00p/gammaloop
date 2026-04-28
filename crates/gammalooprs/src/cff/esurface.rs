@@ -995,7 +995,7 @@ impl Graph {
                 .orientations
                 .iter()
                 .map(|orientation_expression| {
-                    orientation_expression.expression.max_value_count_on_branch(
+                    orientation_expression.max_denominator_value_count_on_branch(
                         &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
                     )
                 })

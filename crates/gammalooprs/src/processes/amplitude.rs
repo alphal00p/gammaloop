@@ -765,6 +765,10 @@ impl AmplitudeGraph {
                     .run_time_settings
                     .general
                     .mu_r_sq())));
+                param_builder.numerator_sampling_scale_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .numerator_sampling_scale)));
 
                 // println!("\nParamBuilder parameters:\n{}", param_builder);
 

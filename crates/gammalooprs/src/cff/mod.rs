@@ -98,7 +98,7 @@ impl Graph {
                 orientations: vec![],
             };
             for orientation in expr.orientations.iter() {
-                let eta_expr = orientation.expression.to_atom_inv();
+                let eta_expr = orientation.to_atom();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
 
                 let inverse_energies = get_cff_inverse_energy_product_impl(

@@ -509,7 +509,7 @@ impl CrossSectionGraphTerm {
             .iter()
             .filter(|orientation| {
                 settings.generation.orientation_pattern.filter(*orientation)
-                    && orientation.expression.iter_nodes().any(|tree_node| {
+                    && orientation.iter_denominator_nodes().any(|tree_node| {
                         graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
                             tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
                         })
@@ -538,13 +538,15 @@ impl CrossSectionGraphTerm {
         let selected_generation_esurfaces = selected_generation_orientations
             .iter()
             .flat_map(|orientation| {
-                orientation.expression.iter_nodes().filter_map(|tree_node| {
-                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
-                        Some(esurface_id)
-                    } else {
-                        None
-                    }
-                })
+                orientation
+                    .iter_denominator_nodes()
+                    .filter_map(|tree_node| {
+                        if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                            Some(esurface_id)
+                        } else {
+                            None
+                        }
+                    })
             })
             .collect::<HashSet<_>>();
 
@@ -1084,6 +1086,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph
             .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
+        self.graph
+            .param_builder
+            .numerator_sampling_scale_value(Complex::new_re(F(settings
+                .general
+                .numerator_sampling_scale)));
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();

@@ -151,13 +151,15 @@ impl AmplitudeGraphTerm {
         let selected_generation_esurfaces = selected_generation_orientations
             .iter()
             .flat_map(|orientation| {
-                orientation.expression.iter_nodes().filter_map(|tree_node| {
-                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
-                        Some(esurface_id)
-                    } else {
-                        None
-                    }
-                })
+                orientation
+                    .iter_denominator_nodes()
+                    .filter_map(|tree_node| {
+                        if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                            Some(esurface_id)
+                        } else {
+                            None
+                        }
+                    })
             })
             .collect::<HashSet<_>>();
 
@@ -558,6 +560,11 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph
             .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
+        self.graph
+            .param_builder
+            .numerator_sampling_scale_value(Complex::new_re(F(settings
+                .general
+                .numerator_sampling_scale)));
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();

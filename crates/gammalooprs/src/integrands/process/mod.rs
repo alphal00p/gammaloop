@@ -958,7 +958,7 @@ fn format_orientation_label(signature: &EdgeVec<Orientation>) -> String {
         .map(|(_, orientation)| match *orientation {
             Orientation::Default => '+',
             Orientation::Reversed => '-',
-            Orientation::Undirected => '0',
+            Orientation::Undirected => 'x',
         })
         .collect()
 }

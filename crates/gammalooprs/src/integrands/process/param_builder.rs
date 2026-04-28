@@ -116,6 +116,7 @@ pub struct GammaLoopPairs {
     m_uv: ParamValuePairs,
     idenso_vars: ParamValuePairs,
     mu_r_sq: ParamValuePairs,
+    numerator_sampling_scale: ParamValuePairs,
     orientations: ParamValuePairs,
     override_if: ParamValuePairs,
     pub model_parameters: ParamValuePairs,
@@ -143,12 +144,13 @@ pub struct GammaLoopPairs {
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             self.m_uv,
             self.mu_r_sq,
+            self.numerator_sampling_scale,
             self.idenso_vars,
             self.model_parameters,
             self.external_energies,
@@ -180,12 +182,13 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &self.m_uv,
             &self.mu_r_sq,
+            &self.numerator_sampling_scale,
             &self.idenso_vars,
             &self.model_parameters,
             &self.external_energies,
@@ -217,12 +220,13 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &mut self.m_uv,
             &mut self.mu_r_sq,
+            &mut self.numerator_sampling_scale,
             &mut self.idenso_vars,
             &mut self.model_parameters,
             &mut self.external_energies,
@@ -266,6 +270,8 @@ impl GammaLoopPairs {
     pub fn validate(&self) {
         debug!("Validating mu_r_sq");
         self.mu_r_sq.validate();
+        debug!("Validating numerator_sampling_scale");
+        self.numerator_sampling_scale.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -317,6 +323,9 @@ impl GammaLoopPairs {
         let mut pairs = GammaLoopPairs {
             m_uv: ParamValuePairs::default_from_symbol(GS.m_uv),
             mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
+            numerator_sampling_scale: ParamValuePairs::default_from_symbol(
+                GS.numerator_sampling_scale,
+            ),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -1283,6 +1292,19 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
+        }
+    }
+
+    pub(crate) fn numerator_sampling_scale_value(
+        &mut self,
+        numerator_sampling_scale: Complex<F<T>>,
+    ) {
+        debug_assert!(self.pairs.numerator_sampling_scale.value_range.len() == 1);
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.numerator_sampling_scale.value_range.start * multiplicative_offset] =
+                numerator_sampling_scale.clone();
         }
     }
 

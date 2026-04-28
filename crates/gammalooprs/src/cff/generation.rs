@@ -37,7 +37,7 @@ use tracing::debug;
 use super::{
     cff_graph::CFFGenerationGraph,
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::{CFFExpression, OrientationID},
+    expression::{CFFExpression, OrientationExpression, OrientationID},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
 };
@@ -273,6 +273,9 @@ fn generate_cff_expression<E, V, H>(
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        linear_surface_cache: crate::cff::surface::LinearSurfaceCollection::from_iter(
+            std::iter::empty(),
+        ),
     };
     let graph_cff = generate_cff_from_orientations(
         graphs,
@@ -312,18 +315,14 @@ impl Graph {
             let mut orientation_iterator = orientation.into_iter();
 
             let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
-                if hedge_pair.is_unpaired() {
+                if hedge_pair.is_unpaired() || contract_edges.contains(&edge_id) {
                     Orientation::Undirected
+                } else if edges_in_initial_state_cut.contains(&edge_id) {
+                    Orientation::Default
                 } else {
-                    if contract_edges.contains(&edge_id) {
-                        Orientation::Undirected
-                    } else if edges_in_initial_state_cut.contains(&edge_id) {
-                        Orientation::Default
-                    } else {
-                        orientation_iterator
-                            .next()
-                            .expect("orientation generation corrupted, not enough edges")
-                    }
+                    orientation_iterator
+                        .next()
+                        .expect("orientation generation corrupted, not enough edges")
                 }
             });
 
@@ -399,6 +398,9 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        linear_surface_cache: crate::cff::surface::LinearSurfaceCollection::from_iter(
+            std::iter::empty(),
+        ),
     };
 
     let generate_tree_for_orientation = generate_tree_for_orientation(
@@ -478,6 +480,7 @@ fn post_process<S: SubGraphLike>(
                                 )
                         })
                 }
+                HybridSurfaceID::Linear(_) => true,
                 HybridSurfaceID::Unit => true,
                 HybridSurfaceID::Infinite => true,
             };
@@ -504,6 +507,9 @@ fn post_process<S: SubGraphLike>(
             match surface_to_rewrite {
                 HybridSurfaceRef::Unit(_) => continue,
                 HybridSurfaceRef::Infinite(_) => continue,
+                HybridSurfaceRef::Linear(_) => {
+                    id_map.insert(*appearing_id, *appearing_id);
+                }
                 HybridSurfaceRef::Esurface(esurface) => {
                     if let Some(esurface_id) = rewrite_esurfaces
                         .allowed_targets
@@ -701,12 +707,7 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
             );
             let expression = tree.map(forget_graphs);
 
-            crate::cff::expression::OrientationExpression {
-                expression,
-                data: OrientationData {
-                    orientation: global_orientation,
-                },
-            }
+            OrientationExpression::pure_cff(OrientationData::new(global_orientation), expression)
         })
         .collect_vec();
 
@@ -722,6 +723,8 @@ pub struct SurfaceCache {
     pub esurface_cache: EsurfaceCollection, // Esurfaces of the supergraph
     #[bincode(with_serde)]
     pub hsurface_cache: HsurfaceCollection, // Anything else.
+    #[bincode(with_serde)]
+    pub linear_surface_cache: crate::cff::surface::LinearSurfaceCollection,
 }
 
 impl SurfaceCache {
@@ -747,7 +750,19 @@ impl SurfaceCache {
             )
         });
 
-        esurface_id_iter.chain(hsurface_id_iter)
+        let linear_surface_id_iter =
+            self.linear_surface_cache
+                .iter_enumerated()
+                .map(|(id, surface)| {
+                    (
+                        HybridSurfaceID::Linear(id),
+                        HybridSurfaceRef::Linear(surface),
+                    )
+                });
+
+        esurface_id_iter
+            .chain(hsurface_id_iter)
+            .chain(linear_surface_id_iter)
     }
 
     pub(crate) fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
@@ -765,6 +780,7 @@ impl SurfaceCache {
         match surface_id {
             HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
             HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
+            HybridSurfaceID::Linear(id) => HybridSurfaceRef::Linear(&self.linear_surface_cache[id]),
             HybridSurfaceID::Unit => HybridSurfaceRef::Unit(UnitSurface {}),
             HybridSurfaceID::Infinite => HybridSurfaceRef::Infinite(InfiniteSurface {}),
         }
@@ -775,6 +791,9 @@ impl SurfaceCache {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+            linear_surface_cache: crate::cff::surface::LinearSurfaceCollection::from_iter(
+                std::iter::empty(),
+            ),
         }
     }
 }
@@ -853,6 +872,7 @@ fn advance_tree(
                         })
                     }
                 }
+                HybridSurface::Linear(surface) => HybridSurface::Linear(surface),
                 HybridSurface::Unit(unit) => HybridSurface::Unit(unit),
                 HybridSurface::Infinite(infinite) => HybridSurface::Infinite(infinite),
                 HybridSurface::Hsurface(hsurface) => {
@@ -969,6 +989,23 @@ fn advance_tree(
                     };
 
                     HybridSurfaceID::Hsurface(hsurface_id)
+                }
+                HybridSurface::Linear(surface) => {
+                    let option_surface_id = generator_cache
+                        .linear_surface_cache
+                        .position(|val| val == &surface);
+
+                    let surface_id = match option_surface_id {
+                        Some(surface_id) => surface_id,
+                        None => {
+                            generator_cache.linear_surface_cache.push(surface);
+                            Into::<crate::cff::surface::LinearSurfaceID>::into(
+                                generator_cache.linear_surface_cache.len() - 1,
+                            )
+                        }
+                    };
+
+                    HybridSurfaceID::Linear(surface_id)
                 }
                 HybridSurface::Unit(_) => HybridSurfaceID::Unit,
                 HybridSurface::Infinite(_) => HybridSurfaceID::Infinite,
