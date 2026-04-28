@@ -335,18 +335,17 @@ fn integrated_uv_targets_pass(
                 "no-integrated result should exist for no-integrated target checks"
             ));
         };
-        if !no_integrated_result.is_compatible_with_target(no_integrated_target.clone(), 2) {
+        if !no_integrated_result.is_compatible_with_target(*no_integrated_target, 2) {
             return Ok(false);
         }
     }
 
-    if let Some(integrated_target) = &targets.integrated {
-        if !results
+    if let Some(integrated_target) = &targets.integrated
+        && !results
             .integrated
-            .is_compatible_with_target(integrated_target.clone(), 2)
-        {
-            return Ok(false);
-        }
+            .is_compatible_with_target(*integrated_target, 2)
+    {
+        return Ok(false);
     }
 
     Ok(true)
@@ -725,62 +724,6 @@ fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
 }
 
 #[test]
-fn aa_aa_gl00_uv() {
-    run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "uv/aa_aa_GL00",
-        test_name: "aa_aa_GL00",
-        process: "aa_aa",
-        integrand_name: "2L",
-        original_m_uv: 91.188,
-        shifted_m_uv: 364.752,
-        original_mu_r: 91.188,
-        shifted_mu_r: 364.752,
-        skip_uv_profile: false,
-        targets: IntegratedUvTargets::default(),
-        min_change_sigma: Some(5.0),
-        min_mu_r_change_sigma: Some(5.0),
-    });
-}
-#[test]
-fn epem_ttxh_gl00_uv() {
-    run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "uv/epem_ttxh_GL00",
-        test_name: "epem_ttxh_gl00",
-        process: "epem_a_tth",
-        integrand_name: "NLO",
-        original_m_uv: 20.0,
-        shifted_m_uv: 7.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 9.0,
-        skip_uv_profile: false,
-        targets: IntegratedUvTargets::default(),
-        min_change_sigma: Some(5.0),
-        min_mu_r_change_sigma: Some(5.0),
-    });
-}
-
-#[test]
-fn epem_a_ddx_xs_nlo_uv() {
-    run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "uv/epem_a_ddx_xs_nlo",
-        test_name: "epem_a_ddx_xs_nlo",
-        process: "epem_a_ddx",
-        integrand_name: "NLO",
-        original_m_uv: 20.0,
-        shifted_m_uv: 7.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 9.0,
-        skip_uv_profile: true,
-        targets: IntegratedUvTargets {
-            no_integrated: None,
-            integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
-        },
-        min_change_sigma: Some(5.0),
-        min_mu_r_change_sigma: Some(5.0),
-    });
-}
-
-#[test]
 fn dod0_bubble_uv() {
     run_single_integrated_uv_case(&IntegratedUvCase {
         run_card: "uv/dod0_bubble",
@@ -862,6 +805,44 @@ fn epem_a_bbx_amp_uv() {
 }
 
 mod slow {
+    use super::*;
+
+    #[test]
+    fn aa_aa_gl00_uv() {
+        run_single_integrated_uv_case(&IntegratedUvCase {
+            run_card: "uv/aa_aa_GL00",
+            test_name: "aa_aa_GL00",
+            process: "aa_aa",
+            integrand_name: "2L",
+            original_m_uv: 91.188,
+            shifted_m_uv: 364.752,
+            original_mu_r: 91.188,
+            shifted_mu_r: 364.752,
+            skip_uv_profile: false,
+            targets: IntegratedUvTargets::default(),
+            min_change_sigma: Some(5.0),
+            min_mu_r_change_sigma: Some(5.0),
+        });
+    }
+
+    #[test]
+    fn epem_ttxh_gl00_uv() {
+        run_single_integrated_uv_case(&IntegratedUvCase {
+            run_card: "uv/epem_ttxh_GL00",
+            test_name: "epem_ttxh_gl00",
+            process: "epem_a_tth",
+            integrand_name: "NLO",
+            original_m_uv: 20.0,
+            shifted_m_uv: 7.0,
+            original_mu_r: 3.0,
+            shifted_mu_r: 9.0,
+            skip_uv_profile: false,
+            targets: IntegratedUvTargets::default(),
+            min_change_sigma: Some(5.0),
+            min_mu_r_change_sigma: Some(5.0),
+        });
+    }
+
     #[test]
     fn ad_ad_with_gluon_correction_uv() {
         run_single_integrated_uv_case(&IntegratedUvCase {
@@ -879,8 +860,6 @@ mod slow {
             min_mu_r_change_sigma: Some(5.0),
         });
     }
-
-    use super::*;
 
     #[test]
     fn soft_ct_se() -> Result<()> {
@@ -911,6 +890,27 @@ mod slow {
 }
 mod failing {
     use super::*;
+
+    #[test]
+    fn epem_a_ddx_xs_nlo_uv() {
+        run_single_integrated_uv_case(&IntegratedUvCase {
+            run_card: "uv/epem_a_ddx_xs_nlo",
+            test_name: "epem_a_ddx_xs_nlo",
+            process: "epem_a_ddx",
+            integrand_name: "NLO",
+            original_m_uv: 20.0,
+            shifted_m_uv: 7.0,
+            original_mu_r: 3.0,
+            shifted_mu_r: 9.0,
+            skip_uv_profile: true,
+            targets: IntegratedUvTargets {
+                no_integrated: None,
+                integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
+            },
+            min_change_sigma: Some(5.0),
+            min_mu_r_change_sigma: Some(5.0),
+        });
+    }
 
     #[test]
     fn epem_a_tth_nlo_uv() -> Result<()> {
