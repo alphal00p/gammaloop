@@ -22,7 +22,7 @@ use crate::{
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            GenericEvaluator, ParamBuilder,
+            GenericEvaluator, ParamBuilder, ThresholdParams,
             evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
         },
     },
@@ -668,12 +668,24 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let mut total_ct = Complex::new_re(self.rstar_sample.zero());
 
         for (order_index, evaluator_stack) in ct_evaluator.evaluator_stacks.iter_mut().enumerate() {
-            let sample_for_order = if order_index == 0 {
+            let (sample_for_order, threshold_params) = if order_index == 0 {
                 debug!(
                     "rescaled loop momenta at rstar:\n{}",
                     self.rstar_sample.loop_moms()
                 );
-                self.rstar_sample.clone()
+                (
+                    self.rstar_sample.clone(),
+                    ThresholdParams {
+                        radius: DualOrNot::NonDual(radius.clone()),
+                        radius_star: DualOrNot::NonDual(radius_star.clone()),
+                        esurface_derivative: DualOrNot::NonDual(
+                            self.rstar_solution.solution.derivative_at_solution.clone(),
+                        ),
+                        uv_damp_plus: DualOrNot::NonDual(uv_damp_plus.clone()),
+                        uv_damp_minus: DualOrNot::NonDual(uv_damp_minus.clone()),
+                        h_function: DualOrNot::NonDual(h_function.clone()),
+                    },
+                )
             } else {
                 let dual_shape = HyperDual::<F<T>>::new(shape_for_t_derivatives(order_index));
                 let dual_radius_star = dual_shape.variable(0, radius_star.clone());
@@ -702,7 +714,26 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 let mut sample_with_duals = self.rstar_sample.clone();
                 sample_with_duals.sample.dual_loop_moms = Some(dual_loop_momenta);
 
-                sample_with_duals
+                (
+                    sample_with_duals,
+                    ThresholdParams {
+                        radius: DualOrNot::Dual(new_constant(&dual_radius_star, &radius)),
+                        radius_star: DualOrNot::Dual(dual_radius_star.clone()),
+                        esurface_derivative: DualOrNot::Dual(new_constant(
+                            &dual_radius_star,
+                            &self.rstar_solution.solution.derivative_at_solution.clone(),
+                        )),
+                        uv_damp_plus: DualOrNot::Dual(new_constant(
+                            &dual_radius_star,
+                            &uv_damp_plus,
+                        )),
+                        uv_damp_minus: DualOrNot::Dual(new_constant(
+                            &dual_radius_star,
+                            &uv_damp_minus,
+                        )),
+                        h_function: DualOrNot::Dual(new_constant(&dual_radius_star, &h_function)),
+                    },
+                )
             };
 
             let esurface_derivatives = if order_index == 0 {
@@ -771,7 +802,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 &sample_for_order,
                 ct_builder.settings.kinematics.externals.get_helicities(),
                 &ct_builder.settings.additional_params(),
-                None,
+                Some(&threshold_params),
                 None,
                 None,
             );

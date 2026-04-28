@@ -1140,6 +1140,10 @@ impl AmplitudeGraph {
         let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
 
         for expr in exprs.into_iter() {
+            let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
+            let jacobian_factor = Atom::var(GS.radius_star_left).pow(loop_number as i32 * 3 - 1);
+
+            let expr = expr.map(|integrand| integrand * &jacobian_factor);
             let counterterm_atom = AmplitudeCountertermAtom {
                 parametric: expr.integrands,
             };
@@ -1424,7 +1428,7 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
     let delta_r_plus = &radius - &radius_star;
     let delta_r_minus = -&radius - &radius_star;
 
-    let jacobian_ratio = (&radius_star / &radius).pow(loop_3 - 1);
+    let jacobian_ratio = (Atom::one() / &radius).pow(loop_3 - 1);
 
     let local_prefactor = &jacobian_ratio / &factors_of_pi
         * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
