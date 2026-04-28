@@ -5,7 +5,7 @@ commands = [
 
 
 [cli_settings.global]
-logfile_directive = "off,gammalooprs[compare_with_scalar_rescaling]=debug,gammalooprs::numerator[color_simplify]=debug,gammalooprs=debug"
+logfile_directive = "off,gammalooprs=debug,symbolica=off,poly::gcd=off"
 display_directive = "info,status=debug"
 
 

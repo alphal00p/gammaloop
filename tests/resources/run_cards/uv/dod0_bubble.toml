@@ -2,7 +2,7 @@ commands = []
 
 [cli_settings]
 [cli_settings.global]
-logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+logfile_directive = "off"
 display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest=debug"
 
 [cli_settings.global.log_style]

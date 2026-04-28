@@ -1,10 +1,10 @@
 [cli_settings]
 # [cli_settings.global]
-# logfile_directive = "info,gammalooprs[kernel]=debug,gammalooprs[orientation_parametric_exprs]=debug,symbolica=off"  # ,gammalooprs[kernel]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"  # ,gammalooprs[build_original_parametric_integrand]=debug"
-# display_directive = "info,gammalooprs[kernel]=debug,gammalooprs[orientation_parametric_exprs]=debug"  # ,gammalooprs[final_integrand]=debug"
+# logfile_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::uv::forest=debug,gammalooprs::uv::approx=debug"
+# display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug"
 
 [cli_settings.global]
-display_directive = "info,gammalooprs[orientation_parametric_exprs]=debug"
+display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug"
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false

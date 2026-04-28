@@ -535,7 +535,11 @@ fn is_valid_ident(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use super::GammaLogFilter;
     use tracing::level_filters::LevelFilter;
@@ -556,6 +560,25 @@ mod tests {
                 GammaLogFilter::parse(spec).is_ok(),
                 "filter example should parse: {spec}"
             );
+        }
+    }
+
+    #[test]
+    fn all_run_card_log_directives_parse() {
+        let run_cards_root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/resources/run_cards");
+        let mut files = Vec::new();
+        collect_toml_files(&run_cards_root, &mut files);
+
+        for path in files {
+            let content = fs::read_to_string(&path).unwrap();
+            for (key, spec) in extract_log_specs(&content) {
+                assert!(
+                    GammaLogFilter::parse(&spec).is_ok(),
+                    "{key} in {} should parse: {spec}",
+                    path.display()
+                );
+            }
         }
     }
 
@@ -679,5 +702,35 @@ mod tests {
         assert!(!GammaLogFilter::is_effectively_off(
             "gammalooprs=info,gammalooprs::uv::forest[{generation,uv}]=debug"
         ));
+    }
+
+    fn collect_toml_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                collect_toml_files(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "toml") {
+                out.push(path);
+            }
+        }
+    }
+
+    fn extract_log_specs(content: &str) -> Vec<(String, String)> {
+        content
+            .lines()
+            .filter_map(|line| {
+                let trimmed = line.trim();
+                ["display_directive", "logfile_directive"]
+                    .into_iter()
+                    .find_map(|key| {
+                        let prefix = format!("{key} = ");
+                        let rest = trimmed.strip_prefix(&prefix)?;
+                        let quoted = rest.strip_prefix('"')?;
+                        let value = quoted.split('"').next()?;
+                        Some((key.to_string(), value.to_string()))
+                    })
+            })
+            .collect()
     }
 }

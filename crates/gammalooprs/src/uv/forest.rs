@@ -95,7 +95,7 @@ impl CutForests {
         {
             let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
 
-            debug_tags!(#generation, #uv, #graph, #orientation, #dump;
+            debug_tags!(#generation, #uv, #graph,  #dump;
                 n_terms =%forest.n_terms(),
                 graph = %graph.dot(&cuts.union),
                 name = %graph.name,
@@ -360,10 +360,8 @@ impl Forest {
         }
 
         for s in &mut sum {
-            *s = s
-                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
-                .with(W_.d_)
-                .collect_factors();
+            *s = s.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_);
+            // .collect_factors(); Really
         }
         Ok(sum)
     }

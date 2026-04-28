@@ -663,7 +663,7 @@ fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
                 graph: "-".to_string(),
                 status: status(Some(result.muv_invariance_passed)),
                 sigma: "-".to_string(),
-                threshold: "compatible within 2sigma".to_string(),
+                threshold: "<=2σ".to_string(),
                 error: error.clone(),
             });
         }
@@ -683,10 +683,9 @@ fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
                 graph: "-".to_string(),
                 status: status(result.mur_dependence_passed),
                 sigma: sigma(result.mur_change_sigma),
-                threshold: result.mur_change_threshold.map_or_else(
-                    || "-".to_string(),
-                    |threshold| format!(">={threshold:.1}sigma"),
-                ),
+                threshold: result
+                    .mur_change_threshold
+                    .map_or_else(|| "-".to_string(), |threshold| format!(">={threshold:.1}σ")),
                 error: error.clone(),
             });
         }
@@ -705,10 +704,9 @@ fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
             graph: "-".to_string(),
             status: status(result.ct_change_passed),
             sigma: sigma(result.ct_change_sigma),
-            threshold: result.ct_change_threshold.map_or_else(
-                || "-".to_string(),
-                |threshold| format!(">={threshold:.1}sigma"),
-            ),
+            threshold: result
+                .ct_change_threshold
+                .map_or_else(|| "-".to_string(), |threshold| format!(">={threshold:.1}σ")),
             error,
         });
     }
@@ -813,7 +811,7 @@ fn dod1_bubble_uv() {
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
         original_mu_r: 3.0,
-        shifted_mu_r: 9.0,
+        shifted_mu_r: 19.0,
         skip_uv_profile: false,
         targets: IntegratedUvTargets {
             no_integrated: Some(Complex::new(F(7.358320108607984e-3), F(0.0))),
