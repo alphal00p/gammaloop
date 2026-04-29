@@ -1319,7 +1319,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                     .max()
                     .unwrap_or(0) as i32
                     + 1;
-                
+
                 overlap
                     .build_evaluators(
                         &self.data.group_derived_data[group_id].esurface_atoms,

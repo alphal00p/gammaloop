@@ -241,7 +241,8 @@ impl AmplitudeCountertermData {
 
         for (group_index, group) in self.overlap.overlap_groups.iter_mut().enumerate() {
             if let Some(prefactor_evaluators) = group.prefactor_evaluator.as_mut() {
-                for (order_index, prefactor_evaluator) in prefactor_evaluators.iter_mut().enumerate()
+                for (order_index, prefactor_evaluator) in
+                    prefactor_evaluators.iter_mut().enumerate()
                 {
                     prefactor_evaluator.borrow_mut().compile_external(
                         path.as_ref()
@@ -957,11 +958,15 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             dual_loop_moms
                 .iter()
                 .flat_map(|mom| {
-                    [mom.px.values.clone(), mom.py.values.clone(), mom.pz.values.clone()]
-                        .into_iter()
-                        .flatten()
-                        .map(Complex::new_re)
-                        .collect::<Vec<_>>()
+                    [
+                        mom.px.values.clone(),
+                        mom.py.values.clone(),
+                        mom.pz.values.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .map(Complex::new_re)
+                    .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -969,10 +974,14 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 .loop_moms()
                 .iter()
                 .flat_map(|momentum| {
-                    [momentum.px.clone(), momentum.py.clone(), momentum.pz.clone()]
-                        .into_iter()
-                        .map(Complex::new_re)
-                        .collect::<Vec<_>>()
+                    [
+                        momentum.px.clone(),
+                        momentum.py.clone(),
+                        momentum.pz.clone(),
+                    ]
+                    .into_iter()
+                    .map(Complex::new_re)
+                    .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
         };
