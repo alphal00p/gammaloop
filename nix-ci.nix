@@ -16,6 +16,8 @@ in {
       "checks.${system}.gammaloop-fmt"
       "devShells.${system}.default"
     ];
+    "checks.${system}.gammaloop" = [ "packages.${system}.gammaloop" ];
+    "packages.${system}.default" = [ "packages.${system}.gammaloop" ];
     "checks.${system}.gammaloop-clippy" = [ "packages.${system}.gammaloop" ];
     "checks.${system}.gammaloop-doc" = [ "packages.${system}.gammaloop" ];
     "packages.${system}.gammaloop-llvm-coverage" = [ "packages.${system}.gammaloop" ];
