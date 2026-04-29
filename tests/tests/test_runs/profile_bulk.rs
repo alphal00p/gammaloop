@@ -108,7 +108,7 @@ fn double_dotted_bubble_amp_bulk_profile_passes() -> Result<()> {
             .commands
             .iter()
             .any(|command| command.raw_string.as_deref() == Some("profile bulk")),
-        "expected tests/resources/run_cards/scalar_self_energy_amp_generate.toml to contain the profile bulk command"
+        "expected tests/resources/run_cards/double_dotted_bubble_amp_generate.toml to contain the profile bulk command"
     );
     assert_eq!(setup_commands.last().copied(), Some("generate"));
 
