@@ -1497,14 +1497,6 @@ pub(crate) fn threshold_counterterm_helper(
     .into_eager_only()
 }
 
-#[test]
-fn test_threshold_counterterm_helper() {
-    let order = 2;
-    let loop_number = 2;
-    let result = threshold_counterterm_helper_atom(order, loop_number);
-    println!("Threshold counterterm helper result: {}", result);
-}
-
 #[cfg(test)]
 pub mod test {
 
