@@ -1,6 +1,7 @@
-let system = "x86_64-linux";
+let
+  system = "x86_64-linux";
 in {
-  systems = [ system ];
+  systems = [system];
   doNotBuild = [
     "checks.${system}.gammaloop-doctest"
     "checks.${system}.gammaloop-nextest"
@@ -16,27 +17,27 @@ in {
       "checks.${system}.gammaloop-fmt"
       "devShells.${system}.default"
     ];
-    "checks.${system}.gammaloop" = [ "packages.${system}.gammaloop" ];
-    "packages.${system}.default" = [ "packages.${system}.gammaloop" ];
-    "checks.${system}.gammaloop-clippy" = [ "packages.${system}.gammaloop" ];
-    "checks.${system}.gammaloop-doc" = [ "packages.${system}.gammaloop" ];
-    "packages.${system}.gammaloop-llvm-coverage" = [ "packages.${system}.gammaloop" ];
-    "packages.${system}.nix-ci-check-gammaloop-doctest" = [ "packages.${system}.gammaloop" ];
-    "packages.${system}.nix-ci-check-gammaloop-nextest" = [ "packages.${system}.gammaloop" ];
+    "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
+    "packages.${system}.default" = ["packages.${system}.gammaloop"];
+    "checks.${system}.gammaloop-clippy" = ["packages.${system}.gammaloop"];
+    "checks.${system}.gammaloop-doc" = ["packages.${system}.gammaloop"];
+    "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
+    "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.gammaloop"];
+    "packages.${system}.nix-ci-check-gammaloop-nextest" = ["packages.${system}.gammaloop"];
   };
   test = {
     gammaloop-doctest = {
-      package = "packages.x86_64-linux.nix-ci-check-gammaloop-doctest";
-      system = "x86_64-linux";
+      package = "packages.${system}.nix-ci-check-gammaloop-doctest";
+      system = system;
       in-repo = true;
-      secrets = [ "SYMBOLICA_LICENSE" ];
+      secrets = ["SYMBOLICA_LICENSE"];
     };
 
     gammaloop-nextest = {
-      package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest";
-      system = "x86_64-linux";
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest";
+      system = system;
       in-repo = true;
-      secrets = [ "SYMBOLICA_LICENSE" ];
+      secrets = ["SYMBOLICA_LICENSE"];
     };
   };
 }
