@@ -19,6 +19,7 @@ use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use crate::utils::GS;
 use crate::utils::compute_shift_part;
+use crate::utils::hyperdual_utils::shape_for_t_derivatives;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -45,7 +46,7 @@ pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
     pub center: LoopMomenta<F<f64>>,
-    pub prefactor_evaluator: Option<RefCell<GenericEvaluator>>,
+    pub prefactor_evaluator: Option<Vec<RefCell<GenericEvaluator>>>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -138,18 +139,23 @@ impl OverlapStructure {
 
         for (group, square_atom) in self.overlap_groups.iter_mut().zip(group_square_atoms) {
             let atom = square_atom / &denominator;
+            let num_orders = power.saturating_sub(1).max(1) as usize;
+            let evaluators = (0..num_orders)
+                .map(|order_index| {
+                    GenericEvaluator::new_from_raw_params(
+                        [atom.clone()],
+                        &params,
+                        &FunctionMap::new(),
+                        vec![],
+                        optimization_settings.clone(),
+                        (order_index > 0).then(|| shape_for_t_derivatives(order_index)),
+                        &EvaluatorSettings::default(),
+                    )
+                    .map(RefCell::new)
+                })
+                .collect::<Result<Vec<_>>>()?;
 
-            let evalautor = GenericEvaluator::new_from_raw_params(
-                [atom],
-                &params,
-                &FunctionMap::new(),
-                vec![],
-                optimization_settings.clone(),
-                None,
-                &EvaluatorSettings::default(),
-            )?;
-
-            group.prefactor_evaluator = Some(RefCell::new(evalautor));
+            group.prefactor_evaluator = Some(evaluators);
         }
 
         Ok(())

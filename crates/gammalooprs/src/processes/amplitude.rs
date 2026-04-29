@@ -1093,11 +1093,16 @@ impl AmplitudeGraph {
                 }
             }
 
-            if esurface.contains_all_with_minus_sign(&incoming_externals)
-                || esurface.contains_only_with_minus_sign(&outgoing_externals)
+            if settings
+                .threshold_subtraction
+                .assume_positive_external_energies
             {
-            } else {
-                continue;
+                if esurface.contains_all_with_minus_sign(&incoming_externals)
+                    || esurface.contains_only_with_minus_sign(&outgoing_externals)
+                {
+                } else {
+                    continue;
+                }
             }
 
             let mut cut_union: SuBitGraph = self.graph.empty_subgraph();

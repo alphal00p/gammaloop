@@ -1,20 +1,14 @@
 digraph massless_box_0 {
-overall_factor=1;
-multiplicity_factor=1;
-v1;
-v2;
-v3;
-v4;
-v5 [int_id="V_3_SCALAR_000"];
-v6 [int_id="V_3_SCALAR_000"];
-v7 [int_id="V_3_SCALAR_000"];
-v8 [int_id="V_3_SCALAR_000"];
-v1 -> v5 [pdg=1000, name=p1, mom=p1];
-v6 -> v2 [pdg=1000, name=p2, mom=p2];
-v7 -> v3 [pdg=1000, name=p3, mom=p3];
-v8 -> v4 [pdg=1000, name=p4, mom=p4];
-v5 -> v6 [pdg=1000, name=q1];
-v6 -> v7 [pdg=1000, name=q2];
-v7 -> v8 [pdg=1000, name=q3, lmb_index=0];
-v8 -> v5 [pdg=1000, name=q4];
+ext0 [style=invis];
+ext1 [style=invis];
+ext2 [style=invis];
+ext3 [style=invis];
+ext0 -> v5:0 [pdg=1000];
+ext1 -> v6:1 [pdg=1000];
+ext2 -> v7:2 [pdg=1000];
+v8:3 -> ext3 [pdg=1000];
+v5 -> v6 [pdg=1000];
+v6 -> v7 [pdg=1000];
+v7 -> v8 [pdg=1000];
+v8 -> v5 [pdg=1000];
 }

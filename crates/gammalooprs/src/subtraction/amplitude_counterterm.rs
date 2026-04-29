@@ -23,7 +23,10 @@ use crate::{
         evaluation::EvaluationMetaData,
         process::{
             GenericEvaluator, ParamBuilder, ThresholdParams,
-            evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
+            evaluators::{
+                EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator,
+                evaluate_evaluator_single,
+            },
         },
     },
     model::Model,
@@ -50,6 +53,24 @@ use symbolica::domains::dual::HyperDual;
 
 const MAX_ITERATIONS: usize = 40;
 const TOLERANCE: f64 = 1.0;
+
+fn multiply_dual_or_not_complex<T: FloatLike>(
+    lhs: DualOrNot<Complex<F<T>>>,
+    rhs: &DualOrNot<Complex<F<T>>>,
+) -> DualOrNot<Complex<F<T>>> {
+    match (lhs, rhs) {
+        (DualOrNot::NonDual(lhs), DualOrNot::NonDual(rhs)) => DualOrNot::NonDual(lhs * rhs),
+        (DualOrNot::Dual(lhs), DualOrNot::Dual(rhs)) => DualOrNot::Dual(lhs * rhs.clone()),
+        (DualOrNot::Dual(lhs), DualOrNot::NonDual(rhs)) => {
+            let rhs_dual = new_constant(&lhs, rhs);
+            DualOrNot::Dual(lhs * rhs_dual)
+        }
+        (DualOrNot::NonDual(lhs), DualOrNot::Dual(rhs)) => {
+            let lhs_dual = new_constant(rhs, &lhs);
+            DualOrNot::Dual(lhs_dual * rhs.clone())
+        }
+    }
+}
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -157,8 +178,14 @@ impl AmplitudeCountertermData {
             .overlap
             .overlap_groups
             .iter()
-            .filter(|group| group.prefactor_evaluator.is_some())
-            .count();
+            .map(|group| {
+                group
+                    .prefactor_evaluator
+                    .as_ref()
+                    .map(|evaluators| evaluators.len())
+                    .unwrap_or(0)
+            })
+            .sum::<usize>();
         stack_count + overlap_count + self.helper_evaluators.len()
     }
 
@@ -206,17 +233,26 @@ impl AmplitudeCountertermData {
         }
 
         for (group_index, group) in self.overlap.overlap_groups.iter_mut().enumerate() {
-            if let Some(prefactor_evaluator) = group.prefactor_evaluator.as_mut() {
-                prefactor_evaluator.borrow_mut().compile_external(
-                    path.as_ref()
-                        .join(format!("overlap_prefactor_{group_index}"))
-                        .with_extension("cpp"),
-                    format!("overlap_prefactor_{group_index}"),
-                    path.as_ref()
-                        .join(format!("overlap_prefactor_{group_index}"))
-                        .with_extension("so"),
-                    frozen_mode,
-                )?;
+            if let Some(prefactor_evaluators) = group.prefactor_evaluator.as_mut() {
+                for (order_index, prefactor_evaluator) in prefactor_evaluators.iter_mut().enumerate()
+                {
+                    prefactor_evaluator.borrow_mut().compile_external(
+                        path.as_ref()
+                            .join(format!(
+                                "overlap_prefactor_{group_index}_order_{}",
+                                order_index + 1
+                            ))
+                            .with_extension("cpp"),
+                        format!("overlap_prefactor_{group_index}_order_{}", order_index + 1),
+                        path.as_ref()
+                            .join(format!(
+                                "overlap_prefactor_{group_index}_order_{}",
+                                order_index + 1
+                            ))
+                            .with_extension("so"),
+                        frozen_mode,
+                    )?;
+                }
             }
         }
 
@@ -246,8 +282,10 @@ impl AmplitudeCountertermData {
         }
 
         for group in &mut self.overlap.overlap_groups {
-            if let Some(prefactor_evaluator) = group.prefactor_evaluator.as_mut() {
-                f(prefactor_evaluator.get_mut())?;
+            if let Some(prefactor_evaluators) = group.prefactor_evaluator.as_mut() {
+                for prefactor_evaluator in prefactor_evaluators.iter_mut() {
+                    f(prefactor_evaluator.get_mut())?;
+                }
             }
         }
 
@@ -630,13 +668,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
             .collect::<Vec<_>>();
 
-        let prefactor = self.evaluate_multichanneling_prefactor(
-            &self.rstar_sample,
-            model_params,
-            evaluation_metadata,
-            record_primary_timing,
-        );
-
         let radius = self
             .rstar_solution
             .esurface_ct_builder
@@ -644,7 +675,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .radius
             .clone();
 
-        let radius_star = self.rstar_solution.solution.solution;
+        let radius_star = self.rstar_solution.solution.solution.clone();
         let e_cm = &ct_builder.e_cm;
         let settings = &ct_builder
             .settings
@@ -819,6 +850,16 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 .pop()
                 .unwrap();
 
+            let prefactor = self.evaluate_multichanneling_prefactor(
+                &sample_for_order,
+                &model_params,
+                evaluation_metadata,
+                record_primary_timing,
+                order_index,
+            );
+
+            let pass_one_result = multiply_dual_or_not_complex(pass_one_result, &prefactor);
+
             debug!(
                 "Pass one result for esurface {} order {}: {}",
                 esurface_id.0,
@@ -872,59 +913,96 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         }
 
         debug!(
-            "results\ncombined ct:   {:+16e}\nprefactor:     {:+16e}",
-            total_ct, prefactor
-        );
-
-        let final_result = total_ct.clone() * prefactor;
-
-        debug!(
-            ct_eval = format!("{:+16e}", final_result),
+            ct_eval = format!("{:+16e}", total_ct),
             "esurface {}", esurface_id.0
         );
 
-        Ok(final_result)
+        Ok(total_ct)
     }
 
     fn evaluate_multichanneling_prefactor(
         &self,
         momentum_sample: &MomentumSample<T>,
-        model_params: Vec<Complex<F<T>>>,
+        model_params: &[Complex<F<T>>],
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Complex<F<T>> {
+        order_index: usize,
+    ) -> DualOrNot<Complex<F<T>>> {
         let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
         let overlap = overlap_builder.counterterm_builder.overlap_structure;
 
         if overlap.overlap_groups.len() < 2 {
-            return Complex::new_re(momentum_sample.one());
+            return DualOrNot::NonDual(Complex::new_re(momentum_sample.one()));
         }
 
-        let params = momentum_sample
-            .loop_moms()
-            .iter()
-            .flat_map(|x| x.into_iter().cloned().map(Complex::new_re))
-            .chain(
-                momentum_sample
-                    .external_moms()
-                    .iter()
-                    .flat_map(|x| x.into_iter().cloned().map(Complex::new_re)),
-            )
-            .chain(model_params)
-            .collect::<Vec<_>>();
+        let multiplicative_offset = momentum_sample
+            .sample
+            .dual_loop_moms
+            .as_ref()
+            .map(|dual_loop_moms| dual_loop_moms.first().unwrap().px.values.len())
+            .unwrap_or(1);
+        let zero = Complex::new_re(momentum_sample.zero());
+        let mut params = if let Some(dual_loop_moms) = &momentum_sample.sample.dual_loop_moms {
+            dual_loop_moms
+                .iter()
+                .flat_map(|mom| {
+                    [mom.px.values.clone(), mom.py.values.clone(), mom.pz.values.clone()]
+                        .into_iter()
+                        .flatten()
+                        .map(Complex::new_re)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        } else {
+            momentum_sample
+                .loop_moms()
+                .iter()
+                .flat_map(|momentum| {
+                    [momentum.px.clone(), momentum.py.clone(), momentum.pz.clone()]
+                        .into_iter()
+                        .map(Complex::new_re)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+
+        params.extend(momentum_sample.external_moms().iter().flat_map(|momentum| {
+            [
+                momentum.temporal.value.clone(),
+                momentum.spatial.px.clone(),
+                momentum.spatial.py.clone(),
+                momentum.spatial.pz.clone(),
+            ]
+            .into_iter()
+            .flat_map(|value| {
+                std::iter::once(Complex::new_re(value))
+                    .chain((1..multiplicative_offset).map(|_| zero.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+        }));
+        params.extend(model_params.iter().cloned().flat_map(|value| {
+            std::iter::once(value)
+                .chain((1..multiplicative_offset).map(|_| zero.clone()))
+                .collect::<Vec<_>>()
+        }));
 
         let evaluator = overlap_builder
             .overlap_group
             .prefactor_evaluator
             .as_ref()
-            .unwrap();
+            .unwrap()
+            .get(order_index)
+            .expect("missing overlap prefactor evaluator for amplitude threshold order");
 
-        evaluate_evaluator_single(
+        evaluate_evaluator(
             &mut evaluator.borrow_mut(),
             &params,
             evaluation_metadata,
             record_primary_timing,
         )
+        .pop()
+        .expect("overlap prefactor evaluator should return exactly one value")
     }
 }
 
