@@ -1297,6 +1297,20 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             msg
                         })?;
 
+                let max_required_power = self.data.graph_group_structure[group_id]
+                    .into_iter()
+                    .flat_map(|graph_id| {
+                        self.data.graph_terms[graph_id]
+                            .threshold_counterterm
+                            .raised_data
+                            .raised_groups
+                            .iter()
+                            .map(|raised_group| raised_group.max_occurence)
+                    })
+                    .max()
+                    .unwrap_or(0) as i32
+                    + 1;
+                
                 overlap
                     .build_evaluators(
                         &self.data.group_derived_data[group_id].esurface_atoms,
@@ -1317,6 +1331,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             .model_parameters
                             .params
                             .clone(),
+                        max_required_power,
                     )
                     .with_context(|| {
                         format!(

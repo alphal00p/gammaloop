@@ -33,6 +33,7 @@ use spenso::algebra::algebraic_traits::IsZero;
 use std::cell::RefCell;
 use std::fmt::Display;
 use symbolica::atom::Atom;
+use symbolica::atom::AtomCore;
 use symbolica::evaluate::FunctionMap;
 use symbolica::evaluate::OptimizationSettings;
 use symbolica::function;
@@ -100,6 +101,7 @@ impl OverlapStructure {
         num_loops: usize,
         num_externals: usize,
         model_params: Vec<Atom>,
+        power: i32,
     ) -> Result<()> {
         let group_square_atoms = self
             .overlap_groups
@@ -111,7 +113,7 @@ impl OverlapStructure {
                     .map(|&existing_esurface_id| {
                         let esurface = self.existing_esurfaces[existing_esurface_id];
                         let atom = &atoms[esurface];
-                        atom * atom
+                        atom.pow(power)
                     })
                     .reduce(|prod, atom| prod * atom)
                     .unwrap_or_else(|| Atom::num(1))
