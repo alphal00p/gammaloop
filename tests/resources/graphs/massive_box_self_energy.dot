@@ -1,0 +1,20 @@
+digraph massive_box_self_energy {
+edge [
+    pdg=1001
+]
+ext0 [style=invis]
+ext1 [style=invis]
+ext2 [style=invis]
+ext3 [style=invis]
+ext0 -> v5:0 
+ext1 -> v6:1 
+ext2 -> v7:2 
+v8:3 -> ext3 
+v5 -> v6 
+v6 -> v9 [ lmb_id=0]
+v9 -> v10 [ lmb_id=1]
+v9 -> v10 
+v10 -> v7 
+v7 -> v8 
+v8 -> v5 
+}

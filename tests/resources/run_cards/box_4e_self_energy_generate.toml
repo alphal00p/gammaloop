@@ -1,6 +1,6 @@
 commands = [
     "import model ./assets/models/json/scalars/scalars.json",
-    "import graphs ./tests/resources/graphs/massless_box_self_energy.dot ",
+    "import graphs ./tests/resources/graphs/massive_box_self_energy.dot ",
     "generate",
     "profile bulk",
     "quit -n",
