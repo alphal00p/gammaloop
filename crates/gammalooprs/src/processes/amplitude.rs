@@ -18,7 +18,7 @@ use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{algebra::complex::Complex, network::library::TensorLibraryData};
+use spenso::algebra::complex::Complex;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
