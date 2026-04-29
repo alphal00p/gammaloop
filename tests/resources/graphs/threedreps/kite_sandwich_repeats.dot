@@ -1,0 +1,25 @@
+digraph kite_sandwich_repeats {
+  num="1";
+  overall_factor="1";
+  edge [num="1"];
+  node [num="1"];
+  v0;
+  v1;
+  v2;
+  v3;
+  v4;
+  v6;
+  ext_p1 [style=invis,label="p1"];
+  ext_p2 [style=invis,label="p2"];
+  v0:0 -> v4:1 [id=0 dir=none name="q0" particle="scalar_1" lmb_rep="K(0,a___)+-1*K(1,a___)" mass="0.8"];
+  v4:2 -> v1:3 [id=1 dir=none name="q1" particle="scalar_1" lmb_rep="K(0,a___)+-1*K(1,a___)" mass="0.8"];
+  v1:4 -> v2:5 [id=2 dir=none lmb_id="0" name="q2" particle="scalar_1" lmb_rep="K(0,a___)" mass="0.9"];
+  v2:6 -> v0:7 [id=3 dir=none name="q3" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)" mass="1.1"];
+  v0:8 -> v3:9 [id=4 dir=none lmb_id="1" name="q4" particle="scalar_1" lmb_rep="K(1,a___)" mass="0.75"];
+  v3:10 -> v6:11 [id=5 dir=none name="q5" particle="scalar_1" lmb_rep="K(1,a___)+-1*P(1,a___)" mass="1.0"];
+  v6:12 -> v1:13 [id=6 dir=none name="q6" particle="scalar_1" lmb_rep="K(1,a___)+-1*P(1,a___)" mass="1.0"];
+  v0:14 -> ext_p1 [id=7 dir=none name="p1" particle="scalar_0" lmb_rep="-1*P(0,a___)" mass="0"];
+  ext_p2 -> v1:15 [id=8 dir=none name="p2" particle="scalar_0" lmb_rep="P(1,a___)" mass="0"];
+  ext_p1 -> v2:16 [id=9 dir=none name="p1" particle="scalar_0" lmb_rep="P(0,a___)" mass="0"];
+  v3:17 -> ext_p2 [id=10 dir=none name="p2" particle="scalar_0" lmb_rep="-1*P(1,a___)" mass="0"];
+}

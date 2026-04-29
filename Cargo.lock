@@ -1578,6 +1578,7 @@ dependencies = [
  "tabled",
  "tempfile",
  "thiserror 2.0.18",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-appender",
@@ -1605,11 +1606,13 @@ dependencies = [
  "momtrop",
  "ndarray",
  "rand 0.9.4",
+ "serde",
  "serde_json",
  "serial_test",
  "spenso",
  "symbolica",
  "tabled",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "vakint",
@@ -1675,6 +1678,7 @@ dependencies = [
  "symbolica",
  "tabled",
  "thiserror 1.0.69",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-appender",
@@ -4879,6 +4883,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "three-dimensional-reps"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "insta",
+ "itertools 0.14.0",
+ "linnet",
+ "nu-ansi-term",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "tabled",
+ "thiserror 1.0.69",
+ "typed-index-collections",
 ]
 
 [[package]]

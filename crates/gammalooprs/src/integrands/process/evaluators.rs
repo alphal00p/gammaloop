@@ -39,7 +39,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::expression::GraphOrientation,
+    cff::expression::{GammaLoopGraphOrientation, GraphOrientation},
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
@@ -375,7 +375,7 @@ impl EvaluatorStack {
             GenericEvaluator::new_from_builder(
                 parametric_atom.iter().flat_map(|atom| {
                     orientations.iter().map(|a| {
-                        let selected = a.select(atom.as_atom_view());
+                        let selected = a.select_gs(atom.as_atom_view());
                         debug!(selected_expr = %selected.log_print(None), "Iterative");
                         selected
                     })
@@ -446,7 +446,7 @@ impl EvaluatorStack {
             orientations
                 .iter()
                 .map(|a| {
-                    GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(i, a), true)
+                    GS.collect_orientation_if(a.orientation_thetas_gs() * GS.integrand(i, a), true)
                     // GS.integrand(a)
                 })
                 .fold(Atom::Zero, |acc, n| acc + n)
@@ -491,7 +491,7 @@ impl EvaluatorStack {
                 .iter()
                 .map(|a| {
                     let selected = GS.collect_orientation_if(
-                        a.orientation_thetas() * a.select(atom.as_atom_view()),
+                        a.orientation_thetas_gs() * a.select_gs(atom.as_atom_view()),
                         true,
                     );
                     debug!(selected_expr = %selected.log_print(None), "Iterative");
@@ -1630,7 +1630,7 @@ mod tests {
         ]
         .iter()
         .map(|a| {
-            GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(1, a), true)
+            GS.collect_orientation_if(a.orientation_thetas_gs() * GS.integrand(1, a), true)
 
             // GS.integrand(a)
         })

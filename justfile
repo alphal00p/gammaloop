@@ -119,6 +119,7 @@ test_gammaloop *args:
     enforce_warnings_as_errors=1
     gammaloop_packages=(
         gammaloop-api
+        three-dimensional-reps
         gammalooprs
         idenso
         linnest

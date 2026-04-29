@@ -2,6 +2,7 @@ use std::fmt;
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result as EyreResult, eyre};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::{
@@ -12,7 +13,7 @@ use symbolica::{
 
 use crate::{
     GammaLoopContext,
-    cff::expression::GraphOrientation,
+    cff::expression::{GammaLoopGraphOrientation, GraphOrientation, OrientationSelector},
     processes::EvaluatorSettings,
     utils::{
         GS, W_,
@@ -571,7 +572,7 @@ impl OrientationPattern {
     }
 
     pub fn from_orientation<O: GraphOrientation>(orientation: &O) -> Self {
-        orientation.orientation_delta().into()
+        orientation.orientation_delta_gs().into()
     }
 
     pub fn select_pattern(&self, atom: impl AtomCore) -> Option<Atom> {
@@ -586,7 +587,7 @@ impl OrientationPattern {
 
     pub fn filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
         if let Some(pat) = &self.pat {
-            let a = orientation.orientation_delta();
+            let a = orientation.orientation_delta_gs();
 
             // println!("{a}vs{}", pat.0);
 
@@ -600,6 +601,12 @@ impl OrientationPattern {
     }
 
     pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
+        self.filter(orientation)
+    }
+}
+
+impl OrientationSelector for OrientationPattern {
+    fn filter_orientation(&self, orientation: &EdgeVec<Orientation>) -> bool {
         self.filter(orientation)
     }
 }

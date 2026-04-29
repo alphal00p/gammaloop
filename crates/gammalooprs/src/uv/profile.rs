@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
-use crate::cff::expression::{GraphOrientation, OrientationData};
+use crate::cff::expression::{GammaLoopGraphOrientation, OrientationData};
 use crate::graph::Graph;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::integrands::evaluation::EvaluationResult;
@@ -866,7 +866,7 @@ impl<'a> UVProfileRunner<'a> {
                     )> = analytic_orientations
                         .par_iter()
                         .map(|o| {
-                            let oatom = o.data.orientation.select(integrand_expr);
+                            let oatom = o.data.orientation.select_gs(integrand_expr);
                             g.graph
                                 .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), lmb)
                                 .into_iter()

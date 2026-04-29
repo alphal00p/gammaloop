@@ -5,7 +5,10 @@ use linnet::half_edge::{
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
-    cff::expression::GraphOrientation,
+    cff::{
+        expression::{GammaLoopGraphOrientation, GammaLoopOrientationExpression},
+        surface::GammaLoopSurfaceCache,
+    },
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
 };
 use color_eyre::Result;
@@ -29,7 +32,7 @@ impl CFFTerm {
     pub fn expression_with_selectors(&self) -> Atom {
         let mut result = Atom::Zero;
         for (expr, orient) in self.expression.iter().zip(self.orientations.iter()) {
-            result += expr.clone() * orient.orientation_thetas();
+            result += expr.clone() * orient.orientation_thetas_gs();
         }
         result
     }
@@ -90,7 +93,7 @@ impl Graph {
             .subtract(&self.initial_state_cut.right);
         let mut terms = vec![];
 
-        let replacement_rules = self.surface_cache.get_all_replacements(&[]);
+        let replacement_rules = self.surface_cache.get_all_replacements_gs(&[]);
 
         for expr in residue.into_iter() {
             let mut cff_term = CFFTerm {
@@ -98,7 +101,7 @@ impl Graph {
                 orientations: vec![],
             };
             for orientation in expr.orientations.iter() {
-                let eta_expr = orientation.to_atom();
+                let eta_expr = orientation.to_atom_gs();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
 
                 let inverse_energies = get_cff_inverse_energy_product_impl(

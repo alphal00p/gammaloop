@@ -35,6 +35,8 @@ pub mod set;
 pub mod shell;
 pub use set::Set;
 pub use shell::Shell;
+pub mod threedreps;
+pub use threedreps::ThreeDRep;
 pub mod run;
 pub use run::Run;
 pub mod evaluate;
@@ -147,6 +149,10 @@ pub enum Commands {
     #[clap(subcommand)]
     Profile(Profile),
 
+    #[command(name = "3Drep", alias = "3drep", alias = "threedreps")]
+    #[clap(subcommand)]
+    ThreeDRep(ThreeDRep),
+
     /// HPC batch evaluation branch
     Batch {
         #[arg(value_name = "PROCESS_FILE", value_hint = clap::ValueHint::FilePath)]
@@ -180,6 +186,9 @@ impl Commands {
         match self {
             Commands::Profile(p) => {
                 p.run(state, global_cli_settings)?;
+            }
+            Commands::ThreeDRep(command) => {
+                command.run(state, global_cli_settings, default_runtime_settings)?;
             }
             Commands::Quit(s) => {
                 return Ok(CommandExecution::break_with(s));

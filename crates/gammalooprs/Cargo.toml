@@ -39,6 +39,7 @@ dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
 git-version = { workspace = true }
+three-dimensional-reps = { path = "../three-dimensional-reps" }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }

@@ -1,0 +1,36 @@
+digraph five_loop_no_repeats {
+  num="1";
+  overall_factor="1";
+  edge [num="1"];
+  node [num="1"];
+  L;
+  R;
+  B1;
+  B2;
+  B3;
+  B4;
+  K0;
+  K1;
+  K2;
+  ext_p1 [style=invis,label="p1"];
+  ext_p2 [style=invis,label="p2"];
+  ext_p3 [style=invis,label="p3"];
+  ext_p4 [style=invis,label="p4"];
+  L:0 -> B1:1 [id=0 dir=none name="q0" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)" mass="1.11"];
+  B1:2 -> B2:3 [id=1 dir=none name="q1" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)" mass="1.12"];
+  B2:4 -> B3:5 [id=2 dir=none name="q2" particle="scalar_1" lmb_rep="K(1,a___)+P(3,a___)" mass="0.71"];
+  B2:6 -> B3:7 [id=3 dir=none name="q3" particle="scalar_1" lmb_rep="K(0,a___)+-1*K(1,a___)+P(0,a___)+-1*P(3,a___)" mass="1.23"];
+  B3:8 -> B4:9 [id=4 dir=none name="q4" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)" mass="1.13"];
+  B4:10 -> R:11 [id=5 dir=none name="q5" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)" mass="1.14"];
+  L:12 -> K0:13 [id=6 dir=none name="q6" particle="scalar_1" lmb_rep="K(2,a___)+P(1,a___)" mass="0.93"];
+  K0:14 -> K1:15 [id=7 dir=none name="q7" particle="scalar_1" lmb_rep="K(3,a___)+P(2,a___)" mass="0.82"];
+  K0:16 -> K1:17 [id=8 dir=none name="q8" particle="scalar_1" lmb_rep="K(4,a___)+P(3,a___)" mass="1.06"];
+  K0:18 -> K1:19 [id=9 dir=none name="q9" particle="scalar_1" lmb_rep="K(2,a___)+-1*K(3,a___)+-1*K(4,a___)+P(1,a___)+-1*P(2,a___)+-1*P(3,a___)" mass="0.88"];
+  K1:20 -> K2:21 [id=10 dir=none name="q10" particle="scalar_1" lmb_rep="K(2,a___)+P(1,a___)" mass="0.94"];
+  K2:22 -> R:23 [id=11 dir=none name="q11" particle="scalar_1" lmb_rep="K(2,a___)+P(1,a___)" mass="0.95"];
+  R:24 -> L:25 [id=12 dir=none name="q12" particle="scalar_1" lmb_rep="K(0,a___)+K(2,a___)+P(0,a___)+P(1,a___)" mass="1.17"];
+  ext_p1 -> L:26 [id=13 dir=none name="p1" particle="scalar_0" lmb_rep="P(0,a___)" mass="0"];
+  L:27 -> ext_p2 [id=14 dir=none name="p2" particle="scalar_0" lmb_rep="-1*P(1,a___)" mass="0"];
+  ext_p3 -> K0:28 [id=15 dir=none name="p3" particle="scalar_0" lmb_rep="P(2,a___)" mass="0"];
+  R:29 -> ext_p4 [id=16 dir=none name="p4" particle="scalar_0" lmb_rep="-1*P(3,a___)" mass="0"];
+}

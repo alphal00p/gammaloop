@@ -20,7 +20,10 @@ use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
-use crate::cff::expression::{CFFExpression, OrientationID};
+use crate::cff::expression::{
+    CFFExpression, OrientationID, RaisedEsurfaceDataView, RaisedEsurfaceGroupView,
+};
+pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
@@ -815,25 +818,6 @@ pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
 pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
-/// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    From,
-    Into,
-    Eq,
-    Encode,
-    Decode,
-    Hash,
-    PartialOrd,
-    Ord,
-)]
-pub struct EsurfaceID(pub usize);
-
 /// Container for esurfaces that exist at a given point in the phase space
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
 pub type ExistingThresholds = TiVec<ExistingEsurfaceId, EsurfaceID>;
@@ -902,12 +886,6 @@ pub(crate) fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> E
     res
 }
 
-impl From<EsurfaceID> for Atom {
-    fn from(id: EsurfaceID) -> Self {
-        parse!(&format!("η({})", Into::<usize>::into(id.0)))
-    }
-}
-
 define_index!(
     pub struct RaisedEsurfaceId;
 );
@@ -923,6 +901,24 @@ pub struct RaisedEsurfaceData {
 pub struct RaisedEsurfaceGroup {
     pub esurface_ids: Vec<EsurfaceID>,
     pub max_occurence: usize,
+}
+
+impl RaisedEsurfaceGroupView for RaisedEsurfaceGroup {
+    fn esurface_ids(&self) -> &[EsurfaceID] {
+        &self.esurface_ids
+    }
+
+    fn max_occurrence(&self) -> usize {
+        self.max_occurence
+    }
+}
+
+impl RaisedEsurfaceDataView for RaisedEsurfaceData {
+    fn for_each_raised_group(&self, mut f: impl FnMut(&dyn RaisedEsurfaceGroupView)) {
+        for group in &self.raised_groups {
+            f(group);
+        }
+    }
 }
 
 impl Graph {

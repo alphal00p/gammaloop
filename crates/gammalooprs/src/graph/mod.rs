@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{collections::BTreeMap, ops::Index};
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
@@ -469,6 +469,163 @@ impl Graph {
         }
 
         (cut_a_mass_sum - cut_b_mass_sum).expand().is_zero()
+    }
+}
+
+impl three_dimensional_reps::ThreeDGraphSource for Graph {
+    fn to_three_d_parsed_graph(
+        &self,
+    ) -> three_dimensional_reps::graph_io::Result<three_dimensional_reps::ParsedGraph> {
+        use std::collections::BTreeMap;
+
+        use linnet::half_edge::involution::{Flow, HedgePair};
+        use three_dimensional_reps::graph_io::{
+            GraphIoError, ParsedGraph, ParsedGraphExternalEdge, ParsedGraphInternalEdge,
+        };
+
+        fn sign_to_i32(sign: crate::momentum::SignOrZero) -> i32 {
+            match sign {
+                crate::momentum::SignOrZero::Minus => -1,
+                crate::momentum::SignOrZero::Zero => 0,
+                crate::momentum::SignOrZero::Plus => 1,
+            }
+        }
+
+        let loop_names = self
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge_id| self.underlying[*edge_id].name.value.clone())
+            .collect::<Vec<_>>();
+        let external_names = self
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .map(|edge_id| self.underlying[*edge_id].name.value.clone())
+            .collect::<Vec<_>>();
+
+        let node_ids = self
+            .underlying
+            .iter_nodes()
+            .map(|(node_id, _, _)| node_id)
+            .sorted()
+            .collect::<Vec<_>>();
+        let node_to_internal = node_ids
+            .iter()
+            .enumerate()
+            .map(|(internal_id, node_id)| (*node_id, internal_id))
+            .collect::<BTreeMap<_, _>>();
+        let node_name_to_internal = node_ids
+            .iter()
+            .enumerate()
+            .map(|(internal_id, node_id)| (format!("n{}", usize::from(*node_id)), internal_id))
+            .collect::<BTreeMap<_, _>>();
+
+        let mut internal_edges = Vec::new();
+        let mut external_edges = Vec::new();
+        let mut next_external_id = 10_000_000usize;
+
+        for (pair, edge_index, edge_data) in self
+            .underlying
+            .iter_edges()
+            .sorted_by_key(|(_, edge_index, _)| *edge_index)
+        {
+            let signature = &self.loop_momentum_basis.edge_signatures[edge_index];
+            let momentum_signature = three_dimensional_reps::MomentumSignature {
+                loop_signature: (&signature.internal).into_iter().map(sign_to_i32).collect(),
+                external_signature: (&signature.external).into_iter().map(sign_to_i32).collect(),
+            };
+            let label = edge_data.data.name.value.clone();
+            match pair {
+                HedgePair::Paired { source, sink } => {
+                    let tail_node = self.underlying.node_id(source);
+                    let head_node = self.underlying.node_id(sink);
+                    let Some(tail) = node_to_internal.get(&tail_node).copied() else {
+                        return Err(GraphIoError::Source(format!(
+                            "missing internal node mapping for source node {}",
+                            usize::from(tail_node)
+                        )));
+                    };
+                    let Some(head) = node_to_internal.get(&head_node).copied() else {
+                        return Err(GraphIoError::Source(format!(
+                            "missing internal node mapping for sink node {}",
+                            usize::from(head_node)
+                        )));
+                    };
+                    internal_edges.push(ParsedGraphInternalEdge {
+                        edge_id: internal_edges.len(),
+                        tail,
+                        head,
+                        label,
+                        mass_key: Some(edge_data.data.particle.mass_atom().to_canonical_string()),
+                        signature: momentum_signature,
+                        had_pow: false,
+                    });
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let node = self.underlying.node_id(hedge);
+                    let Some(node_id) = node_to_internal.get(&node).copied() else {
+                        return Err(GraphIoError::Source(format!(
+                            "missing internal node mapping for external node {}",
+                            usize::from(node)
+                        )));
+                    };
+                    let (source, destination) = match flow {
+                        Flow::Source => (Some(node_id), None),
+                        Flow::Sink => (None, Some(node_id)),
+                    };
+                    external_edges.push(ParsedGraphExternalEdge {
+                        edge_id: next_external_id,
+                        source,
+                        destination,
+                        label,
+                        external_coefficients: momentum_signature.external_signature,
+                    });
+                    next_external_id += 1;
+                }
+                HedgePair::Split { .. } => {
+                    return Err(GraphIoError::Source(
+                        "split edges are not supported when extracting full Graph input"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        Ok(ParsedGraph {
+            internal_edges,
+            external_edges,
+            loop_names,
+            external_names,
+            node_name_to_internal,
+        })
+    }
+
+    fn energy_edge_index_map(
+        &self,
+        _parsed: &three_dimensional_reps::ParsedGraph,
+    ) -> Option<three_dimensional_reps::EnergyEdgeIndexMap> {
+        let internal = self
+            .underlying
+            .iter_edges()
+            .sorted_by_key(|(_, edge_index, _)| *edge_index)
+            .filter_map(|(pair, edge_index, _)| pair.is_paired().then_some(usize::from(edge_index)))
+            .enumerate()
+            .collect::<BTreeMap<_, _>>();
+
+        let external = self
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .enumerate()
+            .map(|(external_id, edge_id)| (external_id, usize::from(*edge_id)))
+            .collect::<BTreeMap<_, _>>();
+
+        Some(three_dimensional_reps::EnergyEdgeIndexMap {
+            internal,
+            external,
+            orientation_edge_count: self.underlying.n_edges(),
+        })
     }
 }
 

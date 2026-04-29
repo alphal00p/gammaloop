@@ -4,14 +4,13 @@ use crate::{
     cff::{
         expression::OrientationData,
         hsurface::{Hsurface, HsurfaceID},
-        surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
+        surface::{GammaLoopSurfaceCache, HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
     graph::{Graph, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
 };
 use ahash::HashSet;
-use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
@@ -24,10 +23,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
 };
-use symbolica::{
-    atom::{Atom, AtomCore},
-    id::{Pattern, Replacement},
-};
+use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
@@ -39,8 +35,10 @@ use super::{
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
     expression::{CFFExpression, OrientationExpression, OrientationID},
     hsurface::HsurfaceCollection,
-    surface::{HybridSurfaceRef, UnitSurface},
+    surface::HybridSurfaceRef,
 };
+
+pub use super::surface::SurfaceCache;
 
 #[derive(Debug, Clone)]
 struct GenerationData {
@@ -426,7 +424,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
 
     let atom_tree = tree.to_atom_inv();
     let atom_tree_substituted =
-        surface_cache_to_use.substitute_energies(&atom_tree, topology.cut_edges);
+        surface_cache_to_use.substitute_energies_gs(&atom_tree, topology.cut_edges);
     let inverse_energies =
         get_cff_inverse_energy_product_impl(graph, subgraph, topology.contract_edges);
 
@@ -717,87 +715,6 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
     })
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
-pub struct SurfaceCache {
-    #[bincode(with_serde)]
-    pub esurface_cache: EsurfaceCollection, // Esurfaces of the supergraph
-    #[bincode(with_serde)]
-    pub hsurface_cache: HsurfaceCollection, // Anything else.
-    #[bincode(with_serde)]
-    pub linear_surface_cache: crate::cff::surface::LinearSurfaceCollection,
-}
-
-impl SurfaceCache {
-    pub fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
-        let replacement_rules = self.get_all_replacements(cut_edges);
-        atom.replace_multiple(&replacement_rules)
-    }
-
-    pub(crate) fn iter_all_surfaces(
-        &'_ self,
-    ) -> impl Iterator<Item = (HybridSurfaceID, HybridSurfaceRef<'_>)> + '_ {
-        let esurface_id_iter = self.esurface_cache.iter_enumerated().map(|(id, esurface)| {
-            (
-                HybridSurfaceID::Esurface(id),
-                HybridSurfaceRef::Esurface(esurface),
-            )
-        });
-
-        let hsurface_id_iter = self.hsurface_cache.iter_enumerated().map(|(id, hsurface)| {
-            (
-                HybridSurfaceID::Hsurface(id),
-                HybridSurfaceRef::Hsurface(hsurface),
-            )
-        });
-
-        let linear_surface_id_iter =
-            self.linear_surface_cache
-                .iter_enumerated()
-                .map(|(id, surface)| {
-                    (
-                        HybridSurfaceID::Linear(id),
-                        HybridSurfaceRef::Linear(surface),
-                    )
-                });
-
-        esurface_id_iter
-            .chain(hsurface_id_iter)
-            .chain(linear_surface_id_iter)
-    }
-
-    pub(crate) fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
-        self.iter_all_surfaces()
-            .map(|(id, surface)| {
-                let id_atom = Pattern::from(Atom::from(id));
-                let surface_atom = Pattern::from(surface.to_atom(cut_edges));
-                Replacement::new(id_atom, surface_atom)
-            })
-            .collect()
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef<'_> {
-        match surface_id {
-            HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
-            HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
-            HybridSurfaceID::Linear(id) => HybridSurfaceRef::Linear(&self.linear_surface_cache[id]),
-            HybridSurfaceID::Unit => HybridSurfaceRef::Unit(UnitSurface {}),
-            HybridSurfaceID::Infinite => HybridSurfaceRef::Infinite(InfiniteSurface {}),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
-        Self {
-            esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
-            hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
-            linear_surface_cache: crate::cff::surface::LinearSurfaceCollection::from_iter(
-                std::iter::empty(),
-            ),
-        }
-    }
-}
-
 fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
     generator_cache: &mut SurfaceCache,
@@ -1065,13 +982,14 @@ mod tests_cff {
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
+        atom::AtomCore,
         evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
         parse, symbol,
     };
     use utils::FloatLike;
 
     use crate::{
-        cff::cff_graph::CFFEdgeType,
+        cff::{cff_graph::CFFEdgeType, expression::GammaLoopThreeDExpression},
         momentum::{FourMomentum, ThreeMomentum},
         settings::global::OrientationPattern,
         utils::{
@@ -1082,18 +1000,26 @@ mod tests_cff {
 
     use super::*;
 
+    trait QuickCffSymbolicaEvaluator {
+        fn quick_symbolica_evaluator(
+            &self,
+            external_range: Range<usize>,
+            virtual_range: Range<usize>,
+        ) -> ExpressionEvaluator<F<f64>>;
+    }
+
     // helper function to make a symbolica evaluator
-    impl CFFExpression<OrientationID> {
+    impl QuickCffSymbolicaEvaluator for CFFExpression<OrientationID> {
         fn quick_symbolica_evaluator(
             &self,
             external_range: Range<usize>,
             virtual_range: Range<usize>,
         ) -> ExpressionEvaluator<F<f64>> {
-            let expression_atom_no_energy_sub = self.to_atom(OrientationPattern::default());
+            let expression_atom_no_energy_sub = self.to_atom_gs(&OrientationPattern::default());
             let num_energies = external_range.end.max(virtual_range.end);
             let mut expression_atom = self
                 .surfaces
-                .substitute_energies(&expression_atom_no_energy_sub, &[]);
+                .substitute_energies_gs(&expression_atom_no_energy_sub, &[]);
             for edge_id in 0..num_energies {
                 let edge_id = EdgeIndex::from(edge_id);
                 expression_atom = expression_atom
@@ -1360,8 +1286,8 @@ mod tests_cff {
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
         let cff = generate_cff_expression(graph, &None, &[], &[]).unwrap();
 
-        let mut cff_atom = cff.to_atom(OrientationPattern::default());
-        cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
+        let mut cff_atom = cff.to_atom_gs(&OrientationPattern::default());
+        cff_atom = cff.surfaces.substitute_energies_gs(&cff_atom, &[]);
         let inverse_energy_product =
             get_cff_inverse_energy_product_impl(graph, &graph.full_graph(), &[]);
 

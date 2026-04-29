@@ -83,6 +83,10 @@ tracing-subscriber = { workspace = true, features = [
   "json",
   "time",
 ] }
+three-dimensional-reps = { path = "../three-dimensional-reps", features = [
+  "diagnostics",
+  "display",
+] }
 typed-index-collections = { workspace = true, features = [
   "bincode",
   "serde",

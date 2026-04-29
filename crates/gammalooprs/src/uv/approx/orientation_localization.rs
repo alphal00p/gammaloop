@@ -1,4 +1,4 @@
-use crate::{cff::expression::GraphOrientation, utils::GS};
+use crate::{cff::expression::GammaLoopGraphOrientation, utils::GS};
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
@@ -124,7 +124,7 @@ pub(crate) fn localize_reduced_orientation_term(
     )?;
 
     Ok(reduced_expression.clone()
-        * reduced_orientation.orientation_thetas()
+        * reduced_orientation.orientation_thetas_gs()
         * internal_orientation_selector(representative, internal_edges))
 }
 

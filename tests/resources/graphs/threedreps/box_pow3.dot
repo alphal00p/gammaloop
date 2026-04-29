@@ -1,0 +1,16 @@
+digraph threedreps_box_pow3 {
+node [num="1"];
+num=1;
+overall_factor=1;
+ext [style=invis]
+ext -> B:0 [particle="scalar_0" id=0 name="p1" lmb_rep="P(0,a___)"];
+ext -> C:1 [particle="scalar_0" id=1 name="p2" lmb_rep="P(1,a___)"];
+ext -> D:2 [particle="scalar_0" id=2 name="p3" lmb_rep="P(2,a___)"];
+A:3 -> ext [particle="scalar_0" id=3 name="p4" lmb_rep="-1*P(0,a___)+-1*P(1,a___)+-1*P(2,a___)"];
+A -> B [particle="scalar_1" id=4 name="q0" lmb_id=0 lmb_rep="K(0,a___)"];
+B -> C [particle="scalar_1" id=5 name="q1" lmb_rep="K(0,a___)+P(0,a___)"];
+C -> D [particle="scalar_1" id=6 name="q2" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)"];
+D -> E [particle="scalar_1" id=7 name="q3" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)+P(2,a___)"];
+E -> F [particle="scalar_1" id=8 name="q4" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)+P(2,a___)"];
+F -> A [particle="scalar_1" id=9 name="q5" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)+P(2,a___)"];
+}

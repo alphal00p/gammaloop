@@ -1,0 +1,23 @@
+digraph proper_iterated_sandwiched_bubble {
+  num="1";
+  overall_factor="1";
+  edge [num="1"];
+  node [num="1"];
+  v0;
+  v1;
+  vA0;
+  vA1;
+  vB0;
+  vB1;
+  ext_p1 [style=invis,label="p1"];
+  ext_p1 -> v0:0 [id=0 dir=none name="p1" particle="scalar_0" lmb_rep="P(0,a___)" mass="0"];
+  v1:1 -> ext_p1 [id=1 dir=none name="p1" particle="scalar_0" lmb_rep="P(0,a___)" mass="0"];
+  v0:2 -> v1:3 [id=2 dir=none lmb_id="0" name="q0" particle="scalar_1" lmb_rep="K(0,a___)" mass="0.8"];
+  v0:4 -> vA0:5 [id=3 dir=none name="q1" particle="scalar_1" lmb_rep="-1*K(0,a___)+P(0,a___)" mass="0.9"];
+  vA0:6 -> vA1:7 [id=4 dir=none lmb_id="1" name="q2" particle="scalar_1" lmb_rep="K(1,a___)" mass="1.1"];
+  vA0:8 -> vB0:9 [id=5 dir=none name="q3" particle="scalar_1" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+P(0,a___)" mass="0.75"];
+  vB0:10 -> vB1:11 [id=6 dir=none name="q4" particle="scalar_1" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+K(2,a___)+P(0,a___)" mass="1.0"];
+  vB1:12 -> vB0:13 [id=7 dir=none lmb_id="2" name="q5" particle="scalar_1" lmb_rep="K(2,a___)" mass="0.6"];
+  vA1:14 -> vB1:15 [id=8 dir=none name="q6" particle="scalar_1" lmb_rep="K(0,a___)+K(1,a___)+-1*P(0,a___)" mass="0.75"];
+  vA1:16 -> v1:17 [id=9 dir=none name="q7" particle="scalar_1" lmb_rep="-1*K(0,a___)+P(0,a___)" mass="0.9"];
+}

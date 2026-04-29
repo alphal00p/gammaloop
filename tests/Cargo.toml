@@ -35,6 +35,12 @@ serial_test = "3.2.0"
 rand = { workspace = true, features = ["small_rng"] }
 ndarray = "0.17"
 serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+three-dimensional-reps = { path = "../crates/three-dimensional-reps", features = [
+  "diagnostics",
+  "eval",
+  "test-support",
+] }
 
 [build-dependencies]
 cc = "1.1"

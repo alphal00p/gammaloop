@@ -84,6 +84,7 @@ pub mod symbolica_ext;
 
 use symbolica::{evaluate::FunctionMap, id::Replacement};
 pub mod aind;
+pub mod energy_degree;
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 /// Settings for the numerator

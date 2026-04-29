@@ -1,27 +1,21 @@
 use crate::cff::cff_graph::VertexSet;
 use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
 use bincode_trait_derive::{Decode, Encode};
-
-use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
-use symbolica::parse;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
 use super::esurface::Esurface;
 use super::esurface::ExternalShift;
+pub use super::surface::HsurfaceID;
 
-#[derive(
-    From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode, Hash,
-)]
-pub struct HsurfaceID(usize);
 pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
 pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
 /// H-surface of the supergraph, is most likely E-surface of the amplitude, kind of badly named.
 pub struct Hsurface {
     pub positive_energies: Vec<EdgeIndex>,
@@ -126,12 +120,6 @@ impl Hsurface {
         };
 
         self_as_esurface == *other
-    }
-}
-
-impl From<HsurfaceID> for Atom {
-    fn from(value: HsurfaceID) -> Self {
-        parse!(&format!("H({})", Into::<usize>::into(value)))
     }
 }
 
