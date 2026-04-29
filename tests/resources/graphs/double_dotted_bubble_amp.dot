@@ -1,4 +1,4 @@
-digraph dotted_bubble {
+digraph double_dotted_bubble_amp {
     edge [
         pdg=1001
     ]
