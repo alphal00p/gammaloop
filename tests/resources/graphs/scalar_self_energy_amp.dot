@@ -1,0 +1,16 @@
+digraph dotted_bubble_amp {
+    num = 1
+    edge [
+        pdg=1001
+    ]
+    ext0 [style=invis]
+    ext1 [style=invis]
+    ext0 -> v1 [id=0];
+    v1 -> v2 [id=1, lmb_id=0];
+    v2 -> v3 [id=2, lmb_id=1];
+    v2 -> v3 [id=3];
+    v3 -> v4 [id=4]; 
+    v1 -> v4 [id=5]; 
+    v4 -> ext1;
+}
+
