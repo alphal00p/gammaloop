@@ -13,11 +13,11 @@ in {
   dependencies = {
     "packages.${system}.gammaloop" = [
       "packages.${system}.cargoArtifacts"
-      "packages.${system}.gammaloop-fmt"
+      "checks.${system}.gammaloop-fmt"
       "devShells.${system}.default"
     ];
-    "packages.${system}.gammaloop-clippy" = [ "packages.${system}.gammaloop" ];
-    "packages.${system}.gammaloop-doc" = [ "packages.${system}.gammaloop" ];
+    "checks.${system}.gammaloop-clippy" = [ "packages.${system}.gammaloop" ];
+    "checks.${system}.gammaloop-doc" = [ "packages.${system}.gammaloop" ];
     "packages.${system}.gammaloop-llvm-coverage" = [ "packages.${system}.gammaloop" ];
     "packages.${system}.nix-ci-check-gammaloop-doctest" = [ "packages.${system}.gammaloop" ];
     "packages.${system}.nix-ci-check-gammaloop-nextest" = [ "packages.${system}.gammaloop" ];
