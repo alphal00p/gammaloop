@@ -634,9 +634,9 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression = self
-            .graph
-            .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
+        let cff_expression =
+            self.graph
+                .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
 
         self.derived_data.cff_expression = Some(cff_expression);
 
