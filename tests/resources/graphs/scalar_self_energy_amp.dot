@@ -1,4 +1,4 @@
-digraph dotted_bubble_amp {
+digraph scalar_self_energy_amp {
     num = 1
     edge [
         pdg=1001
