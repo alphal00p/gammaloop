@@ -250,19 +250,19 @@ impl AmplitudeIntegrand {
                         .evaluators
                         .iter()
                         .map(|counterterm| {
-                            let [evaluator_stack] = counterterm.evaluator_stacks.as_slice() else {
-                                return Err(eyre!(
-                                    "Standalone amplitude export currently supports only single-order threshold counterterms; found {} order-specific evaluator stacks",
-                                    counterterm.evaluator_stacks.len()
-                                ));
-                            };
-                            export_evaluator_stack(
-                                evaluator_stack,
-                                start,
-                                override_pos,
-                                mult_offset,
-                                representative_input.clone(),
-                            )
+                            counterterm
+                                .evaluator_stacks
+                                .iter()
+                                .map(|evaluator_stack| {
+                                    export_evaluator_stack(
+                                        evaluator_stack,
+                                        start,
+                                        override_pos,
+                                        mult_offset,
+                                        representative_input.clone(),
+                                    )
+                                })
+                                .collect::<Result<Vec<_>>>()
                         })
                         .collect::<Result<Vec<_>>>()?;
 

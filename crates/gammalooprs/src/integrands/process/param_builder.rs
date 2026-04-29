@@ -11,7 +11,6 @@ use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-use serde::de::value;
 use spenso::{
     algebra::{
         algebraic_traits::{IsZero, RefZero},
