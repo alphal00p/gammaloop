@@ -12,7 +12,7 @@ in {
   dependency-discovery.enable = false;
   dependencies = {
     "packages.${system}.gammaloop" = [
-      "packages.${system}.cargoArtefacts"
+      "packages.${system}.cargoArtifacts"
       "packages.${system}.gammaloop-fmt"
       "devShells.${system}.default"
     ];
