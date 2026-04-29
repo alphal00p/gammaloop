@@ -69,7 +69,7 @@ The main reason for owning the DSL is that GammaLoop needs composable tag groups
 
 - Use stable targets for broad subsystems such as `gammalooprs::uv::forest` or `gammalooprs::integrands::process::cross_section`.
 - Add boolean event fields as composable tags.
-- Filter with `target[{tag_a,tag_b,!tag_c}]=debug`.
+- Filter by field presence with `target[{tag_a,tag_b,!tag_c}]=debug`, or by displayed boolean values with `target[{#tag_a,#!tag_c}]=debug`.
 
 This is preferable to span-name filtering because span-based filters can admit child-library events emitted while the span is active. GammaLoop tag filters only look at the event target and the boolean tag fields on the event itself.
 
@@ -80,6 +80,7 @@ The supported directive forms are:
 - `level`
 - `target=level`
 - `target[{tag_a,tag_b,!tag_c}]=level`
+- `target[{#tag_a,#!tag_c}]=level`
 - `target`
 
 Notes:
@@ -89,6 +90,8 @@ Notes:
 - A directive without an explicit `=level` is treated as `=trace`.
 - Tag groups are conjunctions: `[{generation,uv}]` means both tags must match.
 - `!tag` means the field is absent.
+- `#tag` means the field is present with boolean value `true`.
+- `#!tag` means the field is present with boolean value `false`.
 - `field=value` matches an explicit field value.
 
 ### Tag matching model
@@ -97,7 +100,9 @@ Tags are represented by event fields.
 
 - `#generation` at the callsite emits `generation = true`.
 - In a directive, `generation` means the event must carry a field named `generation`.
+- In a directive, `#generation` means the event must carry `generation = true`.
 - In a directive, `!inspect` means the event must not carry a field named `inspect`.
+- In a directive, `#!inspect` means the event must carry `inspect = false`.
 - In a directive, `inspect=true`, `mode=summary`, or `label="soft region"` means the event must carry that value specifically.
 
 This means the callsite controls both:
@@ -118,6 +123,8 @@ These can be decided from the callsite target and declared field names alone, so
 Value-matching directives are dynamic.
 
 - `inspect=false`
+- `#!inspect`
+- `#generation`
 - `mode=summary`
 - `label="soft region"`
 
@@ -132,6 +139,30 @@ When multiple directives match the same event, GammaLoop prefers the most specif
 - then later directives win if the earlier specificity is identical
 
 This lets broad directives such as `gammalooprs=info` coexist with narrow tag-specific directives such as `gammalooprs::uv::forest[{generation,uv,dump}]=debug`.
+
+### Copy-pasteable display tags
+
+Display logs render boolean fields next to the source as a directive tag group:
+
+```text
+@gammalooprs::uv::forest[{#generation, #uv, #!inspect}] DEBUG: message
+```
+
+Every boolean field is rendered this way, not only the standard tag vocabulary. `true` becomes `#field_name`; `false` becomes `#!field_name`. These boolean fields are removed from the normal display field table.
+
+Use the `full` logging prefix when you want the rendered source to be a valid directive head:
+
+```bash
+gammaloop --logging-prefix full -l debug ...
+```
+
+Then the text after `@` and before the log level can be copied into a directive by adding `=debug`, for example:
+
+```toml
+display_directive = "gammalooprs::uv::forest[{#generation, #uv, #!inspect}]=debug"
+```
+
+This copy-paste form assumes the display source is the module target. Enabling `full_line_source` adds file and line information to the source display, which is useful for locating code but is not a valid directive target.
 
 ### Sink-only field prefixes
 

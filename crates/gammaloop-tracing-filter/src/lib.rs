@@ -399,6 +399,30 @@ fn parse_tag_group(raw: &str) -> Result<Vec<TagRequirement>, ParseError> {
 }
 
 fn parse_tag_requirement(raw: &str) -> Result<TagRequirement, ParseError> {
+    let raw = raw.trim();
+
+    if let Some(name) = raw.strip_prefix("#!") {
+        let name = name.trim();
+        if !is_valid_ident(name) {
+            return Err(ParseError::InvalidDirectiveMessage(raw.to_string()));
+        }
+        return Ok(TagRequirement::Value {
+            name: name.to_string(),
+            expected: "false".to_string(),
+        });
+    }
+
+    if let Some(name) = raw.strip_prefix('#') {
+        let name = name.trim();
+        if !is_valid_ident(name) {
+            return Err(ParseError::InvalidDirectiveMessage(raw.to_string()));
+        }
+        return Ok(TagRequirement::Value {
+            name: name.to_string(),
+            expected: "true".to_string(),
+        });
+    }
+
     if let Some(name) = raw.strip_prefix('!') {
         let name = name.trim();
         if !is_valid_ident(name) {
@@ -603,6 +627,29 @@ mod tests {
             "gammalooprs::integrands::process::cross_section",
             LevelFilter::INFO,
             &[("integration", true), ("inspect", false)],
+        ));
+    }
+
+    #[test]
+    fn supports_display_tag_spelling_for_copy_pasted_directives() {
+        let filter =
+            GammaLogFilter::parse("gammalooprs::uv::forest[{#generation, #uv, #!inspect}]=debug")
+                .unwrap();
+
+        assert!(filter.enabled_for_test(
+            "gammalooprs::uv::forest",
+            LevelFilter::DEBUG,
+            &[("generation", true), ("uv", true), ("inspect", false)],
+        ));
+        assert!(!filter.enabled_for_test(
+            "gammalooprs::uv::forest",
+            LevelFilter::DEBUG,
+            &[("generation", true), ("uv", true)],
+        ));
+        assert!(!filter.enabled_for_test(
+            "gammalooprs::uv::forest",
+            LevelFilter::DEBUG,
+            &[("generation", true), ("uv", true), ("inspect", true)],
         ));
     }
 

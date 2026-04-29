@@ -289,39 +289,56 @@ const DISPLAY_TAG_FIELDS: &[&str] = &[
     "dump",
 ];
 
-fn extract_display_tags(fields: &mut serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct DisplayTag {
+    name: String,
+    enabled: bool,
+}
+
+fn extract_display_tags(
+    fields: &mut serde_json::Map<String, serde_json::Value>,
+) -> Vec<DisplayTag> {
     let mut tags = fields
         .iter()
-        .filter_map(|(name, value)| {
-            DISPLAY_TAG_FIELDS
-                .contains(&name.as_str())
-                .then_some(value)
-                .filter(|value| matches!(value, serde_json::Value::Bool(true)))
-                .map(|_| name.clone())
+        .filter_map(|(name, value)| match value {
+            serde_json::Value::Bool(enabled) => Some(DisplayTag {
+                name: name.clone(),
+                enabled: *enabled,
+            }),
+            _ => None,
         })
         .collect_vec();
 
     for tag in &tags {
-        fields.remove(tag);
+        fields.remove(&tag.name);
     }
 
     tags.sort_by_key(|tag| {
         DISPLAY_TAG_FIELDS
             .iter()
-            .position(|known| known == &tag.as_str())
-            .unwrap_or(usize::MAX)
+            .position(|known| known == &tag.name.as_str())
+            .map_or_else(
+                || (usize::MAX, tag.name.clone()),
+                |index| (index, String::new()),
+            )
     });
     tags
 }
 
-fn render_display_tags(tags: &[String]) -> String {
+fn render_display_tags(tags: &[DisplayTag]) -> String {
     if tags.is_empty() {
         String::new()
     } else {
-        format!(
-            " {}",
-            format!("[{}]", tags.iter().map(String::as_str).join(", ")).bright_black()
-        )
+        let mut rendered_tags = tags.iter().map(|tag| {
+            if tag.enabled {
+                format!("#{}", tag.name)
+            } else {
+                format!("#!{}", tag.name)
+            }
+        });
+        format!("[{{{}}}]", rendered_tags.join(", "))
+            .bright_black()
+            .to_string()
     }
 }
 
@@ -1065,7 +1082,7 @@ pub(crate) fn format_target(target: String, level: tracing::Level) -> ColoredStr
 }
 
 pub(crate) fn format_target_full(target: String) -> ColoredString {
-    format!("{:<20}", target).bright_blue()
+    target.bright_blue()
 }
 
 pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString {
@@ -1107,8 +1124,8 @@ mod tests {
         collapse_scoped_gamma_level, display_filter_from, extract_display_tags, file_filter_from,
         format_target, format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
         indent_block, render_display_field_table, render_display_message, render_display_tags,
-        route_field_name, set_stderr_log_filter, set_stderr_log_filter_override, LogSink,
-        StderrLogSpecState, STDERR_LOG_SPEC,
+        route_field_name, set_stderr_log_filter, set_stderr_log_filter_override, DisplayTag,
+        LogSink, StderrLogSpecState, STDERR_LOG_SPEC,
     };
 
     struct StderrStateRestore(StderrLogSpecState);
@@ -1256,11 +1273,12 @@ mod tests {
     }
 
     #[test]
-    fn display_formatter_extracts_true_tag_booleans_only() {
+    fn display_formatter_extracts_all_boolean_fields_as_tags() {
         let mut fields = serde_json::Map::from_iter([
             ("generation".to_string(), serde_json::Value::Bool(true)),
             ("uv".to_string(), serde_json::Value::Bool(true)),
             ("inspect".to_string(), serde_json::Value::Bool(false)),
+            ("custom".to_string(), serde_json::Value::Bool(true)),
             (
                 "progress".to_string(),
                 serde_json::Value::String("step-1".to_string()),
@@ -1268,10 +1286,31 @@ mod tests {
         ]);
 
         let tags = extract_display_tags(&mut fields);
-        assert_eq!(tags, vec!["generation".to_string(), "uv".to_string()]);
+        assert_eq!(
+            tags,
+            vec![
+                DisplayTag {
+                    name: "generation".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "uv".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "inspect".to_string(),
+                    enabled: false,
+                },
+                DisplayTag {
+                    name: "custom".to_string(),
+                    enabled: true,
+                },
+            ]
+        );
         assert_eq!(fields.get("generation"), None);
         assert_eq!(fields.get("uv"), None);
-        assert_eq!(fields.get("inspect"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(fields.get("inspect"), None);
+        assert_eq!(fields.get("custom"), None);
         assert_eq!(
             fields.get("progress"),
             Some(&serde_json::Value::String("step-1".to_string()))
@@ -1282,20 +1321,60 @@ mod tests {
     fn display_tags_render_next_to_source() {
         assert_eq!(
             strip_ansi_escape_codes(&render_display_tags(&[
-                "generation".to_string(),
-                "uv".to_string()
+                DisplayTag {
+                    name: "generation".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "inspect".to_string(),
+                    enabled: false,
+                },
+                DisplayTag {
+                    name: "custom".to_string(),
+                    enabled: true,
+                },
             ])),
-            " [generation, uv]"
+            "[{#generation, #!inspect, #custom}]"
         );
     }
 
     #[test]
-    fn display_field_table_renders_only_non_tag_fields() {
+    fn full_source_with_display_tags_is_copy_pasteable_as_directive() {
+        let directive_head = format!(
+            "{}{}",
+            strip_ansi_escape_codes(
+                &format_target_full("gammalooprs::uv::forest".to_string()).to_string()
+            ),
+            strip_ansi_escape_codes(&render_display_tags(&[
+                DisplayTag {
+                    name: "generation".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "uv".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "inspect".to_string(),
+                    enabled: false,
+                },
+            ])),
+        );
+
+        assert_eq!(
+            directive_head,
+            "gammalooprs::uv::forest[{#generation, #uv, #!inspect}]"
+        );
+        assert!(display_filter_from(&format!("{directive_head}=debug")).is_ok());
+    }
+
+    #[test]
+    fn display_field_table_renders_only_non_boolean_fields() {
         let style = gammalooprs::utils::tracing::LogStyle {
             include_fields: true,
             ..Default::default()
         };
-        let fields = serde_json::Map::from_iter([
+        let mut fields = serde_json::Map::from_iter([
             ("inspect".to_string(), serde_json::Value::Bool(false)),
             (
                 "progress".to_string(),
@@ -1303,12 +1382,13 @@ mod tests {
             ),
         ]);
 
+        let _tags = extract_display_tags(&mut fields);
         let rendered = render_display_field_table(&style, &fields).unwrap();
         let rendered = strip_ansi_escape_codes(&rendered);
         assert!(rendered.contains("field"));
         assert!(rendered.contains("value"));
-        assert!(rendered.contains("inspect"));
-        assert!(rendered.contains("false"));
+        assert!(!rendered.contains("inspect"));
+        assert!(!rendered.contains("false"));
         assert!(rendered.contains("progress"));
         assert!(rendered.contains("step-1"));
         assert!(rendered.lines().all(|line| line.starts_with("    ")));
