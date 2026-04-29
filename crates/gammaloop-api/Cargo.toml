@@ -37,7 +37,6 @@ dirs = { workspace = true }
 eyre = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
 gammalooprs = { workspace = true }
-git-version = { workspace = true, optional = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }
 indicatif = { workspace = true }
@@ -103,7 +102,6 @@ tempfile = "3.8"
 
 [build-dependencies]
 pyo3-build-config = { workspace = true, optional = true }
-vergen-gitcl = { workspace = true }
 walkdir = "2.5"
 
 [features]
@@ -125,4 +123,3 @@ python_api = [
 ]
 python_stubgen = ["dep:pyo3-stub-gen", "python_api"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
-vergen_gitcl = ["dep:git-version"]
