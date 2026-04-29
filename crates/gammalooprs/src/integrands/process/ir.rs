@@ -766,6 +766,10 @@ fn build_display_only_limit_reports(
 fn display_only_limit_label(key: AdditionalWeightKey) -> String {
     match key {
         AdditionalWeightKey::Original => "original".to_string(),
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("ct_{esurface_id}_{overlap_group}"),
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("ct_{subset_index}")
         }
@@ -2083,6 +2087,7 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
                             key,
                             AdditionalWeightKey::Original
                                 | AdditionalWeightKey::ThresholdCounterterm { .. }
+                                | AdditionalWeightKey::AmplitudeThresholdCounterterm { .. }
                         ) {
                             continue;
                         }
@@ -2222,6 +2227,7 @@ impl<T: FloatLike> LimitData<T> {
                     key,
                     AdditionalWeightKey::Original
                         | AdditionalWeightKey::ThresholdCounterterm { .. }
+                        | AdditionalWeightKey::AmplitudeThresholdCounterterm { .. }
                 )
             })
             .unique()
@@ -2882,7 +2888,10 @@ mod tests {
                 }),
             ),
             (
-                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                    esurface_id: 3,
+                    overlap_group: 1,
+                },
                 Ok(PowerLawFit {
                     exponent: -0.5,
                     r_squared: 0.991,
@@ -2894,7 +2903,7 @@ mod tests {
 
         assert!(rendered.contains("display-only fits for"));
         assert!(rendered.contains("original"));
-        assert!(rendered.contains("ct_0"));
+        assert!(rendered.contains("ct_3_1"));
         assert!(!rendered.contains("note"));
     }
 
@@ -2983,7 +2992,10 @@ mod tests {
                 }),
             ),
             (
-                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                    esurface_id: 3,
+                    overlap_group: 1,
+                },
                 Ok(PowerLawFit {
                     exponent: -0.5,
                     r_squared: 0.991,
@@ -3032,7 +3044,7 @@ mod tests {
         assert!(rendered.contains("item"));
         assert!(rendered.contains("cut 0"));
         assert!(rendered.contains("original"));
-        assert!(rendered.contains("ct_0"));
+        assert!(rendered.contains("ct_3_1"));
         assert!(!rendered.contains("note"));
         assert!(rendered.contains("sum"));
         assert!(rendered.contains("INFO"));
@@ -3059,7 +3071,10 @@ mod tests {
                     F::<ArbPrec>::from_f64(3.0 * lambda_f64.powf(-1.5) + 0.5),
                 );
                 display_only_components.insert(
-                    AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                    AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                        esurface_id: 3,
+                        overlap_group: 1,
+                    },
                     F::<ArbPrec>::from_f64(5.0 * lambda_f64.powf(-0.5) + 1.0),
                 );
                 display_only_components.insert(
@@ -3093,7 +3108,10 @@ mod tests {
             .as_ref()
             .unwrap();
         let ct_fit = component_fits
-            .get(&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 })
+            .get(&AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                esurface_id: 3,
+                overlap_group: 1,
+            })
             .unwrap()
             .as_ref()
             .unwrap();

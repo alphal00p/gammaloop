@@ -162,9 +162,16 @@ impl AmplitudeCountertermEvaluator {
 }
 
 #[derive(Debug, Clone)]
+pub struct AmplitudeLocalCountertermEvaluation<T: FloatLike> {
+    pub esurface_id: RaisedEsurfaceId,
+    pub overlap_group: usize,
+    pub value: Complex<F<T>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct AmplitudeCountertermEvaluation<T: FloatLike> {
     pub total: Complex<F<T>>,
-    pub local_counterterms: Vec<Complex<F<T>>>,
+    pub local_counterterms: Vec<AmplitudeLocalCountertermEvaluation<T>>,
 }
 
 impl AmplitudeCountertermData {
@@ -336,26 +343,26 @@ impl AmplitudeCountertermData {
         let mut result = Complex::new_re(momentum_sample.zero());
         let mut local_counterterms = Vec::new();
 
-        for group in self.overlap.overlap_groups.iter() {
+        for (overlap_group, group) in self.overlap.overlap_groups.iter().enumerate() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             for existing_esurface_id in group.existing_esurfaces.iter() {
-                let single_result = if let Some(esurface_builder) =
+                let Some(esurface_builder) =
                     overlap_builder.new_esurface_builder(*existing_esurface_id)
-                {
-                    let raised_esurface_id = esurface_builder.raised_esurface_id;
-                    self.ensure_active_raised_esurface(raised_esurface_id)?;
-                    esurface_builder.solve_rstar().rstar_samples().evaluate(
-                        param_builder,
-                        orientation,
-                        evaluation_metadata,
-                        record_primary_timing,
-                        &mut self.evaluators[raised_esurface_id],
-                        &mut self.helper_evaluators,
-                    )?
-                } else {
-                    Complex::new_re(momentum_sample.zero())
+                else {
+                    continue;
                 };
+
+                let raised_esurface_id = esurface_builder.raised_esurface_id;
+                self.ensure_active_raised_esurface(raised_esurface_id)?;
+                let single_result = esurface_builder.solve_rstar().rstar_samples().evaluate(
+                    param_builder,
+                    orientation,
+                    evaluation_metadata,
+                    record_primary_timing,
+                    &mut self.evaluators[raised_esurface_id],
+                    &mut self.helper_evaluators,
+                )?;
 
                 if !single_result.is_zero() {
                     //    debug!(
@@ -368,7 +375,11 @@ impl AmplitudeCountertermData {
                     );
                 }
 
-                local_counterterms.push(single_result.clone());
+                local_counterterms.push(AmplitudeLocalCountertermEvaluation {
+                    esurface_id: raised_esurface_id,
+                    overlap_group,
+                    value: single_result.clone(),
+                });
                 result += single_result;
             }
         }

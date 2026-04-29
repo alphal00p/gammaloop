@@ -60,7 +60,7 @@ use crate::{
     subtraction::{
         amplitude_counterterm::{
             AmplitudeCountertermAtom, AmplitudeCountertermData, AmplitudeCountertermEvaluation,
-            OverlapStructureWithKinematics,
+            AmplitudeLocalCountertermEvaluation, OverlapStructureWithKinematics,
         },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
@@ -505,7 +505,17 @@ impl AmplitudeGraphTerm {
                 local_counterterms: counterterm_evaluation
                     .local_counterterms
                     .into_iter()
-                    .map(|counterterm| counterterm * prefactor.clone())
+                    .map(
+                        |AmplitudeLocalCountertermEvaluation {
+                             esurface_id,
+                             overlap_group,
+                             value,
+                         }| AmplitudeLocalCountertermEvaluation {
+                            esurface_id,
+                            overlap_group,
+                            value: value * prefactor.clone(),
+                        },
+                    )
                     .collect(),
             },
         ))
@@ -679,14 +689,13 @@ impl GraphTerm for AmplitudeGraphTerm {
                     .additional_weights
                     .weights
                     .insert(AdditionalWeightKey::Original, original);
-                for (subset_index, threshold_counterterm) in counterterm_evaluation
-                    .local_counterterms
-                    .into_iter()
-                    .enumerate()
-                {
+                for threshold_counterterm in counterterm_evaluation.local_counterterms.into_iter() {
                     event.additional_weights.weights.insert(
-                        AdditionalWeightKey::ThresholdCounterterm { subset_index },
-                        -threshold_counterterm,
+                        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                            esurface_id: threshold_counterterm.esurface_id.0,
+                            overlap_group: threshold_counterterm.overlap_group,
+                        },
+                        -threshold_counterterm.value,
                     );
                 }
             }
