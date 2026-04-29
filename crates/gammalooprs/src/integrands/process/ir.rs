@@ -9,6 +9,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use rand::Rng;
+use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::MonteCarloRng;
 use tabled::{builder::Builder, settings::Style};
 use tracing::warn;
@@ -2060,7 +2061,7 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         true,
     )? {
         PreciseEvaluationResult::Arb(result) => {
-            let zero_complex = result.integrand_result.clone() - result.integrand_result.clone();
+            let zero_complex = Complex::new_re(result.integrand_result.re.zero());
             let per_cut = if show_per_cut_info {
                 let mut per_cut = BTreeMap::new();
                 for event_group in result.event_groups.iter() {
