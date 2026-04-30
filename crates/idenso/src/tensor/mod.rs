@@ -77,17 +77,25 @@ impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
 impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
     fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
         let structure = OrderedStructure::from_atomcore_unchecked(value)?;
-        let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
-            (false, f.get_symbol() == ETS.metric)
-        } else {
-            (true, false)
+        Ok(Self::from_parsed_atom(value, structure))
+    }
+
+    fn parse_with_settings(
+        value: AtomView,
+        settings: &ParseSettings,
+    ) -> Result<PermutedStructure<Self>, StructureError> {
+        let structure = match OrderedStructure::from_atomcore_unchecked(value) {
+            Ok(structure) => structure,
+            Err(StructureError::EmptyStructure(_))
+                if settings.parse_composite_scalars_as_tensors
+                    && matches!(value, AtomView::Add(_) | AtomView::Mul(_)) =>
+            {
+                OrderedStructure::scalar_structure()
+            }
+            Err(err) => return Err(err),
         };
-        Ok(PermutedStructure::identity(SymbolicTensor {
-            structure,
-            is_composite,
-            is_metric,
-            expression: value.to_owned(),
-        }))
+
+        Ok(Self::from_parsed_atom(value, structure))
     }
 }
 /// A fully symbolic tensor, with no concrete values.
@@ -102,6 +110,25 @@ pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {
     pub is_metric: bool,
     pub is_composite: bool,
     pub expression: symbolica::atom::Atom,
+}
+
+impl<Aind: AbsInd> SymbolicTensor<Aind> {
+    fn from_parsed_atom(
+        value: AtomView,
+        structure: OrderedStructure<LibraryRep, Aind>,
+    ) -> PermutedStructure<Self> {
+        let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
+            (false, f.get_symbol() == ETS.metric)
+        } else {
+            (true, false)
+        };
+        PermutedStructure::identity(SymbolicTensor {
+            structure,
+            is_composite,
+            is_metric,
+            expression: value.to_owned(),
+        })
+    }
 }
 
 impl<Aind: AbsInd> Ref for SymbolicTensor<Aind> {
