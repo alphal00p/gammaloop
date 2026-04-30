@@ -1,7 +1,7 @@
-use spenso::network::parsing::{Parse, ParseSettings, SPENSO_TAG, ShadowedStructure};
+use spenso::network::parsing::{Parse, ParseSettings, ShadowedStructure};
 use spenso::network::{
     ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
-    Steps, TensorOrScalarOrKey,
+    Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
 };
 use symbolica::atom::{AtomCore, Symbol};
 
@@ -15,40 +15,6 @@ use spenso::structure::abstract_index::AbstractIndex;
 // use log::trace;
 
 use symbolica::atom::Atom;
-
-macro_rules! symbol_set {
-        // Identifier symbols with explicit struct and static names
-        ($struct_name:ident, $static_name:ident; $($char:ident)*) => {
-            #[allow(non_snake_case)]
-            pub struct $struct_name {
-                $(pub $char: Symbol,)*
-            }
-
-            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($char: symbol!(stringify!($char)),)*
-            });
-        };
-
-        // String literals as individual statics
-        (statics; $($field:ident : $string:literal),* $(,)?) => {
-            $(
-                #[allow(non_upper_case_globals)]
-                pub static $field: ::std::sync::LazyLock<Symbol> = ::std::sync::LazyLock::new(|| symbol!($string));
-            )*
-        };
-
-        // String literals grouped in a struct
-        ($struct_name:ident, $static_name:ident; $($field:ident : $string:literal),* $(,)?) => {
-            #[allow(non_snake_case)]
-            pub struct $struct_name {
-                $(pub $field: Symbol,)*
-            }
-
-            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($field: symbol!($string),)*
-            });
-        };
-    }
 
 // Generate TestSymbols with all alphabet characters and some multi-character symbols
 symbol_set!(TestSymbols, TS;
@@ -82,6 +48,7 @@ use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
 use crate::representations::initialize;
+use crate::symbol_set;
 use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 
 #[test]

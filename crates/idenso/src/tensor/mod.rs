@@ -13,7 +13,7 @@ use spenso::{
         library::{
             DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError, TensorLibraryData,
             function_lib::Wrap,
-            symbolic::{ExplicitKey, TensorLibrary},
+            symbolic::{ETS, ExplicitKey, TensorLibrary},
         },
         parsing::{Parse, ParseSettings, ShadowedStructure},
         store::NetworkStore,
@@ -59,6 +59,8 @@ impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
     ) -> eyre::Result<SymbolicTensor<Aind>, FunctionLibraryError<Self::Key>> {
         Ok(SymbolicTensor {
             structure: tensor.structure,
+            is_composite: true,
+            is_metric: false,
             expression: function!(*key, tensor.expression),
         })
     }
@@ -75,8 +77,15 @@ impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
 impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
     fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
         let structure = OrderedStructure::from_atomcore_unchecked(value)?;
+        let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
+            (false, f.get_symbol() == ETS.metric)
+        } else {
+            (true, false)
+        };
         Ok(PermutedStructure::identity(SymbolicTensor {
             structure,
+            is_composite,
+            is_metric,
             expression: value.to_owned(),
         }))
     }
@@ -90,6 +99,8 @@ impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {
     pub structure: OrderedStructure<LibraryRep, Aind>,
+    pub is_metric: bool,
+    pub is_composite: bool,
     pub expression: symbolica::atom::Atom,
 }
 
@@ -104,10 +115,12 @@ impl<Aind: AbsInd> Ref for SymbolicTensor<Aind> {
     }
 }
 
-impl ScalarTensor for SymbolicTensor {
+impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<Aind> {
     fn new_scalar(scalar: Self::Scalar) -> Self {
         SymbolicTensor {
             structure: OrderedStructure::scalar_structure(),
+            is_metric: false,
+            is_composite: false,
             expression: scalar,
         }
     }
@@ -176,6 +189,8 @@ impl<Aind: AbsInd> TensorStructure for SymbolicTensor<Aind> {
         Ok(PermutedStructure {
             structure: Self {
                 structure: res.structure,
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
                 expression: self.expression,
             },
             rep_permutation: res.rep_permutation,
@@ -244,6 +259,8 @@ impl<Aind: AbsInd> HasStructure for SymbolicTensor<Aind> {
     fn map_same_structure(self, f: impl FnOnce(Self::Structure) -> Self::Structure) -> Self {
         SymbolicTensor {
             structure: f(self.structure),
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
             expression: self.expression,
         }
     }
@@ -276,6 +293,8 @@ impl<Aind: AbsInd> StructureContract for SymbolicTensor<Aind> {
         Ok((
             Self {
                 structure,
+                is_composite: true,
+                is_metric: false,
                 expression,
             },
             pos_self,
@@ -304,8 +323,11 @@ impl<Aind: AbsInd> SymbolicTensor<Aind> {
         N::Args: IntoArgs,
     {
         let permuted_structure = PermutedStructure::from(structure.external_structure());
+        let is_metric = structure.name()?.ref_into_symbol() == ETS.metric;
         Some(SymbolicTensor {
             expression: structure.to_symbolic(Some(permuted_structure.index_permutation))?,
+            is_metric,
+            is_composite: false,
             structure: permuted_structure.structure,
         })
     }
@@ -317,11 +339,13 @@ impl<Aind: AbsInd> SymbolicTensor<Aind> {
         N::Args: IntoArgs,
     {
         let permuted_structure = PermutedStructure::from(structure.structure.external_structure());
-
+        let is_metric = structure.structure.name()?.ref_into_symbol() == ETS.metric;
         Some(SymbolicTensor {
             expression: structure
                 .structure
                 .to_symbolic(Some(structure.index_permutation.clone()))?,
+            is_composite: false,
+            is_metric,
             structure: permuted_structure.structure,
         })
     }
@@ -337,6 +361,8 @@ impl<Aind: AbsInd> SymbolicTensor<Aind> {
     pub fn empty(expression: Atom) -> Self {
         SymbolicTensor {
             structure: OrderedStructure::empty(),
+            is_composite: false,
+            is_metric: false,
             expression,
         }
     }
@@ -431,12 +457,8 @@ impl<Aind: AbsInd> HasName for SymbolicTensor<Aind> {
 impl<Aind: AbsInd> Contract<SymbolicTensor<Aind>> for SymbolicTensor<Aind> {
     type LCM = SymbolicTensor<Aind>;
     fn contract(&self, other: &SymbolicTensor<Aind>) -> Result<Self::LCM, ContractionError> {
-        let expression = &other.expression * &self.expression;
-        let (structure, _, _, _) = self.structure.merge(&other.structure)?;
-        Ok(SymbolicTensor {
-            expression,
-            structure,
-        })
+        let (out, _, _, _) = self.merge(other)?;
+        Ok(out)
     }
 }
 
@@ -519,8 +541,11 @@ pub mod contract;
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>> for ShadowedStructure<Aind> {
     fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
+        let is_metric = self.name().unwrap() == ETS.metric;
         SymbolicTensor {
             expression: self.to_symbolic(perm).unwrap(),
+            is_composite: false,
+            is_metric,
             structure: self.structure,
         }
     }
@@ -530,8 +555,11 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
     for TensorShell<ShadowedStructure<Aind>>
 {
     fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
+        let is_metric = self.name().unwrap() == ETS.metric;
         SymbolicTensor {
             expression: self.to_symbolic(perm).unwrap(),
+            is_composite: false,
+            is_metric,
             structure: self.structure.structure,
         }
     }
@@ -559,6 +587,8 @@ impl<Aind: AbsInd> std::ops::Neg for SymbolicTensor<Aind> {
     fn neg(self) -> Self::Output {
         Self {
             expression: -self.expression,
+            is_composite: true,
+            is_metric: self.is_metric,
             structure: self.structure,
         }
     }
@@ -568,6 +598,8 @@ impl<Aind: AbsInd> AddAssign<SymbolicTensor<Aind>> for SymbolicTensor<Aind> {
     fn add_assign(&mut self, rhs: SymbolicTensor<Aind>) {
         debug_assert_eq!(self.structure, rhs.structure);
         self.expression += rhs.expression;
+        self.is_composite = true;
+        self.is_metric = false;
     }
 }
 
@@ -575,6 +607,8 @@ impl<Aind: AbsInd> AddAssign<&SymbolicTensor<Aind>> for SymbolicTensor<Aind> {
     fn add_assign(&mut self, rhs: &SymbolicTensor<Aind>) {
         debug_assert_eq!(self.structure, rhs.structure);
         self.expression += &rhs.expression;
+        self.is_composite = true;
+        self.is_metric = false;
     }
 }
 
@@ -584,6 +618,8 @@ impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<Aind> {
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
         Some(Self {
             expression: rhs * &self.expression,
+            is_composite: true,
+            is_metric: false,
             structure: self.structure.clone(),
         })
     }

@@ -7,9 +7,9 @@ use crate::iterators::{
     IteratesAlongPermutedFibers, MetricFiberIterator, MetricItem, ResetableIterator,
     ShiftableIterator,
 };
-use crate::structure::representation::{Minkowski, RepName};
 use crate::structure::PermutedStructure;
-use crate::structure::{concrete_index::FlatIndex, representation::Euclidean, OrderedStructure};
+use crate::structure::representation::{Minkowski, RepName};
+use crate::structure::{OrderedStructure, concrete_index::FlatIndex, representation::Euclidean};
 use linnet::permutation::Permutation;
 
 #[test]

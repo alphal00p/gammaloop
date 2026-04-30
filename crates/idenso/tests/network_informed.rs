@@ -10,8 +10,9 @@ use spenso::{
         SingleSmallestDegree, SmallestDegree, SmallestDegreeIter, Steps, StructureLessDisplay,
         contract::SingleLargestDegree,
         library::{DummyLibrary, function_lib::Wrap},
-        parsing::{NetworkParse, ParseSettings, SPENSO_TAG},
+        parsing::{NetworkParse, ParseSettings},
         store::TensorScalarStore,
+        tags::SPENSO_TAG,
     },
     structure::{
         abstract_index::AbstractIndex,
