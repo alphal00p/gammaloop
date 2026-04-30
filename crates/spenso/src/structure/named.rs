@@ -2,13 +2,13 @@ use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
 use tabled::{builder::Builder, settings::Style};
 
 use super::{
+    HasName, MergeInfo, OrderedStructure, PermutedStructure, ScalarStructure, StructureContract,
+    StructureError, TensorStructure,
     abstract_index::AbstractIndex,
     dimension::Dimension,
     permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, DummyAind, IsAbstractSlot, Slot},
-    HasName, MergeInfo, OrderedStructure, PermutedStructure, ScalarStructure, StructureContract,
-    StructureError, TensorStructure,
 };
 
 use delegate::delegate;

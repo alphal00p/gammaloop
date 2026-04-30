@@ -73,7 +73,6 @@ where
     U: FallibleAdd<T, Output = Out>,
     I: TensorStructure + Clone,
     T: TrySmallestUpgrade<U, LCM = Out>,
-
     Out: Clone,
 {
     type Output = DenseTensor<Out, I>;

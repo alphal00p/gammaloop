@@ -23,7 +23,7 @@ use bincode::{Decode, Encode};
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{abstract_index::AIND_SYMBOLS, slot::SlotError},
 };
 
@@ -1712,7 +1712,7 @@ mod test {
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
 mod shadowing_tests {
-    use crate::network::parsing::SPENSO_TAG;
+    use crate::network::tags::SPENSO_TAG;
     use crate::structure::representation::initialize;
     use symbolica::{atom::AtomCore, parse, parse_lit, symbol};
 

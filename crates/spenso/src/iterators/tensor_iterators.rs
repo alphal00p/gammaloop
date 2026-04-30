@@ -10,8 +10,8 @@ use crate::{
     algebra::upgrading_arithmetic::{FallibleAddAssign, FallibleSubAssign},
     contraction::ContractableWith,
     structure::{
-        concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
         TensorStructure,
+        concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
     },
     tensors::data::{DataTensor, DenseTensor, GetTensorData, SparseTensor},
 };

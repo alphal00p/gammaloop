@@ -1,7 +1,7 @@
 use crate::rep_symbols::RS;
 
 use super::*;
-use spenso::network::{library::symbolic::ETS, parsing::SPENSO_TAG};
+use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 use symbolica::atom::Atom;
 
 pub struct MetricSimplify;
@@ -168,8 +168,8 @@ impl<Aind: AbsInd + ParseableAind> Contract<SymbolicTensor<Aind>, MetricSimplify
             expression: expression
                 .replace(function!(
                     ETS.metric,
-                    SPENSO_TAG.self_dual_([RS.d_, RS.i_]),
-                    SPENSO_TAG.self_dual_([RS.d_, RS.i_])
+                    SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
+                    SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
                 ))
                 .repeat()
                 .level_range((0, Some(0)))
@@ -177,8 +177,8 @@ impl<Aind: AbsInd + ParseableAind> Contract<SymbolicTensor<Aind>, MetricSimplify
                 .replace(
                     function!(
                         ETS.metric,
-                        SPENSO_TAG.self_dual_([RS.d_, RS.i_]),
-                        SPENSO_TAG.self_dual_([RS.d_, RS.j_])
+                        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
+                        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.j_])
                     )
                     .npow(2),
                 )
@@ -186,11 +186,18 @@ impl<Aind: AbsInd + ParseableAind> Contract<SymbolicTensor<Aind>, MetricSimplify
                 .level_range((0, Some(0)))
                 .with(Atom::var(RS.d_))
                 .replace(
-                    function!(ETS.metric, RS.a_, SPENSO_TAG.self_dual_([RS.d_, RS.j_])).npow(2),
+                    function!(
+                        ETS.metric,
+                        RS.a_,
+                        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.j_])
+                    )
+                    .npow(2),
                 )
                 .repeat()
                 .level_range((0, Some(0)))
                 .with(function!(ETS.metric, RS.a_, RS.a_)),
+            is_composite: true,
+            is_metric: false,
             structure,
         })
     }

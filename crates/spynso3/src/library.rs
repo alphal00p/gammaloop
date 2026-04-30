@@ -1,21 +1,21 @@
 use eyre::eyre;
-use pyo3::{exceptions, FromPyObject, PyErr};
+use pyo3::{FromPyObject, PyErr, exceptions};
 
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
-    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
     PyStubType,
+    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
 };
 
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
-use spenso::network::parsing::{ShadowedStructure, SPENSO_TAG};
+use spenso::network::parsing::{SPENSO_TAG, ShadowedStructure};
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
 use spenso::{
     network::library::symbolic::{ExplicitKey, TensorLibrary},
-    structure::{abstract_index::AbstractIndex, HasStructure, PermutedStructure},
+    structure::{HasStructure, PermutedStructure, abstract_index::AbstractIndex},
     tensors::parametric::MixedTensor,
 };
 use symbolica::atom::Atom;
@@ -28,7 +28,7 @@ use symbolica::{
 
 use crate::structure::SpensoName;
 
-use super::{library_tensor::LibrarySpensor, structure::SpensoStructure, Spensor};
+use super::{Spensor, library_tensor::LibrarySpensor, structure::SpensoStructure};
 
 use super::ModuleInit;
 

@@ -5,6 +5,7 @@ use ahash::AHashMap;
 use eyre::eyre;
 use linnet::permutation::Permutation;
 
+use symbolica::atom::{AtomOrView, FunctionBuilder};
 use symbolica::printer::PrintState;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -15,12 +16,12 @@ use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
+        HasName, IndexlessNamedStructure,
         abstract_index::AIND_SYMBOLS,
         named::{IdentityName, METRIC_NAME},
         permuted::{Perm, PermuteTensor},
-        representation::{initialize, LibraryRep, RepName},
+        representation::{LibraryRep, RepName, initialize},
         slot::AbsInd,
-        HasName, IndexlessNamedStructure,
     },
     tensors::parametric::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor},
 };
@@ -218,6 +219,19 @@ pub struct ExplicitTensorSymbols {
     ///   - 6: with dim no commas
     ///   - 7: with dim and parenthesis no commas
     pub metric: Symbol,
+}
+
+impl ExplicitTensorSymbols {
+    pub fn metric<'a, 'b, A: Into<AtomOrView<'a>>, B: Into<AtomOrView<'b>>>(
+        &self,
+        a: A,
+        b: B,
+    ) -> Atom {
+        FunctionBuilder::new(self.metric)
+            .add_arg(a)
+            .add_arg(b)
+            .finish()
+    }
 }
 
 pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
@@ -510,10 +524,10 @@ impl<T: TensorLibraryData> TensorLibraryData for ConcreteOrParam<T> {
 }
 
 impl<
-        Aind: AbsInd,
-        T: HasStructure<Structure = ExplicitKey<Aind>> + Clone,
-        S: TensorStructure + HasName<Name: IntoSymbol, Args: IntoArgs>,
-    > Library<S> for TensorLibrary<T, Aind>
+    Aind: AbsInd,
+    T: HasStructure<Structure = ExplicitKey<Aind>> + Clone,
+    S: TensorStructure + HasName<Name: IntoSymbol, Args: IntoArgs>,
+> Library<S> for TensorLibrary<T, Aind>
 {
     type Key = ExplicitKey<Aind>;
     type Value = PermutedStructure<T>;
@@ -558,13 +572,13 @@ impl<
 }
 
 impl<
-        Aind: AbsInd,
-        T: HasStructure<Structure = ExplicitKey<Aind>>
-            + SetTensorData<SetData = <T as LibraryTensor>::Data>
-            + Clone
-            + LibraryTensor
-            + PermuteTensor<Permuted = T>,
-    > TensorLibrary<T, Aind>
+    Aind: AbsInd,
+    T: HasStructure<Structure = ExplicitKey<Aind>>
+        + SetTensorData<SetData = <T as LibraryTensor>::Data>
+        + Clone
+        + LibraryTensor
+        + PermuteTensor<Permuted = T>,
+> TensorLibrary<T, Aind>
 {
     pub fn get_key_from_name(
         &self,
@@ -741,16 +755,16 @@ mod test {
 
     use crate::{
         network::{
+            ExecutionResult, Network, Sequential, SmallestDegree, TensorOrScalarOrKey,
             library::panicing::ErroringLibrary,
             parsing::{ParseSettings, ShadowedStructure},
             store::NetworkStore,
-            ExecutionResult, Network, Sequential, SmallestDegree, TensorOrScalarOrKey,
         },
         shadowing::Concretize,
         structure::{
+            ToSymbolic,
             abstract_index::AbstractIndex,
             representation::{Euclidean, Minkowski},
-            ToSymbolic,
         },
         tensors::data::SparseOrDense,
     };

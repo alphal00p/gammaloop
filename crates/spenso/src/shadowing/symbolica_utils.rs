@@ -1,4 +1,4 @@
-use crate::{network::parsing::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
+use crate::{network::tags::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -997,7 +997,7 @@ impl IntoSymbol for std::string::String {
 #[cfg(test)]
 mod test {
     use crate::{
-        network::parsing::SPENSO_TAG,
+        network::tags::SPENSO_TAG,
         shadowing::symbolica_utils::{AtomCoreExt, TypstSettings},
     };
 

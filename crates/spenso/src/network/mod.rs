@@ -26,6 +26,8 @@ use crate::{
 };
 use eyre::eyre;
 
+#[cfg(feature = "shadowing")]
+pub mod tags;
 // use eyre::Result;
 
 use std::{convert::Infallible, fmt::Debug};

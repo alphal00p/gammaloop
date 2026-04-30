@@ -7,8 +7,9 @@ use spenso::{
     network::{
         Network,
         library::{DummyLibrary, symbolic::ETS},
-        parsing::{NetworkParse, ParseSettings, SPENSO_TAG},
+        parsing::{NetworkParse, ParseSettings},
         store::NetworkStore,
+        tags::SPENSO_TAG,
     },
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
@@ -394,8 +395,8 @@ pub fn simplify_metrics_impl(view: AtomView) -> Atom {
     // .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
     .replace(function!(
         ETS.metric,
-        SPENSO_TAG.self_dual_([RS.d_, RS.i_]),
-        SPENSO_TAG.self_dual_([RS.d_, RS.i_])
+        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
+        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
     ))
     .repeat()
     .level_range((0, Some(0)))
@@ -403,8 +404,8 @@ pub fn simplify_metrics_impl(view: AtomView) -> Atom {
     .replace(
         function!(
             ETS.metric,
-            SPENSO_TAG.self_dual_([RS.d_, RS.i_]),
-            SPENSO_TAG.self_dual_([RS.d_, RS.j_])
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.j_])
         )
         .npow(2),
     )
@@ -483,8 +484,15 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
     }
 
     expr.replace(
-        function!(RS.f_, RS.a___, SPENSO_TAG.self_dual_([RS.d_, RS.i_]))
-            * function!(RS.g_, RS.b___, SPENSO_TAG.self_dual_([RS.d_, RS.i_])),
+        function!(
+            RS.f_,
+            RS.a___,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+        ) * function!(
+            RS.g_,
+            RS.b___,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+        ),
     )
     .level_range((0, Some(0)))
     .when(not_slot(RS.a___) & not_slot(RS.b___))
@@ -495,13 +503,20 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         // println!("{}", f);
 
         let rep = SPENSO_TAG
-            .self_dual_([RS.d_])
+            .self_dual_::<0, _>([RS.d_])
             .to_pattern()
             .replace_wildcards_with_matches(m);
 
         function!(ETS.metric, rep, f, g)
     })
-    .replace(function!(RS.f_, RS.a___, SPENSO_TAG.self_dual_([RS.d_, RS.i_])).npow(2))
+    .replace(
+        function!(
+            RS.f_,
+            RS.a___,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+        )
+        .npow(2),
+    )
     .level_range((0, Some(0)))
     .when(not_slot(RS.a___))
     .repeat()
@@ -509,15 +524,22 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         let f = func_without_index(m, RS.f_, RS.a___);
 
         let rep = SPENSO_TAG
-            .self_dual_([RS.d_])
+            .self_dual_::<0, _>([RS.d_])
             .to_pattern()
             .replace_wildcards_with_matches(m);
 
         function!(ETS.metric, rep, &f, &f)
     })
     .replace(
-        function!(RS.f_, RS.a___, SPENSO_TAG.dualizable_([RS.d_, RS.i_]))
-            * function!(RS.g_, RS.b___, SPENSO_TAG.dualizable_dual_([RS.d_, RS.i_])),
+        function!(
+            RS.f_,
+            RS.a___,
+            SPENSO_TAG.dualizable_::<0, _>([RS.d_, RS.i_])
+        ) * function!(
+            RS.g_,
+            RS.b___,
+            SPENSO_TAG.dualizable_dual_::<0, _>([RS.d_, RS.i_])
+        ),
     )
     .level_range((0, Some(0)))
     .when(not_slot(RS.a___) & not_slot(RS.b___))
@@ -527,7 +549,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         let g = func_without_index(m, RS.g_, RS.b___);
 
         let rep = SPENSO_TAG
-            .dualizable_([RS.d_])
+            .dualizable_::<0, _>([RS.d_])
             .to_pattern()
             .replace_wildcards_with_matches(m);
 
