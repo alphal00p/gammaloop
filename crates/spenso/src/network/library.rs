@@ -4,9 +4,9 @@ use crate::{
     algebra::complex::{Complex, RealOrComplex},
     network::StructureLessDisplay,
     structure::{
+        HasStructure, PermutedStructure, SlotIndex, StructureError, TensorStructure,
         concrete_index::ConcreteIndex, dimension::Dimension, representation::Representation,
-        slot::IsAbstractSlot, HasStructure, PermutedStructure, SlotIndex, StructureError,
-        TensorStructure,
+        slot::IsAbstractSlot,
     },
     tensors::{
         complex::RealOrComplexTensor,

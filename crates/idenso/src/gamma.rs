@@ -2261,7 +2261,7 @@ mod test {
                 default_namespace = "spenso"
             );
 
-          let res = parse_lit!(7776 * G ^ 6 * dot(P(2), P(3)), default_namespace = "spenso");
+            let res = parse_lit!(7776 * G ^ 6 * dot(P(2), P(3)), default_namespace = "spenso");
             assert_eq!(
                 res,
                 expr.simplify_gamma().to_dots(),
@@ -2269,12 +2269,12 @@ mod test {
                 expr.simplify_gamma().to_dots()
             );
 
-         assert_eq!(
-             res,
-             expr.simplify_gamma().to_dots(),
-             "fount{}",
-             expr.simplify_gamma().to_dots()
-         );
+            assert_eq!(
+                res,
+                expr.simplify_gamma().to_dots(),
+                "fount{}",
+                expr.simplify_gamma().to_dots()
+            );
 
             let expr = parse_lit!(
                 G ^ 2

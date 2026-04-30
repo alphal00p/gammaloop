@@ -1,11 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use quote::{format_ident, quote, ToTokens}; // Ensure ToTokens is imported
+use quote::{ToTokens, format_ident, quote}; // Ensure ToTokens is imported
 use syn::{
-    parse::Parser,
-    parse_macro_input,
-    punctuated::Punctuated,
-    spanned::Spanned,
     Attribute,
     Data,
     DeriveInput,
@@ -18,6 +14,10 @@ use syn::{
     Meta,
     Path, // Use Path and Meta
     Token,
+    parse::Parser,
+    parse_macro_input,
+    punctuated::Punctuated,
+    spanned::Spanned,
 };
 
 // --- RepresentationAttrs struct and parse_representation_attributes function (keep as is) ---
@@ -51,7 +51,7 @@ fn parse_representation_attributes(attrs: &[Attribute]) -> Result<Representation
             return Err(syn::Error::new_spanned(
                 meta,
                 "Expected #[representation(...)] format",
-            ))
+            ));
         }
     };
 
@@ -186,9 +186,9 @@ fn get_filtered_derive_paths(attrs: &[Attribute]) -> Result<Vec<Path>, syn::Erro
                             // in a derive list, it's unexpected for standard traits.
                             // We could ignore it or error. Let's error for clarity.
                             return Err(syn::Error::new_spanned(
-                                 meta, // Span the problematic meta item
-                                 "Expected simple trait paths (e.g., Debug, Clone) in derive attribute, found other meta item.",
-                             ));
+                                meta, // Span the problematic meta item
+                                "Expected simple trait paths (e.g., Debug, Clone) in derive attribute, found other meta item.",
+                            ));
                         }
                     }
                 }
@@ -196,9 +196,12 @@ fn get_filtered_derive_paths(attrs: &[Attribute]) -> Result<Vec<Path>, syn::Erro
                     // If parsing as Metas fails, the derive attribute format is likely malformed.
                     // Return the error, pointing at the problematic attribute
                     return Err(syn::Error::new_spanned(
-                         attr.to_token_stream(), // Span the whole attribute
-                         format!("Failed to parse derive arguments: {}. Check syntax inside #[derive(...)].", e),
-                     ));
+                        attr.to_token_stream(), // Span the whole attribute
+                        format!(
+                            "Failed to parse derive arguments: {}. Check syntax inside #[derive(...)].",
+                            e
+                        ),
+                    ));
                 }
             }
         }

@@ -25,7 +25,7 @@ use nu_ansi_term::Color::DarkGray;
 use symbolica::coefficient::CoefficientView;
 
 #[cfg(feature = "shadowing")]
-use crate::network::parsing::SPENSO_TAG;
+use crate::network::tags::SPENSO_TAG;
 #[cfg(feature = "shadowing")]
 use crate::shadowing::symbolica_utils::SerializableSymbol;
 #[cfg(feature = "shadowing")]

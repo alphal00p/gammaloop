@@ -1,5 +1,5 @@
 use spenso::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
         abstract_index::AIND_SYMBOLS,
         representation::{Euclidean, Lorentz, Minkowski, RepName},

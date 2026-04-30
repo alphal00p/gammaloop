@@ -9,6 +9,7 @@ use library::Library;
 
 use crate::network::library::DummyLibrary;
 use crate::network::library::panicing::ErroringLibrary;
+use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 
 use crate::network::library::symbolic::ETS;
@@ -32,140 +33,6 @@ use symbolica::atom::{AddView, Atom, AtomView, MulView, PowView, representation:
 use crate::structure::{HasStructure, TensorStructure};
 
 use crate::{shadowing::Concretize, structure::HasName, structure::representation::LibraryRep};
-
-pub struct SpensoTags {
-    pub tag: String,
-    pub upper: String,
-    pub lower: String,
-    pub bracket: Symbol,
-    pub pure_scalar: Symbol,
-    pub tensor: String,
-    pub index: String,
-    pub representation: String,
-    pub i_: Symbol,
-    pub dot: Symbol,
-    pub rep_: Symbol,
-    pub self_dual: String,
-    pub self_dual_: Symbol,
-    pub dualizable: String,
-    pub dualizable_: Symbol,
-}
-
-impl SpensoTags {
-    pub fn self_dual_<'a, A: Into<AtomOrView<'a>>>(
-        &self,
-        args: impl IntoIterator<Item = A>,
-    ) -> Atom {
-        let mut f = FunctionBuilder::new(self.self_dual_);
-        for a in args.into_iter() {
-            f = f.add_arg(a);
-        }
-        f.finish()
-    }
-
-    pub fn dualizable_<'a, A: Into<AtomOrView<'a>>>(
-        &self,
-        args: impl IntoIterator<Item = A>,
-    ) -> Atom {
-        let mut f = FunctionBuilder::new(self.dualizable_);
-        for a in args.into_iter() {
-            f = f.add_arg(a);
-        }
-        f.finish()
-    }
-
-    pub fn dualizable_dual_<'a, A: Into<AtomOrView<'a>>>(
-        &self,
-        args: impl IntoIterator<Item = A>,
-    ) -> Atom {
-        AIND_SYMBOLS.dual(self.dualizable_(args))
-    }
-}
-
-pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::new(|| SpensoTags {
-    tag: tag!("broadcast"),
-    upper: tag!("upper"),
-    lower: tag!("lower"),
-    bracket: symbol!("bracket"),
-    pure_scalar: symbol!("pure_scalar"),
-    dot: symbol!("dot";Symmetric,Linear; print = |a,opt|{
-    match opt.custom_print_mode {
-        Some(("spenso",i))=>{
-            let SpensoPrintSettings{
-                parens,
-                with_dim,..
-            } = SpensoPrintSettings::from(i);
-
-
-            let AtomView::Fun(f) = a else {
-                return None;
-            };
-
-            if f.get_nargs() != 3 {
-                return None;
-            }
-            let mut args = f.iter();
-
-            let a = args.next().unwrap();
-            let b = args.next().unwrap();
-            let c = args.next().unwrap();
-
-            fn is_rep(view:AtomView<'_>)->bool{
-                match view {
-                    AtomView::Fun(f) if f.get_symbol().has_tag(&SPENSO_TAG.upper) => true,
-                    AtomView::Var(s) if s.get_symbol().has_tag(&SPENSO_TAG.upper) => true,
-                    _=>false
-                }
-            }
-
-            let (a,b,c) = if is_rep(a) && !is_rep(b) && !is_rep(c) {
-                (a,b,c)
-            } else if is_rep(b) && !is_rep(a) && !is_rep(c) {
-                (b,c,a)
-            } else if is_rep(c) && !is_rep(a) && !is_rep(b) {
-                (c,a,b)
-            } else { return None};
-
-            let mut s = String::new();
-            if parens {
-                s.push('(');
-            }
-            b.format(&mut s, opt,PrintState::new()).unwrap();
-            s.push('.');
-            if with_dim {a.format(&mut s, opt, PrintState::new()).unwrap();
-                s.push('.');
-            }
-            c.format(&mut s, opt,PrintState::new()).unwrap();
-            if parens {
-                s.push(')');
-            }
-            Some(s)
-
-        },
-        _=>None
-    }
-
-
-
-    }),
-
-    tensor: tag!("tensor"),
-    index: tag!("index"),
-    self_dual: tag!("self_dual"),
-    dualizable: tag!("dualizable"),
-    representation: tag!("representation"),
-    i_: symbol!("i_", tag = &tag!("index")),
-    rep_: symbol!("rep_", tag = &tag!("representation")),
-
-    self_dual_: symbol!(
-        "self_dual_",
-        tags = [&tag!("self_dual"), &tag!("representation")]
-    ),
-    dualizable_: symbol!(
-        "dualizable_",
-        tags = [&tag!("dualizable"), &tag!("representation")]
-    ),
-});
 
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
@@ -386,6 +253,7 @@ pub struct ParseSettings {
     pub precontract_scalars: bool,
     pub take_first_term_from_sum: bool,
     pub depth_limit: Option<usize>,
+    pub depth_is_product_depth: bool,
     pub parse_inner_products: bool,
 }
 
@@ -395,6 +263,7 @@ impl Default for ParseSettings {
             precontract_scalars: true,
             take_first_term_from_sum: false,
             depth_limit: None,
+            depth_is_product_depth: true,
             parse_inner_products: true,
         }
     }
@@ -478,9 +347,8 @@ where
     {
         let s: Result<PermutedStructure<S>, _> = S::parse(value);
 
-        println!("Looking at :{}", value);
+        // println!("Looking at :{}", value);
         return if let Ok(s) = s {
-            println!("Tensor");
             Ok(Self::from_tensor(
                 s.structure
                     .to_shell()
@@ -504,7 +372,7 @@ where
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
-        println!("Mul");
+        // println!("Mul");
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
@@ -513,7 +381,7 @@ where
         }
 
         state.depth += 1;
-        println!("{} for mul {}", state.depth, value.as_view());
+        // println!("{} for mul {}", state.depth, value.as_view());
         let mut iter = value.iter();
         let first_atom = iter.next().unwrap();
         let first = Self::try_from_view_impl(first_atom, state, library, settings)?;
@@ -771,7 +639,10 @@ where
         {
             return Self::as_leaf::<S>(value.as_view());
         }
-        state.depth += 1;
+
+        if !settings.depth_is_product_depth {
+            state.depth += 1;
+        }
         let (base, exp) = value.get_base_exp();
 
         if let Ok(n) = i8::try_from(exp) {
@@ -832,7 +703,10 @@ where
         {
             return Self::as_leaf::<S>(value.as_view());
         }
-        state.depth += 1;
+
+        if !settings.depth_is_product_depth {
+            state.depth += 1;
+        }
         let mut iter = value.iter();
 
         let first_atom = iter.next().unwrap();

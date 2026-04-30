@@ -4,7 +4,7 @@ use idenso::rep_symbols::RS;
 use idenso::{metric::MetricSimplifier, representations::initialize};
 use spenso::network::library::symbolic::ETS;
 use spenso::{
-    network::parsing::SPENSO_TAG,
+    network::tags::SPENSO_TAG,
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::atom::FunctionBuilder;

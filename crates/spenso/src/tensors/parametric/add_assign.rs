@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    to_param::{ToAtom, ToParam},
     ConcreteOrParam, ConcreteOrParamRef, ParamOrComposite, ParamOrConcrete, ParamTensor,
+    to_param::{ToAtom, ToParam},
 };
 
 // Scalars:

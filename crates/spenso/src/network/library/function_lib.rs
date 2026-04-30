@@ -12,7 +12,7 @@ use colored::Colorize;
 use crate::{
     network::{
         library::{FunctionLibrary, FunctionLibraryError},
-        parsing::SPENSO_TAG,
+        tags::SPENSO_TAG,
     },
     structure::{HasStructure, TensorStructure},
     tensors::{

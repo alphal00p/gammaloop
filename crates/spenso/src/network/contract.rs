@@ -113,46 +113,57 @@ where
         let mut head = None;
         // println!("{}", graph.dot());
 
-        let (mut scalars, mut scalar_nodes): (Vec<_>, Vec<_>) = graph
-            .graph
-            .iter_nodes()
-            .filter_map(|(nid, _, c)| {
-                if let NetworkNode::Leaf(l) = c {
-                    match l {
-                        NetworkLeaf::Scalar(i) => Some((*i, nid)),
-                        _ => {
-                            if other.is_none() {
-                                other = Some(nid);
+        let mut acc = None;
+        let mut scalar_nodes = Vec::new();
+        let mut more_than_one_scalar = false;
+
+        for (nid, _, c) in graph.graph.iter_nodes() {
+            if let NetworkNode::Leaf(l) = c {
+                let is_scalar = match l {
+                    NetworkLeaf::Scalar(i) => {
+                        if let Some(acc) = &mut acc {
+                            *acc *= executor.scalar[*i].refer();
+                            more_than_one_scalar = true;
+                        } else {
+                            acc = Some(executor.scalar[*i].clone());
+                        }
+                        true
+                    }
+                    NetworkLeaf::LocalTensor(i) => {
+                        if let Some(scalar) = executor.tensors[*i].scalar_ref() {
+                            if let Some(acc) = &mut acc {
+                                *acc *= scalar;
+                                more_than_one_scalar = true;
                             } else {
-                                remove_op_node = false;
+                                acc =
+                                    Some(Sc::from(executor.tensors[*i].clone().scalar().unwrap()));
                             }
-                            None
+                            true
+                        } else {
+                            false
                         }
                     }
+                    NetworkLeaf::LibraryKey(_) => false,
+                };
+
+                if is_scalar {
+                    scalar_nodes.push(nid);
+                } else if other.is_none() {
+                    other = Some(nid);
                 } else {
-                    if let NetworkNode::Op(NetworkOp::Product) = c {
-                        if head.is_some() {
-                            panic!("multiple heads")
-                        }
-                        head = Some(nid);
-                    }
-                    None
+                    remove_op_node = false;
                 }
-            })
-            .collect();
+            } else if let NetworkNode::Op(NetworkOp::Product) = c {
+                if head.is_some() {
+                    panic!("multiple heads")
+                }
+                head = Some(nid);
+            }
+        }
 
         // println!("Scalars {scalars:?} nodes {scalar_nodes:?}");
 
-        if let Some(f) = scalars.pop() {
-            let mut acc = executor.scalar[f].clone();
-            let mut more_than_one_scalar = false;
-
-            // Accumulate all scalars
-            for si in scalars {
-                more_than_one_scalar = true;
-                acc *= executor.scalar[si].refer();
-            }
-
+        if let Some(acc) = acc {
             let new_node = if remove_op_node {
                 if let Some(head) = head {
                     //Should always have an op node
