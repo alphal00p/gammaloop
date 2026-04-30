@@ -43,7 +43,6 @@ impl SpensoTags {
         let representation = tag!("representation");
         let self_dual = tag!("self_dual");
         let dualizable = tag!("dualizable");
-        println!("Hi");
         Self {
             rank1_: symbol!("rank1_", tags = [&tensor, &rank1]),
             bracket: symbol!("bracket"),

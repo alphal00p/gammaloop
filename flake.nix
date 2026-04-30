@@ -627,6 +627,17 @@
           echo "All NixCI build and test jobs passed."
         '';
       };
+
+      gungraunRunner = pkgs.rustPlatform.buildRustPackage rec {
+        pname = "gungraun-runner";
+        version = "0.18.2";
+        src = pkgs.fetchCrate {
+          inherit pname version;
+          hash = "sha256-DiJq9TZCZdWKSstIyMjkLuxaYXua0WKD2AVbEIxM590=";
+        };
+        cargoHash = "sha256-eb9U1MgCg7MpwzS2RnFXMWdPitweKMMty0n3SC0F6+I=";
+        doCheck = false;
+      };
     in {
       checks =
         {
@@ -685,6 +696,7 @@
         }
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
+          inherit gungraunRunner;
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
             // {
               src = workspaceTestSrc;
@@ -759,6 +771,12 @@
           rust-analyzer
           maturin
           virtualenv
+        ]
+        ++ lib.optionals (!pkgs.stdenv.isDarwin) [
+          gungraunRunner
+          valgrind
+        ]
+        ++ [
           (pkgs.rustPlatform.buildRustPackage rec {
             pname = "clinnet";
             version = "0.1.8";

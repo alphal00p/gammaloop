@@ -25,7 +25,17 @@ blake3 = "1.8.3"
 delegate = "0.13.5"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+gungraun = "0.18.1"
 insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
+
+[[bench]]
+name = "schoonschip_modes"
+harness = false
+
+[[bench]]
+name = "schoonschip_modes_time"
+harness = false
 
 [features]
 default = []

@@ -1,7 +1,5 @@
-use symbolica::atom::{AtomCore, AtomOrView, FunctionBuilder, Symbol};
+use symbolica::atom::{AtomCore, FunctionBuilder, Symbol};
 use symbolica::domains::rational::Rational;
-use symbolica::printer::PrintState;
-use symbolica::{symbol, tag};
 
 use super::*;
 
@@ -10,7 +8,6 @@ use library::Library;
 use crate::network::library::DummyLibrary;
 use crate::network::library::panicing::ErroringLibrary;
 use crate::network::tags::SPENSO_TAG;
-use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 
 use crate::network::library::symbolic::ETS;
 use crate::structure::abstract_index::AIND_SYMBOLS;
@@ -255,6 +252,7 @@ pub struct ParseSettings {
     pub depth_limit: Option<usize>,
     pub depth_is_product_depth: bool,
     pub parse_inner_products: bool,
+    pub parse_composite_scalars_as_tensors: bool,
 }
 
 impl Default for ParseSettings {
@@ -265,6 +263,7 @@ impl Default for ParseSettings {
             depth_limit: None,
             depth_is_product_depth: true,
             parse_inner_products: true,
+            parse_composite_scalars_as_tensors: false,
         }
     }
 }
@@ -284,6 +283,13 @@ impl Default for ParseState {
 
 pub trait Parse: Sized {
     fn parse(view: AtomView) -> Result<PermutedStructure<Self>, StructureError>;
+
+    fn parse_with_settings(
+        view: AtomView,
+        _settings: &ParseSettings,
+    ) -> Result<PermutedStructure<Self>, StructureError> {
+        Self::parse(view)
+    }
 }
 
 impl<
@@ -338,14 +344,17 @@ where
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    fn as_leaf<S>(value: AtomView<'a>) -> Result<Self, TensorNetworkError<K, Symbol>>
+    fn as_leaf<S>(
+        value: AtomView<'a>,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + Clone + Parse,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
-        let s: Result<PermutedStructure<S>, _> = S::parse(value);
+        let s: Result<PermutedStructure<S>, _> = S::parse_with_settings(value, settings);
 
         // println!("Looking at :{}", value);
         return if let Ok(s) = s {
@@ -377,7 +386,7 @@ where
             && a <= state.depth
         {
             // println!("Mul leaf");
-            return Self::as_leaf::<S>(value.as_view());
+            return Self::as_leaf::<S>(value.as_view(), settings);
         }
 
         state.depth += 1;
@@ -591,7 +600,8 @@ where
 
             Ok(inner_tensor.fun(symbol))
         } else {
-            let s: Result<PermutedStructure<S>, _> = S::parse(value.as_view());
+            let s: Result<PermutedStructure<S>, _> =
+                S::parse_with_settings(value.as_view(), settings);
 
             if let Ok(s) = s {
                 // println!("Perm:{}", s.index_permutation);
@@ -637,7 +647,7 @@ where
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
-            return Self::as_leaf::<S>(value.as_view());
+            return Self::as_leaf::<S>(value.as_view(), settings);
         }
 
         if !settings.depth_is_product_depth {
@@ -701,7 +711,7 @@ where
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
-            return Self::as_leaf::<S>(value.as_view());
+            return Self::as_leaf::<S>(value.as_view(), settings);
         }
 
         if !settings.depth_is_product_depth {
