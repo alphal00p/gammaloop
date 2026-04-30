@@ -21,11 +21,11 @@ in {
     ];
     "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
     "packages.${system}.default" = ["packages.${system}.gammaloop"];
-    "checks.${system}.gammaloop-clippy" = ["packages.${system}.gammaloop"];
-    "checks.${system}.gammaloop-doc" = ["packages.${system}.gammaloop"];
+    "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
+    "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
     "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-    "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.gammaloop"];
-    "packages.${system}.nix-ci-check-gammaloop-nextest" = ["packages.${system}.gammaloop"];
+    "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
+    "packages.${system}.nix-ci-check-gammaloop-nextest" = ["packages.${system}.cargoArtifacts"];
   };
   test = {
     gammaloop-doctest = {
