@@ -1,9 +1,19 @@
 use spenso::{
+    algebra::ScalarMul,
     contraction::{Contract, ContractionError},
-    network::{library::symbolic::ETS, parsing::ParseSettings, tags::SPENSO_TAG as T},
+    network::{
+        ContractScalars, ContractionStrategy, ExecutionResult, Sequential, SingleSmallestDegree,
+        TensorNetworkError, TensorOrScalarOrKey,
+        graph::NetworkGraph,
+        library::{DummyKey, DummyLibrary, function_lib::Wrap, symbolic::ETS},
+        parsing::ParseSettings,
+        store::NetworkStore,
+        tags::SPENSO_TAG as T,
+    },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         StructureContract, TensorStructure,
+        permuted::PermuteTensor,
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
 };
@@ -14,56 +24,169 @@ use symbolica::{
 
 use crate::{
     W_,
-    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
+    tensor::{SymbolicNetParse, SymbolicTensor},
 };
 
-pub struct Schoonschipify<const EXPANDSUMS: bool, const DEEPEST: bool>;
+const TRACE_SCHOONSCHIP: bool = false;
+
+pub struct Schoonschipify<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>;
+
+struct SchoonschipSmallestDegree<
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+>;
+
+impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
+    SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
+{
+    fn simplify_scalar_tensors<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
+        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+    ) {
+        if !RECURSE {
+            return;
+        }
+
+        let settings = if DEPTH_FIRST {
+            SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
+        } else {
+            SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
+        };
+
+        for tensor in &mut executor.tensors {
+            if tensor.structure.is_scalar() && tensor.is_composite {
+                tensor.expression = tensor
+                    .expression
+                    .schoonschip_with_net::<EXPANDSUMS, true, Aind>(&settings);
+                tensor.is_composite = false;
+                tensor.is_metric = false;
+            }
+        }
+    }
+}
 
 impl<
     const EXPANDSUMS: bool,
-    const DEEPEST: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
-> Contract<SymbolicTensor<Aind>, Schoonschipify<EXPANDSUMS, DEEPEST>> for SymbolicTensor<Aind>
+>
+    ContractionStrategy<
+        NetworkStore<SymbolicTensor<Aind>, Atom>,
+        DummyLibrary<SymbolicTensor<Aind>>,
+        DummyKey,
+        symbolica::atom::Symbol,
+        Aind,
+    > for SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
+where
+    SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
+        + PermuteTensor<Permuted = SymbolicTensor<Aind>>,
+{
+    fn contract(
+        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        graph: NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>,
+        lib: &DummyLibrary<SymbolicTensor<Aind>>,
+    ) -> Result<
+        (NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>, bool),
+        TensorNetworkError<DummyKey, symbolica::atom::Symbol>,
+    > {
+        Self::simplify_scalar_tensors(executor);
+        let (mut graph, mut didsmth) = ContractScalars::<
+            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+        >::contract(executor, graph, lib)?;
+
+        while {
+            let (newgraph, smth) = SingleSmallestDegree::<
+                false,
+                Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+            >::contract(executor, graph, lib)?;
+            graph = newgraph;
+            smth
+        } {
+            didsmth = true;
+        }
+
+        Self::simplify_scalar_tensors(executor);
+        let (graph, scalar_didsmth) = ContractScalars::<
+            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+        >::contract(executor, graph, lib)?;
+
+        Ok((graph, didsmth || scalar_didsmth))
+    }
+}
+
+impl<
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+    Aind: AbsInd + DummyAind + ParseableAind + 'static,
+> Contract<SymbolicTensor<Aind>, Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>>
+    for SymbolicTensor<Aind>
 {
     type LCM = SymbolicTensor<Aind>;
     fn contract(&self, other: &SymbolicTensor<Aind>) -> Result<Self::LCM, ContractionError> {
-        println!(
-            "Contracting  {} {}rank {} with rank {} {} {}: \n{}\nwith\n{}\n gives:",
-            if self.is_composite { "composite " } else { "" },
-            if self.is_metric { "metric " } else { "" },
-            self.structure.order(),
-            if other.is_composite { "composite " } else { "" },
-            if other.is_metric { "metric " } else { "" },
-            other.structure.order(),
-            self.expression,
-            other.expression
-        );
+        if TRACE_SCHOONSCHIP {
+            println!(
+                "Contracting  {} {}rank {} with rank {} {} {}: \n{}\nwith\n{}\n gives:",
+                if self.is_composite { "composite " } else { "" },
+                if self.is_metric { "metric " } else { "" },
+                self.structure.order(),
+                if other.is_composite { "composite " } else { "" },
+                if other.is_metric { "metric " } else { "" },
+                other.structure.order(),
+                self.expression,
+                other.expression
+            );
+        }
 
-        let (sexpr, oexpr) = if DEEPEST {
+        let recursive_settings = || {
+            if DEPTH_FIRST {
+                SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
+            } else {
+                SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
+            }
+        };
+
+        let recursive_schoonschip = |expr: &Atom| {
+            expr.schoonschip_with_net::<EXPANDSUMS, true, Aind>(&recursive_settings())
+        };
+
+        let (sexpr, oexpr) = if RECURSE && DEPTH_FIRST {
             (
-                self.expression
-                    .schoonschip_with_net::<EXPANDSUMS, DEEPEST, Aind>(&SchoonschipSettings {
-                        repeat: true,
-                    }),
-                other
-                    .expression
-                    .schoonschip_with_net::<EXPANDSUMS, DEEPEST, Aind>(&SchoonschipSettings {
-                        repeat: true,
-                    }),
+                recursive_schoonschip(&self.expression),
+                recursive_schoonschip(&other.expression),
             )
         } else {
             (self.expression.clone(), other.expression.clone())
         };
 
+        let finish = |mut result: SymbolicTensor<Aind>, recurse_result: bool| {
+            if recurse_result {
+                result.expression = recursive_schoonschip(&result.expression);
+            }
+            Ok(result)
+        };
+
         if self.structure.is_scalar() || other.structure.is_scalar() {
+            let (sexpr, oexpr) = if RECURSE && !DEPTH_FIRST {
+                (
+                    recursive_schoonschip(&self.expression),
+                    recursive_schoonschip(&other.expression),
+                )
+            } else {
+                (sexpr, oexpr)
+            };
             let (structure, _, _, _) = self.structure.merge(&other.structure)?;
 
-            return Ok(SymbolicTensor {
-                structure,
-                is_composite: true,
-                is_metric: false,
-                expression: &sexpr * &oexpr,
-            });
+            return finish(
+                SymbolicTensor {
+                    structure,
+                    is_composite: true,
+                    is_metric: false,
+                    expression: &sexpr * &oexpr,
+                },
+                false,
+            );
         }
 
         if !self.is_composite && self.structure.order() == 1 {
@@ -73,15 +196,18 @@ impl<
             let expr = sexpr.replace(slot.to_atom()).with(stripped);
             let (structure, _, _, _) = self.structure.merge(&other.structure)?;
 
-            return Ok(SymbolicTensor {
-                structure,
-                is_composite: true,
-                is_metric: other.is_metric,
-                expression: oexpr
-                    .replace(slot.dual().to_atom())
-                    .with(expr)
-                    .normalize_dots(),
-            });
+            return finish(
+                SymbolicTensor {
+                    structure,
+                    is_composite: true,
+                    is_metric: other.is_metric,
+                    expression: oexpr
+                        .replace(slot.dual().to_atom())
+                        .with(expr)
+                        .normalize_dots(),
+                },
+                RECURSE && !DEPTH_FIRST,
+            );
         } else if !other.is_composite && other.structure.order() == 1 {
             let slot = other.structure.get_slot(0).unwrap();
             let stripped = slot.rep().base().to_symbolic([]);
@@ -89,42 +215,124 @@ impl<
             let expr = oexpr.replace(slot.to_atom()).with(stripped);
             let (structure, _, _, _) = self.structure.merge(&other.structure)?;
 
-            return Ok(SymbolicTensor {
-                structure,
-                is_composite: true,
-                is_metric: self.is_metric,
-                expression: sexpr
-                    .replace(slot.dual().to_atom())
-                    .with(expr)
-                    .normalize_dots(),
-            });
+            return finish(
+                SymbolicTensor {
+                    structure,
+                    is_composite: true,
+                    is_metric: self.is_metric,
+                    expression: sexpr
+                        .replace(slot.dual().to_atom())
+                        .with(expr)
+                        .normalize_dots(),
+                },
+                RECURSE && !DEPTH_FIRST,
+            );
         } else {
             let expression = &oexpr * &sexpr;
             let (structure, _, _, _) = self.structure.merge(&other.structure)?;
 
-            Ok(Self {
-                structure,
-                is_composite: true,
-                is_metric: false,
-                expression,
-            })
+            finish(
+                Self {
+                    structure,
+                    is_composite: true,
+                    is_metric: false,
+                    expression,
+                },
+                RECURSE && !DEPTH_FIRST,
+            )
         }
     }
 }
 
 pub struct SchoonschipSettings {
-    repeat: bool,
+    depth_limit: Option<usize>,
+    mode: SchoonschipMode,
+    parse_inner_products: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SchoonschipMode {
+    SinglePass,
+    Recursive(SchoonschipTraversal),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SchoonschipTraversal {
+    DepthFirst,
+    BreadthFirst,
 }
 
 impl Default for SchoonschipSettings {
     fn default() -> Self {
-        Self { repeat: false }
+        Self::partial()
     }
 }
+
+impl SchoonschipSettings {
+    pub fn new(depth_limit: Option<usize>) -> Self {
+        Self::depth_first(depth_limit)
+    }
+
+    pub fn depth_first(depth_limit: Option<usize>) -> Self {
+        Self {
+            depth_limit,
+            mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
+            parse_inner_products: true,
+        }
+    }
+
+    pub fn breadth_first(depth_limit: Option<usize>) -> Self {
+        Self {
+            depth_limit,
+            mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
+            parse_inner_products: true,
+        }
+    }
+
+    pub fn single_pass(depth_limit: Option<usize>) -> Self {
+        Self {
+            depth_limit,
+            mode: SchoonschipMode::SinglePass,
+            parse_inner_products: true,
+        }
+    }
+
+    pub fn partial() -> Self {
+        Self::new(Some(1))
+    }
+
+    pub fn with_depth(depth_limit: usize) -> Self {
+        Self::new(Some(depth_limit))
+    }
+
+    pub fn breadth_first_with_depth(depth_limit: usize) -> Self {
+        Self::breadth_first(Some(depth_limit))
+    }
+
+    pub fn full() -> Self {
+        Self::single_pass(None)
+    }
+
+    fn without_parse_inner_products(mut self) -> Self {
+        self.parse_inner_products = false;
+        self
+    }
+}
+
 pub trait Schoonschip {
     fn schoonschip(&self) -> Atom;
 
     fn normalize_dots(&self) -> Atom;
+    fn schoonschip_once_with_net<
+        const EXPANDSUMS: bool,
+        const RECURSE: bool,
+        const DEPTH_FIRST: bool,
+        Aind: AbsInd + DummyAind + ParseableAind + 'static,
+    >(
+        &self,
+        settings: &SchoonschipSettings,
+    ) -> Atom;
+
     fn schoonschip_with_net<
         const EXPANDSUMS: bool,
         const DEEPEST: bool,
@@ -142,6 +350,19 @@ impl Schoonschip for Atom {
 
     fn normalize_dots(&self) -> Atom {
         self.as_view().normalize_dots()
+    }
+
+    fn schoonschip_once_with_net<
+        const EXPANDSUMS: bool,
+        const RECURSE: bool,
+        const DEPTH_FIRST: bool,
+        Aind: AbsInd + DummyAind + ParseableAind + 'static,
+    >(
+        &self,
+        settings: &SchoonschipSettings,
+    ) -> Atom {
+        self.as_view()
+            .schoonschip_once_with_net::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(settings)
     }
 
     fn schoonschip_with_net<
@@ -235,6 +456,46 @@ impl Schoonschip for AtomView<'_> {
         ))
     }
 
+    fn schoonschip_once_with_net<
+        const EXPANDSUMS: bool,
+        const RECURSE: bool,
+        const DEPTH_FIRST: bool,
+        Aind: AbsInd + DummyAind + ParseableAind + 'static,
+    >(
+        &self,
+        settings: &SchoonschipSettings,
+    ) -> Atom {
+        let mut net = (*self)
+            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                depth_limit: settings.depth_limit,
+                take_first_term_from_sum: false,
+                parse_inner_products: settings.parse_inner_products,
+                parse_composite_scalars_as_tensors: RECURSE,
+                ..Default::default()
+            })
+            .unwrap();
+        let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
+
+        net.execute::<
+            Sequential,
+            SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+            _,
+            _,
+            _,
+        >(&lib, &Wrap {})
+        .unwrap();
+
+        match net.result().unwrap() {
+            ExecutionResult::One => Atom::num(1),
+            ExecutionResult::Zero => Atom::Zero,
+            ExecutionResult::Val(a) => match a {
+                TensorOrScalarOrKey::Key { .. } => panic!("unexpected library key result"),
+                TensorOrScalarOrKey::Scalar(s) => s.clone(),
+                TensorOrScalarOrKey::Tensor { tensor, .. } => tensor.expression.clone(),
+            },
+        }
+    }
+
     fn schoonschip_with_net<
         const EXPANDSUMS: bool,
         const DEEPEST: bool,
@@ -243,40 +504,26 @@ impl Schoonschip for AtomView<'_> {
         &self,
         settings: &SchoonschipSettings,
     ) -> Atom {
-        let mut res: Option<Atom> = None;
-        while {
-            let (mut cont, new) = if let Some(old) = res {
-                let net = old
-                    .as_view()
-                    .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                        depth_limit: Some(1),
-                        take_first_term_from_sum: false,
-                        ..Default::default()
-                    })
-                    .unwrap();
-                let new = net.simple_execute::<Schoonschipify<EXPANDSUMS, DEEPEST>>();
-                (old.as_view() != new.as_view(), new)
-            } else {
-                let net = (*self)
-                    .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                        depth_limit: Some(1),
-                        take_first_term_from_sum: false,
-                        ..Default::default()
-                    })
-                    .unwrap();
-                let new = net.simple_execute::<Schoonschipify<EXPANDSUMS, DEEPEST>>();
-                (*self != new.as_view(), new)
-            };
+        let new = match (settings.mode, DEEPEST) {
+            (SchoonschipMode::SinglePass, _) | (_, false) => {
+                self.schoonschip_once_with_net::<EXPANDSUMS, false, true, Aind>(settings)
+            }
+            (SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst), true) => {
+                self.schoonschip_once_with_net::<EXPANDSUMS, true, true, Aind>(settings)
+            }
+            (SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst), true) => {
+                self.schoonschip_once_with_net::<EXPANDSUMS, true, false, Aind>(settings)
+            }
+        };
 
+        if TRACE_SCHOONSCHIP {
             println!(
                 "New: {}",
                 new.printer(SpensoPrintSettings::compact().nice_symbolica())
             );
-            res = Some(new);
-            cont &= settings.repeat;
-            cont
-        } {}
-        res.unwrap()
+        }
+
+        new
     }
 }
 
@@ -326,21 +573,66 @@ mod tests {
         assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
         let result = (&p1 * (&q2 + &p2 * &q3_2 * &q2_2))
-            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings {
-                repeat: true,
-            });
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::partial());
         assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),P(2,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
         let result = (&p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2)))
-            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings {
-                repeat: true,
-            });
-        assert_snapshot!(result.to_bare_ordered_string(),@"(P(2,mink(D,2))*Q(2,bla,mink(D,2))+Q(2,bla,mink(D,2))*Q(3,mink(D,2)))*g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
+        assert_snapshot!(result.to_bare_ordered_string(),@"(g(P(2,mink(D)),Q(2,bla,mink(D)))+g(Q(2,bla,mink(D)),Q(3,mink(D))))*g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
         let result = ((p1 + q3 * p1_2 * q2_2) * (q2 + p2))
-            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings {
-                repeat: true,
-            });
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
         assert_snapshot!(result.to_bare_ordered_string(),@"(P(1,mink(D,1))+Q(3,mink(D,1))*g(P(1,mink(D)),Q(2,bla,mink(D))))*(P(2,mink(D,1))+Q(2,bla,mink(D,1)))");
+    }
+
+    #[test]
+    fn benchmark_modes_output() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let p = T.rank_one_tensor_symbol("P");
+        let q = T.rank_one_tensor_symbol("Q");
+
+        let p1 = function!(p, 1, mink.slot::<AbstractIndex, _>(1).to_atom());
+        let p2 = function!(p, 2, mink.slot::<AbstractIndex, _>(1).to_atom());
+        let p2_2 = function!(p, 2, mink.slot::<AbstractIndex, _>(2).to_atom());
+
+        let q2 = function!(
+            q,
+            2,
+            symbol!("bla"),
+            mink.slot::<AbstractIndex, _>(1).to_atom()
+        );
+        let q2_2 = function!(
+            q,
+            2,
+            symbol!("bla"),
+            mink.slot::<AbstractIndex, _>(2).to_atom()
+        );
+        let q3_2 = function!(q, 3, mink.slot::<AbstractIndex, _>(2).to_atom());
+
+        let expr = &p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2));
+
+        let single_pass_depth_one = expr
+            .clone()
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::single_pass(
+                Some(1),
+            ))
+            .to_bare_ordered_string();
+        let depth_first_depth_one = expr
+            .clone()
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::partial())
+            .to_bare_ordered_string();
+        let breadth_first_depth_one = expr
+            .clone()
+            .schoonschip_with_net::<false, true, AbstractIndex>(
+                &SchoonschipSettings::breadth_first(Some(1)),
+            )
+            .to_bare_ordered_string();
+        let full_top = expr
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full())
+            .to_bare_ordered_string();
+
+        assert_ne!(single_pass_depth_one, full_top);
+        assert_eq!(depth_first_depth_one, full_top);
+        assert_eq!(breadth_first_depth_one, full_top);
     }
 }
