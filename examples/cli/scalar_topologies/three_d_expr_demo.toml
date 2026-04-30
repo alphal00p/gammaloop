@@ -5,6 +5,9 @@ commands = []
 folder = "./examples/cli/scalar_topologies/three_d_expr_demo_state"
 name = "three_d_expr_demo"
 
+[cli_settings.global.generation]
+uniform_numerator_sampling_scale = "beyond_quadratic"
+
 [default_runtime_settings.general]
 numerator_interpolation_scale = 2.0
 
@@ -41,13 +44,13 @@ digraph three_d_expr_box_pow3 {
 
   "3Drep build -p three_d_expr_box_pow3 -i default -g 0 --representation ltd --clean --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
 
-  "3Drep build -p three_d_expr_box_pow3 -i default -g 0 --representation cff --numerator-sampling-scale-mode beyond-quadratic --no-pretty --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
+  "3Drep build -p three_d_expr_box_pow3 -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --no-pretty --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
 
-  "3Drep build -p three_d_expr_box_pow3 -i default -g 0 --representation cff --numerator-sampling-scale-mode beyond-quadratic --show-details-for-orientation 'xxxx-++xxx|N0|3' --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
+  "3Drep build -p three_d_expr_box_pow3 -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --show-details-for-orientation 'xxxx-++xxx|N0|3' --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
 
-  "3Drep evaluate --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
+  "3Drep evaluate --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace --precision Double --seed 11 --scale 2.0",
 
-  "3Drep test-cff-ltd -p three_d_expr_box_pow3 -i default -g 0 --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace",
+  "3Drep test-cff-ltd -p three_d_expr_box_pow3 -i default -g 0 --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace --precision Double --seed 11 --scale 2.0 --clean",
 
   "3Drep graph-from-signatures --signatures 'prop(k1,m1)*prop(k1+p1,m2)*prop(k1+p1+p2,m3)*prop(k1+p1+p2+p3,m4)' --dot-output ./examples/cli/scalar_topologies/three_d_expr_demo_workspace/box_from_signatures.dot --num-vertices 4",
 ]

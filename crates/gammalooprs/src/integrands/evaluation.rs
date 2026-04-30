@@ -723,7 +723,7 @@ impl Display for EvaluationMetaData {
 }
 
 impl EvaluationMetaData {
-    pub(crate) fn new_empty() -> Self {
+    pub fn new_empty() -> Self {
         Self {
             total_timing: Duration::ZERO,
             integrand_evaluation_time: Duration::ZERO,

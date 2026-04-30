@@ -332,7 +332,10 @@ impl<'a> ExpressionEvaluator<'a> {
                     *value
                 } else {
                     numerator_calls += 1;
-                    let loop_four = self.loop_four_vectors(&orientation.loop_energy_map)?;
+                    let loop_four = self.loop_four_vectors(
+                        &orientation.loop_energy_map,
+                        &orientation.edge_energy_map,
+                    )?;
                     let edge_four = self.edge_four_vectors(&orientation.edge_energy_map)?;
                     let value = numerator.eval(&EvalContext {
                         loops: &loop_four,
@@ -426,18 +429,43 @@ impl<'a> ExpressionEvaluator<'a> {
         Ok(total)
     }
 
-    fn loop_four_vectors(&self, loop_energy_map: &[LinearEnergyExpr]) -> Result<Vec<[f64; 4]>> {
+    fn loop_carrier_edge(&self, loop_id: usize) -> Option<usize> {
+        let loop_name = self.parsed.loop_names.get(loop_id)?;
+        self.parsed
+            .internal_edges
+            .iter()
+            .position(|edge| &edge.label == loop_name)
+    }
+
+    fn loop_four_vectors(
+        &self,
+        loop_energy_map: &[LinearEnergyExpr],
+        edge_energy_map: &[LinearEnergyExpr],
+    ) -> Result<Vec<[f64; 4]>> {
         loop_energy_map
             .iter()
             .enumerate()
             .map(|(loop_id, expr)| {
-                let spatial = self.input.loop_spatial_momenta[loop_id];
-                Ok([
-                    self.linear_expr_value(expr)?,
-                    spatial[0],
-                    spatial[1],
-                    spatial[2],
-                ])
+                let carrier_edge = self.loop_carrier_edge(loop_id);
+                let spatial = if let Some(edge_id) = carrier_edge {
+                    edge_spatial_momentum(
+                        &self.parsed.internal_edges[edge_id].signature,
+                        &self.input.loop_spatial_momenta,
+                        &self.input.external_momenta,
+                    )
+                } else {
+                    self.input.loop_spatial_momenta[loop_id]
+                };
+                let energy = if let Some(edge_id) = carrier_edge {
+                    if let Some(edge_expr) = edge_energy_map.get(edge_id) {
+                        self.linear_expr_value(edge_expr)?
+                    } else {
+                        self.linear_expr_value(expr)?
+                    }
+                } else {
+                    self.linear_expr_value(expr)?
+                };
+                Ok([energy, spatial[0], spatial[1], spatial[2]])
             })
             .collect()
     }

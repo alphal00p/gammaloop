@@ -1046,12 +1046,16 @@ impl<'a> BoundedCffBuilder<'a> {
         if self.bounds.iter().all(|degree| *degree <= 1) {
             return generate_pure_cff_expression_from_parsed(self.parsed);
         }
-        if self.supports_quadratic_e_surface_only() {
+        let uniform_sampling_for_nonlinear_degree = self
+            .bounds
+            .iter()
+            .any(|degree| *degree > 1 && self.sampling_scale_mode.is_active_for_degree(*degree));
+        if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
             self.finalize_numerator_map_labels();
             return Ok(self.expression);
         }
-        if self.supports_quadratic_recursive() {
+        if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_recursive() {
             return self.build_quadratic_recursive(false);
         }
         if self.supports_known_factor_recursive() {
@@ -5143,5 +5147,44 @@ mod ltd_tests {
         assert!(!NumeratorSamplingScaleMode::BeyondQuadratic.is_active_for_degree(2));
         assert!(NumeratorSamplingScaleMode::BeyondQuadratic.is_active_for_degree(3));
         assert!(NumeratorSamplingScaleMode::All.is_active_for_degree(1));
+    }
+
+    #[test]
+    fn all_sampling_scale_mode_affects_quadratic_reconstruction() {
+        let parsed = parsed_fixture("box_pow3.dot");
+        let beyond_quadratic = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                energy_degree_bounds: vec![(3, 2)],
+                numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+            },
+        )
+        .unwrap();
+        let all = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                energy_degree_bounds: vec![(3, 2)],
+                numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+            },
+        )
+        .unwrap();
+
+        assert!(
+            !beyond_quadratic
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.edge_energy_map)
+                .any(LinearEnergyExpr::uses_uniform_scale),
+            "beyond-quadratic mode must not use M as a quadratic sampling node"
+        );
+        assert!(
+            all.orientations
+                .iter()
+                .flat_map(|orientation| &orientation.edge_energy_map)
+                .any(LinearEnergyExpr::uses_uniform_scale),
+            "all mode must use M as a quadratic sampling node"
+        );
     }
 }

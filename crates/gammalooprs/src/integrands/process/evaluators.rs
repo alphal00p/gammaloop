@@ -945,6 +945,26 @@ impl EvaluatorStack {
         Ok(())
     }
 
+    pub fn prepare_f64_backend(
+        &mut self,
+        name: impl AsRef<str>,
+        path: impl AsRef<Path>,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> Result<()> {
+        match frozen_mode {
+            FrozenCompilationMode::Eager => self.for_each_generic_evaluator_mut(|evaluator| {
+                evaluator.activate_eager();
+                Ok(())
+            }),
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())
+            }
+            FrozenCompilationMode::Cpp(_) | FrozenCompilationMode::Assembly(_) => {
+                self.compile(name, path, frozen_mode)
+            }
+        }
+    }
+
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
         mut f: impl FnMut(&mut GenericEvaluator) -> Result<()>,

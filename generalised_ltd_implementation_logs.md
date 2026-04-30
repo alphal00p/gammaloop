@@ -2095,6 +2095,199 @@ just test_gammaloop
 1027 tests run: 1027 passed, 128 skipped
 ```
 
+### Progress 2026-04-30 3Drep runtime settings and comparison verdicts
+
+- Reworked `3Drep evaluate` and `3Drep test-cff-ltd` to use the active
+  GammaLoop generation/runtime settings when selecting diagnostic evaluator
+  behavior. The commands now report the requested runtime precision, selected
+  evaluator method/backend, active numerator-sample normalization strategy,
+  seed, input scale, and the definite value of the numerator interpolation
+  scale `M`.
+- Added the new user-facing generation option spelling
+  `--numerator-samples-normalization` with values `never_M`, `M_for_all`, and
+  `M_for_beyond_quadratic_only`. The old CLI spelling remains accepted as a
+  compatibility alias for now, but the demo and completions use the new name.
+- Fixed the generalized CFF construction path so `M_for_all` also routes the
+  quadratic numerator-sampling nodes through the uniform `M` normalization,
+  instead of reusing the special quadratic OSE-only path.
+- Added precision-aware diagnostic evaluation for `Double`, `Quad`, and
+  `ArbPrec`. `Double` can use the compiled backend selected by the global
+  generation settings; `Quad` and `ArbPrec` force the eager evaluator. The
+  command output now prints full relevant digits for the chosen precision.
+- Extended diagnostic input generation with deterministic `--seed` and
+  `--scale` controls, and made the printed parameter table include all evaluator
+  inputs: external energies, external spatial momenta, loop spatial components,
+  additional parameters, `m_uv`, `mu_r^2`, and `M`.
+- Split timing output into `evaluator build time` and `sample evaluation time`,
+  with dynamically scaled units. Reused cached evaluators leave the build-time
+  entry empty.
+- Changed `test-cff-ltd` so it only evaluates the numerator-normalization mode
+  active in the global generation settings, reports CFF/LTD/PureLTD values with
+  relative `Δ` against CFF, and ends with a colored `SUCCESS`/`FAIL` verdict.
+  The CLI integration tests now assert the verdict result, which intentionally
+  exposes the current representation gaps instead of merely checking that rows
+  were produced.
+- Added `--mass-shift` to control the starting pure-LTD split-mass diagnostic
+  scale, defaulting to `1.0e-4 * --scale`, and display the per-shift values with
+  three significant digits.
+- Updated the demo run card to use the new normalization spelling and to show
+  deterministic precision/seed/scale options for `evaluate` and `test-cff-ltd`.
+
+Focused verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+just clippy -- -D warnings
+passed
+
+cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old-cff,test-support,eval,display -- --nocapture
+passed
+
+cargo test -p gammaloop-api completion_offers_3drep_nested_selectors_and_enum_values -- --nocapture
+passed
+
+just build-cli
+passed
+
+./gammaloop --dev-optim ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo -c "quit -n"
+passed; the comparison summary now correctly reports FAIL for the still-open
+CFF/LTD numerical gaps
+```
+
+## 2026-04-30: make 3Drep comparisons verdict-bearing
+
+- Added an explicit verdict object to the `3Drep test-cff-ltd` manifest. The
+  command now compares direct finite CFF/LTD/pure-LTD evaluations against the
+  CFF reference using a half-double-style threshold, rejects exactly identical
+  formatted values across different direct representations, and applies a
+  deliberately looser couple-digit threshold to the split-mass pure-LTD
+  diagnostics.
+- Added per-check records with absolute/relative differences, tolerances, and
+  human-readable messages. The terminal summary now ends with a colored
+  `SUCCESS` or `FAIL` status and includes a table of the individual checks.
+- Existing cached comparison manifests without a verdict are no longer reused,
+  so the new comparison outcome is always available after the next command run.
+- Updated the 3Drep CLI integration-test harness so `test-cff-ltd` invocations
+  assert the verdict outcome instead of only checking that evaluation rows exist.
+  This intentionally exposes the current implementation gaps before we fix
+  them.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+```
+
+## 2026-04-30: 3Drep diagnostic evaluator NaN cleanup
+
+- Fixed the `3Drep test-cff-ltd` diagnostic evaluator setup so it no longer
+  samples the trivial zero kinematic point. The `ParamBuilder` now exposes
+  grouped evaluator-input metadata and a deterministic nonzero diagnostic
+  kinematic initializer used by `3Drep evaluate` and `test-cff-ltd`.
+- Updated the printed and JSON evaluation records to keep reporting the input
+  parameters with their source classification, including the automatically
+  chosen diagnostic external energies, spatial momenta, loop momenta, and
+  additional parameters.
+- Fixed repeated-propagator `pure_ltd` diagnostics. The comparison harness now
+  follows the old Python reference route: split repeated masses by several
+  epsilon values, generate an ordinary LTD expression on each split-mass graph,
+  and evaluate those split expressions instead of directly evaluating the
+  degenerate repeated-mass pure-LTD expression.
+- Added `mass_shift_values` to each evaluation record. Repeated-propagator
+  pure-LTD rows now include the individual base and shifted masses for every
+  split edge in JSON and in the table's mass-shift label.
+- Added regression coverage that rejects `NaN` values in 3Drep comparison
+  manifests and checks that repeated-propagator pure-LTD diagnostics report
+  explicit split-mass values.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+just clippy -- -D warnings
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs 3drep -- --nocapture --test-threads=1
+2 passed; 70 filtered out
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps:: -- --nocapture --test-threads=1
+8 passed; 1 ignored; 63 filtered out
+```
+
+## 2026-04-30: richer `3Drep evaluate` and `test-cff-ltd` evaluation output
+
+Follow-up implementation after the previous display/cache pass:
+
+- `3Drep evaluate` now actually evaluates the cached oriented expression instead
+  of only building the Symbolica evaluator artifacts. The command writes the
+  resulting complex value, wall-clock evaluation time, evaluator-only timing,
+  and the evaluator input parameter values into `evaluate_manifest.json` and
+  displays the same information in colored tables.
+- `3Drep test-cff-ltd` now evaluates every successfully built comparison case
+  and records a per-case evaluation table with representation, sampling-scale
+  mode, active `M` value when applicable, mass-shift label, status, complex
+  value, wall-clock timing, and evaluator-only timing. When no interpolation
+  scale is configured, the comparison still evaluates each method once and
+  displays `M` as absent.
+- Added small public `ParamBuilder`/`EvaluationMetaData` accessors so the CLI can
+  reuse GammaLoop's existing `EvaluatorStack` machinery without duplicating the
+  private evaluator input layout.
+- Old cached `test-cff-ltd` manifests that do not contain evaluation rows are no
+  longer reused; they are regenerated so the new summary table is populated.
+- Extended the CLI integration tests to assert that `evaluate_manifest.json`
+  contains an evaluated value, timings, and parameter records, and that every
+  successful `test-cff-ltd` case contains at least one evaluation record with
+  value and timing fields.
+
+Verification run so far:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs 3drep -- --nocapture --test-threads=1
+2 passed
+
+cargo test -p gammaloop-integration-tests --test test_runs cli_validate_build_and_evaluate_use_gammaloop_graph_state -- --nocapture --test-threads=1
+1 passed
+
+just clippy -- -D warnings
+passed
+
+just build-cli
+passed
+
+./gammaloop --dev-optim ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo -c "quit -n"
+passed; verified the new evaluate value/timing/parameter table and the
+test-cff-ltd per-method/per-M timing table in the normal CLI path
+
+just test_gammaloop
+1030 tests run: 1030 passed, 128 skipped
+```
+
 ## 2026-04-30: second display/selector pass for `3Drep`
 
 - Fixed denominator-tree rendering in the overview and detail views. The display
@@ -2562,4 +2755,246 @@ passed; verified cache reuse, detail-only selector output, evaluate summary, and
 
 just test_gammaloop
 1027 tests run: 1027 passed, 128 skipped
+```
+
+### Progress 2026-04-30 post-clippy cleanup for runtime-output pass
+
+- Addressed the clippy cleanup from the runtime-output pass by grouping
+  evaluator-build inputs, grouping comparison-distance data, using direct vector
+  initialization, and simplifying the status-color branch.
+- Removed the generated demo state/workspace artifacts after verification. The
+  only remaining untracked demo-adjacent file is the pre-existing local
+  `three_d_expr_demo_vh_do_not_push.toml`, which remains untouched.
+- The comparison harness now asserts the `test-cff-ltd` verdict, so the broader
+  3Drep integration tests are expected to fail until the known representation
+  discrepancies are fixed in the next implementation pass.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+just clippy -- -D warnings
+passed
+
+cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old-cff,test-support,eval,display -- --nocapture
+1 passed
+
+cargo test -p gammaloop-api completion_offers_3drep_nested_selectors_and_enum_values -- --nocapture
+1 passed
+```
+
+### Progress 2026-04-30 multi-way comparison discrepancy pass
+
+- Investigated the first real `test-cff-ltd` discrepancy on the one-loop box
+  with unit numerator and no repeated propagators. The LTD and PureLTD values
+  were exactly four times the CFF value because the diagnostic CLI was building
+  the full orientation-theta-gated parametric atom and then evaluating it once
+  per partial LTD orientation. In the existing theta convention, undirected
+  entries evaluate as zero and therefore pass the `IF(theta + 1)` gate, so each
+  partial orientation activated the full LTD sum.
+- Added a diagnostic 3D-expression atom path that sums orientation
+  contributions without orientation theta gates and uses the orientation energy
+  substitution maps directly. The normal GammaLoop parametric atom path remains
+  theta-gated for the production orientation machinery.
+- Updated `3Drep evaluate` and `3Drep test-cff-ltd` to evaluate that diagnostic
+  theta-free atom once. The simple box now compares CFF, LTD and PureLTD at the
+  expected numerical precision instead of showing the factor-four overcount.
+- Reworked the PureLTD split-mass verdict for repeated propagators. The
+  diagnostic now reports all split-mass trials but accepts the best finite mass
+  shift within the loose mass-shift threshold, matching the intended
+  couple-digit role of the mass-shift comparison rather than requiring
+  monotonic convergence of the default split sequence.
+- Ran the old Python equivalent case matrix through the Rust harness and
+  obtained `309 ok, 0 failed, 309 total`; the deliberately slow five-loop
+  ultimate-basis parity probe remains implemented and ignored, matching the old
+  Python slow-test treatment.
+- Checked the automatic energy-power cap test with a high-power LMB numerator.
+  The old Python reference also shows a CFF/LTD mismatch for
+  `loops[0][0]**3`, while the corresponding EMR case `edges[0][0]**3` agrees.
+  This was initially treated as a build-only cap-extraction parity gap, but the
+  later carrier-edge substitution investigation below identified and fixed the
+  Rust-side cause.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs cli_imported_box_3drep_test_uses_gammaloop_graph_path -- --nocapture --test-threads=1
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path -- --nocapture --test-threads=1
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs cli_reconstructs_energy_power_caps_from_imported_graph_numerators -- --nocapture --test-threads=1
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps:: -- --nocapture --test-threads=1
+8 passed, 0 failed, 1 ignored; old Python 3Drep case matrix reported 309 ok, 0 failed, 309 total
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+just clippy -- -D warnings
+passed
+
+just test_gammaloop
+1031 tests run: 1031 passed, 128 skipped
+
+python3 IGNORE/generalised_ltd/generalised_ltd.py test --dot IGNORE/generalised_ltd/examples/graphs/box.dot --energy-degree-bounds 0:3,1:0,2:0,3:0 --numerator-expr 'loops[0][0]**3' --uniform-numerator-sampling-scale none
+confirmed old Python CFF/LTD mismatch for the analogous LMB high-power numerator
+
+python3 IGNORE/generalised_ltd/generalised_ltd.py test --dot IGNORE/generalised_ltd/examples/graphs/box.dot --energy-degree-bounds 0:3,1:0,2:0,3:0 --numerator-expr 'edges[0][0]**3' --uniform-numerator-sampling-scale none
+confirmed old Python CFF/LTD agreement for the EMR high-power numerator
+```
+
+### Progress 2026-04-30 LMB carrier-energy substitution fix
+
+- Investigated the remaining conceptual discrepancy between a numerator written
+  as `K(0,spenso::cind(0))^3` and the same numerator written as
+  `Q(e_lmb,spenso::cind(0))^3` for the carrier edge of the first loop momentum
+  basis vector.
+- Confirmed that the automatic energy-degree analyzer already assigns the
+  `K(i,0)` power to the corresponding LMB carrier edge. The failure was in the
+  diagnostic numerator substitution: `K(i,0)` was using the generated
+  `loop_energy_map`, while generalized CFF numerator sampling is fundamentally
+  expressed by the `edge_energy_map`. Some finite-difference/contact sample maps
+  are not globally integrable into a single loop-energy assignment, so
+  `loop_energy_map[i]` can legitimately differ from `edge_energy_map[e_lmb]`.
+- Fixed the GammaLoop numerator substitution so `K(i,...)` is lowered through
+  the carrier edge: `K(i,0)` now uses exactly the same energy map as
+  `Q(loop_edges[i],0)`, and `K(i,mink(...))` uses the carrier edge spatial vector
+  plus that same mapped energy component.
+- Updated the standalone `three-dimensional-reps` evaluator similarly for
+  `loops[...]` numerator expressions: if the parsed graph identifies a loop
+  carrier edge by name, loop four-vectors are assembled from that carrier edge's
+  energy map and spatial momentum.
+- Re-enabled the LMB high-power numerator parity check in the CLI integration
+  cap-extraction test and added an explicit generated matrix subcase for
+  `loops[0][0]**3`.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs cli_reconstructs_energy_power_caps_from_imported_graph_numerators -- --nocapture --test-threads=1
+passed; the K(0,0)^3 box cap/parity case now reports SUCCESS
+
+cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_case_matrix_records_current_three_drep_status -- --nocapture --test-threads=1
+1 passed; generated matrix reported 310 ok, 0 failed, 310 total
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps:: -- --nocapture --test-threads=1
+8 passed, 0 failed, 1 ignored; generated matrix reported 310 ok, 0 failed, 310 total
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+just clippy -- -D warnings
+passed
+
+just test_gammaloop
+1031 tests run: 1031 passed, 128 skipped
+```
+
+### Progress 2026-04-30 `3Drep test-cff-ltd` display and mass-shift audit
+
+- Started a follow-up pass on the `test-cff-ltd` report formatting and pure-LTD
+  split-mass diagnostics after the demo run showed the mass-shift row failing
+  while CFF and LTD agreed.
+- Planned changes for this pass:
+  - display final-check distances with three significant digits,
+  - assign stable IDs to each evaluation row and reference those IDs from the
+    final check table,
+  - change the default split-mass ladder from `1.0e-4 * scale` with half-steps
+    to `1.0e-2 * scale` followed by three decade-smaller shifts,
+  - rerun the scalar-topology demo with cache invalidation and inspect whether
+    the apparent best-at-largest-epsilon behavior is numerical instability or a
+    construction/evaluation bug.
+
+Implemented and investigated:
+
+- Added stable sequential IDs to `ThreeDrepEvaluationRecord`, rejected cached
+  comparison manifests that do not contain ordered IDs, added the `id` column to
+  the evaluation table, and included the same ID in final-check labels. Final
+  direct and mass-shift checks now explicitly refer to the compared evaluation
+  and the CFF reference, e.g. `#1 ... vs #0`.
+- Shortened final-check `abs diff`, `rel diff`, and `tolerance` fields to three
+  significant digits.
+- Changed the default pure-LTD split-mass starting shift to `1.0e-2 * scale`
+  and the ladder to `[eps, eps/10, eps/100, eps/1000]`.
+- Removed the explicit too-small `--mass-shift 2.0e-4` from the demo run card
+  and added `--clean` to the demo comparison command so the example cannot
+  silently reuse stale comparison manifests.
+- Reproduced the old demo failure with the explicit small starting shift
+  `2.0e-4` in Double precision: the best row had relative difference
+  `1.64e-2`, just outside the loose `1.0e-2` mass-shift threshold, and smaller
+  shifts rapidly lost precision. With the new default `2.0e-2` starting shift,
+  the Double diagnostic succeeds with best relative difference `2.54e-5`.
+- Repeated the same split-mass sequence in Quad precision. The relative
+  difference improves monotonically as the shift decreases down to `2.0e-5`,
+  reaching `2.71e-11`. This points to cancellation/conditioning of the
+  split-mass diagnostic in Double precision, not to a wrong split-mass
+  construction.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+just build-cli
+passed
+
+./gammaloop --dev-optim ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo -c "quit -n"
+passed after cleaning the previously generated demo state/workspace; comparison status SUCCESS
+
+./gammaloop --dev-optim -n ./examples/cli/scalar_topologies/three_d_expr_demo.toml 3Drep test-cff-ltd ... --precision Double --mass-shift 2.0e-4 --clean
+reproduced the old small-shift Double failure: best mass-shift rel diff 1.64e-2
+
+./gammaloop --dev-optim -n ./examples/cli/scalar_topologies/three_d_expr_demo.toml 3Drep test-cff-ltd ... --precision Quad --mass-shift 2.0e-2 --clean
+confirmed smaller shifts converge in Quad: best mass-shift rel diff 2.71e-11
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps::cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path -- --nocapture --test-threads=1
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps:: -- --nocapture --test-threads=1
+8 passed, 0 failed, 1 ignored; generated matrix reported 310 ok, 0 failed, 310 total
+
+just clippy -- -D warnings
+passed
+
+post-label cleanup:
+cargo fmt
+cargo check -p gammaloop-api
+just clippy -- -D warnings
+passed
+
+just test_gammaloop
+1031 tests run: 1031 passed, 128 skipped
 ```

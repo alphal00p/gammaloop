@@ -822,12 +822,65 @@ fn run_imported_graph_threedrep_test(
 
     let manifest_path = find_named_artifact(&workspace_path, "test_cff_ltd_manifest.json")?;
     let manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(&manifest_path)?)?;
+    assert_threedrep_comparison_success(&manifest, test_name)?;
+    assert_threedrep_evaluation_ids(&manifest, test_name)?;
+    let cases = manifest["cases"]
+        .as_array()
+        .ok_or_else(|| eyre!("3Drep comparison manifest has no cases array"))?;
+    for case in cases {
+        if case["evaluator_build_status"]
+            .as_str()
+            .is_some_and(|status| status.starts_with("ok"))
+        {
+            let evaluations = case["evaluations"]
+                .as_array()
+                .ok_or_else(|| eyre!("3Drep comparison case has no evaluations array"))?;
+            assert!(
+                !evaluations.is_empty(),
+                "3Drep comparison case should record at least one evaluation"
+            );
+            for evaluation in evaluations {
+                assert!(
+                    evaluation["value"].as_str().is_some(),
+                    "3Drep comparison evaluation should record a value"
+                );
+                assert!(
+                    !evaluation["value"]
+                        .as_str()
+                        .is_some_and(|value| value.contains("NaN")),
+                    "3Drep comparison evaluation should avoid singular diagnostic points"
+                );
+                assert!(
+                    evaluation["sample_evaluation_timing_seconds"]
+                        .as_f64()
+                        .is_some(),
+                    "3Drep comparison evaluation should record wall timing"
+                );
+                assert!(
+                    evaluation["evaluator_build_timing_seconds"]
+                        .as_f64()
+                        .is_some(),
+                    "3Drep comparison evaluation should record evaluator build timing"
+                );
+            }
+            if case["name"].as_str() == Some("pureltd") && dot_name.contains("pow") {
+                assert!(
+                    evaluations
+                        .iter()
+                        .any(|evaluation| evaluation["mass_shift_values"]
+                            .as_array()
+                            .is_some_and(|values| !values.is_empty())),
+                    "pure-LTD repeated-propagator diagnostics should report the split masses"
+                );
+            }
+        }
+    }
     let graph = imported_graph_from_cli(&cli, process_name, "default", 0)?;
     let parsed = graph.to_three_d_parsed_graph()?;
     let source_internal_edges = source_internal_edges(graph);
-    let cff = load_imported_graph_case(&manifest, graph, &parsed, "cff_none")?;
-    let ltd = load_imported_graph_case(&manifest, graph, &parsed, "ltd_none")?;
-    let pure_ltd = load_imported_graph_case(&manifest, graph, &parsed, "pureltd_none")?;
+    let cff = load_imported_graph_case(&manifest, graph, &parsed, "cff")?;
+    let ltd = load_imported_graph_case(&manifest, graph, &parsed, "ltd")?;
+    let pure_ltd = load_imported_graph_case(&manifest, graph, &parsed, "pureltd")?;
 
     Ok(ImportedGraphThreeDRepRun {
         cli,
@@ -838,6 +891,63 @@ fn run_imported_graph_threedrep_test(
         ltd,
         pure_ltd,
     })
+}
+
+fn assert_threedrep_comparison_success(manifest: &JsonValue, context: &str) -> Result<()> {
+    let status = manifest["verdict"]["status"]
+        .as_str()
+        .ok_or_else(|| eyre!("3Drep comparison manifest has no verdict status"))?;
+    if status == "Success" {
+        return Ok(());
+    }
+
+    let checks = manifest["verdict"]["checks"]
+        .as_array()
+        .map(|checks| {
+            checks
+                .iter()
+                .filter(|check| check["status"].as_str() != Some("Success"))
+                .map(|check| {
+                    format!(
+                        "{}: {} (abs {}, rel {}, tol {})",
+                        check["name"].as_str().unwrap_or("<unnamed>"),
+                        check["message"].as_str().unwrap_or("<no message>"),
+                        check["abs_diff"].as_str().unwrap_or("-"),
+                        check["rel_diff"].as_str().unwrap_or("-"),
+                        check["tolerance"].as_str().unwrap_or("-"),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    panic!(
+        "3Drep comparison for {context} reported {status}; failing checks:\n{}",
+        checks.join("\n")
+    );
+}
+
+fn assert_threedrep_evaluation_ids(manifest: &JsonValue, context: &str) -> Result<()> {
+    let cases = manifest["cases"]
+        .as_array()
+        .ok_or_else(|| eyre!("3Drep comparison manifest has no cases array"))?;
+    let mut expected_id = 0u64;
+    for evaluation in cases
+        .iter()
+        .flat_map(|case| case["evaluations"].as_array().into_iter().flatten())
+    {
+        assert_eq!(
+            evaluation["id"].as_u64(),
+            Some(expected_id),
+            "3Drep comparison for {context} should assign stable sequential evaluation IDs"
+        );
+        expected_id += 1;
+    }
+    assert!(
+        expected_id > 0,
+        "3Drep comparison for {context} should contain evaluation IDs"
+    );
+    Ok(())
 }
 
 fn import_threedrep_graph(
@@ -888,6 +998,16 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
             name: "normal_box_cubic_edge_energy",
             dot_name: "box.dot",
             numerator: "edges[0][0]**3",
+            bounds: BOUNDS_BOX_CUBIC_0,
+            seed: 1337,
+            compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
+            sampling_scale: NumeratorSamplingScaleMode::None,
+            uniform_scale: None,
+        },
+        ProbeCase {
+            name: "normal_box_cubic_lmb_carrier_energy",
+            dot_name: "box.dot",
+            numerator: "loops[0][0]**3",
             bounds: BOUNDS_BOX_CUBIC_0,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1509,9 +1629,10 @@ fn assert_manifest_case(
         Some(orientation_count as u64),
         "unexpected orientation count for case {name}: {case:#}"
     );
-    assert_eq!(
-        case["evaluator_build_status"].as_str(),
-        Some("ok"),
+    assert!(
+        case["evaluator_build_status"]
+            .as_str()
+            .is_some_and(|status| status.starts_with("ok")),
         "unexpected evaluator build status for case {name}: {case:#}"
     );
     let expression_path = case["expression_path"]
@@ -1651,6 +1772,25 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
         .ok_or_else(|| eyre!("oriented expression path has no parent"))?;
     assert!(expression_dir.join("symbolica_expression.txt").exists());
     assert!(expression_dir.join("param_builder.txt").exists());
+    let evaluate_manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(
+        expression_dir.join("evaluate_manifest.json"),
+    )?)?;
+    assert!(
+        evaluate_manifest["evaluation"]["value"].as_str().is_some(),
+        "3Drep evaluate manifest should record the evaluated value"
+    );
+    assert!(
+        evaluate_manifest["evaluation"]["sample_evaluation_timing_seconds"]
+            .as_f64()
+            .is_some(),
+        "3Drep evaluate manifest should record wall timing"
+    );
+    assert!(
+        evaluate_manifest["parameters"]
+            .as_array()
+            .is_some_and(|parameters| !parameters.is_empty()),
+        "3Drep evaluate manifest should record input parameters"
+    );
 
     clean_test(test_root);
     clean_test(&cli.cli_settings.state.folder);
@@ -1682,6 +1822,7 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
     ];
 
     for (test_name, dot_name, local_bounds, lmb_bound) in cases {
+        clean_test(get_tests_workspace_path().join(test_name));
         let bootstrap = import_threedrep_graph(
             &format!("{test_name}_bootstrap"),
             &gammaloop_threedreps_dot_path(dot_name),
@@ -1712,6 +1853,8 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
         ))?;
         let manifest_path = find_named_artifact(&workspace_path, "test_cff_ltd_manifest.json")?;
         let manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(manifest_path)?)?;
+        assert_threedrep_comparison_success(&manifest, test_name)?;
+        assert_threedrep_evaluation_ids(&manifest, test_name)?;
         let graph = imported_graph_from_cli(&cli, &process_name, "default", 0)?;
         let source_internal_edges = source_internal_edges(graph);
         let local_bound_map = local_bounds.iter().copied().collect::<BTreeMap<_, _>>();
@@ -2093,9 +2236,9 @@ fn cli_imported_box_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
         ],
     );
 
-    assert_manifest_case(manifest, "cff_none", 14, 12)?;
-    assert_manifest_case(manifest, "ltd_none", 4, 24)?;
-    assert_manifest_case(manifest, "pureltd_none", 4, 24)?;
+    assert_manifest_case(manifest, "cff", 14, 12)?;
+    assert_manifest_case(manifest, "ltd", 4, 24)?;
+    assert_manifest_case(manifest, "pureltd", 4, 24)?;
 
     assert_eq!(
         compact_orientation_labels(&run.cff.expression, &run.source_internal_edges),
@@ -2206,9 +2349,9 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
         ],
     );
 
-    assert_manifest_case(manifest, "cff_none", 62, 27)?;
-    assert_manifest_case(manifest, "ltd_none", 4, 24)?;
-    assert_manifest_case(manifest, "pureltd_none", 6, 57)?;
+    assert_manifest_case(manifest, "cff", 62, 27)?;
+    assert_manifest_case(manifest, "ltd", 4, 24)?;
+    assert_manifest_case(manifest, "pureltd", 6, 57)?;
 
     assert_eq!(
         compact_orientation_labels(&run.cff.expression, &run.source_internal_edges),

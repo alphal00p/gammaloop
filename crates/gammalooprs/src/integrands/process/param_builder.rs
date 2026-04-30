@@ -54,6 +54,25 @@ pub struct ParamValuePairs {
     pub params: Vec<Atom>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamBuilderInputGroup {
+    Runtime,
+    Model,
+    ExternalEnergy,
+    ExternalSpatial,
+    Polarization,
+    LoopMomentumSpatial,
+    LocalCounterterm,
+    Additional,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParamBuilderInputParameter {
+    pub index: usize,
+    pub atom: Atom,
+    pub group: ParamBuilderInputGroup,
+}
+
 impl ParamValuePairs {
     pub fn validate(&self) {
         assert_eq!(
@@ -1157,6 +1176,125 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
+    pub fn set_runtime_parameter_values(
+        &mut self,
+        m_uv: Complex<F<T>>,
+        mu_r_sq: Complex<F<T>>,
+        numerator_sampling_scale: Complex<F<T>>,
+    ) {
+        self.m_uv_value(m_uv);
+        self.mu_r_sq_value(mu_r_sq);
+        self.numerator_sampling_scale_value(numerator_sampling_scale);
+    }
+
+    pub fn input_params(&mut self) -> InputParams<'_, T> {
+        InputParams {
+            values: SliceMut::Borrowed(&mut self.values[0]),
+            multiplicative_offset: 1,
+            override_pos: self.pairs.override_if.value_range.start,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
+    }
+
+    pub fn evaluator_input_parameters(&self) -> Vec<ParamBuilderInputParameter> {
+        [
+            (&self.pairs.m_uv, ParamBuilderInputGroup::Runtime),
+            (&self.pairs.mu_r_sq, ParamBuilderInputGroup::Runtime),
+            (
+                &self.pairs.numerator_sampling_scale,
+                ParamBuilderInputGroup::Runtime,
+            ),
+            (&self.pairs.idenso_vars, ParamBuilderInputGroup::Model),
+            (&self.pairs.model_parameters, ParamBuilderInputGroup::Model),
+            (
+                &self.pairs.external_energies,
+                ParamBuilderInputGroup::ExternalEnergy,
+            ),
+            (
+                &self.pairs.external_spatial,
+                ParamBuilderInputGroup::ExternalSpatial,
+            ),
+            (
+                &self.pairs.polarizations,
+                ParamBuilderInputGroup::Polarization,
+            ),
+            (
+                &self.pairs.loop_moms_spatial,
+                ParamBuilderInputGroup::LoopMomentumSpatial,
+            ),
+            (&self.pairs.tstar, ParamBuilderInputGroup::LocalCounterterm),
+            (
+                &self.pairs.h_function_lu_cut,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.h_function_left_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.h_function_right_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.esurface_derivative_lu_cut,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.esurface_derivative_left_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.esurface_derivative_right_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_plus_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_minus_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_star_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_plus_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_minus_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_star_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.additional_params,
+                ParamBuilderInputGroup::Additional,
+            ),
+        ]
+        .into_iter()
+        .flat_map(|(pair, group)| {
+            pair.params
+                .iter()
+                .cloned()
+                .zip(pair.value_range.clone())
+                .map(move |(atom, index)| ParamBuilderInputParameter { index, atom, group })
+        })
+        .collect()
+    }
+
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
         self.reps.push(FnMapEntry {
             lhs: key.clone(),
@@ -1646,6 +1784,73 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         table.build()
+    }
+}
+
+impl ParamBuilder<f64> {
+    pub fn input_params_quad(&self) -> InputParams<'_, f128> {
+        InputParams {
+            values: SliceMut::Owned(self.values[0].iter().map(|value| value.higher()).collect()),
+            multiplicative_offset: 1,
+            override_pos: self.pairs.override_if.value_range.start,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
+    }
+
+    pub fn input_params_arb(&self) -> InputParams<'_, ArbPrec> {
+        InputParams {
+            values: SliceMut::Owned(
+                self.values[0]
+                    .iter()
+                    .map(|value| value.higher().higher())
+                    .collect(),
+            ),
+            multiplicative_offset: 1,
+            override_pos: self.pairs.override_if.value_range.start,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
+    }
+
+    pub fn set_diagnostic_kinematic_values(&mut self) {
+        let Some(values) = self.values.first_mut() else {
+            return;
+        };
+
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.external_energies.value_range.clone(),
+            0.37,
+            0.23,
+        );
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.external_spatial.value_range.clone(),
+            0.11,
+            0.071,
+        );
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.loop_moms_spatial.value_range.clone(),
+            0.19,
+            0.097,
+        );
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.additional_params.value_range.clone(),
+            0.29,
+            0.053,
+        );
+    }
+
+    fn set_diagnostic_range(
+        values: &mut [Complex<F<f64>>],
+        range: Range<usize>,
+        first: f64,
+        step: f64,
+    ) {
+        for (offset, index) in range.enumerate() {
+            values[index] = Complex::new_re(F(first + step * offset as f64));
+        }
     }
 }
 

@@ -23,7 +23,6 @@ use super::{
 };
 use crate::{
     graph::Graph,
-    momentum::sample::LoopIndex,
     settings::global::OrientationPattern,
     utils::{GS, W_, ose_atom_from_index, symbolica_ext::CallSymbol},
 };
@@ -151,6 +150,14 @@ pub trait GammaLoopOrientationExpression {
     fn to_atom_gs(&self) -> Atom;
     fn energy_replacements_gs(&self, graph: &Graph) -> Vec<Replacement>;
     fn numerator_atom_gs(&self, graph: &Graph, numerator: &Atom) -> Atom;
+    fn parametric_atom_without_orientation_thetas_gs<E, H>(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        surfaces: &three_dimensional_reps::surface::SurfaceCache<E, H>,
+    ) -> Atom
+    where
+        three_dimensional_reps::surface::SurfaceCache<E, H>: GammaLoopSurfaceCache;
     fn parametric_atom_gs<E, H>(
         &self,
         graph: &Graph,
@@ -189,17 +196,14 @@ impl GammaLoopOrientationExpression for OrientationExpression {
             ));
         }
 
-        for (loop_id, energy_expr) in self.loop_energy_map.iter().enumerate() {
-            let Some(loop_edge_id) = graph
-                .loop_momentum_basis
-                .loop_edges
-                .get(LoopIndex(loop_id))
-                .copied()
-            else {
-                continue;
-            };
+        for (loop_id, loop_edge_id) in graph.loop_momentum_basis.loop_edges.iter_enumerated() {
+            let loop_id = usize::from(loop_id);
             let loop_id_atom = Atom::num(loop_id as i64);
-            let energy = energy_expr.to_atom_gs(&[]);
+            let energy = self
+                .edge_energy_map
+                .get(usize::from(*loop_edge_id))
+                .map(|energy_expr| energy_expr.to_atom_gs(&[]))
+                .unwrap_or_else(Atom::new);
             replacements.push(Replacement::new(
                 function!(
                     GS.loop_mom,
@@ -217,7 +221,7 @@ impl GammaLoopOrientationExpression for OrientationExpression {
                         AIND_SYMBOLS.cind.f([spatial_index])
                     )
                     .to_pattern(),
-                    GS.emr_mom(loop_edge_id, AIND_SYMBOLS.cind.f([spatial_index]))
+                    GS.emr_mom(*loop_edge_id, AIND_SYMBOLS.cind.f([spatial_index]))
                         .to_pattern(),
                 ));
             }
@@ -227,7 +231,7 @@ impl GammaLoopOrientationExpression for OrientationExpression {
                     .add_arg(mink_index.as_view())
                     .finish()
                     .to_pattern(),
-                (GS.emr_vec_index(loop_edge_id, &mink_index)
+                (GS.emr_vec_index(*loop_edge_id, &mink_index)
                     + energy * GS.energy_delta(&mink_index))
                 .to_pattern(),
             ));
@@ -240,7 +244,7 @@ impl GammaLoopOrientationExpression for OrientationExpression {
         numerator.replace_multiple(&self.energy_replacements_gs(graph))
     }
 
-    fn parametric_atom_gs<E, H>(
+    fn parametric_atom_without_orientation_thetas_gs<E, H>(
         &self,
         graph: &Graph,
         numerator: &Atom,
@@ -251,6 +255,18 @@ impl GammaLoopOrientationExpression for OrientationExpression {
     {
         self.numerator_atom_gs(graph, numerator)
             * surfaces.substitute_energies_gs(&self.to_atom_gs(), &[])
+    }
+
+    fn parametric_atom_gs<E, H>(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        surfaces: &three_dimensional_reps::surface::SurfaceCache<E, H>,
+    ) -> Atom
+    where
+        three_dimensional_reps::surface::SurfaceCache<E, H>: GammaLoopSurfaceCache,
+    {
+        self.parametric_atom_without_orientation_thetas_gs(graph, numerator, surfaces)
             * self.orientation_thetas_gs()
     }
 }
@@ -262,6 +278,7 @@ pub trait GammaLoopThreeDExpression<O> {
         pattern: &OrientationPattern,
     ) -> typed_index_collections::TiVec<OrientationID, Atom>;
     fn get_orientation_atom_gs(&self, orientation_id: O) -> Atom;
+    fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
     fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
 }
 
@@ -304,6 +321,25 @@ where
 
     fn get_orientation_atom_gs(&self, orientation_id: O) -> Atom {
         self.orientations[orientation_id].to_atom_gs()
+    }
+
+    fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
+        let numerator = graph.full_numerator_atom();
+        self.orientations
+            .iter()
+            .filter_map(|orientation| {
+                if pattern.filter_orientation(orientation.orientation()) {
+                    Some(orientation.parametric_atom_without_orientation_thetas_gs(
+                        graph,
+                        &numerator,
+                        &self.surfaces,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .reduce(|acc, atom| acc + atom)
+            .unwrap_or_default()
     }
 
     fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {

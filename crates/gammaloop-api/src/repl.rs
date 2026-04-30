@@ -5276,12 +5276,13 @@ mod tests {
         assert!(values.contains(&"ltd".to_string()), "{values:?}");
 
         let values = completion_values(
-            "3Drep build --numerator-sampling-scale-mode ",
+            "3Drep build --numerator-samples-normalization ",
             &completion_state,
         );
-        assert!(values.contains(&"auto".to_string()), "{values:?}");
+        assert!(values.contains(&"never_M".to_string()), "{values:?}");
+        assert!(values.contains(&"M_for_all".to_string()), "{values:?}");
         assert!(
-            values.contains(&"beyond-quadratic".to_string()),
+            values.contains(&"M_for_beyond_quadratic_only".to_string()),
             "{values:?}"
         );
     }

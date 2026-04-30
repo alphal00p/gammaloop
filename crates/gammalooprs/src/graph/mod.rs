@@ -18,7 +18,11 @@ use tracing::debug;
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
+use color_eyre::Result;
+use eyre::eyre;
+use spenso::algebra::complex::Complex;
 use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::ThreeDGraphSource;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
@@ -28,6 +32,7 @@ use crate::{
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::edge::EdgeMass,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
+    model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
@@ -64,6 +69,16 @@ pub struct Graph {
     pub polarizations: Vec<(PolDef, Atom)>,
 }
 
+#[derive(Clone, Debug)]
+pub struct ThreeDRepMassShift {
+    pub group_index: usize,
+    pub split_index: usize,
+    pub local_edge_id: usize,
+    pub edge_id: EdgeIndex,
+    pub base_mass: f64,
+    pub shifted_mass: f64,
+}
+
 // impl Deref for Graph {
 //     type Target = HedgeGraph<Edge, Vertex>;
 // }
@@ -78,6 +93,66 @@ impl Graph {
 
     pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> String {
         self.to_dot_graph_with_settings(settings).debug_dot()
+    }
+
+    pub fn rebuild_param_builder(&mut self, model: &Model) {
+        let additional_params = self.param_builder.pairs.additional_params.params.clone();
+        let loop_momentum_basis = self.loop_momentum_basis.clone();
+        self.param_builder =
+            ParamBuilder::new(self, model, &loop_momentum_basis, additional_params);
+    }
+
+    pub fn split_repeated_masses_for_three_drep(
+        &self,
+        model: &Model,
+        epsilon: f64,
+    ) -> Result<(Self, Vec<ThreeDRepMassShift>)> {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .map_err(|error| eyre!("could not inspect repeated 3Drep propagators: {error}"))?;
+        let repeated_groups = three_dimensional_reps::repeated_groups(&parsed);
+        let source_edges = self
+            .underlying
+            .iter_edges()
+            .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
+            .map(|(_, edge, _)| edge)
+            .sorted()
+            .collect::<Vec<_>>();
+
+        let mut shifted = self.clone();
+        let mut records = Vec::new();
+        for (group_index, group) in repeated_groups.iter().enumerate() {
+            let center = (group.edge_ids.len().saturating_sub(1)) as f64 / 2.0;
+            for (split_index, local_edge_id) in group.edge_ids.iter().copied().enumerate() {
+                let Some(edge_id) = source_edges.get(local_edge_id).copied() else {
+                    return Err(eyre!(
+                        "repeated 3Drep edge id {local_edge_id} does not map to a GammaLoop edge"
+                    ));
+                };
+                let base_mass = self.underlying[edge_id]
+                    .mass
+                    .value::<f64>(model, &self.param_builder)
+                    .map(|value| value.re.0)
+                    .unwrap_or(0.0);
+                let shifted_mass = base_mass + (split_index as f64 - center) * epsilon;
+                shifted.underlying[edge_id].particle = shifted.underlying[edge_id]
+                    .particle
+                    .clone()
+                    .override_mass(Some(Atom::num(shifted_mass)));
+                shifted.underlying[edge_id].mass =
+                    EdgeMass::Value(Complex::new_re(F(shifted_mass)));
+                records.push(ThreeDRepMassShift {
+                    group_index,
+                    split_index,
+                    local_edge_id,
+                    edge_id,
+                    base_mass,
+                    shifted_mass,
+                });
+            }
+        }
+        shifted.rebuild_param_builder(model);
+        Ok((shifted, records))
     }
 
     pub fn pretty_dot(&self) -> String {
