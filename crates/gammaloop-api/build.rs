@@ -1,21 +1,8 @@
 use std::{env, path::PathBuf};
-#[cfg(feature = "vergen_gitcl")]
-use vergen_gitcl::{Emitter, GitclBuilder};
 use walkdir::WalkDir;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
-
-    #[cfg(feature = "vergen_gitcl")]
-    {
-        let git = GitclBuilder::default().branch(true).build()?;
-
-        Emitter::default().add_instructions(&git)?.emit()?;
-
-        // Help Cargo know when to rerun
-        println!("cargo:rerun-if-changed=.git/HEAD");
-        println!("cargo:rerun-if-changed=.git/refs/heads");
-    }
 
     #[cfg(feature = "python_api")]
     pyo3_build_config::add_extension_module_link_args();

@@ -38,7 +38,6 @@ dirs = { workspace = true }
 dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
-git-version = { workspace = true }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
@@ -129,7 +128,6 @@ insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 
 [build-dependencies]
 # pyo3-build-config = "*"
-vergen-gitcl = { workspace = true }
 # pyo3-build-config = "*"
 
 [features]

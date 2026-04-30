@@ -138,7 +138,6 @@
           [
             pkgs.pkg-config
             pkgs.gcc
-            pkgs.git
             pkgs.python313
             pkgs.gnum4
           ]
