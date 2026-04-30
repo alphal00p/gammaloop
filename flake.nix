@@ -31,37 +31,42 @@
       baseCraneLib = crane.mkLib pkgs;
       stableToolchain = fenix.packages.${system}.stable;
 
+      ciToolchain = stableToolchain.withComponents [
+        "cargo"
+        "clippy"
+        "llvm-tools"
+        "rust-std"
+        "rustc"
+        "rustfmt"
+      ];
+
       craneLib =
         baseCraneLib.overrideToolchain
-        stableToolchain.toolchain;
-
-      craneLibClippy =
-        baseCraneLib.overrideToolchain
-        (stableToolchain.withComponents [
-          "cargo"
-          "clippy"
-          "rust-std"
-          "rustc"
-        ]);
-
-      craneLibFmt =
-        baseCraneLib.overrideToolchain
-        (stableToolchain.withComponents [
-          "cargo"
-          "rustfmt"
-        ]);
-
-      craneLibLLvmTools =
-        baseCraneLib.overrideToolchain
-        (stableToolchain.withComponents [
-          "cargo"
-          "llvm-tools"
-          "rustc"
-        ]);
+        ciToolchain;
 
       workspaceRoot = ./.;
 
       cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
+
+      cargoVendorDir = craneLib.vendorCargoDeps {
+        cargoLock = ./Cargo.lock;
+        overrideVendorGitCheckout = packages: drv:
+          if lib.any (package: package.name == "symbolica") packages
+          then
+            drv.overrideAttrs (old: {
+              postInstall =
+                (old.postInstall or "")
+                + ''
+                  for crate in ${lib.concatMapStringsSep " " (package: lib.escapeShellArg "${package.name}-${package.version}") packages}; do
+                    if [ -d "$out/$crate" ]; then
+                      mkdir -p "$out/$crate/.git"
+                      printf 'ref: refs/heads/nix-vendor\n' > "$out/$crate/.git/HEAD"
+                    fi
+                  done
+                '';
+            })
+          else drv;
+      };
 
       nonCargoBuildSources = lib.fileset.unions [
         ./.config
@@ -101,6 +106,57 @@
         ];
       };
 
+      workspaceMemberDirs = let
+        crateEntries = builtins.readDir ./crates;
+        crateMemberDirs =
+          map (name: "crates/${name}") (
+            lib.filter (
+              name:
+                crateEntries.${name} == "directory"
+                && builtins.pathExists (workspaceRoot + "/crates/${name}/Cargo.toml")
+            ) (builtins.attrNames crateEntries)
+          );
+      in
+        crateMemberDirs ++ ["tests"];
+
+      autoCargoTargetDirs =
+        lib.concatMap (
+          member:
+            lib.filter (
+              dir: builtins.pathExists (workspaceRoot + "/${dir}")
+            ) [
+              "${member}/benches"
+              "${member}/examples"
+              "${member}/tests"
+            ]
+        )
+        workspaceMemberDirs;
+
+      autoCargoTargetPaths =
+        lib.sort (left: right: left < right) (
+          lib.concatMap (
+            dir: let
+              entries = builtins.readDir (workspaceRoot + "/${dir}");
+            in
+              map (name: "${dir}/${name}") (
+                lib.filter (
+                  name:
+                    entries.${name} == "regular"
+                    && lib.hasSuffix ".rs" name
+                    && name != "mod.rs"
+                ) (builtins.attrNames entries)
+              )
+          )
+          autoCargoTargetDirs
+        );
+
+      dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
+        #![allow(clippy::all)]
+        #![allow(dead_code)]
+
+        pub fn main() {}
+      '';
+
       src = workspaceBuildSrc;
 
       apiMeta = craneLib.crateNameFromCargoToml {
@@ -133,6 +189,7 @@
         pname = "gammaloop-workspace";
         inherit (apiMeta) version;
         strictDeps = true;
+        inherit cargoVendorDir;
 
         nativeBuildInputs =
           [
@@ -194,6 +251,10 @@
       # reuse it across workspace lint/test/doc/package checks.
       cargoArtifacts = craneLib.buildDepsOnly (ciArgs // {
         pname = "gammaloop-workspace-deps";
+        src = workspaceTestSrc;
+        extraDummyScript = lib.concatMapStringsSep "\n" (path: ''
+          install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
+        '') autoCargoTargetPaths;
       });
 
       symbolicaCrateArgs = usesSymbolica:
@@ -202,13 +263,14 @@
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
         };
 
-      gammaloop-cli = craneLib.buildPackage (commonArgs
+      gammaloop-cli = craneLib.buildPackage (ciArgs
         // {
           inherit cargoArtifacts;
-          buildType = "dev-optim";
+          buildType = ciCargoProfile;
           doCheck = false;
           pname = "gammaloop";
           inherit (apiMeta) version;
+          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
@@ -249,7 +311,7 @@
           # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
 
-          gammaloop-clippy = craneLibClippy.cargoClippy (ciArgs
+          gammaloop-clippy = craneLib.cargoClippy (ciArgs
             // {
               inherit cargoArtifacts;
               src = workspaceTestSrc;
@@ -269,7 +331,7 @@
             }
             // symbolicaCrateArgs true);
 
-          gammaloop-fmt = craneLibFmt.cargoFmt {
+          gammaloop-fmt = craneLib.cargoFmt {
             src = workspaceFmtSrc;
             pname = "gammaloop-workspace";
             inherit (apiMeta) version;
@@ -300,7 +362,7 @@
         }
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-          gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
+          gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
             // {
               src = workspaceTestSrc;
               inherit cargoArtifacts;
