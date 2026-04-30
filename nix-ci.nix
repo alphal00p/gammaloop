@@ -5,6 +5,8 @@ in {
   doNotBuild = [
     "checks.${system}.gammaloop-doctest"
     "checks.${system}.gammaloop-nextest"
+    "packages.${system}.default"
+    "packages.${system}.gammaloop-llvm-coverage"
   ];
   fail-fast = false;
   # We specify dependencies manually
