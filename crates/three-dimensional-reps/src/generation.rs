@@ -14,6 +14,7 @@ use crate::{
     cff_recursion::enumerate_cff_surface_chains,
     cut_structure::ltd_residues,
     energy_bounds::{energy_divergence_report, normalize_energy_degree_bounds},
+    expression::assign_numerator_map_labels,
     graph_io::{
         ParsedGraphExternalEdge, ParsedGraphInternalEdge, ThreeDGraphSource, repeated_groups,
     },
@@ -23,7 +24,8 @@ use crate::{
     },
     surface::{
         HybridSurfaceID, LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind,
-        RationalCoefficient, SurfaceOrigin,
+        RationalAtomExt, SurfaceOrigin, rational_coeff_atom, rational_coeff_new,
+        rational_coeff_one,
     },
     tree::{NodeId, Tree},
     utils::{
@@ -55,7 +57,7 @@ impl NumeratorSamplingScaleMode {
         match self {
             Self::None => false,
             Self::BeyondQuadratic => degree > 2,
-            Self::All => degree > 1,
+            Self::All => degree > 0,
         }
     }
 }
@@ -133,8 +135,11 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     local_options.energy_degree_bounds = edge_map
         .remap_bounds_to_local(&options.energy_degree_bounds)
         .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })?;
-    Ok(generate_3d_expression_from_parsed(&parsed, &local_options)?
-        .remap_energy_edge_indices(&edge_map))
+    let mut expression = generate_3d_expression_from_parsed(&parsed, &local_options)?
+        .remap_energy_edge_indices(&edge_map)
+        .fuse_compatible_variants();
+    assign_numerator_map_labels(&mut expression.orientations);
+    Ok(expression)
 }
 
 #[allow(unreachable_patterns)]
@@ -154,7 +159,7 @@ pub fn generate_3d_expression_from_parsed(
         }
     }
 
-    match options.representation {
+    let expression = match options.representation {
         RepresentationMode::Ltd => generate_ltd_expression_from_parsed(parsed, options),
         RepresentationMode::Cff if has_higher_energy_power(options) => {
             BoundedCffBuilder::new(parsed, options)?.build()
@@ -169,7 +174,10 @@ pub fn generate_3d_expression_from_parsed(
         #[cfg(feature = "old-cff")]
         RepresentationMode::OldCff => generate_pure_cff_expression_from_parsed(parsed),
         mode => Err(GenerationError::NotImplemented { mode }),
-    }
+    }?;
+    let mut expression = expression.fuse_compatible_variants();
+    assign_numerator_map_labels(&mut expression.orientations);
+    Ok(expression)
 }
 
 fn generate_pure_cff_expression_from_parsed(
@@ -261,7 +269,7 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_sign(
             .collect::<Vec<_>>();
         let variants = vec![crate::expression::CFFVariant {
             origin: Some("pure_cff".to_string()),
-            prefactor: RationalCoefficient::new(overall_sign, 1),
+            prefactor: rational_coeff_new(overall_sign, 1),
             half_edges: (0..n_internal).map(EdgeIndex).collect(),
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
@@ -361,9 +369,9 @@ fn generate_pure_ltd_expression_from_parsed(
         data.numerator_map_index = None;
         let denominator = denominator_tree_from_chain(&denominator_chain);
         let prefactor = if residue.sign >= 0 {
-            RationalCoefficient::one()
+            rational_coeff_one()
         } else {
-            RationalCoefficient::new(-1, 1)
+            rational_coeff_new(-1, 1)
         };
         let variant = crate::expression::CFFVariant {
             origin: Some("pure_ltd".to_string()),
@@ -596,16 +604,9 @@ impl KnownLinearExpr {
             external_terms: self
                 .external_terms
                 .iter()
-                .map(|(edge_id, coeff)| {
-                    (
-                        EdgeIndex(*edge_id),
-                        RationalCoefficient::from_rational(coeff.clone()),
-                    )
-                })
+                .map(|(edge_id, coeff)| (EdgeIndex(*edge_id), rational_coeff_atom(coeff.clone())))
                 .collect(),
-            uniform_scale_coeff: RationalCoefficient::from_rational(
-                self.uniform_scale_coeff.clone(),
-            ),
+            uniform_scale_coeff: rational_coeff_atom(self.uniform_scale_coeff.clone()),
             constant: rational_to_coefficient(self.constant.clone())?,
             ..LinearEnergyExpr::zero()
         }
@@ -614,7 +615,7 @@ impl KnownLinearExpr {
             out = out
                 + LinearEnergyExpr::ose_with_coeff(
                     EdgeIndex(*edge_id),
-                    RationalCoefficient::from_rational(coeff.clone()),
+                    rational_coeff_atom(coeff.clone()),
                 );
         }
         for (edge_id, coeff) in &self.var_terms {
@@ -657,8 +658,8 @@ impl Add for KnownLinearExpr {
         self.var_terms.extend(rhs.var_terms);
         self.ose_terms.extend(rhs.ose_terms);
         self.external_terms.extend(rhs.external_terms);
-        self.constant = self.constant + rhs.constant;
-        self.uniform_scale_coeff = self.uniform_scale_coeff + rhs.uniform_scale_coeff;
+        self.constant += rhs.constant;
+        self.uniform_scale_coeff += rhs.uniform_scale_coeff;
         self.canonical()
     }
 }
@@ -692,7 +693,7 @@ impl Sub for KnownLinearExpr {
 
 #[derive(Debug, Clone)]
 struct AccumulatedVariant {
-    prefactor: RationalCoefficient,
+    prefactor: symbolica::atom::Atom,
     half_edges: Vec<usize>,
     chains: Vec<Vec<HybridSurfaceID>>,
 }
@@ -705,7 +706,7 @@ struct VariantAccumulator {
 impl VariantAccumulator {
     fn add(
         &mut self,
-        prefactor: RationalCoefficient,
+        prefactor: symbolica::atom::Atom,
         half_edges: Vec<usize>,
         chain: Vec<HybridSurfaceID>,
     ) {
@@ -990,7 +991,7 @@ impl DenominatorFactor {
             if *derivative_order != 0 && derivative_coeff.is_zero() {
                 return None;
             }
-            coeff = coeff * derivative_coeff.pow_usize(*derivative_order);
+            coeff *= derivative_coeff.pow_usize(*derivative_order);
         }
         let effective_power = power + order;
         match self {
@@ -1053,38 +1054,17 @@ impl<'a> BoundedCffBuilder<'a> {
         if self.supports_quadratic_recursive() {
             return self.build_quadratic_recursive(false);
         }
-        if self.supports_channel_known_one_loop() {
+        if self.supports_known_factor_recursive() {
             return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
                 .build();
         }
-        if self.supports_known_factor_one_loop() {
-            return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
-                .build();
-        }
-        if !self.supports_quadratic_e_surface_only() {
-            return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
-        }
-        unreachable!("quadratic E-surface support handled above")
+        Err(GenerationError::CffHigherEnergyPowerNotImplemented)
     }
 
     fn supports_quadratic_e_surface_only(&self) -> bool {
         self.parsed.loop_names.len() == 1
             && !self.has_duplicate_signature_ignoring_mass()
-            && (self.bounds.iter().all(|degree| *degree <= 2)
-                || self.single_isolated_high_power_edge().is_some())
-    }
-
-    fn single_isolated_high_power_edge(&self) -> Option<usize> {
-        let nonzero = self
-            .bounds
-            .iter()
-            .enumerate()
-            .filter(|(_, degree)| **degree != 0)
-            .collect::<Vec<_>>();
-        match nonzero.as_slice() {
-            [(edge_id, degree)] if **degree > 2 => Some(*edge_id),
-            _ => None,
-        }
+            && self.bounds.iter().all(|degree| *degree <= 2)
     }
 
     fn supports_quadratic_recursive(&self) -> bool {
@@ -1093,22 +1073,17 @@ impl<'a> BoundedCffBuilder<'a> {
                 || self.bounds.iter().filter(|degree| **degree > 1).count() == 1)
     }
 
-    fn supports_known_factor_one_loop(&self) -> bool {
-        self.parsed.loop_names.len() == 1 && self.bounds.iter().any(|degree| *degree > 2)
-    }
-
-    fn supports_channel_known_one_loop(&self) -> bool {
-        self.parsed.loop_names.len() == 1
-            && RepeatedLtdBuilder::logical_channels(self.parsed)
+    fn supports_known_factor_recursive(&self) -> bool {
+        self.bounds.iter().any(|degree| *degree > 1)
+            || RepeatedLtdBuilder::logical_channels(self.parsed)
                 .iter()
                 .any(|channel| {
-                    channel.power > 1
-                        && channel
-                            .members
-                            .iter()
-                            .map(|edge_id| self.bounds[*edge_id])
-                            .sum::<usize>()
-                            > 2
+                    channel
+                        .members
+                        .iter()
+                        .map(|edge_id| self.bounds[*edge_id])
+                        .sum::<usize>()
+                        > 2
                 })
     }
 
@@ -1423,7 +1398,7 @@ impl<'a> BoundedCffBuilder<'a> {
                     let mut sample_labels = Vec::new();
 
                     for (edge_id, component) in pinched_edges.iter().zip(components) {
-                        prefactor = prefactor * component.prefactor.clone();
+                        prefactor *= component.prefactor.clone();
                         half_edges.extend(component.half_edges.iter().copied());
                         numerator_surfaces.extend(component.numerator_surfaces.iter().copied());
                         if component.sample == 0 {
@@ -1629,18 +1604,7 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn finalize_numerator_map_labels(&mut self) {
-        let mut label_counts = BTreeMap::<String, usize>::new();
-        for orientation in &mut self.expression.orientations {
-            let base_label = orientation
-                .data
-                .label
-                .clone()
-                .unwrap_or_else(|| orientation_from_edge_exprs(&orientation.edge_energy_map).1);
-            let entry = label_counts.entry(base_label.clone()).or_insert(0);
-            *entry += 1;
-            orientation.data.numerator_map_index = Some(*entry);
-            orientation.data.label = Some(format!("{base_label}|N{entry}"));
-        }
+        assign_numerator_map_labels(&mut self.expression.orientations);
     }
 
     fn contract_parsed_edges(&self, pinched_edges: &[usize]) -> (ParsedGraph, Vec<usize>) {
@@ -2559,18 +2523,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
     }
 
     fn finalize_numerator_map_labels(&mut self) {
-        let mut label_counts = BTreeMap::<String, usize>::new();
-        for orientation in &mut self.expression.orientations {
-            let base_label = orientation
-                .data
-                .label
-                .clone()
-                .unwrap_or_else(|| orientation_from_edge_exprs(&orientation.edge_energy_map).1);
-            let entry = label_counts.entry(base_label.clone()).or_insert(0);
-            *entry += 1;
-            orientation.data.numerator_map_index = Some(*entry);
-            orientation.data.label = Some(format!("{base_label}|N{entry}"));
-        }
+        assign_numerator_map_labels(&mut self.expression.orientations);
     }
 }
 
@@ -2585,8 +2538,8 @@ fn map_surface_id(
     }
 }
 
-fn rational_from_coefficient(value: &RationalCoefficient) -> Rational {
-    value.as_rational().clone()
+fn rational_from_coefficient(value: &symbolica::atom::Atom) -> Rational {
+    value.rational_coeff()
 }
 
 fn union_nodes(parent: &mut BTreeMap<usize, usize>, lhs: usize, rhs: usize) {
@@ -2638,7 +2591,7 @@ fn lagrange_basis(nodes: &[i32], index: usize) -> Vec<Rational> {
         }
         let xk = Rational::from(*xk_int);
         poly = poly_mul(&poly, &[-xk.clone(), Rational::one()]);
-        denominator = denominator * (xj.clone() - xk);
+        denominator *= xj.clone() - xk;
     }
     poly_scale(&poly, Rational::one() / denominator)
 }
@@ -2719,7 +2672,7 @@ struct LowerSectorComponent {
     basis_edges: Vec<usize>,
     local_to_sub: Vec<usize>,
     expression: ThreeDExpression<OrientationID>,
-    prefactor_correction: RationalCoefficient,
+    prefactor_correction: symbolica::atom::Atom,
 }
 
 #[derive(Debug, Clone)]
@@ -2925,9 +2878,9 @@ impl<'a> LowerSectorCffBuilder<'a> {
         let is_auxiliary = component_parsed.internal_edges.len() != rank;
         let prefactor_correction =
             if is_auxiliary && (component_parsed.internal_edges.len() - rank + 1) % 2 == 1 {
-                RationalCoefficient::new(-1, 1)
+                rational_coeff_new(-1, 1)
             } else {
-                RationalCoefficient::one()
+                rational_coeff_one()
             };
 
         Ok(LowerSectorComponent {
@@ -3278,18 +3231,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
     }
 
     fn finalize_numerator_map_labels(&mut self) {
-        let mut label_counts = BTreeMap::<String, usize>::new();
-        for orientation in &mut self.expression.orientations {
-            let base_label = orientation
-                .data
-                .label
-                .clone()
-                .unwrap_or_else(|| orientation_from_edge_exprs(&orientation.edge_energy_map).1);
-            let entry = label_counts.entry(base_label.clone()).or_insert(0);
-            *entry += 1;
-            orientation.data.numerator_map_index = Some(*entry);
-            orientation.data.label = Some(format!("{base_label}|N{entry}"));
-        }
+        assign_numerator_map_labels(&mut self.expression.orientations);
     }
 }
 
@@ -3412,7 +3354,7 @@ impl<'a> RepeatedLtdBuilder<'a> {
         let mut residue_sign = Rational::from(if residue.sign >= 0 { 1 } else { -1 });
         for (sigma, order) in cut_signs.iter().zip(&alpha) {
             if order % 2 == 1 {
-                residue_sign = residue_sign * Rational::from(*sigma);
+                residue_sign *= Rational::from(*sigma);
             }
         }
         let residue_norm = Rational::one() / multi_factorial(&alpha);
@@ -3565,18 +3507,7 @@ impl<'a> RepeatedLtdBuilder<'a> {
     }
 
     fn finalize_numerator_map_labels(&mut self) {
-        let mut label_counts = BTreeMap::<String, usize>::new();
-        for orientation in &mut self.expression.orientations {
-            let base_label = orientation
-                .data
-                .label
-                .clone()
-                .unwrap_or_else(|| orientation_from_edge_exprs(&orientation.edge_energy_map).1);
-            let entry = label_counts.entry(base_label.clone()).or_insert(0);
-            *entry += 1;
-            orientation.data.numerator_map_index = Some(*entry);
-            orientation.data.label = Some(format!("{base_label}|N{entry}"));
-        }
+        assign_numerator_map_labels(&mut self.expression.orientations);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3747,7 +3678,7 @@ impl<'a> RepeatedLtdBuilder<'a> {
             for ((basis_position, use_uniform, _), (node, weight)) in
                 per_axis.iter().zip(axis_choices)
             {
-                coeff = coeff * weight;
+                coeff *= weight;
                 offsets.insert(*basis_position, node);
                 axis_uniform.insert(*basis_position, *use_uniform);
             }
@@ -3785,7 +3716,7 @@ impl<'a> RepeatedLtdBuilder<'a> {
                 extra_half_edges.extend(std::iter::repeat_n(rep_edge, *order));
                 nonuniform_order_sum += *order;
             }
-            coeff = coeff * rational_pow_i64(2, nonuniform_order_sum);
+            coeff *= rational_pow_i64(2, nonuniform_order_sum);
             out.push(NumeratorSample {
                 coeff,
                 extra_half_edges,
@@ -4123,7 +4054,7 @@ fn component_coeff_maps(
 
 fn coeff_map(expr: &LinearEnergyExpr, internal_alias: &BTreeMap<usize, usize>) -> CoeffMap {
     let mut out = BTreeMap::new();
-    let constant = expr.constant.as_rational().clone();
+    let constant = expr.constant.rational_coeff();
     if !constant.is_zero() {
         out.insert(CoeffSymbol::Constant, constant);
     }
@@ -4132,21 +4063,21 @@ fn coeff_map(expr: &LinearEnergyExpr, internal_alias: &BTreeMap<usize, usize>) -
         add_coeff(
             &mut out,
             CoeffSymbol::Internal(aliased),
-            coeff.as_rational().clone(),
+            coeff.rational_coeff(),
         );
     }
     for (edge_id, coeff) in &expr.external_terms {
         add_coeff(
             &mut out,
             CoeffSymbol::External(edge_id.0),
-            coeff.as_rational().clone(),
+            coeff.rational_coeff(),
         );
     }
-    if !expr.uniform_scale_coeff.is_zero() {
+    if !expr.uniform_scale_coeff.is_zero_coeff() {
         add_coeff(
             &mut out,
             CoeffSymbol::UniformScale,
-            expr.uniform_scale_coeff.as_rational().clone(),
+            expr.uniform_scale_coeff.rational_coeff(),
         );
     }
     out.retain(|_, value| !value.is_zero());
@@ -4178,8 +4109,8 @@ fn orientation_from_edge_exprs(edge_exprs: &[LinearEnergyExpr]) -> (EdgeVec<Orie
     (orientation, label)
 }
 
-fn rational_to_coefficient(value: Rational) -> Result<RationalCoefficient> {
-    Ok(RationalCoefficient::from_rational(value))
+fn rational_to_coefficient(value: Rational) -> Result<symbolica::atom::Atom> {
+    Ok(rational_coeff_atom(value))
 }
 
 fn derivative_nodes(degree: usize) -> Vec<i32> {
@@ -4256,11 +4187,11 @@ fn classify_surface_kind(expr: &LinearEnergyExpr) -> LinearSurfaceKind {
     let coeffs = expr
         .internal_terms
         .iter()
-        .filter_map(|(_, coeff)| (!coeff.is_zero()).then_some(coeff))
+        .filter_map(|(_, coeff)| (!coeff.is_zero_coeff()).then_some(coeff))
         .collect::<Vec<_>>();
     if coeffs.len() <= 1
-        || coeffs.iter().all(|coeff| !coeff.is_negative())
-        || coeffs.iter().all(|coeff| coeff.is_negative())
+        || coeffs.iter().all(|coeff| !coeff.is_negative_coeff())
+        || coeffs.iter().all(|coeff| coeff.is_negative_coeff())
     {
         LinearSurfaceKind::Esurface
     } else {
@@ -4537,7 +4468,7 @@ fn solve_expr_system_unimodular(
         .map(|row| row.iter().map(|value| Rational::from(*value)).collect())
         .collect::<Vec<Vec<_>>>();
     let mut out = vec![LinearEnergyExpr::zero(); n];
-    for rhs_position in 0..n {
+    for (rhs_position, rhs_expr) in rhs.iter().enumerate().take(n) {
         let unit = (0..n)
             .map(|row| {
                 if row == rhs_position {
@@ -4554,7 +4485,7 @@ fn solve_expr_system_unimodular(
                 continue;
             }
             out[solution_position] = out[solution_position].clone()
-                + scale_linear_energy_expr_rational(&rhs[rhs_position], &coeff)?;
+                + scale_linear_energy_expr_rational(rhs_expr, &coeff)?;
         }
     }
     Ok(out.into_iter().map(LinearEnergyExpr::canonical).collect())
@@ -4565,29 +4496,25 @@ fn scale_linear_energy_expr_rational(
     scale: &Rational,
 ) -> Result<LinearEnergyExpr> {
     fn scale_terms(
-        terms: &[(EdgeIndex, RationalCoefficient)],
+        terms: &[(EdgeIndex, symbolica::atom::Atom)],
         scale: &Rational,
-    ) -> Vec<(EdgeIndex, RationalCoefficient)> {
+    ) -> Vec<(EdgeIndex, symbolica::atom::Atom)> {
         terms
             .iter()
             .filter_map(|(edge_id, coeff)| {
-                let value = coeff.as_rational().clone() * scale.clone();
-                (!value.is_zero()).then_some((*edge_id, RationalCoefficient::from_rational(value)))
+                let value = coeff.rational_coeff() * scale.clone();
+                (!value.is_zero()).then_some((*edge_id, rational_coeff_atom(value)))
             })
             .collect()
     }
 
-    let uniform = RationalCoefficient::from_rational(
-        expr.uniform_scale_coeff.as_rational().clone() * scale.clone(),
-    );
+    let uniform = rational_coeff_atom(expr.uniform_scale_coeff.rational_coeff() * scale.clone());
 
     Ok(LinearEnergyExpr {
         internal_terms: scale_terms(&expr.internal_terms, scale),
         external_terms: scale_terms(&expr.external_terms, scale),
         uniform_scale_coeff: uniform,
-        constant: RationalCoefficient::from_rational(
-            expr.constant.as_rational().clone() * scale.clone(),
-        ),
+        constant: rational_coeff_atom(expr.constant.rational_coeff() * scale.clone()),
     }
     .canonical())
 }
@@ -4872,9 +4799,9 @@ mod ltd_tests {
     }
 
     #[test]
-    fn cff_generation_errors_cleanly_for_unported_higher_energy_powers() {
+    fn cff_generation_builds_multiloop_repeated_high_power_known_factor_completion() {
         let parsed = parsed_fixture("sunrise_pow4.dot");
-        let error = generate_3d_expression_from_parsed(
+        let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
                 representation: RepresentationMode::Cff,
@@ -4882,12 +4809,26 @@ mod ltd_tests {
                 ..Default::default()
             },
         )
-        .unwrap_err();
+        .unwrap();
 
-        assert!(matches!(
-            error,
-            GenerationError::CffHigherEnergyPowerNotImplemented
-        ));
+        assert!(!expression.orientations.is_empty());
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
+        assert!(
+            expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .any(|variant| {
+                    variant.origin.as_deref() == Some("bounded_degree_known_factor_cff")
+                        && !variant.numerator_surfaces.is_empty()
+                })
+        );
     }
 
     #[test]
@@ -5194,5 +5135,13 @@ mod ltd_tests {
                     variant.origin.as_deref() == Some("bounded_degree_known_factor_cff")
                 })
         );
+    }
+
+    #[test]
+    fn all_sampling_scale_mode_activates_for_linear_energy_degree() {
+        assert!(!NumeratorSamplingScaleMode::None.is_active_for_degree(1));
+        assert!(!NumeratorSamplingScaleMode::BeyondQuadratic.is_active_for_degree(2));
+        assert!(NumeratorSamplingScaleMode::BeyondQuadratic.is_active_for_degree(3));
+        assert!(NumeratorSamplingScaleMode::All.is_active_for_degree(1));
     }
 }

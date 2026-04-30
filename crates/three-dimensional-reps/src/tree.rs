@@ -99,6 +99,39 @@ impl<T> Tree<T> {
         self.nodes[parent_id].children.push(node_id);
     }
 
+    pub fn from_root_with_child_trees(data: T, child_trees: Vec<Self>) -> Self
+    where
+        T: Clone,
+    {
+        let mut tree = Self::from_root(data);
+        for child_tree in child_trees {
+            let offset = tree.nodes.len();
+            let mut remapped_root = None;
+            for mut node in child_tree.nodes.into_iter() {
+                let old_node_id = node.node_id;
+                node.node_id = NodeId(node.node_id.0 + offset);
+                node.children = node
+                    .children
+                    .into_iter()
+                    .map(|child| NodeId(child.0 + offset))
+                    .collect();
+                node.parent = if old_node_id == NodeId::root() {
+                    Some(NodeId::root())
+                } else {
+                    node.parent.map(|parent| NodeId(parent.0 + offset))
+                };
+                if old_node_id == NodeId::root() {
+                    remapped_root = Some(node.node_id);
+                }
+                tree.nodes.push(node);
+            }
+            if let Some(root) = remapped_root {
+                tree.nodes[NodeId::root()].children.push(root);
+            }
+        }
+        tree
+    }
+
     pub fn get_node(&self, node_id: NodeId) -> &TreeNode<T> {
         &self.nodes[node_id]
     }

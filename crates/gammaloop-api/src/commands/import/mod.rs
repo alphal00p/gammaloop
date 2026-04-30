@@ -23,8 +23,12 @@ pub enum Import {
     Model(ImportModel),
     Graphs {
         // #[arg(short = 'p')]
-        #[arg(value_hint = clap::ValueHint::FilePath)]
-        path: PathBuf,
+        #[arg(value_name = "PATH_OR_STRING", value_hint = clap::ValueHint::FilePath)]
+        source: String,
+
+        /// DOT graph text when PATH_OR_STRING is the literal 'string'
+        #[arg(value_name = "DOT_STRING")]
+        dot_string: Option<String>,
 
         /// Process reference: #<id>, name:<name>, or <id>/<name>
         #[arg(
@@ -52,24 +56,19 @@ impl Import {
     pub fn run(self, state: &mut State, cli_settings: &CLISettings) -> Result<()> {
         match self {
             Import::Graphs {
-                path,
+                source,
+                dot_string,
                 process,
                 integrand_name,
                 overwrite,
                 append,
             } => {
-                let resolved_path =
-                    Self::resolve_graph_import_path(&path, &cli_settings.state.folder)?;
-                let default_process_name = resolved_path
-                    .file_stem()
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Could not derive a process name from graph path '{}'",
-                            resolved_path.display()
-                        )
-                    })?
-                    .to_string_lossy()
-                    .into_owned();
+                let source = GraphImportSource::resolve(
+                    &source,
+                    dot_string.as_deref(),
+                    &cli_settings.state.folder,
+                )?;
+                let default_process_name = source.default_process_name()?;
                 let (process_name, process_id) = match process {
                     Some(ProcessRef::Id(id)) => (None, Some(id)),
                     Some(ProcessRef::Name(name)) => (Some(name), None),
@@ -96,11 +95,8 @@ impl Import {
                     None => (Some(default_process_name), None),
                 };
 
-                info!(
-                    "Loading graphs from '{}'",
-                    Self::display_graph_import_path(&resolved_path).display()
-                );
-                let graphs = Graph::from_path(&resolved_path, &state.model)?;
+                info!("Loading graphs from {}", source.display_name());
+                let graphs = source.load(&state.model)?;
                 state.import_graphs(
                     graphs,
                     process_name,
@@ -181,5 +177,61 @@ impl Import {
             }
         }
         normalized
+    }
+}
+
+enum GraphImportSource {
+    Path(PathBuf),
+    String(String),
+}
+
+impl GraphImportSource {
+    fn resolve(source: &str, dot_string: Option<&str>, state_folder: &Path) -> Result<Self> {
+        if source == "string" {
+            let dot_string = dot_string
+                .ok_or_else(|| eyre!("`import graphs string` requires a DOT graph string."))?;
+            return Ok(Self::String(dot_string.to_string()));
+        }
+
+        if dot_string.is_some() {
+            return Err(eyre!(
+                "Unexpected extra DOT string argument after graph path '{}'. Use `import graphs string <DOT>` for inline DOT content.",
+                source
+            ));
+        }
+
+        Ok(Self::Path(Import::resolve_graph_import_path(
+            Path::new(source),
+            state_folder,
+        )?))
+    }
+
+    fn default_process_name(&self) -> Result<String> {
+        match self {
+            Self::Path(path) => path
+                .file_stem()
+                .ok_or_else(|| {
+                    eyre!(
+                        "Could not derive a process name from graph path '{}'",
+                        path.display()
+                    )
+                })
+                .map(|stem| stem.to_string_lossy().into_owned()),
+            Self::String(_) => Ok("inline_graphs".to_string()),
+        }
+    }
+
+    fn display_name(&self) -> String {
+        match self {
+            Self::Path(path) => format!("'{}'", Import::display_graph_import_path(path).display()),
+            Self::String(_) => "inline DOT string".to_string(),
+        }
+    }
+
+    fn load(self, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
+        match self {
+            Self::Path(path) => Graph::from_path(&path, model),
+            Self::String(dot_string) => Graph::from_string(dot_string, model),
+        }
     }
 }

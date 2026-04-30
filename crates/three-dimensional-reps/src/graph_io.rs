@@ -295,7 +295,7 @@ pub(crate) mod test_graphs {
             });
             next_edge_id += 1;
         }
-        assert!(n_nodes >= n_external + 1);
+        assert!(n_nodes > n_external);
         edges
     }
 

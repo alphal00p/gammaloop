@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     OrientationID, ParsedGraph, ThreeDExpression,
-    surface::{HybridSurfaceID, LinearEnergyExpr, RationalCoefficient},
+    surface::{HybridSurfaceID, LinearEnergyExpr, RationalAtomExt},
     tree::{NodeId, Tree},
 };
 
@@ -213,28 +213,42 @@ pub fn evaluate_expression(
     evaluator.evaluate(&numerator)
 }
 
-pub fn compare_cff_ltd(
-    parsed: &ParsedGraph,
-    cff_options: &crate::Generate3DExpressionOptions,
-    ltd_options: &crate::Generate3DExpressionOptions,
-    numerator_expr: &str,
-    input: Option<EvaluationInput>,
-    seed: u64,
-    external_override: Option<Vec<[f64; 4]>>,
-    loop_override: Option<Vec<[f64; 3]>>,
-    mass_overrides: &BTreeMap<String, f64>,
-) -> Result<ComparisonResult> {
-    let input = match input {
+pub struct ComparisonRequest<'a> {
+    pub parsed: &'a ParsedGraph,
+    pub cff_options: &'a crate::Generate3DExpressionOptions,
+    pub ltd_options: &'a crate::Generate3DExpressionOptions,
+    pub numerator_expr: &'a str,
+    pub input: Option<EvaluationInput>,
+    pub seed: u64,
+    pub external_override: Option<Vec<[f64; 4]>>,
+    pub loop_override: Option<Vec<[f64; 3]>>,
+    pub mass_overrides: &'a BTreeMap<String, f64>,
+}
+
+pub fn compare_cff_ltd(request: ComparisonRequest<'_>) -> Result<ComparisonResult> {
+    let input = match request.input {
         Some(input) => input,
-        None => EvaluationInput::deterministic(parsed, seed, mass_overrides, None)?
-            .with_overrides(external_override, loop_override, mass_overrides, parsed)?,
+        None => EvaluationInput::deterministic(
+            request.parsed,
+            request.seed,
+            request.mass_overrides,
+            None,
+        )?
+        .with_overrides(
+            request.external_override,
+            request.loop_override,
+            request.mass_overrides,
+            request.parsed,
+        )?,
     };
-    let cff = crate::generate_3d_expression_from_parsed(parsed, cff_options)
+    let cff = crate::generate_3d_expression_from_parsed(request.parsed, request.cff_options)
         .map_err(|error| EvaluationError::NumeratorEval(error.to_string()))?;
-    let ltd = crate::generate_3d_expression_from_parsed(parsed, ltd_options)
+    let ltd = crate::generate_3d_expression_from_parsed(request.parsed, request.ltd_options)
         .map_err(|error| EvaluationError::NumeratorEval(error.to_string()))?;
-    let cff_value = evaluate_expression(parsed, &cff, numerator_expr, &input)?.value;
-    let ltd_value = evaluate_expression(parsed, &ltd, numerator_expr, &input)?.value;
+    let cff_value =
+        evaluate_expression(request.parsed, &cff, request.numerator_expr, &input)?.value;
+    let ltd_value =
+        evaluate_expression(request.parsed, &ltd, request.numerator_expr, &input)?.value;
     Ok(ComparisonResult {
         cff: cff_value,
         ltd: ltd_value,
@@ -402,7 +416,7 @@ impl<'a> ExpressionEvaluator<'a> {
         for (edge_id, coeff) in &expr.external_terms {
             total += rational_to_f64(coeff) * self.external_energies[edge_id.0];
         }
-        if !expr.uniform_scale_coeff.is_zero() {
+        if !expr.uniform_scale_coeff.is_zero_coeff() {
             total += rational_to_f64(&expr.uniform_scale_coeff)
                 * self
                     .input
@@ -938,8 +952,8 @@ fn edge_spatial_momentum(
     out
 }
 
-fn rational_to_f64(value: &RationalCoefficient) -> f64 {
-    value.as_rational().to_f64()
+fn rational_to_f64(value: &symbolica::atom::Atom) -> f64 {
+    value.rational_coeff().to_f64()
 }
 
 fn normalize_index(index: isize, len: usize) -> Result<usize> {

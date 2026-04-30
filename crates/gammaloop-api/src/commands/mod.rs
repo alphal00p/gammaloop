@@ -149,7 +149,7 @@ pub enum Commands {
     #[clap(subcommand)]
     Profile(Profile),
 
-    #[command(name = "3Drep", alias = "3drep", alias = "threedreps")]
+    #[command(name = "3Drep")]
     #[clap(subcommand)]
     ThreeDRep(ThreeDRep),
 

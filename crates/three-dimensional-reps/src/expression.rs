@@ -18,7 +18,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     graph_io::EnergyEdgeIndexMap,
-    surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, RationalCoefficient, SurfaceCache},
+    surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache, rational_coeff_one},
     symbols::{
         numerator_sampling_scale, orientation_delta, orientation_delta_symbol, ose_atom_from_index,
         sign, sign_theta,
@@ -241,9 +241,11 @@ impl OrientationData {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct CFFVariant {
     pub origin: Option<String>,
-    pub prefactor: RationalCoefficient,
+    #[serde(with = "crate::utils::serde_atom")]
+    pub prefactor: Atom,
     pub half_edges: Vec<EdgeIndex>,
     pub uniform_scale_power: usize,
     pub numerator_surfaces: Vec<HybridSurfaceID>,
@@ -254,7 +256,7 @@ impl CFFVariant {
     pub fn pure_cff(denominator: Tree<HybridSurfaceID>) -> Self {
         Self {
             origin: Some("cff".to_string()),
-            prefactor: RationalCoefficient::one(),
+            prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
@@ -283,7 +285,7 @@ impl CFFVariant {
             .reduce(|acc, factor| acc * factor)
             .unwrap_or_else(|| Atom::num(1));
 
-        self.prefactor.to_atom()
+        self.prefactor.clone()
             * half_edge_factor
             * scale_factor
             * numerator_surface_factor
@@ -307,7 +309,16 @@ impl CFFVariant {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct VariantFusionKey {
+    prefactor: String,
+    half_edges: Vec<usize>,
+    uniform_scale_power: usize,
+    numerator_surfaces: Vec<HybridSurfaceID>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct OrientationExpression {
     pub data: OrientationData,
     pub loop_energy_map: Vec<LinearEnergyExpr>,
@@ -360,6 +371,66 @@ impl OrientationExpression {
             .iter()
             .map(|variant| variant.denominator.get_bottom_layer().len())
             .sum()
+    }
+
+    pub fn fuse_compatible_variants(&mut self) {
+        let mut groups = HashMap::<VariantFusionKey, Vec<CFFVariant>>::new();
+        for mut variant in std::mem::take(&mut self.variants) {
+            variant.half_edges.sort_by_key(|edge| edge.0);
+            variant.numerator_surfaces.sort();
+            let key = VariantFusionKey {
+                prefactor: variant.prefactor.to_canonical_string(),
+                half_edges: variant.half_edges.iter().map(|edge| edge.0).collect(),
+                uniform_scale_power: variant.uniform_scale_power,
+                numerator_surfaces: variant.numerator_surfaces.clone(),
+            };
+            groups.entry(key).or_default().push(variant);
+        }
+
+        self.variants = groups
+            .into_values()
+            .map(|mut variants| {
+                if variants.len() == 1 {
+                    return variants.pop().expect("single variant group is nonempty");
+                }
+                let first = variants.first().expect("variant group is nonempty").clone();
+                let first_origin = first.origin.as_deref();
+                let origin = if variants
+                    .iter()
+                    .all(|variant| variant.origin.as_deref() == first_origin)
+                {
+                    first.origin
+                } else {
+                    Some("mixed".to_string())
+                };
+                CFFVariant {
+                    origin,
+                    prefactor: first.prefactor,
+                    half_edges: first.half_edges,
+                    uniform_scale_power: first.uniform_scale_power,
+                    numerator_surfaces: first.numerator_surfaces,
+                    denominator: Tree::from_root_with_child_trees(
+                        HybridSurfaceID::Unit,
+                        variants
+                            .into_iter()
+                            .map(|variant| variant.denominator)
+                            .collect(),
+                    ),
+                }
+            })
+            .collect();
+        self.variants.sort_by(|lhs, rhs| {
+            lhs.half_edges
+                .iter()
+                .map(|edge| edge.0)
+                .cmp(rhs.half_edges.iter().map(|edge| edge.0))
+                .then(lhs.uniform_scale_power.cmp(&rhs.uniform_scale_power))
+                .then(
+                    lhs.prefactor
+                        .to_canonical_string()
+                        .cmp(&rhs.prefactor.to_canonical_string()),
+                )
+        });
     }
 
     pub fn max_denominator_value_count_on_branch(&self, value: &HybridSurfaceID) -> usize {
@@ -420,6 +491,71 @@ impl GraphOrientation for OrientationExpression {
     }
 }
 
+pub(crate) fn assign_numerator_map_labels(
+    orientations: &mut TiVec<OrientationID, OrientationExpression>,
+) {
+    let mut map_indices_by_base = HashMap::<String, HashMap<String, usize>>::new();
+    for orientation in orientations {
+        let base_label = base_orientation_label(orientation);
+        let map_key = orientation.energy_map_key();
+        let next_index = map_indices_by_base
+            .get(&base_label)
+            .map(HashMap::len)
+            .unwrap_or_default();
+        let map_index = *map_indices_by_base
+            .entry(base_label.clone())
+            .or_default()
+            .entry(map_key)
+            .or_insert(next_index);
+        orientation.data.numerator_map_index = Some(map_index);
+        orientation.data.label = Some(format!("{base_label}|N{map_index}"));
+    }
+}
+
+fn base_orientation_label(orientation: &OrientationExpression) -> String {
+    orientation
+        .data
+        .label
+        .as_deref()
+        .and_then(|label| label.split_once('|').map(|(base, _)| base.to_string()))
+        .or_else(|| orientation.data.label.clone())
+        .unwrap_or_else(|| format_graph_orientation_label(&orientation.data.orientation))
+}
+
+impl OrientationExpression {
+    fn energy_map_key(&self) -> String {
+        let loop_map = self
+            .loop_energy_map
+            .iter()
+            .map(linear_energy_expr_key)
+            .join(",");
+        let edge_map = self
+            .edge_energy_map
+            .iter()
+            .map(linear_energy_expr_key)
+            .join(",");
+        format!("L[{loop_map}]|E[{edge_map}]")
+    }
+}
+
+fn linear_energy_expr_key(expr: &LinearEnergyExpr) -> String {
+    let internal = expr
+        .internal_terms
+        .iter()
+        .map(|(edge_id, coeff)| format!("{}:{}", edge_id.0, coeff.to_canonical_string()))
+        .join(",");
+    let external = expr
+        .external_terms
+        .iter()
+        .map(|(edge_id, coeff)| format!("{}:{}", edge_id.0, coeff.to_canonical_string()))
+        .join(",");
+    format!(
+        "i[{internal}]e[{external}]m[{}]c[{}]",
+        expr.uniform_scale_coeff.to_canonical_string(),
+        expr.constant.to_canonical_string()
+    )
+}
+
 fn format_graph_orientation_label(orientation: &EdgeVec<Orientation>) -> String {
     orientation
         .iter()
@@ -463,6 +599,7 @@ pub trait RaisedEsurfaceDataView {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct ThreeDExpression<O, E = (), H = ()>
 where
     O: From<usize> + Into<usize>,
@@ -548,6 +685,13 @@ where
                 .remap_energy_edges(&edge_map.internal, &edge_map.external);
         }
 
+        self
+    }
+
+    pub fn fuse_compatible_variants(mut self) -> Self {
+        for orientation in self.orientations.iter_mut() {
+            orientation.fuse_compatible_variants();
+        }
         self
     }
 

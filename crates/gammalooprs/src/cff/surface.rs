@@ -1,7 +1,7 @@
 pub use three_dimensional_reps::surface::{
     EsurfaceCollection, EsurfaceID, HsurfaceCollection, HsurfaceID, HybridSurfaceID,
     InfiniteSurface, LinearEnergyExpr, LinearSurface, LinearSurfaceCollection, LinearSurfaceID,
-    LinearSurfaceKind, RationalCoefficient, SurfaceAtom, SurfaceOrigin, UnitSurface,
+    LinearSurfaceKind, SurfaceAtom, SurfaceOrigin, UnitSurface,
 };
 
 use linnet::half_edge::involution::EdgeIndex;
@@ -48,23 +48,23 @@ impl GammaLoopLinearEnergyExpr for LinearEnergyExpr {
                 } else {
                     ose_atom_from_index(*edge_id)
                 };
-                acc + coeff.to_atom() * energy
+                acc + coeff.clone() * energy
             });
 
         let external = self
             .external_terms
             .iter()
             .fold(Atom::new(), |acc, (edge_id, coeff)| {
-                acc + coeff.to_atom() * external_energy_atom_from_index(*edge_id)
+                acc + coeff.clone() * external_energy_atom_from_index(*edge_id)
             });
 
         let scale = if self.uniform_scale_coeff.is_zero() {
             Atom::new()
         } else {
-            self.uniform_scale_coeff.to_atom() * Atom::var(GS.numerator_sampling_scale)
+            self.uniform_scale_coeff.clone() * Atom::var(GS.numerator_sampling_scale)
         };
 
-        internal + external + scale + self.constant.to_atom()
+        internal + external + scale + self.constant.clone()
     }
 }
 

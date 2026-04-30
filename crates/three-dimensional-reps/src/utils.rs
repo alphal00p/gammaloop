@@ -10,6 +10,7 @@ use std::{
 };
 
 use bincode_trait_derive::{Decode, Encode};
+use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -59,6 +60,61 @@ impl<'de> Deserialize<'de> for StringSerializedAtom {
         Ok(StringSerializedAtom(parse!(String::deserialize(
             deserializer
         )?)))
+    }
+}
+
+pub(crate) mod serde_atom {
+    use serde::{Deserialize, Serialize};
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        parse,
+    };
+
+    pub(crate) fn serialize<S>(atom: &Atom, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        atom.to_canonical_string().serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Atom, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(parse!(String::deserialize(deserializer)?))
+    }
+}
+
+pub(crate) mod serde_atom_terms {
+    use super::EdgeIndex;
+    use serde::{Deserialize, Serialize};
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        parse,
+    };
+
+    pub(crate) fn serialize<S>(
+        terms: &[(EdgeIndex, Atom)],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        terms
+            .iter()
+            .map(|(edge, atom)| (*edge, atom.to_canonical_string()))
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Vec<(EdgeIndex, Atom)>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Vec::<(EdgeIndex, String)>::deserialize(deserializer)?
+            .into_iter()
+            .map(|(edge, atom)| (edge, parse!(atom)))
+            .collect())
     }
 }
 

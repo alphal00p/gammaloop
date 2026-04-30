@@ -172,11 +172,7 @@ pub fn reconstruct_dot(
         }
     }
 
-    let mut num_vertices = options.num_vertices.unwrap_or_else(|| {
-        let guessed = n_edges.saturating_sub(n_loops).saturating_add(1);
-        guessed.max(2)
-    });
-    num_vertices = num_vertices.max(2);
+    let num_vertices = resolve_num_vertices(n_edges, n_loops, options)?;
 
     let placements = find_edge_placements(signatures, num_vertices, options)?;
     let ext_balance = external_balance(signatures, &placements, num_vertices, n_external);
@@ -210,11 +206,7 @@ pub(crate) fn reconstruct_parsed_graph(
         }
     }
 
-    let mut num_vertices = options.num_vertices.unwrap_or_else(|| {
-        let guessed = n_edges.saturating_sub(n_loops).saturating_add(1);
-        guessed.max(2)
-    });
-    num_vertices = num_vertices.max(2);
+    let num_vertices = resolve_num_vertices(n_edges, n_loops, options)?;
 
     let placements = find_edge_placements(signatures, num_vertices, options)?;
     let ext_balance = external_balance(signatures, &placements, num_vertices, n_external);
@@ -286,6 +278,24 @@ pub(crate) fn reconstruct_parsed_graph(
         external_names: extracted.external_names.clone(),
         node_name_to_internal,
     })
+}
+
+fn resolve_num_vertices(
+    n_edges: usize,
+    n_loops: usize,
+    options: &ReconstructDotOptions,
+) -> Result<usize> {
+    let expected_connected = n_edges.saturating_sub(n_loops).saturating_add(1).max(2);
+    let Some(requested) = options.num_vertices else {
+        return Ok(expected_connected);
+    };
+    let requested = requested.max(2);
+    if options.require_connected && requested != expected_connected {
+        return Err(SignatureParseError::MalformedExpression(format!(
+            "connected explicit-edge realization with {n_edges} propagator signatures and {n_loops} loop momentum basis vector(s) requires {expected_connected} internal vertices, but --num-vertices requested {requested}; repeated/dotted propagators are currently represented as explicit repeated edges"
+        )));
+    }
+    Ok(requested)
 }
 
 fn collect_prop_calls(
@@ -470,8 +480,12 @@ fn find_edge_placements(
 
     let mut placements = vec![None; n_edges];
     let mut loop_balance = vec![vec![0i32; n_loops]; num_vertices];
+    let n_external = signatures[0].external_signature.len();
+    let mut external_balance = vec![vec![0i32; n_external]; num_vertices];
     let mut degree = vec![0usize; num_vertices];
     let mut dsu = RollbackDsu::new(num_vertices);
+    let mut best_placements = None;
+    let mut best_external_cost = ExternalCost::worst();
 
     struct Search<'a> {
         signatures: &'a [MomentumSignature],
@@ -479,10 +493,14 @@ fn find_edge_placements(
         remaining_abs: &'a [Vec<i32>],
         placements: &'a mut [Option<EdgePlacement>],
         loop_balance: &'a mut [Vec<i32>],
+        external_balance: &'a mut [Vec<i32>],
         degree: &'a mut [usize],
         dsu: &'a mut RollbackDsu,
+        best_placements: &'a mut Option<Vec<EdgePlacement>>,
+        best_external_cost: &'a mut ExternalCost,
         num_vertices: usize,
         n_loops: usize,
+        n_external: usize,
     }
 
     impl Search<'_> {
@@ -496,11 +514,29 @@ fn find_edge_placements(
                 return false;
             }
             if edge_index == self.signatures.len() {
-                return self
+                let is_valid = self
                     .loop_balance
                     .iter()
                     .all(|row| row.iter().all(|value| *value == 0))
                     && (!self.options.require_connected || components_now == 1);
+                if !is_valid {
+                    return false;
+                }
+                if !self.options.minimize_external_legs {
+                    return true;
+                }
+
+                let cost = ExternalCost::from_balance(self.external_balance);
+                if cost < *self.best_external_cost {
+                    *self.best_external_cost = cost;
+                    *self.best_placements = Some(
+                        self.placements
+                            .iter()
+                            .map(|placement| placement.expect("leaf search has all edges placed"))
+                            .collect(),
+                    );
+                }
+                return false;
             }
 
             let candidate_limit = (used_vertices_now
@@ -531,6 +567,11 @@ fn find_edge_placements(
                     self.loop_balance[tail][loop_id] -= coeff;
                     self.loop_balance[head][loop_id] += coeff;
                 }
+                for external_id in 0..self.n_external {
+                    let coeff = self.signatures[edge_index].external_signature[external_id];
+                    self.external_balance[tail][external_id] -= coeff;
+                    self.external_balance[head][external_id] += coeff;
+                }
                 self.degree[tail] += 1;
                 self.degree[head] += 1;
 
@@ -548,6 +589,11 @@ fn find_edge_placements(
 
                 self.degree[tail] -= 1;
                 self.degree[head] -= 1;
+                for external_id in 0..self.n_external {
+                    let coeff = self.signatures[edge_index].external_signature[external_id];
+                    self.external_balance[tail][external_id] += coeff;
+                    self.external_balance[head][external_id] -= coeff;
+                }
                 for loop_id in 0..self.n_loops {
                     let coeff = self.signatures[edge_index].loop_signature[loop_id];
                     self.loop_balance[tail][loop_id] += coeff;
@@ -590,13 +636,23 @@ fn find_edge_placements(
         remaining_abs: &remaining_abs,
         placements: &mut placements,
         loop_balance: &mut loop_balance,
+        external_balance: &mut external_balance,
         degree: &mut degree,
         dsu: &mut dsu,
+        best_placements: &mut best_placements,
+        best_external_cost: &mut best_external_cost,
         num_vertices,
         n_loops,
+        n_external,
     };
 
-    if !search.recurse(0, num_vertices, 2.min(num_vertices)) {
+    let found = search.recurse(0, num_vertices, 2.min(num_vertices));
+    if options.minimize_external_legs
+        && let Some(best) = best_placements
+    {
+        return Ok(best);
+    }
+    if !found {
         return Err(SignatureParseError::MalformedExpression(
             "no connected DOT realization found for signatures".to_string(),
         ));
@@ -606,6 +662,31 @@ fn find_edge_placements(
         .into_iter()
         .map(|placement| placement.expect("search succeeded with all edges placed"))
         .collect())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct ExternalCost {
+    total_legs: i32,
+    active_vertices: usize,
+}
+
+impl ExternalCost {
+    fn worst() -> Self {
+        Self {
+            total_legs: i32::MAX,
+            active_vertices: usize::MAX,
+        }
+    }
+
+    fn from_balance(balance: &[Vec<i32>]) -> Self {
+        Self {
+            total_legs: balance.iter().flatten().map(|coeff| coeff.abs()).sum(),
+            active_vertices: balance
+                .iter()
+                .filter(|row| row.iter().any(|coeff| *coeff != 0))
+                .count(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -718,10 +799,9 @@ fn render_gammaloop_dot(
                 for _ in 0..*coeff {
                     writeln!(
                         &mut out,
-                        "  v{vertex}:{} -> ext_{name} [id={next_edge_id} dir=none name=\"{}\" particle=\"scalar_0\" lmb_rep=\"{}\" mass=\"0\"];",
+                        "  v{vertex}:{} -> ext_{name} [id={next_edge_id} dir=none name=\"{}\" particle=\"scalar_0\" mass=\"0\"];",
                         next_hedge_id,
                         dot_escape(name),
-                        dot_escape(&format!("-1*P({external_id},a___)")),
                     )
                     .unwrap();
                     next_edge_id += 1;
@@ -731,10 +811,9 @@ fn render_gammaloop_dot(
                 for _ in 0..(-*coeff) {
                     writeln!(
                         &mut out,
-                        "  ext_{name} -> v{vertex}:{} [id={next_edge_id} dir=none name=\"{}\" particle=\"scalar_0\" lmb_rep=\"{}\" mass=\"0\"];",
+                        "  ext_{name} -> v{vertex}:{} [id={next_edge_id} dir=none name=\"{}\" particle=\"scalar_0\" mass=\"0\"];",
                         next_hedge_id,
                         dot_escape(name),
-                        dot_escape(&format!("P({external_id},a___)")),
                     )
                     .unwrap();
                     next_edge_id += 1;
@@ -745,10 +824,9 @@ fn render_gammaloop_dot(
     }
 
     let loop_carriers = loop_carrier_edges(&extracted.signatures);
-    for (input_edge_id, (signature, placement)) in
+    for (input_edge_id, (_signature, placement)) in
         extracted.signatures.iter().zip(placements).enumerate()
     {
-        let momentum = format_lmb_rep(signature);
         let mass = &extracted.masses[input_edge_id];
         let lmb_id_attr = loop_carriers
             .get(&input_edge_id)
@@ -756,13 +834,12 @@ fn render_gammaloop_dot(
             .unwrap_or_default();
         writeln!(
             &mut out,
-            "  v{}:{} -> v{}:{} [id={next_edge_id} dir=none{} name=\"e{next_edge_id}\" particle=\"scalar_1\" lmb_rep=\"{}\" mass=\"{}\"];",
+            "  v{}:{} -> v{}:{} [id={next_edge_id} dir=none{} name=\"e{next_edge_id}\" particle=\"scalar_1\" mass=\"{}\"];",
             placement.tail,
             next_hedge_id,
             placement.head,
             next_hedge_id + 1,
             lmb_id_attr,
-            dot_escape(&momentum),
             dot_escape(mass),
         )
         .unwrap();
@@ -798,21 +875,6 @@ fn loop_carrier_edges(signatures: &[MomentumSignature]) -> BTreeMap<usize, usize
         }
     }
     carriers
-}
-
-fn format_lmb_rep(signature: &MomentumSignature) -> String {
-    let mut parts = Vec::<(String, i32)>::new();
-    for (loop_id, coeff) in signature.loop_signature.iter().enumerate() {
-        if *coeff != 0 {
-            parts.push((format!("K({loop_id},a___)"), *coeff));
-        }
-    }
-    for (external_id, coeff) in signature.external_signature.iter().enumerate() {
-        if *coeff != 0 {
-            parts.push((format!("P({external_id},a___)"), *coeff));
-        }
-    }
-    format_signed_terms(parts)
 }
 
 fn format_momentum(
@@ -1147,7 +1209,7 @@ mod tests {
         assert!(dot.contains("edge [num=\"1\"];"));
         assert!(dot.contains("node [num=\"1\"];"));
         assert!(dot.contains("lmb_id=\"0\""));
-        assert!(dot.contains("lmb_rep=\"K(0,a___)\""));
+        assert!(!dot.contains("lmb_rep="));
         assert!(dot.contains("mass=\"mA\""));
     }
 }

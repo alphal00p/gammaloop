@@ -3,6 +3,7 @@ use std::fs;
 
 use color_eyre::eyre::eyre;
 use gammalooprs::{graph::Graph, processes::ProcessCollection};
+use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
     EnergyEdgeIndexMap, Generate3DExpressionOptions, HybridSurfaceID, LinearSurfaceKind,
     NumeratorSamplingScaleMode, OrientationID, ParsedGraph, RepresentationMode, ThreeDExpression,
@@ -19,6 +20,49 @@ fn gammaloop_threedreps_dot_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("resources/graphs/threedreps")
         .join(name)
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn find_named_artifact(root: &Path, file_name: &str) -> Result<PathBuf> {
+    let mut stack = vec![root.to_path_buf()];
+    let mut matches = Vec::new();
+    while let Some(path) = stack.pop() {
+        for entry in fs::read_dir(&path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.file_name().and_then(|name| name.to_str()) == Some(file_name) {
+                matches.push(path);
+            }
+        }
+    }
+    matches.sort();
+    match matches.as_slice() {
+        [path] => Ok(path.clone()),
+        [] => Err(eyre!(
+            "Could not find artifact '{file_name}' under {}",
+            root.display()
+        )),
+        many => Err(eyre!(
+            "Artifact '{file_name}' under {} is ambiguous: {:?}",
+            root.display(),
+            many
+        )),
+    }
+}
+
+fn latest_oriented_expression_path(workspace: &Path) -> Result<PathBuf> {
+    let pointer = workspace.join("latest_oriented_expression_path.txt");
+    let path = PathBuf::from(fs::read_to_string(&pointer)?.trim());
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        Ok(std::env::current_dir()?.join(path))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -122,7 +166,7 @@ const IMPORTED_GRAPH_SPECS: &[ImportedGraphSpec] = &[
         loop_count: 4,
         external_symbols: 4,
         external_edges: 4,
-        repeated_group_sizes: &[3],
+        repeated_group_sizes: &[2, 3],
     },
     ImportedGraphSpec {
         dot_name: "five_loop_no_repeats.dot",
@@ -170,6 +214,7 @@ enum ProbeComparison {
     CffLtd { tolerance: f64 },
     CffPureLtd { tolerance: f64 },
     BuildOnly,
+    CffPureLtdBuildOnly,
 }
 
 #[derive(serde::Serialize)]
@@ -323,45 +368,127 @@ fn assert_internal_signatures(parsed: &ParsedGraph, expected: &[(&str, [i32; 4])
     }
 }
 
-fn sorted_signature_pairs(signatures: impl IntoIterator<Item = MomentumSignature>) -> Vec<String> {
-    let mut items = signatures
-        .into_iter()
-        .map(|signature| {
-            format!(
-                "{:?}|{:?}",
-                signature.loop_signature, signature.external_signature
-            )
-        })
-        .collect::<Vec<_>>();
-    items.sort();
-    items
+fn project_external_signature_by_name(
+    parsed: &ParsedGraph,
+    signature: &MomentumSignature,
+    external_names: &[String],
+) -> Result<MomentumSignature> {
+    let mut external_signature = vec![0; external_names.len()];
+    for (source_external_id, coeff) in signature.external_signature.iter().enumerate() {
+        if *coeff == 0 {
+            continue;
+        }
+        let name = &parsed.external_names[source_external_id];
+        let target_external_id = external_names
+            .iter()
+            .position(|candidate| candidate == name)
+            .ok_or_else(|| eyre!("unexpected external name {name}"))?;
+        external_signature[target_external_id] += coeff;
+    }
+    Ok(MomentumSignature {
+        loop_signature: signature.loop_signature.clone(),
+        external_signature,
+    })
 }
 
-fn project_external_signatures_by_name(
-    parsed: &ParsedGraph,
-    external_names: &[String],
-) -> Vec<MomentumSignature> {
-    parsed
+fn signature_mass_multiset(
+    signatures: impl IntoIterator<Item = MomentumSignature>,
+    masses: impl IntoIterator<Item = String>,
+) -> BTreeMap<String, usize> {
+    let mut multiset = BTreeMap::new();
+    for (signature, mass) in signatures.into_iter().zip(masses) {
+        let (canonical, _) = signature.canonical_up_to_sign();
+        let key = format!(
+            "{:?}|{:?}|{}",
+            canonical.loop_signature,
+            canonical.external_signature,
+            mass.trim()
+        );
+        *multiset.entry(key).or_default() += 1;
+    }
+    multiset
+}
+
+fn signature_expression_from_factors(factors: &[(&str, &str)]) -> String {
+    factors
+        .iter()
+        .map(|(momentum, mass)| format!("prop({momentum},{mass})"))
+        .join("*")
+}
+
+fn assert_graph_from_signatures_cli_closure(
+    test_name: &str,
+    factors: &[(&str, &str)],
+    external_prefixes: &[&str],
+    num_vertices: usize,
+) -> Result<()> {
+    let test_root = get_tests_workspace_path().join(test_name);
+    let state_path = test_root.join("state");
+    let dot_path = test_root.join("from_signatures.dot");
+    fs::create_dir_all(&test_root)?;
+
+    let signature_expression = signature_expression_from_factors(factors);
+    let expected = extract_signatures_and_masses_from_symbolica_expression(
+        &signature_expression,
+        "k",
+        &external_prefixes
+            .iter()
+            .map(|prefix| prefix.to_string())
+            .collect::<Vec<_>>(),
+        "prop(q_,m_)",
+    )?;
+    let external_prefixes_arg = external_prefixes.join(",");
+    let process_name = test_name.replace('-', "_");
+
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command(&format!(
+        "3Drep graph-from-signatures --signatures {} --dot-output {} --external-prefixes {} --num-vertices {}",
+        shell_single_quote(&signature_expression),
+        dot_path.display(),
+        external_prefixes_arg,
+        num_vertices,
+    ))?;
+    let dot = fs::read_to_string(&dot_path)?;
+    assert!(
+        !dot.contains("lmb_rep"),
+        "graph-from-signatures output must not carry explicit lmb_rep attributes:\n{dot}"
+    );
+
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command(&format!(
+        "import graphs string {} -p {process_name} -i default -o",
+        shell_single_quote(&dot)
+    ))?;
+
+    let graph = imported_graph_from_cli(&cli, &process_name, "default", 0)?;
+    let parsed = graph.to_three_d_parsed_graph()?;
+    assert_eq!(parsed.internal_edges.len(), expected.signatures.len());
+    assert_eq!(parsed.loop_names.len(), expected.loop_names.len());
+
+    let actual_signatures = parsed
         .internal_edges
         .iter()
         .map(|edge| {
-            let mut external_signature = vec![0; external_names.len()];
-            for (source_external_id, coeff) in edge.signature.external_signature.iter().enumerate()
-            {
-                let name = &parsed.external_names[source_external_id];
-                let target_external_id = external_names
-                    .iter()
-                    .position(|candidate| candidate == name)
-                    .unwrap_or_else(|| panic!("unexpected external name {name}"));
-                external_signature[target_external_id] += coeff;
-            }
-            MomentumSignature {
-                loop_signature: edge.signature.loop_signature.clone(),
-                external_signature,
-            }
+            project_external_signature_by_name(&parsed, &edge.signature, &expected.external_names)
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    let actual_masses = parsed
+        .internal_edges
+        .iter()
+        .map(|edge| edge.mass_key.clone().unwrap_or_else(|| "0".to_string()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        signature_mass_multiset(actual_signatures, actual_masses),
+        signature_mass_multiset(expected.signatures, expected.masses),
+        "closure mismatch for input `{signature_expression}` and generated DOT:\n{dot}"
+    );
+
+    clean_test(test_root);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
+
+type SignatureClosureCase<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a [&'a str], usize);
 
 fn linear_denominator_surface_ids(expression: &ThreeDExpression<OrientationID>) -> Vec<Vec<usize>> {
     expression
@@ -453,7 +580,15 @@ fn variant_half_edges(expression: &ThreeDExpression<OrientationID>) -> Vec<Vec<V
         .collect()
 }
 
-fn variant_prefactors(expression: &ThreeDExpression<OrientationID>) -> Vec<Vec<(i64, i64)>> {
+fn expected_prefactor_label(expected: (i64, i64)) -> String {
+    if expected.1 == 1 {
+        expected.0.to_string()
+    } else {
+        format!("{}/{}", expected.0, expected.1)
+    }
+}
+
+fn variant_prefactors(expression: &ThreeDExpression<OrientationID>) -> Vec<Vec<String>> {
     expression
         .orientations
         .iter()
@@ -461,12 +596,7 @@ fn variant_prefactors(expression: &ThreeDExpression<OrientationID>) -> Vec<Vec<(
             orientation
                 .variants
                 .iter()
-                .map(|variant| {
-                    variant
-                        .prefactor
-                        .to_i64_pair()
-                        .expect("test prefactors should be rational i64 pairs")
-                })
+                .map(|variant| variant.prefactor.to_canonical_string())
                 .collect()
         })
         .collect()
@@ -484,13 +614,13 @@ fn assert_unit_or_minus_one_prefactors(
                 orientation.variants.len()
             ));
         }
-        if orientation.variants[0].prefactor.to_i64_pair() != Some(expected) {
+        let expected_label = expected_prefactor_label(expected);
+        if orientation.variants[0].prefactor.to_canonical_string() != expected_label {
             return Err(eyre!(
-                "orientation {} has prefactor {}; expected {}/{}",
+                "orientation {} has prefactor {}; expected {}",
                 orientation.data.label.as_deref().unwrap_or("<unlabeled>"),
-                orientation.variants[0].prefactor,
-                expected.0,
-                expected.1
+                orientation.variants[0].prefactor.to_canonical_string(),
+                expected_label
             ));
         }
     }
@@ -690,7 +820,7 @@ fn run_imported_graph_threedrep_test(
         workspace_path.display()
     ))?;
 
-    let manifest_path = workspace_path.join("test_cff_ltd_manifest.json");
+    let manifest_path = find_named_artifact(&workspace_path, "test_cff_ltd_manifest.json")?;
     let manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(&manifest_path)?)?;
     let graph = imported_graph_from_cli(&cli, process_name, "default", 0)?;
     let parsed = graph.to_three_d_parsed_graph()?;
@@ -1123,7 +1253,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
             numerator: "1",
             bounds: BOUNDS_EMPTY,
             seed: 1337,
-            compare: ProbeComparison::CffPureLtd { tolerance: 1.0e-8 },
+            compare: ProbeComparison::CffPureLtdBuildOnly,
             sampling_scale: NumeratorSamplingScaleMode::None,
             uniform_scale: None,
         });
@@ -1148,32 +1278,49 @@ fn local_edge_energy_monomial(bounds: &[(usize, usize)]) -> String {
 fn run_probe_case(cli: &gammaloop_integration_tests::CLIState, case: ProbeCase) -> ProbeCaseReport {
     run_probe_case_parts(
         cli,
-        case.name.to_string(),
-        case.dot_name,
-        case.numerator.to_string(),
-        case.bounds.to_vec(),
-        case.seed,
-        case.compare,
-        case.sampling_scale,
-        case.uniform_scale,
+        ProbeCaseRun {
+            name: case.name.to_string(),
+            dot_name: case.dot_name,
+            numerator: case.numerator.to_string(),
+            bounds: case.bounds.to_vec(),
+            seed: case.seed,
+            compare: case.compare,
+            sampling_scale_mode: case.sampling_scale,
+            uniform_scale: case.uniform_scale,
+        },
     )
 }
 
-fn run_probe_case_parts(
-    cli: &gammaloop_integration_tests::CLIState,
+struct ProbeCaseRun<'a> {
     name: String,
-    dot_name: &str,
+    dot_name: &'a str,
     numerator: String,
     bounds: Vec<(usize, usize)>,
     seed: u64,
     compare: ProbeComparison,
     sampling_scale_mode: NumeratorSamplingScaleMode,
     uniform_scale: Option<f64>,
+}
+
+fn run_probe_case_parts(
+    cli: &gammaloop_integration_tests::CLIState,
+    case: ProbeCaseRun<'_>,
 ) -> ProbeCaseReport {
+    let ProbeCaseRun {
+        name,
+        dot_name,
+        numerator,
+        bounds,
+        seed,
+        compare,
+        sampling_scale_mode,
+        uniform_scale,
+    } = case;
     let comparison = match compare {
         ProbeComparison::CffLtd { .. } => "cff_ltd",
         ProbeComparison::CffPureLtd { .. } => "cff_pureltd",
         ProbeComparison::BuildOnly => "build_only",
+        ProbeComparison::CffPureLtdBuildOnly => "cff_pureltd_build_only",
     }
     .to_string();
     let sampling_scale = match sampling_scale_mode {
@@ -1202,7 +1349,9 @@ fn run_probe_case_parts(
             &expression_options(RepresentationMode::Cff, &bounds, sampling_scale_mode),
         );
         let rhs_representation = match compare {
-            ProbeComparison::CffPureLtd { .. } => RepresentationMode::PureLtd,
+            ProbeComparison::CffPureLtd { .. } | ProbeComparison::CffPureLtdBuildOnly => {
+                RepresentationMode::PureLtd
+            }
             _ => RepresentationMode::Ltd,
         };
         let rhs = generate_3d_expression_from_parsed(
@@ -1211,7 +1360,7 @@ fn run_probe_case_parts(
         );
 
         match compare {
-            ProbeComparison::BuildOnly => {
+            ProbeComparison::BuildOnly | ProbeComparison::CffPureLtdBuildOnly => {
                 let cff = cff?;
                 let rhs = rhs?;
                 Ok(format!(
@@ -1452,6 +1601,64 @@ fn cli_imports_old_python_equivalent_threedrep_fixtures() -> Result<()> {
 
 #[test]
 #[serial]
+fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
+    let test_name = "threedreps_cli_validate_build_evaluate";
+    let test_root = get_tests_workspace_path().join(test_name);
+    let state_path = test_root.join("state");
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let validate_path = test_root.join("validate.json");
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command("import model scalars-default.json")?;
+    let dot_string = fs::read_to_string(gammaloop_threedreps_dot_path("box.dot"))?;
+    cli.run_command(&format!(
+        "import graphs string {} -p threedreps_box_build_eval -i default -o",
+        shell_single_quote(&dot_string)
+    ))?;
+
+    cli.run_command(&format!(
+        "3Drep validate -p threedreps_box_build_eval -i default -g 0 --json-out {}",
+        validate_path.display()
+    ))?;
+    let validation = serde_json::from_str::<JsonValue>(&fs::read_to_string(&validate_path)?)?;
+    assert_eq!(validation["graph"]["n_internal_edges"].as_u64(), Some(4));
+    assert_eq!(
+        validation["graph"]["loop_names"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(validation["validation"]["ok"].as_bool(), Some(true));
+
+    cli.run_command(&format!(
+        "3Drep build -p threedreps_box_build_eval -i default -g 0 --workspace-path {} --no-pretty",
+        workspace_path.display()
+    ))?;
+    let expression_path = latest_oriented_expression_path(&workspace_path)?;
+    let artifact = serde_json::from_str::<JsonValue>(&fs::read_to_string(&expression_path)?)?;
+    assert_eq!(artifact["family"].as_str(), Some("Cff"));
+    assert_eq!(artifact["graph"]["n_internal_edges"].as_u64(), Some(4));
+    assert_eq!(
+        artifact["expression"]["orientations"]
+            .as_array()
+            .map(Vec::len),
+        Some(14)
+    );
+
+    cli.run_command(&format!(
+        "3Drep evaluate --workspace-path {}",
+        workspace_path.display()
+    ))?;
+    let expression_dir = expression_path
+        .parent()
+        .ok_or_else(|| eyre!("oriented expression path has no parent"))?;
+    assert!(expression_dir.join("symbolica_expression.txt").exists());
+    assert!(expression_dir.join("param_builder.txt").exists());
+
+    clean_test(test_root);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result<()> {
     let cases = [
         (
@@ -1503,9 +1710,8 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
             "3Drep test-cff-ltd -p {process_name} -i default -g 0 --workspace-path {}",
             workspace_path.display()
         ))?;
-        let manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(
-            workspace_path.join("test_cff_ltd_manifest.json"),
-        )?)?;
+        let manifest_path = find_named_artifact(&workspace_path, "test_cff_ltd_manifest.json")?;
+        let manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(manifest_path)?)?;
         let graph = imported_graph_from_cli(&cli, &process_name, "default", 0)?;
         let source_internal_edges = source_internal_edges(graph);
         let local_bound_map = local_bounds.iter().copied().collect::<BTreeMap<_, _>>();
@@ -1536,50 +1742,117 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
 
 #[test]
 #[serial]
-fn cli_graph_from_signatures_round_trips_pq_mass_expression_through_import_graphs() -> Result<()> {
-    let test_name = "threedreps_graph_from_signatures_pq_mass";
+fn cli_graph_from_signatures_closes_without_explicit_lmb_rep() -> Result<()> {
+    let cases: &[SignatureClosureCase<'_>] = &[
+        (
+            "threedreps_graph_from_signatures_box_dotted",
+            &[
+                ("k1", "1"),
+                ("k1", "11"),
+                ("k1+p1", "2"),
+                ("k1+p1+p2", "3"),
+                ("k1+p1+p2+p3", "4"),
+            ],
+            &["p"],
+            5,
+        ),
+        (
+            "threedreps_graph_from_signatures_pq_mass",
+            &[
+                ("k1+p1", "0"),
+                ("k1+p1-q1", "0"),
+                ("k1-p2+q2", "0"),
+                ("k1", "0"),
+            ],
+            &["p", "q"],
+            4,
+        ),
+        (
+            "threedreps_graph_from_signatures_two_loop_sunrise",
+            &[("k1", "1"), ("k2", "2"), ("k1+k2+p1", "3")],
+            &["p"],
+            2,
+        ),
+        (
+            "threedreps_graph_from_signatures_three_loop_mercedes",
+            &[
+                ("k1", "0"),
+                ("k2", "0"),
+                ("k3", "0"),
+                ("k1+k2+p1", "0"),
+                ("k2+k3+p2", "0"),
+                ("k1-k3+p3-p4", "0"),
+            ],
+            &["p"],
+            4,
+        ),
+        (
+            "threedreps_graph_from_signatures_four_loop_banana",
+            &[
+                ("k1", "1"),
+                ("k2", "2"),
+                ("k3", "3"),
+                ("k4", "4"),
+                ("k1+k2+k3+k4+p1", "5"),
+            ],
+            &["p"],
+            2,
+        ),
+        (
+            "threedreps_graph_from_signatures_five_loop_banana",
+            &[
+                ("k1", "1"),
+                ("k2", "2"),
+                ("k3", "3"),
+                ("k4", "4"),
+                ("k5", "5"),
+                ("k1+k2+k3+k4+k5+p1", "6"),
+            ],
+            &["p"],
+            2,
+        ),
+    ];
+
+    for (test_name, factors, external_prefixes, num_vertices) in cases {
+        assert_graph_from_signatures_cli_closure(
+            test_name,
+            factors,
+            external_prefixes,
+            *num_vertices,
+        )?;
+    }
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_graph_from_signatures_rejects_inconsistent_explicit_vertex_count() -> Result<()> {
+    let test_name = "threedreps_graph_from_signatures_inconsistent_vertices";
     let test_root = get_tests_workspace_path().join(test_name);
     let state_path = test_root.join("state");
-    let signatures_path = test_root.join("pq_signatures.txt");
-    let dot_path = test_root.join("pq_from_signatures.dot");
+    let dot_path = test_root.join("from_signatures.dot");
     fs::create_dir_all(&test_root)?;
 
-    let signature_expression = "prop(k1+p1,0)*prop(k1+p1-q1,0)*prop(k1-p2+q2,0)*prop(k1,0)";
-    fs::write(&signatures_path, signature_expression)?;
-
-    let expected = extract_signatures_and_masses_from_symbolica_expression(
-        signature_expression,
-        "k",
-        &["p".to_string(), "q".to_string()],
-        "prop(q_,m_)",
-    )?;
-
+    let signature_expression = signature_expression_from_factors(&[
+        ("k1", "1"),
+        ("k1", "11"),
+        ("k1+p1", "2"),
+        ("k1+p1+p2", "3"),
+        ("k1+p1+p2+p3", "4"),
+    ]);
     let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
-    cli.run_command(&format!(
-        "3Drep graph-from-signatures --signatures-file {} --dot-output {} --external-prefixes p,q --num-vertices 4",
-        signatures_path.display(),
-        dot_path.display()
-    ))?;
-    cli.run_command("import model scalars-default.json")?;
-    cli.run_command(&format!(
-        "import graphs {} -p threedreps_pq_closure -i default -o",
-        dot_path.display()
-    ))?;
-
-    let graph = imported_graph_from_cli(&cli, "threedreps_pq_closure", "default", 0)?;
-    let parsed = graph.to_three_d_parsed_graph()?;
-    assert_eq!(
-        sorted_signature_pairs(project_external_signatures_by_name(
-            &parsed,
-            &expected.external_names
-        )),
-        sorted_signature_pairs(expected.signatures)
-    );
+    let result = cli.run_command(&format!(
+        "3Drep graph-from-signatures --signatures {} --dot-output {} --external-prefixes p --num-vertices 4",
+        shell_single_quote(&signature_expression),
+        dot_path.display(),
+    ));
     assert!(
-        parsed
-            .internal_edges
-            .iter()
-            .all(|edge| edge.mass_key.as_deref() == Some("0"))
+        result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error.to_string().contains("requires 5 internal vertices")),
+        "expected inconsistent vertex-count error, got {result:?}",
     );
 
     clean_test(test_root);
@@ -1624,17 +1897,19 @@ fn cli_old_python_case_matrix_records_current_three_drep_status() -> Result<()> 
             };
             reports.push(run_probe_case_parts(
                 &cli,
-                format!(
-                    "old_python_all_edge_linear_numerator::{dot_name}::edge{edge_id}",
-                    dot_name = spec.dot_name
-                ),
-                spec.dot_name,
-                numerator,
-                Vec::new(),
-                1337,
-                ProbeComparison::CffLtd { tolerance: 1.0e-8 },
-                NumeratorSamplingScaleMode::None,
-                None,
+                ProbeCaseRun {
+                    name: format!(
+                        "old_python_all_edge_linear_numerator::{dot_name}::edge{edge_id}",
+                        dot_name = spec.dot_name
+                    ),
+                    dot_name: spec.dot_name,
+                    numerator,
+                    bounds: Vec::new(),
+                    seed: 1337,
+                    compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
+                    sampling_scale_mode: NumeratorSamplingScaleMode::None,
+                    uniform_scale: None,
+                },
             ));
         }
     }
@@ -1650,14 +1925,18 @@ fn cli_old_python_case_matrix_records_current_three_drep_status() -> Result<()> 
                         .collect::<Vec<_>>();
                     reports.push(run_probe_case_parts(
                         &cli,
-                        format!("old_python_normal_box_all_convergent_bounds::{e0}_{e1}_{e2}_{e3}"),
-                        "box.dot",
-                        local_edge_energy_monomial(&bounds),
-                        bounds,
-                        1337,
-                        ProbeComparison::CffLtd { tolerance: 1.0e-8 },
-                        NumeratorSamplingScaleMode::None,
-                        None,
+                        ProbeCaseRun {
+                            name: format!(
+                                "old_python_normal_box_all_convergent_bounds::{e0}_{e1}_{e2}_{e3}"
+                            ),
+                            dot_name: "box.dot",
+                            numerator: local_edge_energy_monomial(&bounds),
+                            bounds,
+                            seed: 1337,
+                            compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
+                            sampling_scale_mode: NumeratorSamplingScaleMode::None,
+                            uniform_scale: None,
+                        },
                     ));
                 }
             }
@@ -1947,12 +2226,7 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     );
     assert_eq!(
         variant_prefactors(&run.ltd.expression),
-        vec![
-            vec![(-1, 1)],
-            vec![(-1, 1)],
-            vec![(-1, 1)],
-            vec![(-1, 1), (-3, 1), (-6, 1)]
-        ]
+        vec![vec!["-1"], vec!["-1"], vec!["-1"], vec!["-1", "-3", "-6"]]
     );
     assert_eq!(
         variant_half_edges(&run.ltd.expression),
@@ -2017,7 +2291,7 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
 
     let split_references = [
         (0.1, 0.342_116_187_424_781_67),
-        (0.05, 0.339_106_080_530_878_72),
+        (0.05, 0.339_106_080_530_878_7),
         (0.025, 0.338_357_886_377_202_07),
         (0.0125, 0.338_171_108_363_500_58),
     ];
@@ -2040,63 +2314,5 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
 
     clean_test(get_tests_workspace_path().join(test_name));
     clean_test(&run.cli.cli_settings.state.folder);
-    Ok(())
-}
-
-#[test]
-#[serial]
-fn cli_graph_from_signatures_mercedes_closes_through_import_graphs() -> Result<()> {
-    let test_name = "threedreps_graph_from_signatures_mercedes";
-    let test_root = get_tests_workspace_path().join(test_name);
-    let state_path = test_root.join("state");
-    let signatures_path = test_root.join("mercedes_signatures.txt");
-    let dot_path = test_root.join("mercedes_from_signatures.dot");
-    fs::create_dir_all(&test_root)?;
-
-    let signature_expression = [
-        "prop(k1,0)",
-        "prop(k2,0)",
-        "prop(k3,0)",
-        "prop(k1+k2+p1,0)",
-        "prop(k2+k3+p2,0)",
-        "prop(k1-k3+p3-p4,0)",
-    ]
-    .join("*");
-    fs::write(&signatures_path, &signature_expression)?;
-
-    let expected = extract_signatures_and_masses_from_symbolica_expression(
-        &signature_expression,
-        "k",
-        &["p".to_string()],
-        "prop(q_,m_)",
-    )?;
-
-    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
-    cli.run_command(&format!(
-        "3Drep graph-from-signatures --signatures-file {} --dot-output {} --num-vertices 4",
-        signatures_path.display(),
-        dot_path.display()
-    ))?;
-    cli.run_command("import model scalars-default.json")?;
-    cli.run_command(&format!(
-        "import graphs {} -p threedreps_mercedes_closure -i default -o",
-        dot_path.display()
-    ))?;
-
-    let graph = imported_graph_from_cli(&cli, "threedreps_mercedes_closure", "default", 0)?;
-    let parsed = graph.to_three_d_parsed_graph()?;
-    assert_eq!(parsed.internal_edges.len(), expected.signatures.len());
-    assert_eq!(parsed.loop_names.len(), expected.loop_names.len());
-    assert!(parsed.external_names.len() >= expected.external_names.len());
-    assert_eq!(
-        sorted_signature_pairs(project_external_signatures_by_name(
-            &parsed,
-            &expected.external_names
-        )),
-        sorted_signature_pairs(expected.signatures)
-    );
-
-    clean_test(test_root);
-    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }

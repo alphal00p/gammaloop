@@ -2095,6 +2095,124 @@ just test_gammaloop
 1027 tests run: 1027 passed, 128 skipped
 ```
 
+## 2026-04-30: second display/selector pass for `3Drep`
+
+- Fixed denominator-tree rendering in the overview and detail views. The display
+  now reports node IDs and child node IDs with the form
+  `<node_id>: <surface-or-1> -> [child_node_ids]`, while surfaces remain
+  attached to the node data. The table truncation helper is now ANSI-aware, so
+  colored `den tree` cells no longer leave unterminated color spans when
+  shortened.
+- Reworked orientation display metadata. Orientation labels are sorted by their
+  base tag and then by numerator/energy-map index, display as `tag|N0`,
+  `tag|N1`, ..., and detail selectors now support all of:
+  `tag`, `tag|N0`, and `tag|N0|variant_id`. A final global label pass is
+  applied after remapping and variant fusion so CLI-generated expressions do
+  not inherit duplicated local `N0` indices from lower-sector components.
+- External half-edges in orientation tags are rendered in gray independently of
+  their `x`, `+`, `-`, or `0` assignment; internal entries keep their semantic
+  colors.
+- Changed variant surface lists to report all distinct multiplicative powers
+  encountered on root-to-leaf denominator branches. For example, if a surface
+  appears once on one branch and twice on another it displays as `5,5^2`;
+  numerator-only occurrences remain parenthesized.
+- Changed top-level energy-degree bounds so edge IDs are green, kept high
+  powers red, and changed `3Drep build` numerator display to use the existing
+  GammaLoop/Symbolica pretty printer instead of canonical strings.
+- Corrected `NumeratorSamplingScaleMode::All` so it activates for every
+  positive numerator energy degree. Verified that remaining factors such as
+  `4^2` in `--numerator-sampling-scale-mode all` come from physical/denominator
+  half-edge factors in the known-factor and lower-sector decomposition, not from
+  numerator sampling-node normalization.
+- Updated `examples/cli/scalar_topologies/three_d_expr_demo.toml` to showcase
+  the new `tag|N0|variant` detail selector.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo test -p three-dimensional-reps --features display,diagnostics,test-support,eval,old-cff display::tests -- --nocapture
+3 passed
+
+cargo check -p gammaloop-api --features default
+passed
+
+just clippy -- -D warnings
+passed
+
+just build-cli
+passed
+
+./gammaloop --dev-optim -s /tmp/gammaloop-3drep-display-state ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo -c "quit -n"
+passed; verified cached detail selector `xxxx-++xxx|N0|3`, node-id denominator trees, pretty numerator output, green energy-bound edge IDs, and cache reuse output
+
+just test_gammaloop
+1030 tests run: 1030 passed, 128 skipped
+```
+
+### Progress 2026-04-30 graph-from-signatures closure hardening
+
+- Added a CLI-driven closure harness for `3Drep graph-from-signatures` in
+  `tests/tests/test_runs/test_3d_reps.rs`. Each case specifies only a list of
+  `(momentum_signature, mass)` factors; the helper derives the `prop(q,m)`
+  input expression, runs `3Drep graph-from-signatures`, asserts the generated
+  DOT contains no explicit `lmb_rep`, reloads that DOT via
+  `import graphs string ...` with the scalars model, and compares the imported
+  internal signatures and masses against the input multiset up to momentum
+  reversal.
+- The new closure coverage includes:
+  - a one-loop repeated-signature box-like chain,
+  - mixed `p`/`q` external prefixes,
+  - a two-loop sunrise,
+  - a three-loop Mercedes-style case,
+  - four-loop and five-loop banana cases.
+- `graph-from-signatures` no longer emits explicit `lmb_rep` attributes in
+  GammaLoop DOT output. It emits only topology, masses, external leg names, and
+  `lmb_id` on loop-basis carrier edges, so normal GammaLoop import must recover
+  the momentum signatures from the graph itself.
+- The reconstruction search now tracks external-momentum imbalance while
+  placing internal edges and, for CLI output, minimizes the number of external
+  half-edges before rendering. This avoids accepting the first loop-balanced
+  topology when it creates unnecessary external attachments.
+- Added an explicit connected-graph consistency check:
+  `L = E - V + 1` for the explicit-edge representation. The command
+  `3Drep graph-from-signatures --signatures
+  'prop(k1,m1)*prop(k1,m11)*prop(k1+p1,m2)*prop(k1+p1+p2,m3)*prop(k1+p1+p2+p3,m4)'
+  --num-vertices 4` now errors cleanly, because five explicit propagator
+  signatures with one loop momentum require five internal vertices. With
+  `--num-vertices 5`, the command emits the expected one-loop explicit repeated
+  edge chain with no `lmb_rep`.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+just clippy -- -D warnings
+passed
+
+cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display graph_signatures -- --nocapture --test-threads=1
+5 passed; 35 filtered out
+
+cargo test -p gammaloop-integration-tests --test test_runs graph_from_signatures -- --nocapture --test-threads=1
+2 passed; 70 filtered out
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --test test_runs
+passed
+
+just build-cli
+passed
+
+just test_gammaloop
+1027 tests run: 1027 passed, 128 skipped
+```
+
 ### Progress 2026-04-29 CLI-only box and box_pow3 coverage
 
 - Removed the older direct core tests for the simple box and repeated
@@ -2145,4 +2263,303 @@ passed
 
 just test_gammaloop
 1025 tests run: 1025 passed, 128 skipped
+```
+
+### Progress 2026-04-30 Remaining old-Python case matrix fixes
+
+- Resumed the old-Python parity matrix after the first CLI-only coverage pass.
+  The starting diagnostic matrix had 29 non-ok rows:
+  - 8 unsupported generalized CFF high-power sectors,
+  - 14 one-loop high-contact numerical mismatches,
+  - 7 pure-LTD repeated-propagator diagnostic mismatches.
+- Re-read the generalized LTD notes around high-contact one-loop CFF sectors,
+  especially the terminal-contact completion and lower-sector normal-form
+  recursion. The failing degree-4/5/6 single-edge box sectors matched the
+  documented case that should be handled by the lower-sector recursive builder
+  rather than by the quadratic E-surface-only shortcut.
+- Updated `BoundedCffBuilder` so isolated high-power one-loop sectors no longer
+  enter the quadratic E-surface-only path. That path is now restricted to
+  non-repeated one-loop sectors with all edge bounds at most quadratic; higher
+  one-loop sectors fall through to `KnownFactorCffBuilder`.
+- Verified the targeted diagnostic matrix after the routing fix:
+
+```text
+cargo fmt && cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_case_matrix_records_current_three_drep_status -- --nocapture --test-threads=1
+old Python 3Drep case matrix: 293 ok, 16 failed, 309 total
+```
+
+- The remaining non-ok rows are now:
+  - one real CFF/LTD numerical sign mismatch in `four_loop_stress_linear`,
+  - 8 unsupported multiloop/repeated generalized CFF high-power sectors,
+  - 7 expected pure-LTD repeated-propagator diagnostic mismatches, where the
+    derivative-free pure-LTD diagnostic is not expected to agree for repeated
+    propagators.
+
+### Progress 2026-04-30 Old-Python case matrix closure
+
+- Generalized the high-power CFF dispatch further. `BoundedCffBuilder` now sends
+  every sector with energy degree greater than one, or repeated logical-channel
+  total degree greater than two, through the lower-sector known-factor recursive
+  builder before reporting `CffHigherEnergyPowerNotImplemented`. The quadratic
+  E-surface-only builder remains restricted to non-repeated one-loop sectors with
+  all bounds at most quadratic.
+- This removed the unsupported generalized CFF rows from the old-Python case
+  matrix. The interim diagnostic matrix was:
+
+```text
+cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_case_matrix_records_current_three_drep_status -- --nocapture --test-threads=1
+old Python 3Drep case matrix: 300 ok, 9 failed, 309 total
+```
+
+- Traced the remaining `four_loop_stress_linear` and
+  `four_loop_stress_quadratic` sign/magnitude mismatches to the GammaLoop-format
+  fixture, not to expression generation. The external `p3` leg was attached to
+  `K0`, which made the imported graph expose only one repeated group of size 3.
+  The old Python topology has repeated groups of sizes 2 and 3. Moving `p3` to
+  the central `R` vertex restores the intended signatures and repeated-channel
+  structure.
+- Updated the import-closure assertion for `four_loop_stress.dot` to expect
+  repeated groups `[2, 3]`, and verified the fixture through the standard
+  GammaLoop `import graphs` path:
+
+```text
+cargo test -p gammaloop-integration-tests --test test_runs cli_imports_old_python_equivalent_threedrep_fixtures -- --nocapture --test-threads=1
+passed
+```
+
+- The only remaining matrix failures were the seven repeated-propagator
+  pure-LTD rows. These are not valid numerical equalities in the derivative-free
+  implementation: pure LTD is kept as a diagnostic/mass-shift comparison mode,
+  and without numerator derivatives it is not expected to agree for repeated
+  propagators. The matrix now treats those rows as build-only diagnostics while
+  retaining CFF/LTD numerical comparisons for the derivative-free repeated
+  representation.
+- Verified the complete old-Python-inspired case matrix after the routing,
+  fixture, and diagnostic-harness updates:
+
+```text
+cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_case_matrix_records_current_three_drep_status -- --nocapture --test-threads=1
+old Python 3Drep case matrix: 309 ok, 0 failed, 309 total
+```
+
+- Updated the stale core unit test that still expected
+  `CffHigherEnergyPowerNotImplemented` for the `sunrise_pow4` high-power CFF
+  sector. That sector is now supported through the known-factor recursive
+  builder, so the test now asserts the generated expression shape and the
+  presence of numerator-surface known-factor completion terms.
+- Re-ran the focused 3Drep integration suite and the core crate tests:
+
+```text
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
+7 passed; 1 ignored
+
+cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+40 passed
+```
+
+- Re-ran formatting, warning-as-error checks, and the full selected GammaLoop
+  gate:
+
+```text
+cargo fmt --check
+passed
+
+RUSTFLAGS=-Dwarnings cargo check -p gammaloop-api
+passed
+
+RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
+passed
+
+just test_gammaloop
+1024 tests run: 1024 passed, 128 skipped
+```
+
+### Progress 2026-04-30 CLI coverage audit after matrix closure
+
+- Audited the old Python pytest surface against the Rust `test_3d_reps` coverage
+  after the old-Python case matrix reached `309 ok, 0 failed`. The generation
+  and eager-evaluation parity lanes are now covered by:
+  - GammaLoop CLI DOT import and graph-shape closure for all old Python example
+    topologies ported to GammaLoop DOT syntax,
+  - graph-from-signatures closure through the real `import graphs` command,
+  - automatic EMR/LMB numerator energy-power cap extraction,
+  - the old-Python-inspired CFF/LTD case matrix, including high-contact
+    one-loop CFF, multiloop/repeated high-power CFF, uniform numerator sampling
+    scale modes, and repeated-propagator LTD diagnostics,
+  - explicit box and `box_pow3` oriented-structure checks through
+    `3Drep test-cff-ltd`,
+  - the slow five-loop ultimate-basis parity probe.
+- Ran the slow probe explicitly even though it stays ignored in the default
+  suite, matching the old Python `HYBRID3D_RUN_SLOW` convention:
+
+```text
+cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_slow_five_loop_ultimate_basis_case_matrix -- --ignored --nocapture --test-threads=1
+1 passed
+```
+
+- Added a CLI integration test for the diagnostic path not covered by
+  `test-cff-ltd`: `3Drep validate`, `3Drep build`, and `3Drep evaluate` now run
+  on an imported box graph through the GammaLoop state and assert the generated
+  validation JSON, oriented-expression artifact, Symbolica expression artifact,
+  and parameter-builder artifact.
+- Updated `crates/three-dimensional-reps/README.md` to remove the stale
+  high-power CFF limit statement. The README now describes the validated
+  old-Python generation/eager-evaluation surface and keeps the important
+  distinction that compiled Symbolica runtime evaluation is CLI-side evaluator
+  construction, not part of the library crate's eager evaluator.
+- Re-ran focused and full verification:
+
+```text
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
+8 passed; 1 ignored
+
+cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+40 passed
+
+cargo fmt --check
+passed
+
+RUSTFLAGS=-Dwarnings cargo check -p gammaloop-api
+passed
+
+RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
+passed
+
+just test_gammaloop
+1025 tests run: 1025 passed, 128 skipped
+```
+
+### Progress 2026-04-30 inline graph import and 3D expression demo card
+
+- Added an inline DOT import mode to the existing GammaLoop graph importer:
+  `import graphs string '<dot graph content>'`. The old path-based
+  `import graphs <path>` mode is still the default, and inline imports are
+  routed through the same `Graph::from_string(...)` GammaLoop parsing path used
+  by normal graph ingestion.
+- Added `3d_expr` and `3d-expr` aliases for the existing `3Drep` command so
+  examples can use the terminology of the oriented 3D-expression workflow
+  without changing the underlying command implementation.
+- Updated the interactive REPL completion machinery and tests so tab completion
+  covers:
+  - `import graphs string`,
+  - the `3d_expr` command alias,
+  - nested `3d_expr` subcommands,
+  - process/integrand selectors and representation/scale-mode enum values.
+- Added `examples/cli/scalar_topologies/three_d_expr_demo.toml`, a compact
+  scalar-topology run card that imports a `box_pow3`-style graph from an inline
+  DOT string with an energy-dependent numerator, then demonstrates
+  `3d_expr validate`, `build`, `evaluate`, `test-cff-ltd`, and
+  `graph-from-signatures`.
+- Updated the existing `cli_validate_build_and_evaluate_use_gammaloop_graph_state`
+  integration test to exercise the new inline import path before running the
+  3D-expression validate/build/evaluate workflow.
+
+Focused verification completed so far:
+
+```text
+cargo fmt --check
+passed
+
+RUSTFLAGS=-Dwarnings cargo check -p gammaloop-api
+passed
+
+cargo test -p gammaloop-api completion_offers -- --nocapture
+52 passed; 244 filtered out
+
+cargo run -p gammaloop-api --bin gammaloop -- --clean-state examples/cli/scalar_topologies/three_d_expr_demo.toml
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
+8 passed; 1 ignored
+
+RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
+passed
+
+just test_gammaloop
+1027 tests run: 1027 passed (1 leaky), 128 skipped
+```
+
+### Progress 2026-04-30 3Drep display, caching, and demo polish
+
+- Removed the temporary `3d_expr`, `3d-expr`, `3drep`, and `threedreps`
+  aliases from the top-level command registration. The canonical user command
+  is now only `3Drep`; completion tests were updated accordingly while keeping
+  `import graphs string` completion coverage.
+- Updated `examples/cli/scalar_topologies/three_d_expr_demo.toml` so the inline
+  DOT graph no longer specifies `lmb_rep`. The demo controls the loop-momentum
+  basis only through `lmb_id`, uses only `3Drep` commands, demonstrates cache
+  reuse, and shows a concrete orientation/variant selector using
+  `xxxx-++xxx|3`.
+- Reworked the `three-dimensional-reps` display layer:
+  - surface IDs now render as `S0`, `S1`, ... for generalized linear surfaces;
+  - surface rows merge class/origin/numerator-only into a single colored `type`
+    column with helper surfaces carrying the `_sp` suffix;
+  - linear surface and energy-map expressions are sorted, explicitly signed,
+    aligned between OSE and shift groups, and color-coded;
+  - variant rows now show colored origin, rational prefactor, combined
+    M/half-edge factors such as `[M^2,4,7^3]`, sorted surface IDs with powers,
+    per-variant node counts, and colored denominator trees using `→`;
+  - the global summary includes total node count;
+  - detail mode now suppresses the full structure and supports
+    `orientation|variant_id`, filtering out matching orientations that do not
+    contain the requested variant.
+- Added variant fusion in the 3D expression representation for variants with
+  identical rational prefactor, half-edge factors, uniform-scale power, and
+  numerator-surface set. Fused variants are represented by a new root node whose
+  children are the original denominator trees, and mixed origins are labelled
+  `mixed`.
+- Removed the custom `RationalCoefficient` type from the implementation. Variant
+  prefactors and linear-expression coefficients now use Symbolica `Atom`
+  coefficients directly, with serde support through canonical strings in JSON
+  and the existing Symbolica-state-aware bincode derivations.
+- Added per-process/integrand/graph 3Drep workspace subfolders. `build`,
+  `evaluate`, and `test-cff-ltd` now reuse matching cached artifacts by default,
+  emit the exact relative path being reused, and honor `--clean` to force
+  recomputation. Metadata mismatches fall back to recomputation and overwrite
+  the JSON when saving is enabled.
+- Added colored tabled summaries for `3Drep evaluate` and
+  `3Drep test-cff-ltd`, while still saving the JSON manifests for inspection.
+- During verification, the first dev-optim rebuild hit a local
+  `No space left on device` error while writing generated incremental compiler
+  artifacts. Only generated `target/*/incremental` directories were removed,
+  after which the dev-optim build completed.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+just clippy -- -D warnings
+passed
+
+cargo check -p three-dimensional-reps --features diagnostics,display,eval,test-support,old-cff
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --test test_runs
+passed
+
+cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+40 passed
+
+cargo test -p gammaloop-api completion_offers -- --nocapture
+52 passed; 244 filtered out
+
+cargo test -p gammaloop-integration-tests --test test_runs 3drep -- --nocapture --test-threads=1
+2 passed; 70 filtered out
+
+cargo test -p gammaloop-integration-tests --test test_runs graph_from_signatures -- --nocapture --test-threads=1
+2 passed; 70 filtered out
+
+just build-cli
+passed
+
+./gammaloop --dev-optim ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo -c "quit -n"
+passed; verified cache reuse, detail-only selector output, evaluate summary, and comparison summary
+
+just test_gammaloop
+1027 tests run: 1027 passed, 128 skipped
 ```

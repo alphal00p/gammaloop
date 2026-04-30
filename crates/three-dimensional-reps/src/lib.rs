@@ -44,8 +44,7 @@ pub use graph_signatures::{
 };
 pub use surface::{
     EsurfaceCollection, EsurfaceID, HsurfaceCollection, HsurfaceID, HybridSurface, HybridSurfaceID,
-    LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind, RationalCoefficient,
-    SurfaceAtom, SurfaceCache,
+    LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind, SurfaceAtom, SurfaceCache,
 };
 pub use utils::StringSerializedAtom;
 pub use validator::{GraphValidation, validate_parsed_graph};

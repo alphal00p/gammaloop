@@ -32,9 +32,11 @@ powers.
 - `old-cff`: exposes the legacy CFF comparison mode.
 - `test-support`: exposes internal diagnostic modes such as `pure_ltd`.
 
-The compiled Symbolica runtime evaluator from the Python prototype is not
-ported yet. The current `eval` feature is an eager f64 diagnostic evaluator, not
-GammaLoop's production evaluator path.
+The compiled Symbolica runtime evaluator from the Python prototype is not part
+of this library crate. The current `eval` feature is an eager f64 diagnostic
+evaluator used by the GammaLoop integration tests. The GammaLoop CLI-side
+`3Drep evaluate` command reuses GammaLoop's evaluator construction machinery to
+materialize the Symbolica expression and parameter builder artifacts.
 
 ## CLI
 
@@ -45,9 +47,11 @@ GammaLoop-format DOT graph from a propagator-signature expression.
 
 ## Current Limits
 
-The generalized CFF port covers the validated classes that are currently wired
-into tests: affine CFF, one-loop bounded higher powers, repeated one-loop
-channels, selected repeated spectator cases, and a conservative multiloop
-single-quadratic lower-sector completion. Broader multiloop high-power CFF
-completion is intentionally rejected until the remaining product/lower-sector
-assembly cases are ported and validated.
+The expression-generation and eager-evaluation coverage mirrors the validated
+old Python prototype surface currently ported into GammaLoop tests: affine CFF,
+LTD with repeated propagators, bounded-energy CFF completions for the repeated
+and multiloop high-power cases in the old matrix, uniform numerator sampling
+scale modes, graph-from-signatures reconstruction, and the slow five-loop
+ultimate-basis diagnostic. `pure_ltd` remains diagnostic-only for repeated
+propagators because derivative-free pure LTD is not a valid numerical equality
+test in that case.

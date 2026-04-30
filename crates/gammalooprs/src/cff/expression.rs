@@ -139,7 +139,7 @@ impl GammaLoopCFFVariant for CFFVariant {
             .reduce(|acc, factor| acc * factor)
             .unwrap_or_else(|| Atom::num(1));
 
-        self.prefactor.to_atom()
+        self.prefactor.clone()
             * half_edge_factor
             * scale_factor
             * numerator_surface_factor

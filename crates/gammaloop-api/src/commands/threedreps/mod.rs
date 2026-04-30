@@ -18,8 +18,10 @@ use gammalooprs::{
     utils::symbolica_ext::LogPrint,
 };
 use linnet::half_edge::involution::HedgePair;
+use nu_ansi_term::{Color, Style as AnsiStyle};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tabled::{builder::Builder, settings::Style};
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, reconstruct_dot_from_expression, render_expression_summary,
     validate_parsed_graph, DisplayOptions, Generate3DExpressionOptions, GraphInfo, GraphValidation,
@@ -129,6 +131,9 @@ pub struct Build {
     #[arg(long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
 
+    #[arg(long, default_value_t = false)]
+    pub clean: bool,
+
     #[arg(long, value_hint = clap::ValueHint::FilePath)]
     pub json_out: Option<PathBuf>,
 }
@@ -138,6 +143,9 @@ pub struct Evaluate {
     /// 3Drep artifact workspace containing the oriented expression JSON.
     #[arg(long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
+
+    #[arg(long, default_value_t = false)]
+    pub clean: bool,
 }
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -151,6 +159,9 @@ pub struct TestCffLtd {
 
     #[arg(long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
+
+    #[arg(long, default_value_t = false)]
+    pub clean: bool,
 }
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -272,7 +283,7 @@ struct ValidateOutput {
     validation: GraphValidation,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct TestCffLtdOutput {
     process_id: usize,
     integrand_name: String,
@@ -286,7 +297,7 @@ struct TestCffLtdOutput {
     cases: Vec<TestCffLtdCaseOutput>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct TestCffLtdCaseOutput {
     name: String,
     representation: RepresentationMode,
@@ -300,11 +311,58 @@ struct TestCffLtdCaseOutput {
     generation_error_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Serialize)]
+struct EvaluateOutput {
+    process_id: usize,
+    integrand_name: String,
+    graph_id: usize,
+    graph_name: String,
+    expression_path: PathBuf,
+    symbolica_expression_path: PathBuf,
+    param_builder_path: PathBuf,
+}
+
 struct SelectedGraph<'a> {
     process_id: usize,
     integrand_name: String,
     graph_id: usize,
     graph: &'a Graph,
+}
+
+impl BuildOutput {
+    fn matches_request(
+        &self,
+        selected: &SelectedGraph<'_>,
+        family: RepresentationMode,
+        energy_degree_bounds: &[(usize, usize)],
+        sampling_scale: three_dimensional_reps::NumeratorSamplingScaleMode,
+        numerator_interpolation_scale: Option<f64>,
+    ) -> bool {
+        self.process_id == selected.process_id
+            && self.integrand_name == selected.integrand_name
+            && self.graph_id == selected.graph_id
+            && self.graph_name == selected.graph.name
+            && self.family == family
+            && self.energy_degree_bounds == energy_degree_bounds
+            && self.numerator_sampling_scale_mode == sampling_scale
+            && self.numerator_interpolation_scale == numerator_interpolation_scale
+    }
+}
+
+impl TestCffLtdOutput {
+    fn matches_request(
+        &self,
+        selected: &SelectedGraph<'_>,
+        energy_degree_bounds: &[(usize, usize)],
+        numerator_interpolation_scale: Option<f64>,
+    ) -> bool {
+        self.process_id == selected.process_id
+            && self.integrand_name == selected.integrand_name
+            && self.graph_id == selected.graph_id
+            && self.graph_name == selected.graph.name
+            && self.energy_degree_bounds == energy_degree_bounds
+            && self.numerator_interpolation_scale == numerator_interpolation_scale
+    }
 }
 
 enum GraphCatalog<'a> {
@@ -463,40 +521,87 @@ impl Build {
             .numerator_sampling_scale_mode
             .resolve(default_runtime_settings);
         let representation = RepresentationMode::from(self.representation);
-        let options = Generate3DExpressionOptions {
+        let workspace = self.workspace_path(global_cli_settings);
+        let artifact_dir = build_artifact_dir(
+            &workspace,
+            &selected,
             representation,
-            energy_degree_bounds: energy_degree_bounds.clone(),
-            numerator_sampling_scale: numerator_sampling_scale_mode,
-        };
-        let expression = generate_3d_expression(selected.graph, &options)?;
-        let output = BuildOutput {
-            backend: "gammaloop-3Drep".to_string(),
-            process_id: selected.process_id,
-            integrand_name: selected.integrand_name,
-            graph_id: selected.graph_id,
-            graph_name: selected.graph.name.clone(),
-            family: representation,
-            graph: graph_info(&parsed),
-            validation: validate_parsed_graph(&parsed),
-            automatic_energy_degree_bounds,
-            override_energy_degree_bounds,
-            energy_degree_bounds,
-            numerator_interpolation_scale: default_runtime_settings
-                .general
-                .numerator_interpolation_scale,
             numerator_sampling_scale_mode,
-            expression,
+        );
+        let json_path = self
+            .json_out
+            .clone()
+            .unwrap_or_else(|| artifact_dir.join("oriented_expression.json"));
+        let numerator_interpolation_scale = default_runtime_settings
+            .general
+            .numerator_interpolation_scale;
+        let cached_output = if !self.clean && json_path.exists() {
+            let text = fs::read_to_string(&json_path)
+                .with_context(|| format!("Could not read {}", json_path.display()))?;
+            let cached = serde_json::from_str::<BuildOutput>(&text)
+                .with_context(|| format!("Could not parse {}", json_path.display()))?;
+            if cached.matches_request(
+                &selected,
+                representation,
+                &energy_degree_bounds,
+                numerator_sampling_scale_mode,
+                numerator_interpolation_scale,
+            ) {
+                println!(
+                    "Reusing cached 3Drep oriented expression from {}",
+                    relative_display(&json_path)
+                );
+                Some(cached)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let (output, reused_cached_output) = if let Some(output) = cached_output {
+            (output, true)
+        } else {
+            let options = Generate3DExpressionOptions {
+                representation,
+                energy_degree_bounds: energy_degree_bounds.clone(),
+                numerator_sampling_scale: numerator_sampling_scale_mode,
+            };
+            let expression = generate_3d_expression(selected.graph, &options)?;
+            (
+                BuildOutput {
+                    backend: "gammaloop-3Drep".to_string(),
+                    process_id: selected.process_id,
+                    integrand_name: selected.integrand_name.clone(),
+                    graph_id: selected.graph_id,
+                    graph_name: selected.graph.name.clone(),
+                    family: representation,
+                    graph: graph_info(&parsed),
+                    validation: validate_parsed_graph(&parsed),
+                    automatic_energy_degree_bounds,
+                    override_energy_degree_bounds,
+                    energy_degree_bounds,
+                    numerator_interpolation_scale,
+                    numerator_sampling_scale_mode,
+                    expression,
+                },
+                false,
+            )
         };
 
         if !self.no_save_json {
-            let json_path = self.json_out.clone().unwrap_or_else(|| {
-                self.workspace_path(global_cli_settings)
-                    .join("oriented_expression.json")
-            });
-            write_path(&json_path, &serde_json::to_string_pretty(&output)?)?;
+            write_latest_expression_pointer(&workspace, &json_path)?;
+            if !reused_cached_output {
+                write_path(&json_path, &serde_json::to_string_pretty(&output)?)?;
+                println!(
+                    "Saved 3Drep oriented expression to {}",
+                    relative_display(&json_path)
+                );
+            }
         }
 
         if !self.no_pretty || self.show_details_for_orientation.is_some() {
+            let numerator_expr = selected.graph.full_numerator_atom().log_print(Some(120));
             println!(
                 "{}",
                 render_expression_summary(
@@ -504,7 +609,7 @@ impl Build {
                     representation,
                     &output.graph,
                     &output.energy_degree_bounds,
-                    None,
+                    Some(&numerator_expr),
                     numerator_sampling_scale_mode,
                     &DisplayOptions {
                         use_color: !self.no_color,
@@ -530,7 +635,15 @@ impl Evaluate {
             .workspace_path
             .clone()
             .unwrap_or_else(|| default_workspace_path(global_cli_settings));
-        let expression_path = workspace.join("oriented_expression.json");
+        let expression_path = if workspace.join("oriented_expression.json").exists() {
+            workspace.join("oriented_expression.json")
+        } else {
+            read_latest_expression_path(&workspace)?
+        };
+        println!(
+            "Loading 3Drep oriented expression from {}",
+            relative_display(&expression_path)
+        );
         let expression_text = fs::read_to_string(&expression_path).with_context(|| {
             format!(
                 "Could not read 3Drep oriented expression JSON at {}",
@@ -547,14 +660,32 @@ impl Evaluate {
         let parametric_atom = artifact
             .expression
             .parametric_atom_gs(selected.graph, &OrientationPattern::default());
-        write_path(
-            &workspace.join("symbolica_expression.txt"),
-            &parametric_atom.log_print(None),
-        )?;
-        write_path(
-            &workspace.join("param_builder.txt"),
-            &selected.graph.param_builder.to_string(),
-        )?;
+        let artifact_dir = expression_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| workspace.clone());
+        let symbolica_expression_path = artifact_dir.join("symbolica_expression.txt");
+        let param_builder_path = artifact_dir.join("param_builder.txt");
+        let evaluate_manifest_path = artifact_dir.join("evaluate_manifest.json");
+        if self.clean || !symbolica_expression_path.exists() {
+            write_path(&symbolica_expression_path, &parametric_atom.log_print(None))?;
+        } else {
+            println!(
+                "Reusing cached Symbolica expression from {}",
+                relative_display(&symbolica_expression_path)
+            );
+        }
+        if self.clean || !param_builder_path.exists() {
+            write_path(
+                &param_builder_path,
+                &selected.graph.param_builder.to_string(),
+            )?;
+        } else {
+            println!(
+                "Reusing cached parameter builder from {}",
+                relative_display(&param_builder_path)
+            );
+        }
 
         let orientations = artifact
             .expression
@@ -571,12 +702,23 @@ impl Evaluate {
             &evaluator_settings,
         )?;
 
+        let summary = EvaluateOutput {
+            process_id: selected.process_id,
+            integrand_name: selected.integrand_name,
+            graph_id: selected.graph_id,
+            graph_name: selected.graph.name.clone(),
+            expression_path,
+            symbolica_expression_path,
+            param_builder_path,
+        };
+        write_path(
+            &evaluate_manifest_path,
+            &serde_json::to_string_pretty(&summary)?,
+        )?;
+        println!("{}", render_evaluate_summary(&summary));
         println!(
-            "Built 3Drep evaluator input for process #{}, integrand '{}', graph #{} in {}",
-            selected.process_id,
-            selected.integrand_name,
-            selected.graph_id,
-            workspace.display()
+            "Saved 3Drep evaluate summary to {}",
+            relative_display(&evaluate_manifest_path)
         );
         Ok(())
     }
@@ -594,6 +736,8 @@ impl TestCffLtd {
             .workspace_path
             .clone()
             .unwrap_or_else(|| default_workspace_path(global_cli_settings));
+        let graph_workspace = graph_workspace_dir(&workspace, &selected);
+        let manifest_path = graph_workspace.join("test_cff_ltd_manifest.json");
         let automatic_energy_degree_bounds =
             automatic_energy_degree_bounds_for_graph(selected.graph)?;
         let override_energy_degree_bounds =
@@ -622,47 +766,79 @@ impl TestCffLtd {
             vec![three_dimensional_reps::NumeratorSamplingScaleMode::None]
         };
 
-        let mut cases = Vec::new();
-        for representation in [
-            RepresentationMode::Cff,
-            RepresentationMode::Ltd,
-            RepresentationMode::PureLtd,
-        ] {
-            for scale_mode in &scale_modes {
-                let case = self.build_case(
-                    selected.graph,
-                    &workspace,
-                    representation,
-                    *scale_mode,
-                    &energy_degree_bounds,
-                )?;
-                cases.push(case);
+        let cached_output = if !self.clean && manifest_path.exists() {
+            let text = fs::read_to_string(&manifest_path)
+                .with_context(|| format!("Could not read {}", manifest_path.display()))?;
+            let cached = serde_json::from_str::<TestCffLtdOutput>(&text)
+                .with_context(|| format!("Could not parse {}", manifest_path.display()))?;
+            if cached.matches_request(
+                &selected,
+                &energy_degree_bounds,
+                default_runtime_settings
+                    .general
+                    .numerator_interpolation_scale,
+            ) {
+                println!(
+                    "Reusing cached 3Drep comparison from {}",
+                    relative_display(&manifest_path)
+                );
+                Some(cached)
+            } else {
+                None
             }
-        }
-
-        let output = TestCffLtdOutput {
-            process_id: selected.process_id,
-            integrand_name: selected.integrand_name,
-            graph_id: selected.graph_id,
-            graph_name: selected.graph.name.clone(),
-            automatic_energy_degree_bounds,
-            override_energy_degree_bounds,
-            energy_degree_bounds,
-            numerator_interpolation_scale: default_runtime_settings
-                .general
-                .numerator_interpolation_scale,
-            sampled_m_values,
-            cases,
+        } else {
+            None
         };
-        write_path(
-            &workspace.join("test_cff_ltd_manifest.json"),
-            &serde_json::to_string_pretty(&output)?,
-        )?;
-        println!(
-            "Built {} 3Drep comparison case(s) in {}",
-            output.cases.len(),
-            workspace.display()
-        );
+
+        let (output, reused_cached_output) = if let Some(output) = cached_output {
+            (output, true)
+        } else {
+            let mut cases = Vec::new();
+            for representation in [
+                RepresentationMode::Cff,
+                RepresentationMode::Ltd,
+                RepresentationMode::PureLtd,
+            ] {
+                for scale_mode in &scale_modes {
+                    let case = self.build_case(
+                        selected.graph,
+                        &graph_workspace,
+                        representation,
+                        *scale_mode,
+                        &energy_degree_bounds,
+                    )?;
+                    cases.push(case);
+                }
+            }
+
+            (
+                TestCffLtdOutput {
+                    process_id: selected.process_id,
+                    integrand_name: selected.integrand_name,
+                    graph_id: selected.graph_id,
+                    graph_name: selected.graph.name.clone(),
+                    automatic_energy_degree_bounds,
+                    override_energy_degree_bounds,
+                    energy_degree_bounds,
+                    numerator_interpolation_scale: default_runtime_settings
+                        .general
+                        .numerator_interpolation_scale,
+                    sampled_m_values,
+                    cases,
+                },
+                false,
+            )
+        };
+        if !reused_cached_output {
+            write_path(&manifest_path, &serde_json::to_string_pretty(&output)?)?;
+        }
+        println!("{}", render_test_cff_ltd_summary(&output, &manifest_path));
+        if !reused_cached_output {
+            println!(
+                "Saved 3Drep comparison manifest to {}",
+                relative_display(&manifest_path)
+            );
+        }
         Ok(())
     }
 
@@ -766,7 +942,7 @@ impl GraphFromSignatures {
             max_degree: self.max_degree,
             format: ReconstructDotFormat::Gammaloop,
             graph_engine: None,
-            minimize_external_legs: self.minimize_externals,
+            minimize_external_legs: true,
         };
         let (dot, _) = reconstruct_dot_from_expression(
             &expression,
@@ -775,7 +951,7 @@ impl GraphFromSignatures {
             &self.prop_pattern,
             &options,
         )?;
-        if self.dot_output == PathBuf::from("-") {
+        if self.dot_output == Path::new("-") {
             print!("{dot}");
             Ok(())
         } else {
@@ -918,6 +1094,81 @@ fn default_workspace_path(global_cli_settings: &CLISettings) -> PathBuf {
     }
 }
 
+fn graph_workspace_dir(workspace: &Path, selected: &SelectedGraph<'_>) -> PathBuf {
+    workspace
+        .join(format!(
+            "process_{:04}_{}",
+            selected.process_id,
+            slug(&selected.integrand_name)
+        ))
+        .join(format!(
+            "graph_{:04}_{}",
+            selected.graph_id,
+            slug(&selected.graph.name)
+        ))
+}
+
+fn build_artifact_dir(
+    workspace: &Path,
+    selected: &SelectedGraph<'_>,
+    representation: RepresentationMode,
+    scale_mode: three_dimensional_reps::NumeratorSamplingScaleMode,
+) -> PathBuf {
+    graph_workspace_dir(workspace, selected)
+        .join("build")
+        .join(format!("{representation:?}_{scale_mode:?}").to_lowercase())
+}
+
+fn latest_expression_pointer(workspace: &Path) -> PathBuf {
+    workspace.join("latest_oriented_expression_path.txt")
+}
+
+fn slug(value: &str) -> String {
+    let slug = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if slug.is_empty() {
+        "unnamed".to_string()
+    } else {
+        slug
+    }
+}
+
+fn relative_display(path: &Path) -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| path.strip_prefix(cwd).ok().map(Path::to_path_buf))
+        .unwrap_or_else(|| path.to_path_buf())
+        .display()
+        .to_string()
+}
+
+fn write_latest_expression_pointer(workspace: &Path, expression_path: &Path) -> Result<()> {
+    write_path(
+        &latest_expression_pointer(workspace),
+        &relative_display(expression_path),
+    )
+}
+
+fn read_latest_expression_path(workspace: &Path) -> Result<PathBuf> {
+    let pointer = latest_expression_pointer(workspace);
+    let value = fs::read_to_string(&pointer)
+        .with_context(|| format!("Could not read {}", pointer.display()))?;
+    let path = PathBuf::from(value.trim());
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        Ok(std::env::current_dir()?.join(path))
+    }
+}
+
 fn write_or_print(path: Option<&Path>, text: &str) -> Result<()> {
     if let Some(path) = path {
         write_path(path, text)
@@ -935,4 +1186,101 @@ fn write_path(path: &Path, text: &str) -> Result<()> {
         }
     }
     fs::write(path, text).with_context(|| format!("Could not write {}", path.display()))
+}
+
+fn color_text(text: impl AsRef<str>, color: Color) -> String {
+    color.paint(text.as_ref()).to_string()
+}
+
+fn table_header(text: impl AsRef<str>) -> String {
+    AnsiStyle::new()
+        .bold()
+        .paint(Color::Cyan.paint(text.as_ref()).to_string())
+        .to_string()
+}
+
+fn status_text(text: &str) -> String {
+    let color = if text == "ok" {
+        Color::Green
+    } else if text.starts_with("failed") {
+        Color::Red
+    } else {
+        Color::Yellow
+    };
+    color_text(text, color)
+}
+
+fn render_evaluate_summary(output: &EvaluateOutput) -> String {
+    let mut table = Builder::new();
+    table.push_record(vec![table_header("field"), table_header("value")]);
+    table.push_record(vec![
+        "process".to_string(),
+        color_text(output.process_id.to_string(), Color::Blue),
+    ]);
+    table.push_record(vec![
+        "integrand".to_string(),
+        color_text(&output.integrand_name, Color::Green),
+    ]);
+    table.push_record(vec![
+        "graph".to_string(),
+        format!(
+            "{} {}",
+            color_text(format!("#{}", output.graph_id), Color::Blue),
+            color_text(&output.graph_name, Color::Green)
+        ),
+    ]);
+    table.push_record(vec![
+        "oriented expression".to_string(),
+        color_text(relative_display(&output.expression_path), Color::Purple),
+    ]);
+    table.push_record(vec![
+        "symbolica expression".to_string(),
+        color_text(
+            relative_display(&output.symbolica_expression_path),
+            Color::Purple,
+        ),
+    ]);
+    table.push_record(vec![
+        "param builder".to_string(),
+        color_text(relative_display(&output.param_builder_path), Color::Purple),
+    ]);
+    table.build().with(Style::rounded()).to_string()
+}
+
+fn render_test_cff_ltd_summary(output: &TestCffLtdOutput, manifest_path: &Path) -> String {
+    let mut table = Builder::new();
+    table.push_record(vec![
+        table_header("case"),
+        table_header("rep"),
+        table_header("M mode"),
+        table_header("generation"),
+        table_header("orientations"),
+        table_header("terms"),
+        table_header("evaluator"),
+    ]);
+    for case in &output.cases {
+        table.push_record(vec![
+            color_text(&case.name, Color::Blue),
+            color_text(format!("{:?}", case.representation), Color::Green),
+            color_text(
+                format!("{:?}", case.numerator_sampling_scale_mode),
+                Color::Purple,
+            ),
+            status_text(&case.generation_status),
+            color_text(case.orientation_count.to_string(), Color::Blue),
+            color_text(case.unfolded_term_count.to_string(), Color::Blue),
+            status_text(&case.evaluator_build_status),
+        ]);
+    }
+    format!(
+        "{} for process {}, integrand {}, graph {} {}\n{}: {}\n{}",
+        color_text("3Drep comparison", Color::Cyan),
+        color_text(format!("#{}", output.process_id), Color::Blue),
+        color_text(format!("'{}'", output.integrand_name), Color::Green),
+        color_text(format!("#{}", output.graph_id), Color::Blue),
+        color_text(&output.graph_name, Color::Green),
+        color_text("manifest", Color::Cyan),
+        color_text(relative_display(manifest_path), Color::Purple),
+        table.build().with(Style::rounded())
+    )
 }

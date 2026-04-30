@@ -1,14 +1,15 @@
 use std::{
     collections::BTreeMap,
     fmt,
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub},
+    ops::{Add, Mul, Neg, Sub},
 };
 
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
+    coefficient::CoefficientView,
     id::{Pattern, Replacement},
     parse,
 };
@@ -17,7 +18,7 @@ use typed_index_collections::TiVec;
 use crate::symbols::{
     cut_energy, external_energy_atom_from_index, numerator_sampling_scale, ose_atom_from_index,
 };
-use crate::utils::{Rational, RationalExt};
+use crate::utils::Rational;
 
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, Hash, PartialOrd, Ord,
@@ -65,123 +66,77 @@ impl From<HsurfaceID> for Atom {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Hash)]
-pub struct RationalCoefficient(Rational);
+pub(crate) trait RationalAtomExt {
+    fn rational_coeff(&self) -> Rational;
+    fn is_zero_coeff(&self) -> bool;
+    fn is_one_coeff(&self) -> bool;
+    fn is_negative_coeff(&self) -> bool;
+    fn abs_coeff(&self) -> Atom;
+}
 
-impl RationalCoefficient {
-    pub fn zero() -> Self {
-        Self(Rational::zero())
+impl RationalAtomExt for Atom {
+    fn rational_coeff(&self) -> Rational {
+        match self.as_atom_view() {
+            AtomView::Num(num) => match num.get_coeff_view() {
+                CoefficientView::Natural(re_num, re_den, im_num, im_den) => {
+                    assert_eq!(im_num, 0, "expected a real rational coefficient");
+                    assert_eq!(im_den, 1, "expected a real rational coefficient");
+                    Rational::from_int_unchecked(re_num, re_den)
+                }
+                CoefficientView::Large(re, im) => {
+                    assert!(im.is_zero(), "expected a real rational coefficient");
+                    re.to_rat()
+                }
+                other => panic!("expected rational coefficient atom, found {other:?}"),
+            },
+            _ => panic!("expected numeric rational coefficient atom"),
+        }
     }
 
-    pub fn one() -> Self {
-        Self(Rational::one())
+    fn is_zero_coeff(&self) -> bool {
+        self.rational_coeff().is_zero()
     }
 
-    pub fn new(numerator: i64, denominator: i64) -> Self {
-        Self(Rational::new(numerator, denominator))
+    fn is_one_coeff(&self) -> bool {
+        self.rational_coeff().is_one()
     }
 
-    pub fn from_i64(value: i64) -> Self {
-        Self(Rational::from(value))
+    fn is_negative_coeff(&self) -> bool {
+        self.rational_coeff().is_negative()
     }
 
-    pub fn from_rational(value: Rational) -> Self {
-        Self(value)
-    }
-
-    pub fn into_rational(self) -> Rational {
-        self.0
-    }
-
-    pub fn as_rational(&self) -> &Rational {
-        &self.0
-    }
-
-    pub fn to_i64_pair(&self) -> Option<(i64, i64)> {
-        self.0.to_i64_pair()
-    }
-
-    pub fn to_atom(&self) -> Atom {
-        Atom::num(self.0.clone())
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-
-    pub fn is_one(&self) -> bool {
-        self.0.is_one()
-    }
-
-    pub fn is_negative(&self) -> bool {
-        self.0.is_negative()
-    }
-
-    pub fn abs(&self) -> Self {
-        Self(self.0.abs())
+    fn abs_coeff(&self) -> Atom {
+        rational_coeff_atom(self.rational_coeff().abs())
     }
 }
 
-impl From<i64> for RationalCoefficient {
-    fn from(value: i64) -> Self {
-        Self::from_i64(value)
-    }
+pub(crate) fn rational_coeff_atom(value: Rational) -> Atom {
+    Atom::num(value)
 }
 
-impl Default for RationalCoefficient {
-    fn default() -> Self {
-        Self::zero()
-    }
+pub(crate) fn rational_coeff_one() -> Atom {
+    rational_coeff_atom(Rational::one())
 }
 
-impl fmt::Display for RationalCoefficient {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+pub(crate) fn rational_coeff_i64(value: i64) -> Atom {
+    rational_coeff_atom(Rational::from(value))
 }
 
-impl Add for RationalCoefficient {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign for RationalCoefficient {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 = self.0.clone() + rhs.0;
-    }
-}
-
-impl Neg for RationalCoefficient {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self(-self.0)
-    }
-}
-
-impl Mul<i64> for RationalCoefficient {
-    type Output = Self;
-
-    fn mul(self, rhs: i64) -> Self::Output {
-        Self(self.0 * Rational::from(rhs))
-    }
-}
-
-impl MulAssign<i64> for RationalCoefficient {
-    fn mul_assign(&mut self, rhs: i64) {
-        self.0 = self.0.clone() * Rational::from(rhs);
-    }
+pub(crate) fn rational_coeff_new(numerator: i64, denominator: i64) -> Atom {
+    rational_coeff_atom(Rational::new(numerator, denominator))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Hash, Default)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct LinearEnergyExpr {
-    pub internal_terms: Vec<(EdgeIndex, RationalCoefficient)>,
-    pub external_terms: Vec<(EdgeIndex, RationalCoefficient)>,
-    pub uniform_scale_coeff: RationalCoefficient,
-    pub constant: RationalCoefficient,
+    #[serde(with = "crate::utils::serde_atom_terms")]
+    pub internal_terms: Vec<(EdgeIndex, Atom)>,
+    #[serde(with = "crate::utils::serde_atom_terms")]
+    pub external_terms: Vec<(EdgeIndex, Atom)>,
+    #[serde(with = "crate::utils::serde_atom")]
+    pub uniform_scale_coeff: Atom,
+    #[serde(with = "crate::utils::serde_atom")]
+    pub constant: Atom,
 }
 
 impl LinearEnergyExpr {
@@ -194,7 +149,7 @@ impl LinearEnergyExpr {
             Self::zero()
         } else {
             Self {
-                internal_terms: vec![(edge_id, coeff.into())],
+                internal_terms: vec![(edge_id, rational_coeff_i64(coeff))],
                 ..Self::default()
             }
         }
@@ -205,7 +160,7 @@ impl LinearEnergyExpr {
             Self::zero()
         } else {
             Self {
-                external_terms: vec![(edge_id, coeff.into())],
+                external_terms: vec![(edge_id, rational_coeff_i64(coeff))],
                 ..Self::default()
             }
         }
@@ -216,14 +171,14 @@ impl LinearEnergyExpr {
             Self::zero()
         } else {
             Self {
-                uniform_scale_coeff: coeff.into(),
+                uniform_scale_coeff: rational_coeff_i64(coeff),
                 ..Self::default()
             }
         }
     }
 
-    pub fn ose_with_coeff(edge_id: EdgeIndex, coeff: RationalCoefficient) -> Self {
-        if coeff.is_zero() {
+    pub fn ose_with_coeff(edge_id: EdgeIndex, coeff: Atom) -> Self {
+        if coeff.is_zero_coeff() {
             Self::zero()
         } else {
             Self {
@@ -233,8 +188,8 @@ impl LinearEnergyExpr {
         }
     }
 
-    pub fn external_with_coeff(edge_id: EdgeIndex, coeff: RationalCoefficient) -> Self {
-        if coeff.is_zero() {
+    pub fn external_with_coeff(edge_id: EdgeIndex, coeff: Atom) -> Self {
+        if coeff.is_zero_coeff() {
             Self::zero()
         } else {
             Self {
@@ -244,8 +199,8 @@ impl LinearEnergyExpr {
         }
     }
 
-    pub fn uniform_scale_with_coeff(coeff: RationalCoefficient) -> Self {
-        if coeff.is_zero() {
+    pub fn uniform_scale_with_coeff(coeff: Atom) -> Self {
+        if coeff.is_zero_coeff() {
             Self::zero()
         } else {
             Self {
@@ -271,41 +226,41 @@ impl LinearEnergyExpr {
                 } else {
                     ose_atom_from_index(*edge_id)
                 };
-                acc + coeff.to_atom() * energy
+                acc + coeff.clone() * energy
             });
 
         let external = self
             .external_terms
             .iter()
             .fold(Atom::new(), |acc, (edge_id, coeff)| {
-                acc + coeff.to_atom() * external_energy_atom_from_index(*edge_id)
+                acc + coeff.clone() * external_energy_atom_from_index(*edge_id)
             });
 
-        let scale = if self.uniform_scale_coeff.is_zero() {
+        let scale = if self.uniform_scale_coeff.is_zero_coeff() {
             Atom::new()
         } else {
-            self.uniform_scale_coeff.to_atom() * numerator_sampling_scale()
+            self.uniform_scale_coeff.clone() * numerator_sampling_scale()
         };
 
-        internal + external + scale + self.constant.to_atom()
+        internal + external + scale + self.constant.clone()
     }
 
     pub fn uses_uniform_scale(&self) -> bool {
-        !self.uniform_scale_coeff.is_zero()
+        !self.uniform_scale_coeff.is_zero_coeff()
     }
 
     pub fn is_zero(&self) -> bool {
         self.internal_terms.is_empty()
             && self.external_terms.is_empty()
-            && self.uniform_scale_coeff.is_zero()
-            && self.constant.is_zero()
+            && self.uniform_scale_coeff.is_zero_coeff()
+            && self.constant.is_zero_coeff()
     }
 
     pub fn is_one(&self) -> bool {
         self.internal_terms.is_empty()
             && self.external_terms.is_empty()
-            && self.uniform_scale_coeff.is_zero()
-            && self.constant.is_one()
+            && self.uniform_scale_coeff.is_zero_coeff()
+            && self.constant.is_one_coeff()
     }
 
     pub fn remap_internal_edges(self, edge_map: &std::collections::BTreeMap<usize, usize>) -> Self {
@@ -359,13 +314,14 @@ impl LinearEnergyExpr {
             return Self::zero();
         }
         for (_, item_coeff) in &mut self.internal_terms {
-            *item_coeff *= coeff;
+            *item_coeff = rational_coeff_atom(item_coeff.rational_coeff() * Rational::from(coeff));
         }
         for (_, item_coeff) in &mut self.external_terms {
-            *item_coeff *= coeff;
+            *item_coeff = rational_coeff_atom(item_coeff.rational_coeff() * Rational::from(coeff));
         }
-        self.uniform_scale_coeff = self.uniform_scale_coeff * coeff;
-        self.constant = self.constant * coeff;
+        self.uniform_scale_coeff =
+            rational_coeff_atom(self.uniform_scale_coeff.rational_coeff() * Rational::from(coeff));
+        self.constant = rational_coeff_atom(self.constant.rational_coeff() * Rational::from(coeff));
         self.canonical()
     }
 
@@ -374,20 +330,14 @@ impl LinearEnergyExpr {
             return Self::zero();
         }
         for (_, item_coeff) in &mut self.internal_terms {
-            *item_coeff = RationalCoefficient::from_rational(
-                item_coeff.as_rational().clone() * coeff.clone(),
-            );
+            *item_coeff = rational_coeff_atom(item_coeff.rational_coeff() * coeff.clone());
         }
         for (_, item_coeff) in &mut self.external_terms {
-            *item_coeff = RationalCoefficient::from_rational(
-                item_coeff.as_rational().clone() * coeff.clone(),
-            );
+            *item_coeff = rational_coeff_atom(item_coeff.rational_coeff() * coeff.clone());
         }
-        self.uniform_scale_coeff = RationalCoefficient::from_rational(
-            self.uniform_scale_coeff.as_rational().clone() * coeff.clone(),
-        );
-        self.constant =
-            RationalCoefficient::from_rational(self.constant.as_rational().clone() * coeff);
+        self.uniform_scale_coeff =
+            rational_coeff_atom(self.uniform_scale_coeff.rational_coeff() * coeff.clone());
+        self.constant = rational_coeff_atom(self.constant.rational_coeff() * coeff);
         self.canonical()
     }
 }
@@ -398,8 +348,11 @@ impl Add for LinearEnergyExpr {
     fn add(mut self, rhs: Self) -> Self::Output {
         self.internal_terms.extend(rhs.internal_terms);
         self.external_terms.extend(rhs.external_terms);
-        self.uniform_scale_coeff += rhs.uniform_scale_coeff;
-        self.constant = self.constant + rhs.constant;
+        self.uniform_scale_coeff = rational_coeff_atom(
+            self.uniform_scale_coeff.rational_coeff() + rhs.uniform_scale_coeff.rational_coeff(),
+        );
+        self.constant =
+            rational_coeff_atom(self.constant.rational_coeff() + rhs.constant.rational_coeff());
         self.canonical()
     }
 }
@@ -431,19 +384,22 @@ impl Mul<i64> for LinearEnergyExpr {
 impl fmt::Display for LinearEnergyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut terms = Vec::<(String, bool)>::new();
-        if !self.constant.is_zero() {
-            let magnitude = self.constant.abs();
-            terms.push((magnitude.to_string(), self.constant.is_negative()));
+        if !self.constant.is_zero_coeff() {
+            let magnitude = self.constant.abs_coeff();
+            terms.push((
+                magnitude.to_canonical_string(),
+                self.constant.is_negative_coeff(),
+            ));
         }
 
-        let mut push_term = |label: String, coeff: &RationalCoefficient| {
-            let magnitude = coeff.abs();
-            let term = if magnitude.is_one() {
+        let mut push_term = |label: String, coeff: &Atom| {
+            let magnitude = coeff.abs_coeff();
+            let term = if magnitude.is_one_coeff() {
                 label
             } else {
-                format!("{magnitude}*{label}")
+                format!("{}*{label}", magnitude.to_canonical_string())
             };
-            terms.push((term, coeff.is_negative()));
+            terms.push((term, coeff.is_negative_coeff()));
         };
 
         for (edge_id, coeff) in &self.internal_terms {
@@ -452,7 +408,7 @@ impl fmt::Display for LinearEnergyExpr {
         for (edge_id, coeff) in &self.external_terms {
             push_term(format!("E[{}]", edge_id.0), coeff);
         }
-        if !self.uniform_scale_coeff.is_zero() {
+        if !self.uniform_scale_coeff.is_zero_coeff() {
             push_term("M".to_string(), &self.uniform_scale_coeff);
         }
 
@@ -476,16 +432,15 @@ impl fmt::Display for LinearEnergyExpr {
     }
 }
 
-fn collect_linear_terms(
-    terms: Vec<(EdgeIndex, RationalCoefficient)>,
-) -> Vec<(EdgeIndex, RationalCoefficient)> {
-    let mut collected = BTreeMap::<EdgeIndex, RationalCoefficient>::new();
+fn collect_linear_terms(terms: Vec<(EdgeIndex, Atom)>) -> Vec<(EdgeIndex, Atom)> {
+    let mut collected = BTreeMap::<EdgeIndex, Rational>::new();
     for (edge_id, coeff) in terms {
-        *collected.entry(edge_id).or_default() += coeff;
+        *collected.entry(edge_id).or_default() += coeff.rational_coeff();
     }
     collected
         .into_iter()
         .filter(|(_, coeff)| !coeff.is_zero())
+        .map(|(edge_id, coeff)| (edge_id, rational_coeff_atom(coeff)))
         .collect()
 }
 
@@ -502,6 +457,7 @@ pub enum SurfaceOrigin {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Hash)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct LinearSurface {
     pub kind: LinearSurfaceKind,
     pub expression: LinearEnergyExpr,
@@ -616,6 +572,7 @@ impl SurfaceAtom for () {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct SurfaceCache<E = (), H = ()> {
     pub esurface_cache: EsurfaceCollection<E>,
     pub hsurface_cache: HsurfaceCollection<H>,
