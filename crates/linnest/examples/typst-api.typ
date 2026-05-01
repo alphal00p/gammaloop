@@ -42,7 +42,7 @@
 
 = Linnest Typst API Example
 
-This example imports the local `linnest.typ` wrapper, builds an archived graph through the archived builder API, lays it out, and queries it through archived subgraph objects.
+This example imports the local `linnest.typ` wrapper, builds a graph object through the builder object API, lays it out, and queries it through subgraph objects.
 
 #table(
   columns: (auto, 1fr),
