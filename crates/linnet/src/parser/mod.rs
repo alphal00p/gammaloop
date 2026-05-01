@@ -292,7 +292,13 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     }
 
     #[cfg(feature = "rkyv")]
-    pub unsafe fn archived_from_bytes<'a>(bytes: &'a [u8]) -> &'a <Self as rkyv::Archive>::Archived
+    /// Returns the archived graph root without validating the byte buffer.
+    ///
+    /// # Safety
+    ///
+    /// `bytes` must contain a valid rkyv archive produced for this exact
+    /// `DotGraph` type, and the returned reference must not outlive `bytes`.
+    pub unsafe fn archived_from_bytes(bytes: &[u8]) -> &<Self as rkyv::Archive>::Archived
     where
         Self: rkyv::Archive,
     {

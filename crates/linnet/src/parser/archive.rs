@@ -87,7 +87,13 @@ impl DotGraphBytesSet {
         rkyv::to_bytes::<_, N>(self).map_err(|err| err.to_string())
     }
 
-    pub unsafe fn archived_from_bytes<'a>(bytes: &'a [u8]) -> &'a ArchivedDotGraphBytesSetRoot {
+    /// Returns the archived graph-byte set root without validating the byte buffer.
+    ///
+    /// # Safety
+    ///
+    /// `bytes` must contain a valid rkyv archive produced for `DotGraphBytesSet`,
+    /// and the returned reference must not outlive `bytes`.
+    pub unsafe fn archived_from_bytes(bytes: &[u8]) -> &ArchivedDotGraphBytesSetRoot {
         unsafe { rkyv::archived_root::<Self>(bytes) }
     }
 }

@@ -101,7 +101,13 @@ impl<E, V, H, G, S: NodeStorage<NodeData = V>> GraphSet<E, V, H, G, S> {
     }
 
     #[cfg(feature = "rkyv")]
-    pub unsafe fn archived_from_bytes<'a>(bytes: &'a [u8]) -> &'a <Self as rkyv::Archive>::Archived
+    /// Returns the archived graph set root without validating the byte buffer.
+    ///
+    /// # Safety
+    ///
+    /// `bytes` must contain a valid rkyv archive produced for this exact
+    /// `GraphSet` type, and the returned reference must not outlive `bytes`.
+    pub unsafe fn archived_from_bytes(bytes: &[u8]) -> &<Self as rkyv::Archive>::Archived
     where
         Self: rkyv::Archive,
     {
