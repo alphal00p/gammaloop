@@ -128,6 +128,7 @@
           ./crates/clinnet/templates/figure.typ
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
+          ./crates/clinnet/templates/linnest.typ
         ];
       };
 
