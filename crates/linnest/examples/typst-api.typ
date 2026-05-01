@@ -1,60 +1,44 @@
-#import "../../clinnet/templates/linnest.typ": (
-  builder,
-  builder-add-edge,
-  builder-add-node,
-  default-layout-config,
-  finish-builder,
-  graph-edges,
-  graph-info,
-  graph-nodes,
-  layout-graph,
-  subgraph-contains-hedge,
-  subgraph-from-bits,
-  subgraph-from-compass,
-  subgraph-hedges,
-  subgraph-label,
-)
+#import "../../clinnet/templates/linnest.typ": graph, layout, subgraph
 
-#let builder = builder(spec: (
+#let b = graph.builder(
   name: "constructed",
   statements: (full_num: "x + y"),
-))
-#let a = builder-add-node(builder, name: "a", statements: (eval: "(fill: blue.lighten(70%))"))
-#let builder = a.builder
-#let b = builder-add-node(builder, name: "b", statements: (eval: "(fill: green.lighten(70%))"))
-#let builder = b.builder
-#let builder = builder-add-edge(
-  builder,
-  source: (node: a.node, compass: "e", statement: "out"),
-  sink: (node: b.node, compass: "w", statement: "in"),
+)
+#let (node: a, builder: b) = graph.node(b, name: "a", statements: (eval: "(fill: blue.lighten(70%))"))
+#let (node: c, builder: b) = graph.node(b, name: "b", statements: (eval: "(fill: green.lighten(70%))"))
+#let b = graph.edge(
+  b,
+  source: (node: a, compass: "e", statement: "out"),
+  sink: (node: c, compass: "w", statement: "in"),
   statements: (label: "a-to-b"),
 )
-#let builder = builder-add-edge(
-  builder,
+#let b = graph.edge(
+  b,
   source: none,
-  sink: (node: a.node, compass: "n"),
+  sink: (node: a, compass: "n"),
   statements: (label: "incoming"),
 )
-#let builder = builder-add-edge(
-  builder,
-  source: (node: b.node, compass: "s"),
+#let b = graph.edge(
+  b,
+  source: (node: c, compass: "s"),
   sink: none,
   statements: (label: "outgoing"),
 )
-#let raw-graph = finish-builder(builder)
+#let raw-graph = graph.finish(b)
 
-#let graph = layout-graph(raw-graph, config: default-layout-config + (seed: "2", steps: "5"))
-#let info = graph-info(graph)
-#let nodes = graph-nodes(graph)
-#let edges = graph-edges(graph)
-#let north = subgraph-from-compass(graph, "n")
-#let internal-edge = subgraph-from-bits(graph, (true, true, false, false))
-#let north-label = subgraph-label(north)
-#let north-hedges = subgraph-hedges(north)
-#let internal-label = subgraph-label(internal-edge)
-#let north-edges = graph-edges(graph, subgraph: north)
-#let internal-nodes = graph-nodes(graph, subgraph: internal-edge)
-#let internal-has-hedge-zero = subgraph-contains-hedge(internal-edge, 0)
+#let g = layout(raw-graph, seed: "2", steps: "5")
+#let info = graph.info(g)
+#let nodes = graph.nodes(g)
+#let edges = graph.edges(g)
+#let dot = graph.dot(g)
+#let north = subgraph.compass(g, "n")
+#let internal-edge = subgraph.bits(g, (true, true, false, false))
+#let north-label = subgraph.to-label(north)
+#let north-hedges = subgraph.hedges(north)
+#let internal-label = subgraph.to-label(internal-edge)
+#let north-edges = graph.edges(g, subgraph: north)
+#let internal-nodes = graph.nodes(g, subgraph: internal-edge)
+#let internal-has-hedge-zero = subgraph.contains(internal-edge, 0)
 
 = Linnest Typst API Example
 
@@ -64,10 +48,11 @@ This example imports the local `linnest.typ` wrapper, builds an archived graph t
   columns: (auto, 1fr),
   inset: 6pt,
   stroke: 0.5pt,
-  [graph name], [#info.name],
-  [nodes], [#nodes.len()],
-  [edges], [#edges.len()],
-  [north subgraph], [#north-label],
+[graph name], [#info.name],
+[nodes], [#nodes.len()],
+[edges], [#edges.len()],
+[DOT characters], [#dot.len()],
+[north subgraph], [#north-label],
   [north hedges], [#north-hedges.join(", ")],
   [north edges], [#north-edges.len()],
   [internal edge subgraph], [#internal-label],

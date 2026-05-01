@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     builder_add_edge_bytes, builder_add_node_bytes, builder_finish_bytes, builder_new_bytes,
     graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
-    graph_edges_bytes, graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes,
-    graph_from_spec_bytes, graph_info_bytes, graph_nodes_bytes,
+    graph_dot_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
+    graph_edges_of_bytes, graph_from_spec_bytes, graph_info_bytes, graph_nodes_bytes,
     graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes, graph_spanning_forests_bytes,
     graph_subgraph_bytes, layout_graph_bytes, layout_parsed_graph_bytes,
     layout_parsed_graphs_bytes, parse_dot_graphs_bytes, subgraph_contains_hedge_bytes,
@@ -233,6 +233,12 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
     let edges: Vec<TypstDotEdge> =
         ciborium::de::from_reader(graph_edges_bytes(&graph).unwrap().as_slice()).unwrap();
     assert_eq!(edges.len(), 3);
+
+    let dot: String =
+        ciborium::de::from_reader(graph_dot_bytes(&graph).unwrap().as_slice()).unwrap();
+    assert!(dot.contains("digraph constructed"));
+    assert!(dot.contains("a"));
+    assert!(dot.contains("b"));
 
     let north = graph_compass_subgraph_bytes(&graph, &encode_cbor(&"n")).unwrap();
     let north_label: String = ciborium::de::from_reader(north.as_slice()).unwrap();
