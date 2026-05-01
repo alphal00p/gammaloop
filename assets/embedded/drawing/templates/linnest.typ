@@ -1,154 +1,266 @@
-// Typst wrapper for the linnest WASM plugin.
-//
-// Import this file from a directory that also contains `linnest.wasm`:
-//
-//   #import "linnest.typ": parse-graphs, layout-graph, graph-info
-//
-// Graph, builder, and subgraph values returned here are archived byte arrays
-// intended to be passed back to the functions below.
+#import "graph.typ" as graph-module
+#import "subgraph.typ" as subgraph-module
 
-#let linnest-plugin = plugin("./linnest.wasm")
-
-#let default-layout-config = (
-  steps: sys.inputs.at("steps", default: "15"),
-  seed: sys.inputs.at("seed", default: "14"),
-  step: ".81",
-  step_shrink: "0.21",
-  temp: ".3",
-  beta: "46.1",
-  k_spring: "11.",
-  g_center: "40.0",
-  epochs: "30",
-  crossing_penalty: "30",
-  gamma_dangling: "40",
-  gamma_ee: ".1",
-  directional_force: "5",
-  label_length_scale: ".6",
-  label_spring: "23",
-  label_charge: "3",
-  label_steps: "20",
-  gamma_ev: ".1",
-  z_spring: "0.05",
-  z_spring_growth: "1.3",
-  length_scale: "0.1",
+/// Default layout configuration used by @layout.
+///
+/// These are the defaults for @layout's named settings. Numeric values are
+/// native Typst integers/floats here and are converted to strings only when the
+/// wrapper sends settings to the plugin.
+/// -> dictionary
+#let config = (
+  viewport_w: 10.0,
+  viewport_h: 10.0,
+  tree_dx: 0.9,
+  tree_dy: 1.2,
+  steps: int(sys.inputs.at("steps", default: "15")),
+  seed: int(sys.inputs.at("seed", default: "14")),
+  step: 0.81,
+  step_shrink: 0.21,
+  cool: 0.85,
+  accept_floor: 0.15,
+  early_tol: 1e-6,
+  temp: 0.3,
+  delta: 0.4,
+  beta: 46.1,
+  k_spring: 11.0,
+  g_center: 40.0,
+  epochs: 30,
+  crossing_penalty: 30.0,
+  gamma_dangling: 40.0,
+  gamma_ee: 0.1,
+  directional_force: 5.0,
+  label_length_scale: 0.6,
+  label_spring: 23.0,
+  label_charge: 3.0,
+  label_steps: 20,
+  label_step: 0.15,
+  label_early_tol: 1e-3,
+  label_max_delta_scale: 0.5,
+  gamma_ev: 0.1,
+  eps: 1e-4,
+  incremental_energy: true,
+  layout_algo: "force",
+  z_spring: 0.05,
+  z_spring_growth: 1.3,
+  length_scale: 0.1,
 )
 
-// Parse one or more DOT digraphs into archived graph byte arrays.
-#let parse-graphs(input) = cbor(linnest-plugin.parse_graph(bytes(input)))
+#let _plugin = plugin("./linnest.wasm")
 
-// Build one archived graph byte array from a Typst dictionary:
-//
-//   (
-//     name: "example",
-//     nodes: ((name: "a"), (name: "b")),
-//     edges: ((source: (node: 0), sink: (node: 1)),),
-//   )
-#let build-graph(spec) = linnest-plugin.graph_from_spec(cbor.encode(spec))
+/// Apply the linnest layout pass to an archived graph.
+///
+/// This is intentionally a second step: construct or parse a graph first, then
+/// call `layout`. Set `layout_algo` to `"force"` for deterministic force
+/// integration or `"anneal"` for simulated annealing.
+///
+/// ```example
+/// #let g = graph.build(
+///   nodes: ((name: "a"), (name: "b")),
+///   edges: ((source: (node: 0), sink: (node: 1)),),
+/// )
+/// #let g = layout(g, seed: "2", steps: "5")
+/// #graph.edges(g).map(edge => edge.pos)
+/// ```
+/// -> bytes
+#let layout(
+  /// Archived graph bytes returned by `graph.build`, `graph.finish`, or
+  /// `graph.parse`.
+  /// -> bytes
+  graph,
 
-// Create an archived graph builder. The optional `spec` can set graph-level
-// `name`, `statements`, `node_statements`, and `edge_statements`.
-#let builder(spec: (:)) = linnest-plugin.graph_builder(cbor.encode(spec))
+  /// Width of the layout viewport used to derive the natural spring length.
+  /// Applies to both `"force"` and `"anneal"`. -> float
+  viewport_w: config.viewport_w,
 
-// Add a node to an archived builder. Returns `(builder: bytes, node: index)`.
-#let builder-add-node(builder, name: none, index: none, statements: (:)) = {
-  cbor(linnest-plugin.graph_builder_add_node(
-    bytes(builder),
-    cbor.encode((name: name, index: index, statements: statements)),
-  ))
-}
+  /// Height of the layout viewport used to derive the natural spring length.
+  /// Applies to both `"force"` and `"anneal"`. -> float
+  viewport_h: config.viewport_h,
 
-// Add a paired or external edge to an archived builder and return the next builder.
-// Use `source: none` or `sink: none` for external edges.
-#let builder-add-edge(
-  builder,
-  source: none,
-  sink: none,
-  orientation: "default",
-  flow: none,
-  id: none,
-  statements: (:),
+  /// Horizontal spacing multiplier for the initial traversal-tree placement.
+  /// Applies before both `"force"` and `"anneal"`. -> float
+  tree_dx: config.tree_dx,
+
+  /// Vertical spacing multiplier for the initial traversal-tree placement.
+  /// Applies before both `"force"` and `"anneal"`. -> float
+  tree_dy: config.tree_dy,
+
+  /// Iterations per epoch. In `"force"` mode this is the number of force
+  /// integration steps; in `"anneal"` mode this is the number of proposals per
+  /// temperature epoch. -> int
+  steps: config.steps,
+
+  /// Seed for deterministic initialization, force-mode jitter, and annealing
+  /// proposals. Applies to both modes. -> int
+  seed: config.seed,
+
+  /// Initial movement scale. `"force"` multiplies computed forces by this
+  /// value; `"anneal"` uses it as the proposal step size. -> float
+  step: config.step,
+
+  /// Anneal-only step shrink factor, applied when an epoch's acceptance ratio
+  /// falls below `accept_floor`. -> float
+  step_shrink: config.step_shrink,
+
+  /// Cooling factor applied once per epoch. `"anneal"` cools `temp`; `"force"`
+  /// shrinks `step`. -> float
+  cool: config.cool,
+
+  /// Anneal-only acceptance-ratio threshold below which `step` is shrunk by
+  /// `step_shrink`. -> float
+  accept_floor: config.accept_floor,
+
+  /// Force-only early stop threshold for maximum movement in one step. The
+  /// annealing schedule stores this value but does not currently use it for
+  /// stopping. -> float
+  early_tol: config.early_tol,
+
+  /// Anneal-only initial temperature used in the Metropolis acceptance test.
+  /// -> float
+  temp: config.temp,
+
+  /// Force-mode maximum movement clamp per point and per step. -> float
+  delta: config.delta,
+
+  /// Base repulsion strength for vertex-vertex interactions. Also scales
+  /// `gamma_ev`, `gamma_ee`, `gamma_dangling`, and `g_center`. Applies to both
+  /// modes through the shared spring energy.
+  /// -> float
+  beta: config.beta,
+
+  /// Spring stiffness for node-to-edge incidence lengths. Applies to both
+  /// modes. -> float
+  k_spring: config.k_spring,
+
+  /// Centering strength relative to `beta`. Applies to both modes.
+  /// -> float
+  g_center: config.g_center,
+
+  /// Number of epochs. Both modes run up to `steps` iterations inside
+  /// each epoch. -> int
+  epochs: config.epochs,
+
+  /// Anneal-only fixed energy penalty per detected edge crossing. The direct
+  /// force integrator does not currently add a crossing force. -> float
+  crossing_penalty: config.crossing_penalty,
+
+  /// Repulsion for dangling half edges, relative to `beta`. Applies to
+  /// both modes through the shared spring energy. -> float
+  gamma_dangling: config.gamma_dangling,
+
+  /// Local edge-edge repulsion, relative to `beta`. Applies to both
+  /// modes. -> float
+  gamma_ee: config.gamma_ee,
+
+  /// Bias that pushes points in directions implied by pin/port constraints.
+  /// Applies to both modes. -> float
+  directional_force: config.directional_force,
+
+  /// Edge-label target offset as a multiple of the graph spring length. Label
+  /// layout runs after both graph layout modes. -> float
+  label_length_scale: config.label_length_scale,
+
+  /// Spring strength pulling each label toward its target offset. Label layout
+  /// runs after both modes. -> float
+  label_spring: config.label_spring,
+
+  /// Repulsion strength between labels and graph points, scaled by spring
+  /// length squared. Label layout runs after both modes. -> float
+  label_charge: config.label_charge,
+
+  /// Maximum number of post-layout label relaxation steps. Set to `"0"` to
+  /// skip label placement. Applies after both modes. -> int
+  label_steps: config.label_steps,
+
+  /// Label relaxation step size. Applies after both modes. -> float
+  label_step: config.label_step,
+
+  /// Label relaxation early stop threshold. Applies after both modes. -> float
+  label_early_tol: config.label_early_tol,
+
+  /// Label movement clamp as a multiple of spring length. Applies after both
+  /// modes. -> float
+  label_max_delta_scale: config.label_max_delta_scale,
+
+  /// Edge-vertex repulsion, relative to `beta`. Applies to both modes.
+  /// -> float
+  gamma_ev: config.gamma_ev,
+
+  /// Softening epsilon used in inverse-square force/energy terms. Applies to
+  /// both modes. -> float
+  eps: config.eps,
+
+  /// Whether annealing updates cached energy by local deltas. This is
+  /// anneal-only; force mode computes direct forces instead of energies.
+  /// -> bool
+  incremental_energy: config.incremental_energy,
+
+  /// Layout algorithm. Use `"force"` for direct force integration or `"anneal"`
+  /// for simulated annealing against the spring energy. -> string
+  layout_algo: config.layout_algo,
+
+  /// Force-only spring pulling temporary z coordinates back toward the layout
+  /// plane. Use with `z_spring_growth` to help separate overlapping
+  /// points during integration. -> float
+  z_spring: config.z_spring,
+
+  /// Force-only per-epoch multiplier for `z_spring`. -> float
+  z_spring_growth: config.z_spring_growth,
+
+  /// Natural spring-length multiplier. This scales the graph's preferred edge
+  /// length and the repulsive coefficients derived from it. Applies to both
+  /// modes. -> float
+  length_scale: config.length_scale,
 ) = {
-  linnest-plugin.graph_builder_add_edge(
-    bytes(builder),
-    cbor.encode((
-      source: source,
-      sink: sink,
-      orientation: orientation,
-      flow: flow,
-      id: id,
-      statements: statements,
-    )),
+  let settings = (
+    viewport_w: str(viewport_w),
+    viewport_h: str(viewport_h),
+    tree_dx: str(tree_dx),
+    tree_dy: str(tree_dy),
+    steps: str(steps),
+    seed: str(seed),
+    step: str(step),
+    step_shrink: str(step_shrink),
+    cool: str(cool),
+    accept_floor: str(accept_floor),
+    early_tol: str(early_tol),
+    temp: str(temp),
+    delta: str(delta),
+    beta: str(beta),
+    k_spring: str(k_spring),
+    g_center: str(g_center),
+    epochs: str(epochs),
+    crossing_penalty: str(crossing_penalty),
+    gamma_dangling: str(gamma_dangling),
+    gamma_ee: str(gamma_ee),
+    directional_force: str(directional_force),
+    label_length_scale: str(label_length_scale),
+    label_spring: str(label_spring),
+    label_charge: str(label_charge),
+    label_steps: str(label_steps),
+    label_step: str(label_step),
+    label_early_tol: str(label_early_tol),
+    label_max_delta_scale: str(label_max_delta_scale),
+    gamma_ev: str(gamma_ev),
+    eps: str(eps),
+    incremental_energy: incremental_energy,
+    layout_algo: layout_algo,
+    z_spring: str(z_spring),
+    z_spring_growth: str(z_spring_growth),
+    length_scale: str(length_scale),
   )
+  _plugin.layout_parsed_graph(bytes(graph), cbor.encode(settings))
 }
 
-// Finish an archived builder into an archived graph.
-#let finish-builder(builder) = linnest-plugin.graph_builder_finish(bytes(builder))
+/// Graph namespace.
+///
+/// Graph values are archived byte arrays. Keep them opaque and pass them back to
+/// this module, @subgraph, or @layout.
+/// -> module
+#let graph = graph-module
 
-// Layout one parsed graph and return another archived graph byte array.
-#let layout-graph(graph, config: default-layout-config) = {
-  linnest-plugin.layout_parsed_graph(bytes(graph), cbor.encode(config))
-}
-
-// Parse and layout all DOT graphs in `input`.
-#let layout-graphs(input, config: default-layout-config) = {
-  parse-graphs(input).map(graph => layout-graph(graph, config: config))
-}
-
-// Return graph metadata with `name`, `global_statements`,
-// `edge_statements`, and `node_statements` fields.
-#let graph-info(graph) = cbor(linnest-plugin.graph_info(graph))
-
-// Construct archived subgraph objects.
-#let subgraph-from-label(graph, label) = {
-  linnest-plugin.graph_archived_subgraph(bytes(graph), cbor.encode(label))
-}
-
-#let subgraph-from-bits(graph, bits) = {
-  linnest-plugin.graph_archived_subgraph(bytes(graph), cbor.encode(bits))
-}
-
-#let subgraph-from-compass(graph, compass) = {
-  linnest-plugin.graph_archived_compass_subgraph(bytes(graph), cbor.encode(compass))
-}
-
-#let subgraph-label(subgraph) = cbor(linnest-plugin.subgraph_label(bytes(subgraph)))
-#let subgraph-hedges(subgraph) = cbor(linnest-plugin.subgraph_hedges(bytes(subgraph)))
-#let subgraph-contains-hedge(subgraph, hedge) = {
-  cbor(linnest-plugin.subgraph_contains_hedge(bytes(subgraph), cbor.encode(hedge)))
-}
-
-// Return node records. With `subgraph`, only nodes incident to that subgraph
-// are returned. `subgraph` must be an archived subgraph object.
-#let graph-nodes(graph, subgraph: none) = {
-  if subgraph == none {
-    cbor(linnest-plugin.graph_nodes(graph))
-  } else {
-    cbor(linnest-plugin.graph_nodes_of_subgraph(bytes(graph), bytes(subgraph)))
-  }
-}
-
-// Return edge records. With `subgraph`, only edges intersecting that subgraph
-// are returned. `subgraph` must be an archived subgraph object.
-#let graph-edges(graph, subgraph: none) = {
-  if subgraph == none {
-    cbor(linnest-plugin.graph_edges(graph))
-  } else {
-    cbor(linnest-plugin.graph_edges_of_subgraph(bytes(graph), bytes(subgraph)))
-  }
-}
-
-#let graph-cycle-basis(graph) = cbor(linnest-plugin.graph_cycle_basis(bytes(graph)))
-#let graph-spanning-forests(graph) = cbor(linnest-plugin.graph_spanning_forests(bytes(graph)))
-
-#let join-graphs(left, right, key: none) = {
-  if key == none {
-    panic("join-graphs requires a key")
-  }
-  linnest-plugin.graph_join_by_hedge_key(bytes(left), bytes(right), cbor.encode((key: key)))
-}
-
-// Low-level compatibility helpers that return base62 labels directly.
-#let graph-subgraph(graph, subgraph) = cbor(linnest-plugin.graph_subgraph(graph, cbor.encode(subgraph)))
-#let graph-compass-subgraph(graph, compass) = {
-  cbor(linnest-plugin.graph_compass_subgraph(graph, cbor.encode(compass)))
-}
+/// Subgraph namespace.
+///
+/// Subgraph values are archived byte arrays. They can be passed to
+/// `graph.nodes` and `graph.edges`.
+/// -> module
+#let subgraph = subgraph-module

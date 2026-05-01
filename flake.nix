@@ -126,9 +126,11 @@
         fileset = lib.fileset.unions [
           cargoSources
           ./crates/clinnet/templates/figure.typ
+          ./crates/clinnet/templates/graph.typ
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
           ./crates/clinnet/templates/linnest.typ
+          ./crates/clinnet/templates/subgraph.typ
         ];
       };
 

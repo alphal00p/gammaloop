@@ -45,7 +45,7 @@
   length_scale: 0.1,
 )
 
-#let _plugin = plugin("./linnest.wasm")
+#let _plugin = plugin("../linnest.wasm")
 
 /// Apply the linnest layout pass to an archived graph.
 ///
