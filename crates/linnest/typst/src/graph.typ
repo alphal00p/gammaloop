@@ -1,6 +1,6 @@
 #let _plugin = plugin("../linnest.wasm")
 
-/// Parse one or more DOT digraphs into archived graph byte arrays.
+/// Parse one or more DOT digraphs into graph objects.
 ///
 /// ```example
 /// #let graphs = graph.parse("digraph first { a -> b }")
@@ -9,7 +9,7 @@
 /// -> array
 #let parse(input) = cbor(_plugin.parse_graph(bytes(input)))
 
-/// Build one archived graph from node and edge arrays.
+/// Build one graph object from node and edge arrays.
 ///
 /// This is convenience sugar over @builder, @node, @edge, and @finish.
 ///
@@ -55,7 +55,7 @@
   )))
 }
 
-/// Create an archived graph builder.
+/// Create a builder object.
 ///
 /// `statements`, `node-statements`, and `edge-statements` set graph-level DOT
 /// attributes that are carried into the finished graph.
@@ -75,7 +75,7 @@
   )))
 }
 
-/// Add a node to an archived builder.
+/// Add a node to a builder object.
 ///
 /// Returns a dictionary with fields `node` and `builder`, so callers can write
 /// `#let (node: a, builder: b) = graph.node(b, name: "a")`. The returned
@@ -95,7 +95,7 @@
   ))
 }
 
-/// Add a paired or external edge to an archived builder.
+/// Add a paired or external edge to a builder object.
 ///
 /// Set `source` to `none` or `sink` to `none` for an external edge.
 /// Endpoint dictionaries accept `node`, `statement`, `id`, `port_label`,
@@ -136,7 +136,7 @@
   )
 }
 
-/// Finish an archived builder into an archived graph.
+/// Finish a builder object into a graph object.
 ///
 /// ```example
 /// #let b = graph.builder(name: "demo")
@@ -159,7 +159,7 @@
 /// -> dictionary
 #let info(graph) = cbor(_plugin.graph_info(graph))
 
-/// Serialize an archived graph to DOT.
+/// Serialize a graph object to DOT.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -172,7 +172,7 @@
 /// -> string
 #let dot(graph) = cbor(_plugin.graph_dot(bytes(graph)))
 
-/// Return node records, optionally filtered by an archived subgraph.
+/// Return node records, optionally filtered by an subgraph object.
 ///
 /// ```example
 /// #let g = graph.build(nodes: ((name: "a"), (name: "b")))
@@ -187,7 +187,7 @@
   }
 }
 
-/// Return edge records, optionally filtered by an archived subgraph.
+/// Return edge records, optionally filtered by an subgraph object.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -227,7 +227,7 @@
   _plugin.graph_join_by_hedge_key(bytes(left), bytes(right), cbor.encode((key: key)))
 }
 
-/// Return archived subgraphs for the graph's cycle basis.
+/// Return subgraph objects for the graph's cycle basis.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -239,7 +239,7 @@
 /// -> array
 #let cycles(graph) = cbor(_plugin.graph_cycle_basis(bytes(graph)))
 
-/// Return archived subgraphs for the graph's spanning forests.
+/// Return subgraph objects for the graph's spanning forests.
 ///
 /// ```example
 /// #let g = graph.build(

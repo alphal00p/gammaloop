@@ -1,6 +1,6 @@
 #let _plugin = plugin("./linnest.wasm")
 
-/// Construct an archived subgraph from a base62 label.
+/// Construct an subgraph object from a base62 label.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -14,7 +14,7 @@
 /// -> bytes
 #let label(graph, label) = _plugin.graph_archived_subgraph(bytes(graph), cbor.encode(label))
 
-/// Construct an archived subgraph from a boolean hedge array.
+/// Construct an subgraph object from a boolean hedge array.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -27,7 +27,7 @@
 /// -> bytes
 #let bits(graph, bits) = _plugin.graph_archived_subgraph(bytes(graph), cbor.encode(bits))
 
-/// Construct an archived subgraph from a DOT compass point such as `"n"` or
+/// Construct an subgraph object from a DOT compass point such as `"n"` or
 /// `"s"`.
 ///
 /// ```example
@@ -42,7 +42,7 @@
   _plugin.graph_archived_compass_subgraph(bytes(graph), cbor.encode(compass))
 }
 
-/// Convert an archived subgraph to its base62 label.
+/// Convert an subgraph object to its base62 label.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -54,7 +54,7 @@
 /// -> string
 #let to-label(subgraph) = cbor(_plugin.subgraph_label(bytes(subgraph)))
 
-/// Return the hedge indices included in an archived subgraph.
+/// Return the hedge indices included in an subgraph object.
 ///
 /// ```example
 /// #let g = graph.build(
@@ -66,7 +66,7 @@
 /// -> array
 #let hedges(subgraph) = cbor(_plugin.subgraph_hedges(bytes(subgraph)))
 
-/// Test whether an archived subgraph includes a hedge.
+/// Test whether an subgraph object includes a hedge.
 ///
 /// ```example
 /// #let g = graph.build(

@@ -77,9 +77,9 @@ Import it from a directory that also contains the WASM plugin:
 The wrapper exports:
 
 - `config`: default layout settings used by `layout.typ`.
-- `layout(graph, seed: "2", steps: "5", ...)`: lays out one archived graph.
+- `layout(graph, seed: "2", steps: "5", ...)`: lays out one graph object.
 - `graph`: namespace for graph construction, DOT parsing/printing, inspection, joins, and graph algorithms.
-- `subgraph`: namespace for archived subgraph construction and inspection.
+- `subgraph`: namespace for subgraph object construction and inspection.
 
 See `crates/linnest/typst/docs/manual.pdf` for the full Tidy-generated API reference, and `crates/linnest/examples/typst-api.typ` for a compile-checked example:
 
