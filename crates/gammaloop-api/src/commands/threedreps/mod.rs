@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs,
+    io::Cursor,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -11,13 +12,16 @@ use color_eyre::{
     Result,
 };
 use gammalooprs::{
-    cff::expression::GammaLoopThreeDExpression,
-    graph::{Graph, ThreeDRepMassShift},
+    cff::expression::{
+        internal_energy_parameter_atom_gs, numerator_with_internal_energy_parameters_gs,
+        GammaLoopThreeDExpression,
+    },
+    graph::{FeynmanGraph, Graph, ThreeDRepMassShift},
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
             evaluators::{EvaluatorMethod, EvaluatorStack, InputParams, SingleOrAllOrientations},
-            param_builder::{ParamBuilder, ParamBuilderInputGroup},
+            param_builder::{ParamBuilder, ParamBuilderInputGroup, ParamBuilderInputParameter},
             ProcessIntegrand,
         },
     },
@@ -29,9 +33,11 @@ use gammalooprs::{
         RuntimeSettings,
     },
     utils::{f128, symbolica_ext::LogPrint, ArbPrec, FloatLike, F},
+    DependentMomentaConstructor, GammaLoopContextContainer,
 };
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use linnet::half_edge::{
-    involution::{EdgeVec, HedgePair, Orientation},
+    involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
     subgraph::subset::SubSet,
 };
 use nu_ansi_term::{Color, Style as AnsiStyle};
@@ -39,13 +45,16 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::atom::AtomCore;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    state::State as SymbolicaState,
+};
 use tabled::{builder::Builder, settings::Style};
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, reconstruct_dot_from_expression, render_expression_summary,
     validate_parsed_graph, DisplayOptions, Generate3DExpressionOptions, GraphInfo, GraphValidation,
-    OrientationID, ReconstructDotFormat, ReconstructDotOptions, RepresentationMode,
-    ThreeDExpression, ThreeDGraphSource,
+    NumeratorDisplay, OrientationID, ReconstructDotFormat, ReconstructDotOptions,
+    RepresentationMode, ThreeDExpression, ThreeDGraphSource,
 };
 use typed_index_collections::TiVec;
 
@@ -114,6 +123,47 @@ pub struct GraphSelectorArgs {
     pub graph: String,
 }
 
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
+pub struct OptionalGraphSelectorArgs {
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Any)
+    )]
+    pub process: Option<ProcessRef>,
+
+    /// The integrand name to use
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Any)
+    )]
+    pub integrand_name: Option<String>,
+
+    /// Individual graph id, graph name, or inspect display label such as "#3 : graph_name"
+    #[arg(short = 'g', long = "graph", value_name = "GRAPH")]
+    pub graph: Option<String>,
+}
+
+impl OptionalGraphSelectorArgs {
+    fn has_any_selector(&self) -> bool {
+        self.process.is_some() || self.integrand_name.is_some() || self.graph.is_some()
+    }
+
+    fn require_graph_selection(&self, context: &str) -> Result<GraphSelectorArgs> {
+        Ok(GraphSelectorArgs {
+            process: self.process.clone(),
+            integrand_name: self.integrand_name.clone(),
+            graph: self.graph.clone().ok_or_else(|| {
+                eyre!("{context} requires --graph/-g when selecting a cached representation")
+            })?,
+        })
+    }
+}
+
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Validate {
     #[command(flatten)]
@@ -166,6 +216,25 @@ pub struct Build {
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Evaluate {
+    #[command(flatten)]
+    pub selection: OptionalGraphSelectorArgs,
+
+    /// Explicit oriented-expression JSON to evaluate. Takes precedence over representation lookup.
+    #[arg(long, value_hint = clap::ValueHint::FilePath)]
+    pub json_in: Option<PathBuf>,
+
+    /// Cached representation to evaluate when --json-in is not supplied.
+    #[arg(long, value_enum)]
+    pub representation: Option<CliRepresentationMode>,
+
+    /// Cached numerator-sampling normalization variant to evaluate with --representation.
+    #[arg(
+        long = "numerator-samples-normalization",
+        alias = "numerator-sampling-scale-mode",
+        value_enum
+    )]
+    pub numerator_samples_normalization: Option<CliNumeratorSamplesNormalization>,
+
     /// 3Drep artifact workspace containing the oriented expression JSON.
     #[arg(long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
@@ -178,6 +247,27 @@ pub struct Evaluate {
 
     #[arg(long, default_value_t = 1.0)]
     pub scale: f64,
+
+    /// Profile repeated evaluator calls for approximately this duration.
+    #[arg(long)]
+    pub profile: Option<String>,
+
+    /// Force the eager evaluator backend for Double precision.
+    #[arg(long, default_value_t = false)]
+    pub eager: bool,
+
+    /// Evaluate only the numerator, keeping internal edge energies as Q(edge, cind(0)) input parameters.
+    #[arg(long, default_value_t = false)]
+    pub numerator_only: bool,
+
+    /// Override numerator-only internal energy inputs as edge:value entries.
+    #[arg(
+        long = "numerator-q0",
+        alias = "numerator-energy-components",
+        value_name = "EDGE:VALUE",
+        action = clap::ArgAction::Append
+    )]
+    pub numerator_q0: Vec<String>,
 
     #[arg(long, default_value_t = false)]
     pub clean: bool,
@@ -206,6 +296,9 @@ pub struct TestCffLtd {
 
     #[arg(long)]
     pub mass_shift: Option<f64>,
+
+    #[arg(long, default_value_t = 5)]
+    pub n_epsilon_steps: usize,
 
     #[arg(long, default_value_t = false)]
     pub clean: bool,
@@ -267,6 +360,14 @@ impl From<CliRepresentationMode> for RepresentationMode {
             CliRepresentationMode::Cff => Self::Cff,
             CliRepresentationMode::PureLtd => Self::PureLtd,
         }
+    }
+}
+
+fn cli_representation_name(value: CliRepresentationMode) -> &'static str {
+    match value {
+        CliRepresentationMode::Ltd => "ltd",
+        CliRepresentationMode::Cff => "cff",
+        CliRepresentationMode::PureLtd => "pure-ltd",
     }
 }
 
@@ -393,6 +494,7 @@ struct TestCffLtdOutput {
     energy_degree_bounds: Vec<(usize, usize)>,
     numerator_interpolation_scale: f64,
     mass_shift_start: f64,
+    n_epsilon_steps: usize,
     cases: Vec<TestCffLtdCaseOutput>,
     #[serde(default)]
     verdict: TestCffLtdVerdict,
@@ -422,12 +524,29 @@ struct EvaluateOutput {
     integrand_name: String,
     graph_id: usize,
     graph_name: String,
-    expression_path: PathBuf,
+    #[serde(default)]
+    numerator_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expression_path: Option<PathBuf>,
     symbolica_expression_path: PathBuf,
     param_builder_path: PathBuf,
     settings: ThreeDrepRunSettings,
     evaluation: ThreeDrepEvaluationRecord,
     parameters: Vec<ParameterValueRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ThreeDrepProfileRecord {
+    target_timing: String,
+    target_timing_seconds: f64,
+    warmup_calls: usize,
+    warmup_timing: String,
+    warmup_timing_seconds: f64,
+    calls: usize,
+    total_timing: String,
+    total_timing_seconds: f64,
+    timing_per_sample: String,
+    timing_per_sample_seconds: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -451,6 +570,8 @@ struct ThreeDrepEvaluationRecord {
     value_im: String,
     sample_evaluation_timing: String,
     sample_evaluation_timing_seconds: f64,
+    #[serde(default)]
+    profile: Option<ThreeDrepProfileRecord>,
     status: String,
     error: Option<String>,
 }
@@ -520,6 +641,8 @@ struct ThreeDrepRunSettings {
     evaluator_method: EvaluatorMethod,
     evaluator_backend: String,
     compiled_backend_available: bool,
+    #[serde(default)]
+    force_eager: bool,
     numerator_samples_normalization: CliNumeratorSamplesNormalization,
     numerator_interpolation_scale: f64,
     seed: u64,
@@ -531,11 +654,27 @@ struct SelectedGraph<'a> {
     integrand_name: String,
     graph_id: usize,
     graph: &'a Graph,
+    integrand_kind: SelectedIntegrandKind,
+}
+
+struct EvaluateInput<'a> {
+    selected: SelectedGraph<'a>,
+    artifact: Option<BuildOutput>,
+    expression_path: Option<PathBuf>,
+    artifact_dir: PathBuf,
+    numerator_sampling_scale_mode: three_dimensional_reps::NumeratorSamplingScaleMode,
+}
+
+#[derive(Clone, Copy)]
+enum SelectedIntegrandKind {
+    Amplitude,
+    CrossSection,
 }
 
 struct TestCffLtdCaseBuildRequest<'a> {
     graph: &'a Graph,
     model: &'a Model,
+    integrand_kind: SelectedIntegrandKind,
     workspace: &'a Path,
     representation: RepresentationMode,
     scale_mode: three_dimensional_reps::NumeratorSamplingScaleMode,
@@ -544,11 +683,14 @@ struct TestCffLtdCaseBuildRequest<'a> {
     default_runtime_settings: &'a RuntimeSettings,
     global_cli_settings: &'a CLISettings,
     mass_shift_start: f64,
+    n_epsilon_steps: usize,
 }
 
 struct StandardEvaluationRequest<'a> {
     name: &'a str,
     graph: &'a Graph,
+    model: &'a Model,
+    integrand_kind: SelectedIntegrandKind,
     expression: &'a ThreeDExpression<OrientationID>,
     parametric_atom: &'a symbolica::atom::Atom,
     default_runtime_settings: &'a RuntimeSettings,
@@ -564,6 +706,7 @@ struct PureLtdMassShiftEvaluationRequest<'a> {
     name: &'a str,
     graph: &'a Graph,
     model: &'a Model,
+    integrand_kind: SelectedIntegrandKind,
     energy_degree_bounds: &'a [(usize, usize)],
     default_runtime_settings: &'a RuntimeSettings,
     global_cli_settings: &'a CLISettings,
@@ -571,14 +714,17 @@ struct PureLtdMassShiftEvaluationRequest<'a> {
     scale_mode: three_dimensional_reps::NumeratorSamplingScaleMode,
     run_settings: &'a ThreeDrepRunSettings,
     mass_shift_start: f64,
+    n_epsilon_steps: usize,
 }
 
 #[derive(Clone, Copy)]
 struct EvaluatorBuildContext<'a> {
     workspace: &'a Path,
+    model: &'a Model,
     global_cli_settings: &'a CLISettings,
     default_runtime_settings: &'a RuntimeSettings,
     run_settings: &'a ThreeDrepRunSettings,
+    clean: bool,
 }
 
 struct PreparedEvaluator {
@@ -588,9 +734,22 @@ struct PreparedEvaluator {
 
 #[derive(Clone)]
 struct PreparedEvaluatorInfo {
-    build_timing: String,
-    build_timing_seconds: f64,
+    build_timing: Option<String>,
+    build_timing_seconds: Option<f64>,
     backend: String,
+}
+
+#[derive(Serialize, Deserialize, PartialEq)]
+struct EvaluatorCacheManifest {
+    cache_version: u32,
+    name: String,
+    runtime_precision: CliRuntimePrecision,
+    evaluator_method: EvaluatorMethod,
+    backend: String,
+    force_eager: bool,
+    atom_hash: String,
+    orientation_hash: String,
+    parameter_hash: String,
 }
 
 impl BuildOutput {
@@ -639,6 +798,7 @@ impl TestCffLtdOutput {
         energy_degree_bounds: &[(usize, usize)],
         run_settings: &ThreeDrepRunSettings,
         mass_shift_start: f64,
+        n_epsilon_steps: usize,
     ) -> bool {
         self.process_id == selected.process_id
             && self.integrand_name == selected.integrand_name
@@ -647,6 +807,7 @@ impl TestCffLtdOutput {
             && self.energy_degree_bounds == energy_degree_bounds
             && self.numerator_interpolation_scale == run_settings.numerator_interpolation_scale
             && self.mass_shift_start == mass_shift_start
+            && self.n_epsilon_steps == n_epsilon_steps
             && self.settings.runtime_precision == run_settings.runtime_precision
             && self.settings.evaluator_method == run_settings.evaluator_method
             && self.settings.evaluator_backend == run_settings.evaluator_backend
@@ -693,6 +854,17 @@ impl<'a> GraphCatalog<'a> {
             Self::Generated(integrand) => integrand.graph_count(),
             Self::ImportedAmplitude(amplitude) => amplitude.graphs.len(),
             Self::ImportedCrossSection(cross_section) => cross_section.supergraphs.len(),
+        }
+    }
+
+    fn integrand_kind(&self) -> SelectedIntegrandKind {
+        match self {
+            Self::Generated(ProcessIntegrand::Amplitude(_)) | Self::ImportedAmplitude(_) => {
+                SelectedIntegrandKind::Amplitude
+            }
+            Self::Generated(ProcessIntegrand::CrossSection(_)) | Self::ImportedCrossSection(_) => {
+                SelectedIntegrandKind::CrossSection
+            }
         }
     }
 
@@ -902,7 +1074,12 @@ impl Build {
         }
 
         if !self.no_pretty || self.show_details_for_orientation.is_some() {
-            let numerator_expr = selected.graph.full_numerator_atom().log_print(Some(120));
+            let numerator = selected.graph.full_numerator_atom();
+            let numerator_expr = numerator.log_print(Some(120));
+            let simplified_numerator_expr = numerator
+                .simplify_metrics()
+                .simplify_color()
+                .log_print(Some(120));
             println!(
                 "{}",
                 render_expression_summary(
@@ -910,7 +1087,10 @@ impl Build {
                     representation,
                     &output.graph,
                     &output.energy_degree_bounds,
-                    Some(&numerator_expr),
+                    NumeratorDisplay {
+                        original: Some(&numerator_expr),
+                        simplified: Some(&simplified_numerator_expr),
+                    },
                     numerator_sampling_scale_mode,
                     &DisplayOptions {
                         use_color: !self.no_color,
@@ -941,38 +1121,71 @@ impl Evaluate {
             .workspace_path
             .clone()
             .unwrap_or_else(|| default_workspace_path(global_cli_settings));
-        let expression_path = if workspace.join("oriented_expression.json").exists() {
-            workspace.join("oriented_expression.json")
+        let input = self.resolve_input(state, global_cli_settings, &workspace)?;
+        if let Some(expression_path) = &input.expression_path {
+            println!(
+                "Loading 3Drep oriented expression from {}",
+                relative_display(expression_path)
+            );
         } else {
-            read_latest_expression_path(&workspace)?
+            println!(
+                "3Drep evaluate --numerator-only selected graph #{} {} directly; no oriented expression JSON is required.",
+                input.selected.graph_id,
+                input.selected.graph.name
+            );
+        }
+        let selected = input.selected;
+        let model =
+            state.resolve_model_for_integrand(selected.process_id, &selected.integrand_name)?;
+        let run_settings = threedrep_run_settings(
+            global_cli_settings,
+            default_runtime_settings,
+            self.precision,
+            self.seed,
+            self.scale,
+            CliNumeratorSamplesNormalization::from_generation_mode(
+                input.numerator_sampling_scale_mode,
+            ),
+            self.eager,
+        )?;
+        let input_config = DiagnosticInputConfig {
+            numerator_only: self.numerator_only,
+            numerator_q0_overrides: parse_numerator_q0_overrides(&self.numerator_q0)?,
         };
-        println!(
-            "Loading 3Drep oriented expression from {}",
-            relative_display(&expression_path)
-        );
-        let expression_text = fs::read_to_string(&expression_path).with_context(|| {
-            format!(
-                "Could not read 3Drep oriented expression JSON at {}",
-                expression_path.display()
+        if !self.numerator_only && !input_config.numerator_q0_overrides.is_empty() {
+            return Err(eyre!(
+                "--numerator-q0 can only be used together with 3Drep evaluate --numerator-only"
+            ));
+        }
+        let numerator_only_orientations = self
+            .numerator_only
+            .then(|| numerator_only_orientation(selected.graph));
+        let parametric_atom = if self.numerator_only {
+            numerator_only_parametric_atom_for_evaluator(selected.graph)
+        } else {
+            diagnostic_parametric_atom_for_evaluator(
+                &input
+                    .artifact
+                    .as_ref()
+                    .ok_or_else(|| {
+                        eyre!("3Drep evaluate requires an oriented expression artifact")
+                    })?
+                    .expression,
+                selected.graph,
             )
-        })?;
-        let artifact: BuildOutput = serde_json::from_str(&expression_text).with_context(|| {
-            format!(
-                "Could not parse 3Drep oriented expression JSON at {}",
-                expression_path.display()
-            )
-        })?;
-        let selected = select_graph_from_artifact(state, &artifact)?;
-        let parametric_atom = artifact
-            .expression
-            .diagnostic_parametric_atom_gs(selected.graph, &OrientationPattern::default());
-        let artifact_dir = expression_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| workspace.clone());
+        };
+        let artifact_dir = input.artifact_dir;
         let symbolica_expression_path = artifact_dir.join("symbolica_expression.txt");
         let param_builder_path = artifact_dir.join("param_builder.txt");
         let evaluate_manifest_path = artifact_dir.join("evaluate_manifest.json");
+        let prepared_param_builder = prepare_diagnostic_param_builder(
+            selected.graph,
+            &model,
+            selected.integrand_kind,
+            &run_settings,
+            default_runtime_settings,
+            &input_config,
+        )?;
         if self.clean || !symbolica_expression_path.exists() {
             write_path(&symbolica_expression_path, &parametric_atom.log_print(None))?;
         } else {
@@ -984,7 +1197,7 @@ impl Evaluate {
         if self.clean || !param_builder_path.exists() {
             write_path(
                 &param_builder_path,
-                &selected.graph.param_builder.to_string(),
+                &prepared_param_builder.param_builder.to_string(),
             )?;
         } else {
             println!(
@@ -993,38 +1206,52 @@ impl Evaluate {
             );
         }
 
-        let run_settings = threedrep_run_settings(
-            global_cli_settings,
-            default_runtime_settings,
-            self.precision,
-            self.seed,
-            self.scale,
-            CliNumeratorSamplesNormalization::from_generation_mode(
-                artifact.numerator_sampling_scale_mode,
-            ),
-        )?;
+        let profile = self
+            .profile
+            .as_deref()
+            .map(parse_profile_target_duration)
+            .transpose()?;
         let evaluation = evaluate_threedrep_expression(EvaluationRequest {
-            label: "evaluate",
+            label: if self.numerator_only {
+                "numerator_only"
+            } else {
+                "evaluate"
+            },
             graph: selected.graph,
-            expression: &artifact.expression,
+            model: &model,
+            integrand_kind: selected.integrand_kind,
+            expression: input.artifact.as_ref().map(|artifact| &artifact.expression),
             parametric_atom: &parametric_atom,
+            orientations: numerator_only_orientations.as_ref(),
             workspace: &artifact_dir,
             global_cli_settings,
             default_runtime_settings,
-            representation: Some(artifact.family),
-            numerator_sampling_scale_mode: Some(artifact.numerator_sampling_scale_mode),
+            representation: input.artifact.as_ref().map(|artifact| artifact.family),
+            numerator_sampling_scale_mode: (!self.numerator_only)
+                .then_some(input.numerator_sampling_scale_mode),
             run_settings: &run_settings,
             mass_shift: "none",
             mass_shift_values: &[],
+            profile_target: profile,
+            input_config: &input_config,
+            clean: self.clean,
         })?;
-        let parameters = parameter_records(selected.graph, &run_settings, default_runtime_settings);
+        let parameters = parameter_records(
+            selected.graph,
+            &model,
+            selected.integrand_kind,
+            &run_settings,
+            default_runtime_settings,
+            &input_config,
+        )?;
 
         let summary = EvaluateOutput {
             process_id: selected.process_id,
             integrand_name: selected.integrand_name,
             graph_id: selected.graph_id,
             graph_name: selected.graph.name.clone(),
-            expression_path,
+            numerator_only: self.numerator_only,
+            expression_path: input.expression_path,
             symbolica_expression_path,
             param_builder_path,
             settings: run_settings,
@@ -1041,6 +1268,141 @@ impl Evaluate {
             relative_display(&evaluate_manifest_path)
         );
         Ok(())
+    }
+
+    fn resolve_input<'a>(
+        &self,
+        state: &'a State,
+        global_cli_settings: &CLISettings,
+        workspace: &Path,
+    ) -> Result<EvaluateInput<'a>> {
+        if self.numerator_only && self.selection.has_any_selector() {
+            let selector = self
+                .selection
+                .require_graph_selection("3Drep evaluate --numerator-only")?;
+            let selected = select_graph(state, &selector)?;
+            if self.representation.is_some() || self.json_in.is_some() {
+                println!(
+                    "3Drep evaluate --numerator-only selected a graph directly; ignoring oriented-expression lookup options."
+                );
+            }
+            let numerator_sampling_scale_mode = self
+                .numerator_samples_normalization
+                .unwrap_or_else(|| {
+                    CliNumeratorSamplesNormalization::resolve_from_global(global_cli_settings)
+                })
+                .to_generation_mode();
+            let artifact_dir = graph_workspace_dir(workspace, &selected).join("numerator_only");
+            return Ok(EvaluateInput {
+                selected,
+                artifact: None,
+                expression_path: None,
+                artifact_dir,
+                numerator_sampling_scale_mode,
+            });
+        }
+
+        let (expression_path, artifact) =
+            self.load_oriented_expression_artifact(state, global_cli_settings, workspace)?;
+        let selected = select_graph_from_artifact(state, &artifact)?;
+        let artifact_dir = if self.numerator_only {
+            graph_workspace_dir(workspace, &selected).join("numerator_only")
+        } else {
+            expression_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| workspace.to_path_buf())
+        };
+        let numerator_sampling_scale_mode = artifact.numerator_sampling_scale_mode;
+        Ok(EvaluateInput {
+            selected,
+            artifact: Some(artifact),
+            expression_path: Some(expression_path),
+            artifact_dir,
+            numerator_sampling_scale_mode,
+        })
+    }
+
+    fn load_oriented_expression_artifact(
+        &self,
+        state: &State,
+        global_cli_settings: &CLISettings,
+        workspace: &Path,
+    ) -> Result<(PathBuf, BuildOutput)> {
+        let expression_path =
+            self.resolve_expression_path(state, global_cli_settings, workspace)?;
+        let expression_text = fs::read_to_string(&expression_path).with_context(|| {
+            format!(
+                "Could not read 3Drep oriented expression JSON at {}",
+                expression_path.display()
+            )
+        })?;
+        let artifact: BuildOutput = serde_json::from_str(&expression_text).with_context(|| {
+            format!(
+                "Could not parse 3Drep oriented expression JSON at {}",
+                expression_path.display()
+            )
+        })?;
+        Ok((expression_path, artifact))
+    }
+
+    fn resolve_expression_path(
+        &self,
+        state: &State,
+        global_cli_settings: &CLISettings,
+        workspace: &Path,
+    ) -> Result<PathBuf> {
+        if let Some(path) = &self.json_in {
+            if self.representation.is_some()
+                || self.selection.has_any_selector()
+                || self.numerator_samples_normalization.is_some()
+            {
+                println!(
+                    "3Drep evaluate --json-in supplied; using {} and ignoring cached representation lookup options.",
+                    relative_display(path)
+                );
+            }
+            return Ok(path.clone());
+        }
+
+        if let Some(representation) = self.representation {
+            let selector = self
+                .selection
+                .require_graph_selection("3Drep evaluate --representation")?;
+            let selected = select_graph(state, &selector)?;
+            let scale_mode = self
+                .numerator_samples_normalization
+                .unwrap_or_else(|| {
+                    CliNumeratorSamplesNormalization::resolve_from_global(global_cli_settings)
+                })
+                .to_generation_mode();
+            let expression_path = build_artifact_dir(
+                workspace,
+                &selected,
+                RepresentationMode::from(representation),
+                scale_mode,
+            )
+            .join("oriented_expression.json");
+            if expression_path.exists() {
+                Ok(expression_path)
+            } else {
+                Err(eyre!(
+                    "No cached 3Drep {representation:?} oriented expression found at {}. Run `3Drep build -p ... -i ... -g ... --representation {}` first, or pass --json-in.",
+                    expression_path.display(),
+                    cli_representation_name(representation)
+                ))
+            }
+        } else if self.selection.has_any_selector()
+            || self.numerator_samples_normalization.is_some()
+        {
+            Err(eyre!(
+                "3Drep evaluate graph selection and --numerator-samples-normalization require --representation, or pass --json-in"
+            ))
+        } else if workspace.join("oriented_expression.json").exists() {
+            Ok(workspace.join("oriented_expression.json"))
+        } else {
+            read_latest_expression_path(workspace)
+        }
     }
 }
 
@@ -1075,8 +1437,14 @@ impl TestCffLtd {
             self.seed,
             self.scale,
             CliNumeratorSamplesNormalization::resolve_from_global(global_cli_settings),
+            false,
         )?;
         let mass_shift_start = self.mass_shift.unwrap_or(self.scale);
+        if self.n_epsilon_steps == 0 {
+            return Err(eyre!(
+                "3Drep test-cff-ltd --n-epsilon-steps must be at least 1"
+            ));
+        }
 
         let cached_output = if !self.clean && manifest_path.exists() {
             let text = fs::read_to_string(&manifest_path)
@@ -1088,6 +1456,7 @@ impl TestCffLtd {
                     &energy_degree_bounds,
                     &run_settings,
                     mass_shift_start,
+                    self.n_epsilon_steps,
                 )
             }) {
                 println!(
@@ -1114,6 +1483,7 @@ impl TestCffLtd {
                 let case = self.build_case(TestCffLtdCaseBuildRequest {
                     graph: selected.graph,
                     model: &model,
+                    integrand_kind: selected.integrand_kind,
                     workspace: &graph_workspace,
                     representation,
                     scale_mode: run_settings
@@ -1124,6 +1494,7 @@ impl TestCffLtd {
                     default_runtime_settings,
                     global_cli_settings,
                     mass_shift_start,
+                    n_epsilon_steps: self.n_epsilon_steps,
                 })?;
                 cases.push(case);
             }
@@ -1139,6 +1510,7 @@ impl TestCffLtd {
                 energy_degree_bounds,
                 numerator_interpolation_scale: run_settings.numerator_interpolation_scale,
                 mass_shift_start,
+                n_epsilon_steps: self.n_epsilon_steps,
                 cases,
                 verdict: TestCffLtdVerdict::default(),
             };
@@ -1164,6 +1536,7 @@ impl TestCffLtd {
         let TestCffLtdCaseBuildRequest {
             graph,
             model,
+            integrand_kind,
             workspace,
             representation,
             scale_mode,
@@ -1172,6 +1545,7 @@ impl TestCffLtd {
             default_runtime_settings,
             global_cli_settings,
             mass_shift_start,
+            n_epsilon_steps,
         } = request;
         let name = representation_label(representation).to_lowercase();
         let case_dir = workspace.join("test_cff_ltd").join(&name);
@@ -1188,7 +1562,7 @@ impl TestCffLtd {
             Ok(expression) => expression,
             Err(error) => {
                 let generation_error_path = case_dir.join("generation_error.txt");
-                write_path(&generation_error_path, &format!("{error:?}"))?;
+                write_path(&generation_error_path, &format_diagnostic_error(&error))?;
                 return Ok(TestCffLtdCaseOutput {
                     name,
                     representation,
@@ -1206,8 +1580,7 @@ impl TestCffLtd {
                 });
             }
         };
-        let parametric_atom =
-            expression.diagnostic_parametric_atom_gs(graph, &OrientationPattern::default());
+        let parametric_atom = diagnostic_parametric_atom_for_evaluator(&expression, graph);
         write_path(
             &expression_path,
             &serde_json::to_string_pretty(&expression)?,
@@ -1223,6 +1596,7 @@ impl TestCffLtd {
                     name: &name,
                     graph,
                     model,
+                    integrand_kind,
                     workspace: &case_dir,
                     energy_degree_bounds,
                     default_runtime_settings,
@@ -1230,11 +1604,14 @@ impl TestCffLtd {
                     scale_mode,
                     run_settings,
                     mass_shift_start,
+                    n_epsilon_steps,
                 })?
             } else {
                 self.build_standard_evaluations(StandardEvaluationRequest {
                     name: &name,
                     graph,
+                    model,
+                    integrand_kind,
                     expression: &expression,
                     parametric_atom: &parametric_atom,
                     default_runtime_settings,
@@ -1272,20 +1649,36 @@ impl TestCffLtd {
         &self,
         request: StandardEvaluationRequest<'_>,
     ) -> Result<(String, Vec<ThreeDrepEvaluationRecord>)> {
+        let input_config = DiagnosticInputConfig::default();
+        let prepared_param_builder = prepare_diagnostic_param_builder(
+            request.graph,
+            request.model,
+            request.integrand_kind,
+            request.run_settings,
+            request.default_runtime_settings,
+            &input_config,
+        )?;
         let prepared = match build_threedrep_evaluator(
             request.name,
             EvaluatorBuildContext {
                 workspace: request.workspace,
+                model: request.model,
                 global_cli_settings: request.global_cli_settings,
                 default_runtime_settings: request.default_runtime_settings,
                 run_settings: request.run_settings,
+                clean: self.clean,
             },
-            request.graph,
+            &prepared_param_builder.param_builder,
             &[request.parametric_atom],
             request.orientations,
         ) {
             Ok(prepared) => prepared,
-            Err(error) => return Ok((format!("failed: {error:?}"), Vec::new())),
+            Err(error) => {
+                return Ok((
+                    format!("failed: {}", format_diagnostic_error(&error)),
+                    Vec::new(),
+                ));
+            }
         };
         let evaluator_info = prepared.info.clone();
         let mut evaluator = prepared.evaluator;
@@ -1295,8 +1688,11 @@ impl TestCffLtd {
             EvaluationRequest {
                 label: request.name,
                 graph: request.graph,
-                expression: request.expression,
+                model: request.model,
+                integrand_kind: request.integrand_kind,
+                expression: Some(request.expression),
                 parametric_atom: request.parametric_atom,
+                orientations: None,
                 workspace: request.workspace,
                 global_cli_settings: request.global_cli_settings,
                 default_runtime_settings: request.default_runtime_settings,
@@ -1305,9 +1701,13 @@ impl TestCffLtd {
                 run_settings: request.run_settings,
                 mass_shift: "none",
                 mass_shift_values: &[],
+                profile_target: None,
+                input_config: &input_config,
+                clean: self.clean,
             },
             request.orientations,
             &evaluator_info,
+            prepared_param_builder,
         )?];
         Ok(("ok".to_string(), evaluations))
     }
@@ -1317,7 +1717,9 @@ impl TestCffLtd {
         request: PureLtdMassShiftEvaluationRequest<'_>,
     ) -> Result<(String, Vec<ThreeDrepEvaluationRecord>)> {
         let mut evaluations = Vec::new();
-        for epsilon in pure_ltd_mass_shift_epsilons(request.mass_shift_start) {
+        for epsilon in
+            pure_ltd_mass_shift_epsilons(request.mass_shift_start, request.n_epsilon_steps)
+        {
             let (shifted_graph, mass_shifts) = request
                 .graph
                 .split_repeated_masses_for_three_drep(request.model, epsilon)?;
@@ -1336,23 +1738,39 @@ impl TestCffLtd {
                     "while generating split-mass LTD expression for pure-LTD mass shift {epsilon}"
                 )
             })?;
-            let parametric_atom = shifted_expression
-                .diagnostic_parametric_atom_gs(&shifted_graph, &OrientationPattern::default());
+            let parametric_atom =
+                diagnostic_parametric_atom_for_evaluator(&shifted_expression, &shifted_graph);
             let orientations = diagnostic_evaluation_orientations(&shifted_expression);
+            let input_config = DiagnosticInputConfig::default();
+            let prepared_param_builder = prepare_diagnostic_param_builder(
+                &shifted_graph,
+                request.model,
+                request.integrand_kind,
+                request.run_settings,
+                request.default_runtime_settings,
+                &input_config,
+            )?;
             let prepared = match build_threedrep_evaluator(
                 &format!("{}_{}", request.name, mass_shift_file_label(epsilon)),
                 EvaluatorBuildContext {
                     workspace: request.workspace,
+                    model: request.model,
                     global_cli_settings: request.global_cli_settings,
                     default_runtime_settings: request.default_runtime_settings,
                     run_settings: request.run_settings,
+                    clean: self.clean,
                 },
-                &shifted_graph,
+                &prepared_param_builder.param_builder,
                 &[&parametric_atom],
                 &orientations,
             ) {
                 Ok(prepared) => prepared,
-                Err(error) => return Ok((format!("failed: {error:?}"), evaluations)),
+                Err(error) => {
+                    return Ok((
+                        format!("failed: {}", format_diagnostic_error(&error)),
+                        evaluations,
+                    ));
+                }
             };
             let evaluator_info = prepared.info.clone();
             let mut evaluator = prepared.evaluator;
@@ -1361,8 +1779,11 @@ impl TestCffLtd {
                 EvaluationRequest {
                     label: request.name,
                     graph: &shifted_graph,
-                    expression: &shifted_expression,
+                    model: request.model,
+                    integrand_kind: request.integrand_kind,
+                    expression: Some(&shifted_expression),
                     parametric_atom: &parametric_atom,
+                    orientations: None,
                     workspace: request.workspace,
                     global_cli_settings: request.global_cli_settings,
                     default_runtime_settings: request.default_runtime_settings,
@@ -1371,9 +1792,13 @@ impl TestCffLtd {
                     run_settings: request.run_settings,
                     mass_shift: &mass_shift,
                     mass_shift_values: &mass_shift_values,
+                    profile_target: None,
+                    input_config: &input_config,
+                    clean: self.clean,
                 },
                 &orientations,
                 &evaluator_info,
+                prepared_param_builder,
             )?);
         }
         Ok(("ok (mass-shift diagnostics)".to_string(), evaluations))
@@ -1428,15 +1853,20 @@ fn threedrep_run_settings(
     seed: u64,
     scale: f64,
     numerator_samples_normalization: CliNumeratorSamplesNormalization,
+    force_eager: bool,
 ) -> Result<ThreeDrepRunSettings> {
     if !scale.is_finite() {
         return Err(eyre!("3Drep evaluation --scale must be finite"));
     }
     let runtime_precision = CliRuntimePrecision::resolve(default_runtime_settings, precision);
     let evaluator_method = default_runtime_settings.general.evaluator_method.clone();
-    let evaluator_settings =
-        threedrep_evaluator_settings(global_cli_settings, &evaluator_method, runtime_precision);
-    let frozen_mode = if runtime_precision == CliRuntimePrecision::Double {
+    let evaluator_settings = threedrep_evaluator_settings(
+        global_cli_settings,
+        &evaluator_method,
+        runtime_precision,
+        force_eager,
+    );
+    let frozen_mode = if runtime_precision == CliRuntimePrecision::Double && !force_eager {
         global_cli_settings
             .global
             .generation
@@ -1451,6 +1881,7 @@ fn threedrep_run_settings(
         evaluator_method,
         evaluator_backend: frozen_mode.active_backend_name().to_string(),
         compiled_backend_available: frozen_mode.compile_enabled(),
+        force_eager,
         numerator_samples_normalization,
         numerator_interpolation_scale: definite_numerator_interpolation_scale(
             default_runtime_settings,
@@ -1464,13 +1895,14 @@ fn threedrep_evaluator_settings(
     global_cli_settings: &CLISettings,
     evaluator_method: &EvaluatorMethod,
     runtime_precision: CliRuntimePrecision,
+    force_eager: bool,
 ) -> EvaluatorSettings {
     let mut settings = global_cli_settings.global.generation.evaluator;
     settings.iterative_orientation_optimization =
         matches!(evaluator_method, EvaluatorMethod::Iterative);
     settings.summed_function_map = matches!(evaluator_method, EvaluatorMethod::SummedFunctionMap);
     settings.summed = matches!(evaluator_method, EvaluatorMethod::Summed);
-    if runtime_precision != CliRuntimePrecision::Double {
+    if runtime_precision != CliRuntimePrecision::Double || force_eager {
         settings.compile = false;
     }
     settings
@@ -1488,7 +1920,7 @@ fn threedrep_runtime_settings(
 fn build_threedrep_evaluator<A: AtomCore>(
     name: &str,
     context: EvaluatorBuildContext<'_>,
-    graph: &Graph,
+    param_builder: &ParamBuilder<f64>,
     atoms: &[A],
     orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
 ) -> Result<PreparedEvaluator> {
@@ -1496,8 +1928,11 @@ fn build_threedrep_evaluator<A: AtomCore>(
         context.global_cli_settings,
         &context.run_settings.evaluator_method,
         context.run_settings.runtime_precision,
+        context.run_settings.force_eager,
     );
-    let frozen_mode = if context.run_settings.runtime_precision == CliRuntimePrecision::Double {
+    let frozen_mode = if context.run_settings.runtime_precision == CliRuntimePrecision::Double
+        && !context.run_settings.force_eager
+    {
         context
             .global_cli_settings
             .global
@@ -1510,11 +1945,33 @@ fn build_threedrep_evaluator<A: AtomCore>(
     let evaluator_dir = context.workspace.join("evaluators");
     fs::create_dir_all(&evaluator_dir)
         .with_context(|| format!("Could not create {}", evaluator_dir.display()))?;
+    let cache_manifest = EvaluatorCacheManifest {
+        cache_version: 1,
+        name: name.to_string(),
+        runtime_precision: context.run_settings.runtime_precision,
+        evaluator_method: context.run_settings.evaluator_method.clone(),
+        backend: frozen_mode.active_backend_name().to_string(),
+        force_eager: context.run_settings.force_eager,
+        atom_hash: stable_hash_hex(
+            atoms
+                .iter()
+                .map(|atom| atom.as_atom_view().to_canonical_string()),
+        ),
+        orientation_hash: orientation_hash(orientations),
+        parameter_hash: parameter_hash(param_builder),
+    };
+    if !context.clean {
+        if let Some(prepared) =
+            try_load_cached_threedrep_evaluator(name, context, &frozen_mode, &cache_manifest)?
+        {
+            return Ok(prepared);
+        }
+    }
 
     let start = Instant::now();
     let mut evaluator = EvaluatorStack::new(
         atoms,
-        &graph.param_builder,
+        param_builder,
         &orientations.raw,
         None,
         &evaluator_settings,
@@ -1527,15 +1984,162 @@ fn build_threedrep_evaluator<A: AtomCore>(
     if runtime_settings.general.evaluator_method != context.run_settings.evaluator_method {
         return Err(eyre!("3Drep evaluator method resolution mismatch"));
     }
+    save_threedrep_evaluator_cache(&evaluator_dir, name, &evaluator, &cache_manifest)?;
 
     Ok(PreparedEvaluator {
         evaluator,
         info: PreparedEvaluatorInfo {
-            build_timing: format_duration_dynamic(build_timing),
-            build_timing_seconds: build_timing.as_secs_f64(),
+            build_timing: Some(format_duration_dynamic(build_timing)),
+            build_timing_seconds: Some(build_timing.as_secs_f64()),
             backend: frozen_mode.active_backend_name().to_string(),
         },
     })
+}
+
+fn threedrep_evaluator_cache_paths(evaluator_dir: &Path, name: &str) -> (PathBuf, PathBuf) {
+    (
+        evaluator_dir.join(format!("{name}.evaluator.bin")),
+        evaluator_dir.join(format!("{name}.evaluator_manifest.json")),
+    )
+}
+
+fn try_load_cached_threedrep_evaluator(
+    name: &str,
+    context: EvaluatorBuildContext<'_>,
+    frozen_mode: &FrozenCompilationMode,
+    expected_manifest: &EvaluatorCacheManifest,
+) -> Result<Option<PreparedEvaluator>> {
+    let evaluator_dir = context.workspace.join("evaluators");
+    let (evaluator_path, manifest_path) = threedrep_evaluator_cache_paths(&evaluator_dir, name);
+    if !evaluator_path.exists() || !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    let manifest_text = fs::read_to_string(&manifest_path).with_context(|| {
+        format!(
+            "Could not read 3Drep evaluator cache manifest at {}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: EvaluatorCacheManifest =
+        serde_json::from_str(&manifest_text).with_context(|| {
+            format!(
+                "Could not parse 3Drep evaluator cache manifest at {}",
+                manifest_path.display()
+            )
+        })?;
+    if &manifest != expected_manifest {
+        return Ok(None);
+    }
+
+    let binary = fs::read(&evaluator_path).with_context(|| {
+        format!(
+            "Could not read 3Drep evaluator cache at {}",
+            evaluator_path.display()
+        )
+    })?;
+    let mut state_bytes = Vec::new();
+    SymbolicaState::export(&mut state_bytes)
+        .map_err(|error| eyre!("Could not export current Symbolica state: {error}"))?;
+    let mut cursor = Cursor::new(state_bytes);
+    let state_map = SymbolicaState::import(&mut cursor, None)
+        .map_err(|error| eyre!("Could not import current Symbolica state: {error}"))?;
+    let decode_context = GammaLoopContextContainer {
+        state_map: &state_map,
+        model: context.model,
+    };
+    let (mut evaluator, _): (EvaluatorStack, usize) = bincode::decode_from_slice_with_context(
+        &binary,
+        bincode::config::standard(),
+        decode_context,
+    )
+    .with_context(|| {
+        format!(
+            "Could not decode 3Drep evaluator cache at {}",
+            evaluator_path.display()
+        )
+    })?;
+    evaluator
+        .activate_cached_f64_backend(frozen_mode)
+        .with_context(|| {
+            format!(
+                "Could not activate cached 3Drep evaluator backend from {}",
+                evaluator_path.display()
+            )
+        })?;
+    println!(
+        "Reusing cached 3Drep evaluator from {}",
+        relative_display(&evaluator_path)
+    );
+    println!(
+        "Reusing cached 3Drep evaluator manifest from {}",
+        relative_display(&manifest_path)
+    );
+
+    Ok(Some(PreparedEvaluator {
+        evaluator,
+        info: PreparedEvaluatorInfo {
+            build_timing: None,
+            build_timing_seconds: None,
+            backend: frozen_mode.active_backend_name().to_string(),
+        },
+    }))
+}
+
+fn save_threedrep_evaluator_cache(
+    evaluator_dir: &Path,
+    name: &str,
+    evaluator: &EvaluatorStack,
+    manifest: &EvaluatorCacheManifest,
+) -> Result<()> {
+    let (evaluator_path, manifest_path) = threedrep_evaluator_cache_paths(evaluator_dir, name);
+    let binary = bincode::encode_to_vec(evaluator, bincode::config::standard())
+        .with_context(|| format!("Could not encode 3Drep evaluator cache for {name}"))?;
+    fs::write(&evaluator_path, binary).with_context(|| {
+        format!(
+            "Could not write 3Drep evaluator cache to {}",
+            evaluator_path.display()
+        )
+    })?;
+    write_path(&manifest_path, &serde_json::to_string_pretty(manifest)?)?;
+    Ok(())
+}
+
+fn stable_hash_hex(parts: impl IntoIterator<Item = String>) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for part in parts {
+        for byte in part.as_bytes().iter().copied().chain(std::iter::once(0)) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    format!("{hash:016x}")
+}
+
+fn orientation_hash(orientations: &TiVec<OrientationID, EdgeVec<Orientation>>) -> String {
+    stable_hash_hex(orientations.iter().map(|orientation| {
+        orientation
+            .iter()
+            .map(|(edge, orientation)| format!("{}:{orientation:?}", edge.0))
+            .collect::<Vec<_>>()
+            .join(",")
+    }))
+}
+
+fn parameter_hash(param_builder: &ParamBuilder<f64>) -> String {
+    stable_hash_hex(
+        param_builder
+            .evaluator_input_parameters()
+            .into_iter()
+            .map(|parameter| {
+                format!(
+                    "{:?}:{}:{}",
+                    parameter.group,
+                    parameter.index,
+                    parameter.atom.to_canonical_string()
+                )
+            }),
+    )
 }
 
 fn format_duration_dynamic(duration: Duration) -> String {
@@ -1555,6 +2159,115 @@ fn format_duration_dynamic(duration: Duration) -> String {
         2
     };
     format!("{value:.precision$} {unit}")
+}
+
+const DIAGNOSTIC_ERROR_HEAD_LINES: usize = 200;
+const DIAGNOSTIC_ERROR_TAIL_LINES: usize = 200;
+
+fn format_diagnostic_error(error: &impl std::fmt::Debug) -> String {
+    truncate_middle_lines(
+        &format!("{error:?}"),
+        DIAGNOSTIC_ERROR_HEAD_LINES,
+        DIAGNOSTIC_ERROR_TAIL_LINES,
+    )
+}
+
+fn truncate_middle_lines(text: &str, head_lines: usize, tail_lines: usize) -> String {
+    let lines = text.lines().collect::<Vec<_>>();
+    let retained_lines = head_lines + tail_lines;
+    if lines.len() <= retained_lines {
+        return text.to_string();
+    }
+
+    let omitted = lines.len() - retained_lines;
+    let mut truncated = lines[..head_lines].join("\n");
+    truncated.push_str(&format!(
+        "\n... [truncated {omitted} diagnostic line(s)] ...\n"
+    ));
+    truncated.push_str(&lines[lines.len() - tail_lines..].join("\n"));
+    truncated
+}
+
+fn parse_profile_target_duration(input: &str) -> Result<Duration> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(eyre!(
+            "3Drep evaluate --profile requires a non-empty duration"
+        ));
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    let (number, multiplier) = if let Some(number) = lower.strip_suffix("microseconds") {
+        (number, 1.0e-6)
+    } else if let Some(number) = lower.strip_suffix("microsecond") {
+        (number, 1.0e-6)
+    } else if let Some(number) = lower.strip_suffix("usec") {
+        (number, 1.0e-6)
+    } else if let Some(number) = lower.strip_suffix("us") {
+        (number, 1.0e-6)
+    } else if let Some(number) = lower.strip_suffix("µs") {
+        (number, 1.0e-6)
+    } else if let Some(number) = lower.strip_suffix("milliseconds") {
+        (number, 1.0e-3)
+    } else if let Some(number) = lower.strip_suffix("millisecond") {
+        (number, 1.0e-3)
+    } else if let Some(number) = lower.strip_suffix("msec") {
+        (number, 1.0e-3)
+    } else if let Some(number) = lower.strip_suffix("ms") {
+        (number, 1.0e-3)
+    } else if let Some(number) = lower.strip_suffix("seconds") {
+        (number, 1.0)
+    } else if let Some(number) = lower.strip_suffix("second") {
+        (number, 1.0)
+    } else if let Some(number) = lower.strip_suffix("sec") {
+        (number, 1.0)
+    } else if let Some(number) = lower.strip_suffix('s') {
+        (number, 1.0)
+    } else {
+        (trimmed, 1.0)
+    };
+    let seconds =
+        number.trim().parse::<f64>().with_context(|| {
+            format!("Could not parse 3Drep evaluate --profile duration '{input}'")
+        })? * multiplier;
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return Err(eyre!(
+            "3Drep evaluate --profile duration must be positive and finite"
+        ));
+    }
+    Ok(Duration::from_secs_f64(seconds))
+}
+
+fn parse_numerator_q0_overrides(inputs: &[String]) -> Result<BTreeMap<EdgeIndex, f64>> {
+    let mut overrides = BTreeMap::new();
+    for raw_input in inputs {
+        for entry in raw_input
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let (edge, value) = entry
+                .split_once(':')
+                .or_else(|| entry.split_once('='))
+                .ok_or_else(|| {
+                    eyre!(
+                        "Could not parse --numerator-q0 entry '{entry}'. Expected edge:value or edge=value."
+                    )
+                })?;
+            let edge_id = edge.trim().parse::<usize>().with_context(|| {
+                format!("Could not parse numerator-only energy edge id in '{entry}'")
+            })?;
+            let value = value.trim().parse::<f64>().with_context(|| {
+                format!("Could not parse numerator-only energy value in '{entry}'")
+            })?;
+            if overrides.insert(EdgeIndex(edge_id), value).is_some() {
+                return Err(eyre!(
+                    "Duplicate --numerator-q0 override for edge {edge_id}"
+                ));
+            }
+        }
+    }
+    Ok(overrides)
 }
 
 fn format_f64_full(value: f64) -> String {
@@ -1601,10 +2314,24 @@ fn format_complex_full_precise<T: FloatLike>(value: &Complex<F<T>>) -> (String, 
     (value, re, im)
 }
 
-const DIRECT_RELATIVE_TOLERANCE: f64 = 1.0e-7;
 const DIRECT_ABSOLUTE_TOLERANCE: f64 = 1.0e-12;
-const MASS_SHIFT_RELATIVE_TOLERANCE: f64 = 1.0e-2;
 const MASS_SHIFT_ABSOLUTE_TOLERANCE: f64 = 1.0e-8;
+
+fn direct_relative_tolerance(precision: CliRuntimePrecision) -> f64 {
+    match precision {
+        CliRuntimePrecision::Double => 1.0e-7,
+        CliRuntimePrecision::Quad => 1.0e-16,
+        CliRuntimePrecision::ArbPrec => 1.0e-150,
+    }
+}
+
+fn mass_shift_relative_tolerance(precision: CliRuntimePrecision) -> f64 {
+    match precision {
+        CliRuntimePrecision::Double => 1.0e-2,
+        CliRuntimePrecision::Quad => 1.0e-3,
+        CliRuntimePrecision::ArbPrec => 1.0e-4,
+    }
+}
 
 #[derive(Clone, Debug)]
 struct DecimalValue {
@@ -1982,6 +2709,9 @@ impl ComparableEvaluation {
 
 fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
     let mut checks = Vec::new();
+    let direct_relative_tolerance = direct_relative_tolerance(output.settings.runtime_precision);
+    let mass_shift_relative_tolerance =
+        mass_shift_relative_tolerance(output.settings.runtime_precision);
 
     for case in &output.cases {
         if case.generation_status != "ok" {
@@ -2042,7 +2772,11 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
             TestCffLtdDistance::undefined(),
             "No finite CFF reference evaluation was available.",
         ));
-        return finish_test_cff_ltd_verdict(checks);
+        return finish_test_cff_ltd_verdict(
+            checks,
+            direct_relative_tolerance,
+            mass_shift_relative_tolerance,
+        );
     };
 
     for candidate in direct {
@@ -2051,7 +2785,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         }
         let (abs_diff, rel_diff) = complex_distance(&candidate.value, &baseline.value);
         let within_tolerance = abs_diff.leq_f64(DIRECT_ABSOLUTE_TOLERANCE)
-            || rel_diff.leq_f64(DIRECT_RELATIVE_TOLERANCE);
+            || rel_diff.leq_f64(direct_relative_tolerance);
         let exactly_identical = candidate.representation != baseline.representation
             && candidate.value_text == baseline.value_text;
         let status = if within_tolerance && !exactly_identical {
@@ -2072,7 +2806,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
             status,
             &candidate.value_text,
             &baseline.value_text,
-            TestCffLtdDistance::new(abs_diff, rel_diff, DIRECT_RELATIVE_TOLERANCE),
+            TestCffLtdDistance::new(abs_diff, rel_diff, direct_relative_tolerance),
             message,
         ));
     }
@@ -2093,7 +2827,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
                 continue;
             };
             let within_tolerance = abs_diff.leq_f64(MASS_SHIFT_ABSOLUTE_TOLERANCE)
-                || rel_diff.leq_f64(MASS_SHIFT_RELATIVE_TOLERANCE);
+                || rel_diff.leq_f64(mass_shift_relative_tolerance);
             checks.push(test_cff_ltd_check(
                 format!("mass-shift {} vs #{}", best.label(), baseline.id),
                 Some(best.id),
@@ -2104,7 +2838,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
                 },
                 &best.value_text,
                 &baseline.value_text,
-                TestCffLtdDistance::new(abs_diff, rel_diff, MASS_SHIFT_RELATIVE_TOLERANCE),
+                TestCffLtdDistance::new(abs_diff, rel_diff, mass_shift_relative_tolerance),
                 if within_tolerance {
                     "At least one tested mass shift reproduces the CFF reference to the loose diagnostic threshold."
                 } else {
@@ -2114,7 +2848,11 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         }
     }
 
-    finish_test_cff_ltd_verdict(checks)
+    finish_test_cff_ltd_verdict(
+        checks,
+        direct_relative_tolerance,
+        mass_shift_relative_tolerance,
+    )
 }
 
 fn comparable_evaluations(
@@ -2206,7 +2944,11 @@ fn test_cff_ltd_check(
     }
 }
 
-fn finish_test_cff_ltd_verdict(checks: Vec<TestCffLtdCheckRecord>) -> TestCffLtdVerdict {
+fn finish_test_cff_ltd_verdict(
+    checks: Vec<TestCffLtdCheckRecord>,
+    direct_relative_tolerance: f64,
+    mass_shift_relative_tolerance: f64,
+) -> TestCffLtdVerdict {
     let status = if checks
         .iter()
         .any(|check| check.status != TestCffLtdStatus::Success)
@@ -2217,16 +2959,18 @@ fn finish_test_cff_ltd_verdict(checks: Vec<TestCffLtdCheckRecord>) -> TestCffLtd
     };
     TestCffLtdVerdict {
         status,
-        direct_relative_tolerance: format_f64_full(DIRECT_RELATIVE_TOLERANCE),
+        direct_relative_tolerance: format_f64_full(direct_relative_tolerance),
         direct_absolute_tolerance: format_f64_full(DIRECT_ABSOLUTE_TOLERANCE),
-        mass_shift_relative_tolerance: format_f64_full(MASS_SHIFT_RELATIVE_TOLERANCE),
+        mass_shift_relative_tolerance: format_f64_full(mass_shift_relative_tolerance),
         mass_shift_absolute_tolerance: format_f64_full(MASS_SHIFT_ABSOLUTE_TOLERANCE),
         checks,
     }
 }
 
-fn pure_ltd_mass_shift_epsilons(start: f64) -> [f64; 4] {
-    [start, 0.1 * start, 0.01 * start, 0.001 * start]
+fn pure_ltd_mass_shift_epsilons(start: f64, n_steps: usize) -> Vec<f64> {
+    (0..n_steps)
+        .map(|step| start * 10.0_f64.powi(-(step as i32)))
+        .collect()
 }
 
 fn mass_shift_file_label(epsilon: f64) -> String {
@@ -2288,34 +3032,157 @@ fn diagnostic_evaluation_orientations(
         .collect()
 }
 
+fn diagnostic_parametric_atom_for_evaluator(
+    expression: &ThreeDExpression<OrientationID>,
+    graph: &Graph,
+) -> Atom {
+    expression
+        .diagnostic_parametric_atom_gs(graph, &OrientationPattern::default())
+        .simplify_metrics()
+        .simplify_color()
+}
+
+fn numerator_only_parametric_atom_for_evaluator(graph: &Graph) -> Atom {
+    numerator_with_internal_energy_parameters_gs(graph)
+        .simplify_metrics()
+        .simplify_color()
+}
+
+fn numerator_only_orientation(graph: &Graph) -> TiVec<OrientationID, EdgeVec<Orientation>> {
+    std::iter::once(graph.underlying.new_edgevec(|_, _, pair| {
+        if matches!(pair, HedgePair::Paired { .. }) {
+            Orientation::Default
+        } else {
+            Orientation::Undirected
+        }
+    }))
+    .collect()
+}
+
 fn set_random_diagnostic_input_values(
     param_builder: &mut ParamBuilder<f64>,
     seed: u64,
     scale: f64,
 ) {
+    set_random_diagnostic_input_values_with_policy(param_builder, seed, scale, true);
+}
+
+fn set_random_diagnostic_input_values_with_policy(
+    param_builder: &mut ParamBuilder<f64>,
+    seed: u64,
+    scale: f64,
+    randomize_externals: bool,
+) {
     let mut rng = SmallRng::seed_from_u64(seed);
     let parameters = param_builder.evaluator_input_parameters();
     for parameter in parameters {
-        if matches!(
+        let should_randomize_external = randomize_externals
+            && matches!(
+                parameter.group,
+                ParamBuilderInputGroup::ExternalEnergy | ParamBuilderInputGroup::ExternalSpatial
+            );
+        let should_randomize_non_external = matches!(
             parameter.group,
-            ParamBuilderInputGroup::ExternalEnergy
-                | ParamBuilderInputGroup::ExternalSpatial
-                | ParamBuilderInputGroup::LoopMomentumSpatial
-                | ParamBuilderInputGroup::Additional
-        ) {
+            ParamBuilderInputGroup::LoopMomentumSpatial | ParamBuilderInputGroup::Additional
+        );
+        if should_randomize_external || should_randomize_non_external {
             param_builder.values[0][parameter.index] =
                 Complex::new_re(F(scale * rng.random::<f64>()));
         }
     }
 }
 
-fn parameter_records(
+#[derive(Clone, Copy)]
+enum DiagnosticExternalSource {
+    RuntimeKinematics,
+    AutomaticDiagnostic,
+}
+
+impl DiagnosticExternalSource {
+    fn label(self, group: ParamBuilderInputGroup) -> &'static str {
+        match (self, group) {
+            (
+                Self::RuntimeKinematics,
+                ParamBuilderInputGroup::ExternalEnergy
+                | ParamBuilderInputGroup::ExternalSpatial
+                | ParamBuilderInputGroup::Polarization,
+            ) => "runtime kinematics",
+            (
+                Self::AutomaticDiagnostic,
+                ParamBuilderInputGroup::ExternalEnergy | ParamBuilderInputGroup::ExternalSpatial,
+            ) => "automatic diagnostic",
+            (
+                _,
+                ParamBuilderInputGroup::LoopMomentumSpatial | ParamBuilderInputGroup::Additional,
+            ) => "automatic diagnostic",
+            (
+                _,
+                ParamBuilderInputGroup::Runtime
+                | ParamBuilderInputGroup::Model
+                | ParamBuilderInputGroup::Polarization
+                | ParamBuilderInputGroup::LocalCounterterm,
+            ) => "state/default",
+        }
+    }
+}
+
+struct PreparedDiagnosticParamBuilder {
+    param_builder: ParamBuilder<f64>,
+    external_source: DiagnosticExternalSource,
+    user_overridden_parameters: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Default)]
+struct DiagnosticInputConfig {
+    numerator_only: bool,
+    numerator_q0_overrides: BTreeMap<EdgeIndex, f64>,
+}
+
+fn prepare_diagnostic_param_builder(
     graph: &Graph,
+    model: &Model,
+    integrand_kind: SelectedIntegrandKind,
     run_settings: &ThreeDrepRunSettings,
     default_runtime_settings: &RuntimeSettings,
-) -> Vec<ParameterValueRecord> {
+    input_config: &DiagnosticInputConfig,
+) -> Result<PreparedDiagnosticParamBuilder> {
     let mut param_builder = graph.param_builder.clone();
-    set_random_diagnostic_input_values(&mut param_builder, run_settings.seed, run_settings.scale);
+    let numerator_q0_parameters =
+        ensure_numerator_q0_parameters(graph, &mut param_builder, input_config)?;
+    let runtime_external_result = set_runtime_external_kinematics(
+        &mut param_builder,
+        graph,
+        integrand_kind,
+        default_runtime_settings,
+    );
+    let external_source = match runtime_external_result {
+        Ok(()) => {
+            set_random_diagnostic_input_values_with_policy(
+                &mut param_builder,
+                run_settings.seed,
+                run_settings.scale,
+                false,
+            );
+            DiagnosticExternalSource::RuntimeKinematics
+        }
+        Err(_error) if graph.polarizations.is_empty() => {
+            set_random_diagnostic_input_values(
+                &mut param_builder,
+                run_settings.seed,
+                run_settings.scale,
+            );
+            DiagnosticExternalSource::AutomaticDiagnostic
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "while preparing external kinematics and polarizations for 3Drep graph {}",
+                    graph.name
+                )
+            });
+        }
+    };
+
     param_builder.set_runtime_parameter_values(
         Complex::new_re(F(default_runtime_settings.general.m_uv)),
         Complex::new_re(F(
@@ -2323,41 +3190,169 @@ fn parameter_records(
         )),
         Complex::new_re(F(run_settings.numerator_interpolation_scale)),
     );
+    param_builder.update_model_values(model);
+    let user_overridden_parameters = apply_numerator_q0_overrides(
+        &mut param_builder,
+        &numerator_q0_parameters,
+        &input_config.numerator_q0_overrides,
+    )?;
 
-    param_builder
+    Ok(PreparedDiagnosticParamBuilder {
+        param_builder,
+        external_source,
+        user_overridden_parameters,
+    })
+}
+
+fn ensure_numerator_q0_parameters(
+    graph: &Graph,
+    param_builder: &mut ParamBuilder<f64>,
+    input_config: &DiagnosticInputConfig,
+) -> Result<BTreeMap<EdgeIndex, ParamBuilderInputParameter>> {
+    if !input_config.numerator_only {
+        if !input_config.numerator_q0_overrides.is_empty() {
+            return Err(eyre!(
+                "--numerator-q0 can only be used together with 3Drep evaluate --numerator-only"
+            ));
+        }
+        return Ok(BTreeMap::new());
+    }
+
+    let energy_atoms = graph
+        .underlying
+        .iter_edges()
+        .filter_map(|(pair, edge_id, _)| {
+            (matches!(pair, HedgePair::Paired { .. })
+                && graph.loop_momentum_basis.edge_signatures[edge_id].is_loop_dependent())
+            .then(|| (edge_id, internal_energy_parameter_atom_gs(edge_id)))
+        })
+        .collect::<Vec<_>>();
+    let requested_atoms = energy_atoms
+        .iter()
+        .map(|(_, atom)| atom.clone())
+        .collect::<Vec<_>>();
+    let ensured = param_builder.ensure_additional_input_parameters(requested_atoms);
+    let by_canonical = ensured
+        .into_iter()
+        .map(|parameter| (parameter.atom.to_canonical_string(), parameter))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut by_edge = BTreeMap::new();
+    for (edge_id, atom) in energy_atoms {
+        let canonical = atom.to_canonical_string();
+        let parameter = by_canonical.get(&canonical).cloned().ok_or_else(|| {
+            eyre!(
+                "Could not register numerator-only energy parameter {}",
+                atom.log_print(Some(60))
+            )
+        })?;
+        by_edge.insert(edge_id, parameter);
+    }
+
+    for edge_id in input_config.numerator_q0_overrides.keys() {
+        if !by_edge.contains_key(edge_id) {
+            return Err(eyre!(
+                "Cannot override numerator-only energy for edge {} because it is not an internal propagator edge",
+                edge_id.0
+            ));
+        }
+    }
+
+    Ok(by_edge)
+}
+
+fn apply_numerator_q0_overrides(
+    param_builder: &mut ParamBuilder<f64>,
+    parameters: &BTreeMap<EdgeIndex, ParamBuilderInputParameter>,
+    overrides: &BTreeMap<EdgeIndex, f64>,
+) -> Result<BTreeMap<String, String>> {
+    let mut user_overridden_parameters = BTreeMap::new();
+    for (edge_id, value) in overrides {
+        let parameter = parameters.get(edge_id).ok_or_else(|| {
+            eyre!(
+                "Cannot override numerator-only energy for edge {} because it was not registered",
+                edge_id.0
+            )
+        })?;
+        param_builder.values[0][parameter.index] = Complex::new_re(F(*value));
+        user_overridden_parameters.insert(
+            parameter.atom.to_canonical_string(),
+            "user override".to_string(),
+        );
+    }
+    Ok(user_overridden_parameters)
+}
+
+fn set_runtime_external_kinematics(
+    param_builder: &mut ParamBuilder<f64>,
+    graph: &Graph,
+    integrand_kind: SelectedIntegrandKind,
+    default_runtime_settings: &RuntimeSettings,
+) -> Result<()> {
+    match integrand_kind {
+        SelectedIntegrandKind::Amplitude => {
+            let external_signature = graph.get_external_signature();
+            param_builder.set_external_kinematics_and_polarizations(
+                graph,
+                default_runtime_settings,
+                DependentMomentaConstructor::Amplitude(&external_signature),
+            )
+        }
+        SelectedIntegrandKind::CrossSection => param_builder
+            .set_external_kinematics_and_polarizations(
+                graph,
+                default_runtime_settings,
+                DependentMomentaConstructor::CrossSection,
+            ),
+    }
+}
+
+fn parameter_records(
+    graph: &Graph,
+    model: &Model,
+    integrand_kind: SelectedIntegrandKind,
+    run_settings: &ThreeDrepRunSettings,
+    default_runtime_settings: &RuntimeSettings,
+    input_config: &DiagnosticInputConfig,
+) -> Result<Vec<ParameterValueRecord>> {
+    let prepared = prepare_diagnostic_param_builder(
+        graph,
+        model,
+        integrand_kind,
+        run_settings,
+        default_runtime_settings,
+        input_config,
+    )?;
+
+    Ok(prepared
+        .param_builder
         .evaluator_input_parameters()
         .into_iter()
         .map(|parameter| {
-            let value = &param_builder.values[0][parameter.index];
+            let value = &prepared.param_builder.values[0][parameter.index];
             let (formatted_value, _, _) = format_complex_full(value);
             ParameterValueRecord {
                 name: parameter.atom.log_print(Some(60)),
                 canonical_name: parameter.atom.to_canonical_string(),
                 value: formatted_value,
-                source: parameter_source(parameter.group).to_string(),
+                source: prepared
+                    .user_overridden_parameters
+                    .get(&parameter.atom.to_canonical_string())
+                    .cloned()
+                    .unwrap_or_else(|| prepared.external_source.label(parameter.group).to_string()),
             }
         })
-        .collect()
-}
-
-fn parameter_source(group: ParamBuilderInputGroup) -> &'static str {
-    match group {
-        ParamBuilderInputGroup::ExternalEnergy
-        | ParamBuilderInputGroup::ExternalSpatial
-        | ParamBuilderInputGroup::LoopMomentumSpatial
-        | ParamBuilderInputGroup::Additional => "automatic diagnostic",
-        ParamBuilderInputGroup::Runtime
-        | ParamBuilderInputGroup::Model
-        | ParamBuilderInputGroup::Polarization
-        | ParamBuilderInputGroup::LocalCounterterm => "state/default",
-    }
+        .collect())
 }
 
 struct EvaluationRequest<'a> {
     label: &'a str,
     graph: &'a Graph,
-    expression: &'a ThreeDExpression<OrientationID>,
+    model: &'a Model,
+    integrand_kind: SelectedIntegrandKind,
+    expression: Option<&'a ThreeDExpression<OrientationID>>,
     parametric_atom: &'a symbolica::atom::Atom,
+    orientations: Option<&'a TiVec<OrientationID, EdgeVec<Orientation>>>,
     workspace: &'a Path,
     global_cli_settings: &'a CLISettings,
     default_runtime_settings: &'a RuntimeSettings,
@@ -2366,27 +3361,66 @@ struct EvaluationRequest<'a> {
     run_settings: &'a ThreeDrepRunSettings,
     mass_shift: &'a str,
     mass_shift_values: &'a [MassShiftValueRecord],
+    profile_target: Option<Duration>,
+    input_config: &'a DiagnosticInputConfig,
+    clean: bool,
+}
+
+struct ProfileEvaluationRequest<'a> {
+    param_builder: &'a mut ParamBuilder<f64>,
+    precision: CliRuntimePrecision,
+    orientations: &'a TiVec<OrientationID, EdgeVec<Orientation>>,
+    filter: &'a SubSet<OrientationID>,
+    runtime_settings: &'a RuntimeSettings,
+    evaluation_metadata: &'a mut EvaluationMetaData,
+    target: Duration,
 }
 
 fn evaluate_threedrep_expression(
     request: EvaluationRequest<'_>,
 ) -> Result<ThreeDrepEvaluationRecord> {
-    let orientations = diagnostic_evaluation_orientations(request.expression);
+    let owned_orientations;
+    let orientations = if let Some(orientations) = request.orientations {
+        orientations
+    } else {
+        owned_orientations =
+            diagnostic_evaluation_orientations(request.expression.ok_or_else(|| {
+                eyre!("3Drep evaluation requires an oriented expression unless orientations are supplied")
+            })?);
+        &owned_orientations
+    };
+    let prepared_param_builder = prepare_diagnostic_param_builder(
+        request.graph,
+        request.model,
+        request.integrand_kind,
+        request.run_settings,
+        request.default_runtime_settings,
+        request.input_config,
+    )?;
     let prepared = build_threedrep_evaluator(
         request.label,
         EvaluatorBuildContext {
             workspace: request.workspace,
+            model: request.model,
             global_cli_settings: request.global_cli_settings,
             default_runtime_settings: request.default_runtime_settings,
             run_settings: request.run_settings,
+            clean: request.clean,
         },
-        request.graph,
+        &prepared_param_builder.param_builder,
         &[request.parametric_atom],
-        &orientations,
-    )?;
+        orientations,
+    )
+    .map_err(|error| eyre!("{}", format_diagnostic_error(&error)))?;
     let evaluator_info = prepared.info.clone();
     let mut evaluator = prepared.evaluator;
-    evaluate_with_evaluator(&mut evaluator, request, &orientations, &evaluator_info)
+    evaluate_with_evaluator(
+        &mut evaluator,
+        request,
+        orientations,
+        &evaluator_info,
+        prepared_param_builder,
+    )
 }
 
 fn evaluate_with_evaluator(
@@ -2394,24 +3428,74 @@ fn evaluate_with_evaluator(
     request: EvaluationRequest<'_>,
     orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
     evaluator_info: &PreparedEvaluatorInfo,
+    prepared_param_builder: PreparedDiagnosticParamBuilder,
 ) -> Result<ThreeDrepEvaluationRecord> {
-    let mut param_builder = request.graph.param_builder.clone();
-    set_random_diagnostic_input_values(
-        &mut param_builder,
-        request.run_settings.seed,
-        request.run_settings.scale,
-    );
-    param_builder.set_runtime_parameter_values(
-        Complex::new_re(F(request.default_runtime_settings.general.m_uv)),
-        Complex::new_re(F(request.default_runtime_settings.general.mu_r
-            * request.default_runtime_settings.general.mu_r)),
-        Complex::new_re(F(request.run_settings.numerator_interpolation_scale)),
-    );
+    let mut param_builder = prepared_param_builder.param_builder;
 
     let filter = SubSet::<OrientationID>::full(orientations.len());
     let mut evaluation_metadata = EvaluationMetaData::new_empty();
     let runtime_settings =
         threedrep_runtime_settings(request.default_runtime_settings, request.run_settings);
+    if let Some(profile_target) = request.profile_target {
+        let profile = profile_evaluator_for_precision(
+            evaluator,
+            ProfileEvaluationRequest {
+                param_builder: &mut param_builder,
+                precision: request.run_settings.runtime_precision,
+                orientations,
+                filter: &filter,
+                runtime_settings: &runtime_settings,
+                evaluation_metadata: &mut evaluation_metadata,
+                target: profile_target,
+            },
+        );
+        return match profile {
+            Ok(profile) => Ok(ThreeDrepEvaluationRecord {
+                id: 0,
+                label: request.label.to_string(),
+                representation: request.representation,
+                numerator_sampling_scale_mode: request.numerator_sampling_scale_mode,
+                mass_shift: request.mass_shift.to_string(),
+                mass_shift_values: request.mass_shift_values.to_vec(),
+                numerator_interpolation_scale: request.run_settings.numerator_interpolation_scale,
+                runtime_precision: request.run_settings.runtime_precision,
+                evaluator_method: request.run_settings.evaluator_method.clone(),
+                evaluator_backend: evaluator_info.backend.clone(),
+                evaluator_build_timing: evaluator_info.build_timing.clone(),
+                evaluator_build_timing_seconds: evaluator_info.build_timing_seconds,
+                value: "-".to_string(),
+                value_re: "-".to_string(),
+                value_im: "-".to_string(),
+                sample_evaluation_timing: profile.timing_per_sample.clone(),
+                sample_evaluation_timing_seconds: profile.timing_per_sample_seconds,
+                profile: Some(profile),
+                status: "ok".to_string(),
+                error: None,
+            }),
+            Err(error) => Ok(ThreeDrepEvaluationRecord {
+                id: 0,
+                label: request.label.to_string(),
+                representation: request.representation,
+                numerator_sampling_scale_mode: request.numerator_sampling_scale_mode,
+                mass_shift: request.mass_shift.to_string(),
+                mass_shift_values: request.mass_shift_values.to_vec(),
+                numerator_interpolation_scale: request.run_settings.numerator_interpolation_scale,
+                runtime_precision: request.run_settings.runtime_precision,
+                evaluator_method: request.run_settings.evaluator_method.clone(),
+                evaluator_backend: evaluator_info.backend.clone(),
+                evaluator_build_timing: evaluator_info.build_timing.clone(),
+                evaluator_build_timing_seconds: evaluator_info.build_timing_seconds,
+                value: "-".to_string(),
+                value_re: "-".to_string(),
+                value_im: "-".to_string(),
+                sample_evaluation_timing: "-".to_string(),
+                sample_evaluation_timing_seconds: 0.0,
+                profile: None,
+                status: "failed".to_string(),
+                error: Some(format_diagnostic_error(&error)),
+            }),
+        };
+    }
     let start = Instant::now();
     let result = evaluate_for_precision(
         evaluator,
@@ -2438,13 +3522,14 @@ fn evaluate_with_evaluator(
             runtime_precision: request.run_settings.runtime_precision,
             evaluator_method: request.run_settings.evaluator_method.clone(),
             evaluator_backend: evaluator_info.backend.clone(),
-            evaluator_build_timing: Some(evaluator_info.build_timing.clone()),
-            evaluator_build_timing_seconds: Some(evaluator_info.build_timing_seconds),
+            evaluator_build_timing: evaluator_info.build_timing.clone(),
+            evaluator_build_timing_seconds: evaluator_info.build_timing_seconds,
             value: formatted_value,
             value_re,
             value_im,
             sample_evaluation_timing: format_duration_dynamic(timing),
             sample_evaluation_timing_seconds: timing.as_secs_f64(),
+            profile: None,
             status: "ok".to_string(),
             error: None,
         }),
@@ -2459,15 +3544,16 @@ fn evaluate_with_evaluator(
             runtime_precision: request.run_settings.runtime_precision,
             evaluator_method: request.run_settings.evaluator_method.clone(),
             evaluator_backend: evaluator_info.backend.clone(),
-            evaluator_build_timing: Some(evaluator_info.build_timing.clone()),
-            evaluator_build_timing_seconds: Some(evaluator_info.build_timing_seconds),
+            evaluator_build_timing: evaluator_info.build_timing.clone(),
+            evaluator_build_timing_seconds: evaluator_info.build_timing_seconds,
             value: "-".to_string(),
             value_re: "-".to_string(),
             value_im: "-".to_string(),
             sample_evaluation_timing: format_duration_dynamic(timing),
             sample_evaluation_timing_seconds: timing.as_secs_f64(),
+            profile: None,
             status: "failed".to_string(),
-            error: Some(format!("{error:?}")),
+            error: Some(format_diagnostic_error(&error)),
         }),
     }
 }
@@ -2521,6 +3607,23 @@ fn evaluate_for_precision_impl<T: FloatLike>(
     runtime_settings: &RuntimeSettings,
     evaluation_metadata: &mut EvaluationMetaData,
 ) -> Result<(String, String, String)> {
+    let value = evaluate_value_for_precision_impl::<T>(
+        evaluator,
+        input,
+        orientations,
+        runtime_settings,
+        evaluation_metadata,
+    )?;
+    Ok(format_complex_full_precise(&value))
+}
+
+fn evaluate_value_for_precision_impl<T: FloatLike>(
+    evaluator: &mut EvaluatorStack,
+    input: InputParams<'_, T>,
+    orientations: SingleOrAllOrientations<'_, OrientationID>,
+    runtime_settings: &RuntimeSettings,
+    evaluation_metadata: &mut EvaluationMetaData,
+) -> Result<Complex<F<T>>> {
     let mut values = evaluator.evaluate::<T, OrientationID>(
         input,
         orientations,
@@ -2532,7 +3635,116 @@ fn evaluate_for_precision_impl<T: FloatLike>(
         .pop()
         .ok_or_else(|| eyre!("3Drep evaluator returned no value"))?
         .unwrap_real();
-    Ok(format_complex_full_precise(&value))
+    Ok(value)
+}
+
+fn evaluate_for_precision_discard(
+    evaluator: &mut EvaluatorStack,
+    param_builder: &mut ParamBuilder<f64>,
+    precision: CliRuntimePrecision,
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+    filter: &SubSet<OrientationID>,
+    runtime_settings: &RuntimeSettings,
+    evaluation_metadata: &mut EvaluationMetaData,
+) -> Result<()> {
+    match precision {
+        CliRuntimePrecision::Double => {
+            let input = param_builder.input_params();
+            evaluate_value_for_precision_impl::<f64>(
+                evaluator,
+                input,
+                SingleOrAllOrientations::All {
+                    all: orientations,
+                    filter,
+                },
+                runtime_settings,
+                evaluation_metadata,
+            )?;
+        }
+        CliRuntimePrecision::Quad => {
+            let input = param_builder.input_params_quad();
+            evaluate_value_for_precision_impl::<f128>(
+                evaluator,
+                input,
+                SingleOrAllOrientations::All {
+                    all: orientations,
+                    filter,
+                },
+                runtime_settings,
+                evaluation_metadata,
+            )?;
+        }
+        CliRuntimePrecision::ArbPrec => {
+            let input = param_builder.input_params_arb();
+            evaluate_value_for_precision_impl::<ArbPrec>(
+                evaluator,
+                input,
+                SingleOrAllOrientations::All {
+                    all: orientations,
+                    filter,
+                },
+                runtime_settings,
+                evaluation_metadata,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn profile_evaluator_for_precision(
+    evaluator: &mut EvaluatorStack,
+    request: ProfileEvaluationRequest<'_>,
+) -> Result<ThreeDrepProfileRecord> {
+    const WARMUP_CALLS: usize = 10;
+    let warmup_start = Instant::now();
+    for _ in 0..WARMUP_CALLS {
+        evaluate_for_precision_discard(
+            evaluator,
+            &mut *request.param_builder,
+            request.precision,
+            request.orientations,
+            request.filter,
+            request.runtime_settings,
+            &mut *request.evaluation_metadata,
+        )?;
+    }
+    let warmup_timing = warmup_start.elapsed();
+    let warmup_seconds = warmup_timing.as_secs_f64();
+    let target_seconds = request.target.as_secs_f64();
+    let calls = if warmup_seconds > 0.0 {
+        ((WARMUP_CALLS as f64 * target_seconds / warmup_seconds).ceil() as usize).max(1)
+    } else {
+        WARMUP_CALLS
+    };
+
+    let profile_start = Instant::now();
+    for _ in 0..calls {
+        evaluate_for_precision_discard(
+            evaluator,
+            &mut *request.param_builder,
+            request.precision,
+            request.orientations,
+            request.filter,
+            request.runtime_settings,
+            &mut *request.evaluation_metadata,
+        )?;
+    }
+    let total_timing = profile_start.elapsed();
+    let timing_per_sample_seconds = total_timing.as_secs_f64() / calls as f64;
+    Ok(ThreeDrepProfileRecord {
+        target_timing: format_duration_dynamic(request.target),
+        target_timing_seconds: target_seconds,
+        warmup_calls: WARMUP_CALLS,
+        warmup_timing: format_duration_dynamic(warmup_timing),
+        warmup_timing_seconds: warmup_seconds,
+        calls,
+        total_timing: format_duration_dynamic(total_timing),
+        total_timing_seconds: total_timing.as_secs_f64(),
+        timing_per_sample: format_duration_dynamic(Duration::from_secs_f64(
+            timing_per_sample_seconds,
+        )),
+        timing_per_sample_seconds,
+    })
 }
 
 fn automatic_energy_degree_bounds_for_graph(graph: &Graph) -> Result<Vec<(usize, usize)>> {
@@ -2565,6 +3777,7 @@ fn select_graph<'a>(state: &'a State, selection: &GraphSelectorArgs) -> Result<S
         integrand_name,
         graph_id,
         graph,
+        integrand_kind: catalog.integrand_kind(),
     })
 }
 
@@ -2596,6 +3809,7 @@ fn select_graph_from_artifact<'a>(
         integrand_name: artifact.integrand_name.clone(),
         graph_id: artifact.graph_id,
         graph,
+        integrand_kind: catalog.integrand_kind(),
     })
 }
 
@@ -2805,12 +4019,12 @@ fn evaluation_delta_cell(
     }
     let (_, delta) = complex_distance(&value, &reference);
     let threshold = if evaluation.mass_shift_values.is_empty() {
-        DIRECT_RELATIVE_TOLERANCE
+        direct_relative_tolerance(output.settings.runtime_precision)
     } else {
-        MASS_SHIFT_RELATIVE_TOLERANCE
+        mass_shift_relative_tolerance(output.settings.runtime_precision)
     };
     color_text(
-        format_scientific_significant(Some(delta), 2),
+        format_scientific_significant(Some(delta), 3),
         if delta.leq_f64(threshold) {
             Color::Green
         } else {
@@ -2839,8 +4053,22 @@ fn render_evaluate_summary(output: &EvaluateOutput) -> String {
         ),
     ]);
     table.push_record(vec![
+        "evaluation mode".to_string(),
+        color_text(
+            if output.numerator_only {
+                "numerator-only"
+            } else {
+                "3D expression"
+            },
+            Color::Green,
+        ),
+    ]);
+    table.push_record(vec![
         "oriented expression".to_string(),
-        color_text(relative_display(&output.expression_path), Color::Purple),
+        output.expression_path.as_ref().map_or_else(
+            || color_text("not used for numerator-only", Color::Purple),
+            |path| color_text(relative_display(path), Color::Purple),
+        ),
     ]);
     table.push_record(vec![
         "symbolica expression".to_string(),
@@ -2870,6 +4098,10 @@ fn render_evaluate_summary(output: &EvaluateOutput) -> String {
     table.push_record(vec![
         "evaluator backend".to_string(),
         color_text(&output.settings.evaluator_backend, Color::Green),
+    ]);
+    table.push_record(vec![
+        "force eager".to_string(),
+        color_text(output.settings.force_eager.to_string(), Color::Blue),
     ]);
     table.push_record(vec![
         "numerator samples normalization".to_string(),
@@ -2908,10 +4140,37 @@ fn render_evaluate_summary(output: &EvaluateOutput) -> String {
         "sample evaluation time".to_string(),
         color_text(&output.evaluation.sample_evaluation_timing, Color::Yellow),
     ]);
-    table.push_record(vec![
-        "value".to_string(),
-        color_text(&output.evaluation.value, Color::Green),
-    ]);
+    if let Some(profile) = &output.evaluation.profile {
+        table.push_record(vec![
+            "profile target".to_string(),
+            color_text(&profile.target_timing, Color::Yellow),
+        ]);
+        table.push_record(vec![
+            "warmup calls".to_string(),
+            color_text(profile.warmup_calls.to_string(), Color::Blue),
+        ]);
+        table.push_record(vec![
+            "warmup time".to_string(),
+            color_text(&profile.warmup_timing, Color::Yellow),
+        ]);
+        table.push_record(vec![
+            "profile calls".to_string(),
+            color_text(profile.calls.to_string(), Color::Blue),
+        ]);
+        table.push_record(vec![
+            "profile total time".to_string(),
+            color_text(&profile.total_timing, Color::Yellow),
+        ]);
+        table.push_record(vec![
+            "profile time per sample".to_string(),
+            color_text(&profile.timing_per_sample, Color::Yellow),
+        ]);
+    } else {
+        table.push_record(vec![
+            "value".to_string(),
+            color_text(&output.evaluation.value, Color::Green),
+        ]);
+    }
 
     let mut parameter_table = Builder::new();
     parameter_table.push_record(vec![
@@ -2980,6 +4239,10 @@ fn render_test_cff_ltd_summary(output: &TestCffLtdOutput, manifest_path: &Path) 
     settings_table.push_record(vec![
         "mass shift start".to_string(),
         color_text(format!("{:.3e}", output.mass_shift_start), Color::Yellow),
+    ]);
+    settings_table.push_record(vec![
+        "epsilon steps".to_string(),
+        color_text(output.n_epsilon_steps.to_string(), Color::Blue),
     ]);
 
     let mut table = Builder::new();
@@ -3065,4 +4328,99 @@ fn render_test_cff_ltd_summary(output: &TestCffLtdOutput, manifest_path: &Path) 
         evaluation_table.build().with(Style::rounded()),
         check_table.build().with(Style::rounded())
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decimal_complex_distance_keeps_sub_double_precision_differences() {
+        let reference = EvaluationValueDecimal {
+            re: DecimalValue::parse("+0").unwrap(),
+            im: DecimalValue::parse(
+                "+2.60633369798997730231172326228159376258650967087478475749183960285052030575615217922069468716473401485881434704408195115849206644935348832565092389878772266122111709668676254415561085167195287053414949997300736045316267041815023568348660819283931785067626512952923333570583338281250466259009884923439956e-5",
+            )
+            .unwrap(),
+        };
+        let candidate = EvaluationValueDecimal {
+            re: DecimalValue::parse("+0").unwrap(),
+            im: DecimalValue::parse(
+                "+2.60633369798997730231172326228159376258650967087478475749183960285052030575615217922069468716473401485881434704408195115849206644935348832565092389878772266122111709668676254415561085167195287053414949997300736045316267041815023568348660819283931785067626512952923333570583338281250466259009885027507109e-5",
+            )
+            .unwrap(),
+        };
+
+        let (abs_diff, rel_diff) = complex_distance(&candidate, &reference);
+
+        assert_eq!(
+            format_scientific_significant(Some(abs_diff), 3),
+            "+1.04e-299"
+        );
+        assert_eq!(
+            format_scientific_significant(Some(rel_diff), 3),
+            "+3.99e-295"
+        );
+    }
+
+    #[test]
+    fn profile_duration_parser_accepts_common_units() {
+        assert_eq!(
+            parse_profile_target_duration("5").unwrap(),
+            Duration::from_secs(5)
+        );
+        assert_eq!(
+            parse_profile_target_duration("250ms").unwrap(),
+            Duration::from_millis(250)
+        );
+        assert_eq!(
+            parse_profile_target_duration("10 us").unwrap(),
+            Duration::from_micros(10)
+        );
+    }
+
+    #[test]
+    fn diagnostic_error_truncation_keeps_first_and_last_200_lines() {
+        let text = (0..450)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let truncated = truncate_middle_lines(&text, 200, 200);
+        let lines = truncated.lines().collect::<Vec<_>>();
+
+        assert_eq!(lines.len(), 401);
+        assert_eq!(lines[0], "line 0");
+        assert_eq!(lines[199], "line 199");
+        assert_eq!(lines[200], "... [truncated 50 diagnostic line(s)] ...");
+        assert_eq!(lines[201], "line 250");
+        assert_eq!(lines[400], "line 449");
+    }
+
+    #[test]
+    fn threedrep_precision_dependent_comparison_tolerances_are_configured() {
+        assert_eq!(
+            direct_relative_tolerance(CliRuntimePrecision::Double),
+            1.0e-7
+        );
+        assert_eq!(
+            direct_relative_tolerance(CliRuntimePrecision::Quad),
+            1.0e-16
+        );
+        assert_eq!(
+            direct_relative_tolerance(CliRuntimePrecision::ArbPrec),
+            1.0e-150
+        );
+        assert_eq!(
+            mass_shift_relative_tolerance(CliRuntimePrecision::Double),
+            1.0e-2
+        );
+        assert_eq!(
+            mass_shift_relative_tolerance(CliRuntimePrecision::Quad),
+            1.0e-3
+        );
+        assert_eq!(
+            mass_shift_relative_tolerance(CliRuntimePrecision::ArbPrec),
+            1.0e-4
+        );
+    }
 }

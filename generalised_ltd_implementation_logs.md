@@ -3156,3 +3156,578 @@ Transient note:
   failed with `No space left on device` while writing target artifacts. I
   removed only the transient `target/debug` build cache, then reran the focused
   unit test successfully.
+
+## 2026-05-01: ArbPrec visible deltas in `3Drep test-cff-ltd`
+
+Follow-up request:
+
+- Running `3Drep test-cff-ltd ... --precision ArbPrec` still displayed
+  `+0.00e0` in the final comparison table for non-identical CFF/LTD values.
+
+Implementation notes:
+
+- Tightened the per-evaluation `Delta` display to use three significant digits,
+  matching the final comparison table.
+- Added a regression test using the concrete ArbPrec CFF/LTD decimal strings
+  from the box-pow3 diagnostic run. The test verifies that the decimal
+  comparison path keeps the sub-double difference visible as
+  `+1.04e-299` absolute and `+3.99e-295` relative, instead of collapsing to
+  zero through an `f64` boundary.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo test -p gammaloop-api decimal_complex_distance_keeps_sub_double_precision_differences
+passed
+
+cargo check -p gammaloop-api
+passed
+
+just build-cli
+passed
+
+./gammaloop --dev-optim ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo \
+  -c "3Drep test-cff-ltd -p three_d_expr_box_pow3 -i default -g 0 --precision ArbPrec \
+      --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace \
+      --clean; quit -n"
+passed; final table displayed abs diff +1.04e-299 and rel diff +3.99e-295
+```
+
+## 2026-05-01: `3Drep evaluate` profiling and precision-dependent comparison thresholds
+
+Follow-up request:
+
+- Add `3Drep evaluate --profile <duration>` to repeatedly call the evaluator on
+  the same diagnostic input and report the timing per sample instead of the
+  evaluation value.
+- Add `3Drep evaluate --eager` to force the eager backend for Double precision.
+- Make `test-cff-ltd` direct CFF/LTD relative tolerance track half of the
+  requested precision, tighten pure-LTD mass-shift tolerances for Quad/ArbPrec,
+  add one more default mass-shift epsilon, and expose `--n-epsilon-steps`.
+
+Implementation notes:
+
+- `evaluate --profile` performs a 10-call warmup, derives the number of profile
+  calls from the requested target duration, evaluates the same input repeatedly,
+  and records target, warmup, total, call count, and per-sample timing in the
+  evaluate manifest.
+- `evaluate --eager` disables compiled backend selection in the 3Drep evaluator
+  settings and reports the forced eager setting in the summary.
+- `test-cff-ltd` now uses direct relative tolerances `1e-7`, `1e-16`, and
+  `1e-150` for Double, Quad, and ArbPrec respectively. Pure-LTD mass-shift
+  relative tolerances are now `1e-2`, `1e-3`, and `1e-4` for Double, Quad, and
+  ArbPrec respectively.
+- The default pure-LTD mass-shift sequence now has five epsilon values
+  `eps, eps/10, ..., eps/10000`; `--n-epsilon-steps` overrides that count and is
+  included in cache matching and the rendered settings table.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo fmt --check
+cargo check -p gammaloop-api
+cargo test -p gammaloop-api commands::threedreps::tests
+just clippy -- -D warnings
+just build-cli
+
+./gammaloop --dev-optim -n -s ./examples/cli/scalar_topologies/three_d_expr_demo_state \
+  3Drep evaluate --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace \
+  --precision Double --seed 11 --scale 0.25 --profile 10ms --eager
+passed; summary reported eager backend, profile calls, total time and per-sample timing
+
+./gammaloop --dev-optim -n -s ./examples/cli/scalar_topologies/three_d_expr_demo_state \
+  3Drep test-cff-ltd -p three_d_expr_box_pow3 -i default -g 0 \
+  --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace \
+  --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean
+passed; rendered epsilon steps and two pure-LTD mass-shift evaluations
+
+./gammaloop --dev-optim -n -s ./examples/cli/scalar_topologies/three_d_expr_demo_state \
+  3Drep test-cff-ltd -p three_d_expr_box_pow3 -i default -g 0 \
+  --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace \
+  --precision Quad --seed 11 --scale 0.25 --n-epsilon-steps 1 --clean
+passed; direct tolerance rendered as +1.00e-16 and mass-shift tolerance as +1.00e-3
+
+./gammaloop --dev-optim -n -s ./examples/cli/scalar_topologies/three_d_expr_demo_state \
+  3Drep evaluate --workspace-path ./examples/cli/scalar_topologies/three_d_expr_demo_workspace \
+  --precision Double --seed 11 --scale 0.25 --profile 1ms --eager
+passed after the final dev-optim rebuild; summary still reported eager backend and profile timing
+```
+
+## 2026-05-01: Relocated 3Drep demo cards
+
+Follow-up request:
+
+- Move the scalar box-pow3 3Drep demo card out of
+  `examples/cli/scalar_topologies` into a dedicated
+  `examples/cli/three_d_expr_demo` folder.
+- Add a similar demo card for the `aa_aa_triple_box.dot` graph without running
+  that new card yet.
+
+Implementation notes:
+
+- Moved the box demo to
+  `examples/cli/three_d_expr_demo/box_one_edge_pow3.toml`.
+- Renamed the box demo state, process, graph, workspace, and generated artifact
+  paths to use `box_one_edge_pow3`.
+- Added `examples/cli/three_d_expr_demo/aa_aa_triple_box.toml`, importing
+  `examples/cli/three_d_expr_demo/aa_aa_triple_box.dot` through the normal
+  `import graphs` file path and applying the same validate/build/evaluate/
+  test-cff-ltd demo sequence with isolated state/workspace paths.
+
+Verification completed:
+
+```text
+python3 - <<'PY'
+import tomllib
+from pathlib import Path
+for path in [
+    Path('examples/cli/three_d_expr_demo/box_one_edge_pow3.toml'),
+    Path('examples/cli/three_d_expr_demo/aa_aa_triple_box.toml'),
+]:
+    with path.open('rb') as f:
+        tomllib.load(f)
+    print(f'parsed {path}')
+PY
+passed for both TOML cards
+```
+
+## 2026-05-01: Truncated long 3Drep evaluator diagnostics
+
+Follow-up request:
+
+- `3Drep evaluate` on the `aa_aa_triple_box` demo can surface very large
+  Symbolica evaluator-build diagnostics, including full expressions and
+  function maps. These should be middle-truncated before being propagated to
+  the CLI output.
+
+Implementation notes:
+
+- Added a shared diagnostic formatter for `3Drep` errors that keeps the first
+  200 and last 200 lines and replaces the middle with a truncation marker.
+- Applied the formatter to the `3Drep evaluate` evaluator-build error boundary,
+  so build errors no longer escape through `?` with their full unbounded debug
+  body.
+- Reused the same formatter for 3Drep generation/evaluator/evaluation error
+  strings written to manifests or shown in summaries.
+- Added a unit test confirming the 200-line head/tail truncation behavior.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo fmt --check
+cargo test -p gammaloop-api commands::threedreps::tests::diagnostic_error_truncation_keeps_first_and_last_200_lines
+cargo check -p gammaloop-api
+just clippy -- -D warnings
+passed
+```
+
+## 2026-05-01: 3Drep physical-graph evaluator preparation
+
+Follow-up request:
+
+- The `3Drep evaluate` path for the `aa_aa_triple_box` demo failed while
+  building/evaluating the diagnostic expression for physical graphs because
+  color algebra had not been simplified before evaluator construction and the
+  standalone 3Drep `ParamBuilder` setup did not populate dynamic external
+  polarization parameters.
+
+Implementation notes:
+
+- Added a public `ParamBuilder::set_external_kinematics_and_polarizations(...)`
+  helper in `gammalooprs` that reuses the same runtime external momenta and
+  polarization construction machinery as the standard amplitude/cross-section
+  integrand build path.
+- Made `ParamBuilder::update_model_values(...)` public so 3Drep diagnostics can
+  complete model-parameter population without duplicating internals in
+  `gammaloop-api`.
+- Updated `3Drep evaluate` and `3Drep test-cff-ltd` evaluator preparation to:
+  - color-simplify the generated Symbolica atom before evaluator building;
+  - resolve the graph's model from the active state;
+  - populate runtime parameters, model parameters, runtime external kinematics,
+    and derived polarization entries before creating evaluator inputs;
+  - fall back to randomized external diagnostic inputs only for graphs without
+    polarization slots when the active runtime settings do not provide a usable
+    external-kinematics construction.
+- The saved `param_builder.txt` for `3Drep evaluate` now reflects the prepared
+  diagnostic builder used by the evaluator rather than the raw graph builder.
+
+Verification in progress:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api
+passed
+cargo test -p gammaloop-api commands::threedreps::tests::diagnostic_error_truncation_keeps_first_and_last_200_lines
+passed
+just build-cli
+passed
+./gammaloop --dev-optim ./examples/cli/three_d_expr_demo/aa_aa_triple_box.toml run demo -c "quit -o"
+passed with the currently commented one-evaluate demo card; the 3Drep evaluate
+summary now shows runtime kinematics and polarization entries in the parameter
+table and no longer trips over the previous color/polarization evaluator setup
+failure.
+just clippy -- -D warnings
+passed
+just build-cli
+passed after the final parameter-source display tweak
+./gammaloop --dev-optim ./examples/cli/three_d_expr_demo/aa_aa_triple_box.toml run demo -c "quit -o"
+passed after the final parameter-source display tweak
+```
+
+## 2026-05-01: 3Drep numerator-only evaluation mode
+
+Follow-up request:
+
+- Add `3Drep evaluate --numerator-only` to build/evaluate only a single numerator
+  call, with all internal edge energy components substituted by their positive
+  on-shell energies, without introducing a fake new representation in the 3Drep
+  oriented-expression layer.
+
+Implementation notes:
+
+- Added `numerator_with_positive_internal_ose_gs(graph)` in the gammaloop CFF
+  expression bridge. It applies the same Symbolica replacement conventions used
+  by 3D orientation energy maps, but only for internal edges: `Q(e,0) -> OSE(e)`,
+  `Q(e,mink(...)) -> Q3(e,...) + OSE(e) delta_0(...)`, and `K(l,0)` follows the
+  corresponding LMB edge. External momenta remain runtime/input parameters.
+- Added `--numerator-only` to `3Drep evaluate`. In this mode the command loads
+  the same artifact only to resolve the process/integrand/graph, then builds the
+  evaluator from the on-the-fly numerator atom and a one-entry all-positive
+  internal-edge orientation vector.
+- Kept the numerator-only artifacts separate from the standard evaluate outputs:
+  `numerator_only_symbolica_expression.txt`, `numerator_only_param_builder.txt`,
+  and `numerator_only_evaluate_manifest.json`.
+- Added an `evaluation mode` row to the evaluate summary so the output clearly
+  distinguishes full 3D-expression evaluation from numerator-only evaluation.
+
+Verification in progress:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api
+passed
+cargo test -p gammaloop-api commands::threedreps::tests::diagnostic_error_truncation_keeps_first_and_last_200_lines
+passed
+just build-cli
+passed
+./gammaloop --dev-optim -n -s ./examples/cli/three_d_expr_demo/aa_aa_triple_box_state \
+  3Drep evaluate --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_triple_box_workspace \
+  --precision Double --seed 11 --scale 0.25 --numerator-only --clean
+passed; summary reported evaluation mode `numerator-only` and saved the
+separate numerator-only Symbolica expression, ParamBuilder, and manifest files.
+cargo fmt --check
+cargo check -p gammalooprs -p gammaloop-api
+just clippy -- -D warnings
+passed after the final needless-borrow cleanup
+just build-cli
+passed after the final needless-borrow cleanup
+./gammaloop --dev-optim -n -s ./examples/cli/three_d_expr_demo/aa_aa_triple_box_state \
+  3Drep evaluate --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_triple_box_workspace \
+  --precision Double --seed 11 --scale 0.25 --numerator-only --clean
+passed after the final needless-borrow cleanup
+```
+
+## 2026-05-01: explicit 3Drep evaluate artifact selection
+
+Follow-up request:
+
+- Make `3Drep evaluate` explicit about which oriented expression it evaluates,
+  because a workspace can contain CFF, LTD, and PureLTD artifacts for the same
+  graph and the old latest-pointer behavior was too implicit.
+- Update existing tests and demo cards to use the explicit form, but do not run
+  the test suite in this pass.
+
+Implementation plan:
+
+- Add optional `-p/-i/-g` graph-selection flags to `3Drep evaluate`, plus:
+  - `--json-in <path>` for an explicit oriented-expression JSON;
+  - `--representation cff|ltd|pure-ltd` for cached artifact lookup;
+  - `--numerator-samples-normalization ...` to select the cached CFF/LTD
+    sampling-normalization artifact when `--representation` is used.
+- Resolve the artifact path in this order:
+  1. `--json-in`, which takes precedence over all cached lookup options;
+  2. `--representation` plus `-p/-i/-g`, resolving the standard
+     process/integrand/graph workspace build path;
+  3. the existing `oriented_expression.json` / latest-pointer fallback for
+     backwards-compatible ad-hoc use.
+- Keep `--numerator-only` using the selected artifact only to identify the
+  graph/model context.
+
+Implementation notes:
+
+- Added an optional graph selector specifically for `evaluate`, so `evaluate`
+  remains usable with `--json-in` or the latest-pointer fallback while still
+  supporting explicit state-based artifact lookup.
+- Added clear errors when a user supplies graph-selection flags or
+  `--numerator-samples-normalization` without either `--representation` or
+  `--json-in`.
+- Updated the CLI integration test and the `box_one_edge_pow3` /
+  `aa_aa_triple_box` demo cards to specify the representation being evaluated.
+- Extended the completion regression coverage so `3Drep evaluate` offers the
+  same process selector and representation / normalization enum completions as
+  `3Drep build`.
+
+Verification status:
+
+- Per the user request, the test suite has not been rerun for this pass yet.
+- `cargo fmt` passed.
+- `cargo check -p gammalooprs -p gammaloop-api` passed.
+- `just clippy -- -D warnings` passed as a static check; no tests were executed.
+
+## 2026-05-01: reorganized 3Drep example cards
+
+Follow-up request:
+
+- Reorganize `examples/cli/three_d_expr_demo` so it keeps only:
+  `aa_aa.toml`, `box_one_edge_pow3.toml`, and `aa_aa.dot`.
+- Keep top-level run-card `commands = []`, requiring users to explicitly run
+  named command blocks.
+- Add one `load` block per card and split the remaining examples into focused,
+  descriptive command blocks.
+- For the `aa_aa` card, duplicate the showcase blocks for 1L, 2L, 3L, and 4L,
+  targeting graph ids 0, 1, 2, and 3 respectively, and add `1L_demo` through
+  `4L_demo` grouping blocks.
+- Verify the `1L_demo` block goes through, without running the test suite.
+
+Implementation notes:
+
+- Replaced the old single-block `aa_aa` and `box_one_edge_pow3` cards with
+  load/build/evaluate/profile/compare-oriented command blocks.
+- Kept the box-pow3 graph inline in `box_one_edge_pow3.toml`, so no extra DOT
+  file is needed in the demo directory.
+- Used `aa_aa.dot` as the single shared physical-graph DOT file containing the
+  box, double-box, triple-box, and quadruple-box topologies.
+- Fixed the `aa_aa.dot` graph metadata so each graph has its own `group_id`;
+  otherwise importing all four graphs at once failed with multiple group
+  masters for group 0.
+- Removed generated state/workspace directories and obsolete scratch DOT/card
+  files from the demo folder.
+- Staged the old scalar-topologies demo-card deletion and the new
+  `three_d_expr_demo` files so the move is represented in the pending commit
+  set.
+
+Verification completed:
+
+```text
+python3 tomllib parse of aa_aa.toml and box_one_edge_pow3.toml
+passed; both cards have commands = [] and a load block
+
+just build-cli
+passed; needed so the local ./gammaloop binary knows the new explicit
+3Drep evaluate selector flags
+
+./gammaloop --dev-optim --clean-state ./examples/cli/three_d_expr_demo/aa_aa.toml run 1L_demo -c "quit -n"
+passed after assigning unique group ids in aa_aa.dot
+```
+
+The full test suite was not run for this pass.
+
+## 2026-05-01: aa_aa 3Drep integration test coverage
+
+Follow-up implementation completed:
+
+- Copied the physical `aa_aa.dot` fixture into
+  `tests/resources/graphs/threedreps/aa_aa.dot` so the 3Drep tests no longer
+  depend on demo files.
+- Added a graph-id aware wrapper around the existing CLI
+  `3Drep test-cff-ltd` manifest harness.
+- Added SM-model test setup mirroring the `aa_aa` demo kinematics and
+  helicities, using normal `import graphs` loading from the test resource.
+- Added multi-way comparison coverage for the aa -> aa one-loop box and
+  two-loop double box with:
+  - Double precision + assembly compiled evaluator;
+  - Double precision + symjit compiled evaluator;
+  - Quad precision eager evaluator.
+- Added an `evaluate` cache-reuse test for both graphs that:
+  - builds and evaluates the CFF expression once with `--clean`;
+  - runs `3Drep evaluate` again without `--clean` and asserts the evaluator
+    build time is absent, proving the cached evaluator was reused;
+  - exercises `--numerator-only` directly from the graph, with an explicit
+    `--numerator-q0 4:1.25e-1` override;
+  - asserts the numerator-only evaluator cache is reused on the second call.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api -p three-dimensional-reps
+cargo clippy -p gammalooprs -p gammaloop-api -p three-dimensional-reps -- -D warnings
+
+just test_gammaloop -- cli_aa_aa
+passed: 2 tests run, 2 passed, 1166 skipped
+
+just test_gammaloop
+passed: 1040 tests run, 1040 passed, 128 skipped
+```
+
+## 2026-05-01: numerator-only q0 inputs and evaluator-cache work
+
+Follow-up request:
+
+- In `3Drep evaluate --numerator-only`, do not replace internal edge energies
+  with `+OSE(edge)`. Keep them as explicit evaluator parameters using the
+  natural Symbolica form `Q(edge, spenso::cind(0))`.
+- Add a way for the user to override those numerator-only energy inputs; random
+  values must otherwise be assigned after the usual parameters so existing
+  seeded inputs remain stable.
+- Cache 3Drep evaluators themselves in the workspace when `--clean` is not
+  supplied, reusing the normal `EvaluatorStack` serialization machinery. For
+  `symjit`, reload the serialized evaluator and call `jit_compile()` again,
+  since serialized JIT payloads are not available yet.
+- Add a TODO for top-level graph display: introduce a `simplified_numerator`
+  field next to `numerator`, and use the expression obtained after
+  `simplify_metrics()` and `simplify_color()` as the evaluator input.
+
+Implementation notes:
+
+- Added GammaLoop CFF helpers that replace EMR/LMB temporal components by
+  explicit internal-energy parameter atoms instead of positive OSEs:
+  `numerator_with_internal_energy_parameters_gs`,
+  `internal_energy_parameter_atom_gs`, and
+  `internal_energy_parameter_replacements_gs`.
+- Added `ParamBuilder::ensure_additional_input_parameters`, so diagnostic-only
+  input parameters can be registered without hand-editing ranges from the CLI
+  layer.
+- Added `3Drep evaluate --numerator-q0 EDGE:VALUE` (also accepting comma lists
+  and `EDGE=VALUE`) for numerator-only energy overrides.
+- `--numerator-only` now appends all internal `Q(edge, cind(0))` parameters to
+  the ParamBuilder, assigns seeded diagnostic values to them by default, and
+  applies user overrides last. The parameter table marks overridden entries as
+  `user override`.
+- Added `LoopExtSignature::is_loop_dependent()` and use it to ensure
+  `--numerator-q0` overrides apply only to loop-dependent internal edges, not
+  external energy parameters.
+- Evaluator construction now receives the exact ParamBuilder used for the
+  evaluation, which is necessary for numerator-only q0 parameters.
+- Added binary evaluator caches under the local 3Drep workspace
+  `evaluators/` subdirectory, with a small JSON manifest keyed by evaluator
+  name, precision/backend settings, parameter list, input atoms, and orientation
+  data. Cached loads leave the evaluator build-time field empty and emit the
+  exact cache paths used.
+- Added `EvaluatorStack::activate_cached_f64_backend`, which reactivates eager,
+  symjit, or external compiled backends after deserialization.
+- Updated the box-pow3 demo numerator-only command to showcase explicit
+  `--numerator-q0` overrides.
+
+Display TODO recorded:
+
+- Add `simplified_numerator` to the top-level graph/build summary table and
+  ensure it prints the `simplify_metrics().simplify_color()` expression used for
+  evaluator construction, while keeping the original `numerator` field for
+  comparison. This was implemented in the subsequent display pass.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api
+cargo clippy -p gammalooprs -p gammaloop-api -- -D warnings
+just build-cli
+
+./gammaloop --dev-optim --clean-state -s /tmp/gammaloop_state_q0_test \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml run load \
+  -c "3Drep evaluate -p aa_aa -i default -g 0 \
+      --workspace-path /tmp/gammaloop_3drep_q0_test --precision Double \
+      --seed 11 --scale 0.25 --profile 1ms --eager --clean \
+      --numerator-only --numerator-q0 4:0.125; quit -n"
+passed; the Symbolica expression contains q₄[0] style parameters rather than
+OSE substitutions and the parameter table reports q4[0] as a user override.
+
+./gammaloop --dev-optim --clean-state -s /tmp/gammaloop_state_q0_test2 \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml run load \
+  -c "3Drep evaluate -p aa_aa -i default -g 0 \
+      --workspace-path /tmp/gammaloop_3drep_q0_test --precision Double \
+      --seed 11 --scale 0.25 --profile 1ms --eager \
+      --numerator-only --numerator-q0 4:0.125; quit -n"
+passed; the second run reused `numerator_only.evaluator.bin` and its evaluator
+manifest from the 3Drep workspace.
+```
+
+The full test suite was not run for this pass.
+
+## 2026-05-01: numerator-only evaluate no longer requires cached 3Drep JSON
+
+Follow-up request:
+
+- `3Drep evaluate --numerator-only -p ... -i ... -g ...` should work even when
+  no CFF/LTD oriented-expression JSON has been built yet. The selected graph is
+  enough context for the numerator-only evaluator.
+- Keep the numerator-only Symbolica expression artifact available for user
+  inspection, like the standard evaluate artifacts.
+
+Implementation notes:
+
+- Split `3Drep evaluate` input resolution into:
+  - direct graph selection for `--numerator-only` when `-p/-i/-g` is supplied;
+  - oriented-expression JSON loading for standard evaluation, or for
+    numerator-only only when the user intentionally relies on `--json-in` /
+    latest-artifact context.
+- In direct numerator-only mode, `--representation`, `--json-in`, and cached
+  oriented-expression lookup are ignored because they are not needed to build
+  the trivial positive-OSE numerator call.
+- Store direct numerator-only artifacts under the deterministic graph workspace
+  subfolder:
+  `process_.../graph_.../numerator_only/`.
+- Use the standard artifact filenames in that folder:
+  `symbolica_expression.txt`, `param_builder.txt`, and
+  `evaluate_manifest.json`.
+- The rendered evaluate summary now shows `oriented expression = not used for
+  numerator-only` when no JSON was loaded.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api
+just build-cli
+
+./gammaloop --dev-optim --clean-state ./examples/cli/three_d_expr_demo/aa_aa.toml run load \
+  -c "3Drep evaluate -p aa_aa -i default -g 3 --representation cff \
+      --numerator-samples-normalization M_for_beyond_quadratic_only \
+      --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L \
+      --precision Double --seed 11 --scale 0.25 --profile 1ms --eager \
+      --clean --numerator-only; quit -n"
+passed; no cached oriented-expression JSON was required, and the summary pointed
+to `.../graph_0003_QuadrupleBox/numerator_only/symbolica_expression.txt`.
+
+just clippy -- -D warnings
+passed
+```
+
+The full test suite was not run for this pass.
+
+## 2026-05-01: simplified numerator display
+
+Follow-up implementation:
+
+- `3Drep build` now passes both the original graph numerator and a
+  `simplified_numerator` string to the pretty renderer.
+- The simplified numerator is computed with the same simplification order used
+  for evaluator preparation in this path: `simplify_metrics()` followed by
+  `simplify_color()`.
+- The top-level pretty summary now has both `numerator` and
+  `simplified_numerator` rows, so users can inspect what expression is being
+  fed into evaluator construction after metric/color simplification.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p three-dimensional-reps -p gammaloop-api
+cargo clippy -p three-dimensional-reps -p gammaloop-api -- -D warnings
+just build-cli
+
+./gammaloop --dev-optim --clean-state -s /tmp/gammaloop_state_simpl_num \
+  ./examples/cli/three_d_expr_demo/box_one_edge_pow3.toml run load \
+  -c "3Drep build -p box_one_edge_pow3 -i default -g 0 \
+      --representation cff --workspace-path /tmp/gammaloop_3drep_simpl_num \
+      --no-color --clean; quit -n"
+passed; the build summary shows both `numerator` and `simplified_numerator`.
+```
+
+The full test suite was not run for this pass.

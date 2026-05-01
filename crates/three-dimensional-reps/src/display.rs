@@ -18,12 +18,18 @@ pub struct DisplayOptions {
     pub details_for_orientation: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NumeratorDisplay<'a> {
+    pub original: Option<&'a str>,
+    pub simplified: Option<&'a str>,
+}
+
 pub fn render_expression_summary(
     expression: &ThreeDExpression<OrientationID>,
     family: RepresentationMode,
     graph: &GraphInfo,
     energy_degree_bounds: &[(usize, usize)],
-    numerator_expr: Option<&str>,
+    numerator: NumeratorDisplay<'_>,
     sampling_scale: NumeratorSamplingScaleMode,
     options: &DisplayOptions,
 ) -> String {
@@ -43,7 +49,7 @@ pub fn render_expression_summary(
             family,
             graph,
             energy_degree_bounds,
-            numerator_expr,
+            numerator,
             sampling_scale,
             options.use_color,
         )
@@ -59,7 +65,7 @@ fn summary_table(
     family: RepresentationMode,
     graph: &GraphInfo,
     energy_degree_bounds: &[(usize, usize)],
-    numerator_expr: Option<&str>,
+    numerator: NumeratorDisplay<'_>,
     sampling_scale: NumeratorSamplingScaleMode,
     use_color: bool,
 ) -> String {
@@ -126,7 +132,11 @@ fn summary_table(
     ]);
     table.push_record(vec![
         "numerator".to_string(),
-        numerator_expr.unwrap_or("-").to_string(),
+        numerator.original.unwrap_or("-").to_string(),
+    ]);
+    table.push_record(vec![
+        "simplified_numerator".to_string(),
+        numerator.simplified.unwrap_or("-").to_string(),
     ]);
     table.build().with(Style::rounded()).to_string()
 }
@@ -1017,7 +1027,7 @@ mod tests {
             RepresentationMode::Cff,
             &graph_info(&parsed),
             &[],
-            None,
+            NumeratorDisplay::default(),
             NumeratorSamplingScaleMode::None,
             &DisplayOptions {
                 use_color: false,
@@ -1036,7 +1046,7 @@ mod tests {
             RepresentationMode::Cff,
             &graph_info(&parsed),
             &[],
-            None,
+            NumeratorDisplay::default(),
             NumeratorSamplingScaleMode::None,
             &DisplayOptions {
                 use_color: false,
@@ -1070,7 +1080,7 @@ mod tests {
             RepresentationMode::Cff,
             &graph_info(&parsed),
             &[],
-            None,
+            NumeratorDisplay::default(),
             NumeratorSamplingScaleMode::None,
             &DisplayOptions {
                 use_color: false,

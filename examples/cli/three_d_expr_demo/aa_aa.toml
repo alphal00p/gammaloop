@@ -1,0 +1,261 @@
+commands = []
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/three_d_expr_demo/aa_aa_state"
+name = "aa_aa_3d_expr_demo"
+
+[cli_settings.global.generation]
+uniform_numerator_sampling_scale = "beyond_quadratic"
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [500.0, 0.0, 0.0, 500.0],
+  [500.0, 0.0, 0.0, -500.0],
+  [500.0, 500.0, 0.0, 0.0],
+  "dependent",
+]
+helicities = [+1, +1, -1, -1]
+
+[default_runtime_settings.general]
+numerator_interpolation_scale = 2.0
+evaluator_method = "SingleParametric"
+
+[[command_blocks]]
+name = "load"
+commands = [
+  "import model sm-default.json",
+  "remove processes",
+  "import graphs ./examples/cli/three_d_expr_demo/aa_aa.dot -p aa_aa -i default -o",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "1L_validate_box_graph"
+commands = [
+  "3Drep validate -p aa_aa -i default -g 0 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L/validate.json",
+]
+
+[[command_blocks]]
+name = "1L_build_ltd_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 0 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L",
+]
+
+[[command_blocks]]
+name = "1L_build_cff_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L",
+]
+
+[[command_blocks]]
+name = "1L_evaluate_cff_box_double"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --clean",
+]
+
+[[command_blocks]]
+name = "1L_evaluate_box_numerator_only"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
+]
+
+[[command_blocks]]
+name = "1L_profile_cff_box_double"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
+]
+
+[[command_blocks]]
+name = "1L_compare_cff_ltd_box_double"
+commands = [
+  "3Drep test-cff-ltd -p aa_aa -i default -g 0 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+]
+
+[[command_blocks]]
+name = "1L_demo"
+commands = [
+  "run load",
+  "run 1L_validate_box_graph",
+  "run 1L_build_ltd_box_structure",
+  "run 1L_build_cff_box_structure",
+  "run 1L_evaluate_cff_box_double",
+  "run 1L_evaluate_box_numerator_only",
+  "run 1L_profile_cff_box_double",
+  "run 1L_compare_cff_ltd_box_double",
+]
+
+[[command_blocks]]
+name = "2L_validate_double_box_graph"
+commands = [
+  "3Drep validate -p aa_aa -i default -g 1 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L/validate.json",
+]
+
+[[command_blocks]]
+name = "2L_build_ltd_double_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 1 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L",
+]
+
+[[command_blocks]]
+name = "2L_build_cff_double_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L",
+]
+
+[[command_blocks]]
+name = "2L_evaluate_cff_double_box_double"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --clean",
+]
+
+[[command_blocks]]
+name = "2L_evaluate_double_box_numerator_only"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
+]
+
+[[command_blocks]]
+name = "2L_profile_cff_double_box_double"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
+]
+
+[[command_blocks]]
+name = "2L_compare_cff_ltd_double_box_double"
+commands = [
+  "3Drep test-cff-ltd -p aa_aa -i default -g 1 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+]
+
+[[command_blocks]]
+name = "2L_demo"
+commands = [
+  "run load",
+  "run 2L_validate_double_box_graph",
+  "run 2L_build_ltd_double_box_structure",
+  "run 2L_build_cff_double_box_structure",
+  "run 2L_evaluate_cff_double_box_double",
+  "run 2L_evaluate_double_box_numerator_only",
+  "run 2L_profile_cff_double_box_double",
+  "run 2L_compare_cff_ltd_double_box_double",
+]
+
+[[command_blocks]]
+name = "3L_validate_triple_box_graph"
+commands = [
+  "3Drep validate -p aa_aa -i default -g 2 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L/validate.json",
+]
+
+[[command_blocks]]
+name = "3L_build_ltd_triple_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 2 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L",
+]
+
+[[command_blocks]]
+name = "3L_build_cff_triple_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L",
+]
+
+[[command_blocks]]
+name = "3L_evaluate_cff_triple_box_double"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --clean",
+]
+
+[[command_blocks]]
+name = "3L_evaluate_triple_box_numerator_only"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
+]
+
+[[command_blocks]]
+name = "3L_profile_cff_triple_box_double"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
+]
+
+[[command_blocks]]
+name = "3L_compare_cff_ltd_triple_box_double"
+commands = [
+  "3Drep test-cff-ltd -p aa_aa -i default -g 2 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+]
+
+[[command_blocks]]
+name = "3L_demo"
+commands = [
+  "run load",
+  "run 3L_validate_triple_box_graph",
+  "run 3L_build_ltd_triple_box_structure",
+  "run 3L_build_cff_triple_box_structure",
+  "run 3L_evaluate_cff_triple_box_double",
+  "run 3L_evaluate_triple_box_numerator_only",
+  "run 3L_profile_cff_triple_box_double",
+  "run 3L_compare_cff_ltd_triple_box_double",
+]
+
+[[command_blocks]]
+name = "4L_validate_quadruple_box_graph"
+commands = [
+  "3Drep validate -p aa_aa -i default -g 3 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L/validate.json",
+]
+
+[[command_blocks]]
+name = "4L_build_ltd_quadruple_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 3 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L",
+]
+
+[[command_blocks]]
+name = "4L_build_cff_quadruple_box_structure"
+commands = [
+  "3Drep build -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L",
+]
+
+[[command_blocks]]
+name = "4L_evaluate_cff_quadruple_box_double"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --clean",
+]
+
+[[command_blocks]]
+name = "4L_evaluate_quadruple_box_numerator_only"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
+]
+
+[[command_blocks]]
+name = "4L_profile_cff_quadruple_box_double"
+commands = [
+  "3Drep evaluate -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
+]
+
+[[command_blocks]]
+name = "4L_compare_cff_ltd_quadruple_box_double"
+commands = [
+  "3Drep test-cff-ltd -p aa_aa -i default -g 3 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+]
+
+[[command_blocks]]
+name = "4L_demo"
+commands = [
+  "run load",
+  "run 4L_validate_quadruple_box_graph",
+  "run 4L_build_ltd_quadruple_box_structure",
+  "run 4L_build_cff_quadruple_box_structure",
+  "run 4L_evaluate_cff_quadruple_box_double",
+  "run 4L_evaluate_quadruple_box_numerator_only",
+  "run 4L_profile_cff_quadruple_box_double",
+  "run 4L_compare_cff_ltd_quadruple_box_double",
+]

@@ -1,0 +1,2235 @@
+\documentclass[11pt,a4paper]{report}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,mathtools,bm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,columns=fullflexible,frame=single}
+
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\ii}{\mathrm{i}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\LTD}{\operatorname{LTD}}
+\newcommand{\CFF}{\operatorname{CFF}}
+\newcommand{\OSE}{\operatorname{OSE}}
+\newcommand{\Res}{\operatorname{Res}}
+\newcommand{\Graph}{\mathcal G}
+\newcommand{\Basis}{\mathcal B}
+\newcommand{\Orient}{\mathcal O}
+\newcommand{\Surf}{\mathcal S}
+\newcommand{\Weights}{\mathcal W}
+\newcommand{\Active}{\mathcal A}
+\newcommand{\Samples}{\mathcal X}
+\newcommand{\Ints}{\mathcal E}
+\newcommand{\Rep}{\mathcal R}
+\newcommand{\Pinch}{\mathcal P}
+\newcommand{\rank}{\operatorname{rank}}
+
+\title{Generalised Three-Dimensional LTD/CFF Representations}
+\author{Implementation and theory note}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note describes the derivative-free three-dimensional representation
+implemented in \texttt{generalised\_ltd.py}.  The construction combines loop-tree
+duality (LTD) with the causal/CFF representation in order to handle repeated
+propagators while keeping the numerator as a sampled black box.  It also
+describes the bounded-energy-degree extension used when edge-momentum
+representation (EMR) numerators contain powers above the affine CFF class.
+
+The document is organized as follows.  Chapter~1 gives the mathematical
+construction, with all dependencies made explicit.  Chapter~2 explains how the
+Python implementation and the oriented JSON schema encode the formulae.
+Chapter~3 reports current Symbolica evaluator timings from the example scripts.
+\end{abstract}
+
+\tableofcontents
+
+\chapter{Theoretical Construction}
+
+\section{Framing, Notation, LTD, and CFF}
+
+Let \(\Graph\) be a connected scalar graph with \(L\) loop momenta and internal
+edge set \(E\).  A loop-momentum basis (LMB) is denoted by
+\(\Basis=(k_1,\ldots,k_L)\).  For an edge \(e\in E\),
+\begin{equation}
+  q_e(k,p)=\sum_{r=1}^{L}\rho_{er}k_r+\sum_{a=1}^{n_{\rm ext}}\eta_{ea}p_a,
+  \qquad \rho_{er},\eta_{ea}\in\mathbb Z ,
+\end{equation}
+and
+\begin{equation}
+  q_e^0(k^0,p^0)=\rho_e\cdot k^0+\eta_e\cdot p^0,\qquad
+  \omega_e(\vec k,p,m)=\sqrt{\vec q_e^{\,2}+m_e^2}.
+\end{equation}
+The Feynman denominator is
+\begin{equation}
+  D_e=(q_e^0)^2-\omega_e^2+\ii0 .
+\end{equation}
+
+For a numerator \(N\) in EMR variables, the \(D\)-dimensional input integral is
+\begin{equation}
+  I_{\Graph,\Basis}[N]
+  =
+  \int_{\mathbb R^{4L}}
+  \prod_{r=1}^{L}\frac{\dd^4 k_r}{(2\pi)^4}\,
+  N(\{q_e(k,p)\}_{e\in E})
+  \prod_{e\in E}D_e^{-a_e}.
+  \label{eq:four-dimensional-integral}
+\end{equation}
+The powers \(a_e\) are normally one; repeated propagators are encoded below as
+explicit repeated edges or, equivalently, as collapsed channels with powers.
+
+\paragraph{LTD dependency data.}
+The LTD construction is an algorithmic residue expansion of
+\eqref{eq:four-dimensional-integral} after choosing
+\begin{itemize}[leftmargin=2em]
+  \item the graph \(\Graph\),
+  \item the loop-momentum basis \(\Basis\),
+  \item a contour-closure prescription \(\kappa\), i.e. the side on which each
+        loop-energy integration is closed.
+\end{itemize}
+We denote the resulting spatial integrand by
+\begin{equation}
+  I^{(3)}_{\LTD}[\Graph,\Basis,\kappa;N](\vec k;p,m)
+  =
+  \sum_{\mathfrak o\in\Orient_{\LTD}(\Graph,\Basis,\kappa)}
+  N\!\left(Q_{\mathfrak o}^{\LTD}(\vec k;p,m)\right)
+  W_{\mathfrak o}^{\LTD}(\vec k;p,m).
+\end{equation}
+The map \(Q_{\mathfrak o}^{\LTD}\) gives every EMR edge energy after solving
+the cut equations.  The weight \(W_{\mathfrak o}^{\LTD}\) is a product of
+cut half-edge factors and LTD dual surfaces.  In this note we do not rederive
+LTD; we use the multiloop algorithmic construction of
+Ref.~\cite{ltd1906}.
+
+\paragraph{CFF dependency data.}
+For CFF/causal representations we use the graph as the primary input and assume
+the canonical source/sink contraction ordering used by the implementation.
+Thus
+\begin{equation}
+  I^{(3)}_{\CFF}[\Graph;N](\vec k;p,m)
+  =
+  \sum_{\mathfrak o\in\Orient_{\CFF}(\Graph)}
+  N\!\left(Q_{\mathfrak o}^{\CFF}(\vec k;p,m)\right)
+  W_{\mathfrak o}^{\CFF}(\vec k;p,m).
+\end{equation}
+The CFF weights use causal \(E\)-surfaces in the denominator.  The construction
+is the one of Refs.~\cite{cff2211,cff2311}.  The standard black-box numerator
+assumption is that \(N\) is at most affine in each EMR edge energy \(q_e^0\).
+
+\paragraph{Surface notation.}
+For any integer vector \(c_e\in\{-1,0,1\}\) and external-energy shift
+\(\Delta\), define the signed causal surface
+\begin{equation}
+  \eta(c,\Delta)=\sum_{e}c_e\,\omega_e+\Delta .
+\end{equation}
+An \(E\)-surface has all non-zero internal-energy coefficients with the same
+orientation after the canonical CFF construction.  An \(H\)-surface is a more
+general signed hyperboloid surface.  Pure CFF denominator factors use only
+\(E\)-surfaces; LTD and hybrid terms may use \(H\)-surfaces when the residue
+geometry requires them.  Numerator-side surfaces are allowed in the numerator
+and do not introduce denominator singularities.
+
+\section{Repeated Propagators Without Numerator Derivatives}
+
+Repeated propagators correspond to groups
+\begin{equation}
+  R_g=\{r_{g,1},\ldots,r_{g,\nu_g}\},\qquad \nu_g\ge2,
+\end{equation}
+whose members have the same canonical routing and mass, possibly with reversed
+edge orientation.  Let \(Q_g^0\) be the canonical repeated-channel energy and
+\(\omega_g\) the common on-shell energy.  The purpose of the hybrid
+construction is to evaluate the repeated-channel residues without applying
+derivatives to the black-box numerator.
+
+\phantomsection
+\subsection*{1.2.a The Fully Generic Formula}
+\addcontentsline{toc}{subsection}{1.2.a The Fully Generic Formula}
+
+Start from the four-dimensional integral split into non-repeated edges \(S\)
+and repeated groups \(G_{\rm rep}\):
+\begin{align}
+  I_{\Graph,\Basis}[N]
+  &=
+  \int \prod_{r=1}^{L}\frac{\dd^4 k_r}{(2\pi)^4}\,
+  N(\{q_e(k,p)\})
+  \prod_{s\in S}D_s^{-1}
+  \prod_{g\in G_{\rm rep}}\prod_{a=1}^{\nu_g}D_{r_{g,a}}^{-1}
+  \notag\\
+  &=
+  \int \prod_{r=1}^{L}\frac{\dd^4 k_r}{(2\pi)^4}\,
+  N(\{q_e(k,p)\})
+  \prod_{s\in S}D_s^{-1}
+  \prod_{g\in G_{\rm rep}}D_g^{-\nu_g}.
+  \label{eq:collapsed-repeated-integral}
+\end{align}
+The second equality is only a denominator identity.  The numerator still has
+one EMR argument for every original edge \(e\in E\), including all repeated
+copies.  Thus the collapsed channel \(g\) has a single denominator energy
+\(Q_g^0\), but the numerator still sees \(q_{r_{g,a}}^0\) for
+\(a=1,\ldots,\nu_g\).
+
+Let \(\bar E=S\sqcup G_{\rm rep}\) be the collapsed edge set and assign powers
+\[
+  n_{\bar e}=
+  \begin{cases}
+    1, & \bar e=s\in S,\\
+    \nu_g, & \bar e=g\in G_{\rm rep}.
+  \end{cases}
+\]
+For every rank-\(L\) collapsed cut basis \(B\subset\bar E\) and pole-sign vector
+\(\sigma_B\), solve the cut equations
+\begin{equation}
+  Q_b^0(k^0,p^0)=\sigma_b\omega_b,\qquad b\in B,
+  \label{eq:cut-equations}
+\end{equation}
+for the loop energies:
+\begin{equation}
+  k^0=K_{B,\sigma_B}(\vec k;p,m).
+\end{equation}
+The Jacobian associated with this change of variables is
+\begin{equation}
+  J_{B}=\det(\rho_{br})_{b\in B,\,r=1,\ldots,L}.
+\end{equation}
+With the contour convention used in the implementation, the sign carried by
+the corresponding simple LTD residue is denoted by
+\(s_{B,\sigma_B}\in\{\pm1\}\).  The direct residue theorem gives the strict
+equality
+\begin{align}
+  I_{\Graph,\Basis}[N]
+  &=
+  \int \prod_{r=1}^{L}\frac{\dd^3 k_r}{(2\pi)^3}
+  \sum_{B,\sigma_B}
+  s_{B,\sigma_B}
+  \Biggl[
+  \prod_{b\in B}
+  \frac{1}{(n_b-1)!}
+  \left(\frac{\partial}{\partial Q_b^0}\right)^{n_b-1}
+  \notag\\[-2mm]
+  &\hspace{34mm}
+  \frac{
+    N(\{q_e^0(k^0,p^0),\vec q_e\})
+  }{
+    \prod_{b\in B}(Q_b^0+\sigma_b\omega_b)^{n_b}
+    \prod_{\bar e\notin B}D_{\bar e}^{n_{\bar e}}
+  }
+  \Biggr]_{k^0=K_{B,\sigma_B}} .
+  \label{eq:raw-higher-residue}
+\end{align}
+The determinant \(J_B\) is already included in the LTD residue sign and
+normalization used to define \(s_{B,\sigma_B}\).  For the DOT examples all
+non-zero \(J_B\) are \(\pm1\).  If a different integer LMB gives
+\(|J_B|\ne1\), the residue weight is multiplied by \(1/|J_B|\).
+
+Equation~\eqref{eq:raw-higher-residue} is not the final representation when a powered
+channel is cut, because the derivatives act on \(N\).  Define the set of active
+original edges
+\begin{equation}
+  \Active_B
+  =
+  \left\{
+  e\in E\;:\;
+  q_e^0 \hbox{ depends on } Q_b^0
+  \hbox{ for some } b\in B \hbox{ with } n_b>1
+  \right\}.
+  \label{eq:active-edges}
+\end{equation}
+For the affine EMR class, one exact algebraic route is to insert the
+multilinear pole interpolation identity
+\begin{equation}
+  N(\{q_e^0\})
+  =
+  \sum_{\theta\in\{\pm1\}^{\Active_B}}
+  N\!\left(\{q_{e,\theta}^0\}\right)
+  \prod_{e\in\Active_B}
+  \frac{1+\theta_e q_e^0/\omega_e}{2},
+  \label{eq:affine-interpolation}
+\end{equation}
+with \(q_{e,\theta}^0=\theta_e\omega_e\) for active edges and the ordinary
+affine value for inactive edges.  Since \(N\) is affine in each active EMR
+energy, differentiating \eqref{eq:affine-interpolation} differentiates only the
+known interpolation factors and never the black-box function values.
+
+The form actually used for the hybrid repeated sectors is the equivalent
+physical CFF-localized form.  To derive it independently, temporarily split the
+repeated denominator into distinct on-shell energies
+\(\omega_{g,a}\), \(a=1,\ldots,\nu_g\), and use the linear-pole
+decomposition
+\begin{equation}
+  \frac{1}{(Q_g^0)^2-\omega_{g,a}^2+\ii0}
+  =
+  \sum_{\tau_{g,a}=\pm1}
+  \frac{\tau_{g,a}}{2\omega_{g,a}}\,
+  \frac{1}{Q_g^0-\tau_{g,a}\omega_{g,a}+\ii0\,\tau_{g,a}}.
+  \label{eq:linear-pole-decomposition}
+\end{equation}
+Each linear pole has the causal exponential representation
+\begin{equation}
+  \frac{1}{Q_g^0-\tau\omega+\ii0\,\tau}
+  =
+  -\ii\,\tau\int_0^\infty \dd \lambda\,
+  \exp\!\left[
+    \ii\tau\lambda Q_g^0-\ii\lambda\omega
+  \right] .
+  \label{eq:linear-pole-exponential}
+\end{equation}
+For a repeated group this gives a sign orbit
+\(\tau_g=(\tau_{g,1},\ldots,\tau_{g,\nu_g})\) and the phase
+\begin{equation}
+  \Phi_{\tau_g}
+  =
+  \exp\!\left[
+    \ii Q_g^0\sum_{a=1}^{\nu_g}\tau_{g,a}\lambda_{g,a}
+    -\ii\sum_{a=1}^{\nu_g}\lambda_{g,a}\omega_{g,a}
+  \right],
+  \qquad \lambda_{g,a}\ge0 .
+  \label{eq:repeated-cff-phase}
+\end{equation}
+The loop-energy integrations are now elementary Fourier integrations.  For a
+complete set of CFF/LTD pole choices \(P\), with signs \(\tau_j\), energies
+\(\omega_j\), and loop-energy rows \(\rho_j\), one obtains the localizing
+constraint
+\begin{equation}
+  \prod_{r=1}^{L}
+  2\pi\,
+  \delta\!\left(
+    \sum_{j\in P}\tau_j\lambda_j\rho_{jr}
+  \right).
+  \label{eq:tau-localizing-delta}
+\end{equation}
+Solving \eqref{eq:tau-localizing-delta} with \(\lambda_j\ge0\) is the
+standard CFF source/sink contraction step: the surviving sign assignments are
+precisely the causal orientations.  In a repeated group the individual
+\(\tau_{g,a}\) survive as numerator-sampling signs, while the localized
+collapsed chain has a single sign \(\chi_g=\pm1\) for the energy \(Q_g^0\).
+If all repeated-copy signs are equal, \(\chi_g\) is forced to that common sign.
+If the orbit is mixed, both \(\chi_g=\pm1\) are possible localizations.  This
+is exactly the rule implemented as
+\[
+  \tau_g=(+,+,+)\Rightarrow \chi_g=+,\qquad
+  \tau_g=(-,-,-)\Rightarrow \chi_g=-,\qquad
+  \hbox{mixed }\tau_g\Rightarrow \chi_g=\pm .
+\]
+Only after solving the delta constraints do we take the equal-energy limit
+\(\omega_{g,a}\to\omega_g\).  The split expression is an ordinary simple-pole
+CFF/LTD expression, hence the limit is equal to the confluent residue
+\eqref{eq:raw-higher-residue}.  The difference is organizational:
+\begin{itemize}[leftmargin=2em]
+  \item the confluent derivative form differentiates the known denominator
+        factors and would differentiate \(N\) unless
+        \eqref{eq:affine-interpolation} is inserted first;
+  \item the physical CFF-localized form samples \(N\) directly at repeated-copy
+        on-shell sign orbits \((\tau_g,\chi_g)\), then combines those samples
+        with rational affine weights.
+\end{itemize}
+For an affine EMR numerator the two forms are identical because both are the
+same equal-energy limit of the split simple-pole identity.  They differ only in
+the basis of numerator calls: the direct interpolation basis uses the formal
+active edge signs \(\theta_e\), while the physical basis uses the CFF-localized
+orbits \((\tau_g,\chi_g)\).  The latter is the one printed by the current
+hybrid JSON labels such as \texttt{physG3tmmmcm}.
+
+It remains to define the rational weights multiplying those physical samples.
+Let \(\Samples_{B,\sigma}\) be the finite set of physical samples obtained from
+the above sign-orbit rule for the active repeated groups of the cut
+\((B,\sigma_B)\).  A sample \(x\in\Samples_{B,\sigma}\) determines complete
+loop and edge energy maps,
+\[
+  K_x^0(\vec k;p,m),\qquad q_{e,x}^0(\vec k;p,m).
+\]
+Write every component of every map as an affine vector in the symbols
+\[
+  1,\qquad p_a^0,\qquad \omega_{\bar e},
+\]
+where repeated copies share the collapsed symbol \(\omega_g\).  Let
+\(R_x\) be the column vector containing all those affine coefficients for
+sample \(x\).  For a numerator-derivative multi-index \(\beta\), let
+\(T_\beta\) be the target affine vector:
+\begin{itemize}[leftmargin=2em]
+  \item for \(\beta=0\), \(T_0\) is the ordinary cut map
+        \(K_{B,\sigma_B}^0,q_{e,B,\sigma_B}^0\);
+  \item for \(|\beta|=1\), \(T_\beta\) is the first derivative of those maps
+        with respect to the corresponding repeated cut energy, multiplied by
+        \(2\omega_g\).  The compensating factor \(1/(2\omega_g)\) is stored as
+        one additional repeated half-edge in the JSON.
+\end{itemize}
+The sample coefficients \(\lambda_{\beta x}\) are defined by the affine system
+\begin{equation}
+  \sum_{x\in\Samples_{B,\sigma}}\lambda_{\beta x}= \delta_{\beta0},
+  \qquad
+  \sum_{x\in\Samples_{B,\sigma}}\lambda_{\beta x} R_x=T_\beta.
+  \label{eq:physical-affine-weights}
+\end{equation}
+If the system is underdetermined, the implementation uses the minimum Euclidean
+norm solution.  Equivalently, after discarding dependent rows, if \(R\) is the
+matrix with columns \(R_x\) and \(t_\beta\) is the target vector including the
+constant row, then
+\begin{equation}
+  \lambda_\beta
+  =
+  R^{T}(RR^{T})^{-1}t_\beta .
+  \label{eq:minnorm-affine-weights}
+\end{equation}
+This equation is not a fit or approximation: the affine support of
+\(\Samples_{B,\sigma}\) is checked exactly over rational numbers.
+
+Substituting \eqref{eq:affine-interpolation} into
+\eqref{eq:raw-higher-residue} gives
+\begin{align}
+  I_{\Graph,\Basis}[N]
+  &=
+  \int \prod_{r=1}^{L}\frac{\dd^3 k_r}{(2\pi)^3}\,
+  I^{\rm HybridLTD}_{\Graph,\Basis,\kappa}[N](\vec k;p,m),
+  \label{eq:spatial-hybrid-integral}\\
+  I^{\rm HybridLTD}_{\Graph,\Basis,\kappa}[N]
+  &=
+  \sum_{\mathfrak o\in\Orient_{\rm H}(\Graph,\Basis,\kappa)}
+  N\!\left(Q_{\mathfrak o}^{\rm H}(\vec k;p,m)\right)
+  W_{\mathfrak o}^{\rm H}(\vec k;p,m).
+  \label{eq:hybrid-master}
+\end{align}
+Here one orientation is
+\[
+  \mathfrak o=(B,\sigma_B,x,\beta,\gamma,\mu),
+\]
+where \(x\in\Samples_{B,\sigma}\), \(\beta\) is the part of the confluent
+derivative reconstructed from numerator samples, \(\gamma=\alpha-\beta\) acts
+on known denominator factors, and \(\mu\) labels one algebraic term in the
+known denominator derivative expansion.  Here
+\[
+  \alpha_b=n_b-1,\qquad b\in B.
+\]
+The numerator is never differentiated; it is only sampled at
+\[
+  Q_{\mathfrak o}^{\rm H}=\{q_{e,x}^0,\vec q_e\}_{e\in E}.
+\]
+
+The denominator derivative coefficient is also explicit.  Each known factor is
+of the form
+\[
+  F_j(y)=\zeta_j(y)^{-p_j},\qquad
+  \zeta_j(y)=\zeta_j(0)+a_j\cdot y,
+\]
+where \(y=(Q_b^0-\sigma_b\omega_b)_{b\in B}\), \(p_j\) is either a propagator
+power or a surface power, and \(a_j\) is the vector of derivatives with respect
+to the cut-basis energies.  A multi-derivative assignment
+\(\delta_j\) with \(\sum_j\delta_j=\gamma\) contributes
+\begin{equation}
+  d_{\{\delta_j\}}
+  =
+  \frac{\gamma!}{\prod_j\delta_j!}
+  \prod_j
+  (-1)^{|\delta_j|}
+  (p_j)_{|\delta_j|}
+  a_j^{\delta_j},
+  \qquad
+  (p)_r=p(p+1)\cdots(p+r-1).
+  \label{eq:denominator-derivative-coeff}
+\end{equation}
+For multi-indices,
+\(\gamma!=\prod_b\gamma_b!\),
+\(\delta_j!=\prod_b(\delta_j)_b!\), and
+\[
+  a_j^{\delta_j}=\prod_b (a_j)_b^{(\delta_j)_b}.
+\]
+For a surface factor \(\zeta_j=\eta_j\), the derivative raises the denominator
+power of that cached surface.  For a cut half-edge factor
+\((2\omega_b)^{-p_j}\), it raises the number of stored half-edge entries.
+
+The complete rational coefficient multiplying one JSON variant is therefore
+\begin{equation}
+  c_{\mathfrak o}
+  =
+  s_{B,\sigma_B}\,
+  \frac{1}{\alpha!}\,
+  \binom{\alpha}{\beta}\,
+  \lambda_{\beta x}\,
+  d_{\mu},
+  \label{eq:hybrid-coefficient}
+\end{equation}
+where \(d_\mu\) is the value of
+\eqref{eq:denominator-derivative-coeff} for the derivative assignment
+\(\mu=\{\delta_j\}\), and
+\[
+  \alpha!=\prod_{b\in B}\alpha_b!,\qquad
+  \binom{\alpha}{\beta}=\prod_{b\in B}\binom{\alpha_b}{\beta_b}.
+\]
+The weight is the finite product
+\begin{equation}
+  W_{\mathfrak o}^{\rm H}
+  =
+  c_{\mathfrak o}
+  \prod_{h\in H_{\mathfrak o}}\frac{1}{2\omega_h}
+  \prod_{\eta\in D_{\mathfrak o}}\eta(\vec k;p,m)^{-m_{\mathfrak o,\eta}}
+  \prod_{\zeta\in N_{\mathfrak o}}\zeta(\vec k;p,m) .
+  \label{eq:hybrid-weight}
+\end{equation}
+Here \(H_{\mathfrak o}\) is the multiset of half-edge ids, so each
+\(h\in H_{\mathfrak o}\) contributes \((2\omega_h)^{-1}\).  The denominator
+multiset \(D_{\mathfrak o}\) contains cached surfaces
+\[
+  \eta(\vec k;p,m)=\sum_e c_e\omega_e+\sum_a d_a p_a^0+c_0,
+\]
+with \(c_e,d_a,c_0\in\mathbb Z\).  The numerator multiset
+\(N_{\mathfrak o}\) contains cached numerator-only surfaces of the same
+linear form; each \(\zeta\in N_{\mathfrak o}\) is exactly a known linear
+factor in on-shell and external energies appearing in the numerator, not an
+additional denominator.  If no repeated channel is
+present, then
+\(n_b=1\) for all cuts, \(\Active_B=\varnothing\), and
+\eqref{eq:hybrid-master} collapses exactly to the LTD representation with the
+same \((\Graph,\Basis,\kappa)\).
+
+\phantomsection
+\subsection*{1.2.b The Box with a Triple Repeated Propagator}
+\addcontentsline{toc}{subsection}{1.2.b The Box with a Triple Repeated Propagator}
+
+Consider the one-loop box routing
+\[
+  q_0=k,\qquad q_1=k+p_1,\qquad q_2=k+p_1+p_2,\qquad
+  Q=k+p_1+p_2+p_3,
+\]
+with three repeated copies of \(Q\).  The collapsed denominator is
+\[
+  D_0D_1D_2D_Q^3 .
+\]
+Write \(\Delta_i=p_1^0+\cdots+p_i^0\) and define the causal surfaces
+\begin{align}
+  E_{ij}^{\sigma_i\sigma_j}
+  &=
+  \sigma_i\omega_i+\sigma_j\omega_j+\Delta_i-\Delta_j,\\
+  E_{iQ}^{\sigma_i\sigma_Q}
+  &=
+  \sigma_i\omega_i+\sigma_Q\omega_Q+\Delta_i-\Delta_3 .
+\end{align}
+The three simple-cut sectors are
+\begin{equation}
+  I_i^{\rm simple}
+  =
+  -\frac{
+    N\!\left(
+      q_0^0,q_1^0,q_2^0,Q^0,Q^0,Q^0
+    \right)_{k^0=-\Delta_i+\omega_i}
+  }{
+    2\omega_i\,
+    E_{ij}^{++}\,
+    E_{i\ell}^{++}\,
+    \left(E_{iQ}^{++}\right)^3
+  },
+  \qquad \{i,j,\ell\}=\{0,1,2\}.
+  \label{eq:box-simple-cuts}
+\end{equation}
+The signs shown correspond to the upper on-shell pole convention used in the
+examples; the opposite closure is obtained by replacing every displayed
+\(+\omega\) by the corresponding signed on-shell energy.
+
+For the repeated cut used in the printed example, the collapsed LTD cut is
+\(Q^0=+\omega_Q\), hence
+\[
+  k^0=\omega_Q-\Delta_3 .
+\]
+The six denominator surfaces generated by the three non-cut edges are
+\begin{align}
+  \eta_{18}&=-\omega_0+\omega_Q-\Delta_3,&
+  \eta_{19}&=\phantom{-}\omega_0+\omega_Q-\Delta_3,\\
+  \eta_{20}&=-\omega_1+\omega_Q-\Delta_2,&
+  \eta_{21}&=\phantom{-}\omega_1+\omega_Q-\Delta_2,\\
+  \eta_{22}&=-\omega_2+\omega_Q-\Delta_1,&
+  \eta_{23}&=\phantom{-}\omega_2+\omega_Q-\Delta_1 .
+  \label{eq:box-b3-surfaces}
+\end{align}
+These are precisely surface ids \(18,\ldots,23\) in the CLI output.  The
+overview table prints a compact subset of denominator ids, but
+\texttt{--show-details-for-orientation} displays the full factorization tree
+containing all six surfaces.
+
+Let \(\tau=(\tau_3,\tau_4,\tau_5)\) be the physical repeated-copy signs and
+\(\chi\) the localized collapsed-chain sign.  A physical numerator call is
+\begin{equation}
+  N_{\tau,\chi}
+  =
+  N\!\left(
+    \chi\omega_Q-\Delta_3,\;
+    \chi\omega_Q-\Delta_2,\;
+    \chi\omega_Q-\Delta_1,\;
+    \tau_3\omega_Q,\;
+    \tau_4\omega_Q,\;
+    \tau_5\omega_Q
+  \right).
+  \label{eq:box-repeated-samples}
+\end{equation}
+The admissible physical sample set is
+\begin{equation}
+  \Samples_Q=
+  \{(+++, +), (---,-)\}
+  \cup
+  \{(\tau,+),(\tau,-):\tau\in\{\pm\}^3,\ \tau\ne+++,\ \tau\ne---\}.
+  \label{eq:box-physical-sample-set}
+\end{equation}
+For each \(x=(\tau,\chi)\in\Samples_Q\), the affine coefficients
+\(\lambda_{0x}\) and \(\lambda_{1x}\) defined by
+\eqref{eq:physical-affine-weights} reconstruct respectively the numerator
+itself and the first numerator derivative.  The full table is
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+sample \(x=(\tau,\chi)\) & \(\lambda_{0x}\) & \(\lambda_{1x}\)\\
+\midrule
+\((+++,+)\) & \(43/112\) & \(5/8\)\\
+\((---,-)\) & \(-27/112\) & \(-5/8\)\\
+\((--+,-)\) & \(-3/56\) & \(-1/4\)\\
+\((--+,+)\) & \(1/112\) & \(-1/8\)\\
+\((-+-,-)\) & \(-3/56\) & \(-1/4\)\\
+\((-+-,+)\) & \(1/112\) & \(-1/8\)\\
+\((-++,-)\) & \(15/112\) & \(1/8\)\\
+\((-++,+)\) & \(11/56\) & \(1/4\)\\
+\((+--,-)\) & \(-3/56\) & \(-1/4\)\\
+\((+--,+)\) & \(1/112\) & \(-1/8\)\\
+\((+-+,-)\) & \(15/112\) & \(1/8\)\\
+\((+-+,+)\) & \(11/56\) & \(1/4\)\\
+\((++-,-)\) & \(15/112\) & \(1/8\)\\
+\((++-,+)\) & \(11/56\) & \(1/4\)\\
+\bottomrule
+\end{tabular}
+\end{center}
+The first column sums to one and reconstructs the base affine numerator map.
+The second column sums to zero and reconstructs the derivative map, with one
+extra factor \(1/(2\omega_Q)\).
+
+For the repeated box, \(\alpha=2\).  Hence \(\beta=0,\gamma=2\) or
+\(\beta=1,\gamma=1\).  Define
+\[
+  P=\prod_{i=18}^{23}\eta_i^{-1},\qquad
+  h_r=\sum_{18\le i_1\le\cdots\le i_r\le 23}
+       \eta_{i_1}^{-1}\cdots\eta_{i_r}^{-1},\qquad h_0=1 .
+\]
+The denominator derivative terms are
+\begin{align}
+  \gamma=2:\quad&
+  2\,\frac{P h_2}{(2\omega_Q)^3}
+  +6\,\frac{P h_1}{(2\omega_Q)^4}
+  +12\,\frac{P}{(2\omega_Q)^5},
+  \label{eq:box-den-gamma2}\\
+  \gamma=1:\quad&
+  -\,\frac{P h_1}{(2\omega_Q)^3}
+  -3\,\frac{P}{(2\omega_Q)^4}.
+  \label{eq:box-den-gamma1}
+\end{align}
+These equations are exactly the two factorization trees printed in the JSON:
+\(P h_2\) is the large tree with all weakly ordered pairs of surfaces,
+\(P h_1\) is the smaller tree, and \(P\) is the single chain
+\([18,19,20,21,22,23]\).
+
+The complete repeated-cut contribution is therefore
+\begin{equation}
+  I_Q^{\rm rep}
+  =
+  \sum_{x\in\Samples_Q}
+  N_x
+  \left[
+    -\frac{\lambda_{0x}}{2}
+    \left(
+      2\,\frac{P h_2}{(2\omega_Q)^3}
+      +6\,\frac{P h_1}{(2\omega_Q)^4}
+      +12\,\frac{P}{(2\omega_Q)^5}
+    \right)
+    -\lambda_{1x}
+    \left(
+      -\,\frac{P h_1}{(2\omega_Q)^4}
+      -3\,\frac{P}{(2\omega_Q)^5}
+    \right)
+  \right].
+  \label{eq:box-repeated-explicit}
+\end{equation}
+The overall minus sign is the one-loop LTD residue sign for the \(Q\)-cut in
+this routing.  Equation~\eqref{eq:box-repeated-explicit} contains no undefined
+coefficient: every rational number is either one of the affine weights in the
+table or one of the derivative factors in
+\eqref{eq:box-den-gamma2}--\eqref{eq:box-den-gamma1}.
+
+For the concrete orientation requested in the CLI output,
+\[
+  x=(---,-),\qquad
+  N_x=N_{---,-}.
+\]
+The coefficients are
+\[
+  \lambda_{0x}=-\frac{27}{112},
+  \qquad
+  \lambda_{1x}=-\frac{5}{8}.
+\]
+Using \eqref{eq:hybrid-coefficient}, the \(\beta=0,\gamma=2\) variants are
+\[
+  -\frac{1}{2}\lambda_{0x}\,(2,6,12)
+  =
+  \left(\frac{27}{112},\frac{81}{112},\frac{81}{56}\right),
+\]
+with half-edge powers \(3,4,5\).  The \(\beta=1,\gamma=1\) variants include the
+extra numerator-derivative half-edge and have
+\[
+  -\lambda_{1x}\,(-1,-3)
+  =
+  \left(-\frac{5}{8},-\frac{15}{8}\right),
+\]
+with half-edge powers \(4,5\).  These five numbers are exactly
+\[
+\begin{array}{c|c|c}
+\hbox{variant label} & \hbox{prefactor} & \hbox{half-edge multiset}\\
+\hline
+\texttt{B3|b0|g2|n0:physG3tmmmcm} & 27/112 & [3,3,3]\\
+\texttt{B3|b0|g2|n0:physG3tmmmcm} & 81/112 & [3,3,3,3]\\
+\texttt{B3|b0|g2|n0:physG3tmmmcm} & 81/56 & [3,3,3,3,3]\\
+\texttt{B3|b1|g1|nD0phys:physG3tmmmcm} & -5/8 & [3,3,3,3]\\
+\texttt{B3|b1|g1|nD0phys:physG3tmmmcm} & -15/8 & [3,3,3,3,3].
+\end{array}
+\]
+The label \texttt{tmmmcm} means
+\(\tau=(-,-,-)\) and \(\chi=-\); \texttt{b0/g2} means
+\(\beta=0,\gamma=2\), and \texttt{b1/g1} means
+\(\beta=1,\gamma=1\).  The repeated edge signs in the orientation are all
+minus because the numerator sample uses the physical repeated-copy signs
+\(\tau=(-,-,-)\), even though the denominator tree is the derivative expansion
+around the collapsed \(Q^0=+\omega_Q\) cut.
+
+The final boxed formula is
+\[
+  I^{\rm HybridLTD}_{\Box^{(3)}} =
+  I_0^{\rm simple}+I_1^{\rm simple}+I_2^{\rm simple}+I_Q^{\rm rep}.
+\]
+
+\phantomsection
+\subsection*{1.2.c Sunrise with One Repeated Dot Numerator}
+\addcontentsline{toc}{subsection}{1.2.c Sunrise with One Repeated Dot Numerator}
+
+The file \texttt{examples/graphs/sunrise\_pow4.dot} gives a compact multiloop
+example where the same repeated-channel mechanism is used in a two-loop LMB.
+Its internal EMR momenta are
+\[
+  q_0=-k_1-k_2+p_1,\qquad q_1=k_1,\qquad
+  q_2=q_3=q_4=q_5=k_2 ,
+\]
+with masses \(m_1,m_2,m_3,m_3,m_3,m_3\).  The repeated group is
+\[
+  R=\{2,3,4,5\},\qquad \nu_R=4,\qquad Q_R^0=k_2^0,\qquad
+  \omega_R=\omega_2=\omega_3=\omega_4=\omega_5 .
+\]
+Consider the numerator
+\[
+  N(q)=q_2\cdot p_1
+  =
+  q_2^0p_1^0-\vec q_2\cdot\vec p_1 ,
+  \label{eq:sunrise-one-dot-numerator}
+\]
+which is affine in the repeated energy.  The command-line shorthand
+\[
+\begin{aligned}
+&\texttt{--energy-degree-bounds 2:1 --numerator-expr auto}\\
+&\hspace{8mm}\Longrightarrow\quad
+  \texttt{dot(edges[2], ext[0])}
+\end{aligned}
+\]
+generates exactly \eqref{eq:sunrise-one-dot-numerator}.
+
+There are two types of rank-two cut bases in the collapsed graph.  The first
+type cuts the two non-repeated edges \(\{0,1\}\).  Since the repeated channel
+is not cut, \(n_0=n_1=1\), \(\alpha=0\), and the hybrid term is just the LTD
+term with the ordinary numerator map.  In the pretty output this is the
+orientation with variant
+\[
+  \texttt{B0,1|b00|g00|n0:phys0}.
+\]
+
+The second type cuts one non-repeated edge and the repeated channel,
+\[
+  B=\{a,R\},\qquad a\in\{0,1\}.
+\]
+For definiteness take \(B=\{0,R\}\).  The cut equations are
+\[
+  -k_1^0-k_2^0+p_1^0=\sigma_0\omega_0,\qquad
+  k_2^0=\chi\,\omega_R ,
+\]
+so
+\[
+  k_2^0=\chi\omega_R,\qquad
+  k_1^0=p_1^0-\sigma_0\omega_0-\chi\omega_R .
+  \label{eq:sunrise-cut-map}
+\]
+The repeated physical sample has
+\[
+  \tau_R=(\tau_2,\tau_3,\tau_4,\tau_5)\in\{\pm1\}^4 ,
+\]
+and the CFF-localized sign \(\chi\) obeys the same rule as before: all equal
+orbits force \(\chi\) to the common sign, while mixed orbits allow both
+\(\chi=\pm1\).  The numerator call for
+\eqref{eq:sunrise-one-dot-numerator} is therefore
+\begin{equation}
+  N_{\tau,\chi}^{\rm sun}
+  =
+  \tau_2\,\omega_R\,p_1^0-\vec k_2\cdot\vec p_1 .
+  \label{eq:sunrise-physical-sample}
+\end{equation}
+The other repeated signs \(\tau_3,\tau_4,\tau_5\) do not enter this particular
+dot numerator, but they are still part of the representation-level numerator
+energy map stored in the JSON.  This is deliberate: the JSON describes a
+representation valid for any numerator respecting the bound, not only for the
+single displayed dot.
+
+Because \(\nu_R=4\), the confluent derivative order is
+\[
+  \alpha_R=\nu_R-1=3.
+\]
+For an affine repeated numerator, only \(\beta_R=0\) and \(\beta_R=1\) appear.
+Consequently the repeated-cut contribution for any fixed non-repeated cut
+sign \(\sigma_0\) has the form
+\begin{align}
+  I^{\rm sun}_{0,R}
+  &=
+  \sum_{x=(\tau,\chi)\in\Samples_R}
+  N_x^{\rm sun}
+  \sum_{\beta=0}^{1}
+  \sum_{\mu:\,|\mu|=3-\beta}
+  s_{0,R,\sigma_0,\chi}\,
+  \frac{1}{3!}\binom{3}{\beta}\,
+  \lambda_{\beta x}\,
+  d_\mu\,
+  \prod_{h\in H_{\beta,\mu}}\frac{1}{2\omega_h}
+  \prod_{\eta\in D_{\mu}}\eta^{-1}.
+  \label{eq:sunrise-repeated-master}
+\end{align}
+Here \(\Samples_R\) is the four-copy version of
+\eqref{eq:box-physical-sample-set}, \(\lambda_{\beta x}\) is obtained from the
+same rational affine system \eqref{eq:physical-affine-weights}, and \(d_\mu\)
+is the explicit denominator-derivative coefficient of
+\eqref{eq:denominator-derivative-coeff}.  For \(\beta=0\) the half-edge
+multiset contains four copies of the repeated edge before additional
+derivatives are distributed; for \(\beta=1\) it contains five copies because
+the numerator derivative reconstruction stores one extra factor
+\((2\omega_R)^{-1}\).
+
+In the actual pretty table the first repeated-channel rows have labels such as
+\[
+  \texttt{-x++++}\qquad
+  \texttt{B0,2|b00|g03|n0:physG2tppppcp}.
+\]
+This means:
+\[
+\begin{array}{ll}
+\texttt{-x++++}:&
+q_0^0=-\omega_0,\ q_1^0 \hbox{ is the solved affine map of }
+\eqref{eq:sunrise-cut-map},\
+q_2^0=q_3^0=q_4^0=q_5^0=+\omega_R,\\[1mm]
+\texttt{B0,2}:&\hbox{the collapsed cut basis is edge }0
+\hbox{ and the repeated representative }2,\\
+\texttt{b00|g03}:&\beta=(0,0),\ \gamma=(0,3),\\
+\texttt{physG2tppppcp}:&
+\tau_R=(+,+,+,+),\ \chi=+ .
+\end{array}
+\]
+For a mixed sign row such as \texttt{physG2tmmmpcm}, the four letters after
+\texttt{t} are \(\tau_2,\tau_3,\tau_4,\tau_5\), and the final
+\texttt{c m} gives \(\chi=-\).  Substituting those signs into
+\eqref{eq:sunrise-physical-sample}, and the corresponding
+\(\lambda_{\beta x}\) into \eqref{eq:sunrise-repeated-master}, reproduces the
+prefactors and half-edge powers printed in the JSON.
+
+\section{Higher Energy Powers in Numerators}
+
+The CFF construction is naturally compatible with numerators affine in each
+EMR edge energy.  When a user supplies a bound \(d_e\) for the highest power of
+each edge energy in \(N\), the implementation first checks loop-energy UV
+convergence.  In every loop-energy direction \(v\), the degree of the numerator
+minus twice the number of denominators depending on that direction must be
+strictly smaller than \(-1\).  If this check fails, finite pole data are not
+enough and the command refuses to build a representation.
+
+\phantomsection
+\subsection*{1.3.1.a Quadratic Bounds}
+\addcontentsline{toc}{subsection}{1.3.1.a Quadratic Bounds}
+
+Let \(x=q_e^0\), \(\omega=\omega_e\), and suppose \(N\) has degree at most two
+in \(x\), while all other EMR edge energies are held fixed.  There is an exact
+polynomial division
+\begin{equation}
+  N(x)=R_eN(x)+\left(x^2-\omega^2\right)C_eN,
+  \label{eq:quadratic-division}
+\end{equation}
+where the pole-safe affine remainder is
+\begin{equation}
+  R_eN(x)=
+  \frac{x+\omega}{2\omega}N(+\omega)
+  +
+  \frac{\omega-x}{2\omega}N(-\omega),
+  \label{eq:quadratic-remainder}
+\end{equation}
+and the contact quotient is
+\begin{equation}
+  C_eN=
+  \frac{N(+\omega)-2N(0)+N(-\omega)}{2\omega^2}.
+  \label{eq:quadratic-contact}
+\end{equation}
+Therefore
+\begin{equation}
+  \frac{N}{D_e\prod_{f\ne e}D_f}
+  =
+  \frac{R_eN}{D_e\prod_{f\ne e}D_f}
+  +
+  \frac{C_eN}{\prod_{f\ne e}D_f}.
+  \label{eq:quadratic-master}
+\end{equation}
+The first term is affine in \(q_e^0\) and can be handled by ordinary CFF.  The
+second term is a pinched graph with edge \(e\) removed, also handled by CFF.
+Consequently the pure CFF denominator remains \(E\)-surface only.  The
+non-trivial part is to lift the CFF expression of the deleted graph back to an
+orientation of the original graph.  The lift is completely mechanical:
+\begin{enumerate}[leftmargin=2em]
+  \item Delete the pinched edge set \(P\) from the denominator graph and build
+        a CFF representation of the lower graph
+        \(\Graph\setminus P\).  If the lower graph factorizes into independent
+        loop-energy components, build one CFF factor per component and multiply
+        the component representations.
+  \item Every lower-sector CFF term fixes loop energies
+        \(K_{\mathfrak t}^{0,\,\Graph\setminus P}\) in the original LMB.  If
+        component CFF factors were built separately, the global loop-energy map
+        is reconstructed by solving the full-rank linear system defined by the
+        union of component basis edges.
+  \item For every original edge, including each deleted edge, compute the
+        lifted EMR energy
+        \begin{equation}
+          \widehat q_{e,\mathfrak t}^{\,0}
+          =
+          \rho_e\cdot K_{\mathfrak t}^{0,\,\Graph\setminus P}
+          +\eta_e\cdot p^0 .
+          \label{eq:lifted-deleted-edge-energy}
+        \end{equation}
+        This number is used only for known polynomial factors.  It is not
+        automatically the numerator sample value of a deleted edge.
+  \item The numerator sample value of a deleted quadratic edge is one of
+        \(+\omega_e,0,-\omega_e\), because
+        \(C_eN\) in \eqref{eq:quadratic-contact} depends on those three
+        black-box samples.  The JSON orientation therefore assigns
+        \(q_e^0=+\omega_e\), \(0\), or \(-\omega_e\) to the deleted edge and
+        records the corresponding orientation character \(+\), \(0\), or \(-\).
+  \item Any lifted factor \(\widehat q_{e,\mathfrak t}^{\,0}\) that remains
+        outside the black-box numerator is stored as a numerator-side surface.
+        In the strictly quadratic contact quotient no such \(q\)-factor is
+        needed; for cubic and higher bounds it is needed.
+  \item The lower-sector CFF denominator surfaces are copied into the original
+        surface cache after replacing every lower-sector edge id by its
+        original edge id.  No denominator surface involving a deleted edge is
+        introduced.
+\end{enumerate}
+The rational coefficients in the JSON follow directly from
+\eqref{eq:quadratic-contact}.  Since half-edge lists encode
+\((2\omega_e)^{-1}\), the factor \(1/(2\omega_e^2)\) is represented as
+\[
+  \frac{1}{2\omega_e^2}
+  =
+  \frac{2}{(2\omega_e)^2}.
+\]
+The three samples \(N(+\omega_e),N(0),N(-\omega_e)\) therefore carry raw
+half-edge prefactors \(2,-4,2\).  A one-edge CFF pinch contributes one
+additional sign \((-1)\) in the implementation's CFF orientation convention, so
+the printed pinched quadratic prefactors are \(-2,+4,-2\).
+
+In hybrid mode, the same division is applied to non-affine edge energies before
+or inside the repeated-channel residue expansion.  For non-repeated edges this
+is identical to the pure CFF lift above.  For repeated edges the division is
+combined with the repeated-channel sample set
+\(\Samples_{B,\sigma}\).  The black-box numerator is still sampled only at the
+explicit finite set of energies supplied by the JSON orientation map.
+
+\phantomsection
+\subsection*{1.3.1.b One-Loop Box with One Quadratic Edge}
+\addcontentsline{toc}{subsection}{1.3.1.b One-Loop Box with One Quadratic Edge}
+
+For a non-repeated one-loop box with denominators \(D_0D_1D_2D_3\), assume the
+only non-affine dependence is \(d_0=2\).  Use the routing
+\[
+  q_0=k,\quad q_1=k+p_1,\quad q_2=k+p_1+p_2,\quad
+  q_3=k+p_1+p_2+p_3,
+\]
+and set \(\Delta_i=p_1^0+\cdots+p_i^0\).  Equations
+\eqref{eq:quadratic-division}--\eqref{eq:quadratic-master} give
+\begin{equation}
+  I_{\Box}^{\CFF}[N]
+  =
+  I_{\CFF}[\Box;R_0N]
+  +
+  I_{\CFF}[\Box/0;C_0N],
+  \label{eq:box-quadratic}
+\end{equation}
+where \(\Box/0\) is the triangle obtained by deleting propagator \(0\).  More
+explicitly,
+\begin{align}
+  I_{\CFF}[\Box;R_0N]
+  &=
+  \sum_{\mathfrak o\in\Orient_{\CFF}(\Box)}
+  \left[
+  \frac{q_0^0(\mathfrak o)+\omega_0}{2\omega_0}N(q_0^0=+\omega_0)
+  +
+  \frac{\omega_0-q_0^0(\mathfrak o)}{2\omega_0}N(q_0^0=-\omega_0)
+  \right]
+  W_{\mathfrak o}^{\CFF},\\
+  I_{\CFF}[\Box/0;C_0N]
+  &=
+  \sum_{\mathfrak t\in\Orient_{\CFF}(\Box/0)}
+  \frac{
+    N(+\omega_0)-2N(0)+N(-\omega_0)
+  }{2\omega_0^2}
+  W_{\mathfrak t}^{\CFF}.
+\end{align}
+Both \(W_{\mathfrak o}^{\CFF}\) and \(W_{\mathfrak t}^{\CFF}\) contain only
+\(E\)-surface denominators.
+
+The lifted triangle terms make the orientation structure concrete.  If the
+triangle CFF term cuts edge \(j\in\{1,2,3\}\) with sign \(\sigma_j\), then
+\[
+  k^0=\sigma_j\omega_j-\Delta_j,\qquad
+  \widehat q_0^{\,0}=\sigma_j\omega_j-\Delta_j .
+\]
+However, in the contact numerator call the deleted edge energy is not
+\(\widehat q_0^{\,0}\); it is one of the three interpolation samples
+\[
+  q_0^0=+\omega_0,\qquad q_0^0=0,\qquad q_0^0=-\omega_0 .
+\]
+For example, the lower triangle orientation with original signs
+\((-++ )\) on edges \(1,2,3\) contributes three lifted original-box
+orientations
+\[
+  +-++,\qquad 0-++,\qquad --++ ,
+\]
+where the first character is the assigned numerator value of the deleted edge.
+The printed coefficients are
+\[
+\begin{array}{c|c|c|c}
+\hbox{orientation} & \hbox{variant} & \hbox{prefactor} &
+       \hbox{half-edge multiset}\\
+\hline
++-++ & \texttt{pinch[0]|e0=+} & -2 & [0,0,1,2,3]\\
+0-++ & \texttt{pinch[0]|e0=0} & 4 & [0,0,1,2,3]\\
+--++ & \texttt{pinch[0]|e0=-} & -2 & [0,0,1,2,3].
+\end{array}
+\]
+The denominator surfaces of that lower triangle are the ordinary CFF
+surfaces among edges \(1,2,3\); in the CLI table they appear, for this
+orientation, as ids \([4,5]\).  The two extra half-edge entries \(0,0\) encode
+the factor \((2\omega_0)^{-2}\).  No denominator singularity associated with
+edge \(0\) remains because \(D_0\) has been cancelled by the contact quotient.
+This is why the final JSON is still a normal orientation of the original box:
+all four numerator edge energies are specified, but only the lower triangle
+denominator surfaces are present.
+
+\phantomsection
+\subsection*{1.3.2.a Bounds Above Quadratic}
+\addcontentsline{toc}{subsection}{1.3.2.a Bounds Above Quadratic}
+
+For \(d_e>2\), the same idea works but the contact quotient is no longer a
+constant in the deleted edge energy.  Let \(a_1,\ldots,a_{d_e-1}\) be
+non-pole interpolation nodes with \(a_j\ne\pm1\), and write
+\[
+  u=\frac{q_e^0}{\omega_e}.
+\]
+The implementation uses the deterministic node list
+\[
+  0,\;2,\;-2,\;3,\;-3,\ldots
+\]
+truncated to \(d_e-1\) nodes.  The Lagrange basis polynomial associated with
+node \(a_j\) is
+\begin{equation}
+  L_j(u)=
+  \prod_{\ell\ne j}\frac{u-a_\ell}{a_j-a_\ell}.
+  \label{eq:lagrange-basis}
+\end{equation}
+It is characterized by \(L_j(a_i)=\delta_{ij}\).  The pole remainder is still
+the affine interpolation at \(u=\pm1\), and the contact quotient is
+reconstructed from black-box samples by
+\begin{equation}
+  C_eN(q_e^0)
+  =
+  \sum_{j}
+  \frac{L_j(q_e^0/\omega_e)}{(a_j^2-1)\omega_e^2}
+  \left[
+    N(a_j\omega_e)
+    -\frac{a_j+1}{2}N(+\omega_e)
+    -\frac{1-a_j}{2}N(-\omega_e)
+  \right].
+  \label{eq:higher-contact}
+\end{equation}
+The quotient \(C_eN\) is now a known polynomial in the lifted deleted-edge
+energy \(\widehat q_{e,\mathfrak t}^{\,0}\) of
+\eqref{eq:lifted-deleted-edge-energy}.  Expanding each \(L_j(u)\) gives
+\[
+  L_j(u)=\sum_{r=0}^{d_e-2}\ell_{jr}u^r .
+\]
+A monomial contribution is therefore
+\begin{equation}
+  \ell_{jr}\,
+  \frac{(\widehat q_{e,\mathfrak t}^{\,0})^r}
+       {(a_j^2-1)\omega_e^{r+2}}
+  \left[
+    N(a_j\omega_e)
+    -\frac{a_j+1}{2}N(+\omega_e)
+    -\frac{1-a_j}{2}N(-\omega_e)
+  \right].
+  \label{eq:higher-contact-monomial}
+\end{equation}
+In JSON this becomes:
+\begin{itemize}[leftmargin=2em]
+  \item \(r+2\) entries of edge \(e\) in \texttt{half\_edges}, because
+        \(\omega_e^{-(r+2)}=2^{r+2}(2\omega_e)^{-(r+2)}\);
+  \item \(r\) numerator-side copies of the lifted surface
+        \(\widehat q_{e,\mathfrak t}^{\,0}\), unless that linear form is zero;
+  \item one numerator map with \(q_e^0=a_j\omega_e\), \(+\omega_e\), or
+        \(-\omega_e\), depending on the black-box sample in the bracket.
+\end{itemize}
+For several higher-power edges, \eqref{eq:higher-contact-monomial} suggests a
+recursive construction: pick an active edge, split its contribution into the
+pole remainder and the contact sector, then repeat the operation on the
+remaining bounded edges of the same graph or lower graph.  Once a cubic or
+higher contact has been taken, the lower graph carries known
+polynomial factors
+\[
+  \prod_s \bigl(\widehat q_{e_s,\mathfrak t}^{\,0}\bigr)^{r_s}.
+\]
+If a second non-affine edge is then contacted, those known factors and the
+black-box numerator samples no longer separate into independent edge-wise
+finite-pole divisions.  The completion is obtained by reducing those known
+polynomial factors against the remaining quadratic denominators, as described
+in Sec.~1.3.2.c below.  Algebraically this is the lower-sector
+contact/infinity completion of the finite-pole recursion.  In JSON it is still
+encoded with the same ingredients: ordinary \(E\)-surface denominator trees,
+half-edge factors, numerator-only linear factors, and one black-box numerator
+map per orientation.  The only grammar extension is that a denominator tree may
+now contain a unit node, represented by a node with no surfaces and no
+children.  Such a node evaluates to \(1\) and represents a terminal tadpole or
+unit lower-sector contact.
+
+The implementation exposes the following pure-CFF higher-power cases:
+\begin{enumerate}[leftmargin=2em]
+  \item arbitrary quadratic-or-lower caps \(d_e\le2\), on one-loop,
+        multiloop, split-mass, and repeated-signature graphs, provided the
+        loop-energy UV check is satisfied;
+  \item arbitrary UV-convergent higher caps on non-repeated edges, using the
+        recursive lower-contact completion described below;
+  \item arbitrary UV-convergent higher caps on repeated-signature channels,
+        using a channel normal form before any individual copy is deleted.
+\end{enumerate}
+In all accepted pure-CFF cases every denominator tree is built only from
+\(E\)-surfaces.  Numerator-side cached factors may be \(E\)- or \(H\)-type
+linear forms, but the JSON marks them as numerator-only and the evaluator
+multiplies them in the numerator.
+
+The repeated-channel case needs one extra algebraic step.  Let
+\[
+  C=\{e_1,\ldots,e_\nu\}
+\]
+be a repeated channel with common canonical energy \(y_C\), on-shell energy
+\(\omega_C\), and denominator \(D_C=y_C^2-\omega_C^2\).  If the user-supplied
+edge bounds in this channel are \(d_{e_a}\), the black-box numerator is known
+to have total channel degree at most
+\[
+  d_C=\sum_{a=1}^{\nu}d_{e_a}.
+\]
+Choose the deterministic interpolation nodes
+\[
+  \Samples_{d_C}=(1,-1,0,2,-2,3,-3,\ldots)
+\]
+truncated to \(d_C+1\) entries.  The Lagrange polynomial for node \(a\) is
+\[
+  L_a(u)=\prod_{\substack{b\in\Samples_{d_C}\\ b\ne a}}
+  \frac{u-b}{a-b},\qquad u=\frac{y_C}{\omega_C}.
+\]
+For any black-box numerator, with all channel-copy EMR energies sampled at
+their signed values \(q_{e_a}^0=s_{e_a}a\,\omega_{e_a}\), where
+\(s_{e_a}=\pm1\) is the sign of the copy relative to the canonical channel,
+\[
+  N(y_C,\ldots)
+  =
+  \sum_{a\in\Samples_{d_C}}
+  L_a(y_C/\omega_C)\,
+  N\!\left(q_{e_a}^0=s_{e_a}a\,\omega_{e_a},\ldots\right).
+  \label{eq:channel-interpolation}
+\]
+Now write
+\[
+  L_a(u)=\sum_{r=0}^{d_C}\ell_{a,r}u^r,\qquad
+  r=2b+p,\quad p\in\{0,1\}.
+\]
+The normal form of each monomial is
+\begin{equation}
+  \frac{u^{2b+p}}{D_C^\nu}
+  =
+  \sum_{j=0}^{b}
+  \binom{b}{j}
+  \frac{y_C^{p}\,D_C^j}
+       {\omega_C^{2j+p}D_C^\nu}.
+  \label{eq:channel-normal-form}
+\end{equation}
+If \(j<\nu\), the term keeps \(\nu-j\) explicit copies of the repeated
+denominator and deletes the other \(j\) copies.  In JSON it contributes:
+\begin{itemize}[leftmargin=2em]
+  \item coefficient \(2^{2j+p}\ell_{a,2b+p}\binom{b}{j}\), because
+        \(\omega_C^{-(2j+p)}=2^{2j+p}(2\omega_C)^{-(2j+p)}\);
+  \item \(2j+p\) entries of the representative channel edge in
+        \texttt{half\_edges};
+  \item one numerator-only surface for \(y_C\) if \(p=1\);
+  \item a lower CFF denominator graph with exactly \(\nu-j\) copies of the
+        channel still present.
+\end{itemize}
+If \(j\ge\nu\), no denominator copy of \(C\) remains.  The extra
+\(D_C^{j-\nu}\) is serialized as numerator-only factors
+\[
+  (y_C-\omega_C)^{j-\nu}(y_C+\omega_C)^{j-\nu},
+\]
+again expressed through cached surface keys.  The lower denominator is then the
+CFF expression of the graph with the whole repeated channel deleted.  This is
+still an \(E\)-surface-only denominator representation; the additional factors
+are explicitly numerator-side objects.
+
+This channel normal form is the reason pure CFF can now handle high powers on
+repeated propagators without ever invoking LTD contact denominators.  It also
+makes the ordinary finite-pole/contact recursion a limiting case: for
+\(\nu=1\), \eqref{eq:channel-normal-form} is precisely the division of a
+single higher-power edge into a pole remainder and a lower contact sector.
+
+\subsection{Uniform-Scale Repeated-Channel Sampling}
+
+The default interpolation variable in
+\eqref{eq:channel-interpolation} is \(u_C=y_C/\omega_C\).  This is compact and
+is kept as the default implementation because it produces the smallest
+coefficients for the ordinary repeated-channel formula.  However, after
+\eqref{eq:channel-normal-form}, high-degree monomials can generate explicit
+inverse powers of \(\omega_C\).  These inverse powers are artificial
+interpolation factors: the complete orientation sum is independent of the
+normalization used for the interpolation nodes.  They are not physical
+propagator singularities, and for a massless representative edge they can make
+individual terms unnecessarily sensitive to a soft limit before the term sum is
+formed.
+
+The implementation therefore also supports a user-provided non-zero scale
+\(M\).  Let
+\[
+  \Samples_d=(1,-1,0,2,-2,\ldots)
+\]
+be the deterministic integer node list.  In uniform-scale mode the pure CFF
+channel interpolant is
+\begin{equation}
+  N(y_C,\ldots)
+  =
+  \sum_{a\in\Samples_{d_C}}
+  L_a(y_C/M)\,
+  N\!\left(q_{e_b}^0=s_{e_b}a\,M,\ldots\right),
+  \label{eq:uniform-channel-interpolation}
+\end{equation}
+where \(s_{e_b}=\pm1\) is the sign of member \(e_b\) relative to the channel
+representative.  The Lagrange polynomial is the same polynomial in its
+dimensionless argument:
+\[
+  L_a(v)=\sum_{r=0}^{d_C}\ell_{a,r}v^r,\qquad v=y_C/M.
+\]
+For a monomial \(r=2b+p\), \(p\in\{0,1\}\), the normal form becomes
+\begin{equation}
+  \frac{(y_C/M)^{2b+p}}{D_C^\nu}
+  =
+  \sum_{j=0}^{b}
+  \binom{b}{j}
+  \frac{y_C^p\,\omega_C^{2(b-j)}\,D_C^j}
+       {M^{2b+p}D_C^\nu}.
+  \label{eq:uniform-channel-normal-form}
+\end{equation}
+Compared with \eqref{eq:channel-normal-form}, the inverse scale is now
+\(M^{-(2b+p)}\), while positive powers of \(\omega_C\) are numerator-side
+known factors.  If \(j<\nu\), the denominator keeps \(\nu-j\) channel copies.
+If \(j\ge\nu\), the excess \(D_C^{j-\nu}\) is again serialized as numerator
+factors \((y_C-\omega_C)^{j-\nu}(y_C+\omega_C)^{j-\nu}\).  Hence the
+denominator surfaces are unchanged CFF causal surfaces; only the numerator map
+and variant prefactor gain explicit dependence on \(M\).
+
+For hybrid LTD/CFF, the same idea is applied around the localized LTD pole.
+If a repeated basis edge has sign \(\sigma=\pm1\), the finite-difference
+samples are
+\begin{equation}
+  q_C^0=\sigma\,\omega_C+aM,\qquad a\in\Samples_d ,
+  \label{eq:uniform-hybrid-samples}
+\end{equation}
+and the finite-difference weights carry \(M^{-|\beta|}\) for a
+multi-derivative index \(\beta\).  This replaces the default
+\((2\omega_C)^{-|\beta|}\) factors without changing the final summed value.
+
+The CLI exposes three policies:
+\[
+\begin{array}{ll}
+\texttt{none} & \text{use } \omega_C \text{ normalization everywhere
+  (default)},\\
+\texttt{beyond-quadratic} & \text{use } M \text{ only when the repeated-channel
+  bound is } d_C>2,\\
+\texttt{all} & \text{use } M \text{ for every repeated-channel bound }
+  d_C>1 .
+\end{array}
+\]
+The second policy keeps the quadratic case in the original compact
+\(\omega_C\)-normalized form; the third is useful when one wants all repeated
+finite-difference samples to have the same external normalization.  The
+runtime evaluator rejects \(M=0\).  Real evaluators accept positive or negative
+real \(M\).  Complex-valued Symbolica evaluators also accept complex \(M\);
+real-valued Symbolica evaluators reject it.
+
+For the two-loop \texttt{sunrise\_pow4.dot} graph, the repeated channel is
+\[
+  C=\{2,3,4,5\},\qquad y_C=k_2^0,\qquad \nu=4 .
+\]
+With
+\[
+  \texttt{--energy-degree-bounds 2:5}
+\]
+the channel degree is \(d_C=5\), so
+\[
+  \Samples_5=(1,-1,0,2,-2,3).
+\]
+The JSON samples the black-box numerator at the six maps
+\[
+  q_2^0=a\,\omega_2,\qquad
+  q_3^0=a\,\omega_3,\qquad
+  q_4^0=a\,\omega_4,\qquad
+  q_5^0=a\,\omega_5,
+  \qquad a\in\Samples_5,
+\]
+where \(\omega_2=\omega_3=\omega_4=\omega_5\) numerically because the repeated
+copy masses and spatial routings are equal.  For a monomial check,
+\[
+  \frac{(y_C)^5}{D_C^4}
+  =
+  \frac{\omega_C^4 y_C}{D_C^4}
+  +2\,\frac{\omega_C^2 y_C}{D_C^3}
+  +\frac{y_C}{D_C^2}.
+  \label{eq:sunrise-channel-monomial-check}
+\]
+The serialized black-box formula does not assume this monomial; it emits the
+six Lagrange sample maps above and the rational coefficients obtained from
+\eqref{eq:channel-interpolation}--\eqref{eq:channel-normal-form}.  The three
+denominator powers in \eqref{eq:sunrise-channel-monomial-check} correspond to
+JSON variants keeping four, three, and two repeated denominator copies,
+respectively.  Every such variant has only CFF \(E\)-surfaces in the
+denominator and, when \(p=1\), one numerator-only surface representing
+\(y_C\).  The tests compare this pure-CFF value with the hybrid value and with
+the split-mass LTD limiting proxy.
+
+\paragraph{How the JSON rows are obtained.}
+The oriented JSON does not store the polynomial
+\eqref{eq:channel-interpolation} symbolically.  It stores the fully expanded
+terms of
+\[
+  L_a(u)D_C^{-\nu}
+\]
+after applying \eqref{eq:channel-normal-form}.  For each interpolation node
+\(a\) and each monomial \(u^{2b+p}\) in \(L_a\), the builder emits one variant
+for each \(j=0,\ldots,b\).  The row data are
+\[
+\begin{array}{rl}
+\texttt{sample} &= a,\\
+\texttt{remaining\_power} &= \max(0,\nu-j),\\
+\texttt{parity} &= p,\\
+\texttt{cancelled\_power} &= \max(0,j-\nu),\\
+\texttt{inverse\_ose\_power} &= 2j+p,\\
+\texttt{coefficient} &= \ell_{a,2b+p}\binom{b}{j}.
+\end{array}
+\]
+The JSON prefactor of that variant is this coefficient multiplied by
+\(2^{2j+p}\) and by the ordinary lower CFF prefactor of the denominator graph
+with \(\max(0,\nu-j)\) channel copies retained.  The ordinary CFF half-edge
+list of that lower graph is then appended with \(2j+p\) copies of the
+representative channel edge.  If \(p=1\), the numerator-surface list gets one
+cached copy of the canonical channel energy \(y_C\).  This construction is
+purely mechanical and is what the evaluator uses directly.
+
+For \texttt{box\_pow3.dot} with
+\[
+  \texttt{--energy-degree-bounds 3:4},
+\]
+the repeated channel is \(C=\{3,4,5\}\), \(\nu=3\), \(d_C=4\), and
+\(\Samples_4=(1,-1,0,2,-2)\).  The first numerator map printed by
+\texttt{build --family cff --pretty} has orientation label
+\(\texttt{-+++++}\).  For its sample \(a=1\), the actual variants are:
+\[
+\begin{array}{c|c|c|c|c|c}
+\texttt{pref} & \texttt{remaining\_power} & p &
+\texttt{inverse\_ose\_power} & \texttt{half\_edges} &
+\texttt{num\_surfaces}\\
+\hline
+-8/3 & 1 & 0 & 4 & [0,1,2,3,3,3,3,3] & []\\
+-4/3 & 2 & 0 & 2 & [0,1,2,3,3,3,4] & []\\
+ 4/3 & 2 & 1 & 3 & [0,1,2,3,3,3,3,4] & [19]\\
+ 1/2 & 3 & 0 & 0 & [0,1,2,3,4,5] & []\\
+ 1   & 3 & 1 & 1 & [0,1,2,3,3,4,5] & [19].
+\end{array}
+\]
+Here surface \(19\) is numerator-only and is the cached linear form for the
+canonical repeated energy \(y_C\) in that orientation.  The denominator
+surfaces referenced by the factorization trees are all \(E\)-surfaces.
+
+For the mixed box command
+\[
+  \texttt{--energy-degree-bounds 0:1,1:1,2:0,3:4},
+\]
+the same channel reduction is performed first.  The affine powers on edges
+\(0\) and \(1\) do not require new black-box calls.  They become known linear
+factors whenever a lower contact sector leaves them outside the sampled
+black-box numerator, so the same orientation label can have additional
+variants with extra numerator surfaces, for example surfaces \(20,21,22\) in
+the current output.  These variants are still grouped under the same
+\texttt{edge\_q0} map; this is the invariant that one orientation equals one
+black-box numerator call.
+
+For \texttt{sunrise\_pow4.dot} with
+\[
+  \texttt{--energy-degree-bounds 2:5},
+\]
+the repeated channel is \(C=\{2,3,4,5\}\), \(\nu=4\), \(d_C=5\), and
+\(\Samples_5=(1,-1,0,2,-2,3)\).  The first numerator map has orientation label
+\(\texttt{++++++}\).  For sample \(a=1\), the variants are:
+\[
+\begin{array}{c|c|c|c|c|c}
+\texttt{pref} & \texttt{remaining\_power} & p &
+\texttt{inverse\_ose\_power} & \texttt{half\_edges} &
+\texttt{num\_surfaces}\\
+\hline
+-8/3 & 2 & 0 & 4 & [0,1,2,2,2,2,2,3] & []\\
+ 8/3 & 2 & 1 & 5 & [0,1,2,2,2,2,2,2,3] & [5]\\
+-4/3 & 3 & 0 & 2 & [0,1,2,2,2,3,4] & []\\
+10/3 & 3 & 1 & 3 & [0,1,2,2,2,2,3,4] & [5]\\
+ 1/2 & 4 & 0 & 0 & [0,1,2,3,4,5] & []\\
+ 1   & 4 & 1 & 1 & [0,1,2,2,3,4,5] & [5].
+\end{array}
+\]
+Surface \(5\) is numerator-only and represents the lifted canonical channel
+energy
+\[
+  y_C=-\omega_0-\omega_1+p_1^0
+\]
+for this orientation.  Its sign-flipped companion appears as surface \(6\) in
+the \(\texttt{--++++}\) orientation.  These two surfaces are marked
+\((e)\) in pretty output because they occur only in the numerator.
+
+If the same sunrise graph is built with
+\[
+  \texttt{--energy-degree-bounds 2:3,3:3},
+\]
+the channel degree is \(d_C=6\), because both powered repeated copies belong
+to the same denominator channel.  The node set is
+\(\Samples_6=(1,-1,0,2,-2,3,-3)\).  The first printed numerator map has seven
+variants for sample \(a=1\); the leading channel-reduction metadata are
+\[
+\begin{array}{c|c|c|c|c}
+\texttt{pref} & \texttt{remaining\_power} & p &
+\texttt{inverse\_ose\_power} & \texttt{coefficient}\\
+\hline
+-4/3  & 1 & 0 & 6 & 1/48\\
+-10/3 & 2 & 0 & 4 & -5/24\\
+ 2/3  & 2 & 1 & 5 & 1/48\\
+-13/12& 3 & 0 & 2 & 13/48 .
+\end{array}
+\]
+The remaining three variants are the same expansion continued to
+\(\texttt{remaining\_power}=3,4,4\).  The important point is that the JSON
+does not distinguish which copy originally carried which cubic cap once the
+copies are identified as a repeated channel; it only needs the total channel
+degree \(d_C=6\) and the individual numerator sample map for every original
+edge copy.
+
+Pure CFF does not need a separate repeated-pole derivative construction:
+repeated propagators are repeated denominator factors in the CFF contour
+integral.  The channel normal form above simply performs the finite polynomial
+division at the level of the repeated denominator power before CFF denominator
+trees are generated.  The hybrid formula remains useful for the LTD-like
+repeated-channel organization, but it is not needed to make the pure-CFF
+higher-power lift well-defined.
+
+Hybrid mode has a different status.  The hybrid repeated-channel formula is
+not constrained to keep pure-CFF denominator trees \(E\)-only: \(H\)-surfaces
+are allowed because the non-repeated part is LTD-like and CFF is used only to
+localize repeated channels.  With \texttt{--energy-degree-bounds}, numerator
+derivatives in the repeated-channel residue are replaced by tensor-product
+finite-difference samples in the repeated basis coordinates.  For a derivative
+multiindex \(\beta\), the degree used along basis direction \(b\) is
+\[
+  D_b=\sum_e d_e\,\mathbf 1\{\partial q_e^0/\partial z_b\ne0\},
+\]
+where \(z_b\) is the repeated basis energy.  The finite-difference stencil is
+the node set \(0,1,-1,2,-2,\ldots\) truncated to \(D_b+1\) nodes, with weights
+fixed by exact polynomial interpolation.  Therefore the numerator is still a
+black box: the JSON only asks for samples at explicit EMR energy maps.
+
+The implemented hybrid path is validated for arbitrary user-provided caps
+subject to the same loop-energy UV check and practical expression size.  The
+test suite covers cubic, quartic, and quintic caps on repeated box, sunrise,
+kite, mercedes, and iterated-bubble examples by comparing the hybrid value to
+the split-mass LTD limiting proxy.  In the absence of repeated propagators,
+hybrid collapses exactly to LTD for any accepted bound vector.
+
+\phantomsection
+\subsection*{1.3.2.b One-Loop Box with One Cubic Edge}
+\addcontentsline{toc}{subsection}{1.3.2.b One-Loop Box with One Cubic Edge}
+
+For the same one-loop box, take \(d_0=3\).  The implementation chooses the
+two non-pole nodes
+\[
+  a_0=0,\qquad a_1=2.
+\]
+The Lagrange basis is
+\begin{equation}
+  L_0(u)=1-\frac{u}{2},\qquad
+  L_1(u)=\frac{u}{2}.
+  \label{eq:box-cubic-lagrange}
+\end{equation}
+Substituting these two polynomials into \eqref{eq:higher-contact} gives
+\begin{align}
+  C_0N(q_0^0)
+  &=
+  -\frac{1-u/2}{\omega_0^2}
+  \left[
+    N(0)-\frac12 N(+\omega_0)-\frac12 N(-\omega_0)
+  \right]
+  \notag\\
+  &\quad
+  +\frac{u/2}{3\omega_0^2}
+  \left[
+    N(2\omega_0)-\frac32 N(+\omega_0)+\frac12 N(-\omega_0)
+  \right],
+  \qquad u=\frac{\widehat q_0^{\,0}}{\omega_0}.
+  \label{eq:box-cubic-contact}
+\end{align}
+For a lower triangle orientation \(\mathfrak t\), the lifted deleted energy is
+\[
+  \widehat q_{0,\mathfrak t}^{\,0}
+  =
+  \rho_0\cdot K_{\mathfrak t}^{0,\Box/0}.
+\]
+For instance, if the triangle cut is edge \(1\) with sign \(-\), then
+\[
+  \widehat q_{0,\mathfrak t}^{\,0}=-\omega_1-p_1^0,
+\]
+which appears in the surface cache as a numerator-only \(E\)-surface.  If the
+cut is edge \(1\) with sign \(+\), the lifted surface is
+\(\omega_1-p_1^0\).  These are the numerator-only surfaces printed as
+\((e)\) in the cubic box output.
+
+The monomial coefficients of \eqref{eq:box-cubic-contact} map directly to JSON
+variants.  Before the one-edge CFF pinch sign, the finite-pole contact
+components for edge \(0\) are
+\[
+\begin{array}{c|c|c|c}
+\hbox{sample }q_0^0 & \hbox{prefactor} &
+  \hbox{half-edge multiset} & \hbox{numerator surface}\\
+\hline
+0 & -4 & [0,0] & \varnothing\\
+0 & 4 & [0,0,0] & [\widehat q_0^0]\\
++\omega_0 & 2 & [0,0] & \varnothing\\
++\omega_0 & -4 & [0,0,0] & [\widehat q_0^0]\\
+-\omega_0 & 2 & [0,0] & \varnothing\\
+-\omega_0 & -4/3 & [0,0,0] & [\widehat q_0^0]\\
+2\omega_0 & 4/3 & [0,0,0] & [\widehat q_0^0].
+\end{array}
+\]
+The printed one-loop box CFF table includes the additional pinch sign, so the
+visible variants are
+\[
+\begin{array}{c|c|c|c}
+\hbox{orientation label} & \hbox{variant} & \hbox{prefactor}
+  & \hbox{meaning}\\
+\hline
+0-++ & \texttt{pinch[0]|e0=0} & 4
+  & -(-4)\,N(q_0^0=0)/(2\omega_0)^2\\
+0-++ & \texttt{pinch[0]|e0=0} & -4
+  & -(4)\,\widehat q_0^0\,N(q_0^0=0)/(2\omega_0)^3\\
+x-++ & \texttt{pinch[0]|e0=2} & -4/3
+  & -(4/3)\,\widehat q_0^0\,N(q_0^0=2\omega_0)/(2\omega_0)^3\\
++-++ & \texttt{pinch[0]|e0=+} & -2
+  & -(2)\,N(q_0^0=+\omega_0)/(2\omega_0)^2\\
++-++ & \texttt{pinch[0]|e0=+} & 4
+  & -(-4)\,\widehat q_0^0\,N(q_0^0=+\omega_0)/(2\omega_0)^3\\
+--++ & \texttt{pinch[0]|e0=-} & -2
+  & -(2)\,N(q_0^0=-\omega_0)/(2\omega_0)^2\\
+--++ & \texttt{pinch[0]|e0=-} & 4/3
+  & -(-4/3)\,\widehat q_0^0\,N(q_0^0=-\omega_0)/(2\omega_0)^3 .
+\end{array}
+\]
+The label \(x\) in \(x-++\) indicates that the deleted edge is sampled at the
+non-standard finite node \(q_0^0=2\omega_0\), so its detailed energy map must be
+read from the orientation details rather than from a single \(+\), \(-\), or
+\(0\) symbol.  All denominator surfaces in these rows are the lifted triangle
+CFF surfaces; \(\widehat q_0^0\) is a numerator-only surface and cannot create
+a denominator singularity.
+
+This cubic box example is the first member of the higher-contact recursion.  If
+the other box edges are affine, for example
+\((d_0,d_1,d_2,d_3)=(3,1,1,1)\), the formula above is exact and agrees with
+LTD.  If one spectator is quadratic, for example \((3,1,2,0)\), a second
+contact produces the terminal tadpole derived below.  The implemented command
+now emits that completion as an explicit unit denominator node, so the resulting
+pure-CFF JSON remains \(E\)-surface-only in the denominator and agrees with LTD
+for all UV-convergent one-loop box monomial caps through the convergence range
+\(\sum_e d_e\le6\).  The same higher cap is allowed on a graph that contains
+repeated propagators, including when the capped edge is one of the repeated
+copies, because pure CFF treats those copies as ordinary repeated denominator
+factors.
+
+\phantomsection
+\subsection*{1.3.2.c Terminal Contact Completion}
+\addcontentsline{toc}{subsection}{1.3.2.c Terminal Contact Completion}
+
+The recursive lower-contact completion can terminate on a sector whose
+remaining denominator set is smaller than the degree of the known polynomial
+factor carried by previous contacts.  The simplest terminal sector is useful
+because it can be analyzed completely and because it fixes the unit-tree terms
+that appear in the JSON grammar.
+
+Consider the one-loop box with edge energies
+\[
+  q_e^0=k^0+\Delta_e,\qquad
+  D_e=(q_e^0)^2-\omega_e^2,\qquad e=0,1,2,3 ,
+\]
+where \(\Delta_e\) is the external-energy shift of edge \(e\) and
+\(\omega_e=E_e(\vec k)\).  Define
+\[
+  \delta_{ab}=\Delta_a-\Delta_b ,
+  \qquad q_a^0=q_b^0+\delta_{ab}.
+\]
+One representative terminal sector is
+\[
+  (d_0,d_1,d_2,d_3)=(0,0,3,3),
+  \qquad
+  N(q)= (q_2^0)^3(q_3^0)^3 .
+\]
+For a cubic edge the finite-pole/contact division is just
+\begin{equation}
+  (q_e^0)^3
+  =
+  \omega_e^2 q_e^0
+  +
+  D_e\,q_e^0 .
+  \label{eq:cubic-one-edge-division}
+\end{equation}
+The first term is the pole remainder and is handled by the finite-pole CFF
+samples.  The second term cancels \(D_e\) and produces a contact lower sector.
+Taking the contact part on both cubic edges produces, among other already
+handled terms, the lower bubble
+\begin{equation}
+  \frac{q_2^0 q_3^0}{D_0D_1}.
+  \label{eq:terminal-contact-bubble}
+\end{equation}
+This bubble is the first terminal sector in which the lower-contact completion
+produces a unit denominator tree.
+Writing the numerator in terms of the remaining edge \(0\),
+\[
+  q_2^0=q_0^0+\delta_{20},
+  \qquad
+  q_3^0=q_0^0+\delta_{30},
+\]
+gives the exact identity
+\begin{align}
+  q_2^0q_3^0
+  &=
+  (q_0^0)^2+(\delta_{20}+\delta_{30})q_0^0
+    +\delta_{20}\delta_{30}
+  \notag\\
+  &=
+  D_0+
+  \omega_0^2+(\delta_{20}+\delta_{30})q_0^0
+    +\delta_{20}\delta_{30}.
+  \label{eq:terminal-contact-polynomial-division}
+\end{align}
+Therefore
+\begin{equation}
+  \frac{q_2^0q_3^0}{D_0D_1}
+  =
+  \frac{
+    \omega_0^2+(\delta_{20}+\delta_{30})q_0^0
+      +\delta_{20}\delta_{30}}
+       {D_0D_1}
+  +
+  \frac{1}{D_1}.
+  \label{eq:terminal-contact-tadpole}
+\end{equation}
+The first term has an affine numerator in the lower bubble and is a standard
+CFF object.  The second term is a terminal lower-sector tadpole.  It has no
+ordinary \(E\)-surface denominator left after the half-edge factor of edge
+\(1\); in the JSON grammar it would be represented as a unit denominator tree
+with the half-edge list \([1]\).
+
+With the close-below convention used by the code, this terminal contribution
+has the sign of the corresponding CFF branch and evaluates to
+\[
+  -\,\frac{1}{2\omega_1}
+\]
+for the sector in \eqref{eq:terminal-contact-bubble}.  The same value is
+obtained by comparing the serialized CFF unit-tree term against the LTD
+reference at high precision.  For the same random kinematics used in the tests,
+\[
+  \omega_1=0.788665091489179\ldots,\qquad
+  \frac{1}{2\omega_1}=0.633982669444499\ldots .
+\]
+The related box sectors
+\[
+  (0,3,0,3),\quad (0,3,3,0),\quad (2,1,0,3),
+  \quad (3,1,2,0),
+\]
+and their permutations show the same pattern: the terminal contribution is a single
+terminal tadpole \(\pm1/(2\omega_i)\), with \(i\) determined by the last
+remaining denominator in the lower sector.  In the intermediate recursion these
+branches are terms with no \(E\)-surface denominator chain.  The schema now
+serializes them as a unit denominator node
+\[
+  \texttt{\{surfaces: [], children: []\}},
+\]
+so the evaluator multiplies by the half-edge factors and by one.  With this
+unit-node encoding, all UV-convergent one-loop box monomial caps satisfying
+\(\sum_e d_e\le6\) agree with LTD at arbitrary precision.
+
+The natural one-loop generalization is consequently not another finite-pole
+sample, but a lower-sector normal-form recursion.  Let \(S\) be the set of
+denominators left after some contacts and let \(P(q^0)\) be the known
+polynomial factor multiplying the black-box numerator sample.  Choose
+\(a\in S\) and divide \(P\) by
+\[
+  D_a=(q_a^0)^2-\omega_a^2
+\]
+after rewriting all \(q_e^0\) in terms of \(q_a^0\):
+\begin{equation}
+  P(q^0)=D_a\,Q_a(q^0)+R_a(q^0),
+  \qquad
+  \deg_{q_a^0} R_a\le1 .
+  \label{eq:lower-sector-normal-form}
+\end{equation}
+Then
+\begin{equation}
+  \frac{P}{\prod_{e\in S}D_e}
+  =
+  \frac{R_a}{D_a\prod_{e\in S\setminus\{a\}}D_e}
+  +
+  \frac{Q_a}{\prod_{e\in S\setminus\{a\}}D_e}.
+  \label{eq:lower-sector-recursion}
+\end{equation}
+The first term is again a finite-pole CFF term because its numerator is affine
+in the active energy.  The second term is the contact completion and is
+recursed on the smaller denominator set.  When one denominator remains,
+\eqref{eq:lower-sector-recursion} terminates in a tadpole; when no denominator
+remains, UV convergence of the full sector must make the sum of such unit
+polynomial branches cancel across contact histories.
+
+The same mechanism extends to multiloop contact sectors whenever the known
+polynomial factors reduce to the span of the denominator components that remain.
+The smallest diagnostic graph is the two-loop penta-denominator
+\[
+  D_0(k_1+k_2+p_3)D_1(k_1)D_2(k_1+p_1)D_3(k_2)D_4(k_2+p_2).
+\]
+For the UV-convergent bounds
+\[
+  (d_0,d_1,d_2,d_3,d_4)=(1,0,3,0,3),
+\]
+one contact history sets \(q_2^0=q_4^0=q_0^0=q_1^0=0\) and leaves only
+\[
+  \frac{(p_1^0)(p_2^0-p_3^0)}{D_3(k_2)} .
+\]
+The original graph has two loop energies, but this lower sector has rank one.
+It is nevertheless not ambiguous: all dependence on the unlocalized \(k_1^0\)
+has disappeared into external-energy factors.  The completion is therefore a
+single terminal tadpole,
+\[
+  \frac{p_1^0(p_2^0-p_3^0)}{2\omega_3},
+\]
+times the half-edge factors accumulated along the contact path.  The code
+handles this by decomposing the remaining denominator rows into vector-matroid
+components, building a CFF or terminal LTD factor for each non-zero component,
+and solving only the localized rank directions.  Free loop-energy directions
+are assigned the particular value zero in the derived \(\texttt{loop\_q0}\)
+map; the EMR \(\texttt{edge\_q0}\) map is the numerator map and is unchanged by
+that bookkeeping choice.
+
+This gives a practical generalization of
+\eqref{eq:lower-sector-normal-form}--\eqref{eq:lower-sector-recursion}: recurse
+on active higher-power or known-polynomial edges, reduce quotient terms against
+the remaining denominators, decompose the lower denominator into matroid
+components, and serialize terminal components as unit denominator nodes.  The
+pure-CFF tests now include the one-loop box sectors above, repeated-signature
+box sectors with quartic caps on repeated copies, high-power repeated sunrise
+and kite sectors, two repeated channels in the iterated-bubble topology, and
+the two-loop rank-deficient penta sectors; in every accepted case the
+denominator surface set is \(E\)-only and the value agrees with LTD or, for
+repeated propagators, with the hybrid value and the split-mass LTD limiting
+proxy.
+
+\chapter{Python Implementation and JSON Format}
+
+\section{Module Structure}
+
+The implementation is organized around an evaluator-complete intermediate
+format.
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{graph\_io.py} parses DOT graphs, extracts momentum signatures,
+        detects repeated channels, and builds split-mass reference graphs.
+  \item \texttt{graph\_signatures.py} implements the
+        \texttt{graph\_from\_signatures} command, which turns products such as
+        \texttt{prop(k1+p1,m)} into DOT graphs.
+  \item \texttt{orientation\_bundle.py} constructs LTD, CFF, hybrid, and
+        bounded-degree contact bundles.  This is where repeated channels are
+        collapsed, active numerator maps are enumerated, and CFF lower minors
+        are generated.
+  \item \texttt{structure.py} serializes bundles to schema-v6 JSON and contains
+        the arbitrary-precision Python evaluator.
+  \item \texttt{pretty.py} renders the JSON in a human-readable form.
+  \item \texttt{symbolica\_eval.py} compiles a fixed-numerator JSON expression
+        to Symbolica eager and assembly-backed evaluators.
+\end{itemize}
+
+\section{Bounded-Degree Support Matrix}
+
+The command-line option \texttt{--energy-degree-bounds} is interpreted as an
+upper bound \(d_e\) for the degree of the black-box numerator in each EMR edge
+energy \(q_e^0\).  The builder first applies the loop-energy UV check described
+in Section~1.3.  If the check fails, no representation is built.
+For the \texttt{test} and \texttt{compare} subcommands this option is common:
+the same bound vector is used to build the CFF expression, the hybrid
+expression, and the split-mass LTD reference.  The
+\texttt{--cff-energy-degree-bounds} option is retained only for CFF-only
+diagnostics.
+
+When a command both evaluates a numerator and sees
+\texttt{--numerator-expr auto}, the CLI replaces \texttt{auto} by a concrete
+black-box numerator before any representation is evaluated or compiled.  The
+\texttt{build} command accepts the same option as metadata: it records the
+resolved expression in \texttt{graph.numerator\_expr} while leaving the
+orientation structure unchanged.  If the graph has \(n_{\rm ext}\) external
+momentum symbols and the normalized bound vector is
+\(d=(d_0,\ldots,d_{|E|-1})\), the generated expression is
+\begin{equation}
+  N_{\rm auto}(q,p)
+  =
+  \prod_{e=0}^{|E|-1}
+  \prod_{r=0}^{d_e-1}
+  \left(q_e\cdot p_{(e+r)\bmod n_{\rm ext}}\right).
+  \label{eq:auto-numerator}
+\end{equation}
+Edges absent from the bound input have \(d_e=0\) and therefore contribute no
+factor.  The external index cycle is deterministic and is chosen only to make
+the numerator depend on generic external energies; it has no bearing on the
+representation builder.  For example, on \texttt{box\_pow3.dot},
+\[
+  \texttt{--energy-degree-bounds 3:3,4:4 --numerator-expr auto}
+\]
+is resolved to
+\begin{lstlisting}
+dot(edges[3], ext[0]) * dot(edges[3], ext[1]) * dot(edges[3], ext[2]) *
+dot(edges[4], ext[1]) * dot(edges[4], ext[2]) * dot(edges[4], ext[0]) *
+dot(edges[4], ext[1])
+\end{lstlisting}
+The concrete string is stored in JSON test reports and in Symbolica evaluator
+metadata.  For \texttt{evaluate} and \texttt{compile}, \texttt{auto} reads the
+bound vector from \texttt{graph.energy\_degree\_bounds} in the input
+orientation JSON; for \texttt{build}, \texttt{test}, \texttt{compare}, and
+\texttt{test-cff-ltd}, it uses the command-line bound vector.
+
+For repeated-channel interpolation one may additionally set
+\begin{lstlisting}
+--uniform-numerator-sampling-scale none
+--uniform-numerator-sampling-scale beyond-quadratic
+--uniform-numerator-sampling-scale all
+\end{lstlisting}
+on \texttt{build}, \texttt{test}, or \texttt{compare}.  The first value is the
+default.  In uniform modes the JSON graph block records
+\begin{lstlisting}
+"uniform_numerator_sampling_scale": "all",
+"uniform_scale_symbol": "M"
+\end{lstlisting}
+and every energy map is allowed to contain an integer coefficient
+\texttt{"m"} multiplying the runtime scale \(M\):
+\begin{lstlisting}
+{"i": [[3, 1]], "x": [[0, -1]], "m": 2, "c": "0"}
+\end{lstlisting}
+The expression above means \(\omega_3-E_0+2M\).  Variants also have an integer
+\texttt{uniform\_scale\_power}; a value \(r\) multiplies that variant by
+\(M^{-r}\).  The arbitrary-precision evaluator receives \(M\) through
+\texttt{evaluate --uniform-scale VALUE}.  The \texttt{test} command receives
+comparison scales through \texttt{--uniform-scales A,B}; if omitted, it uses
+\(M=1.0\) and \(M=2.75\).
+
+The surface cache stores both a compact expression and structured terms:
+\begin{lstlisting}
+"terms": {
+  "ose": [[edge_id, coeff]],
+  "external_shift": [[external_id, coeff]],
+  "uniform_scale": coeff,
+  "constant": "0"
+},
+"surface_origin": "physical",
+"singularity": "physical"
+\end{lstlisting}
+\texttt{surface\_origin="helper"} is reserved for factors introduced by
+interpolation, known-factor reconstruction, finite-pole recursion, or terminal
+sectors.  CFF causal surfaces emitted by the original graph or by a
+lower-sector CFF component are still classified as
+\texttt{surface\_origin="physical"}, because they are genuine causal thresholds
+of the denominator set being evaluated.  \texttt{singularity="spurious"} is an
+algorithmic marker for a helper factor that is not one of those causal
+surfaces, for example a factor containing \(M\), a non-unit OSE coefficient, or
+a polynomial reconstruction factor.  In pretty output the class tag adds
+\texttt{\_h} for helper origin and \texttt{\_sp} for the spurious marker, while
+parentheses still mean numerator-only.  Thus \texttt{e} is a physical
+denominator E-surface and \texttt{(e\_h\_sp)} is a numerator-only helper factor.
+Pure CFF denominator trees are tested not to contain \texttt{\_sp} surfaces.
+
+After the UV check, the guaranteed support is:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+family & graph class & supported bounds \\
+\midrule
+\texttt{ltd} & any graph & any UV-convergent bounds; structure unchanged \\
+\texttt{hybrid} & no repeated propagators & any UV-convergent bounds; exact LTD collapse \\
+\texttt{hybrid} & repeated propagators & any tested UV-convergent bounds; finite-difference samples \\
+\texttt{cff} & any graph & all \(d_e\le2\), denominator \(E\)-surfaces only \\
+\texttt{cff} & high-power edge caps & channel/contact normal form; denominator \(E\)-surfaces only \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The last \texttt{cff} row includes one-loop and multiloop sectors with mixed
+cubic/quadratic and quartic-or-higher caps, including caps on repeated-signature
+edges, provided the loop-energy UV check succeeds.  Repeated channels are
+reduced by \eqref{eq:channel-normal-form}; non-repeated high-power contacts are
+reduced by the lower-sector recursion
+\eqref{eq:lower-sector-normal-form}--\eqref{eq:lower-sector-recursion}.  The
+implementation still may become impractical for very large cap vectors because
+the number of Lagrange samples and lower-contact sectors grows rapidly, but the
+JSON grammar and evaluator semantics do not require a separate fallback branch.
+
+The hybrid high-power tests are not pure-CFF tests.  They compare the hybrid
+value with a split-mass LTD proxy and verify convergence as the mass split is
+reduced.  This is the correct reference for repeated propagators because
+ordinary LTD on the unsplit repeated graph would require numerator
+derivatives, which the hybrid construction avoids.
+
+\section{Oriented JSON Semantics}
+
+The top-level JSON contains graph metadata, a surface cache, and a list of
+orientations.  The central invariant is:
+\begin{quote}
+one orientation corresponds to one unique EMR edge-energy numerator map.
+\end{quote}
+All denominator terms sharing that numerator call are stored as
+\texttt{variants}.  Each variant has its own rational prefactor, half-edge
+list, numerator-surface list, and factorized denominator tree.
+
+The evaluator uses only the JSON plus the DOT graph.  It does not reconstruct a
+hidden LTD or CFF object.  A variant contributes
+\[
+  \texttt{pref}\;
+  \prod_{e\in\texttt{half\_edges}}(2\omega_e)^{-1}
+  \prod_{s\in\texttt{num\_surfaces}}\eta_s
+  \prod_{t\in\texttt{denominator tree}}\eta_t^{-1}
+\]
+times the numerator sampled at the orientation's \texttt{edge\_q0} map.
+
+\section{Surface Cache}
+
+Each surface cache entry records a class, coefficients of internal on-shell
+energies, and external-energy shifts.  The class is printed as
+\texttt{e} or \texttt{h}.  If a surface appears only in numerator factors, the
+entry carries \texttt{numerator\_only=true} and pretty printing displays
+\texttt{(e)} or \texttt{(h)}.  If a numerator-side surface is identical to an
+existing denominator surface, the same id is reused.
+
+\section{Orientation Labels and Variants}
+
+Compact labels use \(+\), \(-\), \(0\), and \(x\):
+\begin{itemize}[leftmargin=2em]
+  \item \(+\): the numerator samples that edge at \(+\omega_e\);
+  \item \(-\): the numerator samples that edge at \(-\omega_e\);
+  \item \(0\): the numerator samples that edge at zero energy;
+  \item \(x\): the edge has a non-trivial affine map, printed by
+        \texttt{--show-details}.
+\end{itemize}
+The physical origin of a contribution, such as CFF, LTD, pinched contacts, or
+hybrid basis/interpolation data, is variant metadata rather than part of the
+orientation identity.  This is what keeps the number of numerator calls
+minimal.
+
+\section{Command-Line Workflow}
+
+The main commands are:
+\begin{lstlisting}
+python3 generalised_ltd.py validate --dot examples/graphs/box_pow3.dot
+python3 generalised_ltd.py build --family hybrid --dot examples/graphs/box_pow3.dot --pretty
+python3 generalised_ltd.py build --family cff --dot examples/graphs/box_pow3.dot \
+  --energy-degree-bounds 3:3,4:4 --numerator-expr auto
+python3 generalised_ltd.py test --dot examples/graphs/box_pow3.dot
+python3 generalised_ltd.py test --dot examples/graphs/box_pow3.dot \
+  --energy-degree-bounds 0:1,1:1,2:0,3:4 \
+  --numerator-expr 'edges[0][0] * edges[1][0] * edges[3][0]**4'
+python3 generalised_ltd.py test --dot examples/graphs/box_pow3.dot \
+  --energy-degree-bounds 3:3,4:4 --numerator-expr auto
+python3 generalised_ltd.py test-cff-ltd --dot examples/graphs/box.dot --energy-degree-bounds 0:2
+python3 generalised_ltd.py compile --orientation-json demo.json --dot graph.dot --numerator-expr "1"
+python3 generalised_ltd.py evaluate --orientation-json demo.json --dot graph.dot --evaluator-backend symbolica
+\end{lstlisting}
+The repeated-propagator three-way test compares pure CFF, hybrid, and the
+split-mass LTD limiting proxy.  The ordinary LTD formula on an unsplit repeated
+graph is not a valid physics comparison because numerator derivatives are not
+included there.
+
+\section{Symbolica Evaluators}
+
+The \texttt{compile} command accepts one JSON representation and one fixed
+numerator expression.  It reconstructs the JSON expression symbolically,
+introducing structured functions such as \texttt{OSE(qx,qy,qz,m)},
+\texttt{etaE(i)}, \texttt{etaH(i)}, and tagged edge/loop/external momentum
+components.  The resulting Symbolica evaluator is saved both as a shared
+library and as eager evaluator state.  The JSON is updated with relative paths
+and fingerprints tying the evaluator to the graph, numerator, value type, and
+orientation structure.
+
+The \texttt{evaluate} command can use:
+\[
+\texttt{builtin},\quad
+\texttt{symbolica\_compiled},\quad
+\texttt{symbolica\_eager},\quad
+\texttt{symbolica\_eager\_symjit}.
+\]
+Profiling performs ten calls of a batch evaluator.  The default batch size is
+100, so a profile line reports one thousand repeated samples of the same input
+kinematics.
+
+The same saved eager evaluator is used by
+\texttt{evaluate --stability}.  This mode converts the generated or supplied
+real kinematic input to decimal precision-tracking numbers with 16 significant
+digits by default, evaluates with Symbolica's
+\texttt{Evaluator.evaluate\_with\_prec}, and reports the number of significant
+digits carried by the final decimal result.  The work precision for constants
+and arithmetic defaults to 80 decimal digits and can be changed with
+\texttt{--stability-work-precision}.  Non-finite outputs are assigned zero
+reported digits.  The printed central value is diagnostic only: once the
+reported digit count is small, the value may have lost enough significance to
+be numerically meaningless.
+
+\chapter{Performance}
+
+\section{Benchmark Setup}
+
+The numbers below were generated on April 26, 2026 using the scripts in
+\texttt{examples/scripts}.  Each timing is the per-sample time reported by
+\texttt{evaluate --profiling 100}, i.e. ten batch calls of size 100.  The
+15-external one-loop benchmark is intentionally omitted here: the LTD build is
+small, but the pure CFF one-loop representation has \(2^{15}-2=32766\) sign
+sectors and the CFF build is not practical for routine documentation runs.
+
+\section{Repeated Box}
+
+The repeated box script
+\texttt{examples/scripts/box\_pow3\_cli\_showcase.sh} compares hybrid and pure
+CFF for the six-edge graph with a triple repeated propagator.  The numerator is
+\texttt{dot(edges[0], ext[0]) + edges[3][0]}.
+
+\begin{center}
+\begin{tabular}{llrrrr}
+\toprule
+label & backend & orientations & maps & value type & per sample \\
+\midrule
+hybrid & compiled & 17 & 17 & real & \(0.0955\,\mu s\) \\
+hybrid & eager & 17 & 17 & real & \(0.521\,\mu s\) \\
+hybrid & eager+symjit & 17 & 17 & real & \(0.104\,\mu s\) \\
+hybrid & compiled & 17 & 17 & complex & \(0.271\,\mu s\) \\
+hybrid & eager & 17 & 17 & complex & \(0.725\,\mu s\) \\
+hybrid & eager+symjit & 17 & 17 & complex & \(0.0989\,\mu s\) \\
+CFF & compiled & 62 & 62 & real & \(0.162\,\mu s\) \\
+CFF & eager & 62 & 62 & real & \(1.44\,\mu s\) \\
+CFF & eager+symjit & 62 & 62 & real & \(0.142\,\mu s\) \\
+CFF & compiled & 62 & 62 & complex & \(0.466\,\mu s\) \\
+CFF & eager & 62 & 62 & complex & \(2.03\,\mu s\) \\
+CFF & eager+symjit & 62 & 62 & complex & \(0.136\,\mu s\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The hybrid representation has fewer numerator maps than CFF, which explains
+the faster compiled real evaluator.  Complex compiled evaluation is slower
+because the generated function propagates complex arithmetic even though the
+input kinematics are real.  Symjit eager evaluation is competitive for this
+small expression because the batch is small and the expression has only 17 or
+62 maps.
+
+\section{One-Loop 10-Gon}
+
+The script
+\texttt{examples/scripts/one\_loop\_10\_external\_runtime\_compare.sh}
+compares numerator-free LTD and CFF on a true one-loop 10-gon.
+
+\begin{center}
+\begin{tabular}{llrrr}
+\toprule
+family & backend & orientations & maps & per sample \\
+\midrule
+LTD & compiled & 10 & 10 & \(0.234\,\mu s\) \\
+LTD & eager & 10 & 10 & \(0.852\,\mu s\) \\
+LTD & eager+symjit & 10 & 10 & \(0.147\,\mu s\) \\
+CFF & compiled & 1022 & 1022 & \(3.96\,\mu s\) \\
+CFF & eager & 1022 & 1022 & \(36.6\,\mu s\) \\
+CFF & eager+symjit & 1022 & 1022 & \(2.97\,\mu s\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The result is expected: the one-loop CFF orientation count grows like
+\(2^n-2\), while LTD has only one cut per internal edge.  The CFF expression is
+still fast in absolute terms after compilation, but it is much larger.
+
+\section{Five-Loop Four-External Benchmarks}
+
+The script
+\texttt{examples/scripts/five\_loop\_symbolica\_runtime\_compare.sh} compares
+three numerator choices on a non-repeated five-loop graph and on the repeated
+five-loop graph.  The three numerator choices are \(1\), one edge-external dot
+product per internal edge, and the same numerator with three selected edge
+terms squared.
+
+\begin{center}
+\begin{tabular}{llrrrr}
+\toprule
+case & family & maps & compiled & eager & eager+symjit \\
+\midrule
+no repeats, \(N=1\) & LTD & 137 & \(0.326\) & \(1.88\) & \(0.250\) \\
+no repeats, \(N=1\) & CFF & 930 & \(1.26\) & \(12.3\) & \(0.892\) \\
+no repeats, \(N=1\) & hybrid & 137 & \(0.333\) & \(1.87\) & \(0.246\) \\
+no repeats, linear & LTD & 137 & \(0.481\) & \(3.29\) & \(0.379\) \\
+no repeats, linear & CFF & 930 & \(1.96\) & \(17.5\) & \(1.35\) \\
+no repeats, linear & hybrid & 137 & \(0.484\) & \(3.24\) & \(0.391\) \\
+no repeats, squared & LTD & 137 & \(0.493\) & \(3.45\) & \(1.73\) \\
+no repeats, squared & CFF & 4692 & \(18.7\) & \(45.9\) & \(13.2\) \\
+no repeats, squared & hybrid & 137 & \(0.520\) & \(3.31\) & \(0.390\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{llrrrr}
+\toprule
+case & family & maps & compiled & eager & eager+symjit \\
+\midrule
+repeated, \(N=1\) & LTD & 137 & \(0.334\) & \(1.90\) & \(0.272\) \\
+repeated, \(N=1\) & CFF & 930 & \(1.26\) & \(12.5\) & \(0.899\) \\
+repeated, \(N=1\) & hybrid & 630 & \(0.823\) & \(4.88\) & \(0.579\) \\
+repeated, linear & LTD & 137 & \(0.481\) & \(3.44\) & \(0.408\) \\
+repeated, linear & CFF & 930 & \(1.88\) & \(17.4\) & \(1.32\) \\
+repeated, linear & hybrid & 630 & \(21.4\) & \(37.8\) & \(12.4\) \\
+repeated, squared & LTD & 137 & \(0.491\) & \(3.53\) & \(0.387\) \\
+repeated, squared & CFF & see text & see text & see text & see text \\
+repeated, squared & hybrid & 115 & \(1.84\) & \(9.47\) & \(1.11\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For non-repeated graphs the hybrid family collapses to the LTD structure, so
+their orientation and map counts agree.  CFF is slower because it has more
+causal sign sectors.  The squared CFF no-repeat case is much larger because the
+bounded-degree contact completion adds pinched CFF minors.
+
+For repeated graphs, the LTD rows are included only as runtime references.  The
+ordinary unsplit LTD expression does not include numerator derivatives for
+raised propagators; the correct comparison is CFF versus hybrid versus the
+split-mass LTD limiting test.  The repeated unit numerator shows the expected
+middle ground: hybrid has fewer maps than CFF but more than LTD.  The repeated
+linear case is slower for hybrid because the confluent interpolation creates
+heavier denominator variants per numerator map.  In the squared repeated case,
+the pure CFF row now uses the recursive \(E\)-surface-only contact/minor
+construction rather than an LTD-contact correction; the timing table should be
+regenerated before quoting a stable number for that row.  The bounded hybrid
+reduction has 115 maps for this benchmark.
+
+\section{Precision Stability}
+
+The following tables use \texttt{evaluate --stability} with 16 significant
+digits in the input and 80 decimal digits of work precision.  They measure the
+precision carried by Symbolica's eager precision-tracking arithmetic through the
+already compiled structured expression.  These measurements are not identity
+tests; they probe numerical conditioning of the particular representation and
+kinematic point.  When only one or two digits remain, the displayed value should
+be interpreted as a symptom of cancellation rather than as a trustworthy
+estimate.
+
+\begin{center}
+\begin{tabular}{llrrr}
+\toprule
+example & family & maps & result digits & tracked value \\
+\midrule
+repeated box & LTD & 6 & 0 & \(\infty\) \\
+repeated box & CFF & 62 & 1 & \(10^{-2}\) \\
+repeated box & hybrid & 17 & 1 & \(-2\times 10^{3}\) \\
+one-loop 10-gon & LTD & 10 & 2 & \(2.6\times 10^{5}\) \\
+one-loop 10-gon & CFF & 1022 & 1 & \(10^{-1}\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For the repeated box, the LTD row is again not a valid repeated-propagator
+formula; its singular output is a useful reminder that the unsplit LTD
+structure contains zero repeated-channel surfaces.  CFF and hybrid have the
+same ordinary double value for this point, but the precision-tracking run shows
+that both are badly conditioned at 16 input digits, with the hybrid central
+value already unusable.  This is consistent with the hybrid expression being a
+more compact but more cancellation-prone confluent combination.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+five-loop case & LTD digits & CFF digits & hybrid digits \\
+\midrule
+no repeats, \(N=1\) & 2 & 2 & 2 \\
+no repeats, linear & 2 & 2 & 2 \\
+no repeats, squared & 2 & 2 & 2 \\
+repeated, \(N=1\) & 0 & 2 & 2 \\
+repeated, linear & 0 & 2 & 2 \\
+repeated, squared & 0 & 2 & 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The five-loop tables show that the tested random point is numerically delicate
+for all structured sums at ordinary double-like input precision.  The
+non-repeated hybrid rows coincide with LTD, as required by construction.  In
+the repeated graph, the invalid unsplit LTD expression produces \texttt{NaN}
+and therefore zero digits, while CFF and hybrid retain two tracked digits in
+all three numerator scenarios.  The result supports using the stability mode as
+a representation-level diagnostic: it highlights where algebraically equivalent
+JSON structures differ in numerical conditioning even when the ordinary
+double-precision evaluator returns matching values.
+
+\begin{thebibliography}{9}
+  \bibitem{ltd1906}
+  J. J. Aguilera-Verdugo et al.,
+  algorithmic multiloop LTD construction, arXiv:1906.06138.
+
+  \bibitem{cff2211}
+  Z. Capatti et al.,
+  causal/CFF representation construction, arXiv:2211.09653.
+
+  \bibitem{cff2311}
+  Z. Capatti et al.,
+  further CFF representation and box examples, arXiv:2311.14374.
+
+  \bibitem{cltd}
+  \texttt{cLTD} and \texttt{gammaLoop} implementations,
+  \url{https://github.com/alphal00p/cLTD} and
+  \url{https://github.com/alphal00p/gammaloop}.
+\end{thebibliography}
+
+\end{document}

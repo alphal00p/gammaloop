@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -30,7 +31,7 @@ use tracing::debug;
 use tracing::warn;
 
 use crate::{
-    GammaLoopContext,
+    DependentMomentaConstructor, GammaLoopContext,
     graph::{Graph, LoopMomentumBasis},
     integrands::process::{
         amplitude::export::ExportAtomTo,
@@ -40,6 +41,7 @@ use crate::{
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
+    settings::RuntimeSettings,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
@@ -1099,6 +1101,48 @@ impl<T: FloatLike> ParamBuilder<T> {
         let range = self.pairs.model_parameters.value_range.clone();
         &self.values[0][range]
     }
+
+    pub fn ensure_additional_input_parameters<I>(
+        &mut self,
+        params: I,
+    ) -> Vec<ParamBuilderInputParameter>
+    where
+        I: IntoIterator<Item = Atom>,
+    {
+        let requested: Vec<Atom> = params.into_iter().collect();
+        if requested.is_empty() {
+            return Vec::new();
+        }
+
+        let mut known = self
+            .evaluator_input_parameters()
+            .into_iter()
+            .map(|parameter| (parameter.atom.to_canonical_string(), parameter))
+            .collect::<BTreeMap<_, _>>();
+
+        for param in &requested {
+            if !known.contains_key(&param.to_canonical_string()) {
+                self.pairs.additional_params.params.push(param.clone());
+            }
+        }
+
+        let new_len = self.pairs.update_ranges();
+        for values in &mut self.values {
+            values.resize(new_len, Complex::new_re(F::default()));
+        }
+        self.validate();
+
+        known = self
+            .evaluator_input_parameters()
+            .into_iter()
+            .map(|parameter| (parameter.atom.to_canonical_string(), parameter))
+            .collect();
+        requested
+            .iter()
+            .filter_map(|param| known.get(&param.to_canonical_string()).cloned())
+            .collect()
+    }
+
     pub fn validate(&self) {
         self.pairs.validate();
     }
@@ -1460,7 +1504,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub(crate) fn update_model_values(&mut self, model: &Model) {
+    pub fn update_model_values(&mut self, model: &Model) {
         for (value_index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = value_index + 1;
             let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
@@ -1485,6 +1529,38 @@ impl<T: FloatLike> ParamBuilder<T> {
                 self.pairs.model_parameters.value_range.end * multiplicative_offset
             );
         }
+    }
+
+    pub fn set_external_kinematics_and_polarizations(
+        &mut self,
+        graph: &Graph,
+        settings: &RuntimeSettings,
+        dependent_momenta_constructor: DependentMomentaConstructor<'_>,
+    ) -> Result<()> {
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(dependent_momenta_constructor)?;
+        self.add_external_four_mom_all_derivatives(&externals);
+
+        let pols = self.pairs.polarizations_values(
+            graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+
+        for (value_index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = value_index + 1;
+            let mut polarization_start =
+                self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+            for pol_value in &pols {
+                values[polarization_start] = pol_value.clone();
+                polarization_start += multiplicative_offset;
+            }
+        }
+
+        Ok(())
     }
 
     pub(crate) fn add_external_four_mom(

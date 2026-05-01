@@ -5268,6 +5268,9 @@ mod tests {
         let values = completion_values("3Drep build -p e", &completion_state);
         assert!(values.contains(&"epem_xs".to_string()), "{values:?}");
 
+        let values = completion_values("3Drep evaluate -p e", &completion_state);
+        assert!(values.contains(&"epem_xs".to_string()), "{values:?}");
+
         let values = completion_values("3Drep test-cff-ltd -p triangle -i ", &completion_state);
         assert!(values.contains(&"LO".to_string()), "{values:?}");
 
@@ -5275,8 +5278,23 @@ mod tests {
         assert!(values.contains(&"cff".to_string()), "{values:?}");
         assert!(values.contains(&"ltd".to_string()), "{values:?}");
 
+        let values = completion_values("3Drep evaluate --representation ", &completion_state);
+        assert!(values.contains(&"cff".to_string()), "{values:?}");
+        assert!(values.contains(&"ltd".to_string()), "{values:?}");
+
         let values = completion_values(
             "3Drep build --numerator-samples-normalization ",
+            &completion_state,
+        );
+        assert!(values.contains(&"never_M".to_string()), "{values:?}");
+        assert!(values.contains(&"M_for_all".to_string()), "{values:?}");
+        assert!(
+            values.contains(&"M_for_beyond_quadratic_only".to_string()),
+            "{values:?}"
+        );
+
+        let values = completion_values(
+            "3Drep evaluate --numerator-samples-normalization ",
             &completion_state,
         );
         assert!(values.contains(&"never_M".to_string()), "{values:?}");

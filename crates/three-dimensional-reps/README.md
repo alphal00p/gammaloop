@@ -44,6 +44,10 @@ Diagnostic commands are integrated in `gammaloop-api` under the `3Drep`
 command. They operate on graphs already present in the active GammaLoop state,
 except for the orthogonal `3Drep graph-from-signatures` helper, which emits a
 GammaLoop-format DOT graph from a propagator-signature expression.
+`3Drep evaluate` can either load an explicit oriented-expression JSON with
+`--json-in` or resolve a cached build artifact from
+`-p/-i/-g --representation ...`, with the old latest-artifact pointer kept only
+as an ad-hoc fallback.
 
 ## Current Limits
 

@@ -19,7 +19,7 @@ pub mod validator;
 pub use cut_structure::{ContourClosure, Residue, ltd_residues};
 pub use diagnostics::{ProfileWarningRow, profile_warnings};
 #[cfg(feature = "display")]
-pub use display::{DisplayOptions, render_expression_summary};
+pub use display::{DisplayOptions, NumeratorDisplay, render_expression_summary};
 pub use energy_bounds::{
     EnergyDirectionReport, EnergyDivergenceReport, auto_numerator_expr_for_bounds,
     energy_divergence_report, normalize_energy_degree_bounds,

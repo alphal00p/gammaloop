@@ -1019,8 +1019,28 @@ fn run_threedrep_test_cff_ltd_manifest(
     seed: u64,
     scale: f64,
 ) -> Result<JsonValue> {
+    run_threedrep_test_cff_ltd_manifest_for_graph(
+        cli,
+        workspace_path,
+        process_name,
+        0,
+        precision,
+        seed,
+        scale,
+    )
+}
+
+fn run_threedrep_test_cff_ltd_manifest_for_graph(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    workspace_path: &Path,
+    process_name: &str,
+    graph_id: usize,
+    precision: &str,
+    seed: u64,
+    scale: f64,
+) -> Result<JsonValue> {
     cli.run_command(&format!(
-        "3Drep test-cff-ltd -p {process_name} -i default -g 0 --workspace-path {} --precision {precision} --seed {seed} --scale {scale:.17e} --clean",
+        "3Drep test-cff-ltd -p {process_name} -i default -g {graph_id} --workspace-path {} --precision {precision} --seed {seed} --scale {scale:.17e} --clean",
         workspace_path.display()
     ))?;
     let manifest_path = find_named_artifact(workspace_path, "test_cff_ltd_manifest.json")?;
@@ -1131,6 +1151,91 @@ fn assert_manifest_uses_backend(
     Ok(())
 }
 
+fn read_evaluate_manifest(workspace_path: &Path) -> Result<JsonValue> {
+    let manifest_path = find_named_artifact(workspace_path, "evaluate_manifest.json")?;
+    Ok(serde_json::from_str::<JsonValue>(&fs::read_to_string(
+        manifest_path,
+    )?)?)
+}
+
+fn assert_evaluate_manifest_ok(manifest: &JsonValue, context: &str) -> Result<()> {
+    assert_eq!(
+        manifest["evaluation"]["status"].as_str(),
+        Some("ok"),
+        "3Drep evaluate for {context} should succeed: {manifest:#}"
+    );
+    assert!(
+        manifest["evaluation"]["value"].as_str().is_some(),
+        "3Drep evaluate for {context} should record the evaluated value"
+    );
+    assert!(
+        !manifest["evaluation"]["value"]
+            .as_str()
+            .is_some_and(|value| value.contains("NaN")),
+        "3Drep evaluate for {context} should avoid singular diagnostic points"
+    );
+    assert!(
+        manifest["evaluation"]["sample_evaluation_timing_seconds"]
+            .as_f64()
+            .is_some(),
+        "3Drep evaluate for {context} should record sample timing"
+    );
+    Ok(())
+}
+
+fn assert_evaluate_reused_cached_evaluator(manifest: &JsonValue, context: &str) -> Result<()> {
+    assert_evaluate_manifest_ok(manifest, context)?;
+    assert!(
+        manifest["evaluation"]["evaluator_build_timing_seconds"].is_null(),
+        "3Drep evaluate for {context} should have reused the evaluator cache: {manifest:#}"
+    );
+    Ok(())
+}
+
+fn assert_numerator_only_q0_override(
+    manifest: &JsonValue,
+    edge_id: usize,
+    expected_value: f64,
+    context: &str,
+) -> Result<()> {
+    assert_eq!(
+        manifest["numerator_only"].as_bool(),
+        Some(true),
+        "3Drep evaluate for {context} should be in numerator-only mode"
+    );
+    assert!(
+        manifest["expression_path"].is_null(),
+        "direct numerator-only evaluation for {context} should not require an oriented JSON path"
+    );
+    let parameter = manifest["parameters"]
+        .as_array()
+        .ok_or_else(|| eyre!("3Drep evaluate manifest for {context} has no parameter list"))?
+        .iter()
+        .find(|parameter| {
+            parameter["canonical_name"]
+                .as_str()
+                .is_some_and(|name| name.contains(&format!("Q({edge_id},")) && name.contains("cind(0)"))
+        })
+        .ok_or_else(|| {
+            eyre!(
+                "3Drep evaluate manifest for {context} has no numerator-only Q({edge_id},0) parameter"
+            )
+        })?;
+    assert_eq!(
+        parameter["source"].as_str(),
+        Some("user override"),
+        "Q({edge_id},0) parameter in {context} should be user supplied"
+    );
+    let value = parameter["value"]
+        .as_str()
+        .ok_or_else(|| eyre!("Q({edge_id},0) parameter in {context} has no value"))?;
+    assert!(
+        value.contains(&format!("{expected_value:+.17e}")),
+        "Q({edge_id},0) parameter in {context} was {value}, expected {expected_value:+.17e}"
+    );
+    Ok(())
+}
+
 fn import_threedrep_graph(
     test_name: &str,
     dot_path: &Path,
@@ -1142,6 +1247,46 @@ fn import_threedrep_graph(
     cli.run_command(&format!(
         "import graphs {} -p {process_name} -i default -o",
         dot_path.display()
+    ))?;
+    Ok(cli)
+}
+
+fn import_aa_aa_threedrep_graphs(
+    test_name: &str,
+    process_name: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let state_path = get_tests_workspace_path().join(test_name).join("state");
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            r#"set default-runtime string '
+[general]
+evaluator_method = "SingleParametric"
+numerator_interpolation_scale = 2.0
+
+[kinematics]
+e_cm = 300.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+  [500.0, 0.0, 0.0, 500.0],
+  [500.0, 0.0, 0.0, -500.0],
+  [500.0, 500.0, 0.0, 0.0],
+  "dependent",
+]
+helicities = [1, 1, -1, -1]
+'"#,
+        ],
+    )?;
+    set_threedrep_sampling_mode(&mut cli, "beyond_quadratic")?;
+    cli.run_command(&format!(
+        "import graphs {} -p {process_name} -i default -o",
+        gammaloop_threedreps_dot_path("aa_aa.dot").display()
     ))?;
     Ok(cli)
 }
@@ -2007,7 +2152,7 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
     );
 
     cli.run_command(&format!(
-        "3Drep evaluate --workspace-path {}",
+        "3Drep evaluate -p threedreps_box_build_eval -i default -g 0 --representation cff --workspace-path {}",
         workspace_path.display()
     ))?;
     let expression_dir = expression_path
@@ -2323,6 +2468,167 @@ fn cli_box_pow3_high_power_compiled_double_backends_agree_with_eager() -> Result
     }
 
     clean_test(get_tests_workspace_path().join(test_name));
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_aa_aa_box_and_double_box_multibackend_threedrep_comparisons() -> Result<()> {
+    let test_name = "threedreps_aa_aa_box_double_box_multibackend";
+    let test_root = get_tests_workspace_path().join(test_name);
+    clean_test(&test_root);
+    let process_name = "threedreps_aa_aa_multibackend";
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = import_aa_aa_threedrep_graphs(test_name, process_name)?;
+
+    let graph_cases = [(0usize, 1usize, "box"), (1usize, 2usize, "double_box")];
+    for (graph_id, loop_count, label) in graph_cases {
+        let graph = imported_graph_from_cli(&cli, process_name, "default", graph_id)?;
+        let parsed = graph.to_three_d_parsed_graph()?;
+        assert_eq!(
+            parsed.loop_names.len(),
+            loop_count,
+            "aa_aa {label} should have {loop_count} loop(s)"
+        );
+    }
+
+    let backend_cases = [
+        ("double_assembly", "Double", Some("assembly"), "assembly"),
+        ("double_symjit", "Double", Some("symjit"), "symjit"),
+        ("quad_eager", "Quad", None, "eager"),
+    ];
+    for (graph_id, _, graph_label) in graph_cases {
+        for (case_label, precision, backend, expected_backend) in backend_cases {
+            set_threedrep_compile_backend(&mut cli, backend)?;
+            let manifest = run_threedrep_test_cff_ltd_manifest_for_graph(
+                &mut cli,
+                &workspace_path.join(format!("graph_{graph_id}_{case_label}")),
+                process_name,
+                graph_id,
+                precision,
+                11,
+                0.25,
+            )?;
+            assert_eq!(
+                manifest["graph_id"].as_u64(),
+                Some(graph_id as u64),
+                "aa_aa {graph_label} {case_label} should target the requested graph"
+            );
+            assert_manifest_uses_backend(
+                &manifest,
+                expected_backend,
+                &format!("aa_aa {graph_label} {case_label}"),
+            )?;
+        }
+    }
+
+    clean_test(test_root);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches() -> Result<()> {
+    let test_name = "threedreps_aa_aa_evaluate_cache_reuse";
+    let test_root = get_tests_workspace_path().join(test_name);
+    clean_test(&test_root);
+    let process_name = "threedreps_aa_aa_evaluate_cache";
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = import_aa_aa_threedrep_graphs(test_name, process_name)?;
+    set_threedrep_compile_backend(&mut cli, None)?;
+
+    for (graph_id, graph_label) in [(0usize, "box"), (1usize, "double_box")] {
+        let standard_workspace = workspace_path.join(format!("graph_{graph_id}_standard"));
+        cli.run_command(&format!(
+            "3Drep build -p {process_name} -i default -g {graph_id} --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path {} --no-pretty --clean",
+            standard_workspace.display()
+        ))?;
+        let evaluate_command = format!(
+            "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path {} --precision Double --seed 11 --scale 0.25 --eager",
+            standard_workspace.display()
+        );
+        cli.run_command(&format!("{evaluate_command} --clean"))?;
+        let first_standard = read_evaluate_manifest(&standard_workspace)?;
+        assert_evaluate_manifest_ok(
+            &first_standard,
+            &format!("aa_aa {graph_label} standard first build"),
+        )?;
+        assert!(
+            first_standard["evaluation"]["evaluator_build_timing_seconds"]
+                .as_f64()
+                .is_some(),
+            "first standard aa_aa {graph_label} evaluation should build an evaluator"
+        );
+        let standard_value = first_standard["evaluation"]["value"]
+            .as_str()
+            .ok_or_else(|| eyre!("standard aa_aa {graph_label} evaluation has no value"))?
+            .to_string();
+        find_named_artifact(&standard_workspace, "evaluate.evaluator.bin")?;
+
+        cli.run_command(&evaluate_command)?;
+        let reused_standard = read_evaluate_manifest(&standard_workspace)?;
+        assert_evaluate_reused_cached_evaluator(
+            &reused_standard,
+            &format!("aa_aa {graph_label} standard cached evaluation"),
+        )?;
+        assert_eq!(
+            reused_standard["evaluation"]["value"].as_str(),
+            Some(standard_value.as_str()),
+            "cached standard aa_aa {graph_label} evaluation should reproduce the same value"
+        );
+
+        let numerator_only_workspace =
+            workspace_path.join(format!("graph_{graph_id}_numerator_only"));
+        let numerator_only_command = format!(
+            "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path {} --precision Double --seed 11 --scale 0.25 --eager --numerator-only --numerator-q0 4:1.25e-1",
+            numerator_only_workspace.display()
+        );
+        cli.run_command(&format!("{numerator_only_command} --clean"))?;
+        let first_numerator_only = read_evaluate_manifest(&numerator_only_workspace)?;
+        assert_evaluate_manifest_ok(
+            &first_numerator_only,
+            &format!("aa_aa {graph_label} numerator-only first build"),
+        )?;
+        assert!(
+            first_numerator_only["evaluation"]["evaluator_build_timing_seconds"]
+                .as_f64()
+                .is_some(),
+            "first numerator-only aa_aa {graph_label} evaluation should build an evaluator"
+        );
+        assert_numerator_only_q0_override(
+            &first_numerator_only,
+            4,
+            0.125,
+            &format!("aa_aa {graph_label} numerator-only first build"),
+        )?;
+        let numerator_only_value = first_numerator_only["evaluation"]["value"]
+            .as_str()
+            .ok_or_else(|| eyre!("numerator-only aa_aa {graph_label} evaluation has no value"))?
+            .to_string();
+        find_named_artifact(&numerator_only_workspace, "numerator_only.evaluator.bin")?;
+
+        cli.run_command(&numerator_only_command)?;
+        let reused_numerator_only = read_evaluate_manifest(&numerator_only_workspace)?;
+        assert_evaluate_reused_cached_evaluator(
+            &reused_numerator_only,
+            &format!("aa_aa {graph_label} numerator-only cached evaluation"),
+        )?;
+        assert_numerator_only_q0_override(
+            &reused_numerator_only,
+            4,
+            0.125,
+            &format!("aa_aa {graph_label} numerator-only cached evaluation"),
+        )?;
+        assert_eq!(
+            reused_numerator_only["evaluation"]["value"].as_str(),
+            Some(numerator_only_value.as_str()),
+            "cached numerator-only aa_aa {graph_label} evaluation should reproduce the same value"
+        );
+    }
+
+    clean_test(test_root);
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }

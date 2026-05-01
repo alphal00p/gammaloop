@@ -5,7 +5,7 @@ pub use three_dimensional_reps::expression::{
 };
 
 use itertools::{EitherOrBoth, Itertools};
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, HedgePair, Orientation};
 use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
     representation::{LibraryRep, Minkowski, RepName},
@@ -356,6 +356,142 @@ where
             .reduce(|acc, atom| acc + atom)
             .unwrap_or_default()
     }
+}
+
+pub fn numerator_with_positive_internal_ose_gs(graph: &Graph) -> Atom {
+    graph
+        .full_numerator_atom()
+        .replace_multiple(&positive_internal_ose_energy_replacements_gs(graph))
+}
+
+pub fn numerator_with_internal_energy_parameters_gs(graph: &Graph) -> Atom {
+    graph
+        .full_numerator_atom()
+        .replace_multiple(&internal_energy_parameter_replacements_gs(graph))
+}
+
+pub fn internal_energy_parameter_atom_gs(edge_id: EdgeIndex) -> Atom {
+    GS.emr_mom(edge_id, AIND_SYMBOLS.cind.f([Atom::Zero]))
+}
+
+pub fn positive_internal_ose_energy_replacements_gs(graph: &Graph) -> Vec<Replacement> {
+    let mut replacements = Vec::new();
+    let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
+
+    for (pair, edge_id, _) in graph.underlying.iter_edges() {
+        if !matches!(pair, HedgePair::Paired { .. }) {
+            continue;
+        }
+        let energy = ose_atom_from_index(edge_id);
+        replacements.push(Replacement::new(
+            GS.emr_mom(edge_id, AIND_SYMBOLS.cind.f([Atom::Zero]))
+                .to_pattern(),
+            energy.clone().to_pattern(),
+        ));
+        replacements.push(Replacement::new(
+            GS.emr_mom(edge_id, &mink_index).to_pattern(),
+            (GS.emr_vec_index(edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+                .to_pattern(),
+        ));
+    }
+
+    for (loop_id, loop_edge_id) in graph.loop_momentum_basis.loop_edges.iter_enumerated() {
+        let loop_id = usize::from(loop_id);
+        let loop_id_atom = Atom::num(loop_id as i64);
+        let energy = ose_atom_from_index(*loop_edge_id);
+        replacements.push(Replacement::new(
+            function!(
+                GS.loop_mom,
+                loop_id_atom.clone(),
+                AIND_SYMBOLS.cind.f([Atom::Zero])
+            )
+            .to_pattern(),
+            energy.clone().to_pattern(),
+        ));
+        for spatial_index in 1..=3 {
+            replacements.push(Replacement::new(
+                function!(
+                    GS.loop_mom,
+                    loop_id_atom.clone(),
+                    AIND_SYMBOLS.cind.f([spatial_index])
+                )
+                .to_pattern(),
+                GS.emr_mom(*loop_edge_id, AIND_SYMBOLS.cind.f([spatial_index]))
+                    .to_pattern(),
+            ));
+        }
+        replacements.push(Replacement::new(
+            FunctionBuilder::new(GS.loop_mom)
+                .add_arg(loop_id as i64)
+                .add_arg(mink_index.as_view())
+                .finish()
+                .to_pattern(),
+            (GS.emr_vec_index(*loop_edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+                .to_pattern(),
+        ));
+    }
+
+    replacements
+}
+
+pub fn internal_energy_parameter_replacements_gs(graph: &Graph) -> Vec<Replacement> {
+    let mut replacements = Vec::new();
+    let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
+
+    for (pair, edge_id, _) in graph.underlying.iter_edges() {
+        if !matches!(pair, HedgePair::Paired { .. }) {
+            continue;
+        }
+        let energy = internal_energy_parameter_atom_gs(edge_id);
+        replacements.push(Replacement::new(
+            GS.emr_mom(edge_id, AIND_SYMBOLS.cind.f([Atom::Zero]))
+                .to_pattern(),
+            energy.clone().to_pattern(),
+        ));
+        replacements.push(Replacement::new(
+            GS.emr_mom(edge_id, &mink_index).to_pattern(),
+            (GS.emr_vec_index(edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+                .to_pattern(),
+        ));
+    }
+
+    for (loop_id, loop_edge_id) in graph.loop_momentum_basis.loop_edges.iter_enumerated() {
+        let loop_id = usize::from(loop_id);
+        let loop_id_atom = Atom::num(loop_id as i64);
+        let energy = internal_energy_parameter_atom_gs(*loop_edge_id);
+        replacements.push(Replacement::new(
+            function!(
+                GS.loop_mom,
+                loop_id_atom.clone(),
+                AIND_SYMBOLS.cind.f([Atom::Zero])
+            )
+            .to_pattern(),
+            energy.clone().to_pattern(),
+        ));
+        for spatial_index in 1..=3 {
+            replacements.push(Replacement::new(
+                function!(
+                    GS.loop_mom,
+                    loop_id_atom.clone(),
+                    AIND_SYMBOLS.cind.f([spatial_index])
+                )
+                .to_pattern(),
+                GS.emr_mom(*loop_edge_id, AIND_SYMBOLS.cind.f([spatial_index]))
+                    .to_pattern(),
+            ));
+        }
+        replacements.push(Replacement::new(
+            FunctionBuilder::new(GS.loop_mom)
+                .add_arg(loop_id as i64)
+                .add_arg(mink_index.as_view())
+                .finish()
+                .to_pattern(),
+            (GS.emr_vec_index(*loop_edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+                .to_pattern(),
+        ));
+    }
+
+    replacements
 }
 
 pub fn orientation_delta_gs(orientation: &EdgeVec<Orientation>) -> Atom {
