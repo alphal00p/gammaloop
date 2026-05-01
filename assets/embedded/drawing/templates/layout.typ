@@ -1,9 +1,9 @@
 #import "@preview/fletcher:0.5.8" as fletcher: cetz, diagram, edge, hide, node
+#import "linnest.typ": default-layout-config, graph-edges, graph-info, graph-nodes, layout-graph, parse-graphs
 #let mom_arr = (
   stroke: black + 0.3mm,
   marks: ((inherit: "head", rev: false, pos: 1, scale: 40%),),
 )
-#let p = plugin("./linnest.wasm")
 
 #let eval-dict(data, name, scope) = {
   let dict = data.remove(name, default: "(:)")
@@ -11,17 +11,6 @@
     dict = "(:)"
   }
   eval(dict, scope: scope, mode: "code")
-}
-#let graph-info(graph) = cbor(p.graph_info(graph))
-#let graph-nodes(graph, subgraph: none) = if subgraph == none {
-  cbor(p.graph_nodes(graph))
-} else {
-  cbor(p.graph_nodes_of(graph, cbor.encode(subgraph)))
-}
-#let graph-edges(graph, subgraph: none) = if subgraph == none {
-  cbor(p.graph_edges(graph))
-} else {
-  cbor(p.graph_edges_of(graph, cbor.encode(subgraph)))
 }
 #let layout(
   input,
@@ -31,37 +20,11 @@
   unit: 1,
   additional_data: (:),
 ) = {
-  let parsed = p.parse_graph(bytes(input))
-  let config = cbor.encode(
-    (
-      steps: sys.inputs.at("steps", default: "15"),
-      seed: sys.inputs.at("seed", default: "14"),
-      step: ".81",
-      step_shrink: "0.21",
-      temp: ".3",
-      beta: "46.1",
-      k_spring: "11.",
-      g_center: "40.0",
-      epochs:"30",
-      crossing_penalty: "30",
-      gamma_dangling: "40",
-      gamma_ee: ".1",
-      directional_force:"5",
-      label_length_scale:".6",
-      label_spring:"23",
-      label_charge:"3",
-      label_steps:"20",
-      gamma_ev: ".1",
-
-      z_spring:"0.05",
-      z_spring_growth:"1.3",
-      length_scale: "0.1",
-    ) + additional_data,
-  )
-  let graphs = cbor(parsed)
+  let config = default-layout-config + additional_data
+  let graphs = parse-graphs(input)
   let diags = ()
   for graph in graphs {
-    let graph = p.layout_parsed_graph(graph, config)
+    let graph = layout-graph(graph, config: config)
     let g = graph-info(graph)
     let nodes = graph-nodes(graph)
     let edges = graph-edges(graph)
@@ -225,9 +188,7 @@
         spacing: 2em,
         ..noed,
       ),
-      if g.global_statements.at("full_num",default:none)!= none{
-        [$#eval(g.global_statements.full_num.replace("\\\"","\""),mode: "math")$]
-      }
+      // {set align(left);raw(parse)},
     ))
   }
   for d in diags{
