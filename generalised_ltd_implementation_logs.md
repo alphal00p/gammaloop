@@ -2352,7 +2352,7 @@ just test_gammaloop
   `(momentum_signature, mass)` factors; the helper derives the `prop(q,m)`
   input expression, runs `3Drep graph-from-signatures`, asserts the generated
   DOT contains no explicit `lmb_rep`, reloads that DOT via
-  `import graphs string ...` with the scalars model, and compares the imported
+  `import graphs --inline-dot ...` with the scalars model, and compares the imported
   internal signatures and masses against the input multiset up to momentum
   reversal.
 - The new closure coverage includes:
@@ -2625,7 +2625,7 @@ just test_gammaloop
 ### Progress 2026-04-30 inline graph import and 3D expression demo card
 
 - Added an inline DOT import mode to the existing GammaLoop graph importer:
-  `import graphs string '<dot graph content>'`. The old path-based
+  `import graphs --inline-dot '<dot graph content>'`. The old path-based
   `import graphs <path>` mode is still the default, and inline imports are
   routed through the same `Graph::from_string(...)` GammaLoop parsing path used
   by normal graph ingestion.
@@ -2634,7 +2634,7 @@ just test_gammaloop
   without changing the underlying command implementation.
 - Updated the interactive REPL completion machinery and tests so tab completion
   covers:
-  - `import graphs string`,
+  - `import graphs --inline-dot`,
   - the `3d_expr` command alias,
   - nested `3d_expr` subcommands,
   - process/integrand selectors and representation/scale-mode enum values.
@@ -2677,7 +2677,7 @@ just test_gammaloop
 - Removed the temporary `3d_expr`, `3d-expr`, `3drep`, and `threedreps`
   aliases from the top-level command registration. The canonical user command
   is now only `3Drep`; completion tests were updated accordingly while keeping
-  `import graphs string` completion coverage.
+  `import graphs --inline-dot` completion coverage.
 - Updated `examples/cli/scalar_topologies/three_d_expr_demo.toml` so the inline
   DOT graph no longer specifies `lmb_rep`. The demo controls the loop-momentum
   basis only through `lmb_id`, uses only `3Drep` commands, demonstrates cache
@@ -3563,6 +3563,39 @@ passed: 2 tests run, 2 passed, 1166 skipped
 
 just test_gammaloop
 passed: 1040 tests run, 1040 passed, 128 skipped
+```
+
+## 2026-05-01: PR review follow-up fixes
+
+Follow-up implementation completed:
+
+- Replaced the reserved positional inline graph import selector
+  `import graphs string <DOT>` with an explicit `import graphs --inline-dot
+  <DOT>` option, so a file literally named `string` can still be imported as a
+  normal path.
+- Updated the scalar 3Drep demo card, CLI integration tests, and completion
+  tests to use/cover `--inline-dot`.
+- Documented that `ParamBuilder::ensure_additional_input_parameters` must be
+  called before constructing any evaluator or function map, since existing
+  evaluator parameter indexing cannot be updated by mutating the builder.
+- Changed repeated-mass splitting for PureLTD diagnostics to propagate mass
+  evaluation errors instead of silently using a zero mass.
+- Changed numerator energy-power analysis to report malformed `Q(edge, index)`
+  and `K(loop, index)` arguments as structured errors instead of using sentinel
+  ids.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api -p three-dimensional-reps
+cargo test -p gammaloop-api completion_offers_inline_graph_import_and_3drep_command
+cargo test -p gammalooprs numerator::energy_degree
+just test_gammaloop -- cli_validate_build_and_evaluate_use_gammaloop_graph_state
+just test_gammaloop -- cli_graph_from_signatures_closes_without_explicit_lmb_rep
+cargo clippy -p gammalooprs -p gammaloop-api -p three-dimensional-reps -- -D warnings
+just test_gammaloop
+passed: 1042 tests run, 1042 passed, 128 skipped
 ```
 
 ## 2026-05-01: numerator-only q0 inputs and evaluator-cache work

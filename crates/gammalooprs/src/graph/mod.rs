@@ -133,7 +133,12 @@ impl Graph {
                     .mass
                     .value::<f64>(model, &self.param_builder)
                     .map(|value| value.re.0)
-                    .unwrap_or(0.0);
+                    .ok_or_else(|| {
+                        eyre!(
+                            "could not evaluate mass for repeated 3Drep edge {} (group {group_index}, split {split_index}, local edge id {local_edge_id})",
+                            edge_id.0
+                        )
+                    })?;
                 let shifted_mass = base_mass + (split_index as f64 - center) * epsilon;
                 shifted.underlying[edge_id].particle = shifted.underlying[edge_id]
                     .particle

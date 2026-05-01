@@ -69,6 +69,14 @@ pub enum EnergyPowerAnalysisError {
     #[error("loop momentum K({loop_index}, ...) has no carrier edge in this loop momentum basis")]
     MissingLoopCarrierEdge { loop_index: usize },
     #[error(
+        "energy-power analysis expected an integer edge id in Q(edge, index), found `{argument}`"
+    )]
+    InvalidEmrEdgeArgument { argument: String },
+    #[error(
+        "energy-power analysis expected an integer loop id in K(loop, index), found `{argument}`"
+    )]
+    InvalidLoopMomentumArgument { argument: String },
+    #[error(
         "non-polynomial energy dependence encountered in numerator subexpression `{expression}` with exponent `{exponent}`"
     )]
     NonPolynomialEnergyPower {
@@ -158,7 +166,11 @@ impl EnergyPowerAnalyzer {
                 }
 
                 if function.get_nargs() == 2 && function.get_symbol() == GS.emr_mom {
-                    let edge = EdgeIndex(usize::try_from(function.get(0)).unwrap_or(usize::MAX));
+                    let edge = EdgeIndex(usize::try_from(function.get(0)).map_err(|_| {
+                        EnergyPowerAnalysisError::InvalidEmrEdgeArgument {
+                            argument: function.get(0).to_owned().log_print(None),
+                        }
+                    })?);
                     return if self.is_internal_edge(edge) && self.is_energy_index(function.get(1)) {
                         Ok(EnergyPowerCapMap::unit(edge))
                     } else {
@@ -167,7 +179,11 @@ impl EnergyPowerAnalyzer {
                 }
 
                 if function.get_nargs() == 2 && function.get_symbol() == GS.loop_mom {
-                    let loop_index = usize::try_from(function.get(0)).unwrap_or(usize::MAX);
+                    let loop_index = usize::try_from(function.get(0)).map_err(|_| {
+                        EnergyPowerAnalysisError::InvalidLoopMomentumArgument {
+                            argument: function.get(0).to_owned().log_print(None),
+                        }
+                    })?;
                     return if self.is_energy_index(function.get(1)) {
                         let edge = self.loop_edges.get(loop_index).copied().ok_or(
                             EnergyPowerAnalysisError::MissingLoopCarrierEdge { loop_index },
@@ -245,7 +261,7 @@ mod tests {
     };
 
     use crate::{
-        numerator::energy_degree::EnergyPowerAnalyzer,
+        numerator::energy_degree::{EnergyPowerAnalysisError, EnergyPowerAnalyzer},
         utils::{GS, symbolica_ext::CallSymbol},
     };
 
@@ -312,5 +328,35 @@ mod tests {
         let k1 = function!(GS.loop_mom, 1, mink_index("nu"));
         let expression = q3.clone() * k1.clone() + q3.pow(Atom::num(3));
         assert_eq!(bounds(expression), vec![(3, 3), (9, 1)]);
+    }
+
+    #[test]
+    fn malformed_emr_edge_argument_is_reported() {
+        let expression = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(Atom::var(symbol!("edge")).as_view())
+            .add_arg(mink_index("mu").as_view())
+            .finish();
+        let error = EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
+            .analyze_atom(&expression)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            EnergyPowerAnalysisError::InvalidEmrEdgeArgument { .. }
+        ));
+    }
+
+    #[test]
+    fn malformed_loop_argument_is_reported() {
+        let expression = FunctionBuilder::new(GS.loop_mom)
+            .add_arg(Atom::var(symbol!("loop_id")).as_view())
+            .add_arg(mink_index("mu").as_view())
+            .finish();
+        let error = EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
+            .analyze_atom(&expression)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            EnergyPowerAnalysisError::InvalidLoopMomentumArgument { .. }
+        ));
     }
 }

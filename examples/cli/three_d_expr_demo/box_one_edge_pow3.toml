@@ -17,7 +17,7 @@ commands = [
   "import model scalars-default.json",
   "remove processes",
 
-  """import graphs string '
+  """import graphs --inline-dot '
 digraph box_one_edge_pow3 {
   node [num="1"];
   num=1;

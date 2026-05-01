@@ -1102,6 +1102,11 @@ impl<T: FloatLike> ParamBuilder<T> {
         &self.values[0][range]
     }
 
+    /// Register additional evaluator input parameters on this builder.
+    ///
+    /// This updates the parameter ranges and value buffers owned by the builder. It must be called
+    /// before constructing any evaluator or function map from this `ParamBuilder`; existing
+    /// evaluators keep their original parameter indexing and are not updated by this mutation.
     pub fn ensure_additional_input_parameters<I>(
         &mut self,
         params: I,

@@ -1121,10 +1121,6 @@ fn add_value_suggestions(
         add_builtin_model_suggestions(context, pos, suggestions, seen);
     }
 
-    if matches_command_path(context, &["import", "graphs"]) {
-        add_import_graph_source_suggestions(context, pos, suggestions, seen);
-    }
-
     if matches_command_path(context, &["set", "model"]) {
         add_model_parameter_suggestions(context, pos, completion_state, suggestions, seen);
     }
@@ -1149,26 +1145,6 @@ fn add_value_suggestions(
     }
 }
 
-fn add_import_graph_source_suggestions(
-    context: &CommandContext<'_>,
-    pos: usize,
-    suggestions: &mut Vec<Suggestion>,
-    seen: &mut HashSet<String>,
-) {
-    if completed_positional_count(context.cmd, context.completed_tokens) != 0 {
-        return;
-    }
-
-    add_literal_value_suggestion(
-        "string",
-        Some("Inline DOT graph string".to_string()),
-        context,
-        pos,
-        suggestions,
-        seen,
-    );
-}
-
 fn add_run_block_suggestions(
     context: &CommandContext<'_>,
     pos: usize,
@@ -1190,55 +1166,6 @@ fn add_run_block_suggestions(
             });
         }
     }
-}
-
-fn completed_positional_count(cmd: &clap::Command, completed_tokens: &[CompletionToken]) -> usize {
-    let mut count = 0usize;
-    let mut index = 0usize;
-    while index < completed_tokens.len() {
-        let token = completed_tokens[index].cooked.as_str();
-        if let Some(arg) = find_flag(cmd, token) {
-            index += 1;
-            if arg_takes_value(arg) && inline_flag_value_start(token).is_none() {
-                index = index.saturating_add(1);
-            }
-            continue;
-        }
-        if !token.starts_with('-') {
-            count += 1;
-        }
-        index += 1;
-    }
-    count
-}
-
-fn add_literal_value_suggestion(
-    value: &str,
-    description: Option<String>,
-    context: &CommandContext<'_>,
-    pos: usize,
-    suggestions: &mut Vec<Suggestion>,
-    seen: &mut HashSet<String>,
-) {
-    if !context.current_token.cooked.is_empty()
-        && !value.starts_with(context.current_token.cooked.as_str())
-    {
-        return;
-    }
-
-    let rendered = render_value_completion(value, context.current_token.quote_style);
-    if !seen.insert(rendered.clone()) {
-        return;
-    }
-
-    suggestions.push(Suggestion {
-        value: rendered,
-        description,
-        style: None,
-        extra: None,
-        span: Span::new(context.current_token.start, pos),
-        append_whitespace: true,
-    });
 }
 
 fn add_builtin_model_suggestions(
@@ -5239,8 +5166,8 @@ mod tests {
 
     #[test]
     fn completion_offers_inline_graph_import_and_3drep_command() {
-        let values = completion_values("import graphs s", &CompletionState::default());
-        assert!(values.contains(&"string".to_string()), "{values:?}");
+        let values = completion_values("import graphs --in", &CompletionState::default());
+        assert!(values.contains(&"--inline-dot".to_string()), "{values:?}");
 
         let values = completion_values("3", &CompletionState::default());
         assert!(values.contains(&"3Drep".to_string()), "{values:?}");

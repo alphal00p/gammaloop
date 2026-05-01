@@ -23,12 +23,12 @@ pub enum Import {
     Model(ImportModel),
     Graphs {
         // #[arg(short = 'p')]
-        #[arg(value_name = "PATH_OR_STRING", value_hint = clap::ValueHint::FilePath)]
-        source: String,
+        #[arg(value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        source: Option<String>,
 
-        /// DOT graph text when PATH_OR_STRING is the literal 'string'
-        #[arg(value_name = "DOT_STRING")]
-        dot_string: Option<String>,
+        /// Inline DOT graph content to import instead of reading from a file path.
+        #[arg(long = "inline-dot", value_name = "DOT")]
+        inline_dot: Option<String>,
 
         /// Process reference: #<id>, name:<name>, or <id>/<name>
         #[arg(
@@ -57,15 +57,15 @@ impl Import {
         match self {
             Import::Graphs {
                 source,
-                dot_string,
+                inline_dot,
                 process,
                 integrand_name,
                 overwrite,
                 append,
             } => {
                 let source = GraphImportSource::resolve(
-                    &source,
-                    dot_string.as_deref(),
+                    source.as_deref(),
+                    inline_dot.as_deref(),
                     &cli_settings.state.folder,
                 )?;
                 let default_process_name = source.default_process_name()?;
@@ -186,19 +186,24 @@ enum GraphImportSource {
 }
 
 impl GraphImportSource {
-    fn resolve(source: &str, dot_string: Option<&str>, state_folder: &Path) -> Result<Self> {
-        if source == "string" {
-            let dot_string = dot_string
-                .ok_or_else(|| eyre!("`import graphs string` requires a DOT graph string."))?;
-            return Ok(Self::String(dot_string.to_string()));
+    fn resolve(
+        source: Option<&str>,
+        inline_dot: Option<&str>,
+        state_folder: &Path,
+    ) -> Result<Self> {
+        if let Some(inline_dot) = inline_dot {
+            if let Some(source) = source {
+                return Err(eyre!(
+                    "Cannot combine graph path '{}' with --inline-dot. Use either a path or inline DOT content.",
+                    source
+                ));
+            }
+            return Ok(Self::String(inline_dot.to_string()));
         }
 
-        if dot_string.is_some() {
-            return Err(eyre!(
-                "Unexpected extra DOT string argument after graph path '{}'. Use `import graphs string <DOT>` for inline DOT content.",
-                source
-            ));
-        }
+        let source = source.ok_or_else(|| {
+            eyre!("`import graphs` requires either a graph path or --inline-dot <DOT>.")
+        })?;
 
         Ok(Self::Path(Import::resolve_graph_import_path(
             Path::new(source),

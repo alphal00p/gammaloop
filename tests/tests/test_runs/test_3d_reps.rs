@@ -458,7 +458,7 @@ fn assert_graph_from_signatures_cli_closure(
 
     cli.run_command("import model scalars-default.json")?;
     cli.run_command(&format!(
-        "import graphs string {} -p {process_name} -i default -o",
+        "import graphs --inline-dot {} -p {process_name} -i default -o",
         shell_single_quote(&dot)
     ))?;
 
@@ -2120,7 +2120,7 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
     cli.run_command("import model scalars-default.json")?;
     let dot_string = fs::read_to_string(gammaloop_threedreps_dot_path("box.dot"))?;
     cli.run_command(&format!(
-        "import graphs string {} -p threedreps_box_build_eval -i default -o",
+        "import graphs --inline-dot {} -p threedreps_box_build_eval -i default -o",
         shell_single_quote(&dot_string)
     ))?;
 
