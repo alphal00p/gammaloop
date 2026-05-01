@@ -12,9 +12,15 @@ pub use api::{
     parse_dot_graphs_bytes,
 };
 pub use graph_api::{
-    graph_compass_subgraph_bytes, graph_edges_bytes, graph_edges_of_bytes, graph_info_bytes,
-    graph_nodes_bytes, graph_nodes_of_bytes, graph_subgraph_bytes, TypstDotEdge, TypstDotEndpoint,
-    TypstDotGraphInfo, TypstDotNode, TypstPoint,
+    builder_add_edge_bytes, builder_add_node_bytes, builder_finish_bytes, builder_new_bytes,
+    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
+    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_edges_bytes,
+    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
+    graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
+    graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
+    graph_spanning_forests_bytes, graph_subgraph_bytes, subgraph_contains_hedge_bytes,
+    subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge, TypstDotEndpoint, TypstDotGraphInfo,
+    TypstDotNode, TypstPoint,
 };
 pub use pin::{expand_template, PinConstraint};
 
