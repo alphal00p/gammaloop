@@ -16,6 +16,8 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::expand_template;
+
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -207,12 +209,12 @@ pub fn builder_new_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     };
 
     encode_builder(&TypstDotGraphBuilder {
-        global_data: GlobalData {
-            name: spec.name.unwrap_or_else(|| "constructed".to_string()),
-            statements: spec.statements,
-            edge_statements: spec.edge_statements,
-            node_statements: spec.node_statements,
-        },
+        global_data: global_data_from_parts(
+            spec.name,
+            spec.statements,
+            spec.edge_statements,
+            spec.node_statements,
+        ),
         builder: HedgeGraphBuilder::new(),
         node_count: 0,
     })
@@ -221,14 +223,11 @@ pub fn builder_new_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 pub fn builder_add_node_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let mut graph_builder = decode_builder(arg)?;
     let node: TypstNodeSpec = decode_cbor(arg2, "node spec")?;
-    let node_index = graph_builder.builder.add_node(DotVertexData {
-        name: node.name,
-        index: node
-            .index
-            .map(NodeIndex)
-            .or(Some(NodeIndex(graph_builder.node_count))),
-        statements: node.statements,
-    });
+    let node_index = graph_builder.builder.add_node(node_data_from_spec(
+        &graph_builder.global_data,
+        node,
+        graph_builder.node_count,
+    ));
     graph_builder.node_count += 1;
 
     encode_cbor(&TypstBuilderNodeResult {
@@ -240,7 +239,12 @@ pub fn builder_add_node_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String
 pub fn builder_add_edge_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let mut graph_builder = decode_builder(arg)?;
     let edge: TypstEdgeSpec = decode_cbor(arg2, "edge spec")?;
-    add_edge_to_builder(&mut graph_builder.builder, graph_builder.node_count, edge)?;
+    add_edge_to_builder(
+        &graph_builder.global_data,
+        &mut graph_builder.builder,
+        graph_builder.node_count,
+        edge,
+    )?;
     encode_builder(&graph_builder)
 }
 
@@ -498,32 +502,30 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
 fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, String> {
     let node_count = spec.nodes.len();
     let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
+    let global_data = global_data_from_parts(
+        spec.name,
+        spec.statements,
+        spec.edge_statements,
+        spec.node_statements,
+    );
 
     for (node_index, node) in spec.nodes.into_iter().enumerate() {
-        builder.add_node(DotVertexData {
-            name: node.name,
-            index: node.index.map(NodeIndex).or(Some(NodeIndex(node_index))),
-            statements: node.statements,
-        });
+        builder.add_node(node_data_from_spec(&global_data, node, node_index));
     }
 
     for edge in spec.edges {
-        add_edge_to_builder(&mut builder, node_count, edge)?;
+        add_edge_to_builder(&global_data, &mut builder, node_count, edge)?;
     }
 
     Ok(TypstDotGraphBuilder {
-        global_data: GlobalData {
-            name: spec.name.unwrap_or_else(|| "constructed".to_string()),
-            statements: spec.statements,
-            edge_statements: spec.edge_statements,
-            node_statements: spec.node_statements,
-        },
+        global_data,
         builder,
         node_count,
     })
 }
 
 fn add_edge_to_builder(
+    global_data: &GlobalData,
     builder: &mut DotBuilder,
     node_count: usize,
     edge: TypstEdgeSpec,
@@ -534,9 +536,10 @@ fn add_edge_to_builder(
         .map(parse_orientation)
         .transpose()?
         .unwrap_or(Orientation::Default);
+    let local_statements = edge.statements;
     let edge_data = DotEdgeData {
-        statements: edge.statements,
-        local_statements: BTreeMap::new(),
+        statements: merged_expanded_statements(&global_data.edge_statements, &local_statements),
+        local_statements,
         edge_id: edge.id.map(linnet::half_edge::involution::EdgeIndex::from),
     };
 
@@ -570,6 +573,48 @@ fn add_edge_to_builder(
     }
 
     Ok(())
+}
+
+fn global_data_from_parts(
+    name: Option<String>,
+    statements: BTreeMap<String, String>,
+    edge_statements: BTreeMap<String, String>,
+    node_statements: BTreeMap<String, String>,
+) -> GlobalData {
+    GlobalData {
+        name: name.unwrap_or_else(|| "constructed".to_string()),
+        statements: expanded_statements(statements),
+        edge_statements: expanded_statements(edge_statements),
+        node_statements: expanded_statements(node_statements),
+    }
+}
+
+fn node_data_from_spec(
+    global_data: &GlobalData,
+    node: TypstNodeSpec,
+    default_index: usize,
+) -> DotVertexData {
+    DotVertexData {
+        name: node.name,
+        index: node.index.map(NodeIndex).or(Some(NodeIndex(default_index))),
+        statements: merged_expanded_statements(&global_data.node_statements, &node.statements),
+    }
+}
+
+fn merged_expanded_statements(
+    defaults: &BTreeMap<String, String>,
+    local: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut statements = defaults.clone();
+    statements.extend(local.clone());
+    expanded_statements(statements)
+}
+
+fn expanded_statements(statements: BTreeMap<String, String>) -> BTreeMap<String, String> {
+    statements
+        .iter()
+        .map(|(key, value)| (key.clone(), expand_template(value, &statements)))
+        .collect()
 }
 
 fn endpoint_spec_to_hedge_data(

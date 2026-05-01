@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": graph, layout, subgraph, config
+#import "../src/lib.typ": draw, graph, layout, subgraph
 
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
@@ -13,22 +13,28 @@ The public surface is intentionally narrow:
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.
 - `subgraph` for subgraph object construction and inspection.
 - `layout` for the separate layout pass.
-- `config` for default layout settings.
+- `draw` for rendering a laid-out graph object with Fletcher.
 
 == Minimal Builder Example
 
 ```typ
-#import "../src/lib.typ": graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(name: "demo")
+#let b = graph.builder(
+  name: "demo",
+  edge-statements: (
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  ),
+)
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(b, source: (node: a), sink: (node: c))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-c"))
 #let g = graph.finish(b)
-#let g = layout(g, seed: "2", steps: "5")
+#let g = layout(g, seed: 2, steps: 5)
 #let north = subgraph.compass(g, "n")
 #let edges = graph.edges(g, subgraph: north)
 #let dot = graph.dot(g)
+#draw(g)
 ```
 
 == Graph Objects
@@ -45,9 +51,10 @@ objects back to `graph` or `subgraph` for inspection.
 - `graph.node(builder, ..)` returns `(node: index, builder: builder)`.
 - `graph.edge(builder, ..)` returns the updated builder.
 - `graph.finish(builder)` turns a builder into a graph.
-- `layout(graph, seed: "2", steps: "5", ..)` runs layout as an explicit
+- `layout(graph, seed: 2, steps: 5, ..)` runs layout as an explicit
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
+- `draw(graph, ..)` draws a laid-out graph object with Fletcher.
 - `graph.dot(graph)` returns a DOT string for inspection or export.
 
 == Builder Spec
@@ -63,6 +70,27 @@ Use destructuring to keep the builder value moving:
 contain `node`, `statement`, `id`, `port_label`, `compass`, and `in_subgraph`.
 Set `source: none` or `sink: none` to create an external half edge.
 
+String-valued DOT statements may contain `{name}` placeholders. `graph.build`
+and the builder object expand each placeholder while constructing the graph
+object. Use `{{` and `}}` for literal braces. Unknown placeholders are left
+unchanged.
+
+This is most useful for graph-level `edge-statements`: the default edge
+statement is merged into each edge, then expanded against that edge's complete
+statement dictionary. The following default label renderer consumes the
+per-edge `label` statement:
+
+```typ
+#let b = graph.builder(
+  edge-statements: (
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  ),
+)
+#let (node: a, builder: b) = graph.node(b, name: "a")
+#let (node: c, builder: b) = graph.node(b, name: "c")
+#let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-c"))
+```
+
 `graph.build` accepts the same data in one dictionary:
 
 ```typ
@@ -70,12 +98,15 @@ Set `source: none` or `sink: none` to create an external half edge.
   name: "demo",
   statements: (full_num: "x + y"),
   node-statements: (shape: "circle"),
-  edge-statements: (color: "black"),
+  edge-statements: (
+    color: "000000",
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  ),
   nodes: ((name: "a"), (name: "b")),
   edges: ((
     source: (node: 0, compass: "e"),
     sink: (node: 1, compass: "w"),
-    statements: (label: "ab"),
+    statements: (color: "0055ff", label: "ab"),
   ),),
 )
 ```
@@ -121,13 +152,13 @@ and `gamma_dangling` for $gamma_("dangling")$. The spring stiffness $k$ is
 In `layout_algo: "anneal"`, linnest minimizes an energy:
 
 $ E =
-  sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
-  + sum_(i, e) c_("ev") / (d(v_i, e) + epsilon)
-  + sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
-  + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
-  + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
-  + sum_(i) 1/2 c_("center") / (d(v_i, 0) + epsilon)
-  + p_("cross") N_("cross") $.
+sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
++ sum_(i, e) c_("ev") / (d(v_i, e) + epsilon)
++ sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
++ sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
++ sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
++ sum_(i) 1/2 c_("center") / (d(v_i, 0) + epsilon)
++ p_("cross") N_("cross") $.
 
 Here $p_("cross")$ is `crossing_penalty` and $N_("cross")$ is the number of
 detected edge crossings. `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
@@ -173,20 +204,27 @@ Subgraph objects are opaque zero-copy values.
 
 #let docs = tidy.parse-module(
   read("../src/lib.typ"),
-  scope: (graph: graph, layout: layout, subgraph: subgraph, config: config),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(docs, style: tidy-style)
 
 #let graph-docs = tidy.parse-module(
   read("../src/graph.typ"),
   name: "graph",
-  scope: (graph: graph, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(graph-docs, style: tidy-style)
+
+#let draw-docs = tidy.parse-module(
+  read("../src/draw.typ"),
+  name: "draw",
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+)
+#tidy.show-module(draw-docs, style: tidy-style)
 
 #let subgraph-docs = tidy.parse-module(
   read("../src/subgraph.typ"),
   name: "subgraph",
-  scope: (graph: graph, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(subgraph-docs, style: tidy-style)
