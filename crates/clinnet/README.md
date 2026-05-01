@@ -60,24 +60,30 @@ The generated templates include `linnest.typ`, a small Typst wrapper around `lin
 Import it from a directory that also contains the WASM plugin:
 
 ```typst
-#import "linnest.typ": graph, layout, subgraph
+#import "linnest.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(name: "example")
+#let b = graph.builder(
+  name: "example",
+  edge-statements: (
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  ),
+)
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "b")
-#let b = graph.edge(b, source: (node: a), sink: (node: c))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-b"))
 #let g = layout(graph.finish(b))
 #let info = graph.info(g)
 #let nodes = graph.nodes(g)
 #let north = subgraph.compass(g, "n")
 #let north-edges = graph.edges(g, subgraph: north)
 #let dot = graph.dot(g)
+#draw(g)
 ```
 
 The wrapper exports:
 
-- `config`: default layout settings used by `layout.typ`.
-- `layout(graph, seed: "2", steps: "5", ...)`: lays out one graph object.
+- `draw(graph, ...)`: draws a laid-out graph object through Fletcher.
+- `layout(graph, seed: 2, steps: 5, ...)`: lays out one graph object.
 - `graph`: namespace for graph construction, DOT parsing/printing, inspection, joins, and graph algorithms.
 - `subgraph`: namespace for subgraph object construction and inspection.
 

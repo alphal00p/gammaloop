@@ -29,7 +29,9 @@
   /// Graph-level DOT statements. -> dictionary
   statements: (:),
 
-  /// Default DOT statements for edges. -> dictionary
+  /// Default DOT statements for edges. String values may use `{name}`
+  /// placeholders that expand from each edge's merged statement dictionary.
+  /// -> dictionary
   edge-statements: (:),
 
   /// Default DOT statements for nodes. -> dictionary
@@ -58,10 +60,17 @@
 /// Create a builder object.
 ///
 /// `statements`, `node-statements`, and `edge-statements` set graph-level DOT
-/// attributes that are carried into the finished graph.
+/// attributes that are carried into the finished graph. String values may use
+/// `{name}` placeholders; edge defaults expand after per-edge statements are
+/// merged, so an `edge-statements` value can refer to a `label` supplied by
+/// @edge.
 ///
 /// ```example
-/// #let b = graph.builder(name: "demo", statements: (full_num: "x + y"))
+/// #let b = graph.builder(
+///   name: "demo",
+///   statements: (full_num: "x + y"),
+///   edge-statements: (eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])"),
+/// )
 /// #let (node: a, builder: b) = graph.node(b, name: "a")
 /// #a
 /// ```

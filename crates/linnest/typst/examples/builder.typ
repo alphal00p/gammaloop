@@ -1,13 +1,25 @@
-#import "../src/lib.typ": graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(name: "example")
+#let b = graph.builder(
+  name: "example",
+  edge-statements: (
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  ),
+)
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(b, source: (node: a, compass: "e"), sink: (node: c, compass: "w"))
-#let g = layout(graph.finish(b), seed: "2", steps: "5")
+#let b = graph.edge(
+  b,
+  source: (node: a, compass: "e"),
+  sink: (node: c, compass: "w"),
+  statements: (color: "0055ff", label: "a-c"),
+)
+#let g = layout(graph.finish(b), seed: 2, steps: 5)
 #let east = subgraph.compass(g, "e")
 
 = Builder Example
+
+#draw(g)
 
 #table(
   columns: (auto, 1fr),
