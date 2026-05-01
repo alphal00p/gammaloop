@@ -5,7 +5,8 @@
 </picture>
 
 
-[![CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main)](https://nix-ci.com/gh:alphal00p:gammaloop/main)
+[![Nix-CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2)](https://nix-ci.com/gh:alphal00p:gammaloop/main)
+[![GitHub Actions](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml)
 <!--[![crates.io](https://img.shields.io/crates/v/spenso.svg)](https://crates.io/crates/spenso)
 [![Build Status](https://github.com/alphal00p/spenso/actions/workflows/ci.yml/badge.svg)](https://github.com/alphal00p/spenso/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/alphal00p/spenso/graph/badge.svg?token=ST0XA54QSF)](https://codecov.io/github/alphal00p/spenso)
@@ -15,7 +16,6 @@
 
 *Computation of differential cross-sections using Local Unitarity.*
 
-<img src="https://nix-ci.com/badge/gh:alphal00p:gammaloop/main" alt="NixCI Badge">
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and related literature.
 See the [wiki](https://wiki.alphaloop.ch/) for command syntax and usage notes.
 Process-generation syntax is documented here: [gammaLoop/ProcessGeneration](https://wiki.alphaloop.ch/en/gammaLoop/ProcessGeneration).
