@@ -60,53 +60,28 @@ The generated templates include `linnest.typ`, a small Typst wrapper around `lin
 Import it from a directory that also contains the WASM plugin:
 
 ```typst
-#import "linnest.typ": (
-  builder,
-  builder-add-edge,
-  builder-add-node,
-  finish-builder,
-  graph-edges,
-  graph-info,
-  graph-nodes,
-  layout-graph,
-  subgraph-from-compass,
-)
+#import "linnest.typ": graph, layout, subgraph
 
-#let b0 = builder(spec: (
-  name: "example",
-))
-#let a = builder-add-node(b0, name: "a")
-#let b = builder-add-node(a.builder, name: "b")
-#let b2 = builder-add-edge(b.builder, source: (node: a.node), sink: (node: b.node))
-#let graph = finish-builder(b2)
-#let graph = layout-graph(graph)
-#let info = graph-info(graph)
-#let nodes = graph-nodes(graph)
-#let north = subgraph-from-compass(graph, "n")
-#let north-edges = graph-edges(graph, subgraph: north)
+#let b = graph.builder(name: "example")
+#let (node: a, builder: b) = graph.node(b, name: "a")
+#let (node: c, builder: b) = graph.node(b, name: "b")
+#let b = graph.edge(b, source: (node: a), sink: (node: c))
+#let g = layout(graph.finish(b))
+#let info = graph.info(g)
+#let nodes = graph.nodes(g)
+#let north = subgraph.compass(g, "n")
+#let north-edges = graph.edges(g, subgraph: north)
+#let dot = graph.dot(g)
 ```
 
 The wrapper exports:
 
-- `default-layout-config`: the default layout settings used by `layout.typ`.
-- `builder(spec: (:))`: creates an archived graph builder byte array.
-- `builder-add-node(builder, name: none, index: none, statements: (:))`: adds a node and returns `(builder: bytes, node: index)`.
-- `builder-add-edge(builder, source: none, sink: none, orientation: "default", flow: none, id: none, statements: (:))`: adds a paired or external edge and returns the next builder.
-- `finish-builder(builder)`: turns an archived builder into an archived graph.
-- `build-graph(spec)`: convenience sugar that builds one archived graph byte array from a Typst dictionary.
-- `parse-graphs(input)`: parses one or more DOT digraphs and returns archived graph byte arrays.
-- `layout-graph(graph, config: default-layout-config)`: lays out one parsed graph.
-- `layout-graphs(input, config: default-layout-config)`: parses and lays out all DOT graphs in `input`.
-- `graph-info(graph)`: returns graph metadata and default DOT statements.
-- `graph-nodes(graph, subgraph: none)`: returns node records, optionally filtered by an archived subgraph.
-- `graph-edges(graph, subgraph: none)`: returns edge records, optionally filtered by an archived subgraph.
-- `subgraph-from-label(graph, label)`, `subgraph-from-bits(graph, bits)`, and `subgraph-from-compass(graph, compass)`: construct archived subgraph byte arrays.
-- `subgraph-label(subgraph)`, `subgraph-hedges(subgraph)`, and `subgraph-contains-hedge(subgraph, hedge)`: inspect archived subgraphs.
-- `graph-cycle-basis(graph)`: returns archived subgraphs for the cycle basis.
-- `graph-spanning-forests(graph)`: returns archived subgraphs for spanning forests.
-- `join-graphs(left, right, key: "...")`: joins dangling edges whose half-edge data field matches on `key`; supported keys are `statement`, `port_label`, `compass`, and `id`.
+- `config`: default layout settings used by `layout.typ`.
+- `layout(graph, seed: "2", steps: "5", ...)`: lays out one archived graph.
+- `graph`: namespace for graph construction, DOT parsing/printing, inspection, joins, and graph algorithms.
+- `subgraph`: namespace for archived subgraph construction and inspection.
 
-See `crates/linnest/examples/typst-api.typ` for a compile-checked example:
+See `crates/linnest/typst/docs/manual.pdf` for the full Tidy-generated API reference, and `crates/linnest/examples/typst-api.typ` for a compile-checked example:
 
 ```bash
 typst compile --root . crates/linnest/examples/typst-api.typ /tmp/linnest-typst-api.pdf

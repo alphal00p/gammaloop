@@ -14,7 +14,7 @@ pub use api::{
 pub use graph_api::{
     builder_add_edge_bytes, builder_add_node_bytes, builder_finish_bytes, builder_new_bytes,
     graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
-    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_edges_bytes,
+    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes, graph_edges_bytes,
     graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
     graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
     graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,

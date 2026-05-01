@@ -113,6 +113,12 @@ pub fn graph_info(arg: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
+pub fn graph_dot(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_dot_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
 pub fn graph_nodes(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_nodes_bytes(arg)
 }

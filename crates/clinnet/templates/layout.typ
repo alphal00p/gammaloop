@@ -1,5 +1,5 @@
 #import "@preview/fletcher:0.5.8" as fletcher: cetz, diagram, edge, hide, node
-#import "linnest.typ": default-layout-config, graph-edges, graph-info, graph-nodes, layout-graph, parse-graphs
+#import "linnest.typ": config as default-config, graph, layout as apply-layout
 #let mom_arr = (
   stroke: black + 0.3mm,
   marks: ((inherit: "head", rev: false, pos: 1, scale: 40%),),
@@ -20,14 +20,14 @@
   unit: 1,
   additional_data: (:),
 ) = {
-  let config = default-layout-config + additional_data
-  let graphs = parse-graphs(input)
+  let config = default-config + additional_data
+  let graphs = graph.parse(input)
   let diags = ()
-  for graph in graphs {
-    let graph = layout-graph(graph, config: config)
-    let g = graph-info(graph)
-    let nodes = graph-nodes(graph)
-    let edges = graph-edges(graph)
+  for graph-bytes in graphs {
+    let graph-bytes = apply-layout(graph-bytes, ..config)
+    let g = graph.info(graph-bytes)
+    let nodes = graph.nodes(graph-bytes)
+    let edges = graph.edges(graph-bytes)
     let noed = ()
     let n = (:)
 

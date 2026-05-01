@@ -272,6 +272,12 @@ pub fn graph_info_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&graph_info(&graph))
 }
 
+pub fn graph_dot_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
+        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    encode_cbor(&graph.debug_dot())
+}
+
 pub fn graph_nodes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let graph = DotGraph::archived_view(arg);
     encode_cbor(
