@@ -187,40 +187,45 @@ impl std::fmt::Display for PinConstraint {
 }
 
 pub fn expand_template(template: &str, statements: &BTreeMap<String, String>) -> String {
-    let mut result = template.to_string();
-    let mut chars = template.chars().peekable();
-    let mut placeholders = Vec::new();
-    let mut current_pos = 0;
+    let chars = template.chars().collect::<Vec<_>>();
+    let mut result = String::new();
+    let mut index = 0;
 
-    while let Some(ch) = chars.next() {
-        if ch == '{' {
-            let start = current_pos;
-            let mut key = String::new();
-            let mut found_closing = false;
+    while index < chars.len() {
+        match chars[index] {
+            '{' if chars.get(index + 1) == Some(&'{') => {
+                result.push('{');
+                index += 2;
+            }
+            '{' => {
+                let mut end = index + 1;
+                while end < chars.len() && chars[end] != '}' {
+                    end += 1;
+                }
 
-            for inner_ch in chars.by_ref() {
-                current_pos += inner_ch.len_utf8();
-                if inner_ch == '}' {
-                    found_closing = true;
-                    break;
-                } else if inner_ch == '{' {
-                    break;
+                if end < chars.len() {
+                    let key = chars[index + 1..end].iter().collect::<String>();
+                    if let Some(value) = statements.get(&key) {
+                        result.push_str(value.trim().trim_matches('"'));
+                    } else {
+                        result.push('{');
+                        result.push_str(&key);
+                        result.push('}');
+                    }
+                    index = end + 1;
                 } else {
-                    key.push(inner_ch);
+                    result.push('{');
+                    index += 1;
                 }
             }
-
-            if found_closing && !key.is_empty() {
-                placeholders.push((start, current_pos + 1, key));
+            '}' if chars.get(index + 1) == Some(&'}') => {
+                result.push('}');
+                index += 2;
             }
-        }
-        current_pos += ch.len_utf8();
-    }
-
-    for (start, end, key) in placeholders.iter().rev() {
-        if let Some(value) = statements.get(key) {
-            let clean_value = value.trim().trim_matches('"');
-            result.replace_range(*start..*end, clean_value);
+            ch => {
+                result.push(ch);
+                index += 1;
+            }
         }
     }
 

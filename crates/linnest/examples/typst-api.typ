@@ -1,8 +1,11 @@
-#import "../../clinnet/templates/linnest.typ": graph, layout, subgraph
+#import "../../clinnet/templates/linnest.typ": draw, graph, layout, subgraph
 
 #let b = graph.builder(
   name: "constructed",
   statements: (full_num: "x + y"),
+  edge-statements: (
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a", statements: (eval: "(fill: blue.lighten(70%))"))
 #let (node: c, builder: b) = graph.node(b, name: "b", statements: (eval: "(fill: green.lighten(70%))"))
@@ -10,23 +13,23 @@
   b,
   source: (node: a, compass: "e", statement: "out"),
   sink: (node: c, compass: "w", statement: "in"),
-  statements: (label: "a-to-b"),
+  statements: (color: "8a2be2", label: "a-to-b"),
 )
 #let b = graph.edge(
   b,
   source: none,
   sink: (node: a, compass: "n"),
-  statements: (label: "incoming"),
+  statements: (color: "666666", label: "incoming"),
 )
 #let b = graph.edge(
   b,
   source: (node: c, compass: "s"),
   sink: none,
-  statements: (label: "outgoing"),
+  statements: (color: "666666", label: "outgoing"),
 )
 #let raw-graph = graph.finish(b)
 
-#let g = layout(raw-graph, seed: "2", steps: "5")
+#let g = layout(raw-graph, seed: 2, steps: 5)
 #let info = graph.info(g)
 #let nodes = graph.nodes(g)
 #let edges = graph.edges(g)
@@ -43,6 +46,8 @@
 = Linnest Typst API Example
 
 This example imports the local `linnest.typ` wrapper, builds a graph object through the builder object API, lays it out, and queries it through subgraph objects.
+
+#draw(g)
 
 #table(
   columns: (auto, 1fr),

@@ -39,12 +39,9 @@ use linnet::{
             },
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
-        subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
-        tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
-    tree::child_pointer::ParentChildStore,
 };
 
 use rand::rngs::SmallRng;
@@ -1435,28 +1432,33 @@ impl TypstGraph {
         let mut pos_v = self.new_nodevec(|_, _, n| n.pos);
         let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
 
-        let mut visited_edges: SuBitGraph = self.empty_subgraph();
-        let all: SuBitGraph = self.full_filter();
-
-        let mut comps = vec![];
-
-        // Iterate over all edges in the subgraph
-        for hedge_index in all.included_iter() {
-            if visited_edges.includes(&hedge_index) {
-                continue; // Already visited
+        let forest = self
+            .all_spanning_forests_of(&self.full_filter())
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| self.empty_subgraph());
+        let mut adjacency = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
+        for (pair, _, _) in self.iter_edges_of(&forest) {
+            match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let source_node = self.node_id(source);
+                    let sink_node = self.node_id(sink);
+                    if source_node != sink_node {
+                        adjacency[source_node].push(sink_node);
+                        adjacency[sink_node].push(source_node);
+                    }
+                }
+                HedgePair::Unpaired { .. } => {}
             }
-            let root_node = self.node_id(hedge_index);
-            let reachable_edges =
-                SimpleTraversalTree::depth_first_traverse(self, &all, &root_node, None).unwrap();
-            visited_edges.union_with(&reachable_edges.covers(&all));
-            let tree: SimpleTraversalTree<ParentChildStore<()>> = reachable_edges.cast();
-            comps.push((tree, root_node));
         }
 
         let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
         let mut n_per_level: Vec<usize> = vec![];
-        for (tree, root_node) in comps {
-            // 2) compute levels (distance to root)
+        for (root_node, _) in adjacency.iter() {
+            if level[root_node] >= 0 {
+                continue;
+            }
+
             let mut q = std::collections::VecDeque::new();
             level[root_node] = 0;
             if n_per_level.is_empty() {
@@ -1466,9 +1468,10 @@ impl TypstGraph {
             }
             q.push_back(root_node);
             while let Some(v) = q.pop_front() {
-                for u in tree.iter_children(v, &self.as_ref()) {
+                let next_level = level[v] + 1;
+                for &u in &adjacency[v] {
                     if level[u] < 0 {
-                        level[u] = level[v] + 1;
+                        level[u] = next_level;
                         if level[u] == n_per_level.len() as i32 {
                             n_per_level.push(1);
                         } else if level[u] < n_per_level.len() as i32 {

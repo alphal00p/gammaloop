@@ -175,6 +175,7 @@
         root = workspaceRoot;
         fileset = lib.fileset.unions [
           cargoSources
+          ./crates/clinnet/templates/draw.typ
           ./crates/clinnet/templates/figure.typ
           ./crates/clinnet/templates/graph.typ
           ./crates/clinnet/templates/grid.typ
