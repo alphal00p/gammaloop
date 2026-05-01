@@ -41,6 +41,7 @@ integration_workspace_*
 
 gammaloop_state_integration_workspace/
 result/
+/result
 examples/amplitude_computation/GL_*
 gammaloop_state/
 examples/cli/epem_a_ttxh/NNLO

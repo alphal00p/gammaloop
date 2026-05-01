@@ -1,36 +1,78 @@
 #import "../../clinnet/templates/linnest.typ": (
+  builder,
+  builder-add-edge,
+  builder-add-node,
   default-layout-config,
-  graph-compass-subgraph,
+  finish-builder,
   graph-edges,
   graph-info,
   graph-nodes,
   layout-graph,
-  parse-graphs,
+  subgraph-contains-hedge,
+  subgraph-from-bits,
+  subgraph-from-compass,
+  subgraph-hedges,
+  subgraph-label,
 )
 
-#let dot = read("gl303.dot")
-#let parsed = parse-graphs(dot)
-#let graph = layout-graph(parsed.first(), config: default-layout-config + (seed: "2", steps: "5"))
+#let builder = builder(spec: (
+  name: "constructed",
+  statements: (full_num: "x + y"),
+))
+#let a = builder-add-node(builder, name: "a", statements: (eval: "(fill: blue.lighten(70%))"))
+#let builder = a.builder
+#let b = builder-add-node(builder, name: "b", statements: (eval: "(fill: green.lighten(70%))"))
+#let builder = b.builder
+#let builder = builder-add-edge(
+  builder,
+  source: (node: a.node, compass: "e", statement: "out"),
+  sink: (node: b.node, compass: "w", statement: "in"),
+  statements: (label: "a-to-b"),
+)
+#let builder = builder-add-edge(
+  builder,
+  source: none,
+  sink: (node: a.node, compass: "n"),
+  statements: (label: "incoming"),
+)
+#let builder = builder-add-edge(
+  builder,
+  source: (node: b.node, compass: "s"),
+  sink: none,
+  statements: (label: "outgoing"),
+)
+#let raw-graph = finish-builder(builder)
+
+#let graph = layout-graph(raw-graph, config: default-layout-config + (seed: "2", steps: "5"))
 #let info = graph-info(graph)
 #let nodes = graph-nodes(graph)
 #let edges = graph-edges(graph)
-#let north = graph-compass-subgraph(graph, "n")
+#let north = subgraph-from-compass(graph, "n")
+#let internal-edge = subgraph-from-bits(graph, (true, true, false, false))
+#let north-label = subgraph-label(north)
+#let north-hedges = subgraph-hedges(north)
+#let internal-label = subgraph-label(internal-edge)
 #let north-edges = graph-edges(graph, subgraph: north)
+#let internal-nodes = graph-nodes(graph, subgraph: internal-edge)
+#let internal-has-hedge-zero = subgraph-contains-hedge(internal-edge, 0)
 
 = Linnest Typst API Example
 
-This example imports the local `linnest.typ` wrapper, reads `gl303.dot`, lays out the first graph, and queries the archived graph bytes through the WASM plugin.
+This example imports the local `linnest.typ` wrapper, builds an archived graph through the archived builder API, lays it out, and queries it through archived subgraph objects.
 
 #table(
   columns: (auto, 1fr),
   inset: 6pt,
   stroke: 0.5pt,
   [graph name], [#info.name],
-  [graphs parsed], [#parsed.len()],
   [nodes], [#nodes.len()],
   [edges], [#edges.len()],
-  [north subgraph], [#north],
+  [north subgraph], [#north-label],
+  [north hedges], [#north-hedges.join(", ")],
   [north edges], [#north-edges.len()],
+  [internal edge subgraph], [#internal-label],
+  [internal edge nodes], [#internal-nodes.len()],
+  [internal has hedge 0], [#internal-has-hedge-zero],
 )
 
 == First Nodes

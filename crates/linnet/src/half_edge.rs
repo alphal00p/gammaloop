@@ -668,6 +668,43 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         Ok(g)
     }
 
+    /// Like [`Self::join`], but the matcher also receives the dangling hedge id
+    /// and half-edge data for both candidate endpoints.
+    pub fn join_with_hedge_data(
+        mut self,
+        other: Self,
+        matching_fn: impl Fn(Hedge, Flow, EdgeData<&E>, &H, Hedge, Flow, EdgeData<&E>, &H) -> bool,
+        merge_fn: impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> (Flow, EdgeData<E>),
+    ) -> Result<Self, HedgeGraphError> {
+        self.hedge_data.extend(other.hedge_data);
+        let hedge_data = self.hedge_data;
+        let node_store = self.node_store.extend(other.node_store);
+        let edge_store = self.edge_store.join_with_hedges(
+            other.edge_store,
+            |left_hedge, left_flow, left_data, right_hedge, right_flow, right_data| {
+                matching_fn(
+                    left_hedge,
+                    left_flow,
+                    left_data,
+                    &hedge_data[left_hedge],
+                    right_hedge,
+                    right_flow,
+                    right_data,
+                    &hedge_data[right_hedge],
+                )
+            },
+            merge_fn,
+        )?;
+        let mut g = HedgeGraph {
+            hedge_data,
+            node_store,
+            edge_store,
+        };
+        g.node_store.check_and_set_nodes()?;
+
+        Ok(g)
+    }
+
     /// Joins another graph (`other`) into `self` by consuming `other`.
     ///
     /// This is similar to `join`, but modifies `self` in place instead of returning a new graph.

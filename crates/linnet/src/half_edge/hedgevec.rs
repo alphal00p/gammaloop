@@ -849,6 +849,21 @@ impl<T> SmartEdgeVec<T> {
         matching_fn: impl Fn(Flow, EdgeData<&T>, Flow, EdgeData<&T>) -> bool,
         merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
     ) -> Result<Self, HedgeGraphError> {
+        self.join_with_hedges(
+            other,
+            |_, left_flow, left_data, _, right_flow, right_data| {
+                matching_fn(left_flow, left_data, right_flow, right_data)
+            },
+            merge_fn,
+        )
+    }
+
+    pub(crate) fn join_with_hedges(
+        self,
+        other: Self,
+        matching_fn: impl Fn(Hedge, Flow, EdgeData<&T>, Hedge, Flow, EdgeData<&T>) -> bool,
+        merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
+    ) -> Result<Self, HedgeGraphError> {
         let self_n_h: Hedge = self.len();
         let self_empty_filter = SuBitGraph::empty(self_n_h.0);
         let mut full_self = !self_empty_filter.clone();
@@ -916,8 +931,10 @@ impl<T> SmartEdgeVec<T> {
                             &g.involution.inv[j]
                         {
                             if matching_fn(
+                                i,
                                 *underlyings,
                                 datas.as_ref().map(|a| &g.data[*a].0),
+                                j,
                                 *underlying,
                                 data.as_ref().map(|a| &g.data[*a].0),
                             ) {
