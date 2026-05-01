@@ -72,15 +72,27 @@ fn spenso_bare_symb_vertex_substitution() {
     symbol!("k";
         tags=["spenso::tensor","spenso::rank1"]);
 
-    let mut r = parse!(
-        "vx(1,-k(0), k(0)-k(1), k(1), k(10), spenso::mink(4,mu1), spenso::mink(4,mu8))
-    vx(2,-k(1), k(2), k(1)-k(2), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))
-    vx(3,-k(2), k(3), k(2)-k(3), spenso::mink(4,mu2), spenso::mink(4,mu3), spenso::mink(4,mu10))
-    vx(4,-k(3), k(4), k(3)-k(4), spenso::mink(4,mu3), spenso::mink(4,mu4), spenso::mink(4,mu11))
-    vx(5,-k(4), k(0), k(4)-k(0), spenso::mink(4,mu4), k(20), spenso::mink(4,mu5))
-    vx(6,-k(4)+k(0), -k(3)+k(4), k(3)-k(0), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))
-    vx(7,-k(3)+k(0), -k(2)+k(3), k(2)-k(0), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))
-    vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
+    let v1 =
+        parse!("vx(1,-k(0), k(0)-k(1), k(1), k(10), spenso::mink(4,mu1), spenso::mink(4,mu8))");
+    let v2 = parse!(
+        "vx(2,-k(1), k(2), k(1)-k(2), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
+    );
+    let v3 = parse!(
+        "vx(3,-k(2), k(3), k(2)-k(3), spenso::mink(4,mu2), spenso::mink(4,mu3), spenso::mink(4,mu10))"
+    );
+    let v4 = parse!(
+        "vx(4,-k(3), k(4), k(3)-k(4), spenso::mink(4,mu3), spenso::mink(4,mu4), spenso::mink(4,mu11))"
+    );
+    let v5 =
+        parse!("vx(5,-k(4), k(0), k(4)-k(0), spenso::mink(4,mu4), k(20), spenso::mink(4,mu5))");
+    let v6 = parse!(
+        "vx(6,-k(4)+k(0), -k(3)+k(4), k(3)-k(0), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
+    );
+    let v7 = parse!(
+        "vx(7,-k(3)+k(0), -k(2)+k(3), k(2)-k(0), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))"
+    );
+    let v8 = parse!(
+        "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
     );
 
     let gluon_rule = parse!(
@@ -93,6 +105,8 @@ fn spenso_bare_symb_vertex_substitution() {
                 )"
     )
     .to_pattern();
+
+    let mut r = v1 * v2 * v3 * v4; //* v5 * v6;
 
     for i in 0..8 {
         let gluon_rule = gluon_rule.clone();
@@ -115,10 +129,15 @@ fn spenso_bare_symb_vertex_substitution() {
     assert!(result.contains("mink"), "{result}");
     let mut settings = SpensoPrintSettings::compact().nice_symbolica();
     settings.max_line_length = Some(80);
-    println!("{}", r.printer(settings));
+    println!("in:{}", r.printer(settings));
 
-    let out = r.schoonschip_with_net::<false, true, AbstractIndex>(
+    let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
         &SchoonschipSettings::partial().with_expanded_contracted_sums(),
     );
-    println!("{}", out.printer(settings))
+    let out_string = out.to_bare_ordered_string();
+    assert!(!contains_index(&out_string, "mu1"), "{out_string}");
+    assert!(!contains_index(&out_string, "mu2"), "{out_string}");
+    assert!(!contains_index(&out_string, "mu3"), "{out_string}");
+    assert!(!contains_index(&out_string, "mu4"), "{out_string}");
+    println!("out:{}", out.printer(settings))
 }
