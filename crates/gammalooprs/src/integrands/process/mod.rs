@@ -3073,9 +3073,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
 
         let jacobian_is_nan = stability_level_result
             .parameterization_jacobian
-            .is_some_and(|jacobian| {
-                jacobian.is_nan() || jacobian.is_infinite()
-            });
+            .is_some_and(|jacobian| jacobian.is_nan() || jacobian.is_infinite());
 
         let is_nan = re_is_nan || im_is_nan || jacobian_is_nan;
 
