@@ -12,28 +12,27 @@ python-api-tests = []
 path = "src/lib.rs"
 
 [dependencies]
-bincode = { workspace = true, features = ["serde"] }
-color-eyre = "0.6"
+color-eyre = { workspace = true }
 colored = { workspace = true }
 eyre = {workspace = true}
 gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
 insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
-itertools = "0.14"
-momtrop = { version = "0.3.0" }
+itertools = { workspace = true }
+momtrop = { workspace = true }
 spenso = { workspace = true, features = ["shadowing"] }
 symbolica = { workspace = true, default-features = false, features = [
   "bincode",
   "serde"
 ] }
-tabled = { version = "0.20.0", features = ["ansi"] }
+tabled = { workspace = true, features = ["ansi"] }
 toml = { workspace = true }
-tracing = { version = "0.1.41", features = ["release_max_level_info"] }
+tracing = { workspace = true, features = ["release_max_level_info"] }
 vakint = {workspace=true}
 which = { workspace = true }
 serial_test = "3.2.0"
 rand = { workspace = true, features = ["small_rng"] }
-ndarray = "0.17"
+ndarray = { workspace = true }
 serde_json = { workspace = true }
 
 [build-dependencies]

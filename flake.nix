@@ -44,6 +44,21 @@
         baseCraneLib.overrideToolchain
         ciToolchain;
 
+      wasmTarget = "wasm32-unknown-unknown";
+
+      wasmToolchain = fenix.packages.${system}.combine [
+        (stableToolchain.withComponents [
+          "cargo"
+          "rust-std"
+          "rustc"
+        ])
+        fenix.packages.${system}.targets.${wasmTarget}.stable.rust-std
+      ];
+
+      wasmCraneLib =
+        baseCraneLib.overrideToolchain
+        wasmToolchain;
+
       workspaceRoot = ./.;
 
       cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
@@ -106,16 +121,26 @@
         ];
       };
 
+      linnestWasmSrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = lib.fileset.unions [
+          cargoSources
+          ./crates/clinnet/templates/figure.typ
+          ./crates/clinnet/templates/grid.typ
+          ./crates/clinnet/templates/layout.typ
+        ];
+      };
+
       workspaceMemberDirs = let
         crateEntries = builtins.readDir ./crates;
-        crateMemberDirs =
-          map (name: "crates/${name}") (
-            lib.filter (
-              name:
-                crateEntries.${name} == "directory"
-                && builtins.pathExists (workspaceRoot + "/crates/${name}/Cargo.toml")
-            ) (builtins.attrNames crateEntries)
-          );
+        crateMemberDirs = map (name: "crates/${name}") (
+          lib.filter (
+            name:
+              crateEntries.${name}
+              == "directory"
+              && builtins.pathExists (workspaceRoot + "/crates/${name}/Cargo.toml")
+          ) (builtins.attrNames crateEntries)
+        );
       in
         crateMemberDirs ++ ["tests"];
 
@@ -132,23 +157,23 @@
         )
         workspaceMemberDirs;
 
-      autoCargoTargetPaths =
-        lib.sort (left: right: left < right) (
-          lib.concatMap (
-            dir: let
-              entries = builtins.readDir (workspaceRoot + "/${dir}");
-            in
-              map (name: "${dir}/${name}") (
-                lib.filter (
-                  name:
-                    entries.${name} == "regular"
-                    && lib.hasSuffix ".rs" name
-                    && name != "mod.rs"
-                ) (builtins.attrNames entries)
-              )
-          )
-          autoCargoTargetDirs
-        );
+      autoCargoTargetPaths = lib.sort (left: right: left < right) (
+        lib.concatMap (
+          dir: let
+            entries = builtins.readDir (workspaceRoot + "/${dir}");
+          in
+            map (name: "${dir}/${name}") (
+              lib.filter (
+                name:
+                  entries.${name}
+                  == "regular"
+                  && lib.hasSuffix ".rs" name
+                  && name != "mod.rs"
+              ) (builtins.attrNames entries)
+            )
+        )
+        autoCargoTargetDirs
+      );
 
       dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
         #![allow(clippy::all)]
@@ -161,6 +186,10 @@
 
       apiMeta = craneLib.crateNameFromCargoToml {
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
+      };
+
+      linnestMeta = wasmCraneLib.crateNameFromCargoToml {
+        cargoToml = ./crates/linnest/Cargo.toml;
       };
 
       # Host Rust target triple, e.g. x86_64-unknown-linux-gnu
@@ -249,19 +278,51 @@
 
       # Crane's documented workspace pattern is to build one shared dependency cache and
       # reuse it across workspace lint/test/doc/package checks.
-      cargoArtifacts = craneLib.buildDepsOnly (ciArgs // {
-        pname = "gammaloop-workspace-deps";
-        src = workspaceTestSrc;
-        extraDummyScript = lib.concatMapStringsSep "\n" (path: ''
-          install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
-        '') autoCargoTargetPaths;
-      });
+      cargoArtifacts = craneLib.buildDepsOnly (ciArgs
+        // {
+          pname = "gammaloop-workspace-deps";
+          src = workspaceTestSrc;
+          extraDummyScript =
+            lib.concatMapStringsSep "\n" (path: ''
+              install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
+            '')
+            autoCargoTargetPaths;
+        });
 
       symbolicaCrateArgs = usesSymbolica:
         lib.optionalAttrs usesSymbolica {
           preBuild = licensePreCheck;
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
         };
+
+      linnestWasmArgs = {
+        inherit cargoVendorDir;
+        src = linnestWasmSrc;
+        pname = "linnest-wasm";
+        inherit (linnestMeta) version;
+        strictDeps = true;
+        doCheck = false;
+        buildType = "release";
+        CARGO_BUILD_TARGET = wasmTarget;
+        cargoExtraArgs = "--locked -p linnest --features custom --target ${wasmTarget}";
+      };
+
+      linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (linnestWasmArgs
+        // {
+          pname = "linnest-wasm-deps";
+        });
+
+      linnest-wasm = wasmCraneLib.buildPackage (linnestWasmArgs
+        // {
+          cargoArtifacts = linnestWasmCargoArtifacts;
+          cargoBuildCommand = "cargo build --release";
+          installPhaseCommand = ''
+            mkdir -p "$out/templates"
+            cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
+            cp crates/clinnet/templates/*.typ "$out/templates/"
+            cp "$out/linnest.wasm" "$out/templates/linnest.wasm"
+          '';
+        });
 
       gammaloop-cli = craneLib.buildPackage (ciArgs
         // {
@@ -274,17 +335,16 @@
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
-      impureCheckRunnerTargets =
-        [
-          {
-            runnerAttr = "nix-ci-check-gammaloop-doctest";
-            checkAttr = "gammaloop-doctest";
-          }
-          {
-            runnerAttr = "nix-ci-check-gammaloop-nextest";
-            checkAttr = "gammaloop-nextest";
-          }
-        ];
+      impureCheckRunnerTargets = [
+        {
+          runnerAttr = "nix-ci-check-gammaloop-doctest";
+          checkAttr = "gammaloop-doctest";
+        }
+        {
+          runnerAttr = "nix-ci-check-gammaloop-nextest";
+          checkAttr = "gammaloop-nextest";
+        }
+      ];
 
       impureCheckRunnerPackages = lib.listToAttrs (map (target: {
           name = target.runnerAttr;
@@ -336,6 +396,17 @@
             pname = "gammaloop-workspace";
             inherit (apiMeta) version;
           };
+
+          linnest-wasm = pkgs.runCommand "linnest-wasm-check" {
+            nativeBuildInputs = [pkgs.wasm-tools];
+          } ''
+            test -s ${linnest-wasm}/linnest.wasm
+            test -s ${linnest-wasm}/templates/linnest.wasm
+            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
+            wasm-tools validate ${linnest-wasm}/linnest.wasm
+            test -s ${linnest-wasm}/templates/layout.typ
+            mkdir -p "$out"
+          '';
         }
         // {
           gammaloop-nextest = craneLib.cargoNextest (ciArgs
@@ -358,6 +429,7 @@
         {
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
+          inherit linnest-wasm linnestWasmCargoArtifacts;
           inherit cargoArtifacts;
         }
         // impureCheckRunnerPackages

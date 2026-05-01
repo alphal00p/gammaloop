@@ -38,6 +38,8 @@ jobs:
               - 'Cargo.lock'
               - 'build.rs'
               - '.cargo/**'
+              - 'justfile'
+              - '.github/workflows/**'
 
   # Aggregate matrix and checks into one status for branch protection.
   tests:
@@ -99,7 +101,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: tests-${{ matrix.os }}
+          key: cargo-${{ matrix.os }}
 
       - name: Set fallback Symbolica license
         run: |
@@ -157,8 +159,9 @@ jobs:
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
+        if: matrix.check != 'fmt'
         with:
-          key: checks-ubuntu
+          key: cargo-ubuntu-latest
 
       - name: Run clippy
         if: matrix.check == 'clippy'

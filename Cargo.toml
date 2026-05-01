@@ -7,67 +7,77 @@ default-members = ["crates/gammaloop-api"]
 edition = "2024"
 
 [workspace.dependencies]
-ahash = "0.8.8"
-bincode = "2.0.0"
+ahash = "0.8.12"
+bincode = "2.0.1"
 bincode-trait-derive = "0.1.1"
-clap = "4.5.47"
-colored = "3.0.0"
+chrono = "0.4.44"
+clap = "4.6.1"
+color-eyre = { version = "0.6.5", default-features = false, features = [
+  "capture-spantrace",
+  "track-caller"
+] }
+colored = "3.1.1"
 dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
 gammaloop-api = { path = "crates/gammaloop-api/" }
+gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammalooprs = { path = "crates/gammalooprs/" }
 idenso = { path = "crates/idenso/" }
 include_dir = "0.7"
-indexmap = "2.7.0"
+indexmap = "2.14.0"
 indicatif = "0.18.4"
 insta = "1.46.3"
 itertools = "0.14"
+json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
 linnet = { path = "crates/linnet/" }
+momtrop = "0.3.0"
+ndarray = "0.17.2"
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"
 pyo3-build-config = "0.28"
 pyo3-stub-gen = { version = "0.17", default-features = false }
 pyo3-stub-gen-derive = { version = "0.17", default-features = false }
-rand = "0.9"
+rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
-schemars = "1.0.4"
-serde = "1.0.219"
+regex = "1.12.3"
+schemars = "1.2.1"
+serde = "1.0.228"
 serde_json = "1"
-serde_repr = "0.1.19"
-serde_yaml = "*"
-smartstring = "*"
+serde_repr = "0.1.20"
+serde_yaml = "0.9.34"
+smartstring = "1.0.1"
 spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
-symbolica = { version = "1.5", default-features = false }
-sysinfo = "0.33"
+symbolica = { version = "1.5.1", default-features = false }
+sysinfo = "0.33.1"
 tabled = "0.20.0"
-thiserror = "1.0.60"
-toml = "0.9.5"
-tracing = "0.1.41"
-tracing-appender = "0.2.3"
+thiserror = "2.0"
+toml = "0.9.12"
+tracing = "0.1.44"
+tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
-tracing-subscriber = "0.3.19"
-typed-index-collections = "3.3.0"
+tracing-subscriber = "0.3.23"
+typed-index-collections = "3.5.0"
 vakint = { path = "crates/vakint/" }
+walkdir = "2.5.0"
+
 which = "8.0.0"
 
 [patch.crates-io]
 # graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+# graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+# numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+# symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
 # graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-
-
 
 [profile.bench]
 opt-level = 3

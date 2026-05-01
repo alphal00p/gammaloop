@@ -161,7 +161,11 @@ impl AmplitudeGraphTerm {
             })
             .collect::<HashSet<_>>();
 
-        debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
+        crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
+            orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS),
+            "Building evaluator for all orientations \n{}",
+            graph.graph.param_builder.table()
+        );
 
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
@@ -453,15 +457,20 @@ impl AmplitudeGraphTerm {
         )?;
         let sum_of_cts = counterterm_evaluation.total.clone();
 
-        debug!(
+        crate::debug_tags!(#integration, #subtraction;
             bare_cff = format!("{result:16e}"),
-            "{}: {result:16e}", self.graph.name
+            "{}: {result:16e}",
+            self.graph.name
         );
-        debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
-        debug!("result: {result:16e}");
-        debug!("sum_of_cts: {sum_of_cts:16e}");
+        crate::debug_tags!(#integration, #subtraction;
+            cts = format!("{sum_of_cts:16e}"),
+            "{}",
+            self.graph.name
+        );
+        crate::debug_tags!(#integration, #subtraction; "result: {result:16e}");
+        crate::debug_tags!(#integration, #subtraction; "sum_of_cts: {sum_of_cts:16e}");
 
-        debug!(
+        crate::debug_tags!(#integration, #subtraction;
             value = format!("{sum_of_cts:16e}"),
             "evaluated sum of threshold counterterms"
         );
@@ -530,6 +539,11 @@ impl GraphTerm for AmplitudeGraphTerm {
             .param_builder
             .add_external_four_mom_all_derivatives(&externals);
         let pols = self.graph.param_builder.pairs.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+        self.graph.param_builder.pairs.warn_zero_polarizations(
             &self.graph,
             &externals,
             settings.kinematics.externals.get_helicities(),

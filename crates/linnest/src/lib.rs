@@ -22,6 +22,9 @@ use linnet::{
     tree::child_pointer::ParentChildStore,
 };
 
+#[cfg(target_arch = "wasm32")]
+use linnet::parser::set::DotGraphSet;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum PinConstraint {
     /// Pin both coordinates to fixed values: pin="1.0,2.0"

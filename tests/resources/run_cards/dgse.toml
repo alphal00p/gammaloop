@@ -26,7 +26,7 @@ momenta = [
 helicities = [1, 1, 1]
 
 [cli_settings.global]
-logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+logfile_directive = "off"
 display_directive = "info"
 
 [cli_settings.global.generation.uv]

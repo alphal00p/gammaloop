@@ -12,7 +12,7 @@ name = "linnet"
 path = "src/lib.rs"
 
 [dependencies]
-ahash = "0.8.11"
+ahash = { version = "0.8.11", default-features = false, features = ["compile-time-rng", "std"] }
 bincode = { workspace = true, features = ["serde"], optional = true }
 bincode-trait-derive = { workspace = true }
 bitvec = { version = "1.0.1" }

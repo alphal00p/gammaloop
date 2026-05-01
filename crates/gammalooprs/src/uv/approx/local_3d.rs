@@ -9,11 +9,15 @@ use symbolica::{
     id::Replacement,
     parse,
 };
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 use crate::{
+    debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{
+        GS, W_,
+        symbolica_ext::{CallSymbol, LogPrint},
+    },
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
@@ -228,7 +232,7 @@ impl Local3DApproximation {
             .replace(parse!("der(x__, OSE(y__))"))
             .with(Atom::num(0));
         a = a.replace(GS.rescale).with(Atom::num(1));
-        debug!("a: {}", a);
+        debug_tags!(#uv,#local; expr=%a.log_print(Some(80)), "Local 3D approximation");
         Ok(a)
     }
 

@@ -9,8 +9,11 @@ use std::{
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
+use gammaloop_tracing_filter::GammaLogFilter;
 use gammalooprs::utils::tracing::{LogFormat, LogStyle};
 use indicatif::ProgressState;
+use itertools::Itertools;
+use tabled::{builder::Builder, settings::Style};
 use tracing::{field::Visit, level_filters::LevelFilter, Event, Subscriber};
 use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
 use tracing_subscriber::field::RecordFields;
@@ -28,51 +31,17 @@ use tracing_subscriber::{
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter,
 };
 
 use color_eyre::Result;
 
-fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
-    // Start from a strict global default…
-    let mut filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::WARN.into()) // global floor
-        .parse_lossy(""); // no user rules yet
-
-    // for req in ["gammalooprs=debug", "gammaloop_api=info", "symbolica=off"] {
-    //     let Ok(d) = req.parse() else {
-    //         continue;
-    //     };
-    //     filter = filter.add_directive(d);
-    // }
-    for a in user_spec.split(",") {
-        if a.trim().is_empty() {
-            continue;
-        }
-        filter = filter.add_directive(a.trim().parse()?);
-    }
-    Ok(filter)
+fn file_filter_from(user_spec: &str) -> Result<GammaLogFilter> {
+    GammaLogFilter::parse_with_default(user_spec, Some(LevelFilter::WARN)).map_err(Into::into)
 }
 
-fn display_filter_from(user_spec: &str) -> Result<EnvFilter> {
-    // Default: only show `status` target, everything else OFF.
-    // Users can override/expand with their spec.
-    let mut f = EnvFilter::builder()
-        .with_default_directive(LevelFilter::OFF.into())
-        .parse_lossy("");
-
-    for a in user_spec.split(",") {
-        if a.trim().is_empty() {
-            continue;
-        }
-        f = f.add_directive(
-            a.trim()
-                .parse()
-                .context(format!("Trying to get directive from :{}", a))?,
-        );
-    }
-
-    Ok(f)
+fn display_filter_from(user_spec: &str) -> Result<GammaLogFilter> {
+    GammaLogFilter::parse_with_default(user_spec, Some(LevelFilter::OFF))
+        .context(format!("Trying to parse filter spec: {user_spec}"))
 }
 
 const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
@@ -152,7 +121,7 @@ static FILE_LOG_SPEC: LazyLock<Mutex<FileLogSpecState>> = LazyLock::new(|| {
 static STDERR_LOG_SPEC: LazyLock<Mutex<StderrLogSpecState>> =
     LazyLock::new(|| Mutex::new(StderrLogSpecState::default()));
 
-type ReloadFilterFn = Box<dyn Fn(EnvFilter) -> Result<()> + Send + Sync>;
+type ReloadFilterFn = Box<dyn Fn(GammaLogFilter) -> Result<()> + Send + Sync>;
 
 struct FilterHandles {
     file_reload: Option<ReloadFilterFn>,
@@ -287,34 +256,126 @@ impl Visit for RoutedFieldsVisitor {
     }
 }
 
-fn render_display_message(
-    style: &LogStyle,
-    message: &str,
-    fields: &serde_json::Map<String, serde_json::Value>,
-) -> String {
-    let field_suffix = if style.include_fields && !fields.is_empty() {
-        let mut s = String::new();
-        if !message.is_empty() {
-            s.push(' ');
-        }
-        s.push('{');
-        for (index, (key, value)) in fields.iter().enumerate() {
-            if index > 0 {
-                s.push_str(", ");
-            }
-            s.push_str(key);
-            s.push('=');
-            match value {
-                serde_json::Value::String(string) => s.push_str(string),
-                other => s.push_str(&other.to_string()),
-            }
-        }
-        s.push('}');
-        s
-    } else {
+fn render_display_message(message: &str) -> String {
+    message.to_string()
+}
+
+const DISPLAY_TAG_FIELDS: &[&str] = &[
+    "generation",
+    "integration",
+    "profile",
+    "persistence",
+    "uv",
+    "ir",
+    "subtraction",
+    "sampling",
+    "stability",
+    "observables",
+    "selectors",
+    "cache",
+    "graph",
+    "group",
+    "orientation",
+    "channel",
+    "cut",
+    "event",
+    "sample",
+    "iteration",
+    "term",
+    "solver",
+    "compile",
+    "inspect",
+    "summary",
+    "dump",
+];
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct DisplayTag {
+    name: String,
+    enabled: bool,
+}
+
+fn extract_display_tags(
+    fields: &mut serde_json::Map<String, serde_json::Value>,
+) -> Vec<DisplayTag> {
+    let mut tags = fields
+        .iter()
+        .filter_map(|(name, value)| match value {
+            serde_json::Value::Bool(enabled) => Some(DisplayTag {
+                name: name.clone(),
+                enabled: *enabled,
+            }),
+            _ => None,
+        })
+        .collect_vec();
+
+    for tag in &tags {
+        fields.remove(&tag.name);
+    }
+
+    tags.sort_by_key(|tag| {
+        DISPLAY_TAG_FIELDS
+            .iter()
+            .position(|known| known == &tag.name.as_str())
+            .map_or_else(
+                || (usize::MAX, tag.name.clone()),
+                |index| (index, String::new()),
+            )
+    });
+    tags
+}
+
+fn render_display_tags(tags: &[DisplayTag]) -> String {
+    if tags.is_empty() {
         String::new()
-    };
-    format!("{message}{field_suffix}")
+    } else {
+        let mut rendered_tags = tags.iter().map(|tag| {
+            if tag.enabled {
+                format!("#{}", tag.name)
+            } else {
+                format!("#!{}", tag.name)
+            }
+        });
+        format!("[{{{}}}]", rendered_tags.join(", "))
+            .bright_black()
+            .to_string()
+    }
+}
+
+fn render_display_field_table(
+    style: &LogStyle,
+    fields: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    if !style.include_fields || fields.is_empty() {
+        return None;
+    }
+
+    let mut builder = Builder::new();
+    builder.push_record([
+        "field".bold().blue().to_string(),
+        "value".bold().blue().to_string(),
+    ]);
+
+    for (key, value) in fields {
+        builder.push_record([key.clone(), display_field_value(value)]);
+    }
+
+    let table = builder.build().with(Style::blank()).to_string();
+    Some(indent_block(&table, "    "))
+}
+
+fn display_field_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(string) => string.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn indent_block(block: &str, prefix: &str) -> String {
+    block
+        .lines()
+        .map(|line| format!("{prefix}{line}"))
+        .join("\n")
 }
 
 impl LazyJsonMakeWriter {
@@ -448,15 +509,7 @@ fn strip_ansi_escape_codes(line: &str) -> String {
 }
 
 fn directive_is_effectively_off(spec: &str) -> bool {
-    let parts: Vec<_> = spec
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect();
-    !parts.is_empty()
-        && parts
-            .iter()
-            .all(|part| *part == "off" || part.ends_with("=off"))
+    GammaLogFilter::is_effectively_off(spec)
 }
 
 fn file_log_disabled_error(reason: &str) -> color_eyre::Report {
@@ -840,7 +893,10 @@ where
         let mut v = RoutedFieldsVisitor::for_sink(LogSink::Display);
         event.record(&mut v);
         let msg = v.message.as_deref().unwrap_or("");
-        let rendered = render_display_message(&style, msg, &v.fields);
+        let mut display_fields = v.fields;
+        let display_tags = extract_display_tags(&mut display_fields);
+        let rendered = render_display_message(msg);
+        let rendered_field_table = render_display_field_table(&style, &display_fields);
 
         let ts_long = format!(
             "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
@@ -871,6 +927,8 @@ where
         } else {
             format_target_full(meta.module_path().unwrap_or("").to_string())
         };
+        let long_source = format!("{}{}", long_source, render_display_tags(&display_tags));
+        let full_source = format!("{}{}", full_source, render_display_tags(&display_tags));
 
         match style.log_format {
             LogFormat::Long => {
@@ -918,6 +976,9 @@ where
             LogFormat::None => {
                 write!(w, "{}", rendered)?;
             }
+        }
+        if let Some(field_table) = rendered_field_table {
+            write!(w, "\n{field_table}")?;
         }
         writeln!(w)
     }
@@ -1021,7 +1082,7 @@ pub(crate) fn format_target(target: String, level: tracing::Level) -> ColoredStr
 }
 
 pub(crate) fn format_target_full(target: String) -> ColoredString {
-    format!("{:<20}", target).bright_blue()
+    target.bright_blue()
 }
 
 pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString {
@@ -1060,10 +1121,11 @@ mod tests {
     use crate::tracing::strip_ansi_escape_codes;
 
     use super::{
-        collapse_scoped_gamma_level, display_filter_from, file_filter_from, format_target,
-        format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
-        render_display_message, route_field_name, set_stderr_log_filter,
-        set_stderr_log_filter_override, LogSink, StderrLogSpecState, STDERR_LOG_SPEC,
+        collapse_scoped_gamma_level, display_filter_from, extract_display_tags, file_filter_from,
+        format_target, format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
+        indent_block, render_display_field_table, render_display_message, render_display_tags,
+        route_field_name, set_stderr_log_filter, set_stderr_log_filter_override, DisplayTag,
+        LogSink, StderrLogSpecState, STDERR_LOG_SPEC,
     };
 
     struct StderrStateRestore(StderrLogSpecState);
@@ -1145,6 +1207,29 @@ mod tests {
     }
 
     #[test]
+    fn display_filter_examples_with_multi_field_groups_parse() {
+        for spec in [
+            "gammalooprs::uv::forest[{generation,uv}]=debug",
+            "gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug",
+            "gammalooprs::uv::forest[{generation,uv,term}]=debug",
+            "gammalooprs::integrands::process::amplitude[{integration,subtraction}]=debug",
+            "gammalooprs::integrands::process::cross_section[{integration,sample,inspect}]=debug",
+            "gammalooprs::integrands::process::cross_section[{integration,cut,solver}]=debug",
+        ] {
+            assert!(
+                display_filter_from(spec).is_ok(),
+                "display filter example should parse: {spec}"
+            );
+        }
+    }
+
+    #[test]
+    fn file_filter_examples_with_multi_field_groups_parse() {
+        let spec = "gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug";
+        assert!(file_filter_from(spec).is_ok());
+    }
+
+    #[test]
     fn full_target_format_preserves_long_module_paths() {
         let target = "gammaloop_api::commands::very_long_module_name".to_string();
         assert_eq!(
@@ -1183,25 +1268,134 @@ mod tests {
     }
 
     #[test]
-    fn display_message_renders_only_display_visible_fields() {
-        let style = gammalooprs::utils::tracing::LogStyle {
-            include_fields: true,
-            ..Default::default()
-        };
-        let fields = serde_json::Map::from_iter([
-            (
-                "shared".to_string(),
-                serde_json::Value::String("ok".to_string()),
-            ),
+    fn display_message_keeps_only_message_text() {
+        assert_eq!(render_display_message("hello"), "hello");
+    }
+
+    #[test]
+    fn display_formatter_extracts_all_boolean_fields_as_tags() {
+        let mut fields = serde_json::Map::from_iter([
+            ("generation".to_string(), serde_json::Value::Bool(true)),
+            ("uv".to_string(), serde_json::Value::Bool(true)),
+            ("inspect".to_string(), serde_json::Value::Bool(false)),
+            ("custom".to_string(), serde_json::Value::Bool(true)),
             (
                 "progress".to_string(),
                 serde_json::Value::String("step-1".to_string()),
             ),
         ]);
 
+        let tags = extract_display_tags(&mut fields);
         assert_eq!(
-            render_display_message(&style, "hello", &fields),
-            "hello {progress=step-1, shared=ok}"
+            tags,
+            vec![
+                DisplayTag {
+                    name: "generation".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "uv".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "inspect".to_string(),
+                    enabled: false,
+                },
+                DisplayTag {
+                    name: "custom".to_string(),
+                    enabled: true,
+                },
+            ]
         );
+        assert_eq!(fields.get("generation"), None);
+        assert_eq!(fields.get("uv"), None);
+        assert_eq!(fields.get("inspect"), None);
+        assert_eq!(fields.get("custom"), None);
+        assert_eq!(
+            fields.get("progress"),
+            Some(&serde_json::Value::String("step-1".to_string()))
+        );
+    }
+
+    #[test]
+    fn display_tags_render_next_to_source() {
+        assert_eq!(
+            strip_ansi_escape_codes(&render_display_tags(&[
+                DisplayTag {
+                    name: "generation".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "inspect".to_string(),
+                    enabled: false,
+                },
+                DisplayTag {
+                    name: "custom".to_string(),
+                    enabled: true,
+                },
+            ])),
+            "[{#generation, #!inspect, #custom}]"
+        );
+    }
+
+    #[test]
+    fn full_source_with_display_tags_is_copy_pasteable_as_directive() {
+        let directive_head = format!(
+            "{}{}",
+            strip_ansi_escape_codes(
+                &format_target_full("gammalooprs::uv::forest".to_string()).to_string()
+            ),
+            strip_ansi_escape_codes(&render_display_tags(&[
+                DisplayTag {
+                    name: "generation".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "uv".to_string(),
+                    enabled: true,
+                },
+                DisplayTag {
+                    name: "inspect".to_string(),
+                    enabled: false,
+                },
+            ])),
+        );
+
+        assert_eq!(
+            directive_head,
+            "gammalooprs::uv::forest[{#generation, #uv, #!inspect}]"
+        );
+        assert!(display_filter_from(&format!("{directive_head}=debug")).is_ok());
+    }
+
+    #[test]
+    fn display_field_table_renders_only_non_boolean_fields() {
+        let style = gammalooprs::utils::tracing::LogStyle {
+            include_fields: true,
+            ..Default::default()
+        };
+        let mut fields = serde_json::Map::from_iter([
+            ("inspect".to_string(), serde_json::Value::Bool(false)),
+            (
+                "progress".to_string(),
+                serde_json::Value::String("step-1".to_string()),
+            ),
+        ]);
+
+        let _tags = extract_display_tags(&mut fields);
+        let rendered = render_display_field_table(&style, &fields).unwrap();
+        let rendered = strip_ansi_escape_codes(&rendered);
+        assert!(rendered.contains("field"));
+        assert!(rendered.contains("value"));
+        assert!(!rendered.contains("inspect"));
+        assert!(!rendered.contains("false"));
+        assert!(rendered.contains("progress"));
+        assert!(rendered.contains("step-1"));
+        assert!(rendered.lines().all(|line| line.starts_with("    ")));
+    }
+
+    #[test]
+    fn indent_block_prefixes_each_line() {
+        assert_eq!(indent_block("a\nb", "  "), "  a\n  b");
     }
 }

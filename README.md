@@ -3,6 +3,14 @@
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-dark.svg">
   <img src="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-light.svg" width="300">
 </picture>
+
+
+[![CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main)](https://nix-ci.com/gh:alphal00p:gammaloop/main)
+<!--[![crates.io](https://img.shields.io/crates/v/spenso.svg)](https://crates.io/crates/spenso)
+[![Build Status](https://github.com/alphal00p/spenso/actions/workflows/ci.yml/badge.svg)](https://github.com/alphal00p/spenso/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/github/alphal00p/spenso/graph/badge.svg?token=ST0XA54QSF)](https://codecov.io/github/alphal00p/spenso)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/alphal00p/spenso)-->
+
 </div>
 
 *Computation of differential cross-sections using Local Unitarity.*
