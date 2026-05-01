@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, ops::MulAssign};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::MulAssign,
+};
 
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::structure::{
@@ -76,6 +79,7 @@ pub enum EnergyPowerAnalysisError {
 
 pub struct EnergyPowerAnalyzer {
     loop_edges: Vec<EdgeIndex>,
+    internal_edges: Option<BTreeSet<EdgeIndex>>,
     minkowski_symbol: Symbol,
 }
 
@@ -83,6 +87,18 @@ impl EnergyPowerAnalyzer {
     pub fn new(loop_edges: impl IntoIterator<Item = EdgeIndex>) -> Self {
         Self {
             loop_edges: loop_edges.into_iter().collect(),
+            internal_edges: None,
+            minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
+        }
+    }
+
+    pub fn with_internal_edges(
+        loop_edges: impl IntoIterator<Item = EdgeIndex>,
+        internal_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Self {
+        Self {
+            loop_edges: loop_edges.into_iter().collect(),
+            internal_edges: Some(internal_edges.into_iter().collect()),
             minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
         }
     }
@@ -143,7 +159,7 @@ impl EnergyPowerAnalyzer {
 
                 if function.get_nargs() == 2 && function.get_symbol() == GS.emr_mom {
                     let edge = EdgeIndex(usize::try_from(function.get(0)).unwrap_or(usize::MAX));
-                    return if self.is_energy_index(function.get(1)) {
+                    return if self.is_internal_edge(edge) && self.is_energy_index(function.get(1)) {
                         Ok(EnergyPowerCapMap::unit(edge))
                     } else {
                         Ok(EnergyPowerCapMap::default())
@@ -183,6 +199,12 @@ impl EnergyPowerAnalyzer {
 
         function.get_symbol() == self.minkowski_symbol && function.get_nargs() == 2
     }
+
+    fn is_internal_edge(&self, edge: EdgeIndex) -> bool {
+        self.internal_edges
+            .as_ref()
+            .is_none_or(|internal_edges| internal_edges.contains(&edge))
+    }
 }
 
 impl Graph {
@@ -198,8 +220,15 @@ impl Graph {
     pub fn numerator_energy_power_caps(
         &self,
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
-        EnergyPowerAnalyzer::new(self.loop_momentum_basis.loop_edges.iter().copied())
-            .analyze_atom(&self.full_numerator_atom())
+        let internal_edges = self
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge));
+        EnergyPowerAnalyzer::with_internal_edges(
+            self.loop_momentum_basis.loop_edges.iter().copied(),
+            internal_edges,
+        )
+        .analyze_atom(&self.full_numerator_atom())
     }
 }
 
@@ -234,10 +263,23 @@ mod tests {
             .into_generation_bounds()
     }
 
+    fn bounds_with_internal_edges(expression: Atom) -> Vec<(usize, usize)> {
+        EnergyPowerAnalyzer::with_internal_edges([EdgeIndex(7), EdgeIndex(9)], [EdgeIndex(3)])
+            .analyze_atom(&expression)
+            .unwrap()
+            .into_generation_bounds()
+    }
+
     #[test]
     fn emr_minkowski_index_counts_as_energy_power() {
         let expression = function!(GS.emr_mom, 3, mink_index("mu"));
         assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn emr_external_edge_minkowski_index_does_not_count_when_internal_edges_are_known() {
+        let expression = function!(GS.emr_mom, 0, mink_index("mu"));
+        assert!(bounds_with_internal_edges(expression).is_empty());
     }
 
     #[test]

@@ -200,7 +200,7 @@ fn orientation_table(
     let mut table = Builder::new();
     table.push_record(vec![
         h("id", use_color),
-        h("orient", use_color),
+        h("orientation", use_color),
         h("variant", use_color),
         h("origin", use_color),
         h("pref", use_color),
@@ -243,7 +243,7 @@ fn orientation_table(
                 factor_list(variant.uniform_scale_power, &variant.half_edges, use_color),
                 variant_surface_list(variant, use_color),
                 variant.denominator.get_num_nodes().to_string(),
-                truncate_for_table(&tree_shape(&variant.denominator, use_color), 160),
+                truncate_for_table(&tree_shape(&variant.denominator, use_color), 30),
             ]);
         }
     }
@@ -600,7 +600,20 @@ fn origin_label(origin: &str, use_color: bool) -> String {
         "ltd" | "pure_ltd" => Color::Blue,
         _ => Color::Purple,
     };
-    c(origin, color, use_color)
+    c(&short_origin_label(origin), color, use_color)
+}
+
+fn short_origin_label(origin: &str) -> String {
+    origin
+        .replace("ltd_confluent", "ltd_cflt")
+        .replace("bounded_degree", "bd")
+        .replace("known_factor", "known")
+        .replace("e_surface", "e_surf")
+        .replace("quadratic_recursive", "quad_rec")
+        .replace("lower_sector", "low_sec")
+        .replace("component_product", "comp_prod")
+        .replace(":beta=", ":β=")
+        .replace(":gamma=", ":γ=")
 }
 
 fn coefficient_label(coeff: &symbolica::atom::Atom, use_color: bool) -> String {
@@ -938,6 +951,9 @@ fn truncate_for_table(text: &str, max_chars: usize) -> String {
 
     if !truncated && chars.next().is_none() {
         return text.to_string();
+    }
+    if text.contains('\u{1b}') {
+        out.push_str("\u{1b}[0m");
     }
     out.push_str("...");
     if text.contains('\u{1b}') {

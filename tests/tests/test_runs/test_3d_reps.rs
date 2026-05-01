@@ -230,6 +230,8 @@ struct ProbeCaseReport {
 }
 
 const BOUNDS_EMPTY: &[(usize, usize)] = &[];
+const DENSE_BOUNDS_NUMERATOR: &str = "auto_dense_bounds";
+const DENSE_LOOP0_BOUNDS_NUMERATOR: &str = "auto_dense_loop0_bounds";
 const BOUNDS_BOX_QUADRATIC_0: &[(usize, usize)] = &[(0, 2)];
 const BOUNDS_BOX_SPLIT_SPECTATORS: &[(usize, usize)] = &[(0, 1), (1, 1), (2, 1), (3, 2)];
 const BOUNDS_BOX_CUBIC_0: &[(usize, usize)] = &[(0, 3)];
@@ -732,22 +734,24 @@ fn source_bounds_from_local(source_internal_edges: &[usize], bounds: &[(usize, u
         .join(",")
 }
 
-fn edge_energy_power_numerator(
+fn dense_edge_energy_power_numerator(
     source_internal_edges: &[usize],
+    source_external_edges: &[usize],
     bounds: &[(usize, usize)],
 ) -> String {
-    let factors = bounds
-        .iter()
-        .filter(|(_, degree)| *degree > 0)
-        .map(|(local_edge_id, degree)| {
-            let edge_id = source_internal_edges[*local_edge_id];
-            if *degree == 1 {
-                format!("Q({edge_id},spenso::cind(0))")
-            } else {
-                format!("Q({edge_id},spenso::cind(0))^{degree}")
-            }
-        })
-        .collect::<Vec<_>>();
+    assert!(
+        !source_external_edges.is_empty(),
+        "dense edge-energy numerator construction needs at least one external momentum"
+    );
+    let mut factors = Vec::new();
+    for (local_edge_id, degree) in bounds {
+        let edge_id = source_internal_edges[*local_edge_id];
+        for power_index in 0..*degree {
+            let external_id =
+                source_external_edges[(local_edge_id + power_index) % source_external_edges.len()];
+            factors.push(imported_q_dot_q(edge_id, external_id));
+        }
+    }
     if factors.is_empty() {
         "1".to_string()
     } else {
@@ -755,12 +759,38 @@ fn edge_energy_power_numerator(
     }
 }
 
-fn loop_energy_power_numerator(loop_id: usize, degree: usize) -> String {
-    if degree == 1 {
-        format!("K({loop_id},spenso::cind(0))")
-    } else {
-        format!("K({loop_id},spenso::cind(0))^{degree}")
+fn dense_loop_energy_power_numerator(
+    loop_id: usize,
+    degree: usize,
+    source_external_edges: &[usize],
+) -> String {
+    assert!(
+        !source_external_edges.is_empty(),
+        "dense loop-energy numerator construction needs at least one external momentum"
+    );
+    let mut factors = Vec::new();
+    for power_index in 0..degree {
+        let external_id =
+            source_external_edges[(loop_id + power_index) % source_external_edges.len()];
+        factors.push(imported_k_dot_q(loop_id, external_id));
     }
+    if factors.is_empty() {
+        "1".to_string()
+    } else {
+        factors.join("*")
+    }
+}
+
+fn imported_q_dot_q(lhs_edge_id: usize, rhs_edge_id: usize) -> String {
+    format!(
+        "(Q({lhs_edge_id},spenso::cind(0))*Q({rhs_edge_id},spenso::cind(0))-Q({lhs_edge_id},spenso::cind(1))*Q({rhs_edge_id},spenso::cind(1))-Q({lhs_edge_id},spenso::cind(2))*Q({rhs_edge_id},spenso::cind(2))-Q({lhs_edge_id},spenso::cind(3))*Q({rhs_edge_id},spenso::cind(3)))"
+    )
+}
+
+fn imported_k_dot_q(loop_id: usize, edge_id: usize) -> String {
+    format!(
+        "(K({loop_id},spenso::cind(0))*Q({edge_id},spenso::cind(0))-K({loop_id},spenso::cind(1))*Q({edge_id},spenso::cind(1))-K({loop_id},spenso::cind(2))*Q({edge_id},spenso::cind(2))-K({loop_id},spenso::cind(3))*Q({edge_id},spenso::cind(3)))"
+    )
 }
 
 fn dot_with_global_numerator(test_name: &str, dot_name: &str, numerator: &str) -> Result<PathBuf> {
@@ -800,6 +830,14 @@ struct ImportedGraphThreeDRepRun {
     cff: ImportedGraphThreeDRepCase,
     ltd: ImportedGraphThreeDRepCase,
     pure_ltd: ImportedGraphThreeDRepCase,
+}
+
+#[derive(Debug, Clone)]
+struct ManifestEvaluationValue {
+    id: usize,
+    re: f64,
+    im: f64,
+    backend: String,
 }
 
 fn run_imported_graph_threedrep_test(
@@ -950,6 +988,149 @@ fn assert_threedrep_evaluation_ids(manifest: &JsonValue, context: &str) -> Resul
     Ok(())
 }
 
+fn set_threedrep_sampling_mode(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    mode: &str,
+) -> Result<()> {
+    cli.run_command(&format!(
+        "set global kv global.generation.uniform_numerator_sampling_scale={mode}"
+    ))
+}
+
+fn set_threedrep_compile_backend(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    backend: Option<&str>,
+) -> Result<()> {
+    match backend {
+        None => cli.run_command("set global kv global.generation.evaluator.compile=false"),
+        Some(backend) => {
+            cli.run_command(&format!(
+                "set global string '\n[global.generation.evaluator]\ncompile = true\n\n[global.generation.compile]\ncompilation_mode = \"{backend}\"\noptimization_level = \"O0\"\nfast_math = false\nunsafe_math = false\ncustom = []\n'"
+            ))
+        }
+    }
+}
+
+fn run_threedrep_test_cff_ltd_manifest(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    workspace_path: &Path,
+    process_name: &str,
+    precision: &str,
+    seed: u64,
+    scale: f64,
+) -> Result<JsonValue> {
+    cli.run_command(&format!(
+        "3Drep test-cff-ltd -p {process_name} -i default -g 0 --workspace-path {} --precision {precision} --seed {seed} --scale {scale:.17e} --clean",
+        workspace_path.display()
+    ))?;
+    let manifest_path = find_named_artifact(workspace_path, "test_cff_ltd_manifest.json")?;
+    let manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(manifest_path)?)?;
+    assert_threedrep_comparison_success(&manifest, process_name)?;
+    assert_threedrep_evaluation_ids(&manifest, process_name)?;
+    Ok(manifest)
+}
+
+fn direct_manifest_evaluation_value(
+    manifest: &JsonValue,
+    case_name: &str,
+) -> Result<ManifestEvaluationValue> {
+    let case = manifest_case(manifest, case_name)?;
+    let evaluation = case["evaluations"]
+        .as_array()
+        .ok_or_else(|| eyre!("3Drep case '{case_name}' has no evaluations array"))?
+        .iter()
+        .find(|evaluation| {
+            evaluation["status"].as_str() == Some("ok")
+                && evaluation["mass_shift_values"]
+                    .as_array()
+                    .is_some_and(Vec::is_empty)
+        })
+        .ok_or_else(|| eyre!("3Drep case '{case_name}' has no direct successful evaluation"))?;
+    let re = evaluation["value_re"]
+        .as_str()
+        .ok_or_else(|| eyre!("3Drep case '{case_name}' evaluation has no real part"))?
+        .parse::<f64>()?;
+    let im = evaluation["value_im"]
+        .as_str()
+        .ok_or_else(|| eyre!("3Drep case '{case_name}' evaluation has no imaginary part"))?
+        .parse::<f64>()?;
+    assert!(
+        re.is_finite() && im.is_finite(),
+        "3Drep case {case_name} direct value should be finite: ({re}, {im})"
+    );
+    Ok(ManifestEvaluationValue {
+        id: evaluation["id"]
+            .as_u64()
+            .ok_or_else(|| eyre!("3Drep case '{case_name}' evaluation has no id"))?
+            as usize,
+        re,
+        im,
+        backend: evaluation["evaluator_backend"]
+            .as_str()
+            .ok_or_else(|| eyre!("3Drep case '{case_name}' evaluation has no backend"))?
+            .to_string(),
+    })
+}
+
+fn assert_manifest_direct_values_agree(
+    lhs: &ManifestEvaluationValue,
+    rhs: &ManifestEvaluationValue,
+    context: &str,
+    tolerance: f64,
+) {
+    let abs_diff = (lhs.re - rhs.re).hypot(lhs.im - rhs.im);
+    let rhs_abs = rhs.re.hypot(rhs.im);
+    let rel_diff = abs_diff
+        / if rhs_abs > 0.0 {
+            rhs_abs
+        } else {
+            f64::MIN_POSITIVE
+        };
+    assert!(
+        abs_diff <= 1.0e-12 || rel_diff <= tolerance,
+        "{context}: values differ beyond tolerance: lhs #{}, rhs #{}, lhs=({:.17e},{:.17e}), rhs=({:.17e},{:.17e}), abs_diff={:.3e}, rel_diff={:.3e}, tolerance={:.3e}",
+        lhs.id,
+        rhs.id,
+        lhs.re,
+        lhs.im,
+        rhs.re,
+        rhs.im,
+        abs_diff,
+        rel_diff,
+        tolerance
+    );
+}
+
+fn assert_manifest_uses_backend(
+    manifest: &JsonValue,
+    expected_backend: &str,
+    context: &str,
+) -> Result<()> {
+    let actual = manifest["settings"]["evaluator_backend"]
+        .as_str()
+        .ok_or_else(|| eyre!("3Drep manifest for {context} has no evaluator backend setting"))?;
+    assert!(
+        actual.contains(expected_backend),
+        "3Drep manifest for {context} used backend '{actual}', expected it to contain '{expected_backend}'"
+    );
+    for case in manifest["cases"]
+        .as_array()
+        .ok_or_else(|| eyre!("3Drep manifest for {context} has no cases array"))?
+    {
+        for evaluation in case["evaluations"]
+            .as_array()
+            .ok_or_else(|| eyre!("3Drep manifest for {context} case has no evaluations array"))?
+        {
+            let backend = evaluation["evaluator_backend"].as_str().unwrap_or("-");
+            assert!(
+                backend.contains(expected_backend),
+                "3Drep evaluation in {context} used backend '{backend}', expected it to contain '{expected_backend}'"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn import_threedrep_graph(
     test_name: &str,
     dot_path: &Path,
@@ -987,7 +1168,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_quadratic_edge_energy",
             dot_name: "box.dot",
-            numerator: "edges[0][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_QUADRATIC_0,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -997,7 +1178,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_cubic_edge_energy",
             dot_name: "box.dot",
-            numerator: "edges[0][0]**3",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_CUBIC_0,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1007,7 +1188,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_cubic_lmb_carrier_energy",
             dot_name: "box.dot",
-            numerator: "loops[0][0]**3",
+            numerator: DENSE_LOOP0_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_CUBIC_0,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1017,7 +1198,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_cff_ltd_high_contact_4_0_0_0",
             dot_name: "box.dot",
-            numerator: "edges[0][0]**4",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_HIGH_CONTACT_A,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1027,7 +1208,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_cff_ltd_high_contact_3_2_0_0",
             dot_name: "box.dot",
-            numerator: "edges[0][0]**3 * edges[1][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_HIGH_CONTACT_B,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1037,7 +1218,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_cff_ltd_high_contact_2_1_0_3",
             dot_name: "box.dot",
-            numerator: "edges[0][0]**2 * edges[1][0] * edges[3][0]**3",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_HIGH_CONTACT_C,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1047,7 +1228,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "normal_box_cff_ltd_high_contact_0_0_3_3",
             dot_name: "box.dot",
-            numerator: "edges[2][0]**3 * edges[3][0]**3",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_HIGH_CONTACT_D,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1087,7 +1268,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_repeated_quadratic_bounds",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0]**2 * edges[1][0] * edges[2][0] * edges[3][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_QUADRATIC,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1097,7 +1278,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_single_cubic_nonrepeated_with_repeated_spectators",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0]**3 * edges[1][0] * edges[2][0] * edges[3][0]",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_CUBIC_SPECTATOR,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1107,7 +1288,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_unsplit_repeated_higher_bounds",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0] * edges[1][0] * edges[3][0]**4",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_REPEATED_HIGH,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1117,7 +1298,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_repeated_quintic",
             dot_name: "box_pow3.dot",
-            numerator: "edges[3][0]**5",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_REPEATED_QUINTIC,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1127,7 +1308,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_mixed_quintic",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0]**2 * edges[1][0] * edges[2][0] * edges[3][0]**5",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_MIXED_QUINTIC,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1157,7 +1338,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_ambiguous_orientation_labels",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0] * edges[1][0]**2 * edges[2][0]**2 * edges[3][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_AMBIGUOUS,
             seed: 1337,
             compare: ProbeComparison::BuildOnly,
@@ -1167,7 +1348,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_uniform_beyond_quadratic_m_1",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0] * edges[1][0] * edges[3][0]**4",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_REPEATED_HIGH,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1177,7 +1358,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_uniform_beyond_quadratic_m_minus_2",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0] * edges[1][0] * edges[3][0]**4",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_REPEATED_HIGH,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1187,7 +1368,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "box_pow3_uniform_all_m_2_75",
             dot_name: "box_pow3.dot",
-            numerator: "edges[0][0]**2 * edges[1][0] * edges[2][0] * edges[3][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_BOX_POW3_QUADRATIC,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1217,7 +1398,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "sunrise_pow4_quadratic_multiloop",
             dot_name: "sunrise_pow4.dot",
-            numerator: "edges[0][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_SUNRISE_QUADRATIC_0,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1227,7 +1408,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "sunrise_pow4_free_lower_sector_quintic",
             dot_name: "sunrise_pow4.dot",
-            numerator: "edges[2][0]**5",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_SUNRISE_QUINTIC_2,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1237,7 +1418,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "sunrise_pow4_repeated_channel_cubic_pair",
             dot_name: "sunrise_pow4.dot",
-            numerator: "edges[2][0]**3 * edges[3][0]**3",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_SUNRISE_CUBIC_PAIR,
             seed: 123,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1257,7 +1438,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "iterated_sandwiched_quadratic_combo",
             dot_name: "proper_iterated_sandwiched_bubble.dot",
-            numerator: "edges[0][0]**2 * edges[1][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_ITER_QUADRATIC_COMBO,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1267,7 +1448,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "iterated_sandwiched_cubic_linear",
             dot_name: "proper_iterated_sandwiched_bubble.dot",
-            numerator: "edges[0][0]**3 * edges[1][0]",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_ITER_CUBIC_LINEAR,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1277,7 +1458,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "iterated_sandwiched_cubic_pair",
             dot_name: "proper_iterated_sandwiched_bubble.dot",
-            numerator: "edges[1][0]**3 * edges[3][0]**3",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_ITER_CUBIC_PAIR,
             seed: 123,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1307,7 +1488,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "kite_nested_high_repeated_build",
             dot_name: "kite_nested_repeats.dot",
-            numerator: "edges[0][0]**5",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_KITE_NESTED_HIGH,
             seed: 1337,
             compare: ProbeComparison::BuildOnly,
@@ -1327,7 +1508,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "kite_sandwich_higher_power_combo",
             dot_name: "kite_sandwich_repeats.dot",
-            numerator: "edges[0][0]**4 * edges[5][0]**3",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_KITE_SANDWICH_HIGH,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1357,7 +1538,7 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
         ProbeCase {
             name: "four_loop_stress_quadratic",
             dot_name: "four_loop_stress.dot",
-            numerator: "edges[0][0]**2 * edges[1][0]**2",
+            numerator: DENSE_BOUNDS_NUMERATOR,
             bounds: BOUNDS_FOUR_LOOP_QUADRATIC,
             seed: 1337,
             compare: ProbeComparison::CffLtd { tolerance: 1.0e-8 },
@@ -1385,14 +1566,67 @@ fn old_python_probe_cases() -> Vec<ProbeCase> {
 fn local_edge_energy_monomial(bounds: &[(usize, usize)]) -> String {
     let numerator = bounds
         .iter()
-        .filter(|(_, power)| *power > 0)
-        .map(|(edge_id, power)| format!("edges[{edge_id}][0]**{power}"))
+        .flat_map(|(edge_id, power)| {
+            (0..*power).map(move |power_index| {
+                format!(
+                    "dot(edges[{edge_id}], ext[{}])",
+                    (edge_id + power_index) % 4
+                )
+            })
+        })
         .join(" * ");
     if numerator.is_empty() {
         "1".to_string()
     } else {
         numerator
     }
+}
+
+fn local_loop_energy_monomial(loop_id: usize, power: usize, external_count: usize) -> String {
+    assert!(
+        external_count > 0,
+        "dense loop-energy numerator construction needs at least one external momentum"
+    );
+    (0..power)
+        .map(|power_index| {
+            format!(
+                "dot(loops[{loop_id}], ext[{}])",
+                (loop_id + power_index) % external_count
+            )
+        })
+        .join(" * ")
+}
+
+fn dense_probe_numerator(
+    numerator: &str,
+    bounds: &[(usize, usize)],
+    parsed: &ParsedGraph,
+) -> Result<String> {
+    if bounds.is_empty()
+        || (numerator != DENSE_BOUNDS_NUMERATOR
+            && numerator != DENSE_LOOP0_BOUNDS_NUMERATOR
+            && !numerator.contains("[0]"))
+        || parsed.external_names.is_empty()
+    {
+        return Ok(numerator.to_string());
+    }
+    if numerator == DENSE_LOOP0_BOUNDS_NUMERATOR || numerator.contains("loops[0][0]") {
+        let degree = bounds
+            .iter()
+            .find_map(|(edge_id, degree)| (*edge_id == 0).then_some(*degree))
+            .unwrap_or(0);
+        return Ok(local_loop_energy_monomial(
+            0,
+            degree,
+            parsed.external_names.len(),
+        ));
+    }
+    auto_numerator_expr_for_bounds(
+        parsed.external_names.len(),
+        bounds,
+        parsed.internal_edges.len(),
+    )
+    .map_err(Into::into)
 }
 
 fn run_probe_case(cli: &gammaloop_integration_tests::CLIState, case: ProbeCase) -> ProbeCaseReport {
@@ -1454,6 +1688,7 @@ fn run_probe_case_parts(
         let process_name = imported_process_name(dot_name)?;
         let graph = imported_graph_from_cli(cli, process_name, "default", 0)?;
         let parsed = graph.to_three_d_parsed_graph()?;
+        let numerator = dense_probe_numerator(&numerator, &bounds, &parsed)?;
         if !bounds.is_empty() && parsed.external_names.is_empty() {
             // Keep this diagnostic explicit for vacuum topologies: the old Python helper used
             // energy monomials, while the automatic numerator helper requires an external vector.
@@ -1573,6 +1808,14 @@ fn source_internal_edges(graph: &Graph) -> Vec<usize> {
         .underlying
         .iter_edges()
         .filter_map(|(pair, edge_id, _)| pair.is_paired().then_some(edge_id.0))
+        .collect()
+}
+
+fn source_external_edges(graph: &Graph) -> Vec<usize> {
+    graph
+        .underlying
+        .iter_edges()
+        .filter_map(|(pair, edge_id, _)| (!pair.is_paired()).then_some(edge_id.0))
         .collect()
 }
 
@@ -1830,10 +2073,15 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
         )?;
         let bootstrap_graph = imported_graph_from_cli(&bootstrap, "bootstrap", "default", 0)?;
         let bootstrap_source_internal_edges = source_internal_edges(bootstrap_graph);
+        let bootstrap_source_external_edges = source_external_edges(bootstrap_graph);
         let numerator = if let Some((loop_id, degree)) = lmb_bound {
-            loop_energy_power_numerator(loop_id, degree)
+            dense_loop_energy_power_numerator(loop_id, degree, &bootstrap_source_external_edges)
         } else {
-            edge_energy_power_numerator(&bootstrap_source_internal_edges, &local_bounds)
+            dense_edge_energy_power_numerator(
+                &bootstrap_source_internal_edges,
+                &bootstrap_source_external_edges,
+                &local_bounds,
+            )
         };
         clean_test(&bootstrap.cli_settings.state.folder);
 
@@ -1880,6 +2128,202 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
         clean_test(&cli.cli_settings.state.folder);
     }
 
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_box_pow3_high_power_agrees_for_all_numerator_sample_normalizations() -> Result<()> {
+    let test_name = "threedreps_box_pow3_high_power_sample_normalizations";
+    clean_test(get_tests_workspace_path().join(test_name));
+    let bootstrap = import_threedrep_graph(
+        &format!("{test_name}_bootstrap"),
+        &gammaloop_threedreps_dot_path("box_pow3.dot"),
+        "bootstrap",
+    )?;
+    let bootstrap_graph = imported_graph_from_cli(&bootstrap, "bootstrap", "default", 0)?;
+    let source_internal_edges = source_internal_edges(bootstrap_graph);
+    let source_external_edges = source_external_edges(bootstrap_graph);
+    let numerator = dense_edge_energy_power_numerator(
+        &source_internal_edges,
+        &source_external_edges,
+        BOUNDS_BOX_POW3_REPEATED_HIGH,
+    );
+    clean_test(&bootstrap.cli_settings.state.folder);
+
+    let dot_path = dot_with_global_numerator(test_name, "box_pow3.dot", &numerator)?;
+    let process_name = "threedreps_box_pow3_high_power_norms";
+    let state_path = get_tests_workspace_path().join(test_name).join("state");
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command("set default-runtime kv general.numerator_interpolation_scale=2.0")?;
+    set_threedrep_compile_backend(&mut cli, None)?;
+    cli.run_command(&format!(
+        "import graphs {} -p {process_name} -i default -o",
+        dot_path.display()
+    ))?;
+
+    let modes = [
+        ("none", "NeverM"),
+        ("beyond_quadratic", "MForBeyondQuadraticOnly"),
+        ("all", "MForAll"),
+    ];
+    let mut cff_reference = None;
+    for (mode, expected_manifest_mode) in modes {
+        set_threedrep_sampling_mode(&mut cli, mode)?;
+        let mode_workspace = workspace_path.join(format!("mode_{mode}"));
+        let manifest = run_threedrep_test_cff_ltd_manifest(
+            &mut cli,
+            &mode_workspace,
+            process_name,
+            "Double",
+            23,
+            0.25,
+        )?;
+        assert_eq!(
+            manifest["settings"]["numerator_samples_normalization"].as_str(),
+            Some(expected_manifest_mode),
+            "test-cff-ltd should use the active global numerator normalization mode"
+        );
+        assert_eq!(
+            manifest["mass_shift_start"].as_f64(),
+            Some(0.25),
+            "default pure-LTD mass shift should start at 1.0 * --scale"
+        );
+        assert_eq!(
+            serde_json::from_value::<Vec<(usize, usize)>>(
+                manifest["override_energy_degree_bounds"].clone()
+            )?,
+            Vec::<(usize, usize)>::new(),
+            "the high-power bounds should come from automatic numerator analysis"
+        );
+        let local_bound_map = BOUNDS_BOX_POW3_REPEATED_HIGH
+            .iter()
+            .copied()
+            .collect::<BTreeMap<_, _>>();
+        let expected_automatic_bounds = source_internal_edges
+            .iter()
+            .enumerate()
+            .map(|(local_edge_id, source_edge_id)| {
+                (
+                    *source_edge_id,
+                    local_bound_map.get(&local_edge_id).copied().unwrap_or(0),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            serde_json::from_value::<Vec<(usize, usize)>>(
+                manifest["automatic_energy_degree_bounds"].clone()
+            )?,
+            expected_automatic_bounds,
+            "dense four-vector numerator should reconstruct the requested energy caps"
+        );
+        let cff_value = direct_manifest_evaluation_value(&manifest, "cff")?;
+        let ltd_value = direct_manifest_evaluation_value(&manifest, "ltd")?;
+        assert_manifest_direct_values_agree(
+            &ltd_value,
+            &cff_value,
+            &format!("LTD vs CFF for normalization mode {mode}"),
+            1.0e-7,
+        );
+        if let Some(reference) = &cff_reference {
+            assert_manifest_direct_values_agree(
+                &cff_value,
+                reference,
+                &format!("CFF value for normalization mode {mode} vs baseline"),
+                1.0e-8,
+            );
+        } else {
+            cff_reference = Some(cff_value);
+        }
+    }
+
+    clean_test(get_tests_workspace_path().join(test_name));
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_box_pow3_high_power_compiled_double_backends_agree_with_eager() -> Result<()> {
+    let test_name = "threedreps_box_pow3_high_power_compiled_backends";
+    clean_test(get_tests_workspace_path().join(test_name));
+    let bootstrap = import_threedrep_graph(
+        &format!("{test_name}_bootstrap"),
+        &gammaloop_threedreps_dot_path("box_pow3.dot"),
+        "bootstrap",
+    )?;
+    let bootstrap_graph = imported_graph_from_cli(&bootstrap, "bootstrap", "default", 0)?;
+    let source_internal_edges = source_internal_edges(bootstrap_graph);
+    let source_external_edges = source_external_edges(bootstrap_graph);
+    let numerator = dense_edge_energy_power_numerator(
+        &source_internal_edges,
+        &source_external_edges,
+        BOUNDS_BOX_POW3_REPEATED_HIGH,
+    );
+    clean_test(&bootstrap.cli_settings.state.folder);
+
+    let dot_path = dot_with_global_numerator(test_name, "box_pow3.dot", &numerator)?;
+    let process_name = "threedreps_box_pow3_high_power_backends";
+    let state_path = get_tests_workspace_path().join(test_name).join("state");
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command("set default-runtime kv general.numerator_interpolation_scale=2.0")?;
+    set_threedrep_sampling_mode(&mut cli, "all")?;
+    cli.run_command(&format!(
+        "import graphs {} -p {process_name} -i default -o",
+        dot_path.display()
+    ))?;
+
+    set_threedrep_compile_backend(&mut cli, None)?;
+    let eager_manifest = run_threedrep_test_cff_ltd_manifest(
+        &mut cli,
+        &workspace_path.join("backend_eager"),
+        process_name,
+        "Double",
+        23,
+        0.25,
+    )?;
+    assert_manifest_uses_backend(&eager_manifest, "eager", "eager baseline")?;
+    let eager_cff = direct_manifest_evaluation_value(&eager_manifest, "cff")?;
+    let eager_ltd = direct_manifest_evaluation_value(&eager_manifest, "ltd")?;
+    assert_manifest_direct_values_agree(&eager_ltd, &eager_cff, "eager LTD vs CFF", 1.0e-7);
+
+    for backend in ["symjit", "assembly"] {
+        set_threedrep_compile_backend(&mut cli, Some(backend))?;
+        let manifest = run_threedrep_test_cff_ltd_manifest(
+            &mut cli,
+            &workspace_path.join(format!("backend_{backend}")),
+            process_name,
+            "Double",
+            23,
+            0.25,
+        )?;
+        assert_manifest_uses_backend(&manifest, backend, backend)?;
+        let compiled_cff = direct_manifest_evaluation_value(&manifest, "cff")?;
+        let compiled_ltd = direct_manifest_evaluation_value(&manifest, "ltd")?;
+        assert_manifest_direct_values_agree(
+            &compiled_ltd,
+            &compiled_cff,
+            &format!("{backend} LTD vs CFF"),
+            1.0e-7,
+        );
+        assert_manifest_direct_values_agree(
+            &compiled_cff,
+            &eager_cff,
+            &format!("{backend} CFF vs eager CFF"),
+            1.0e-8,
+        );
+        assert!(
+            !compiled_cff.backend.is_empty(),
+            "compiled backend record should not be empty"
+        );
+    }
+
+    clean_test(get_tests_workspace_path().join(test_name));
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 

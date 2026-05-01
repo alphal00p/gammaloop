@@ -496,6 +496,7 @@ impl TestCffLtdStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestCffLtdCheckRecord {
     name: String,
+    evaluation_id: String,
     status: TestCffLtdStatus,
     lhs: String,
     rhs: String,
@@ -1075,7 +1076,7 @@ impl TestCffLtd {
             self.scale,
             CliNumeratorSamplesNormalization::resolve_from_global(global_cli_settings),
         )?;
-        let mass_shift_start = self.mass_shift.unwrap_or(1.0e-2 * self.scale);
+        let mass_shift_start = self.mass_shift.unwrap_or(self.scale);
 
         let cached_output = if !self.clean && manifest_path.exists() {
             let text = fs::read_to_string(&manifest_path)
@@ -1570,21 +1571,6 @@ fn format_f64_full(value: f64) -> String {
     }
 }
 
-fn format_f64_significant(value: f64, significant_digits: usize) -> String {
-    if value.is_nan() {
-        "NaN".to_string()
-    } else if value.is_infinite() {
-        if value.is_sign_negative() {
-            "-inf".to_string()
-        } else {
-            "+inf".to_string()
-        }
-    } else {
-        let decimals = significant_digits.saturating_sub(1);
-        format!("{value:+.decimals$e}")
-    }
-}
-
 fn format_complex_full(value: &Complex<F<f64>>) -> (String, String, String) {
     let re = format_f64_full(value.re.0);
     let im = format_f64_full(value.im.0);
@@ -1620,6 +1606,326 @@ const DIRECT_ABSOLUTE_TOLERANCE: f64 = 1.0e-12;
 const MASS_SHIFT_RELATIVE_TOLERANCE: f64 = 1.0e-2;
 const MASS_SHIFT_ABSOLUTE_TOLERANCE: f64 = 1.0e-8;
 
+#[derive(Clone, Debug)]
+struct DecimalValue {
+    sign: i8,
+    digits: Vec<u8>,
+    exponent: i32,
+}
+
+impl DecimalValue {
+    fn parse(input: &str) -> Option<Self> {
+        let mut value = input.trim();
+        if value.eq_ignore_ascii_case("nan")
+            || value.eq_ignore_ascii_case("inf")
+            || value.eq_ignore_ascii_case("+inf")
+            || value.eq_ignore_ascii_case("-inf")
+        {
+            return None;
+        }
+
+        let mut sign = 1;
+        if let Some(stripped) = value.strip_prefix('-') {
+            sign = -1;
+            value = stripped;
+        } else if let Some(stripped) = value.strip_prefix('+') {
+            value = stripped;
+        }
+
+        let (mantissa, parsed_exponent) =
+            if let Some((mantissa, exponent)) = value.split_once(['e', 'E']) {
+                (mantissa, exponent.parse::<i32>().ok()?)
+            } else {
+                (value, 0)
+            };
+        let mut exponent = parsed_exponent;
+        let mut digits = Vec::new();
+        let mut fractional_digits = 0usize;
+        let mut past_decimal_point = false;
+        for ch in mantissa.chars() {
+            match ch {
+                '0'..='9' => {
+                    digits.push(ch as u8 - b'0');
+                    if past_decimal_point {
+                        fractional_digits += 1;
+                    }
+                }
+                '.' if !past_decimal_point => past_decimal_point = true,
+                _ => return None,
+            }
+        }
+        exponent -= fractional_digits as i32;
+        Some(Self::new(sign, digits, exponent))
+    }
+
+    fn new(sign: i8, mut digits: Vec<u8>, mut exponent: i32) -> Self {
+        let first_nonzero = digits.iter().position(|digit| *digit != 0);
+        let Some(first_nonzero) = first_nonzero else {
+            return Self {
+                sign: 0,
+                digits: Vec::new(),
+                exponent: 0,
+            };
+        };
+        if first_nonzero > 0 {
+            digits.drain(0..first_nonzero);
+        }
+        while digits.last() == Some(&0) {
+            digits.pop();
+            exponent += 1;
+        }
+        Self {
+            sign: if sign < 0 { -1 } else { 1 },
+            digits,
+            exponent,
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.sign == 0
+    }
+
+    fn negated(&self) -> Self {
+        let mut value = self.clone();
+        value.sign = -value.sign;
+        value
+    }
+
+    fn abs_scientific(&self) -> ScientificValue {
+        if self.is_zero() {
+            return ScientificValue::zero();
+        }
+        let take = self.digits.len().min(18);
+        let leading = self
+            .digits
+            .iter()
+            .take(take)
+            .fold(0_u64, |acc, digit| acc * 10 + u64::from(*digit));
+        let mantissa = leading as f64 / 10_f64.powi(take.saturating_sub(1) as i32);
+        ScientificValue::new(mantissa, self.exponent + self.digits.len() as i32 - 1)
+    }
+
+    fn difference(lhs: &Self, rhs: &Self) -> Self {
+        lhs.signed_add(&rhs.negated())
+    }
+
+    fn signed_add(&self, rhs: &Self) -> Self {
+        if self.is_zero() {
+            return rhs.clone();
+        }
+        if rhs.is_zero() {
+            return self.clone();
+        }
+
+        let exponent = self.exponent.min(rhs.exponent);
+        let lhs_digits = self.aligned_digits(exponent);
+        let rhs_digits = rhs.aligned_digits(exponent);
+        if self.sign == rhs.sign {
+            return Self::new(
+                self.sign,
+                add_decimal_digits(&lhs_digits, &rhs_digits),
+                exponent,
+            );
+        }
+
+        match compare_decimal_digits(&lhs_digits, &rhs_digits) {
+            std::cmp::Ordering::Greater => Self::new(
+                self.sign,
+                subtract_decimal_digits(&lhs_digits, &rhs_digits),
+                exponent,
+            ),
+            std::cmp::Ordering::Less => Self::new(
+                rhs.sign,
+                subtract_decimal_digits(&rhs_digits, &lhs_digits),
+                exponent,
+            ),
+            std::cmp::Ordering::Equal => Self::new(0, Vec::new(), 0),
+        }
+    }
+
+    fn aligned_digits(&self, target_exponent: i32) -> Vec<u8> {
+        let mut digits = self.digits.clone();
+        digits.extend(std::iter::repeat_n(
+            0,
+            self.exponent.saturating_sub(target_exponent) as usize,
+        ));
+        digits
+    }
+}
+
+fn compare_decimal_digits(lhs: &[u8], rhs: &[u8]) -> std::cmp::Ordering {
+    let lhs_first = lhs
+        .iter()
+        .position(|digit| *digit != 0)
+        .unwrap_or(lhs.len());
+    let rhs_first = rhs
+        .iter()
+        .position(|digit| *digit != 0)
+        .unwrap_or(rhs.len());
+    let lhs = &lhs[lhs_first..];
+    let rhs = &rhs[rhs_first..];
+    lhs.len().cmp(&rhs.len()).then_with(|| lhs.cmp(rhs))
+}
+
+fn add_decimal_digits(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut carry = 0_u8;
+    let mut lhs_iter = lhs.iter().rev();
+    let mut rhs_iter = rhs.iter().rev();
+    loop {
+        let lhs_digit = lhs_iter.next().copied();
+        let rhs_digit = rhs_iter.next().copied();
+        if lhs_digit.is_none() && rhs_digit.is_none() && carry == 0 {
+            break;
+        }
+        let sum = lhs_digit.unwrap_or(0) + rhs_digit.unwrap_or(0) + carry;
+        out.push(sum % 10);
+        carry = sum / 10;
+    }
+    out.reverse();
+    out
+}
+
+fn subtract_decimal_digits(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut borrow = 0_i8;
+    let mut lhs_iter = lhs.iter().rev();
+    let mut rhs_iter = rhs.iter().rev();
+    loop {
+        let Some(lhs_digit) = lhs_iter.next().copied() else {
+            break;
+        };
+        let mut digit = lhs_digit as i8 - borrow - rhs_iter.next().copied().unwrap_or(0) as i8;
+        if digit < 0 {
+            digit += 10;
+            borrow = 1;
+        } else {
+            borrow = 0;
+        }
+        out.push(digit as u8);
+    }
+    out.reverse();
+    out
+}
+
+#[derive(Clone, Debug)]
+struct EvaluationValueDecimal {
+    re: DecimalValue,
+    im: DecimalValue,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ScientificValue {
+    mantissa: f64,
+    exponent: i32,
+}
+
+impl ScientificValue {
+    fn zero() -> Self {
+        Self {
+            mantissa: 0.0,
+            exponent: 0,
+        }
+    }
+
+    fn new(mantissa: f64, exponent: i32) -> Self {
+        if mantissa == 0.0 || !mantissa.is_finite() {
+            return Self::zero();
+        }
+        let mut mantissa = mantissa.abs();
+        let mut exponent = exponent;
+        while mantissa >= 10.0 {
+            mantissa /= 10.0;
+            exponent += 1;
+        }
+        while mantissa < 1.0 {
+            mantissa *= 10.0;
+            exponent -= 1;
+        }
+        Self { mantissa, exponent }
+    }
+
+    fn from_f64(value: f64) -> Self {
+        if value == 0.0 || !value.is_finite() {
+            return Self::zero();
+        }
+        let exponent = value.abs().log10().floor() as i32;
+        Self::new(value.abs() / 10_f64.powi(exponent), exponent)
+    }
+
+    fn is_zero(self) -> bool {
+        self.mantissa == 0.0
+    }
+
+    fn hypot(lhs: Self, rhs: Self) -> Self {
+        if lhs.is_zero() {
+            return rhs;
+        }
+        if rhs.is_zero() {
+            return lhs;
+        }
+        let exponent = lhs.exponent.max(rhs.exponent);
+        let lhs_scaled = lhs.mantissa * 10_f64.powi(lhs.exponent - exponent);
+        let rhs_scaled = rhs.mantissa * 10_f64.powi(rhs.exponent - exponent);
+        Self::new(lhs_scaled.hypot(rhs_scaled), exponent)
+    }
+
+    fn ratio(numerator: Self, denominator: Self) -> Self {
+        if numerator.is_zero() {
+            return Self::zero();
+        }
+        if denominator.is_zero() {
+            return Self::new(f64::INFINITY, i32::MAX);
+        }
+        Self::new(
+            numerator.mantissa / denominator.mantissa,
+            numerator.exponent - denominator.exponent,
+        )
+    }
+
+    fn max(self, rhs: Self) -> Self {
+        if compare_scientific(self, rhs) == std::cmp::Ordering::Less {
+            rhs
+        } else {
+            self
+        }
+    }
+
+    fn leq_f64(self, rhs: f64) -> bool {
+        compare_scientific(self, Self::from_f64(rhs)) != std::cmp::Ordering::Greater
+    }
+}
+
+fn compare_scientific(lhs: ScientificValue, rhs: ScientificValue) -> std::cmp::Ordering {
+    if lhs.is_zero() && rhs.is_zero() {
+        return std::cmp::Ordering::Equal;
+    }
+    if lhs.is_zero() {
+        return std::cmp::Ordering::Less;
+    }
+    if rhs.is_zero() {
+        return std::cmp::Ordering::Greater;
+    }
+    lhs.exponent
+        .cmp(&rhs.exponent)
+        .then_with(|| lhs.mantissa.total_cmp(&rhs.mantissa))
+}
+
+fn format_scientific_significant(
+    value: Option<ScientificValue>,
+    significant_digits: usize,
+) -> String {
+    let Some(value) = value else {
+        return "-".to_string();
+    };
+    if value.is_zero() {
+        let decimals = significant_digits.saturating_sub(1);
+        return format!("{:+.decimals$e}", 0.0);
+    }
+    let decimals = significant_digits.saturating_sub(1);
+    format!("{:+.decimals$}e{}", value.mantissa, value.exponent)
+}
+
 #[derive(Clone)]
 struct ComparableEvaluation {
     id: usize,
@@ -1628,28 +1934,31 @@ struct ComparableEvaluation {
     scale_mode: Option<three_dimensional_reps::NumeratorSamplingScaleMode>,
     numerator_interpolation_scale: f64,
     mass_shift: String,
-    value: (f64, f64),
+    value: EvaluationValueDecimal,
     value_text: String,
 }
 
-#[derive(Clone, Copy)]
 struct TestCffLtdDistance {
-    abs_diff: f64,
-    rel_diff: f64,
-    tolerance: f64,
+    abs_diff: Option<ScientificValue>,
+    rel_diff: Option<ScientificValue>,
+    tolerance: Option<ScientificValue>,
 }
 
 impl TestCffLtdDistance {
-    fn new(abs_diff: f64, rel_diff: f64, tolerance: f64) -> Self {
+    fn new(abs_diff: ScientificValue, rel_diff: ScientificValue, tolerance: f64) -> Self {
         Self {
-            abs_diff,
-            rel_diff,
-            tolerance,
+            abs_diff: Some(abs_diff),
+            rel_diff: Some(rel_diff),
+            tolerance: Some(ScientificValue::from_f64(tolerance)),
         }
     }
 
     fn undefined() -> Self {
-        Self::new(f64::NAN, f64::NAN, f64::NAN)
+        Self {
+            abs_diff: None,
+            rel_diff: None,
+            tolerance: None,
+        }
     }
 }
 
@@ -1678,6 +1987,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         if case.generation_status != "ok" {
             checks.push(test_cff_ltd_check(
                 format!("{} generation", case.name),
+                None,
                 TestCffLtdStatus::Fail,
                 "-",
                 "-",
@@ -1690,6 +2000,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         if !case.evaluator_build_status.starts_with("ok") {
             checks.push(test_cff_ltd_check(
                 format!("{} evaluator", case.name),
+                None,
                 TestCffLtdStatus::Fail,
                 "-",
                 "-",
@@ -1702,6 +2013,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
             if evaluation.status != "ok" {
                 checks.push(test_cff_ltd_check(
                     format!("{} evaluation {}", case.name, evaluation.mass_shift),
+                    Some(evaluation.id),
                     TestCffLtdStatus::Fail,
                     &evaluation.value,
                     "-",
@@ -1723,6 +2035,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
     let Some(baseline) = baseline else {
         checks.push(test_cff_ltd_check(
             "cff reference".to_string(),
+            None,
             TestCffLtdStatus::Fail,
             "-",
             "-",
@@ -1736,9 +2049,9 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         if candidate.label() == baseline.label() {
             continue;
         }
-        let (abs_diff, rel_diff) = complex_distance(candidate.value, baseline.value);
-        let within_tolerance =
-            abs_diff <= DIRECT_ABSOLUTE_TOLERANCE || rel_diff <= DIRECT_RELATIVE_TOLERANCE;
+        let (abs_diff, rel_diff) = complex_distance(&candidate.value, &baseline.value);
+        let within_tolerance = abs_diff.leq_f64(DIRECT_ABSOLUTE_TOLERANCE)
+            || rel_diff.leq_f64(DIRECT_RELATIVE_TOLERANCE);
         let exactly_identical = candidate.representation != baseline.representation
             && candidate.value_text == baseline.value_text;
         let status = if within_tolerance && !exactly_identical {
@@ -1755,6 +2068,7 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         };
         checks.push(test_cff_ltd_check(
             format!("direct {} vs #{}", candidate.label(), baseline.id),
+            Some(candidate.id),
             status,
             &candidate.value_text,
             &baseline.value_text,
@@ -1768,26 +2082,21 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
             let best = group
                 .iter()
                 .map(|evaluation| {
-                    let (abs_diff, rel_diff) = complex_distance(evaluation.value, baseline.value);
+                    let (abs_diff, rel_diff) = complex_distance(&evaluation.value, &baseline.value);
                     (evaluation, abs_diff, rel_diff)
                 })
                 .min_by(|(_, lhs_abs, lhs_rel), (_, rhs_abs, rhs_rel)| {
-                    lhs_rel
-                        .partial_cmp(rhs_rel)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| {
-                            lhs_abs
-                                .partial_cmp(rhs_abs)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        })
+                    compare_scientific(*lhs_rel, *rhs_rel)
+                        .then_with(|| compare_scientific(*lhs_abs, *rhs_abs))
                 });
             let Some((best, abs_diff, rel_diff)) = best else {
                 continue;
             };
-            let within_tolerance = abs_diff <= MASS_SHIFT_ABSOLUTE_TOLERANCE
-                || rel_diff <= MASS_SHIFT_RELATIVE_TOLERANCE;
+            let within_tolerance = abs_diff.leq_f64(MASS_SHIFT_ABSOLUTE_TOLERANCE)
+                || rel_diff.leq_f64(MASS_SHIFT_RELATIVE_TOLERANCE);
             checks.push(test_cff_ltd_check(
                 format!("mass-shift {} vs #{}", best.label(), baseline.id),
+                Some(best.id),
                 if within_tolerance {
                     TestCffLtdStatus::Success
                 } else {
@@ -1822,9 +2131,6 @@ fn comparable_evaluations(
                     return None;
                 }
                 let value = parse_evaluation_value(evaluation)?;
-                if !value.0.is_finite() || !value.1.is_finite() {
-                    return None;
-                }
                 Some(ComparableEvaluation {
                     id: evaluation.id,
                     case_name: case.name.clone(),
@@ -1853,27 +2159,32 @@ fn mass_shift_groups(evaluations: &[ComparableEvaluation]) -> Vec<Vec<Comparable
     groups.into_values().collect()
 }
 
-fn parse_evaluation_value(evaluation: &ThreeDrepEvaluationRecord) -> Option<(f64, f64)> {
-    let re = evaluation.value_re.parse::<f64>().ok()?;
-    let im = evaluation.value_im.parse::<f64>().ok()?;
-    Some((re, im))
+fn parse_evaluation_value(
+    evaluation: &ThreeDrepEvaluationRecord,
+) -> Option<EvaluationValueDecimal> {
+    Some(EvaluationValueDecimal {
+        re: DecimalValue::parse(&evaluation.value_re)?,
+        im: DecimalValue::parse(&evaluation.value_im)?,
+    })
 }
 
-fn complex_distance(lhs: (f64, f64), rhs: (f64, f64)) -> (f64, f64) {
-    let re_diff = lhs.0 - rhs.0;
-    let im_diff = lhs.1 - rhs.1;
-    let abs_diff = re_diff.hypot(im_diff);
-    let scale = lhs.0.hypot(lhs.1).max(rhs.0.hypot(rhs.1));
-    let scale = if scale > 0.0 {
-        scale
-    } else {
-        f64::MIN_POSITIVE
-    };
-    (abs_diff, abs_diff / scale)
+fn complex_distance(
+    lhs: &EvaluationValueDecimal,
+    rhs: &EvaluationValueDecimal,
+) -> (ScientificValue, ScientificValue) {
+    let re_diff = DecimalValue::difference(&lhs.re, &rhs.re).abs_scientific();
+    let im_diff = DecimalValue::difference(&lhs.im, &rhs.im).abs_scientific();
+    let abs_diff = ScientificValue::hypot(re_diff, im_diff);
+    let lhs_abs = ScientificValue::hypot(lhs.re.abs_scientific(), lhs.im.abs_scientific());
+    let rhs_abs = ScientificValue::hypot(rhs.re.abs_scientific(), rhs.im.abs_scientific());
+    let scale = lhs_abs.max(rhs_abs);
+    let rel_diff = ScientificValue::ratio(abs_diff, scale);
+    (abs_diff, rel_diff)
 }
 
 fn test_cff_ltd_check(
     name: String,
+    evaluation_id: Option<usize>,
     status: TestCffLtdStatus,
     lhs: impl AsRef<str>,
     rhs: impl AsRef<str>,
@@ -1882,12 +2193,15 @@ fn test_cff_ltd_check(
 ) -> TestCffLtdCheckRecord {
     TestCffLtdCheckRecord {
         name,
+        evaluation_id: evaluation_id
+            .map(|id| format!("#{id}"))
+            .unwrap_or_else(|| "-".to_string()),
         status,
         lhs: lhs.as_ref().to_string(),
         rhs: rhs.as_ref().to_string(),
-        abs_diff: format_f64_significant(distance.abs_diff, 3),
-        rel_diff: format_f64_significant(distance.rel_diff, 3),
-        tolerance: format_f64_significant(distance.tolerance, 3),
+        abs_diff: format_scientific_significant(distance.abs_diff, 3),
+        rel_diff: format_scientific_significant(distance.rel_diff, 3),
+        tolerance: format_scientific_significant(distance.tolerance, 3),
         message: message.as_ref().to_string(),
     }
 }
@@ -2484,27 +2798,20 @@ fn evaluation_delta_cell(
     let Some(value) = parse_evaluation_value(evaluation) else {
         return color_text("-", Color::Yellow);
     };
-    let value_abs = value.0.hypot(value.1);
-    let reference_abs = reference.0.hypot(reference.1);
-    let delta = (value_abs - reference_abs).abs()
-        / if reference_abs > 0.0 {
-            reference_abs
-        } else {
-            f64::MIN_POSITIVE
-        };
     if evaluation.representation == Some(RepresentationMode::Cff)
         && evaluation.mass_shift_values.is_empty()
     {
         return color_text("ref", Color::Green);
     }
+    let (_, delta) = complex_distance(&value, &reference);
     let threshold = if evaluation.mass_shift_values.is_empty() {
         DIRECT_RELATIVE_TOLERANCE
     } else {
         MASS_SHIFT_RELATIVE_TOLERANCE
     };
     color_text(
-        format!("{delta:.1e}"),
-        if delta <= threshold {
+        format_scientific_significant(Some(delta), 2),
+        if delta.leq_f64(threshold) {
             Color::Green
         } else {
             Color::Red
@@ -2724,7 +3031,7 @@ fn render_test_cff_ltd_summary(output: &TestCffLtdOutput, manifest_path: &Path) 
 
     let mut check_table = Builder::new();
     check_table.push_record(vec![
-        table_header("check"),
+        table_header("evaluation id"),
         table_header("status"),
         table_header("abs diff"),
         table_header("rel diff"),
@@ -2733,7 +3040,7 @@ fn render_test_cff_ltd_summary(output: &TestCffLtdOutput, manifest_path: &Path) 
     ]);
     for check in &output.verdict.checks {
         check_table.push_record(vec![
-            color_text(&check.name, Color::Blue),
+            color_text(&check.evaluation_id, Color::Blue),
             status_text(check.status.label()),
             color_text(&check.abs_diff, Color::Yellow),
             color_text(&check.rel_diff, Color::Yellow),

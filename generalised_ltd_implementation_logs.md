@@ -2998,3 +2998,161 @@ passed
 just test_gammaloop
 1031 tests run: 1031 passed, 128 skipped
 ```
+
+## 2026-05-01: 3Drep display polish and stronger CLI comparison coverage
+
+Follow-up request:
+
+- shorten the `den tree` preview in `3Drep build` to 30 visible characters and
+  keep the truncation ellipsis in normal terminal color,
+- shorten verbose origin labels with UTF-8 beta/gamma and compact LTD
+  abbreviations,
+- spell out the `orientation` table header,
+- rename the final comparison table's `check` column to `evaluation id` and
+  show only `#<id>`,
+- change the default pure-LTD split-mass start to `1.0 * --scale`,
+- add CLI tests for the most demanding repeated-propagator/high-energy-power
+  case across all numerator-sample normalization modes and across eager,
+  symjit, and assembly double evaluators,
+- extend the scalar-topology demo card with Double, Quad, ArbPrec, symjit, and
+  assembly examples for `evaluate` and `test-cff-ltd`.
+
+Implementation notes:
+
+- Updated the colored 3D expression display code so the denominator tree is
+  truncated at 30 visible characters and resets ANSI styling before appending
+  `...`.
+- Added compact origin rendering (`ltd_confluent` to `ltd_cflt`,
+  `bounded_degree` to `bd`, and `beta`/`gamma` to `β`/`γ`) while keeping the
+  raw origin data unchanged in the serialized expression.
+- Added test helpers that run `3Drep test-cff-ltd` through a real CLI session,
+  read the generated manifest, assert `SUCCESS`, check stable evaluation IDs,
+  parse direct CFF/LTD values, and compare complex values numerically.
+- Added one normalization-strategy test for `box_pow3` with a high-power
+  repeated-propagator numerator. It runs `never_M`,
+  `M_for_beyond_quadratic_only`, and `M_for_all`, confirms the global setting
+  reaches the command, verifies the default mass-shift start is exactly
+  `--scale`, and compares direct CFF/LTD values as well as CFF values across
+  strategies.
+- Added one compiled-backend test for the same case. It compares eager, symjit,
+  and assembly Double evaluations and asserts the compiled backends recorded in
+  the manifest match the requested backend.
+- Expanded `examples/cli/scalar_topologies/three_d_expr_demo.toml` to run the
+  same oriented-expression evaluation/comparison in Double, Quad, ArbPrec,
+  symjit Double, and assembly Double modes. The demo now uses `--scale 0.25`
+  so the new default `mass_shift_start = scale` remains a clean split-mass
+  diagnostic without producing a negative shifted mass in the first row.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs \
+  test_3d_reps::cli_box_pow3_high_power_agrees_for_all_numerator_sample_normalizations \
+  -- --nocapture --test-threads=1
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs \
+  test_3d_reps::cli_box_pow3_high_power_compiled_double_backends_agree_with_eager \
+  -- --nocapture --test-threads=1
+passed
+
+cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps:: \
+  -- --nocapture --test-threads=1
+10 passed, 0 failed, 1 ignored; generated matrix reported 310 ok, 0 failed, 310 total
+
+just build-cli
+passed
+
+./gammaloop --dev-optim ./examples/cli/scalar_topologies/three_d_expr_demo.toml run demo -c "quit -n"
+passed
+
+just clippy -- -D warnings
+passed
+
+just test_gammaloop
+1033 tests run: 1033 passed, 128 skipped
+```
+
+## 2026-05-01: Dense numerator probes and high-precision deltas
+
+Follow-up request:
+
+- confirm that multi-way tests use numerators matching the intended energy
+  powers,
+- make those numerators dense four-dimensional contractions rather than pure
+  temporal-component monomials,
+- compute `3Drep test-cff-ltd` deltas/differences without downcasting the
+  compared high-precision values to `f64`,
+- commit and push the accumulated changes.
+
+Implementation notes:
+
+- Reworked the imported-graph CLI test numerators used for automatic energy
+  power extraction. They now build explicit four-component Minkowski
+  contractions such as `Q(e,0) Q(p,0) - Q(e,1) Q(p,1) - ...`, so the temporal
+  component still drives the requested cap while the numerator depends on all
+  four components.
+- Added the analogous dense LMB numerator construction with
+  `K(loop,component)` contracted against an external-edge `Q`; this keeps the
+  LMB cap extraction path covered while avoiding evaluator-internal symbolic
+  indices that are not parameterized in the standalone diagnostic evaluator.
+- Updated the local old-Python parity harness so power-bound probe cases marked
+  by their bounds are evaluated with dense `dot(edges[i], ext[j])` or
+  `dot(loops[0], ext[j])` numerators. This keeps the intended energy caps but
+  avoids temporal-only local probe numerators for the non-vacuum cases.
+- Fixed automatic numerator energy cap extraction in `gammalooprs` so EMR
+  `Q(edge, energy-index)` factors only contribute caps for paired/internal
+  edges when the graph is available. External-edge `Q` factors used as dense
+  contraction partners no longer create invalid generation bounds.
+- Added a direct unit test for the new external-edge filtering behavior in the
+  energy-degree analyzer.
+- Replaced the `test-cff-ltd` comparison/delta path that parsed
+  `value_re/value_im` into `f64`. It now parses the formatted decimal strings,
+  performs real/imaginary subtraction on decimal digit vectors first, and only
+  reduces the final norm/ratio to a compact scientific display value. This
+  avoids displaying exact `+0.00e0` for Quad/Arb comparisons solely because the
+  difference was below double precision.
+
+Verification completed:
+
+```text
+cargo fmt
+passed
+
+cargo check -p gammaloop-api
+passed
+
+cargo check -p gammaloop-integration-tests --tests
+passed
+
+cargo nextest run -p gammaloop-integration-tests --cargo-profile dev-optim \
+  -P local_test -E 'test(test_3d_reps::cli_reconstructs_energy_power_caps_from_imported_graph_numerators) | test(test_3d_reps::cli_box_pow3_high_power_agrees_for_all_numerator_sample_normalizations) | test(test_3d_reps::cli_box_pow3_high_power_compiled_double_backends_agree_with_eager)'
+3 tests run: 3 passed
+
+cargo nextest run -p gammaloop-integration-tests --cargo-profile dev-optim \
+  -P local_test -E 'test(test_3d_reps::)'
+10 tests run: 10 passed
+
+cargo nextest run -p gammalooprs --cargo-profile dev-optim \
+  -P local_test energy_degree
+7 tests run: 7 passed
+
+just clippy -- -D warnings
+passed
+```
+
+Transient note:
+
+- The first attempt to run the focused `gammalooprs` dev-optim unit tests
+  failed with `No space left on device` while writing target artifacts. I
+  removed only the transient `target/debug` build cache, then reran the focused
+  unit test successfully.
