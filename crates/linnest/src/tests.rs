@@ -8,13 +8,18 @@ use linnet::{
     dot,
     parser::{set::DotGraphSet, DotGraph},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    graph_compass_subgraph_bytes, graph_edges_bytes, graph_edges_of_bytes, graph_info_bytes,
-    graph_nodes_bytes, graph_nodes_of_bytes, graph_subgraph_bytes, layout_graph_bytes,
-    layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes, CBORTypstGraph,
-    TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph,
+    builder_add_edge_bytes, builder_add_node_bytes, builder_finish_bytes, builder_new_bytes,
+    graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
+    graph_edges_bytes, graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes,
+    graph_from_spec_bytes, graph_info_bytes, graph_nodes_bytes,
+    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes, graph_spanning_forests_bytes,
+    graph_subgraph_bytes, layout_graph_bytes, layout_parsed_graph_bytes,
+    layout_parsed_graphs_bytes, parse_dot_graphs_bytes, subgraph_contains_hedge_bytes,
+    subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph, TreeInitCfg, TypstDotEdge,
+    TypstDotGraphInfo, TypstDotNode, TypstGraph,
 };
 
 fn test_figment() -> Figment {
@@ -38,6 +43,55 @@ fn encode_cbor<T: Serialize>(value: &T) -> Vec<u8> {
     let mut bytes = Vec::new();
     ciborium::ser::into_writer(value, &mut bytes).unwrap();
     bytes
+}
+
+fn decode_cbor<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> T {
+    ciborium::de::from_reader(bytes).unwrap()
+}
+
+fn one_statement(key: &str, value: &str) -> BTreeMap<String, String> {
+    BTreeMap::from([(key.to_string(), value.to_string())])
+}
+
+#[derive(Serialize)]
+struct TestGraphSpec {
+    name: String,
+    #[serde(default)]
+    statements: BTreeMap<String, String>,
+    nodes: Vec<TestNodeSpec>,
+    edges: Vec<TestEdgeSpec>,
+}
+
+#[derive(Serialize)]
+struct TestNodeSpec {
+    name: String,
+    #[serde(default)]
+    statements: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct TestEdgeSpec {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<TestEndpointSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sink: Option<TestEndpointSpec>,
+    #[serde(default)]
+    statements: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct TestEndpointSpec {
+    node: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compass: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    statement: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TestBuilderNodeResult {
+    builder: Vec<u8>,
+    node: usize,
 }
 
 #[test]
@@ -111,6 +165,216 @@ fn test_graph_query_api_reads_nodes_edges_and_subgraphs() {
     )
     .unwrap();
     assert_eq!(south_nodes.len(), 1);
+}
+
+#[test]
+fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
+    let spec = TestGraphSpec {
+        name: "constructed".to_string(),
+        statements: one_statement("full_num", "x+y"),
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![
+            TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: Some("e".to_string()),
+                    statement: Some("out".to_string()),
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: Some("w".to_string()),
+                    statement: Some("in".to_string()),
+                }),
+                statements: one_statement("label", "a-to-b"),
+            },
+            TestEdgeSpec {
+                source: None,
+                sink: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: Some("n".to_string()),
+                    statement: None,
+                }),
+                statements: one_statement("label", "incoming"),
+            },
+            TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: Some("s".to_string()),
+                    statement: None,
+                }),
+                sink: None,
+                statements: one_statement("label", "outgoing"),
+            },
+        ],
+    };
+
+    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let info: TypstDotGraphInfo =
+        ciborium::de::from_reader(graph_info_bytes(&graph).unwrap().as_slice()).unwrap();
+    assert_eq!(info.name, "constructed");
+    assert_eq!(
+        info.global_statements.get("full_num").map(String::as_str),
+        Some("x+y")
+    );
+
+    let nodes: Vec<TypstDotNode> =
+        ciborium::de::from_reader(graph_nodes_bytes(&graph).unwrap().as_slice()).unwrap();
+    assert_eq!(nodes.len(), 2);
+
+    let edges: Vec<TypstDotEdge> =
+        ciborium::de::from_reader(graph_edges_bytes(&graph).unwrap().as_slice()).unwrap();
+    assert_eq!(edges.len(), 3);
+
+    let north = graph_compass_subgraph_bytes(&graph, &encode_cbor(&"n")).unwrap();
+    let north_label: String = ciborium::de::from_reader(north.as_slice()).unwrap();
+    let north_edges: Vec<TypstDotEdge> = ciborium::de::from_reader(
+        graph_edges_of_bytes(&graph, &encode_cbor(&north_label))
+            .unwrap()
+            .as_slice(),
+    )
+    .unwrap();
+    assert_eq!(north_edges.len(), 1);
+
+    let internal =
+        graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false])).unwrap();
+    let internal_label: String = ciborium::de::from_reader(internal.as_slice()).unwrap();
+    let internal_nodes: Vec<TypstDotNode> = ciborium::de::from_reader(
+        graph_nodes_of_bytes(&graph, &encode_cbor(&internal_label))
+            .unwrap()
+            .as_slice(),
+    )
+    .unwrap();
+    assert_eq!(internal_nodes.len(), 2);
+}
+
+#[test]
+fn test_archived_builder_and_subgraph_api() {
+    let builder = builder_new_bytes(&encode_cbor(&BTreeMap::from([(
+        "name".to_string(),
+        "builder".to_string(),
+    )])))
+    .unwrap();
+
+    let a: TestBuilderNodeResult = decode_cbor(
+        &builder_add_node_bytes(
+            &builder,
+            &encode_cbor(&TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            }),
+        )
+        .unwrap(),
+    );
+    let b: TestBuilderNodeResult = decode_cbor(
+        &builder_add_node_bytes(
+            &a.builder,
+            &encode_cbor(&TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            }),
+        )
+        .unwrap(),
+    );
+
+    let builder = builder_add_edge_bytes(
+        &b.builder,
+        &encode_cbor(&TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: a.node,
+                compass: Some("e".to_string()),
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: b.node,
+                compass: Some("w".to_string()),
+                statement: None,
+            }),
+            statements: one_statement("join", "ab"),
+        }),
+    )
+    .unwrap();
+    let graph = builder_finish_bytes(&builder).unwrap();
+
+    let east = graph_archived_compass_subgraph_bytes(&graph, &encode_cbor(&"e")).unwrap();
+    let east_label: String = decode_cbor(&subgraph_label_bytes(&east).unwrap());
+    assert!(!east_label.is_empty());
+    let east_hedges: Vec<usize> = decode_cbor(&subgraph_hedges_bytes(&east).unwrap());
+    assert_eq!(east_hedges, vec![0]);
+    let contains: bool =
+        decode_cbor(&subgraph_contains_hedge_bytes(&east, &encode_cbor(&0)).unwrap());
+    assert!(contains);
+
+    let east_edges: Vec<TypstDotEdge> =
+        decode_cbor(&graph_edges_of_archived_subgraph_bytes(&graph, &east).unwrap());
+    assert_eq!(east_edges.len(), 1);
+    let east_nodes: Vec<TypstDotNode> =
+        decode_cbor(&graph_nodes_of_archived_subgraph_bytes(&graph, &east).unwrap());
+    assert_eq!(east_nodes.len(), 1);
+
+    let cycles: Vec<Vec<u8>> = decode_cbor(&graph_cycle_basis_bytes(&graph).unwrap());
+    assert!(cycles.is_empty());
+    let forests: Vec<Vec<u8>> = decode_cbor(&graph_spanning_forests_bytes(&graph).unwrap());
+    assert_eq!(forests.len(), 1);
+}
+
+#[test]
+fn test_graph_join_matches_half_edge_statement() {
+    let left = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "left".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "a".to_string(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: None,
+            sink: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: Some("join".to_string()),
+            }),
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+    let right = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "right".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "b".to_string(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: Some("join".to_string()),
+            }),
+            sink: None,
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+
+    let joined = crate::graph_join_by_hedge_key_bytes(
+        &left,
+        &right,
+        &encode_cbor(&one_statement("key", "statement")),
+    )
+    .unwrap();
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&joined).unwrap());
+    assert_eq!(edges.len(), 1);
+    assert!(edges[0].source.is_some());
+    assert!(edges[0].sink.is_some());
 }
 
 #[test]
