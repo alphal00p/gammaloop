@@ -65,6 +65,36 @@ pub fn parse_graph(arg: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
+pub fn graph_builder(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::builder_new_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_builder_add_node(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::builder_add_node_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_builder_add_edge(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::builder_add_edge_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_builder_finish(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::builder_finish_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_from_spec(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_from_spec_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
 pub fn layout_parsed_graph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     layout_parsed_graph_bytes(arg, arg2)
 }
@@ -95,6 +125,12 @@ pub fn graph_nodes_of(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
+pub fn graph_nodes_of_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_nodes_of_archived_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
 pub fn graph_edges(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_edges_bytes(arg)
 }
@@ -107,12 +143,72 @@ pub fn graph_edges_of(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
+pub fn graph_edges_of_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_edges_of_archived_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
 pub fn graph_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_subgraph_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
+pub fn graph_archived_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_archived_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
 pub fn graph_compass_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_compass_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_archived_compass_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_archived_compass_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn subgraph_label(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::subgraph_label_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn subgraph_hedges(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::subgraph_hedges_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn subgraph_contains_hedge(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::subgraph_contains_hedge_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_cycle_basis(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_cycle_basis_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_spanning_forests(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_spanning_forests_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_join_by_edge_key(arg: &[u8], arg2: &[u8], arg3: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_join_by_edge_key_bytes(arg, arg2, arg3)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_join_by_hedge_key(arg: &[u8], arg2: &[u8], arg3: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_join_by_hedge_key_bytes(arg, arg2, arg3)
 }
