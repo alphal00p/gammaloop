@@ -47,7 +47,7 @@
 
 #let _plugin = plugin("../linnest.wasm")
 
-/// Apply the linnest layout pass to an archived graph.
+/// Apply the linnest layout pass to a graph object.
 ///
 /// This is intentionally a second step: construct or parse a graph first, then
 /// call `layout`. Set `layout_algo` to `"force"` for deterministic force
@@ -63,7 +63,7 @@
 /// ```
 /// -> bytes
 #let layout(
-  /// Archived graph bytes returned by `graph.build`, `graph.finish`, or
+  /// Graph object returned by `graph.build`, `graph.finish`, or
   /// `graph.parse`.
   /// -> bytes
   graph,
@@ -253,14 +253,14 @@
 
 /// Graph namespace.
 ///
-/// Graph values are archived byte arrays. Keep them opaque and pass them back to
+/// Graph objects are opaque zero-copy values. Keep them opaque and pass them back to
 /// this module, @subgraph, or @layout.
 /// -> module
 #let graph = graph-module
 
 /// Subgraph namespace.
 ///
-/// Subgraph values are archived byte arrays. They can be passed to
+/// Subgraph objects are opaque zero-copy values. They can be passed to
 /// `graph.nodes` and `graph.edges`.
 /// -> module
 #let subgraph = subgraph-module

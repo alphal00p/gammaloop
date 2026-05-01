@@ -11,7 +11,7 @@ Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst API
 The public surface is intentionally narrow:
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.
-- `subgraph` for archived subgraph construction and inspection.
+- `subgraph` for subgraph object construction and inspection.
 - `layout` for the separate layout pass.
 - `config` for default layout settings.
 
@@ -31,17 +31,17 @@ The public surface is intentionally narrow:
 #let dot = graph.dot(g)
 ```
 
-== Graph Values
+== Graph Objects
 
-Linnest graph values are archived byte arrays. Treat them as opaque values: build
-or parse them with `graph`, transform them with `layout`, and pass them back to
-`graph` or `subgraph` for inspection.
+Graph, builder, and subgraph objects are opaque zero-copy values. Build or parse
+graph objects with `graph`, transform graph objects with `layout`, and pass
+objects back to `graph` or `subgraph` for inspection.
 
 - `graph.parse(input)` parses one or more DOT digraphs and returns an array of
-  archived graphs.
-- `graph.build(spec)` constructs one graph from a Typst dictionary. This is
+  graph objects.
+- `graph.build(..)` constructs one graph object from named arguments. This is
   convenience sugar over the builder functions.
-- `graph.builder(..)` starts an archived builder.
+- `graph.builder(..)` starts a builder object.
 - `graph.node(builder, ..)` returns `(node: index, builder: builder)`.
 - `graph.edge(builder, ..)` returns the updated builder.
 - `graph.finish(builder)` turns a builder into a graph.
@@ -84,18 +84,80 @@ Set `source: none` or `sink: none` to create an external half edge.
 
 `graph.info(g)` returns graph metadata. `graph.nodes(g)` returns node records,
 and `graph.edges(g)` returns edge records. Pass `subgraph: sg` to filter nodes
-or edges by an archived subgraph.
+or edges by an subgraph object.
 
 `graph.join(left, right, key: "statement")` joins matching dangling half edges.
 The key is read from half-edge data and can be `"statement"`, `"port_label"`,
 `"compass"`, or `"id"`.
 
-`graph.cycles(g)` returns archived subgraphs for a cycle basis.
-`graph.forests(g)` returns archived subgraphs for spanning forests.
+`graph.cycles(g)` returns subgraph objects for a cycle basis.
+`graph.forests(g)` returns subgraph objects for spanning forests.
+
+== Layout Model
+
+`layout` starts from a traversal-tree placement, then optimizes the positions of
+graph nodes and edge control points. The initial tree spacing is
+
+$ L = lambda sqrt((W H) / max(n, 1)) $,
+
+with horizontal spacing $tau_x L$ and vertical spacing $tau_y L$. Here
+$lambda$ is `length_scale`, $W$ is `viewport_w`, $H$ is `viewport_h`, $tau_x$
+is `tree_dx`, and $tau_y$ is `tree_dy`. These fields set the geometry scale for
+both layout modes.
+
+The shared spring/charge model uses the following coefficients:
+
+$ c_("vv") = beta L^2 $
+$ c_("ev") = beta gamma_("ev") L^2 $
+$ c_("ee") = beta gamma_("ee") L^2 $
+$ c_("center") = beta g_("center") L^2 $
+$ c_("dangling") = beta gamma_("dangling") L^2 $
+
+The Typst parameter names are `beta` for $beta$, `gamma_ev` for
+$gamma_("ev")$, `gamma_ee` for $gamma_("ee")$, `g_center` for $g_("center")$,
+and `gamma_dangling` for $gamma_("dangling")$. The spring stiffness $k$ is
+`k_spring`, and the softening constant $epsilon$ is `eps`.
+
+In `layout_algo: "anneal"`, linnest minimizes an energy:
+
+$ E =
+  sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
+  + sum_(i, e) c_("ev") / (d(v_i, e) + epsilon)
+  + sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
+  + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
+  + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
+  + sum_(i) 1/2 c_("center") / (d(v_i, 0) + epsilon)
+  + p_("cross") N_("cross") $.
+
+Here $p_("cross")$ is `crossing_penalty` and $N_("cross")$ is the number of
+detected edge crossings. `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
+`accept_floor`, `step_shrink`, and `incremental_energy` belong to this
+simulated annealing mode. `crossing_penalty` is also anneal-only; force mode
+does not currently add a crossing force.
+
+In `layout_algo: "force"`, linnest applies the direct forces corresponding to
+the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
+dangling-edge, and center terms. `step` is the integration step, `delta` clamps
+per-step movement, `steps` and `epochs` set the iteration budget, `cool` shrinks
+the step after each epoch, and `early_tol` stops when movement is small.
+`z_spring` and `z_spring_growth` are force-only helpers: the integrator gives
+points temporary z coordinates to break overlaps and pulls them back toward the
+2D plane.
+
+`directional_force` is applied in both modes as an extra bias derived from
+pin/port direction constraints.
+
+After either graph layout mode, labels are relaxed separately. If $L_l$ is the
+label target distance and $q_l$ is the label repulsion strength, then
+$L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
+`label_length_scale` for $alpha_l$ and `label_charge` for $beta_l$.
+`label_spring` is the spring constant pulling each label toward its target.
+`label_steps`, `label_step`, `label_early_tol`, and `label_max_delta_scale`
+control the label relaxation iteration.
 
 == Subgraphs
 
-Subgraph values are archived byte arrays.
+Subgraph objects are opaque zero-copy values.
 
 - `subgraph.label(g, label)` constructs a subgraph from a base62 label.
 - `subgraph.bits(g, bits)` constructs a subgraph from a boolean hedge array.
