@@ -54,6 +54,39 @@ linnet examples --input author="John Doe" --input version=1.0 --input debug=true
 These variables are available in both figure and grid templates through Typst's `sys.inputs`
 dictionary.
 
+## Typst wrapper API
+
+The generated templates include `linnest.typ`, a small Typst wrapper around `linnest.wasm`.
+Import it from a directory that also contains the WASM plugin:
+
+```typst
+#import "linnest.typ": parse-graphs, layout-graph, graph-info, graph-nodes, graph-edges
+
+#let graphs = parse-graphs(read("graph.dot"))
+#let graph = layout-graph(graphs.first())
+#let info = graph-info(graph)
+#let nodes = graph-nodes(graph)
+#let edges = graph-edges(graph)
+```
+
+The wrapper exports:
+
+- `default-layout-config`: the default layout settings used by `layout.typ`.
+- `parse-graphs(input)`: parses one or more DOT digraphs and returns archived graph byte arrays.
+- `layout-graph(graph, config: default-layout-config)`: lays out one parsed graph.
+- `layout-graphs(input, config: default-layout-config)`: parses and lays out all DOT graphs in `input`.
+- `graph-info(graph)`: returns graph metadata and default DOT statements.
+- `graph-nodes(graph, subgraph: none)`: returns node records, optionally filtered by a subgraph label or bool array.
+- `graph-edges(graph, subgraph: none)`: returns edge records, optionally filtered by a subgraph label or bool array.
+- `graph-subgraph(graph, subgraph)`: normalizes a subgraph spec into the base62 label used by the Rust API.
+- `graph-compass-subgraph(graph, compass)`: builds a base62 subgraph label from a compass point such as `"n"` or `"s"`.
+
+See `crates/linnest/examples/typst-api.typ` for a compile-checked example:
+
+```bash
+typst compile --root . crates/linnest/examples/typst-api.typ /tmp/linnest-typst-api.pdf
+```
+
 ## Partial rebuilds
 
 After a full run, you can re-render individual figures or the final grid without rescanning DOT
