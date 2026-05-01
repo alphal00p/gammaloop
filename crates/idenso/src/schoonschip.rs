@@ -1,3 +1,4 @@
+use linnet::half_edge::subgraph::SubSetLike;
 use spenso::{
     algebra::ScalarMul,
     contraction::{Contract, ContractionError},
@@ -30,6 +31,10 @@ use crate::{
 const TRACE_SCHOONSCHIP: bool = false;
 
 pub struct Schoonschipify<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>;
+
+fn is_sum(expr: &Atom) -> bool {
+    matches!(expr.as_view(), AtomView::Add(_))
+}
 
 struct SchoonschipSmallestDegree<
     const EXPANDSUMS: bool,
@@ -229,7 +234,15 @@ impl<
             );
         } else {
             let expression = &oexpr * &sexpr;
-            let (structure, _, _, _) = self.structure.merge(&other.structure)?;
+            let (structure, pos_self, _, _) = self.structure.merge(&other.structure)?;
+            let expression =
+                if EXPANDSUMS && pos_self.n_included() > 0 && (is_sum(&sexpr) || is_sum(&oexpr)) {
+                    expression
+                        .expand()
+                        .schoonschip_with_net::<false, true, Aind>(&recursive_settings())
+                } else {
+                    expression
+                };
 
             finish(
                 Self {
@@ -248,6 +261,7 @@ pub struct SchoonschipSettings {
     depth_limit: Option<usize>,
     mode: SchoonschipMode,
     parse_inner_products: bool,
+    expand_contracted_sums: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -278,6 +292,7 @@ impl SchoonschipSettings {
             depth_limit,
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
             parse_inner_products: true,
+            expand_contracted_sums: false,
         }
     }
 
@@ -286,6 +301,7 @@ impl SchoonschipSettings {
             depth_limit,
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
             parse_inner_products: true,
+            expand_contracted_sums: false,
         }
     }
 
@@ -294,6 +310,7 @@ impl SchoonschipSettings {
             depth_limit,
             mode: SchoonschipMode::SinglePass,
             parse_inner_products: true,
+            expand_contracted_sums: false,
         }
     }
 
@@ -311,6 +328,11 @@ impl SchoonschipSettings {
 
     pub fn full() -> Self {
         Self::single_pass(None)
+    }
+
+    pub fn with_expanded_contracted_sums(mut self) -> Self {
+        self.expand_contracted_sums = true;
+        self
     }
 
     fn without_parse_inner_products(mut self) -> Self {
@@ -504,15 +526,29 @@ impl Schoonschip for AtomView<'_> {
         &self,
         settings: &SchoonschipSettings,
     ) -> Atom {
-        let new = match (settings.mode, DEEPEST) {
-            (SchoonschipMode::SinglePass, _) | (_, false) => {
-                self.schoonschip_once_with_net::<EXPANDSUMS, false, true, Aind>(settings)
+        let new = if settings.expand_contracted_sums {
+            match (settings.mode, DEEPEST) {
+                (SchoonschipMode::SinglePass, _) | (_, false) => {
+                    self.schoonschip_once_with_net::<true, false, true, Aind>(settings)
+                }
+                (SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst), true) => {
+                    self.schoonschip_once_with_net::<true, true, true, Aind>(settings)
+                }
+                (SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst), true) => {
+                    self.schoonschip_once_with_net::<true, true, false, Aind>(settings)
+                }
             }
-            (SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst), true) => {
-                self.schoonschip_once_with_net::<EXPANDSUMS, true, true, Aind>(settings)
-            }
-            (SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst), true) => {
-                self.schoonschip_once_with_net::<EXPANDSUMS, true, false, Aind>(settings)
+        } else {
+            match (settings.mode, DEEPEST) {
+                (SchoonschipMode::SinglePass, _) | (_, false) => {
+                    self.schoonschip_once_with_net::<EXPANDSUMS, false, true, Aind>(settings)
+                }
+                (SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst), true) => {
+                    self.schoonschip_once_with_net::<EXPANDSUMS, true, true, Aind>(settings)
+                }
+                (SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst), true) => {
+                    self.schoonschip_once_with_net::<EXPANDSUMS, true, false, Aind>(settings)
+                }
             }
         };
 
@@ -580,9 +616,25 @@ mod tests {
             .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
         assert_snapshot!(result.to_bare_ordered_string(),@"(g(P(2,mink(D)),Q(2,bla,mink(D)))+g(Q(2,bla,mink(D)),Q(3,mink(D))))*g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
-        let result = ((p1 + q3 * p1_2 * q2_2) * (q2 + p2))
-            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
+        let expr = (p1 + q3 * p1_2 * q2_2) * (q2 + p2);
+
+        let result =
+            expr.schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
         assert_snapshot!(result.to_bare_ordered_string(),@"(P(1,mink(D,1))+Q(3,mink(D,1))*g(P(1,mink(D)),Q(2,bla,mink(D))))*(P(2,mink(D,1))+Q(2,bla,mink(D,1)))");
+
+        let result = expr.schoonschip_with_net::<false, true, AbstractIndex>(
+            &SchoonschipSettings::full().with_expanded_contracted_sums(),
+        );
+        let result = result.to_bare_ordered_string();
+        assert_snapshot!(result, @"g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(P(2,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))");
+        assert!(!result.contains("mink(D,1)"));
+
+        let result = expr.schoonschip_with_net::<false, true, AbstractIndex>(
+            &SchoonschipSettings::partial().with_expanded_contracted_sums(),
+        );
+        let result = result.to_bare_ordered_string();
+        assert_snapshot!(result, @"g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(P(2,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))");
+        assert!(!result.contains("mink(D,1)"));
     }
 
     #[test]
