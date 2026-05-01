@@ -16,7 +16,7 @@ use spenso::{
         OrderedStructure, SlotIndex, StructureContract, TensorStructure,
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
+        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
 };
 use symbolica::{
@@ -37,6 +37,39 @@ pub struct Schoonschipify<const EXPANDSUMS: bool, const RECURSE: bool, const DEP
 
 fn is_sum(expr: &Atom) -> bool {
     matches!(expr.as_view(), AtomView::Add(_))
+}
+
+fn expression_size(expr: &Atom) -> (usize, usize) {
+    (expr.as_view().get_byte_size(), expr.nterms())
+}
+
+fn distribute_expanded_left_sum(expanded_left: &Atom, right: &Atom) -> Atom {
+    expanded_left.terms().fold(Atom::Zero, |sum, term| {
+        let term = term.to_owned();
+        sum + &term * right
+    })
+}
+
+fn distribute_expanded_right_sum(left: &Atom, expanded_right: &Atom) -> Atom {
+    expanded_right.terms().fold(Atom::Zero, |sum, term| {
+        let term = term.to_owned();
+        sum + left * &term
+    })
+}
+
+fn distribute_smallest_expanded_sum_side(left: &Atom, right: &Atom) -> Atom {
+    match (is_sum(left), is_sum(right)) {
+        (true, true) => {
+            if expression_size(left) <= expression_size(right) {
+                distribute_expanded_left_sum(&left.expand(), right)
+            } else {
+                distribute_expanded_right_sum(left, &right.expand())
+            }
+        }
+        (true, false) => distribute_expanded_left_sum(&left.expand(), right),
+        (false, true) => distribute_expanded_right_sum(left, &right.expand()),
+        (false, false) => left * right,
+    }
 }
 
 fn positive_even_power(exp: AtomView<'_>) -> bool {
@@ -254,6 +287,8 @@ fn contract_metric_into_tensor<Aind: AbsInd + ParseableAind>(
 fn contract_rank_one_into_tensor<Aind: AbsInd + ParseableAind>(
     rank_one: &SymbolicTensor<Aind>,
     tensor: &SymbolicTensor<Aind>,
+    rank_one_positions: &SubSet<SlotIndex>,
+    tensor_positions: &SubSet<SlotIndex>,
     rank_one_expr: &Atom,
     tensor_expr: &Atom,
     structure: OrderedStructure<LibraryRep, Aind>,
@@ -262,16 +297,25 @@ fn contract_rank_one_into_tensor<Aind: AbsInd + ParseableAind>(
         return None;
     }
 
-    let slot = rank_one.structure.get_slot(0)?;
-    let stripped = slot.rep().base().to_symbolic([]);
-    let contracted_expr = rank_one_expr.replace(slot.to_atom()).with(stripped);
+    // The rank-one shortcut is only a contraction when the merge information
+    // says the vector leg is actually consumed. Without this guard an
+    // unconnected vector would be dropped when it is merely multiplied by
+    // another tensor.
+    let rank_one_pos = single_contracted_pos(rank_one_positions)?;
+    let tensor_pos = single_contracted_pos(tensor_positions)?;
+    let rank_one_slot = rank_one.structure.get_slot(rank_one_pos)?;
+    let contracted_tensor_slot = tensor.structure.get_slot(tensor_pos)?;
+    let stripped = rank_one_slot.rep().base().to_symbolic([]);
+    let contracted_expr = rank_one_expr
+        .replace(rank_one_slot.to_atom())
+        .with(stripped);
 
     Some(SymbolicTensor {
         structure,
         is_composite: true,
         is_metric: tensor.is_metric,
         expression: tensor_expr
-            .replace(slot.dual().to_atom())
+            .replace(contracted_tensor_slot.to_atom())
             .with(contracted_expr)
             .normalize_dots(),
     })
@@ -365,19 +409,31 @@ impl<
 
         // Rank-one tensors are the original Schoonschip contraction shortcut:
         // their contracted slot is stripped from the vector and inserted into
-        // the matching dual slot of the other tensor expression.
-        if let Some(result) =
-            contract_rank_one_into_tensor(self, other, &sexpr, &oexpr, structure.clone())
-        {
+        // the tensor slot selected by the merge.
+        if let Some(result) = contract_rank_one_into_tensor(
+            self,
+            other,
+            &pos_self,
+            &pos_other,
+            &sexpr,
+            &oexpr,
+            structure.clone(),
+        ) {
             return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
                 result,
                 RECURSE && !DEPTH_FIRST,
             );
         }
 
-        if let Some(result) =
-            contract_rank_one_into_tensor(other, self, &oexpr, &sexpr, structure.clone())
-        {
+        if let Some(result) = contract_rank_one_into_tensor(
+            other,
+            self,
+            &pos_other,
+            &pos_self,
+            &oexpr,
+            &sexpr,
+            structure.clone(),
+        ) {
             return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
                 result,
                 RECURSE && !DEPTH_FIRST,
@@ -388,9 +444,11 @@ impl<
         let expression =
             if EXPANDSUMS && pos_self.n_included() > 0 && (is_sum(&sexpr) || is_sum(&oexpr)) {
                 // Sums are distributed only when this contraction actually
-                // consumes an index. This keeps ordinary products factored.
-                expression
-                    .expand()
+                // consumes an index. Expand the smaller additive side fully,
+                // iterate over its terms, and fold those terms against the
+                // other side. This mirrors the bare Symbolica flow without
+                // eagerly expanding the product of both sides.
+                distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
                     .schoonschip_with_net::<false, true, Aind>(&recursive_schoonschip_settings::<
                         DEPTH_FIRST,
                     >())
@@ -437,7 +495,7 @@ impl Default for SchoonschipSettings {
 
 impl SchoonschipSettings {
     pub fn new(depth_limit: Option<usize>) -> Self {
-        Self::depth_first(depth_limit)
+        Self::breadth_first(depth_limit)
     }
 
     pub fn depth_first(depth_limit: Option<usize>) -> Self {
