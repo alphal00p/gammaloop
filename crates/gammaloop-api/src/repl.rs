@@ -36,6 +36,7 @@ use crate::{
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CompletionState {
     commands_block_names: Vec<String>,
+    command_block_placeholders: BTreeMap<String, Vec<String>>,
     process_entries: Vec<ProcessCompletionEntry>,
     integrand_detail_entries: Vec<IntegrandDetailCompletionEntry>,
     process_settings_entries: Vec<ProcessSettingsCompletionEntry>,
@@ -112,6 +113,7 @@ impl SharedCompletionState {
     pub fn update_from_session(&self, session: &CliSession<'_>) {
         self.write(|state| {
             state.commands_block_names = session.current_commands_block_names();
+            state.command_block_placeholders = session.current_command_block_placeholders();
             state.process_entries = session.current_process_entries();
             state.integrand_detail_entries = session.current_integrand_detail_entries();
             state.process_settings_entries = session.current_process_settings_entries();
@@ -486,7 +488,16 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
 
         let value_request = &flag_value_context.request;
         let arg = flag_value_context.arg;
-        if is_path_argument(arg) {
+        if is_run_define_argument(&context, arg) {
+            add_run_define_suggestions(
+                completion_state,
+                context.completed_tokens,
+                value_request,
+                pos,
+                &mut suggestions,
+                &mut seen,
+            );
+        } else if is_path_argument(arg) {
             add_path_suggestions(&mut suggestions, &mut seen, value_request, pos);
         } else if let Some(completion) = arg_value_completion(arg) {
             match completion {
@@ -1166,6 +1177,149 @@ fn add_run_block_suggestions(
             });
         }
     }
+}
+
+fn is_run_define_argument(context: &CommandContext<'_>, arg: &clap::Arg) -> bool {
+    context.cmd.get_name() == "run" && arg.get_long() == Some("define")
+}
+
+fn add_run_define_suggestions(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    request: &PathCompletionRequest,
+    pos: usize,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let selected_blocks = completed_run_block_names(completed_tokens);
+    if selected_blocks.is_empty() {
+        return;
+    }
+
+    let already_defined = completed_run_define_keys(completed_tokens);
+    let partial_key = request
+        .partial_path
+        .split_once('=')
+        .map(|(key, _)| key)
+        .unwrap_or(request.partial_path.as_str());
+    for placeholder in selected_blocks
+        .iter()
+        .filter_map(|name| completion_state.command_block_placeholders.get(name))
+        .flatten()
+    {
+        if already_defined.contains(placeholder) {
+            continue;
+        }
+        if !partial_key.is_empty() && !placeholder.starts_with(partial_key) {
+            continue;
+        }
+        let value = format!("{placeholder}=");
+        let rendered = render_value_completion(&value, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(Suggestion {
+            value: rendered,
+            description: Some("Command block variable".to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(request.span_start, pos),
+            append_whitespace: false,
+        });
+    }
+}
+
+fn completed_run_block_names(completed_tokens: &[CompletionToken]) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut index = 0usize;
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        if let Some(flag) = run_flag_kind(token) {
+            index += 1;
+            if flag.takes_separate_value() {
+                index = index.saturating_add(1);
+            }
+            continue;
+        }
+        if !token.starts_with('-') {
+            names.push(token.to_string());
+        }
+        index += 1;
+    }
+    names
+}
+
+fn completed_run_define_keys(completed_tokens: &[CompletionToken]) -> HashSet<String> {
+    let mut keys = HashSet::new();
+    let mut index = 0usize;
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        let Some(flag) = run_flag_kind(token) else {
+            index += 1;
+            continue;
+        };
+        match flag {
+            RunFlagKind::DefineInline(value) => {
+                if let Some((key, _)) = value.split_once('=') {
+                    keys.insert(key.to_string());
+                }
+                index += 1;
+            }
+            RunFlagKind::DefineSeparate => {
+                if let Some(value) = completed_tokens
+                    .get(index + 1)
+                    .map(|token| token.cooked.as_str())
+                {
+                    if let Some((key, _)) = value.split_once('=') {
+                        keys.insert(key.to_string());
+                    }
+                }
+                index += 2;
+            }
+            RunFlagKind::CommandsInline => index += 1,
+            RunFlagKind::CommandsSeparate => index += 2,
+        }
+    }
+    keys
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RunFlagKind<'a> {
+    DefineInline(&'a str),
+    DefineSeparate,
+    CommandsInline,
+    CommandsSeparate,
+}
+
+impl RunFlagKind<'_> {
+    fn takes_separate_value(self) -> bool {
+        matches!(self, Self::DefineSeparate | Self::CommandsSeparate)
+    }
+}
+
+fn run_flag_kind(token: &str) -> Option<RunFlagKind<'_>> {
+    if let Some(value) = token.strip_prefix("--define=") {
+        return Some(RunFlagKind::DefineInline(value));
+    }
+    if token == "--define" || token == "-D" {
+        return Some(RunFlagKind::DefineSeparate);
+    }
+    if let Some(value) = token.strip_prefix("-D").filter(|value| !value.is_empty()) {
+        return Some(RunFlagKind::DefineInline(value));
+    }
+    if token.strip_prefix("--commands=").is_some() {
+        return Some(RunFlagKind::CommandsInline);
+    }
+    if token == "--commands" || token == "-c" {
+        return Some(RunFlagKind::CommandsSeparate);
+    }
+    if token
+        .strip_prefix("-c")
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Some(RunFlagKind::CommandsInline);
+    }
+    None
 }
 
 fn add_builtin_model_suggestions(
@@ -4230,6 +4384,43 @@ mod tests {
         let values = completion_values("run -c ", &completion_state);
 
         assert!(values.is_empty());
+    }
+
+    #[test]
+    fn completion_offers_run_define_keys_for_selected_blocks() {
+        let completion_state = CompletionState {
+            commands_block_names: vec!["alpha".to_string(), "beta".to_string()],
+            command_block_placeholders: BTreeMap::from([
+                (
+                    "alpha".to_string(),
+                    vec!["graph_id".to_string(), "workspace".to_string()],
+                ),
+                ("beta".to_string(), vec!["precision".to_string()]),
+            ]),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("run alpha beta -D ", &completion_state);
+
+        assert!(values.contains(&"graph_id=".to_string()), "{values:?}");
+        assert!(values.contains(&"workspace=".to_string()), "{values:?}");
+        assert!(values.contains(&"precision=".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_filters_run_define_keys_and_skips_existing_defines() {
+        let completion_state = CompletionState {
+            commands_block_names: vec!["alpha".to_string()],
+            command_block_placeholders: BTreeMap::from([(
+                "alpha".to_string(),
+                vec!["graph_id".to_string(), "workspace".to_string()],
+            )]),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("run alpha -Dgraph_id=0 -D wor", &completion_state);
+
+        assert_eq!(values, vec!["workspace=".to_string()]);
     }
 
     #[test]

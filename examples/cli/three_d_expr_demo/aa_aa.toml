@@ -33,229 +33,270 @@ commands = [
   "import model sm-default.json",
   "remove processes",
   "import graphs ./examples/cli/three_d_expr_demo/aa_aa.dot -p aa_aa -i default -o",
+  "import graphs ./examples/cli/three_d_expr_demo/aa_aa_no_numerator.dot -p aa_aa_no_numerator -i default -o",
   "save state -o",
 ]
 
+# Parameterized short 3Drep demo blocks. The convenience wrappers below set:
+# loop_count, graph_id, diagram_name, workspace_name, precision, precision_label, seed, scale.
+
 [[command_blocks]]
-name = "1L_validate_box_graph"
+name = "validate_graph"
 commands = [
-  "3Drep validate -p aa_aa -i default -g 0 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L/validate.json",
+  "3Drep validate -p aa_aa -i default -g {graph_id} --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name}/validate.json",
 ]
 
 [[command_blocks]]
-name = "1L_build_ltd_box_structure"
+name = "build_structure_clean"
 commands = [
-  "3Drep build -p aa_aa -i default -g 0 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L",
+  "3Drep build -p aa_aa -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name}",
 ]
 
 [[command_blocks]]
-name = "1L_build_cff_box_structure"
+name = "build_structure"
 commands = [
-  "3Drep build -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L",
+  "3Drep build -p aa_aa -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name}",
 ]
 
 [[command_blocks]]
-name = "1L_evaluate_cff_box_double"
+name = "evaluate_structure"
 commands = [
   "set global kv global.generation.evaluator.compile=false",
-  "3Drep evaluate -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --clean",
+  "3Drep evaluate -p aa_aa -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --clean --manifest-name {workspace_name}_evaluate_{representation}_{diagram_name}_{precision_label}_eval_01.json --no-show-parameters",
 ]
 
 [[command_blocks]]
-name = "1L_evaluate_box_numerator_only"
+name = "evaluate_numerator_only"
 commands = [
-  "3Drep evaluate -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p aa_aa -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --numerator-only --clean --manifest-name {workspace_name}_evaluate_{diagram_name}_numerator_only_eval_01.json --no-show-parameters",
 ]
 
 [[command_blocks]]
-name = "1L_profile_cff_box_double"
+name = "profile_structure_short"
 commands = [
-  "3Drep evaluate -p aa_aa -i default -g 0 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p aa_aa -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile 10ms --eager --clean --manifest-name {workspace_name}_profile_{representation}_{diagram_name}_{precision_label}_eval_01.json --no-show-parameters",
 ]
 
 [[command_blocks]]
-name = "1L_compare_cff_ltd_box_double"
+name = "compare_cff_ltd"
 commands = [
-  "3Drep test-cff-ltd -p aa_aa -i default -g 0 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/1L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+  "3Drep test-cff-ltd -p aa_aa -i default -g {graph_id} --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --n-epsilon-steps 2 --clean",
+]
+
+[[command_blocks]]
+name = "diagram_demo"
+commands = [
+  "run load",
+  "run validate_graph -D graph_id={graph_id} -D workspace_name={workspace_name}",
+  "run build_structure_clean -D graph_id={graph_id} -D workspace_name={workspace_name} -D representation=ltd",
+  "run build_structure -D graph_id={graph_id} -D workspace_name={workspace_name} -D representation=cff",
+  "run evaluate_structure -D graph_id={graph_id} -D workspace_name={workspace_name} -D diagram_name={diagram_name} -D representation=cff -D precision={precision} -D precision_label={precision_label} -D seed={seed} -D scale={scale}",
+  "run evaluate_numerator_only -D graph_id={graph_id} -D workspace_name={workspace_name} -D diagram_name={diagram_name} -D representation=cff -D precision={precision} -D seed={seed} -D scale={scale}",
+  "run profile_structure_short -D graph_id={graph_id} -D workspace_name={workspace_name} -D diagram_name={diagram_name} -D representation=cff -D precision={precision} -D precision_label={precision_label} -D seed={seed} -D scale={scale}",
+  "run compare_cff_ltd -D graph_id={graph_id} -D workspace_name={workspace_name} -D precision={precision} -D seed={seed} -D scale={scale}",
 ]
 
 [[command_blocks]]
 name = "1L_demo"
 commands = [
-  "run load",
-  "run 1L_validate_box_graph",
-  "run 1L_build_ltd_box_structure",
-  "run 1L_build_cff_box_structure",
-  "run 1L_evaluate_cff_box_double",
-  "run 1L_evaluate_box_numerator_only",
-  "run 1L_profile_cff_box_double",
-  "run 1L_compare_cff_ltd_box_double",
-]
-
-[[command_blocks]]
-name = "2L_validate_double_box_graph"
-commands = [
-  "3Drep validate -p aa_aa -i default -g 1 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L/validate.json",
-]
-
-[[command_blocks]]
-name = "2L_build_ltd_double_box_structure"
-commands = [
-  "3Drep build -p aa_aa -i default -g 1 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L",
-]
-
-[[command_blocks]]
-name = "2L_build_cff_double_box_structure"
-commands = [
-  "3Drep build -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L",
-]
-
-[[command_blocks]]
-name = "2L_evaluate_cff_double_box_double"
-commands = [
-  "set global kv global.generation.evaluator.compile=false",
-  "3Drep evaluate -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --clean",
-]
-
-[[command_blocks]]
-name = "2L_evaluate_double_box_numerator_only"
-commands = [
-  "3Drep evaluate -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
-]
-
-[[command_blocks]]
-name = "2L_profile_cff_double_box_double"
-commands = [
-  "3Drep evaluate -p aa_aa -i default -g 1 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
-]
-
-[[command_blocks]]
-name = "2L_compare_cff_ltd_double_box_double"
-commands = [
-  "3Drep test-cff-ltd -p aa_aa -i default -g 1 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/2L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+  "run diagram_demo -D loop_count=1 -D graph_id=0 -D diagram_name=box -D workspace_name={loop_count}L -D precision=Double -D precision_label=double -D seed=11 -D scale=0.25",
 ]
 
 [[command_blocks]]
 name = "2L_demo"
 commands = [
-  "run load",
-  "run 2L_validate_double_box_graph",
-  "run 2L_build_ltd_double_box_structure",
-  "run 2L_build_cff_double_box_structure",
-  "run 2L_evaluate_cff_double_box_double",
-  "run 2L_evaluate_double_box_numerator_only",
-  "run 2L_profile_cff_double_box_double",
-  "run 2L_compare_cff_ltd_double_box_double",
-]
-
-[[command_blocks]]
-name = "3L_validate_triple_box_graph"
-commands = [
-  "3Drep validate -p aa_aa -i default -g 2 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L/validate.json",
-]
-
-[[command_blocks]]
-name = "3L_build_ltd_triple_box_structure"
-commands = [
-  "3Drep build -p aa_aa -i default -g 2 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L",
-]
-
-[[command_blocks]]
-name = "3L_build_cff_triple_box_structure"
-commands = [
-  "3Drep build -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L",
-]
-
-[[command_blocks]]
-name = "3L_evaluate_cff_triple_box_double"
-commands = [
-  "set global kv global.generation.evaluator.compile=false",
-  "3Drep evaluate -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --clean",
-]
-
-[[command_blocks]]
-name = "3L_evaluate_triple_box_numerator_only"
-commands = [
-  "3Drep evaluate -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
-]
-
-[[command_blocks]]
-name = "3L_profile_cff_triple_box_double"
-commands = [
-  "3Drep evaluate -p aa_aa -i default -g 2 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
-]
-
-[[command_blocks]]
-name = "3L_compare_cff_ltd_triple_box_double"
-commands = [
-  "3Drep test-cff-ltd -p aa_aa -i default -g 2 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/3L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+  "run diagram_demo -D loop_count=2 -D graph_id=1 -D diagram_name=double_box -D workspace_name={loop_count}L -D precision=Double -D precision_label=double -D seed=11 -D scale=0.25",
 ]
 
 [[command_blocks]]
 name = "3L_demo"
 commands = [
-  "run load",
-  "run 3L_validate_triple_box_graph",
-  "run 3L_build_ltd_triple_box_structure",
-  "run 3L_build_cff_triple_box_structure",
-  "run 3L_evaluate_cff_triple_box_double",
-  "run 3L_evaluate_triple_box_numerator_only",
-  "run 3L_profile_cff_triple_box_double",
-  "run 3L_compare_cff_ltd_triple_box_double",
-]
-
-[[command_blocks]]
-name = "4L_validate_quadruple_box_graph"
-commands = [
-  "3Drep validate -p aa_aa -i default -g 3 --json-out ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L/validate.json",
-]
-
-[[command_blocks]]
-name = "4L_build_ltd_quadruple_box_structure"
-commands = [
-  "3Drep build -p aa_aa -i default -g 3 --representation ltd --clean --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L",
-]
-
-[[command_blocks]]
-name = "4L_build_cff_quadruple_box_structure"
-commands = [
-  "3Drep build -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L",
-]
-
-[[command_blocks]]
-name = "4L_evaluate_cff_quadruple_box_double"
-commands = [
-  "set global kv global.generation.evaluator.compile=false",
-  "3Drep evaluate -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --clean",
-]
-
-[[command_blocks]]
-name = "4L_evaluate_quadruple_box_numerator_only"
-commands = [
-  "3Drep evaluate -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --numerator-only --clean",
-]
-
-[[command_blocks]]
-name = "4L_profile_cff_quadruple_box_double"
-commands = [
-  "3Drep evaluate -p aa_aa -i default -g 3 --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --profile 10ms --eager --clean",
-]
-
-[[command_blocks]]
-name = "4L_compare_cff_ltd_quadruple_box_double"
-commands = [
-  "3Drep test-cff-ltd -p aa_aa -i default -g 3 --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/4L --precision Double --seed 11 --scale 0.25 --n-epsilon-steps 2 --clean",
+  "run diagram_demo -D loop_count=3 -D graph_id=2 -D diagram_name=triple_box -D workspace_name={loop_count}L -D precision=Double -D precision_label=double -D seed=11 -D scale=0.25",
 ]
 
 [[command_blocks]]
 name = "4L_demo"
 commands = [
-  "run load",
-  "run 4L_validate_quadruple_box_graph",
-  "run 4L_build_ltd_quadruple_box_structure",
-  "run 4L_build_cff_quadruple_box_structure",
-  "run 4L_evaluate_cff_quadruple_box_double",
-  "run 4L_evaluate_quadruple_box_numerator_only",
-  "run 4L_profile_cff_quadruple_box_double",
-  "run 4L_compare_cff_ltd_quadruple_box_double",
+  "run diagram_demo -D loop_count=4 -D graph_id=3 -D diagram_name=quadruple_box -D workspace_name={loop_count}L -D precision=Double -D precision_label=double -D seed=11 -D scale=0.25",
+]
+
+# Parameterized long profiling blocks. The profile wrappers set:
+# loop_count, graph_id, process_name, workspace_name, seed, scale, profile_duration.
+
+[[command_blocks]]
+name = "profile_compile_assembly"
+commands = [
+  """set global string '
+[global.generation.evaluator]
+compile = true
+
+[global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O0"
+fast_math = false
+unsafe_math = false
+custom = []
+'""",
+]
+
+[[command_blocks]]
+name = "profile_compile_symjit"
+commands = [
+  """set global string '
+[global.generation.evaluator]
+compile = true
+
+[global.generation.compile]
+compilation_mode = "symjit"
+optimization_level = "O0"
+fast_math = false
+unsafe_math = false
+custom = []
+'""",
+]
+
+[[command_blocks]]
+name = "profile_build_structure"
+commands = [
+  "3Drep build -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --no-pretty",
+]
+
+[[command_blocks]]
+name = "profile_evaluate_eager"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --manifest-name {manifest_name} --no-show-parameters",
+]
+
+[[command_blocks]]
+name = "profile_evaluate_compiled"
+commands = [
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --manifest-name {manifest_name} --no-show-parameters",
+]
+
+[[command_blocks]]
+name = "profile_evaluate_numerator_only_eager"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --numerator-only --manifest-name {manifest_name} --no-show-parameters",
+]
+
+[[command_blocks]]
+name = "profile_evaluate_numerator_only_compiled"
+commands = [
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --numerator-only --manifest-name {manifest_name} --no-show-parameters",
+]
+
+[[command_blocks]]
+name = "profile_sweep"
+commands = [
+  "run profile_build_structure -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D representation=ltd",
+  "run profile_build_structure -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D representation=cff",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_01.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_02.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_03.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Quad -D manifest_name={workspace_name}_eval_04.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=ArbPrec -D manifest_name={workspace_name}_eval_05.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_06.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_07.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_08.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Quad -D manifest_name={workspace_name}_eval_09.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=ArbPrec -D manifest_name={workspace_name}_eval_10.json",
+]
+
+[[command_blocks]]
+name = "profile_numerator_only_sweep"
+commands = [
+  "run profile_evaluate_numerator_only_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_01.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_numerator_only_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_02.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_numerator_only_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_03.json",
+  "run profile_evaluate_numerator_only_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Quad -D manifest_name={workspace_name}_eval_04.json",
+  "run profile_evaluate_numerator_only_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=ArbPrec -D manifest_name={workspace_name}_eval_05.json",
+  "run profile_evaluate_numerator_only_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_06.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_numerator_only_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_07.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_numerator_only_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_08.json",
+  "run profile_evaluate_numerator_only_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Quad -D manifest_name={workspace_name}_eval_09.json",
+  "run profile_evaluate_numerator_only_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=ArbPrec -D manifest_name={workspace_name}_eval_10.json",
+]
+
+[[command_blocks]]
+name = "1L_profile"
+commands = [
+  "run profile_sweep -D loop_count=1 -D graph_id=0 -D process_name=aa_aa -D workspace_name={loop_count}L_profile -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "1L_profile_numerator_only"
+commands = [
+  "run profile_numerator_only_sweep -D loop_count=1 -D graph_id=0 -D process_name=aa_aa -D workspace_name={loop_count}L_profile_numerator_only -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "1L_profile_no_numerator"
+commands = [
+  "run profile_sweep -D loop_count=1 -D graph_id=0 -D process_name=aa_aa_no_numerator -D workspace_name={loop_count}L_profile_no_numerator -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "2L_profile"
+commands = [
+  "run profile_sweep -D loop_count=2 -D graph_id=1 -D process_name=aa_aa -D workspace_name={loop_count}L_profile -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "2L_profile_numerator_only"
+commands = [
+  "run profile_numerator_only_sweep -D loop_count=2 -D graph_id=1 -D process_name=aa_aa -D workspace_name={loop_count}L_profile_numerator_only -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "2L_profile_no_numerator"
+commands = [
+  "run profile_sweep -D loop_count=2 -D graph_id=1 -D process_name=aa_aa_no_numerator -D workspace_name={loop_count}L_profile_no_numerator -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "3L_profile"
+commands = [
+  "run profile_sweep -D loop_count=3 -D graph_id=2 -D process_name=aa_aa -D workspace_name={loop_count}L_profile -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "3L_profile_numerator_only"
+commands = [
+  "run profile_numerator_only_sweep -D loop_count=3 -D graph_id=2 -D process_name=aa_aa -D workspace_name={loop_count}L_profile_numerator_only -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "3L_profile_no_numerator"
+commands = [
+  "run profile_sweep -D loop_count=3 -D graph_id=2 -D process_name=aa_aa_no_numerator -D workspace_name={loop_count}L_profile_no_numerator -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "4L_profile"
+commands = [
+  "run profile_sweep -D loop_count=4 -D graph_id=3 -D process_name=aa_aa -D workspace_name={loop_count}L_profile -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "4L_profile_numerator_only"
+commands = [
+  "run profile_numerator_only_sweep -D loop_count=4 -D graph_id=3 -D process_name=aa_aa -D workspace_name={loop_count}L_profile_numerator_only -D seed=11 -D scale=0.25 -D profile_duration=10s",
+]
+
+[[command_blocks]]
+name = "4L_profile_no_numerator"
+commands = [
+  "run profile_sweep -D loop_count=4 -D graph_id=3 -D process_name=aa_aa_no_numerator -D workspace_name={loop_count}L_profile_no_numerator -D seed=11 -D scale=0.25 -D profile_duration=10s",
 ]

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs::{self},
     io::{self},
     ops::ControlFlow,
@@ -54,6 +54,7 @@ use gammalooprs::{
 
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
+    command_template::{contains_placeholder, placeholder_names},
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
@@ -475,6 +476,14 @@ impl Serialize for CommandHistory {
     where
         S: serde::Serializer,
     {
+        if self.is_template() {
+            return self
+                .raw_string
+                .as_deref()
+                .unwrap_or("__command_template")
+                .serialize(serializer);
+        }
+
         if get_serialize_commands_as_strings() {
             if let Some(ref raw_string) = self.raw_string {
                 raw_string.serialize(serializer)
@@ -570,6 +579,26 @@ impl CommandHistory {
         }
     }
 
+    pub fn new_template(raw_string: String) -> Self {
+        Self::new_with_raw(Commands::CommandTemplate, raw_string)
+    }
+
+    pub fn is_template(&self) -> bool {
+        matches!(self.command, Commands::CommandTemplate)
+    }
+
+    pub fn raw_string(&self) -> Option<&str> {
+        self.raw_string.as_deref()
+    }
+
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        match (self.is_template(), other.is_template()) {
+            (true, true) => self.raw_string == other.raw_string,
+            (false, false) => self.command == other.command,
+            _ => false,
+        }
+    }
+
     /// Create a CommandHistory from a command (alias for new)
     pub fn from_command(command: Commands) -> Self {
         Self::new(command)
@@ -580,9 +609,7 @@ impl CommandHistory {
     /// This function attempts to parse the raw string using clap, and if successful,
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
-        use crate::Repl;
         use clap::error::ErrorKind;
-        use clap::Parser;
 
         let args = split_command_line(raw_string)
             .map(normalize_clap_args)
@@ -592,11 +619,25 @@ impl CommandHistory {
                     "Could not parse command: unmatched quotes or trailing escape",
                 )
             })?;
+
+        match Self::from_args_and_raw(args, raw_string.to_string()) {
+            Ok(command) => Ok(command),
+            Err(err) if contains_placeholder(raw_string) => {
+                Ok(Self::new_template(raw_string.into()))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn from_args_and_raw(args: Vec<String>, raw_string: String) -> Result<Self, clap::Error> {
+        use crate::Repl;
+        use clap::Parser;
+
         let cli = Repl::try_parse_from(
             std::iter::once("gammaloop").chain(args.iter().map(String::as_str)),
         )?;
 
-        Ok(Self::new_with_raw(cli.command, raw_string.into()))
+        Ok(Self::new_with_raw(cli.command, raw_string))
     }
 }
 
@@ -647,7 +688,7 @@ impl CommandsBlock {
                 .commands
                 .iter()
                 .zip(other.commands.iter())
-                .all(|(left, right)| left.command == right.command)
+                .all(|(left, right)| left.semantically_eq(right))
     }
 }
 
@@ -710,6 +751,50 @@ impl RunHistory {
 
     pub fn command_block(&self, name: &str) -> Option<&CommandsBlock> {
         self.command_blocks.iter().find(|block| block.name == name)
+    }
+
+    pub fn command_block_placeholder_names(&self, name: &str) -> BTreeSet<String> {
+        let mut placeholders = BTreeSet::new();
+        let mut visited = HashSet::new();
+        self.collect_command_block_placeholder_names(name, &mut visited, &mut placeholders);
+        placeholders
+    }
+
+    fn collect_command_block_placeholder_names(
+        &self,
+        name: &str,
+        visited: &mut HashSet<String>,
+        placeholders: &mut BTreeSet<String>,
+    ) {
+        if !visited.insert(name.to_string()) {
+            return;
+        }
+
+        let Some(block) = self.command_block(name) else {
+            return;
+        };
+
+        for command in &block.commands {
+            if let Some(raw) = command.raw_string() {
+                placeholders.extend(placeholder_names(raw));
+            }
+            let Commands::Run(run) = &command.command else {
+                continue;
+            };
+            for nested_name in run.selected_block_names() {
+                let mut nested_placeholders = BTreeSet::new();
+                self.collect_command_block_placeholder_names(
+                    nested_name,
+                    visited,
+                    &mut nested_placeholders,
+                );
+                for defined in &run.defines {
+                    nested_placeholders.remove(&defined.key);
+                }
+                placeholders.extend(nested_placeholders);
+            }
+        }
+        visited.remove(name);
     }
 
     pub fn select_command_blocks(
@@ -811,9 +896,9 @@ impl RunHistory {
 
     pub(crate) fn filtered_for_save(&self) -> Self {
         let mut filtered = self.clone();
-        filtered
-            .commands
-            .retain(|command_history| should_persist_command(&command_history.command));
+        filtered.commands.retain(|command_history| {
+            command_history.is_template() || should_persist_command(&command_history.command)
+        });
         filtered
     }
 
@@ -2375,6 +2460,7 @@ b = 1.0
         run_history.push_with_raw(
             Commands::Run(Run {
                 block_names: vec!["block_a".to_string()],
+                defines: Vec::new(),
                 commands: None,
             }),
             Some("run block_a".to_string()),

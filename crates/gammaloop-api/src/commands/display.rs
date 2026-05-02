@@ -1314,12 +1314,24 @@ fn render_command_blocks_table(run_history: &RunHistory) -> String {
     let mut builder = Builder::new();
     builder.push_record([
         "name".bold().blue().to_string(),
+        "placeholders".bold().blue().to_string(),
         "commands".bold().blue().to_string(),
     ]);
 
     for block in &run_history.command_blocks {
+        let placeholders = run_history
+            .command_block_placeholder_names(&block.name)
+            .into_iter()
+            .map(|name| format!("{{{name}}}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         builder.push_record([
             block.name.green().bold().to_string(),
+            if placeholders.is_empty() {
+                "-".to_string()
+            } else {
+                placeholders
+            },
             command_block_contents(block),
         ]);
     }
@@ -2081,6 +2093,42 @@ mod test {
                 .count(),
             2,
             "{rendered}"
+        );
+    }
+
+    #[test]
+    fn command_blocks_table_lists_command_block_placeholders() {
+        let run_history = RunHistory {
+            command_blocks: vec![
+                CommandsBlock {
+                    name: "inner".to_string(),
+                    commands: vec![CommandHistory::from_raw_string(
+                        "set global kv global.display_directive={level}",
+                    )
+                    .unwrap()],
+                },
+                CommandsBlock {
+                    name: "outer".to_string(),
+                    commands: vec![CommandHistory::from_raw_string(
+                        "run inner -D level={outer_level}",
+                    )
+                    .unwrap()],
+                },
+            ],
+            ..RunHistory::default()
+        };
+
+        let rendered = render_command_blocks_table(&run_history);
+
+        assert!(rendered.contains("placeholders"), "{rendered}");
+        assert!(rendered.contains("{level}"), "{rendered}");
+        assert!(rendered.contains("{outer_level}"), "{rendered}");
+        assert_eq!(
+            run_history
+                .command_block_placeholder_names("outer")
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec!["outer_level".to_string()]
         );
     }
 }

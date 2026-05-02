@@ -72,6 +72,7 @@ use walkdir::WalkDir;
 
 // use tracing::LogLevel;
 mod command_parser;
+pub(crate) mod command_template;
 pub(crate) mod completion;
 pub mod integrand_info;
 pub(crate) mod model_parameters;

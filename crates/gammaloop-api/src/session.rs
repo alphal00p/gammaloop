@@ -12,6 +12,7 @@ use gammalooprs::settings::RuntimeSettings;
 use tracing::{info, warn};
 
 use crate::{
+    command_template::contains_placeholder,
     commands::{
         process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
         run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
@@ -230,8 +231,14 @@ impl<'a> CliSession<'a> {
 
         for block in &effective_boot_run_history.command_blocks {
             let block_context = format!("command block '{}'", block.name);
+            let statically_validatable_commands = block
+                .commands
+                .iter()
+                .filter(|command| !command.raw_string().is_some_and(contains_placeholder))
+                .cloned()
+                .collect::<Vec<_>>();
             let _ = prepare_command_histories_with_context(
-                &block.commands,
+                &statically_validatable_commands,
                 &merged_history,
                 2,
                 &block_context,
@@ -274,6 +281,22 @@ impl<'a> CliSession<'a> {
             .command_blocks
             .iter()
             .map(|block| block.name.clone())
+            .collect()
+    }
+
+    pub fn current_command_block_placeholders(&self) -> BTreeMap<String, Vec<String>> {
+        self.run_history
+            .command_blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.name.clone(),
+                    self.run_history
+                        .command_block_placeholder_names(&block.name)
+                        .into_iter()
+                        .collect(),
+                )
+            })
             .collect()
     }
 
@@ -777,6 +800,7 @@ fn normalize_persisted_run_history(
 
     let persisted_run = crate::commands::Run {
         block_names: run.block_names.clone(),
+        defines: run.defines.clone(),
         commands: (!persisted_inline_commands.is_empty()).then(|| {
             persisted_inline_commands
                 .iter()
@@ -864,6 +888,7 @@ mod tests {
             .join("\n");
         let command = CommandHistory::new(Commands::Run(Run {
             block_names: Vec::new(),
+            defines: Vec::new(),
             commands: Some(commands.clone()),
         }));
 
@@ -878,6 +903,7 @@ mod tests {
     fn display_command_truncates_multiline_commands_beyond_line_limit() {
         let command = CommandHistory::new(Commands::Run(Run {
             block_names: Vec::new(),
+            defines: Vec::new(),
             commands: Some("cmd1\ncmd2\ncmd3\ncmd4\ncmd5\ncmd6".to_string()),
         }));
 

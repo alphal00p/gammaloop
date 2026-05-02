@@ -245,6 +245,99 @@ fn nested_run_records_executed_commands_once() -> Result<()> {
     Ok(())
 }
 
+fn run_command_block_substitutes_define_variables() -> Result<()> {
+    let mut cli = new_cli("run_command_block_substitutes_define_variables")?;
+    cli.run_history.command_blocks = vec![block(
+        "set_display",
+        &["set global kv global.display_directive={level}"],
+    )];
+
+    cli.run_command("run set_display -D level=warn")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["run set_display -D level=warn"]
+    );
+    cli.save_state()?;
+    let persisted = fs::read_to_string(cli.cli_settings.state.folder.join("run.toml"))?;
+    assert!(persisted.contains("run set_display -D level=warn"));
+    Ok(())
+}
+
+fn run_command_blocks_share_define_environment_and_allow_unused_keys() -> Result<()> {
+    let mut cli = new_cli("run_command_blocks_share_define_environment_and_allow_unused_keys")?;
+    cli.run_history.command_blocks = vec![
+        block(
+            "set_display",
+            &["set global kv global.display_directive={display}"],
+        ),
+        block(
+            "set_logfile",
+            &["set global kv global.logfile_directive={logfile}"],
+        ),
+    ];
+
+    cli.run_command("run set_display set_logfile -D display=warn -D logfile=error -D unused=ok")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(cli.cli_settings.global.logfile_directive, "error");
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["run set_display set_logfile -D display=warn -D logfile=error -D unused=ok"]
+    );
+    Ok(())
+}
+
+fn nested_run_inherits_and_can_override_define_environment() -> Result<()> {
+    let mut cli = new_cli("nested_run_inherits_and_can_override_define_environment")?;
+    cli.run_history.command_blocks = vec![
+        block("inner", &["set global kv global.display_directive={level}"]),
+        block("outer_inherit", &["run inner"]),
+        block("outer_override", &["run inner -D level=error"]),
+    ];
+
+    cli.run_command("run outer_inherit -D level=warn")?;
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+
+    cli.run_command("run outer_override -D level=warn")?;
+    assert_eq!(cli.cli_settings.global.display_directive, "error");
+    Ok(())
+}
+
+fn run_define_placeholders_are_prevalidated_before_execution() -> Result<()> {
+    let mut cli = new_cli("run_define_placeholders_are_prevalidated_before_execution")?;
+    let original_display = cli.cli_settings.global.display_directive.clone();
+    cli.run_history.command_blocks = vec![
+        block("first", &["set global kv global.display_directive=warn"]),
+        block(
+            "broken",
+            &["set global kv global.display_directive={level}"],
+        ),
+    ];
+
+    let err = cli.run_command("run first broken").unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Missing command-block variable 'level'"));
+    assert_eq!(cli.cli_settings.global.display_directive, original_display);
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn run_inline_commands_can_use_define_variables() -> Result<()> {
+    let mut cli = new_cli("run_inline_commands_can_use_define_variables")?;
+
+    cli.run_command("run -D level=warn -c 'set global kv global.display_directive={level}'")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["run -D level=warn -c 'set global kv global.display_directive={level}'"]
+    );
+    Ok(())
+}
+
 #[allow(clippy::needless_update)]
 fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     let mut cli = new_cli("boot_run_history_merges_blocks_and_persists_commands_once")?;
@@ -848,6 +941,11 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     run_prevalidation_is_all_or_nothing_for_inline_commands()?;
     run_prevalidation_is_all_or_nothing_for_nested_block_failures()?;
     nested_run_records_executed_commands_once()?;
+    run_command_block_substitutes_define_variables()?;
+    run_command_blocks_share_define_environment_and_allow_unused_keys()?;
+    nested_run_inherits_and_can_override_define_environment()?;
+    run_define_placeholders_are_prevalidated_before_execution()?;
+    run_inline_commands_can_use_define_variables()?;
     boot_run_history_merges_blocks_and_persists_commands_once()?;
     boot_run_history_rejects_conflicting_block_redefinitions()?;
     boot_run_history_allows_conflicting_redefinitions_after_confirmation()?;
@@ -916,6 +1014,37 @@ commands = ["no_such_command"]
 
     assert!(error_text.contains("command block 'demo' command #1"));
     assert!(error_text.contains("no_such_command"));
+}
+
+#[test]
+#[serial]
+fn run_history_load_accepts_command_block_templates_that_need_late_parsing() {
+    let run_card_path = run_card_path(
+        "run_history_load_accepts_command_block_templates_that_need_late_parsing.toml",
+    );
+    if let Some(parent) = run_card_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(
+        &run_card_path,
+        r#"
+[[command_blocks]]
+name = "bench_template"
+commands = ["bench -s {samples} -p box -i default -c 1"]
+"#,
+    )
+    .unwrap();
+
+    let run_history = RunHistory::load(&run_card_path).unwrap();
+
+    assert!(run_history.command_blocks[0].commands[0].is_template());
+    assert_eq!(
+        run_history
+            .command_block_placeholder_names("bench_template")
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["samples".to_string()]
+    );
 }
 
 #[test]
