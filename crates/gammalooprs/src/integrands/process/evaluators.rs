@@ -263,6 +263,7 @@ impl Default for EvaluatorMethod {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
+    pub explicit_orientation_sum_only: bool,
     pub single_parametric: GenericEvaluator,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
@@ -353,6 +354,29 @@ impl EvaluatorStack {
             param_builder,
             dual_shape.clone(),
             opt_settings.clone(),
+            settings,
+        )
+    }
+
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Explicit Orientation Sum Evaluator",
+          )
+      )]
+    fn new_direct<A: AtomCore>(
+        parametric_atom: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        GenericEvaluator::new_from_builder(
+            parametric_atom
+                .iter()
+                .map(|atom| atom.as_atom_view().to_owned()),
+            param_builder,
+            dual_shape.clone(),
+            settings.optimization_settings(),
             settings,
         )
     }
@@ -540,42 +564,7 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
-        let mut timings = EvaluatorBuildTimings::default();
-        let spenso_started = std::time::Instant::now();
-        let parsed_atoms = atoms
-            .iter()
-            .map(|a| {
-                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-                let mut net = if settings.do_algebra {
-                    a.as_atom_view()
-                        .simplify_color()
-                        .simplify_gamma()
-                        .simplify_metrics()
-                        .to_dots()
-                        .parse_into_net()?
-                } else {
-                    a.as_atom_view().parse_into_net()?
-                };
-
-                // println!("Executing {}", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-
-                net.result_scalar()
-                    .map(|a| match a {
-                        ExecutionResult::One => Atom::num(1),
-                        ExecutionResult::Zero => Atom::Zero,
-                        ExecutionResult::Val(v) => v.into_owned(),
-                    })
-                    .map_err(|a| {
-                        Report::from(a)
-                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        timings.spenso_time += spenso_started.elapsed();
+        let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
 
         let symbolica_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
@@ -630,6 +619,7 @@ impl EvaluatorStack {
 
         Ok((
             EvaluatorStack {
+                explicit_orientation_sum_only: false,
                 single_parametric,
                 iterative,
                 summed_function_map,
@@ -637,6 +627,81 @@ impl EvaluatorStack {
             },
             timings,
         ))
+    }
+
+    #[instrument(
+           skip_all,
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Explicit Orientation Sum Evaluator Stack"),
+           err
+       )]
+    pub(crate) fn new_explicit_sum_with_timings<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
+
+        let symbolica_started = std::time::Instant::now();
+        let single_parametric =
+            Self::new_direct(&parsed_atoms, param_builder, &dual_shape, settings)
+                .with_context(|| "Failed to create explicit orientation sum evaluator")?;
+        timings.symbolica_time += symbolica_started.elapsed();
+
+        Ok((
+            EvaluatorStack {
+                explicit_orientation_sum_only: true,
+                single_parametric,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            },
+            timings,
+        ))
+    }
+
+    fn parse_atoms_with_timings<A: AtomCore>(
+        atoms: &[A],
+        settings: &EvaluatorSettings,
+    ) -> Result<(Vec<Atom>, EvaluatorBuildTimings)> {
+        let mut timings = EvaluatorBuildTimings::default();
+        let spenso_started = std::time::Instant::now();
+        let parsed_atoms = atoms
+            .iter()
+            .map(|a| {
+                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
+                let mut net = if settings.do_algebra {
+                    a.as_atom_view()
+                        .simplify_color()
+                        .simplify_gamma()
+                        .simplify_metrics()
+                        .to_dots()
+                        .parse_into_net()?
+                } else {
+                    a.as_atom_view().parse_into_net()?
+                };
+
+                // println!("Executing {}", net.dot_pretty());
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+
+                net.result_scalar()
+                    .map(|a| match a {
+                        ExecutionResult::One => Atom::num(1),
+                        ExecutionResult::Zero => Atom::Zero,
+                        ExecutionResult::Val(v) => v.into_owned(),
+                    })
+                    .map_err(|a| {
+                        Report::from(a)
+                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        timings.spenso_time += spenso_started.elapsed();
+
+        Ok((parsed_atoms, timings))
     }
 
     fn evaluate_parametric<'a, T: FloatLike, OID: IndexLike>(
@@ -853,6 +918,22 @@ impl EvaluatorStack {
     where
         usize: From<OID>,
     {
+        if self.explicit_orientation_sum_only {
+            if settings.general.evaluator_method != EvaluatorMethod::Summed {
+                return Err(eyre!(
+                    "`global.generation.explicit_orientation_sum_only = true` requires runtime `general.evaluator_method = Summed`; {:?} is not supported",
+                    settings.general.evaluator_method
+                ));
+            }
+
+            return Ok(evaluate_evaluator(
+                &mut self.single_parametric,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            ));
+        }
+
         match settings.general.evaluator_method {
             EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
                 input,

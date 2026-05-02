@@ -450,6 +450,7 @@ impl Process {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<GeneratedGraphReport>> {
+        settings.ensure_step_iii_pending_options_are_supported()?;
         let reports = self.collection.preprocess(
             model,
             &self.definition,

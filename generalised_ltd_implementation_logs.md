@@ -3527,6 +3527,557 @@ passed after assigning unique group ids in aa_aa.dot
 
 The full test suite was not run for this pass.
 
+## 2026-05-02: commit summary for `ltd_in_gammaloop`
+
+This working-set commit collects the Step III production-integration work and
+the supporting CLI/test/documentation changes needed to keep the branch
+reviewable.
+
+Included changes:
+
+- Added the production Step III settings surface:
+  - `global.3d_representation`, with parsed values `CFF` and `LTD`;
+  - `global.generation.explicit_orientation_sum_only`;
+  - `global.generation.uv.local_uv_cts_from_expanded_4d_integrands`.
+- Kept unsupported Step III paths explicit:
+  - production `LTD` generation still errors as not implemented;
+  - `local_uv_cts_from_expanded_4d_integrands` still errors outside explicit
+    orientation-sum mode.
+- Added the generalized CFF bridge
+  `Graph::generate_3d_expression_for_integrand(...)`, including:
+  - GammaLoop-to-`ThreeDGraphSource` contracted graph extraction;
+  - GammaLoop edge-id preservation through `EnergyEdgeIndexMap`;
+  - conversion from generalized linear E/H surfaces back into GammaLoop concrete
+    surface caches;
+  - stripping generalized half-edge inverse-energy factors to preserve the
+    existing production CFF convention;
+  - legacy CFF fallback for initial-state-cut and contracted-subgraph cases
+    until those parity boundaries are closed.
+- Wired production amplitude, cross-section, and lower-level CFF call sites to
+  the generalized CFF bridge while preserving the default CFF behavior.
+- Implemented `explicit_orientation_sum_only = true` for production CFF:
+  - graph-term atoms are explicitly summed over all selected orientations at
+    generation time;
+  - evaluator construction uses a direct summed evaluator path with no runtime
+    orientation branching;
+  - runtime settings must use `general.evaluator_method = Summed`;
+  - individual-orientation Monte Carlo sampling and explicit orientation
+    selection are rejected cleanly;
+  - event/observable orientation ids collapse to a single effective orientation
+    id `0`, displayed as all `x` markers.
+- Propagated explicit orientation-sum semantics through local UV, integrated UV,
+  threshold counterterm, amplitude-counterterm, and LU-counterterm evaluator
+  construction.
+- Added an exhaustive saved-state default-settings regression test ensuring
+  `global_settings.toml` and `default_runtime_settings.toml` retain all
+  schema-visible default options when `SHOWDEFAULTS` is active.
+- Updated `AGENTS.md` to document `just test_gammaloop` as the default selected
+  GammaLoop suite and to note that it runs with warnings as errors.
+- Extended `3Drep evaluate` with:
+  - `--manifest-name` for selecting the evaluate manifest file name;
+  - `--no-show-parameters` for suppressing the parameter table in command
+    output.
+- Added the `summarize_3drep_workspace.py` demo helper and ignored generated
+  nested `*_workspace/` directories in `examples/`.
+- Added/updated tests for:
+  - Step III setting parsing and guard behavior;
+  - exhaustive default settings serialization;
+  - generalized CFF bridge parity on a scalar bubble fixture;
+  - inspect-level equality between ordinary CFF and explicit orientation-sum CFF;
+  - explicit runtime rejection of non-`Summed`, orientation Monte Carlo, and
+    explicit orientation selection;
+  - stable event-order expectations in graph-grouped event tests.
+
+Final verification before commit:
+
+```text
+just test_gammaloop
+passed: 1055 tests run, 1055 passed, 128 skipped
+```
+
+## 2026-05-02: Step III kickoff - production GammaLoop integration
+
+Step III targets the production GammaLoop integrand-generation path. The branch
+for this work is:
+
+```text
+ltd_in_gammaloop
+```
+
+The intended merge target is `ltd_expr`, not `main`.
+
+### Step III subgoals
+
+a. Replace the production GammaLoop `generate_cff` call by the generalized
+`three-dimensional-reps::generate_3d_expression` entry point, while preserving
+the existing production behavior for the default CFF mode.
+
+b. Add a global top-level `3d_representation` setting with variants:
+
+- `CFF` (default)
+- `LTD`
+
+For the initial guard pass, `LTD` is parsed but raises an explicit
+not-implemented error when production generation is reached.
+
+c. Add a generation-level `explicit_orientation_sum_only` setting. The intended
+semantics are to remove Monte Carlo sampling over individual orientations and
+force an explicit sum over all orientations per sample. This is required for
+LTD, while CFF should eventually support both the old sampled-orientation mode
+and explicit-sum mode.
+
+For the initial guard pass, this setting defaults to `false` and raises an
+explicit not-implemented error when evaluator/generation construction is
+reached.
+
+d. Add `global.generation.uv.local_uv_cts_from_expanded_4d_integrands`. The
+intended semantics are to build local UV counterterms from the expanded
+four-dimensional integrand and then localize them, instead of expanding the
+already generated three-dimensional expression of the original integrand.
+
+This setting defaults to `false`, is only valid together with
+`global.generation.explicit_orientation_sum_only = true`, and raises an
+explicit not-implemented error when reached.
+
+### Initial guard implementation
+
+- Added `global.3d_representation` as a top-level serialized setting, backed by
+  a Rust `ThreeDRepresentation` enum.
+- Added `global.generation.explicit_orientation_sum_only`.
+- Added
+  `global.generation.uv.local_uv_cts_from_expanded_4d_integrands`.
+- Added guard checks at process preprocessing and graph-term construction
+  boundaries so unsupported Step III modes fail explicitly before silently using
+  the old CFF implementation.
+- Added a direct UV forest guard so direct UV calls with
+  `local_uv_cts_from_expanded_4d_integrands = true` do not silently use the
+  old local-3D UVCT construction.
+- Added settings tests covering parsing and guard errors for the new Step III
+  settings.
+
+Verification completed:
+
+```text
+cargo fmt --all -- --check
+cargo test -p gammalooprs step_iii_3d_settings_parse_and_guard_pending_modes
+cargo test -p gammalooprs local_uv_4d_source_requires_explicit_orientation_sum_mode
+cargo check -p gammalooprs --tests --locked
+just check
+just clippy -- -D warnings
+just test_gammaloop
+passed: 1051 tests run, 1051 passed, 128 skipped
+```
+
+### Plan for subgoal III.a only
+
+1. Add a GammaLoop graph adapter audit for `ThreeDGraphSource`.
+   The `3Drep` CLI already calls `generate_3d_expression` from GammaLoop graph
+   state. The production path must reuse that adapter rather than serializing
+   DOT or rebuilding graph topology. The first check is that the generated edge
+   index map, mass expressions, external-energy shifts, initial-state cut
+   treatment, and contracted-tree-edge handling match the current
+   `Graph::generate_cff` production call.
+
+2. Introduce a production helper next to `Graph::generate_cff`, provisionally
+   `Graph::generate_3d_expression_for_integrand(...)`.
+   It should accept the same contraction/canonization context as the current
+   CFF helper, translate `GenerationSettings` into
+   `Generate3DExpressionOptions`, call `generate_3d_expression`, and return the
+   existing GammaLoop concrete alias `CFFExpression<OrientationID>` /
+   `ThreeDExpression<OrientationID, Esurface, Hsurface>`.
+
+3. Keep default behavior CFF-only for this subgoal.
+   `global.3d_representation = CFF` should be the only enabled mode during
+   III.a. The old `generate_cff` implementation should remain available as a
+   parity fallback until the new CFF path passes existing production tests.
+
+4. Port surface-cache compatibility deliberately.
+   Production threshold subtraction and UV code currently depend on
+   `graph.surface_cache.esurface_cache` and concrete GammaLoop `Esurface` /
+   `Hsurface` payloads. The generalized crate returns linear-surface cache
+   entries. The helper must either construct equivalent GammaLoop concrete
+   surface payloads or add a narrow conversion layer so existing
+   `determine_raised_esurfaces_from_expression`, residue selection, and
+   threshold-counterterm builders keep seeing the same physical E-surface
+   identities.
+
+5. Rebuild numerator substitution around orientation energy maps.
+   Current production CFF substitution is mostly orientation-sign based. The
+   generalized expression invariant is stronger: one orientation corresponds to
+   one explicit EMR edge-energy numerator map. Numerator replacement must read
+   `OrientationExpression.edge_energy_map` directly and replace every EMR
+   temporal component with that map. This must cover ordinary `+/- OSE`, zero
+   samples, finite integer samples, external-energy shifts, and future
+   uniform-scale `M` samples without special-casing the representation family.
+
+6. Rebuild threshold residues from denominator E-surfaces generically.
+   Current code selects residues by matching raised GammaLoop E-surfaces in CFF
+   denominator trees. The new path must collect denominator E-surface
+   occurrences directly from each `CFFVariant.denominator` tree, ignoring
+   numerator-only surfaces, and map them to the same raised-cut data. This keeps
+   threshold subtraction tied to actual denominator singularities rather than to
+   CFF-specific orientation assumptions.
+
+7. Generalize orientation marker handling before enabling generated expressions
+   in production.
+   The generalized representation uses:
+
+   - `+` and `-` for `+/- OSE` numerator samples;
+   - `0` for a genuine zero-energy numerator sample;
+   - `X`/unspecified for no orientation marker, corresponding to the old
+     tree-level/undirected placeholder that was previously encoded as `0`.
+
+   Production `OrientationPattern`, selector rendering, runtime filtering, and
+   integrated-UV orientation localization currently conflate "undirected" with
+   `0`. III.a must separate these semantics. Internally this likely still maps
+   to `Orientation::Undirected`, but user-facing patterns and labels must stop
+   treating `0` as "no orientation".
+
+8. Preserve integrated UV orientation localization.
+   The existing localization picks a representative full orientation compatible
+   with reduced CFF terms. With generalized expressions, compatibility must use
+   denominator/support orientation constraints and tolerate `X`/unspecified
+   entries, while still rejecting incompatible representatives. This should be
+   covered by the existing integrated-UV tests plus targeted tests for zero
+   numerator samples.
+
+9. Add parity tests before deleting or bypassing the old CFF path.
+   The minimum gate for III.a is:
+
+   - CFF production generation for existing amplitude and cross-section tests;
+   - threshold-subtraction tests using raised E-surfaces;
+   - UV local/integrated tests, including orientation localization;
+   - a direct comparison between old `generate_cff` and new
+     `generate_3d_expression(... CFF ...)` on representative graph fixtures;
+   - `just test_gammaloop`.
+
+### Main difficulties for III.a
+
+- The generalized crate has a neutral linear-surface model, while production
+  GammaLoop still uses concrete `Esurface`/`Hsurface` payloads and a mutable
+  graph-level surface cache. Maintaining stable E-surface ids is the highest
+  risk for threshold subtraction.
+- Numerator evaluation must stop deriving energy substitutions from compact
+  orientation labels. Labels are diagnostic; the source of truth is
+  `edge_energy_map`.
+- `0` now has physical meaning as a zero-energy numerator sample. Existing
+  GammaLoop pattern parsing and orientation-delta display historically used
+  `0` for an unspecified/undirected marker, so this is an easy place to create
+  silent selector bugs.
+- Existing evaluator code assumes an orientation-parametric integrand evaluated
+  with orientation variables. The explicit-orientation-sum mode is deliberately
+  not part of III.a, but III.a must not make it harder to add later.
+- Local and integrated UVCT code builds reduced local 3D terms from CFF-like
+  expressions. The generalized CFF default must keep those terms equivalent
+  before LTD or 4D-expanded UVCT construction is attempted.
+
+### Subgoal III.a implementation progress
+
+Implemented the first production bridge from GammaLoop CFF generation to the
+generalized `three-dimensional-reps::generate_3d_expression` entry point while
+keeping the enabled mode CFF-only.
+
+- Added `Graph::generate_3d_expression_for_integrand(...)` next to the legacy
+  `Graph::generate_cff(...)`.
+- Added a contracted GammaLoop graph source adapter for the generalized
+  `ThreeDGraphSource` trait. It contracts the same tree edges as the legacy
+  production path, preserves GammaLoop edge ids through
+  `EnergyEdgeIndexMap`, and keeps the original external-energy basis.
+- Replaced the production CFF generation calls in:
+  - amplitude graph generation;
+  - cross-section graph generation;
+  - the lower-level `Graph::cff(...)` helper.
+- Added a linear-surface conversion layer from generalized
+  `LinearSurfaceKind::{Esurface,Hsurface}` entries back into GammaLoop
+  concrete `Esurface` / `Hsurface` cache entries. This keeps downstream raised
+  E-surface discovery and threshold-residue code operating on the existing
+  concrete surface ids.
+- Lowered paired initial-state cut terms in generated linear surfaces into
+  GammaLoop external shifts with the cross-section cut convention sign. This is
+  needed for the generated CFF surface cache to contain the same s-channel cut
+  E-surfaces used by `CrossSectionCut::new_from_cut_left(...)`.
+- Preserved the current GammaLoop convention that inverse on-shell-energy
+  factors live outside the CFF denominator tree. The generalized crate stores
+  these factors in `CFFVariant::half_edges`, so the bridge strips them after
+  surface remapping to avoid double-counting in the existing production
+  pipeline.
+- Kept numerator-energy substitution tied to the generalized
+  `OrientationExpression::edge_energy_map`; this had already been introduced
+  in the GammaLoop expression layer and now becomes the production source of
+  truth for CFF-generated orientations.
+- Added a parity regression comparing legacy CFF generation with the new
+  generalized CFF bridge for a scalar bubble, both without contractions and
+  with the same amplitude-production tree contractions.
+
+Current deliberately unresolved Step III pieces:
+
+- `global.3d_representation = LTD` remains guarded as not implemented in
+  production generation.
+- `global.generation.explicit_orientation_sum_only = true` remains guarded.
+- `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true`
+  remains guarded.
+- Genuine zero-energy numerator sample markers are still only exercised inside
+  the generalized crate. The production CFF bridge does not enable those modes
+  yet, so the full user-facing `0` versus `X` selector split remains part of
+  the later explicit-orientation/numerator-sampling work.
+
+Verification completed for this pass:
+
+```text
+cargo fmt --all -- --check
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs --tests --locked -- -D warnings
+cargo test -p gammalooprs \
+  cff::generation::tests_cff::generated_cff_matches_legacy_cff_for_scalar_bubble \
+  --locked -- --nocapture
+cargo test -p gammalooprs \
+  processes::amplitude::test::generation_orientation_pattern_filters_evaluator_orientations \
+  --locked -- --nocapture
+cargo test -p gammaloop-integration-tests \
+  cli_stateful_workflow_behaviors --test test_cli --locked -- --nocapture
+cargo test -p gammaloop-integration-tests \
+  cross_section_vector_spin_sum_matches_explicit_incoming_helicity_average \
+  --test test_runs --locked -- --nocapture
+cargo test -p gammaloop-integration-tests \
+  save_state_writes_exhaustive_default_settings_files \
+  --test test_cli --locked -- --nocapture
+```
+
+`cargo test -p gammalooprs --locked` still aborts in the existing
+`cff::esurface::tests::failing::test_from_cut_left_box` test before reaching the
+new bridge-specific tests when run as a whole.
+
+## 2026-05-02: Step III.c explicit orientation sum mode
+
+Implemented `global.generation.explicit_orientation_sum_only = true` for the
+current production CFF mode.
+
+Semantics implemented:
+
+- Explicit-sum generation now builds graph-term evaluators that contain the
+  direct sum over all valid CFF orientations in the generated atom, so runtime
+  evaluation does not sample or branch over orientation choices.
+- Runtime settings are validated for this mode:
+  - `general.evaluator_method` must be `Summed`;
+  - individual-orientation Monte Carlo sampling is rejected;
+  - explicit runtime orientation selection is rejected.
+- The effective event/observable orientation space is collapsed to one
+  orientation, id `0`, rendered as an all-`x` signature.
+- Generation evaluator options that only select between iterative/summed
+  orientation implementations are ignored in this mode, except that an
+  explicitly requested iterative generation path still remains unsupported.
+- `global.generation.uv.local_uv_cts_from_expanded_4d_integrands` is accepted
+  when explicit orientation summation is enabled, but still guarded as
+  not-implemented without explicit orientation summation.
+- Local UV and threshold counterterm evaluator construction uses the same
+  explicit-sum evaluator path when this mode is active.
+- The generalized CFF production helper keeps the legacy CFF fallback for
+  initial-state-cut and contracted-subgraph cases until the remaining III.a
+  parity boundaries are closed. This avoids destabilizing existing
+  threshold/UV orientation-localization behavior while the explicit-sum runtime
+  mode is introduced.
+
+Test coverage added:
+
+- inspect-level comparison between ordinary CFF generation and
+  `explicit_orientation_sum_only = true` for scalar amplitude topologies;
+- explicit runtime rejection tests for non-`Summed` evaluator mode,
+  individual-orientation Monte Carlo sampling, and explicit orientation
+  selection;
+- settings coverage for the revised
+  `local_uv_cts_from_expanded_4d_integrands` guard semantics.
+
+Verification completed:
+
+```text
+just test_gammaloop
+passed: 1055 tests run, 1055 passed, 128 skipped
+```
+
+## 2026-05-01: aa_aa profiling command blocks
+
+Follow-up implementation:
+
+- Extended `examples/cli/three_d_expr_demo/aa_aa.toml` so the `load` block now
+  imports both:
+  - the physical numerator demo graphs from `aa_aa.dot` into process `aa_aa`;
+  - the scalar no-numerator variants from `aa_aa_no_numerator.dot` into process
+    `aa_aa_no_numerator`.
+- Added `aa_aa_no_numerator.dot`, mirroring the 1L/2L/3L/4L `aa_aa` box
+  topologies with graph, edge, node, and projector numerators set to `1`.
+- Added long-form profiling command blocks:
+  - `1L_profile`, `2L_profile`, `3L_profile`, `4L_profile`;
+  - `1L_profile_numerator_only`, `2L_profile_numerator_only`,
+    `3L_profile_numerator_only`, `4L_profile_numerator_only`;
+  - `1L_profile_no_numerator`, `2L_profile_no_numerator`,
+    `3L_profile_no_numerator`, `4L_profile_no_numerator`.
+- Each profile block builds/reuses LTD and CFF artifacts in that order and runs
+  `3Drep evaluate --profile 10s` for:
+  - Double eager;
+  - Double compiled with assembly;
+  - Double compiled with symjit;
+  - Quad eager;
+  - ArbPrec eager.
+- The numerator-only blocks exercise the direct `--numerator-only` evaluator
+  path without requiring prebuilt oriented-expression JSON.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p gammaloop-api
+just build-cli
+cargo clippy -p gammaloop-api -- -D warnings
+
+python3 - <<'PY'
+from pathlib import Path
+import tomllib
+with Path("examples/cli/three_d_expr_demo/aa_aa.toml").open("rb") as f:
+    data = tomllib.load(f)
+blocks = [b["name"] for b in data["command_blocks"]]
+assert all(name in blocks for name in [
+    "load",
+    "1L_profile", "1L_profile_numerator_only", "1L_profile_no_numerator",
+    "2L_profile", "2L_profile_numerator_only", "2L_profile_no_numerator",
+    "3L_profile", "3L_profile_numerator_only", "3L_profile_no_numerator",
+    "4L_profile", "4L_profile_numerator_only", "4L_profile_no_numerator",
+])
+PY
+
+./gammaloop --dev-optim --clean-state \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml run load -c "quit -n"
+
+./gammaloop --dev-optim --clean-state \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml \
+  run load \
+  1L_profile 1L_profile_numerator_only 1L_profile_no_numerator \
+  2L_profile 2L_profile_numerator_only 2L_profile_no_numerator \
+  -c "quit -n"
+```
+
+The x=1 and x=2 profile, numerator-only profile, and no-numerator profile
+blocks all completed successfully. The full `just test_gammaloop` suite was not
+run for this pass.
+
+## 2026-05-01: 3Drep workspace summary helper
+
+Follow-up implementation:
+
+- Added the top-level helper script `summarize_3drep_workspace.py`.
+- The script scans a supplied 3Drep workspace for all `evaluate_manifest.json`
+  files and renders a colored `prettytable` summary with:
+  - graph name;
+  - representation;
+  - numerator category (`no_numerator`, `only_numerator`, or `full`);
+  - precision;
+  - evaluator mode (`eager`, `compiled assembly`, `compiled symjit`, etc.);
+  - evaluator build time in seconds;
+  - profile/evaluation time per sample in microseconds.
+- Timings are printed with three significant digits. When a Double/eager
+  baseline exists for the same graph, representation, and numerator category,
+  timing ratios are shown in parentheses.
+- If multiple manifests share the same displayed category, the script adds a
+  final `details` column containing the path and relevant settings needed to
+  distinguish the entries.
+
+Verification completed:
+
+```text
+python3 -m py_compile summarize_3drep_workspace.py
+
+./summarize_3drep_workspace.py \
+  ./examples/cli/three_d_expr_demo/aa_aa_workspace --no-color
+```
+
+The helper found and summarized the 13 evaluate manifests currently present in
+the local `aa_aa_workspace`.
+
+## 2026-05-02: named 3Drep evaluate manifests
+
+Follow-up implementation:
+
+- Added `3Drep evaluate --manifest-name <name>`.
+- The option selects the evaluate summary JSON filename inside the selected
+  3Drep artifact directory. The default remains `evaluate_manifest.json` for
+  existing workflows. Names without a `.json` suffix receive it automatically;
+  path separators are rejected so the option cannot escape the artifact folder.
+- Added `3Drep evaluate --no-show-parameters`.
+- The option keeps the full `parameters` array in the JSON manifest, but skips
+  the large input-parameter table in the terminal output.
+- Updated `examples/cli/three_d_expr_demo/aa_aa.toml` so every `3Drep evaluate`
+  command writes a unique manifest name and passes `--no-show-parameters`.
+- Updated `summarize_3drep_workspace.py` to scan all JSON files under a
+  workspace and retain only those matching the evaluate-manifest schema. This
+  lets it pick up arbitrary manifest names supplied with `--manifest-name`.
+
+Verification completed:
+
+```text
+python3 - <<'PY'
+from pathlib import Path
+import tomllib
+with Path("examples/cli/three_d_expr_demo/aa_aa.toml").open("rb") as f:
+    data = tomllib.load(f)
+names = []
+for block in data["command_blocks"]:
+    for cmd in block["commands"]:
+        if cmd.startswith("3Drep evaluate"):
+            assert "--manifest-name " in cmd
+            assert "--no-show-parameters" in cmd
+            parts = cmd.split()
+            names.append(parts[parts.index("--manifest-name") + 1])
+assert len(names) == len(set(names))
+PY
+
+./gammaloop --dev-optim --clean-state -s /tmp/gammaloop_state_named_manifest \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml run load \
+  -c "3Drep evaluate -p aa_aa -i default -g 0 --representation cff \
+      --workspace-path /tmp/gammaloop_3drep_named_manifest --precision Double \
+      --seed 11 --scale 0.25 --profile 1ms --eager --clean \
+      --numerator-only --manifest-name smoke_eval.json --no-show-parameters; quit -n"
+
+./summarize_3drep_workspace.py /tmp/gammaloop_3drep_named_manifest --no-color
+```
+
+The smoke test wrote the named `smoke_eval.json` manifest, suppressed the
+parameter table in the terminal output, and the summary helper discovered the
+non-default manifest name.
+
+## 2026-05-02: wrapped 3Drep summary details
+
+Follow-up implementation:
+
+- Updated `examples/cli/three_d_expr_demo/summarize_3drep_workspace.py` so the
+  optional `details` column wraps at 40 visible characters.
+- This keeps long manifest paths readable without allowing duplicate-category
+  rows to make the summary table excessively wide.
+- The summary now deduplicates manifests with identical visible category and
+  identical detail properties.
+- By default, entries that differ only in detail properties are collapsed to the
+  first representative row; `--show-duplicates` expands them and highlights
+  differing detail fields in red.
+- Added a final `manifest` column with the manifest basename.
+- Timing ratios are now measured per graph, representation, and numerator kind
+  against the first available baseline in this priority order within that
+  subset:
+  1. Double compiled assembly;
+  2. Double eager.
+- The selected reference row is sorted first inside each
+  graph/representation/kind subset and its manifest basename is colored green.
+- Added horizontal separators between graph groups.
+
+Verification completed:
+
+```text
+python3 -m py_compile examples/cli/three_d_expr_demo/summarize_3drep_workspace.py
+
+./examples/cli/three_d_expr_demo/summarize_3drep_workspace.py \
+  ./examples/cli/three_d_expr_demo/aa_aa_workspace --no-color
+
+./examples/cli/three_d_expr_demo/summarize_3drep_workspace.py \
+  ./examples/cli/three_d_expr_demo/aa_aa_workspace --no-color --show-duplicates
+```
+
 ## 2026-05-01: aa_aa 3Drep integration test coverage
 
 Follow-up implementation completed:

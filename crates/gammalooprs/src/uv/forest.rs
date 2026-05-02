@@ -1,5 +1,6 @@
 use crate::{
     GammaLoopContext,
+    cff::expression::GammaLoopGraphOrientation,
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
@@ -53,6 +54,21 @@ impl ParametricIntegrands {
             cuts: self.cuts.clone(),
         }
     }
+
+    pub fn sum_orientations_explicitly(self, orientations: &[EdgeVec<Orientation>]) -> Self {
+        self.map(|atom| explicit_orientation_sum_atom(&atom, orientations))
+    }
+}
+
+pub(crate) fn explicit_orientation_sum_atom(
+    atom: &Atom,
+    orientations: &[EdgeVec<Orientation>],
+) -> Atom {
+    orientations
+        .iter()
+        .map(|orientation| orientation.select_gs(atom.as_atom_view()))
+        .fold(Atom::Zero, |acc, term| acc + term)
+        .collect_factors()
 }
 
 impl CutForests {
@@ -62,7 +78,14 @@ impl CutForests {
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
+        explicit_orientation_sum_only: bool,
     ) -> Result<()> {
+        if settings.local_uv_cts_from_expanded_4d_integrands && !explicit_orientation_sum_only {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands` is not implemented yet"
+            ));
+        }
+
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
             .iter_mut()
@@ -75,6 +98,7 @@ impl CutForests {
                 cuts,
                 valid_orientations,
                 settings,
+                explicit_orientation_sum_only,
             )?;
         }
         Ok(())
@@ -126,6 +150,7 @@ impl Forest {
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
+        explicit_orientation_sum_only: bool,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
 
@@ -172,6 +197,7 @@ impl Forest {
                         &parent.data,
                         valid_orientations,
                         settings,
+                        explicit_orientation_sum_only,
                     )?;
                 }
                 _ => {

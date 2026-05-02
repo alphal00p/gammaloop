@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     cff::{
         expression::OrientationData,
         hsurface::{Hsurface, HsurfaceID},
-        surface::{GammaLoopSurfaceCache, HybridSurface, HybridSurfaceID},
+        surface::{
+            GammaLoopSurfaceCache, HybridSurface, HybridSurfaceID, LinearSurface, LinearSurfaceID,
+            LinearSurfaceKind,
+        },
         tree::Tree,
     },
     graph::{Graph, get_cff_inverse_energy_product_impl},
@@ -16,14 +19,17 @@ use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
-    involution::{EdgeVec, HedgePair},
+    involution::{EdgeVec, Flow, HedgePair},
     subgraph::{OrientedCut, SubGraphLike, SubSetOps},
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
 };
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::{
+    Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode, ThreeDGraphSource,
+};
 use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
@@ -287,6 +293,75 @@ fn generate_cff_expression<E, V, H>(
 }
 
 impl Graph {
+    pub(crate) fn generate_3d_expression_for_integrand(
+        &mut self,
+        contract_edges: &[EdgeIndex],
+        canonize_esurface: &Option<ShiftRewrite>,
+    ) -> Result<CFFExpression<OrientationID>> {
+        let initial_state_cut_edges = self
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .collect_vec();
+        if !initial_state_cut_edges.is_empty() {
+            debug!(
+                "using legacy CFF generation for graphs with initial-state cuts until generalized initial-cut parity is complete"
+            );
+            return self.generate_cff(contract_edges, canonize_esurface);
+        }
+
+        if !contract_edges.is_empty() {
+            debug!(
+                "using legacy CFF generation for contracted production subgraphs until generalized contracted-basis support is complete"
+            );
+            return self.generate_cff(contract_edges, canonize_esurface);
+        }
+
+        let options = Generate3DExpressionOptions {
+            representation: RepresentationMode::Cff,
+            energy_degree_bounds: Vec::new(),
+            numerator_sampling_scale: NumeratorSamplingScaleMode::None,
+        };
+        let mut expression = match {
+            let source = ContractedGraphSource {
+                graph: self,
+                contract_edges,
+            };
+            three_dimensional_reps::generate_3d_expression(&source, &options)
+        } {
+            Ok(expression) => expression,
+            Err(error) => {
+                debug!(
+                    ?error,
+                    "falling back to legacy CFF generation for a contracted graph not yet supported by generalized 3D expression generation"
+                );
+                return self.generate_cff(contract_edges, canonize_esurface);
+            }
+        };
+
+        if !initial_state_cut_edges.is_empty() {
+            expression.orientations = expression
+                .orientations
+                .into_iter()
+                .filter(|orientation| {
+                    initial_state_cut_edges.iter().all(|edge_id| {
+                        orientation
+                            .data
+                            .orientation
+                            .get(*edge_id)
+                            .is_some_and(|orientation| *orientation == Orientation::Default)
+                    })
+                })
+                .collect();
+        }
+
+        self.convert_generated_expression_surfaces(
+            expression,
+            canonize_esurface,
+            &initial_state_cut_edges,
+        )
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn generate_cff(
         &mut self,
         contract_edges: &[EdgeIndex],
@@ -338,6 +413,397 @@ impl Graph {
             &edges_in_initial_state_cut,
             canonize_esurface,
         )
+    }
+
+    fn convert_generated_expression_surfaces(
+        &mut self,
+        mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
+        canonize_esurface: &Option<ShiftRewrite>,
+        initial_state_cut_edges: &[EdgeIndex],
+    ) -> Result<CFFExpression<OrientationID>> {
+        let mut linear_surface_map = BTreeMap::<LinearSurfaceID, HybridSurfaceID>::new();
+        for (linear_surface_id, surface) in
+            expression.surfaces.linear_surface_cache.iter_enumerated()
+        {
+            let converted = self.intern_generated_linear_surface(
+                surface,
+                canonize_esurface,
+                initial_state_cut_edges,
+            )?;
+            linear_surface_map.insert(linear_surface_id, converted);
+        }
+
+        for orientation in expression.orientations.iter_mut() {
+            orientation.for_each_denominator_tree_mut(|denominator| {
+                denominator.map_mut(|surface_id| {
+                    remap_generated_surface_id(surface_id, &linear_surface_map)
+                });
+            });
+            for variant in &mut orientation.variants {
+                for surface_id in &mut variant.numerator_surfaces {
+                    remap_generated_surface_id(surface_id, &linear_surface_map);
+                }
+                // GammaLoop production CFF keeps inverse on-shell-energy factors
+                // outside the CFF denominator tree. The generalized crate stores
+                // them per variant, so strip them here to preserve the current
+                // production convention.
+                variant.half_edges.clear();
+            }
+        }
+
+        Ok(CFFExpression {
+            orientations: expression.orientations,
+            surfaces: self.surface_cache.clone(),
+        })
+    }
+
+    fn intern_generated_linear_surface(
+        &mut self,
+        surface: &LinearSurface,
+        canonize_esurface: &Option<ShiftRewrite>,
+        initial_state_cut_edges: &[EdgeIndex],
+    ) -> Result<HybridSurfaceID> {
+        if !surface.expression.uniform_scale_coeff.is_zero()
+            || !surface.expression.constant.is_zero()
+        {
+            return Err(eyre::eyre!(
+                "generalized CFF production cannot convert non-homogeneous linear surface {:?}",
+                surface
+            ));
+        }
+
+        let mut positive_energies = Vec::new();
+        let mut negative_energies = Vec::new();
+        let mut external_shift = Vec::new();
+        collect_linear_surface_terms(
+            &surface.expression.internal_terms,
+            initial_state_cut_edges,
+            &mut positive_energies,
+            &mut negative_energies,
+            &mut external_shift,
+        )?;
+        for (edge_id, coeff) in &surface.expression.external_terms {
+            let coeff = atom_integer_coeff(coeff)?;
+            external_shift.push((*edge_id, coeff));
+        }
+        positive_energies.sort();
+        negative_energies.sort();
+        external_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+        match surface.kind {
+            LinearSurfaceKind::Esurface => {
+                if !negative_energies.is_empty() {
+                    return Err(eyre::eyre!(
+                        "generalized CFF production cannot convert E-surface with negative internal terms {:?}",
+                        surface
+                    ));
+                }
+                let mut esurface = Esurface {
+                    energies: positive_energies,
+                    external_shift,
+                    vertex_set: crate::cff::cff_graph::VertexSet::dummy(),
+                };
+                if let Some(shift_rewrite) = canonize_esurface {
+                    esurface.canonicalize_shift(shift_rewrite);
+                }
+
+                let esurface_id = self
+                    .surface_cache
+                    .esurface_cache
+                    .position(|existing| *existing == esurface)
+                    .unwrap_or_else(|| {
+                        self.surface_cache.esurface_cache.push(esurface);
+                        Into::<EsurfaceID>::into(self.surface_cache.esurface_cache.len() - 1)
+                    });
+
+                Ok(HybridSurfaceID::Esurface(esurface_id))
+            }
+            LinearSurfaceKind::Hsurface => {
+                let hsurface = Hsurface {
+                    positive_energies,
+                    negative_energies,
+                    external_shift,
+                    vertex_set: crate::cff::cff_graph::VertexSet::dummy(),
+                };
+                let hsurface_id = self
+                    .surface_cache
+                    .hsurface_cache
+                    .position(|existing| existing == &hsurface)
+                    .unwrap_or_else(|| {
+                        self.surface_cache.hsurface_cache.push(hsurface);
+                        Into::<HsurfaceID>::into(self.surface_cache.hsurface_cache.len() - 1)
+                    });
+
+                Ok(HybridSurfaceID::Hsurface(hsurface_id))
+            }
+        }
+    }
+}
+
+struct ContractedGraphSource<'a> {
+    graph: &'a Graph,
+    contract_edges: &'a [EdgeIndex],
+}
+
+impl ThreeDGraphSource for ContractedGraphSource<'_> {
+    fn to_three_d_parsed_graph(
+        &self,
+    ) -> three_dimensional_reps::graph_io::Result<three_dimensional_reps::ParsedGraph> {
+        use three_dimensional_reps::graph_io::{
+            GraphIoError, ParsedGraph, ParsedGraphExternalEdge, ParsedGraphInternalEdge,
+        };
+
+        let mut parent = (0..self.graph.n_nodes()).collect_vec();
+        for (pair, edge_id, edge_data) in self.graph.underlying.iter_edges() {
+            if edge_data.data.is_dummy || !self.contract_edges.contains(&edge_id) {
+                continue;
+            }
+            if let HedgePair::Paired { source, sink } = pair {
+                union_parent(
+                    &mut parent,
+                    usize::from(self.graph.node_id(source)),
+                    usize::from(self.graph.node_id(sink)),
+                );
+            }
+        }
+
+        let node_ids = self
+            .graph
+            .underlying
+            .iter_nodes()
+            .map(|(node_id, _, _)| node_id)
+            .sorted()
+            .collect::<Vec<_>>();
+        let mut root_to_internal = BTreeMap::<usize, usize>::new();
+        for node_id in &node_ids {
+            let root = find_parent(&mut parent, usize::from(*node_id));
+            if !root_to_internal.contains_key(&root) {
+                root_to_internal.insert(root, root_to_internal.len());
+            }
+        }
+        let mut node_to_internal = BTreeMap::new();
+        for node_id in &node_ids {
+            let root = find_parent(&mut parent, usize::from(*node_id));
+            node_to_internal.insert(*node_id, root_to_internal[&root]);
+        }
+
+        let loop_names = self
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge_id| self.graph.underlying[*edge_id].name.value.clone())
+            .collect::<Vec<_>>();
+        let external_names = self
+            .graph
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .map(|edge_id| self.graph.underlying[*edge_id].name.value.clone())
+            .collect::<Vec<_>>();
+
+        let mut internal_edges = Vec::new();
+        let mut external_edges = Vec::new();
+        let mut next_external_id = 10_000_000usize;
+
+        for (pair, edge_index, edge_data) in self
+            .graph
+            .underlying
+            .iter_edges()
+            .sorted_by_key(|(_, edge_index, _)| *edge_index)
+        {
+            if edge_data.data.is_dummy {
+                continue;
+            }
+            let signature = &self.graph.loop_momentum_basis.edge_signatures[edge_index];
+            let momentum_signature = three_dimensional_reps::MomentumSignature {
+                loop_signature: (&signature.internal).into_iter().map(sign_to_i32).collect(),
+                external_signature: (&signature.external).into_iter().map(sign_to_i32).collect(),
+            };
+            let label = edge_data.data.name.value.clone();
+            match pair {
+                HedgePair::Paired { source, sink } => {
+                    if self.contract_edges.contains(&edge_index) {
+                        continue;
+                    }
+                    let tail = *node_to_internal
+                        .get(&self.graph.node_id(source))
+                        .ok_or_else(|| {
+                            GraphIoError::Source(format!(
+                                "missing contracted source node mapping for edge {}",
+                                usize::from(edge_index)
+                            ))
+                        })?;
+                    let head =
+                        *node_to_internal
+                            .get(&self.graph.node_id(sink))
+                            .ok_or_else(|| {
+                                GraphIoError::Source(format!(
+                                    "missing contracted sink node mapping for edge {}",
+                                    usize::from(edge_index)
+                                ))
+                            })?;
+                    internal_edges.push(ParsedGraphInternalEdge {
+                        edge_id: internal_edges.len(),
+                        tail,
+                        head,
+                        label,
+                        mass_key: Some(edge_data.data.particle.mass_atom().to_canonical_string()),
+                        signature: momentum_signature,
+                        had_pow: false,
+                    });
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let node = *node_to_internal
+                        .get(&self.graph.node_id(hedge))
+                        .ok_or_else(|| {
+                            GraphIoError::Source(format!(
+                                "missing contracted external node mapping for edge {}",
+                                usize::from(edge_index)
+                            ))
+                        })?;
+                    let (source, destination) = match flow {
+                        Flow::Source => (Some(node), None),
+                        Flow::Sink => (None, Some(node)),
+                    };
+                    external_edges.push(ParsedGraphExternalEdge {
+                        edge_id: next_external_id,
+                        source,
+                        destination,
+                        label,
+                        external_coefficients: momentum_signature.external_signature,
+                    });
+                    next_external_id += 1;
+                }
+                HedgePair::Split { .. } => {
+                    return Err(GraphIoError::Source(
+                        "split edges are not supported when extracting contracted Graph input"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        Ok(ParsedGraph {
+            internal_edges,
+            external_edges,
+            loop_names,
+            external_names,
+            node_name_to_internal: root_to_internal
+                .into_iter()
+                .map(|(root, node)| (format!("n{root}"), node))
+                .collect(),
+        })
+    }
+
+    fn energy_edge_index_map(
+        &self,
+        _parsed: &three_dimensional_reps::ParsedGraph,
+    ) -> Option<three_dimensional_reps::EnergyEdgeIndexMap> {
+        let internal = self
+            .graph
+            .underlying
+            .iter_edges()
+            .sorted_by_key(|(_, edge_index, _)| *edge_index)
+            .filter_map(|(pair, edge_index, edge_data)| {
+                (pair.is_paired()
+                    && !edge_data.data.is_dummy
+                    && !self.contract_edges.contains(&edge_index))
+                .then_some(usize::from(edge_index))
+            })
+            .enumerate()
+            .collect::<BTreeMap<_, _>>();
+
+        let external = self
+            .graph
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .enumerate()
+            .map(|(external_id, edge_id)| (external_id, usize::from(*edge_id)))
+            .collect::<BTreeMap<_, _>>();
+
+        Some(three_dimensional_reps::EnergyEdgeIndexMap {
+            internal,
+            external,
+            orientation_edge_count: self.graph.underlying.n_edges(),
+        })
+    }
+}
+
+fn remap_generated_surface_id(
+    surface_id: &mut HybridSurfaceID,
+    linear_surface_map: &BTreeMap<LinearSurfaceID, HybridSurfaceID>,
+) {
+    if let HybridSurfaceID::Linear(linear_surface_id) = surface_id {
+        *surface_id = *linear_surface_map
+            .get(linear_surface_id)
+            .expect("all generated linear surfaces should have been interned");
+    }
+}
+
+fn collect_linear_surface_terms(
+    terms: &[(EdgeIndex, Atom)],
+    initial_state_cut_edges: &[EdgeIndex],
+    positive_energies: &mut Vec<EdgeIndex>,
+    negative_energies: &mut Vec<EdgeIndex>,
+    external_shift: &mut Vec<(EdgeIndex, i64)>,
+) -> Result<()> {
+    for (edge_id, coeff) in terms {
+        let coeff = atom_integer_coeff(coeff)?;
+        if coeff == 0 {
+            continue;
+        }
+        if initial_state_cut_edges.contains(edge_id) {
+            // GammaLoop cut E-surfaces store initial-state energies on the
+            // external-shift side with the opposite sign.
+            external_shift.push((*edge_id, -coeff));
+            continue;
+        }
+
+        let target = if coeff > 0 {
+            &mut *positive_energies
+        } else {
+            &mut *negative_energies
+        };
+        for _ in 0..coeff.unsigned_abs() {
+            target.push(*edge_id);
+        }
+    }
+    Ok(())
+}
+
+fn atom_integer_coeff(coeff: &Atom) -> Result<i64> {
+    let coeff_text = coeff.to_canonical_string();
+    coeff_text
+        .parse::<i64>()
+        .map_err(|_| eyre::eyre!("expected integer linear-surface coefficient, found {coeff_text}"))
+}
+
+fn find_parent(parent: &mut [usize], node: usize) -> usize {
+    let parent_node = parent[node];
+    if parent_node == node {
+        node
+    } else {
+        let root = find_parent(parent, parent_node);
+        parent[node] = root;
+        root
+    }
+}
+
+fn union_parent(parent: &mut [usize], left: usize, right: usize) {
+    let left_root = find_parent(parent, left);
+    let right_root = find_parent(parent, right);
+    if left_root != right_root {
+        parent[right_root] = left_root;
+    }
+}
+
+fn sign_to_i32(sign: crate::momentum::SignOrZero) -> i32 {
+    match sign {
+        crate::momentum::SignOrZero::Minus => -1,
+        crate::momentum::SignOrZero::Zero => 0,
+        crate::momentum::SignOrZero::Plus => 1,
     }
 }
 
@@ -990,7 +1456,11 @@ mod tests_cff {
 
     use crate::{
         cff::{cff_graph::CFFEdgeType, expression::GammaLoopThreeDExpression},
+        dot,
+        graph::{feynman_graph::FeynmanGraph, parse::IntoGraph},
+        initialisation::test_initialise,
         momentum::{FourMomentum, ThreeMomentum},
+        processes::AmplitudeGraph,
         settings::global::OrientationPattern,
         utils::{
             self, F, RefDefault, external_energy_atom_from_index, ose_atom_from_index,
@@ -1293,6 +1763,85 @@ mod tests_cff {
 
         cff_atom *= inverse_energy_product;
         cff_atom
+    }
+
+    fn cff_atom_with_surface_substitutions(cff: &CFFExpression<OrientationID>) -> Atom {
+        let atom = cff.to_atom_gs(&OrientationPattern::default());
+        cff.surfaces.substitute_energies_gs(&atom, &[])
+    }
+
+    fn amplitude_production_contract_edges(graph: &Graph) -> Vec<EdgeIndex> {
+        graph
+            .iter_edges_of(
+                &graph
+                    .tree_edges
+                    .subtract(&graph.initial_state_cut)
+                    .subtract(&graph.external_filter::<linnet::half_edge::subgraph::SuBitGraph>()),
+            )
+            .map(|(_, edge_id, _)| edge_id)
+            .collect_vec()
+    }
+
+    #[test]
+    fn generated_cff_matches_legacy_cff_for_scalar_bubble() {
+        test_initialise().unwrap();
+        let graph: AmplitudeGraph = dot!(
+            digraph bub {
+                edge [particle=scalar_1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3]
+                B:1 -> e [id=2]
+                A -> B [id=1]
+                A -> B [id=0]
+            },
+            "scalars"
+        )
+        .unwrap();
+
+        for (case, contract_edges) in [
+            ("uncontracted", Vec::new()),
+            (
+                "amplitude production contractions",
+                amplitude_production_contract_edges(&graph.graph),
+            ),
+        ] {
+            let mut legacy_graph = graph.graph.clone();
+            let legacy_canonize =
+                legacy_graph.get_esurface_canonization(&legacy_graph.loop_momentum_basis);
+            let legacy = legacy_graph
+                .generate_cff(&contract_edges, &legacy_canonize)
+                .unwrap();
+
+            let mut generated_graph = graph.graph.clone();
+            let generated_canonize =
+                generated_graph.get_esurface_canonization(&generated_graph.loop_momentum_basis);
+            let generated = generated_graph
+                .generate_3d_expression_for_integrand(&contract_edges, &generated_canonize)
+                .unwrap();
+
+            let legacy_orientations = legacy
+                .orientations
+                .iter()
+                .map(|orientation| orientation.data.to_string())
+                .sorted()
+                .collect_vec();
+            let generated_orientations = generated
+                .orientations
+                .iter()
+                .map(|orientation| orientation.data.to_string())
+                .sorted()
+                .collect_vec();
+            assert_eq!(legacy_orientations, generated_orientations, "{case}");
+
+            let diff = (cff_atom_with_surface_substitutions(&legacy)
+                - cff_atom_with_surface_substitutions(&generated))
+            .expand();
+            assert!(
+                diff.is_zero(),
+                "generalized CFF path differs from legacy path for {case} by {diff}"
+            );
+        }
     }
 
     #[test]

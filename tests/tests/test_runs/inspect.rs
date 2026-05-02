@@ -1,6 +1,36 @@
 use super::utils::*;
 use super::*;
 
+fn setup_explicit_sum_scalar_topologies_cli(
+    test_name: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "remove processes",
+            "set global kv global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false",
+            "set default-runtime kv general.evaluator_method=Summed",
+            "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri",
+            "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+            "generate",
+            "set model mass_scalar_2=2.0",
+            "set model mass_scalar_1=1.0",
+            SCALAR_TRIANGLE_EXTERNALS,
+            SCALAR_BOX_ABOVE_EXTERNALS,
+        ],
+    )?;
+
+    Ok(cli)
+}
+
 #[test]
 fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
     let mut cli = get_test_cli(
@@ -55,6 +85,117 @@ fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
             && rendered.contains(
                 "requires 3 discrete dimensions [graph group, orientation, channel], but got 0."
             ),
+        "{rendered}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn explicit_orientation_sum_inspect_matches_standard_cff() -> Result<()> {
+    let mut standard = setup_scalar_topologies_cli("scalar_explicit_orientation_standard")?;
+    let mut explicit = setup_explicit_sum_scalar_topologies_cli("scalar_explicit_orientation_sum")?;
+
+    for (process, integrand, point) in [
+        ("triangle", "scalar_tri", vec![0.1, 0.2, 0.3]),
+        ("box", "scalar_box", vec![0.1, 0.2, 0.3]),
+    ] {
+        let standard_value = inspect_xspace_process(&mut standard, process, integrand, &point)?;
+        let explicit_value = inspect_xspace_process(&mut explicit, process, integrand, &point)?;
+        assert_complex_approx_eq(
+            explicit_value,
+            standard_value,
+            &format!("explicit orientation sum inspect for {process}/{integrand}"),
+        );
+    }
+
+    clean_test(&standard.cli_settings.state.folder);
+    clean_test(&explicit.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn explicit_orientation_sum_rejects_individual_orientation_runtime_modes() -> Result<()> {
+    let mut cli =
+        setup_explicit_sum_scalar_topologies_cli("scalar_explicit_orientation_runtime_rejections")?;
+
+    cli.run_command(
+        "set process -p box -i scalar_box kv general.evaluator_method=SingleParametric",
+    )?;
+    let error = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .expect_err("explicit orientation sum should reject non-Summed runtime evaluators");
+    let rendered = format!("{error:#}");
+    assert!(
+        rendered.contains("requires runtime `general.evaluator_method = Summed`"),
+        "{rendered}"
+    );
+
+    cli.run_command("set process -p box -i scalar_box kv general.evaluator_method=Summed")?;
+    cli.run_command(
+        r#"set process -p box -i scalar_box string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+'"#,
+    )?;
+    let error = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: false,
+        discrete_dim: vec![0, 0],
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .expect_err("explicit orientation sum should reject orientation Monte Carlo");
+    let rendered = format!("{error:#}");
+    assert!(
+        rendered.contains("does not support runtime individual-orientation Monte Carlo sampling"),
+        "{rendered}"
+    );
+
+    cli.run_command(
+        r#"set process -p box -i scalar_box string '
+[general]
+evaluator_method = "Summed"
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+'"#,
+    )?;
+    let error = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: true,
+        graph_id: Some(0),
+        orientation_id: Some(0),
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .expect_err("explicit orientation sum should reject explicit orientation selection");
+    let rendered = format!("{error:#}");
+    assert!(
+        rendered.contains("explicit orientation selection is not supported"),
         "{rendered}"
     );
 

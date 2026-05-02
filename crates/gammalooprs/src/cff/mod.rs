@@ -62,7 +62,7 @@ impl Graph {
             }
         }
 
-        let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
+        let cff = self.generate_3d_expression_for_integrand(&contract_edges, &canonize_esurface)?;
         let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
             cff.select_esurface_residue(right_threshold).pop().unwrap()
         } else {

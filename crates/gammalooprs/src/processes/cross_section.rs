@@ -367,6 +367,9 @@ impl CrossSection {
                 graph_to_group_id: graph_to_group_id_for_group_structure(
                     &self.graph_group_structure,
                 ),
+                explicit_orientation_sum_only: global_settings
+                    .generation
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -703,6 +706,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
+        settings.ensure_step_iii_pending_options_are_supported()?;
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
         self.apply_spin_sum(model, settings, &runtime_default)?;
@@ -770,7 +774,7 @@ impl CrossSectionGraph {
 
         let global_cff = self
             .graph
-            .generate_cff(&contract_edges, &canonize_esurface)?;
+            .generate_3d_expression_for_integrand(&contract_edges, &canonize_esurface)?;
 
         let cut_esurface_map = self
             .cut_esurface
@@ -962,13 +966,26 @@ impl CrossSectionGraph {
         let lu_prefactor = self.lu_prefactor_helper();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            settings.explicit_orientation_sum_only,
+        )?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
 
         Ok(parametric_integrands
             .into_iter()
+            .map(|integrand| {
+                if settings.explicit_orientation_sum_only {
+                    integrand.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    integrand
+                }
+            })
             .map(|integrand| integrand.map(|a| a * &lu_prefactor))
             .collect())
     }
@@ -1467,7 +1484,13 @@ impl CrossSectionGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            settings.explicit_orientation_sum_only,
+        )?;
 
         let mut threshold_counterterms = cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
@@ -1503,32 +1526,35 @@ impl CrossSectionGraph {
             let mut iterated_atoms = vec![];
 
             for _ in 0..left_raised_cut_threshold_data[raised_cut_id].len() {
-                left_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &th_prefactor_left * &lu_prefactor),
-                );
+                let atoms = threshold_counterterms.next().unwrap();
+                let atoms = if settings.explicit_orientation_sum_only {
+                    atoms.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    atoms
+                };
+                left_atoms.push(atoms.map(|x| x * &th_prefactor_left * &lu_prefactor));
             }
 
             for _ in 0..right_raised_cut_threshold_data[raised_cut_id].len() {
-                right_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &th_prefactor_right * &lu_prefactor),
-                );
+                let atoms = threshold_counterterms.next().unwrap();
+                let atoms = if settings.explicit_orientation_sum_only {
+                    atoms.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    atoms
+                };
+                right_atoms.push(atoms.map(|x| x * &th_prefactor_right * &lu_prefactor));
             }
 
             for _ in 0..(left_raised_cut_threshold_data[raised_cut_id].len()
                 * right_raised_cut_threshold_data[raised_cut_id].len())
             {
-                iterated_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &iterated_prefactor * &lu_prefactor),
-                );
+                let atoms = threshold_counterterms.next().unwrap();
+                let atoms = if settings.explicit_orientation_sum_only {
+                    atoms.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    atoms
+                };
+                iterated_atoms.push(atoms.map(|x| x * &iterated_prefactor * &lu_prefactor));
             }
 
             let iterated_collection = IteratedCtCollection {

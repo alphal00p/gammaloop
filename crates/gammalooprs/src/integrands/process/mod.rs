@@ -57,6 +57,7 @@ use color_eyre::Result;
 
 pub mod evaluators;
 pub use evaluators::ActiveF64Backend;
+use evaluators::EvaluatorMethod;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
@@ -621,6 +622,17 @@ impl ProcessIntegrand {
                 .graph_terms
                 .get(graph_id)
                 .map(|term| term.get_num_orientations()),
+        }
+    }
+
+    pub fn uses_explicit_orientation_sum_only(&self) -> bool {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                integrand.uses_explicit_orientation_sum_only()
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                integrand.uses_explicit_orientation_sum_only()
+            }
         }
     }
 
@@ -2032,8 +2044,32 @@ pub trait ProcessIntegrandImpl {
     fn groups_default_sample_events_by_graph_group(&self) -> bool {
         false
     }
+    fn uses_explicit_orientation_sum_only(&self) -> bool {
+        false
+    }
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
+}
+
+pub(crate) fn validate_explicit_orientation_sum_runtime_settings(
+    settings: &RuntimeSettings,
+) -> Result<()> {
+    if settings.general.evaluator_method != EvaluatorMethod::Summed {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` requires runtime `general.evaluator_method = Summed`; {:?} is not supported",
+            settings.general.evaluator_method
+        ));
+    }
+
+    if let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling
+        && discrete_settings.sample_orientations
+    {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` does not support runtime individual-orientation Monte Carlo sampling; set `sampling.sample_orientations = false`"
+        ));
+    }
+
+    Ok(())
 }
 
 fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Option<usize> {
@@ -2800,6 +2836,12 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
 ) -> Result<GammaLoopSample<T>> {
+    if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` represents all orientations as a single summed contribution, so explicit orientation selection is not supported"
+        ));
+    }
+
     let expected_loop_count = if let Some(graph_id) = input.graph_id {
         let group_id = integrand
             .get_group_structure()

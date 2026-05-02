@@ -269,6 +269,14 @@ pub struct Evaluate {
     )]
     pub numerator_q0: Vec<String>,
 
+    /// File name used for the evaluate summary manifest in the 3Drep workspace.
+    #[arg(long, default_value = "evaluate_manifest.json", value_name = "NAME")]
+    pub manifest_name: String,
+
+    /// Do not print the input-parameter table in the evaluate command output.
+    #[arg(long, default_value_t = false)]
+    pub no_show_parameters: bool,
+
     #[arg(long, default_value_t = false)]
     pub clean: bool,
 }
@@ -1177,7 +1185,8 @@ impl Evaluate {
         let artifact_dir = input.artifact_dir;
         let symbolica_expression_path = artifact_dir.join("symbolica_expression.txt");
         let param_builder_path = artifact_dir.join("param_builder.txt");
-        let evaluate_manifest_path = artifact_dir.join("evaluate_manifest.json");
+        let evaluate_manifest_path =
+            artifact_dir.join(evaluate_manifest_file_name(&self.manifest_name)?);
         let prepared_param_builder = prepare_diagnostic_param_builder(
             selected.graph,
             &model,
@@ -1262,7 +1271,10 @@ impl Evaluate {
             &evaluate_manifest_path,
             &serde_json::to_string_pretty(&summary)?,
         )?;
-        println!("{}", render_evaluate_summary(&summary));
+        println!(
+            "{}",
+            render_evaluate_summary(&summary, !self.no_show_parameters)
+        );
         println!(
             "Saved 3Drep evaluate summary to {}",
             relative_display(&evaluate_manifest_path)
@@ -2159,6 +2171,28 @@ fn format_duration_dynamic(duration: Duration) -> String {
         2
     };
     format!("{value:.precision$} {unit}")
+}
+
+fn evaluate_manifest_file_name(name: &str) -> Result<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(eyre!("3Drep evaluate --manifest-name cannot be empty"));
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err(eyre!(
+            "3Drep evaluate --manifest-name must be a file name, not a path"
+        ));
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err(eyre!(
+            "3Drep evaluate --manifest-name must be a regular file name"
+        ));
+    }
+    if trimmed.ends_with(".json") {
+        Ok(trimmed.to_string())
+    } else {
+        Ok(format!("{trimmed}.json"))
+    }
 }
 
 const DIAGNOSTIC_ERROR_HEAD_LINES: usize = 200;
@@ -4033,7 +4067,7 @@ fn evaluation_delta_cell(
     )
 }
 
-fn render_evaluate_summary(output: &EvaluateOutput) -> String {
+fn render_evaluate_summary(output: &EvaluateOutput, show_parameters: bool) -> String {
     let mut table = Builder::new();
     table.push_record(vec![table_header("field"), table_header("value")]);
     table.push_record(vec![
@@ -4170,6 +4204,10 @@ fn render_evaluate_summary(output: &EvaluateOutput) -> String {
             "value".to_string(),
             color_text(&output.evaluation.value, Color::Green),
         ]);
+    }
+
+    if !show_parameters {
+        return table.build().with(Style::rounded()).to_string();
     }
 
     let mut parameter_table = Builder::new();

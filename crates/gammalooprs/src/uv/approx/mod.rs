@@ -428,6 +428,7 @@ impl Approximation {
         dependent: &Self,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
+        _explicit_orientation_sum_only: bool,
     ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");

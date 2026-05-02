@@ -335,14 +335,24 @@ impl LUCounterTermEvaluators {
                             None
                         };
 
-                        let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
-                            std::slice::from_ref(atom),
-                            param_builder,
-                            &orientations.raw,
-                            dual_shape,
-                            &settings.generation.evaluator,
-                        )
-                        .unwrap();
+                        let (evaluator, evaluator_timings) =
+                            if settings.generation.explicit_orientation_sum_only {
+                                EvaluatorStack::new_explicit_sum_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            } else {
+                                EvaluatorStack::new_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    &orientations.raw,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            }
+                            .unwrap();
                         timings += evaluator_timings;
                         evaluator
                     })
@@ -366,14 +376,24 @@ impl LUCounterTermEvaluators {
                             None
                         };
 
-                        let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
-                            std::slice::from_ref(atom),
-                            param_builder,
-                            &orientations.raw,
-                            dual_shape,
-                            &settings.generation.evaluator,
-                        )
-                        .unwrap();
+                        let (evaluator, evaluator_timings) =
+                            if settings.generation.explicit_orientation_sum_only {
+                                EvaluatorStack::new_explicit_sum_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            } else {
+                                EvaluatorStack::new_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    &orientations.raw,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            }
+                            .unwrap();
                         timings += evaluator_timings;
                         evaluator
                     })
@@ -395,14 +415,24 @@ impl LUCounterTermEvaluators {
                         None
                     };
 
-                    let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
-                        std::slice::from_ref(atom),
-                        param_builder,
-                        &orientations.raw,
-                        dual_shape,
-                        &settings.generation.evaluator,
-                    )
-                    .unwrap();
+                    let (evaluator, evaluator_timings) =
+                        if settings.generation.explicit_orientation_sum_only {
+                            EvaluatorStack::new_explicit_sum_with_timings(
+                                std::slice::from_ref(atom),
+                                param_builder,
+                                dual_shape,
+                                &settings.generation.evaluator,
+                            )
+                        } else {
+                            EvaluatorStack::new_with_timings(
+                                std::slice::from_ref(atom),
+                                param_builder,
+                                &orientations.raw,
+                                dual_shape,
+                                &settings.generation.evaluator,
+                            )
+                        }
+                        .unwrap();
                     let mut timings = iterated_timings.get();
                     timings += evaluator_timings;
                     iterated_timings.set(timings);

@@ -401,6 +401,9 @@ impl Amplitude {
                     &self.graph_group_structure,
                 ),
                 group_derived_data: self.group_derived_data.clone(),
+                explicit_orientation_sum_only: global_settings
+                    .generation
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -563,7 +566,14 @@ impl AmplitudeGraph {
 
             let vk = (crate::utils::vakint()?, &vk_settings);
             let cuts = CutSet::empty(self.graph.n_hedges());
-            forest.compute(&mut self.graph, vk, &cuts, &valid_orientations, settings)?;
+            forest.compute(
+                &mut self.graph,
+                vk,
+                &cuts,
+                &valid_orientations,
+                settings,
+                false,
+            )?;
 
             forest.pole_part_of_ends(&self.graph)
         } else {
@@ -611,7 +621,9 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression = self.graph.generate_cff(&contract_edges, &shift_rewrite)?;
+        let cff_expression = self
+            .graph
+            .generate_3d_expression_for_integrand(&contract_edges, &shift_rewrite)?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
@@ -624,6 +636,7 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
+        settings.ensure_step_iii_pending_options_are_supported()?;
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
@@ -934,11 +947,24 @@ impl AmplitudeGraph {
         let cutstructure = CutStructure::empty(&self.graph);
         let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            settings.explicit_orientation_sum_only,
+        )?;
         let exprs: Vec<_> = forests
             .orientation_parametric_exprs(&self.graph, false)?
             .into_iter()
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
+            .map(|e| {
+                if settings.explicit_orientation_sum_only {
+                    e.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    e
+                }
+            })
             .collect();
 
         self.derived_data.all_mighty_integrand = exprs[0].integrands[0].clone();
@@ -1061,9 +1087,25 @@ impl AmplitudeGraph {
 
         let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            settings.explicit_orientation_sum_only,
+        )?;
 
-        let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, false)?;
+        let exprs: Vec<_> = forests
+            .orientation_parametric_exprs(&self.graph, false)?
+            .into_iter()
+            .map(|e| {
+                if settings.explicit_orientation_sum_only {
+                    e.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    e
+                }
+            })
+            .collect();
 
         for mut expr in exprs.into_iter() {
             assert!(

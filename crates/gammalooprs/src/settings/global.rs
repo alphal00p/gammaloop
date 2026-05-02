@@ -56,6 +56,20 @@ pub struct GenerationSettings {
     pub force_cuts: Vec<Vec<String>>,
     #[serde(skip_serializing_if = "is_false")]
     pub override_lmb_heuristics: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub explicit_orientation_sum_only: bool,
+}
+
+impl GenerationSettings {
+    pub fn ensure_step_iii_pending_options_are_supported(&self) -> EyreResult<()> {
+        if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands` is not implemented yet"
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg_attr(
@@ -109,6 +123,27 @@ pub enum UniformNumeratorSamplingScale {
     None,
     BeyondQuadratic,
     All,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+pub enum ThreeDRepresentation {
+    #[default]
+    #[serde(rename = "CFF", alias = "cff")]
+    Cff,
+    #[serde(rename = "LTD", alias = "ltd")]
+    Ltd,
+}
+
+impl fmt::Display for ThreeDRepresentation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Cff => f.write_str("CFF"),
+            Self::Ltd => f.write_str("LTD"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Copy, JsonSchema)]

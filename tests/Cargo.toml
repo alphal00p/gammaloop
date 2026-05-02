@@ -36,6 +36,7 @@ rand = { workspace = true, features = ["small_rng"] }
 ndarray = "0.17"
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+schemars = { workspace = true }
 three-dimensional-reps = { path = "../crates/three-dimensional-reps", features = [
   "diagnostics",
   "eval",

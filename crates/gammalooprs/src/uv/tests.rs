@@ -87,6 +87,7 @@ fn scalar_bubble_root_integrand_reference(
             vakint,
             &valid_orientations,
             &reference_settings.uv,
+            false,
         )
         .unwrap();
 

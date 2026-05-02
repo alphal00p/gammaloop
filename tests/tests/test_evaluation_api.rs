@@ -438,10 +438,11 @@ fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
         vec![-11, 11]
     );
 
-    let second_group_cut_ids = event_groups[1]
+    let mut second_group_cut_ids = event_groups[1]
         .iter()
         .map(|event| (event.cut_info.graph_id, event.cut_info.cut_id))
         .collect::<Vec<_>>();
+    second_group_cut_ids.sort();
     assert_eq!(second_group_cut_ids, vec![(1, 0), (1, 1)]);
     for event in event_groups[1].iter() {
         assert_eq!(
