@@ -86,7 +86,8 @@ fn scalar_bubble_root_integrand_reference(
             &mut amplitude_graph.graph,
             vakint,
             &valid_orientations,
-            &reference_settings.uv,
+            &reference_settings,
+            crate::settings::global::ThreeDRepresentation::Cff,
             false,
         )
         .unwrap();

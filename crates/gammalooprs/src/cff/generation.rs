@@ -191,7 +191,7 @@ impl Graph {
         }
     }
 
-    fn convert_generated_expression_surfaces(
+    pub(crate) fn convert_generated_expression_surfaces(
         &mut self,
         mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
         representation: RepresentationMode,

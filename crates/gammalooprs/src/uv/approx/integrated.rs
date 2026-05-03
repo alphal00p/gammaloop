@@ -69,7 +69,7 @@ impl Graph {
                 GS.den(
                     W_.a_,
                     W_.mom_,
-                    Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
+                    Atom::var(GS.m_uv).pow(2),
                     Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
                         - (Atom::var(GS.m_uv)).pow(2),
                 ) / &tsquare,

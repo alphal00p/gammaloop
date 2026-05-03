@@ -15,6 +15,22 @@ fn setup_explicit_sum_scalar_topologies_cli_with_representation(
     subtract_uv: bool,
     enable_thresholds: bool,
 ) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_explicit_sum_scalar_topologies_cli_with_local_uv_mode(
+        test_name,
+        representation,
+        subtract_uv,
+        enable_thresholds,
+        false,
+    )
+}
+
+fn setup_explicit_sum_scalar_topologies_cli_with_local_uv_mode(
+    test_name: &str,
+    representation: &str,
+    subtract_uv: bool,
+    enable_thresholds: bool,
+    local_uv_from_expanded_4d: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
     let mut cli = get_test_cli(
         None,
         get_tests_workspace_path().join(test_name),
@@ -28,7 +44,7 @@ fn setup_explicit_sum_scalar_topologies_cli_with_representation(
             "import model scalars-default.json",
             "remove processes",
             &format!(
-                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds}"
+                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds}"
             ),
             "set default-runtime kv general.evaluator_method=Summed",
             "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri",
@@ -38,6 +54,149 @@ fn setup_explicit_sum_scalar_topologies_cli_with_representation(
             "set model mass_scalar_1=1.0",
             SCALAR_TRIANGLE_EXTERNALS,
             SCALAR_BOX_ABOVE_EXTERNALS,
+        ],
+    )?;
+
+    Ok(cli)
+}
+
+fn setup_explicit_sum_scalar_bubble_cli_with_local_uv_mode(
+    test_name: &str,
+    representation: &str,
+    local_uv_from_expanded_4d: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_scalar_bubble_cli_with_local_uv_mode(
+        test_name,
+        representation,
+        local_uv_from_expanded_4d,
+        true,
+    )
+}
+
+fn setup_scalar_bubble_cli_with_local_uv_mode(
+    test_name: &str,
+    representation: &str,
+    local_uv_from_expanded_4d: bool,
+    explicit_orientation_sum_only: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_scalar_bubble_cli_with_local_uv_and_integrated_mode(
+        test_name,
+        representation,
+        local_uv_from_expanded_4d,
+        explicit_orientation_sum_only,
+        false,
+    )
+}
+
+fn setup_scalar_bubble_cli_with_local_uv_and_integrated_mode(
+    test_name: &str,
+    representation: &str,
+    local_uv_from_expanded_4d: bool,
+    explicit_orientation_sum_only: bool,
+    generate_integrated: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "remove processes",
+            &format!(
+                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.summed=true global.generation.evaluator.summed_function_map=true global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated={generate_integrated} global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds=false"
+            ),
+            r#"set default-runtime string '
+[general]
+evaluator_method = "Summed"
+mu_r = 3.0
+m_uv = 20.0
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+'"#,
+            "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble",
+            "set model mass_scalar_2=2.0",
+            r#"set process -p bubble -i scalar_bubble string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [1.0, 0.0, 0.0, 0.0],
+    "dependent"
+]
+helicities = [0, 0]
+'"#,
+        ],
+    )?;
+
+    Ok(cli)
+}
+
+fn setup_explicit_sum_scalar_cross_section_cli_with_representation(
+    test_name: &str,
+    representation: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_explicit_sum_scalar_cross_section_cli_with_uv_mode(test_name, representation, false)
+}
+
+fn setup_explicit_sum_scalar_cross_section_cli_with_uv_mode(
+    test_name: &str,
+    representation: &str,
+    subtract_uv: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "remove processes",
+            &format!(
+                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true global.generation.threshold_subtraction.enable_thresholds=false"
+            ),
+            r#"set default-runtime string '
+[general]
+evaluator_method = "Summed"
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [3.0, 0.0, 0.0, 0.0]
+]
+helicities = [0]
+'"#,
+            "set model mass_scalar_2=0.1",
+            "generate xs scalar_1 > scalar_2 scalar_2 [{{1}}] --allowed-vertex-interactions V_3_SCALAR_122 -p scalar_xs -i scalar_xs",
         ],
     )?;
 
@@ -406,6 +565,60 @@ fn ltd_threshold_explicit_orientation_sum_inspect_matches_cff() -> Result<()> {
 
 #[test]
 #[serial]
+fn ltd_bare_scalar_cross_section_inspect_matches_cff() -> Result<()> {
+    let mut cff = setup_explicit_sum_scalar_cross_section_cli_with_representation(
+        "scalar_xs_ltd_bare_cff_reference",
+        "CFF",
+    )?;
+    let mut ltd = setup_explicit_sum_scalar_cross_section_cli_with_representation(
+        "scalar_xs_ltd_bare",
+        "LTD",
+    )?;
+
+    let point = default_xspace_point_for(&cff, "scalar_xs", "scalar_xs")?;
+    let cff_value = inspect_xspace_process(&mut cff, "scalar_xs", "scalar_xs", &point)?;
+    let ltd_value = inspect_xspace_process(&mut ltd, "scalar_xs", "scalar_xs", &point)?;
+    assert_complex_approx_eq(
+        ltd_value,
+        cff_value,
+        "bare LTD scalar cross-section inspect",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_scalar_cross_section_local_uv_from_expanded_4d_inspect_matches_cff() -> Result<()> {
+    let mut cff = setup_explicit_sum_scalar_cross_section_cli_with_uv_mode(
+        "scalar_xs_ltd_local_uv_4d_cff_reference",
+        "CFF",
+        true,
+    )?;
+    let mut ltd = setup_explicit_sum_scalar_cross_section_cli_with_uv_mode(
+        "scalar_xs_ltd_local_uv_4d",
+        "LTD",
+        true,
+    )?;
+
+    let point = default_xspace_point_for(&cff, "scalar_xs", "scalar_xs")?;
+    let cff_value = inspect_xspace_process(&mut cff, "scalar_xs", "scalar_xs", &point)?;
+    let ltd_value = inspect_xspace_process(&mut ltd, "scalar_xs", "scalar_xs", &point)?;
+    assert_complex_approx_eq(
+        ltd_value,
+        cff_value,
+        "LTD scalar cross-section expanded-4D local UV inspect",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn ltd_with_uv_subtraction_errors_cleanly() -> Result<()> {
     let test_name = "scalar_ltd_uv_subtraction_not_supported";
     let mut cli = get_test_cli(
@@ -434,6 +647,177 @@ fn ltd_with_uv_subtraction_errors_cleanly() -> Result<()> {
     );
 
     clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn local_uv_from_expanded_4d_inspects_match_cff_and_ltd() -> Result<()> {
+    let mut cff_3d_uv = setup_explicit_sum_scalar_topologies_cli_with_local_uv_mode(
+        "scalar_local_uv_3d_cff_reference",
+        "CFF",
+        true,
+        false,
+        false,
+    )?;
+    let mut cff_4d_uv = setup_explicit_sum_scalar_topologies_cli_with_local_uv_mode(
+        "scalar_local_uv_4d_cff",
+        "CFF",
+        true,
+        false,
+        true,
+    )?;
+    let mut ltd_4d_uv = setup_explicit_sum_scalar_topologies_cli_with_local_uv_mode(
+        "scalar_local_uv_4d_ltd",
+        "LTD",
+        true,
+        false,
+        true,
+    )?;
+
+    for (process, integrand, point) in [
+        ("triangle", "scalar_tri", vec![0.1, 0.2, 0.3]),
+        ("box", "scalar_box", vec![0.1, 0.2, 0.3]),
+    ] {
+        let cff_3d = inspect_xspace_process(&mut cff_3d_uv, process, integrand, &point)?;
+        let cff_4d = inspect_xspace_process(&mut cff_4d_uv, process, integrand, &point)?;
+        let ltd_4d = inspect_xspace_process(&mut ltd_4d_uv, process, integrand, &point)?;
+        assert_complex_approx_eq(
+            cff_4d,
+            cff_3d,
+            &format!(
+                "CFF local UV from expanded 4D matches 3D expansion for {process}/{integrand}"
+            ),
+        );
+        assert_complex_approx_eq(
+            ltd_4d,
+            cff_3d,
+            &format!("LTD local UV from expanded 4D matches CFF for {process}/{integrand}"),
+        );
+    }
+
+    clean_test(&cff_3d_uv.cli_settings.state.folder);
+    clean_test(&cff_4d_uv.cli_settings.state.folder);
+    clean_test(&ltd_4d_uv.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn divergent_bubble_local_uv_from_expanded_4d_inspects_match_cff_and_ltd() -> Result<()> {
+    let mut cff_3d_uv = setup_explicit_sum_scalar_bubble_cli_with_local_uv_mode(
+        "scalar_bubble_local_uv_3d_cff_reference",
+        "CFF",
+        false,
+    )?;
+    let mut cff_4d_uv = setup_explicit_sum_scalar_bubble_cli_with_local_uv_mode(
+        "scalar_bubble_local_uv_4d_cff",
+        "CFF",
+        true,
+    )?;
+    let mut ltd_4d_uv = setup_explicit_sum_scalar_bubble_cli_with_local_uv_mode(
+        "scalar_bubble_local_uv_4d_ltd",
+        "LTD",
+        true,
+    )?;
+
+    let point = vec![0.1, 0.2, 0.3];
+    let cff_3d = inspect_xspace_process(&mut cff_3d_uv, "bubble", "scalar_bubble", &point)?;
+    let cff_4d = inspect_xspace_process(&mut cff_4d_uv, "bubble", "scalar_bubble", &point)?;
+    let ltd_4d = inspect_xspace_process(&mut ltd_4d_uv, "bubble", "scalar_bubble", &point)?;
+
+    assert_complex_approx_eq(
+        cff_4d,
+        cff_3d,
+        "CFF expanded-4D local UV matches 3D-local UV for divergent scalar bubble",
+    );
+    assert_complex_approx_eq(
+        ltd_4d,
+        cff_3d,
+        "LTD expanded-4D local UV matches CFF for divergent scalar bubble",
+    );
+
+    clean_test(&cff_3d_uv.cli_settings.state.folder);
+    clean_test(&cff_4d_uv.cli_settings.state.folder);
+    clean_test(&ltd_4d_uv.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn divergent_bubble_integrated_uv_from_expanded_4d_inspects_match_cff_and_ltd() -> Result<()> {
+    let mut cff_3d_uv = setup_scalar_bubble_cli_with_local_uv_and_integrated_mode(
+        "scalar_bubble_integrated_uv_3d_cff_reference",
+        "CFF",
+        false,
+        true,
+        true,
+    )?;
+    let mut cff_4d_uv = setup_scalar_bubble_cli_with_local_uv_and_integrated_mode(
+        "scalar_bubble_integrated_uv_4d_cff",
+        "CFF",
+        true,
+        true,
+        true,
+    )?;
+    let mut ltd_4d_uv = setup_scalar_bubble_cli_with_local_uv_and_integrated_mode(
+        "scalar_bubble_integrated_uv_4d_ltd",
+        "LTD",
+        true,
+        true,
+        true,
+    )?;
+
+    let point = vec![0.1, 0.2, 0.3];
+    let cff_3d = inspect_xspace_process(&mut cff_3d_uv, "bubble", "scalar_bubble", &point)?;
+    let cff_4d = inspect_xspace_process(&mut cff_4d_uv, "bubble", "scalar_bubble", &point)?;
+    let ltd_4d = inspect_xspace_process(&mut ltd_4d_uv, "bubble", "scalar_bubble", &point)?;
+
+    assert_complex_approx_eq(
+        cff_4d,
+        cff_3d,
+        "CFF expanded-4D local UV with integrated UV matches 3D-local UV for divergent scalar bubble",
+    );
+    assert_complex_approx_eq(
+        ltd_4d,
+        cff_3d,
+        "LTD expanded-4D local UV with integrated UV matches CFF for divergent scalar bubble",
+    );
+
+    clean_test(&cff_3d_uv.cli_settings.state.folder);
+    clean_test(&cff_4d_uv.cli_settings.state.folder);
+    clean_test(&ltd_4d_uv.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cff_local_uv_from_expanded_4d_works_without_explicit_orientation_sum() -> Result<()> {
+    let mut cff_3d_uv = setup_scalar_bubble_cli_with_local_uv_mode(
+        "scalar_bubble_local_uv_3d_cff_sampled",
+        "CFF",
+        false,
+        false,
+    )?;
+    let mut cff_4d_uv = setup_scalar_bubble_cli_with_local_uv_mode(
+        "scalar_bubble_local_uv_4d_cff_sampled",
+        "CFF",
+        true,
+        false,
+    )?;
+
+    let point = vec![0.1, 0.2, 0.3];
+    let cff_3d = inspect_xspace_process(&mut cff_3d_uv, "bubble", "scalar_bubble", &point)?;
+    let cff_4d = inspect_xspace_process(&mut cff_4d_uv, "bubble", "scalar_bubble", &point)?;
+
+    assert_complex_approx_eq(
+        cff_4d,
+        cff_3d,
+        "CFF expanded-4D local UV works without explicit orientation summing",
+    );
+
+    clean_test(&cff_3d_uv.cli_settings.state.folder);
+    clean_test(&cff_4d_uv.cli_settings.state.folder);
     Ok(())
 }
 

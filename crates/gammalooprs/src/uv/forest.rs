@@ -2,6 +2,7 @@ use crate::{
     GammaLoopContext,
     cff::expression::GammaLoopGraphOrientation,
     graph::{Graph, cuts::CutSet},
+    settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
@@ -21,7 +22,6 @@ use tracing::{debug, instrument};
 use vakint::Vakint;
 
 use super::{
-    UVgenerationSettings,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -76,15 +76,10 @@ impl CutForests {
         graph: &mut Graph,
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
-        if settings.local_uv_cts_from_expanded_4d_integrands {
-            return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is not implemented yet in the UV forest"
-            ));
-        }
-
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
             .iter_mut()
@@ -97,6 +92,7 @@ impl CutForests {
                 cuts,
                 valid_orientations,
                 settings,
+                representation,
                 explicit_orientation_sum_only,
             )?;
         }
@@ -148,59 +144,101 @@ impl Forest {
         vakint: (&Vakint, &vakint::VakintSettings),
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
+        let use_expanded_4d_local_uv = settings.uv.local_uv_cts_from_expanded_4d_integrands;
         let order = self.dag.compute_topological_order();
 
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.topo_order = i;
-                    self.dag.nodes[n]
-                        .data
-                        .root(graph, cut_data, valid_orientations, settings)?;
+                    if use_expanded_4d_local_uv {
+                        self.dag.nodes[n].data.root_expanded_4d(
+                            graph,
+                            cut_data,
+                            valid_orientations,
+                            settings,
+                            representation,
+                        )?;
+                    } else {
+                        self.dag.nodes[n].data.root(
+                            graph,
+                            cut_data,
+                            valid_orientations,
+                            &settings.uv,
+                        )?;
+                    }
                 }
                 1 => {
                     // debug!("")
+                    let parent_id = self.dag.nodes[n].parents[0];
                     let [current, parent] = &mut self
                         .dag
                         .nodes
-                        .get_disjoint_mut([n, self.dag.nodes[n].parents[0]])
-                        .unwrap();
+                        .get_disjoint_mut([n, parent_id])
+                        .ok_or_else(|| {
+                            eyre!(
+                                "UV forest node {n:?} and parent {parent_id:?} could not be borrowed independently"
+                            )
+                        })?;
 
                     let Some(a) = &parent.data.simple_approx else {
-                        panic!("Should have computed the simple approx");
+                        return Err(eyre!(
+                            "UV forest parent {parent_id:?} simple approximation was not computed before node {n:?}"
+                        ));
                     };
                     current.data.simple_approx =
                         Some(a.dependent(current.data.spinney.subgraph.clone()));
                     current.data.update_filtered_integrated_uv_chain_state(
                         graph,
                         &parent.data,
-                        settings,
+                        &settings.uv,
                     );
 
                     current.data.topo_order = i;
-                    if settings.generate_integrated {
-                        current
-                            .data
-                            .compute_integrated(graph, vakint, &parent.data, settings)?;
+                    if settings.uv.generate_integrated {
+                        current.data.compute_integrated(
+                            graph,
+                            vakint,
+                            &parent.data,
+                            &settings.uv,
+                        )?;
                     }
-                    if settings.only_integrated {
+                    if settings.uv.only_integrated {
                         continue;
                     }
-                    assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
-                    current.data.compute(
-                        graph,
-                        cut_data,
-                        &parent.data,
-                        valid_orientations,
-                        settings,
-                        explicit_orientation_sum_only,
-                    )?;
+                    if use_expanded_4d_local_uv {
+                        current.data.compute_expanded_4d(
+                            graph,
+                            cut_data,
+                            &parent.data,
+                            valid_orientations,
+                            settings,
+                            representation,
+                        )?;
+                    } else {
+                        if !matches!(parent.data.local_3d, CFFapprox::Dependent { .. }) {
+                            return Err(eyre!(
+                                "UV forest parent {parent_id:?} local 3D approximation was not computed before node {n:?}"
+                            ));
+                        }
+                        current.data.compute(
+                            graph,
+                            cut_data,
+                            &parent.data,
+                            valid_orientations,
+                            &settings.uv,
+                            explicit_orientation_sum_only,
+                        )?;
+                    }
                 }
                 _ => {
-                    unimplemented!("Union not implemented");
+                    return Err(eyre!(
+                        "UV forest union nodes are not supported in local counterterm generation"
+                    ));
                 }
             }
         }
@@ -215,51 +253,30 @@ impl Forest {
     ) -> Result<Vec<Atom>> {
         let mut sum = None;
 
-        for (_, n) in &self.dag.nodes {
-            debug!(
-                dod = %n.data.dod(),
-                simple = %
-                n.data
-                    .simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),"Terms"
-            );
-            let mut first = false;
+        for (node_id, n) in &self.dag.nodes {
+            let simple_approx = n.data.simple_approx.as_ref().ok_or_else(|| {
+                eyre!("UV forest node {node_id:?} simple approximation was not computed")
+            })?;
+            let simple_expr = simple_approx.expr(&graph.full_filter());
+            debug!(dod = %n.data.dod(), simple = %simple_expr, "Terms");
 
-            if sum.is_none() {
-                first = true;
-                sum = Some(vec![]);
+            let first = sum.is_none();
+            let sum = sum.get_or_insert_with(Vec::new);
+            let final_integrands = n.data.final_integrand.as_ref().ok_or_else(|| {
+                eyre!("UV forest node {node_id:?} final integrand was not computed")
+            })?;
+            if !first && final_integrands.len() != sum.len() {
+                return Err(eyre!(
+                    "UV forest node {node_id:?} produced {} residue integrands, but previous nodes produced {}",
+                    final_integrands.len(),
+                    sum.len()
+                ));
             }
 
-            let sum = sum.as_mut().unwrap();
-
-            for (i, integrand) in n
-                .data
-                .final_integrand
-                .as_ref()
-                .ok_or(eyre!("Final integrand not computed"))?
-                .iter()
-                .enumerate()
-            {
+            for (i, integrand) in final_integrands.iter().enumerate() {
                 let a = if add_sigma {
-                    debug!(
-                        "{}",
-                        n.data
-                            .simple_approx
-                            .as_ref()
-                            .unwrap()
-                            .expr(&graph.full_filter())
-                    );
-                    integrand
-                        * function!(
-                            GS.if_sigma,
-                            n.data
-                                .simple_approx
-                                .as_ref()
-                                .unwrap()
-                                .expr(&graph.full_filter())
-                        )
+                    debug!("{}", simple_expr);
+                    integrand * function!(GS.if_sigma, simple_expr.clone())
                 } else {
                     integrand.clone()
                 };

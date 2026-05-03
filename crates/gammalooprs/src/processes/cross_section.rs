@@ -720,11 +720,6 @@ impl CrossSectionGraph {
                     "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported for cross-section supergraphs; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
                 ));
             }
-            if settings.uv.subtract_uv && settings.uv.local_uv_cts_from_expanded_4d_integrands {
-                return Err(eyre!(
-                    "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is not implemented yet in production cross-section generation"
-                ));
-            }
             if settings.threshold_subtraction.enable_thresholds {
                 return Err(eyre!(
                     "`global.3d_representation = LTD` with threshold subtraction is not implemented yet for cross-section supergraphs"
@@ -951,7 +946,9 @@ impl CrossSectionGraph {
 
         let cuts = self.cutsets_for_raised_cuts();
 
-        if global_settings.three_d_representation == ThreeDRepresentation::Ltd {
+        if global_settings.three_d_representation == ThreeDRepresentation::Ltd
+            && !(settings.uv.subtract_uv && settings.uv.local_uv_cts_from_expanded_4d_integrands)
+        {
             return self.build_ltd_original_integrand(&cuts, settings);
         }
 
@@ -969,13 +966,15 @@ impl CrossSectionGraph {
             .collect();
 
         let lu_prefactor = self.lu_prefactor_helper();
+        let representation = global_settings.three_d_representation;
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
         cut_forests.compute(
             &mut self.graph,
             vakint,
             &valid_orientations,
-            &settings.uv,
+            settings,
+            representation,
             settings.explicit_orientation_sum_only,
         )?;
 
@@ -985,7 +984,9 @@ impl CrossSectionGraph {
         Ok(parametric_integrands
             .into_iter()
             .map(|integrand| {
-                if settings.explicit_orientation_sum_only {
+                if settings.explicit_orientation_sum_only
+                    && representation == ThreeDRepresentation::Cff
+                {
                     integrand.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     integrand
@@ -1581,7 +1582,8 @@ impl CrossSectionGraph {
             &mut self.graph,
             vakint,
             &valid_orientations,
-            &settings.uv,
+            settings,
+            ThreeDRepresentation::Cff,
             settings.explicit_orientation_sum_only,
         )?;
 

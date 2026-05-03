@@ -4953,3 +4953,333 @@ Validation plan:
   non-regressions, loopful scalar cross sections without repeated propagators,
   and manually written quartic numerator cases.
 - The final validation target remains `just test_gammaloop_detailed`.
+
+## 2026-05-03: Step III final subgoal implementation
+
+Implemented the expanded-4D local-UV bridge and wired it into the production UV
+forest for both `CFF` and `LTD`.
+
+Main implementation points:
+
+- Added `uv::approx::expanded_4d`, which extracts strict-4D expanded local UV
+  terms from `GS.den(edge,momentum,mass,full_denominator)^-n` factors, builds a
+  parsed auxiliary denominator graph, calls `generate_3d_expr` with either CFF
+  or LTD, and maps the generated residues back to GammaLoop atoms.
+- The bridge computes numerator energy-degree bounds from the local expanded
+  numerator and the active denominator edges before calling `generate_3d_expr`.
+  This keeps the automatic EMR power-shape detection in GammaLoop rather than in
+  the 3Drep CLI.
+- The local expanded-4D path keeps numerators in strict four dimensions and
+  does not call `gamma_simplify` or Vakint tensor simplification. This preserves
+  local pointwise cancellations.
+- `local_uv_cts_from_expanded_4d_integrands = true` now bypasses the old
+  local-3D UV path entirely. CFF may still use either local-3D UV or
+  expanded-4D UV; LTD requires expanded-4D UV whenever UV subtraction is enabled.
+- `LTD + local UV from 3D expansions` remains permanently `NotSupported`.
+  There is no maintained fallback to the CFF-shaped local-3D UV forest.
+- The finite integrated UV insertion now also goes through the expanded-4D
+  bridge in this mode. Denominator-free finite terms are normalized in CFF
+  explicit-orientation-sum mode so the later explicit orientation sum does not
+  replicate orientation-independent constants. Denominator-free terms are also
+  dropped when a cut/threshold residue selector is active, since constants have
+  no E-surface residue.
+- Fixed the UV-rescaled denominator metadata: after the UV expansion the
+  `GS.den` mass entry is `m_uv^2`, matching the denominator actually seen by
+  the local 3D bridge. The Vakint integrated path remains unaffected because it
+  substitutes the full denominator expression separately.
+- Removed the production guard that rejected
+  `local_uv_cts_from_expanded_4d_integrands = true`, including the old
+  restriction that it only made sense in explicit-orientation-sum mode. The CFF
+  expanded-4D path is tested both with and without explicit orientation summing.
+
+Tracked LTD/CFF local inspect comparisons:
+
+| test | coverage | expanded-4D local UV CT? |
+| --- | --- | --- |
+| `ltd_bare_explicit_orientation_sum_inspect_matches_cff` | scalar triangle/box amplitudes, UV and thresholds off | no |
+| `ltd_threshold_explicit_orientation_sum_inspect_matches_cff` | scalar triangle/box amplitudes with threshold subtraction | no |
+| `ltd_bare_scalar_cross_section_inspect_matches_cff` | generated scalar cross section, UV and thresholds off | no |
+| `ltd_scalar_cross_section_local_uv_from_expanded_4d_inspect_matches_cff` | generated scalar cross section with UV subtraction through the expanded-4D local UV path | yes, cross-section LU-residue path |
+| `ltd_bare_external_tree_inspects_match_cff` | imported external-tree loop graphs and pure-tree passthrough | no |
+| `ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff` | imported scalar one-loop topologies with quartic numerator dot products, including a repeated-propagator case | no |
+| `local_uv_from_expanded_4d_inspects_match_cff_and_ltd` | scalar triangle/box, compares `CFF + 3D UV`, `CFF + 4D UV`, and `LTD + 4D UV` | bridge/plumbing coverage; not a strongly divergent UV topology |
+| `divergent_bubble_local_uv_from_expanded_4d_inspects_match_cff_and_ltd` | divergent scalar bubble, compares `CFF + 3D UV`, `CFF + 4D UV`, and `LTD + 4D UV` | yes, nonzero local UV subtraction |
+| `divergent_bubble_integrated_uv_from_expanded_4d_inspects_match_cff_and_ltd` | divergent scalar bubble with finite integrated UV insertion, same three-way comparison | yes, local UV plus finite integrated UV insertion |
+| `cff_local_uv_from_expanded_4d_works_without_explicit_orientation_sum` | divergent scalar bubble in CFF sampled-orientation generation mode | yes, CFF-only non-explicit mode |
+| `ltd_with_uv_subtraction_errors_cleanly` | guard that LTD with the local-3D UV path fails cleanly | not a parity test |
+
+Verification:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo test -p gammaloop-integration-tests local_uv --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_ --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_scalar_cross_section_local_uv_from_expanded_4d_inspect_matches_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests scalar_bubble_inspect --locked -- --nocapture
+cargo test -p gammalooprs step_iii --locked
+cargo test -p gammalooprs local_uv_4d_source_is_supported_without_explicit_orientation_sum_mode --locked
+just test_gammaloop_detailed
+
+Summary [146.717s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal review pass
+
+Performed a final cleanup/review pass over the expanded-4D local-UV bridge and
+the LTD/CFF inspect coverage.
+
+Findings and small cleanups:
+
+- Rechecked the new `uv::approx::expanded_4d` path for generic-precision
+  downcasts. The bridge works at the symbolic `Atom` level and does not
+  introduce `from_f64`, `std::f64` constants, or lossy numeric casts in the
+  hot path. Integer atoms are introduced only for exact combinatoric factors
+  such as the explicit-orientation normalization.
+- Replaced new-path invariant panics in expanded-4D UV numerator extraction and
+  threshold-residue selection with propagated `Result` errors carrying context.
+  Also removed a small fixed-size spatial-sum `expect` by constructing the
+  three spatial terms explicitly.
+- Reviewed whether the quotient-node construction in the expanded-4D parsed
+  source should be moved to an existing `linnet` helper. `linnet` has generic
+  connected-component and union-find utilities, but the current local operation
+  is a small node quotient over a GammaLoop `SubGraphLike` plus denominator-edge
+  metadata. Reusing the generic helpers would not currently reduce complexity
+  enough to justify widening the change.
+- Tried to add a manually-written quartic-numerator scalar forward-scattering
+  cross-section fixture. The straightforward imported forward graph generated
+  valid CFF/LTD expressions, but the full local cross-section sum was zero and
+  several cut kinematics were intentionally outside support at the sampled
+  point. Attempting to isolate one nonzero contribution through
+  `general.additional_param_values` exposed an unrelated runtime indexing panic
+  in the existing parameter builder. The fragile fixture was not kept; the
+  retained coverage remains the generated scalar cross-section local-UV test
+  plus the imported quartic-numerator scalar amplitude tests.
+
+Additional focused verification in this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [153.647s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal repeated review pass
+
+Performed another global review pass after the queued follow-up request.
+
+Additional cleanup:
+
+- Converted the remaining new expanded-4D finite integrated UV epsilon-series
+  invariant panic into a contextual propagated error.
+- Converted UV-forest control-flow invariants touched by the expanded-4D local
+  UV routing from panics/asserts into `Result` errors. This includes missing
+  parent simple approximations, missing parent local-3D approximations, and
+  unsupported union nodes. The successful CFF/LTD behavior is unchanged, but
+  failures now point at the relevant forest node instead of aborting with a
+  generic panic.
+
+Review notes:
+
+- Re-ran the precision scan over the changed UV, CFF, and process-generation
+  files. The expanded-4D bridge still does not introduce `from_f64`,
+  `std::f64`, or lossy generic-precision downcasts. Remaining hits are existing
+  settings/test/output/tropical-sampler boundaries outside this subgoal.
+- Rechecked the retained local-inspect coverage. The LTD/CFF parity assertions
+  remain in place for generated scalar amplitudes, scalar cross sections,
+  external-tree and pure-tree imports, imported quartic numerator scalar
+  amplitudes, and the expanded-4D local-UV bridge including the divergent bubble
+  and finite integrated UV insertion cases.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [153.994s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal final queued review pass
+
+Performed one more queued review pass over the active expanded-4D UV forest
+path.
+
+Additional cleanup:
+
+- Replaced the remaining active `unwrap()`s in `Forest::orientation_parametric_expr`
+  with contextual errors. Missing simple approximations, missing final
+  integrands, and inconsistent residue-integrand counts now report the
+  corresponding UV-forest node instead of panicking.
+- Kept this pass intentionally narrow: the remaining panic/unwrap hits in the
+  touched UV modules are either pre-existing local-3D/integrated-UV invariant
+  paths, tests, or commented diagnostic code. They were not mixed into this
+  subgoal to avoid broad unrelated refactoring after the LTD/expanded-4D path
+  was already validated.
+
+Review notes:
+
+- Rechecked the generic-precision scan. No new `from_f64`, `std::f64`, or lossy
+  downcast was introduced by the expanded-4D local-UV bridge or the UV-forest
+  cleanup.
+- Reconfirmed the local-inspect LTD/CFF comparison coverage, including the
+  retained imported quartic-numerator scalar amplitude test and the generated
+  scalar cross-section test through expanded-4D local UV.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [152.078s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal queued symmetry review pass
+
+Performed another queued review pass over the UV-forest aggregation path.
+
+Additional cleanup:
+
+- Tightened `Forest::orientation_parametric_expr` so every UV-forest node must
+  produce exactly the same residue-integrand shape before summing. The previous
+  cleanup reported nodes that produced too many residue terms, but a node
+  producing too few terms would still have left stale entries from earlier
+  nodes. This is now a symmetric contextual error.
+
+Review notes:
+
+- Rechecked precision-sensitive code in the expanded-4D bridge and UV-forest
+  path. No `from_f64`, `std::f64`, or lossy generic-precision downcast was
+  introduced. The only hit in the touched production files remains the
+  pre-existing tropical-sampler `f64` weight outside this subgoal.
+- The retained LTD/CFF local-inspect comparisons remain unchanged, including
+  expanded-4D local UV for scalar amplitudes/cross sections and quartic
+  numerator imported scalar amplitude tests.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [149.831s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal queued coverage audit pass
+
+Performed another queued review pass focused on the remaining coverage request
+and the latest UV-forest residue-shape cleanup.
+
+Review notes:
+
+- Re-audited local inspect tests across `tests/tests/test_runs`. The retained
+  LTD/CFF parity coverage for this subgoal remains in `inspect.rs`, covering
+  generated scalar amplitudes, generated scalar cross sections, external-tree
+  imports, pure-tree passthrough, imported quartic-numerator scalar amplitudes,
+  and expanded-4D local UV including the divergent bubble and finite integrated
+  UV insertion cases.
+- Rechecked whether a robust manually-written quartic-numerator scalar
+  cross-section import could be added in this pass. Imported cross sections
+  require initial-state-cut graph structure, and the simple available scalar
+  forward-scattering fixtures are not clean non-repeated quartic numerator
+  checks. The earlier attempted fixture remains rejected for the reasons logged
+  above; adding a brittle or zero-valued test would not improve confidence.
+- Rechecked precision-sensitive code in the expanded-4D bridge and UV-forest
+  path. No `from_f64`, `std::f64`, or lossy generic-precision downcast was
+  introduced. The remaining production hit is the pre-existing tropical-sampler
+  `f64` weight outside this subgoal.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [147.012s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal completion audit
+
+Performed a final implementation-status pass before committing the LTD and
+expanded-4D local-UV support.
+
+Additional cleanup:
+
+- Shared the finite integrated UV extraction helper between the existing
+  local-3D UV path and the expanded-4D local-UV path. This removes duplicated
+  epsilon-series extraction logic and makes shape/series failures contextual
+  `Result` errors instead of panics.
+- Tightened the local-3D UV path touched by this work so missing dependent
+  local approximations, mismatched residue-integrand counts, and non-single
+  graph numerators now fail with explicit context.
+- Made expanded-4D threshold-residue selection reject non-singleton threshold
+  residue results explicitly, instead of silently taking the last expression
+  with `pop()`.
+- Reduced one unnecessary symbolic clone by exposing expanded-4D approximation
+  terms as a borrowed slice.
+
+Implementation status:
+
+- The old `generate_cff` production route has been retired from `gammalooprs`.
+  Gammaloop production generation now routes through `generate_3d_expr` /
+  `generate_3d_expression` with automatic energy-power detection for the
+  numerator.
+- `global.3d_representation = "CFF" | "LTD"` is implemented, with LTD allowed
+  only in explicit orientation-sum generation mode.
+- CFF behavior is preserved for standard sampled-orientation generation,
+  explicit orientation-sum generation, local UV from 3D expansions, and local
+  UV from expanded 4D integrands.
+- LTD supports the original integrand and the representation-neutral expanded
+  4D local-UV construction. LTD with local UV from 3D expansions is explicitly
+  unsupported by design.
+- External tree and initial-state-cut structures are handled by the generalized
+  3D-expression path rather than a legacy CFF fallback.
+
+Remaining known limitations:
+
+- LTD threshold subtraction for cross-section supergraphs is still not
+  implemented. Amplitude threshold-subtraction inspect parity is covered.
+- A robust manually-written quartic-numerator scalar cross-section fixture was
+  not retained; the available simple imported forward-scattering attempts were
+  either zero-valued or relied on unrelated fragile runtime-parameter paths.
+  Quartic numerator coverage is retained for imported scalar amplitude
+  topologies, including a repeated-propagator case.
+- The expanded-4D local-UV bridge is correct under the tested cases but is still
+  structurally dense. A future cleanup should split extraction, parsed-source
+  construction, residue projection, and parametric-atom reconstruction into
+  smaller units.
+
+Final validation:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests explicit_orientation_sum_inspect_matches_standard_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [150.212s] 1054 tests run: 1054 passed, 125 skipped
+```

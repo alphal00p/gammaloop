@@ -298,7 +298,7 @@ pat = "(+,-)"
     }
 
     #[test]
-    fn local_uv_4d_source_requires_explicit_orientation_sum_mode() {
+    fn local_uv_4d_source_is_supported_without_explicit_orientation_sum_mode() {
         let settings: GenerationSettings = toml::from_str(
             r#"
 [uv]
@@ -307,11 +307,9 @@ local_uv_cts_from_expanded_4d_integrands = true
         )
         .unwrap();
 
-        let error = settings
+        settings
             .ensure_step_iii_pending_options_are_supported()
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("not implemented yet"));
+            .expect("CFF local UV from expanded 4D integrands does not require explicit orientation summing");
 
         let explicit_settings: GenerationSettings = toml::from_str(
             r#"
@@ -324,7 +322,7 @@ local_uv_cts_from_expanded_4d_integrands = true
         .unwrap();
         explicit_settings
             .ensure_step_iii_pending_options_are_supported()
-            .expect("local UV 4D source setting is ignored in explicit orientation sum mode");
+            .expect("local UV from expanded 4D integrands is also supported in explicit orientation sum mode");
     }
 
     #[test]

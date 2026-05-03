@@ -78,7 +78,7 @@ use crate::{
     graph::{FeynmanGraph, Graph},
     integrands::process::ProcessIntegrand,
     model::Model,
-    settings::global::GenerationSettings,
+    settings::global::{GenerationSettings, ThreeDRepresentation},
 };
 
 use crate::graph::parse::complete_group_parsing;
@@ -626,15 +626,6 @@ impl AmplitudeGraph {
                 "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
             ));
         }
-        if settings.uv.subtract_uv
-            && settings.uv.local_uv_cts_from_expanded_4d_integrands
-            && self.graph.get_loop_number() > 0
-        {
-            return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is not implemented yet in production integrand generation"
-            ));
-        }
-
         self.build_3d_expression_with_settings(global_settings)?;
 
         self.build_integrands(global_settings, vk)?;
@@ -973,6 +964,7 @@ impl AmplitudeGraph {
             .collect();
         if global_settings.three_d_representation
             == crate::settings::global::ThreeDRepresentation::Ltd
+            && !(settings.uv.subtract_uv && settings.uv.local_uv_cts_from_expanded_4d_integrands)
         {
             let expression = self
                 .derived_data
@@ -1000,7 +992,8 @@ impl AmplitudeGraph {
             &mut self.graph,
             vakint,
             &valid_orientations,
-            &settings.uv,
+            settings,
+            global_settings.three_d_representation,
             settings.explicit_orientation_sum_only,
         )?;
         let exprs: Vec<_> = forests
@@ -1008,7 +1001,9 @@ impl AmplitudeGraph {
             .into_iter()
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .map(|e| {
-                if settings.explicit_orientation_sum_only {
+                if settings.explicit_orientation_sum_only
+                    && global_settings.three_d_representation == ThreeDRepresentation::Cff
+                {
                     e.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     e
@@ -1149,7 +1144,8 @@ impl AmplitudeGraph {
             &mut self.graph,
             vakint,
             &valid_orientations,
-            &settings.uv,
+            settings,
+            representation,
             settings.explicit_orientation_sum_only,
         )?;
 

@@ -62,12 +62,6 @@ pub struct GenerationSettings {
 
 impl GenerationSettings {
     pub fn ensure_step_iii_pending_options_are_supported(&self) -> EyreResult<()> {
-        if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
-            return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands` is not implemented yet"
-            ));
-        }
-
         Ok(())
     }
 }
