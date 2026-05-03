@@ -1181,6 +1181,68 @@ fn assert_evaluate_manifest_ok(manifest: &JsonValue, context: &str) -> Result<()
             .is_some(),
         "3Drep evaluate for {context} should record sample timing"
     );
+    for field in [
+        "symbolica_expression_path",
+        "symbolica_expression_raw_path",
+        "symbolica_expression_raw_script_path",
+        "param_builder_path",
+    ] {
+        let path = manifest[field].as_str().ok_or_else(|| {
+            eyre!("3Drep evaluate manifest for {context} has no {field}: {manifest:#}")
+        })?;
+        assert!(
+            PathBuf::from(path).exists(),
+            "3Drep evaluate manifest for {context} points {field} to a missing file: {path}"
+        );
+    }
+    let raw_expression_path = manifest["symbolica_expression_raw_path"]
+        .as_str()
+        .ok_or_else(|| {
+            eyre!("3Drep evaluate manifest for {context} has no symbolica_expression_raw_path")
+        })?;
+    assert!(
+        !fs::read_to_string(raw_expression_path)?.trim().is_empty(),
+        "3Drep evaluate for {context} should write a non-empty raw Symbolica evaluator input"
+    );
+    let raw_expression =
+        serde_json::from_str::<JsonValue>(&fs::read_to_string(raw_expression_path)?)?;
+    assert_eq!(
+        raw_expression["schema_version"].as_u64(),
+        Some(1),
+        "3Drep evaluate for {context} should write a versioned raw Symbolica evaluator input"
+    );
+    assert!(
+        raw_expression["parameters"]
+            .as_array()
+            .is_some_and(|parameters| !parameters.is_empty()),
+        "3Drep evaluate for {context} should record raw Symbolica evaluator parameters"
+    );
+    assert!(
+        raw_expression["calls"]
+            .as_array()
+            .is_some_and(|calls| !calls.is_empty()),
+        "3Drep evaluate for {context} should record raw Symbolica evaluator calls"
+    );
+    let raw_script_path = manifest["symbolica_expression_raw_script_path"]
+        .as_str()
+        .ok_or_else(|| {
+            eyre!(
+                "3Drep evaluate manifest for {context} has no symbolica_expression_raw_script_path"
+            )
+        })?;
+    let raw_script = fs::read_to_string(raw_script_path)?;
+    assert!(
+        raw_script.starts_with("#!/usr/bin/env -S rust-script --debug"),
+        "3Drep evaluate for {context} should write an executable rust-script replay"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert!(
+            fs::metadata(raw_script_path)?.permissions().mode() & 0o111 != 0,
+            "3Drep evaluate for {context} should make the rust-script replay executable"
+        );
+    }
     Ok(())
 }
 
@@ -2160,10 +2222,30 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
         .parent()
         .ok_or_else(|| eyre!("oriented expression path has no parent"))?;
     assert!(expression_dir.join("symbolica_expression.txt").exists());
+    let raw_expression_path = expression_dir.join("symbolica_expression_raw.json");
+    assert!(raw_expression_path.exists());
+    let raw_expression =
+        serde_json::from_str::<JsonValue>(&fs::read_to_string(&raw_expression_path)?)?;
+    assert_eq!(raw_expression["schema_version"].as_u64(), Some(1));
+    let raw_script_path = expression_dir.join("symbolica_expression_raw.rs");
+    assert!(raw_script_path.exists());
+    assert!(
+        fs::read_to_string(&raw_script_path)?.starts_with("#!/usr/bin/env -S rust-script --debug")
+    );
     assert!(expression_dir.join("param_builder.txt").exists());
     let evaluate_manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(
         expression_dir.join("evaluate_manifest.json"),
     )?)?;
+    assert_eq!(
+        evaluate_manifest["symbolica_expression_raw_path"].as_str(),
+        raw_expression_path.to_str(),
+        "3Drep evaluate manifest should record the raw Symbolica evaluator input path"
+    );
+    assert_eq!(
+        evaluate_manifest["symbolica_expression_raw_script_path"].as_str(),
+        raw_script_path.to_str(),
+        "3Drep evaluate manifest should record the raw Symbolica evaluator replay script path"
+    );
     assert!(
         evaluate_manifest["evaluation"]["value"].as_str().is_some(),
         "3Drep evaluate manifest should record the evaluated value"

@@ -333,6 +333,18 @@ impl EvaluatorStack {
         count
     }
 
+    /// Return the scalar Symbolica atoms produced by the Spenso network pass.
+    ///
+    /// These are the expressions handed to the concrete Symbolica evaluator
+    /// builders after optional color/gamma/metric simplification and tensor
+    /// network execution.
+    pub fn spenso_processed_atoms<A: AtomCore>(
+        atoms: &[A],
+        settings: &EvaluatorSettings,
+    ) -> Result<Vec<Atom>> {
+        Self::parse_atoms_with_timings(atoms, settings).map(|(atoms, _)| atoms)
+    }
+
     #[instrument(
         skip_all,
           fields(

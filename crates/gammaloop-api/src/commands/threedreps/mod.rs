@@ -14,7 +14,7 @@ use color_eyre::{
 use gammalooprs::{
     cff::expression::{
         internal_energy_parameter_atom_gs, numerator_with_internal_energy_parameters_gs,
-        GammaLoopThreeDExpression,
+        GammaLoopGraphOrientation, GammaLoopThreeDExpression,
     },
     graph::{FeynmanGraph, Graph, ThreeDRepMassShift},
     integrands::{
@@ -32,7 +32,11 @@ use gammalooprs::{
         runtime::Precision,
         RuntimeSettings,
     },
-    utils::{f128, symbolica_ext::LogPrint, ArbPrec, FloatLike, F},
+    utils::{
+        f128,
+        symbolica_ext::{CallSymbol, LogPrint},
+        ArbPrec, FloatLike, F, GS, W_,
+    },
     DependentMomentaConstructor, GammaLoopContextContainer,
 };
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
@@ -46,7 +50,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
     state::State as SymbolicaState,
 };
 use tabled::{builder::Builder, settings::Style};
@@ -537,10 +541,78 @@ struct EvaluateOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     expression_path: Option<PathBuf>,
     symbolica_expression_path: PathBuf,
+    symbolica_expression_raw_path: PathBuf,
+    symbolica_expression_raw_script_path: PathBuf,
     param_builder_path: PathBuf,
     settings: ThreeDrepRunSettings,
     evaluation: ThreeDrepEvaluationRecord,
     parameters: Vec<ParameterValueRecord>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SymbolicaEvaluatorInputArchive {
+    schema_version: u32,
+    description: String,
+    evaluator_method: EvaluatorMethod,
+    evaluator_settings: SymbolicaEvaluatorSettingsRecord,
+    optimization_settings: SymbolicaOptimizationSettingsRecord,
+    parameters: Vec<String>,
+    function_map_entries: Vec<SymbolicaFunctionMapEntryRecord>,
+    representative_input: Vec<SymbolicaComplexValueRecord>,
+    calls: Vec<SymbolicaEvaluatorCallRecord>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SymbolicaEvaluatorCallRecord {
+    label: String,
+    expressions: Vec<String>,
+    additional_function_map_entries: Vec<SymbolicaFunctionMapEntryRecord>,
+    dual_shape: Option<Vec<Vec<usize>>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SymbolicaFunctionMapEntryRecord {
+    lhs: String,
+    rhs: String,
+    tags: Vec<String>,
+    args: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SymbolicaComplexValueRecord {
+    re: String,
+    im: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SymbolicaEvaluatorSettingsRecord {
+    do_algebra: bool,
+    iterative_orientation_optimization: bool,
+    summed: bool,
+    summed_function_map: bool,
+    compile: bool,
+    store_atom: bool,
+    do_fn_map_replacements: bool,
+    horner_iterations: usize,
+    n_cores: usize,
+    cpe_iterations: Option<usize>,
+    abort_level: usize,
+    max_horner_scheme_variables: usize,
+    max_common_pair_cache_entries: usize,
+    max_common_pair_distance: usize,
+    verbose: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SymbolicaOptimizationSettingsRecord {
+    horner_iterations: usize,
+    n_cores: usize,
+    cpe_iterations: Option<usize>,
+    abort_level: usize,
+    max_horner_scheme_variables: usize,
+    max_common_pair_cache_entries: usize,
+    max_common_pair_distance: usize,
+    verbose: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1184,6 +1256,8 @@ impl Evaluate {
         };
         let artifact_dir = input.artifact_dir;
         let symbolica_expression_path = artifact_dir.join("symbolica_expression.txt");
+        let symbolica_expression_raw_path = artifact_dir.join("symbolica_expression_raw.json");
+        let symbolica_expression_raw_script_path = artifact_dir.join("symbolica_expression_raw.rs");
         let param_builder_path = artifact_dir.join("param_builder.txt");
         let evaluate_manifest_path =
             artifact_dir.join(evaluate_manifest_file_name(&self.manifest_name)?);
@@ -1201,6 +1275,53 @@ impl Evaluate {
             println!(
                 "Reusing cached Symbolica expression from {}",
                 relative_display(&symbolica_expression_path)
+            );
+        }
+        if self.clean
+            || !symbolica_expression_raw_path.exists()
+            || !symbolica_expression_raw_script_path.exists()
+        {
+            let evaluator_settings = threedrep_evaluator_settings(
+                global_cli_settings,
+                &run_settings.evaluator_method,
+                run_settings.runtime_precision,
+                run_settings.force_eager,
+            );
+            let processed_atoms =
+                EvaluatorStack::spenso_processed_atoms(&[&parametric_atom], &evaluator_settings)
+                    .with_context(|| {
+                        format!(
+                            "Could not build raw Symbolica evaluator input for {}",
+                            relative_display(&symbolica_expression_raw_path)
+                        )
+                    })?;
+            let raw_archive = symbolica_evaluator_input_archive(
+                &processed_atoms,
+                &prepared_param_builder.param_builder,
+                diagnostic_evaluation_orientations_for_raw_input(
+                    input.artifact.as_ref().map(|artifact| &artifact.expression),
+                    numerator_only_orientations.as_ref(),
+                )?,
+                &evaluator_settings,
+                &run_settings.evaluator_method,
+            )?;
+            write_path(
+                &symbolica_expression_raw_path,
+                &serde_json::to_string_pretty(&raw_archive)?,
+            )?;
+            write_path(
+                &symbolica_expression_raw_script_path,
+                &symbolica_expression_raw_rust_script(),
+            )?;
+            make_script_executable(&symbolica_expression_raw_script_path)?;
+        } else {
+            println!(
+                "Reusing cached raw Symbolica evaluator input from {}",
+                relative_display(&symbolica_expression_raw_path)
+            );
+            println!(
+                "Reusing cached raw Symbolica evaluator replay script from {}",
+                relative_display(&symbolica_expression_raw_script_path)
             );
         }
         if self.clean || !param_builder_path.exists() {
@@ -1262,6 +1383,8 @@ impl Evaluate {
             numerator_only: self.numerator_only,
             expression_path: input.expression_path,
             symbolica_expression_path,
+            symbolica_expression_raw_path,
+            symbolica_expression_raw_script_path,
             param_builder_path,
             settings: run_settings,
             evaluation,
@@ -3971,6 +4094,654 @@ fn write_or_print(path: Option<&Path>, text: &str) -> Result<()> {
     }
 }
 
+fn atom_string(atom: &Atom) -> String {
+    atom.to_canonical_string()
+}
+
+fn function_map_entry_record(
+    entry: &gammalooprs::integrands::process::param_builder::FnMapEntry,
+) -> SymbolicaFunctionMapEntryRecord {
+    SymbolicaFunctionMapEntryRecord {
+        lhs: atom_string(&entry.lhs),
+        rhs: atom_string(&entry.rhs),
+        tags: entry.tags.iter().map(atom_string).collect(),
+        args: entry
+            .args
+            .iter()
+            .map(|arg| atom_string(&Atom::from(arg.clone())))
+            .collect(),
+    }
+}
+
+fn complex_value_record(value: &Complex<F<f64>>) -> SymbolicaComplexValueRecord {
+    let (_, re, im) = format_complex_full(value);
+    SymbolicaComplexValueRecord { re, im }
+}
+
+fn evaluator_settings_record(settings: &EvaluatorSettings) -> SymbolicaEvaluatorSettingsRecord {
+    SymbolicaEvaluatorSettingsRecord {
+        do_algebra: settings.do_algebra,
+        iterative_orientation_optimization: settings.iterative_orientation_optimization,
+        summed: settings.summed,
+        summed_function_map: settings.summed_function_map,
+        compile: settings.compile,
+        store_atom: settings.store_atom,
+        do_fn_map_replacements: settings.do_fn_map_replacements,
+        horner_iterations: settings.horner_iterations,
+        n_cores: settings.n_cores,
+        cpe_iterations: settings.cpe_iterations,
+        abort_level: settings.abort_level,
+        max_horner_scheme_variables: settings.max_horner_scheme_variables,
+        max_common_pair_cache_entries: settings.max_common_pair_cache_entries,
+        max_common_pair_distance: settings.max_common_pair_distance,
+        verbose: settings.verbose,
+    }
+}
+
+fn optimization_settings_record(
+    settings: &EvaluatorSettings,
+) -> SymbolicaOptimizationSettingsRecord {
+    let optimization_settings = settings.optimization_settings();
+    SymbolicaOptimizationSettingsRecord {
+        horner_iterations: optimization_settings.horner_iterations,
+        n_cores: optimization_settings.n_cores,
+        cpe_iterations: optimization_settings.cpe_iterations,
+        abort_level: optimization_settings.abort_level,
+        max_horner_scheme_variables: optimization_settings.max_horner_scheme_variables,
+        max_common_pair_cache_entries: optimization_settings.max_common_pair_cache_entries,
+        max_common_pair_distance: optimization_settings.max_common_pair_distance,
+        verbose: optimization_settings.verbose,
+    }
+}
+
+fn param_builder_params(param_builder: &ParamBuilder<f64>) -> Vec<Atom> {
+    (&param_builder.pairs)
+        .into_iter()
+        .flat_map(|pair| pair.params.clone())
+        .collect()
+}
+
+fn diagnostic_evaluation_orientations_for_raw_input(
+    expression: Option<&ThreeDExpression<OrientationID>>,
+    explicit_orientations: Option<&TiVec<OrientationID, EdgeVec<Orientation>>>,
+) -> Result<TiVec<OrientationID, EdgeVec<Orientation>>> {
+    if let Some(orientations) = explicit_orientations {
+        Ok(orientations.clone())
+    } else {
+        Ok(diagnostic_evaluation_orientations(expression.ok_or_else(
+            || eyre!("3Drep raw evaluator input requires an oriented expression"),
+        )?))
+    }
+}
+
+fn symbolica_evaluator_input_archive(
+    processed_atoms: &[Atom],
+    param_builder: &ParamBuilder<f64>,
+    orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    evaluator_settings: &EvaluatorSettings,
+    evaluator_method: &EvaluatorMethod,
+) -> Result<SymbolicaEvaluatorInputArchive> {
+    let params = param_builder_params(param_builder)
+        .into_iter()
+        .map(|param| atom_string(&param))
+        .collect();
+    let base_function_map_entries = param_builder
+        .reps
+        .iter()
+        .map(function_map_entry_record)
+        .collect::<Vec<_>>();
+    let representative_input = param_builder
+        .values
+        .first()
+        .ok_or_else(|| eyre!("3Drep raw evaluator input requires parameter values"))?
+        .iter()
+        .map(complex_value_record)
+        .collect();
+    let calls = symbolica_evaluator_call_records(
+        processed_atoms,
+        param_builder,
+        &orientations,
+        evaluator_settings,
+        evaluator_method,
+    )?;
+
+    Ok(SymbolicaEvaluatorInputArchive {
+        schema_version: 1,
+        description: "Inputs passed to Symbolica when building the 3Drep diagnostic evaluator after Spenso tensor-network processing.".to_string(),
+        evaluator_method: evaluator_method.clone(),
+        evaluator_settings: evaluator_settings_record(evaluator_settings),
+        optimization_settings: optimization_settings_record(evaluator_settings),
+        parameters: params,
+        function_map_entries: base_function_map_entries,
+        representative_input,
+        calls,
+    })
+}
+
+fn symbolica_evaluator_call_records(
+    processed_atoms: &[Atom],
+    param_builder: &ParamBuilder<f64>,
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+    evaluator_settings: &EvaluatorSettings,
+    evaluator_method: &EvaluatorMethod,
+) -> Result<Vec<SymbolicaEvaluatorCallRecord>> {
+    let mut calls = vec![symbolica_evaluator_call_record_for_method(
+        processed_atoms,
+        param_builder,
+        orientations,
+        evaluator_settings,
+        &EvaluatorMethod::SingleParametric,
+    )?];
+    if evaluator_method != &EvaluatorMethod::SingleParametric {
+        calls.push(symbolica_evaluator_call_record_for_method(
+            processed_atoms,
+            param_builder,
+            orientations,
+            evaluator_settings,
+            evaluator_method,
+        )?);
+    }
+    Ok(calls)
+}
+
+fn symbolica_evaluator_call_record_for_method(
+    processed_atoms: &[Atom],
+    param_builder: &ParamBuilder<f64>,
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+    evaluator_settings: &EvaluatorSettings,
+    evaluator_method: &EvaluatorMethod,
+) -> Result<SymbolicaEvaluatorCallRecord> {
+    match evaluator_method {
+        EvaluatorMethod::SingleParametric => Ok(SymbolicaEvaluatorCallRecord {
+            label: "single_parametric".to_string(),
+            expressions: final_symbolica_call_expressions(
+                processed_atoms
+                    .iter()
+                    .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
+                &param_builder.reps,
+                evaluator_settings,
+            ),
+            additional_function_map_entries: Vec::new(),
+            dual_shape: None,
+        }),
+        EvaluatorMethod::Iterative => Ok(SymbolicaEvaluatorCallRecord {
+            label: "iterative".to_string(),
+            expressions: final_symbolica_call_expressions(
+                processed_atoms.iter().flat_map(|atom| {
+                    orientations
+                        .iter()
+                        .map(|orientation| orientation.select_gs(atom.as_atom_view()))
+                }),
+                &param_builder.reps,
+                evaluator_settings,
+            ),
+            additional_function_map_entries: Vec::new(),
+            dual_shape: None,
+        }),
+        EvaluatorMethod::Summed => Ok(SymbolicaEvaluatorCallRecord {
+            label: "summed".to_string(),
+            expressions: final_symbolica_call_expressions(
+                summed_symbolica_evaluator_expressions(processed_atoms, orientations),
+                &param_builder.reps,
+                evaluator_settings,
+            ),
+            additional_function_map_entries: Vec::new(),
+            dual_shape: None,
+        }),
+        EvaluatorMethod::SummedFunctionMap => {
+            let (expressions, entries) =
+                summed_function_map_symbolica_evaluator_inputs(processed_atoms, orientations)?;
+            let mut all_entries = param_builder.reps.clone();
+            all_entries.extend(entries.clone());
+            Ok(SymbolicaEvaluatorCallRecord {
+                label: "summed_function_map".to_string(),
+                expressions: final_symbolica_call_expressions(
+                    expressions,
+                    &all_entries,
+                    evaluator_settings,
+                ),
+                additional_function_map_entries: entries
+                    .iter()
+                    .map(function_map_entry_record)
+                    .collect(),
+                dual_shape: None,
+            })
+        }
+    }
+}
+
+fn final_symbolica_call_expressions(
+    expressions: impl IntoIterator<Item = Atom>,
+    function_map_entries: &[gammalooprs::integrands::process::param_builder::FnMapEntry],
+    evaluator_settings: &EvaluatorSettings,
+) -> Vec<String> {
+    let replacements = if evaluator_settings.do_fn_map_replacements {
+        function_map_entries
+            .iter()
+            .map(|entry| entry.replacement())
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    expressions
+        .into_iter()
+        .map(|expression| {
+            let expression = expression
+                .replace_multiple(&replacements)
+                .replace_multiple(&replacements);
+            atom_string(&GS.collect_orientation_if(expression, false))
+        })
+        .collect()
+}
+
+fn summed_symbolica_evaluator_expressions(
+    processed_atoms: &[Atom],
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+) -> Vec<Atom> {
+    processed_atoms
+        .iter()
+        .map(|atom| {
+            orientations
+                .iter()
+                .map(|orientation| {
+                    GS.collect_orientation_if(
+                        orientation.orientation_thetas_gs()
+                            * orientation.select_gs(atom.as_atom_view()),
+                        true,
+                    )
+                })
+                .fold(Atom::Zero, |acc, term| acc + term)
+                .replace(
+                    Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
+                        + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+                )
+                .repeat()
+                .with(Symbol::IF.f([
+                    Atom::var(GS.override_if),
+                    Atom::var(W_.b_) + Atom::var(W_.d_),
+                    Atom::var(W_.c_) + Atom::var(W_.e_),
+                ]))
+        })
+        .collect()
+}
+
+fn summed_function_map_symbolica_evaluator_inputs(
+    processed_atoms: &[Atom],
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+) -> Result<(
+    Vec<Atom>,
+    Vec<gammalooprs::integrands::process::param_builder::FnMapEntry>,
+)> {
+    let first_orientation = orientations
+        .first()
+        .ok_or_else(|| eyre!("summed function-map raw evaluator input requires orientations"))?;
+    let entries = processed_atoms
+        .iter()
+        .enumerate()
+        .map(|(i, atom)| {
+            let mut args = Vec::new();
+            let mut lhs = FunctionBuilder::new(GS.integrand);
+            lhs = lhs.add_arg(i);
+            for (edge_id, _) in first_orientation {
+                lhs = lhs.add_arg(GS.sign(edge_id));
+                args.push(Indeterminate::try_from(GS.sign(edge_id)).unwrap());
+            }
+            Ok(
+                gammalooprs::integrands::process::param_builder::FnMapEntry {
+                    lhs: lhs.finish(),
+                    rhs: GS.collect_orientation_if(atom.as_atom_view(), false),
+                    tags: vec![Atom::num(i)],
+                    args,
+                },
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let expressions = (0..entries.len())
+        .map(|i| {
+            orientations
+                .iter()
+                .map(|orientation| {
+                    GS.collect_orientation_if(
+                        orientation.orientation_thetas_gs() * GS.integrand(i, orientation),
+                        true,
+                    )
+                })
+                .fold(Atom::Zero, |acc, term| acc + term)
+                .replace(
+                    Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
+                        + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+                )
+                .repeat()
+                .with(Symbol::IF.f([
+                    Atom::var(GS.override_if),
+                    Atom::var(W_.b_) + Atom::var(W_.d_),
+                    Atom::var(W_.c_) + Atom::var(W_.e_),
+                ]))
+        })
+        .collect();
+
+    Ok((expressions, entries))
+}
+
+#[cfg(unix)]
+fn make_script_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_script_executable(_: &Path) -> Result<()> {
+    Ok(())
+}
+
+fn symbolica_expression_raw_rust_script() -> String {
+    r#"#!/usr/bin/env -S rust-script --debug
+//! ```cargo
+//! [dependencies]
+//! color-eyre = "0.6"
+//! serde = { version = "1.0", features = ["derive"] }
+//! serde_json = "1"
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3", default-features = false, features = ["bincode", "serde"] }
+//!
+//! [patch.crates-io]
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+//! ```
+
+use std::{
+    env,
+    fs,
+    path::{Path, PathBuf},
+    time::Instant,
+};
+
+use color_eyre::{
+    eyre::{eyre, Context},
+    Result,
+};
+use serde::Deserialize;
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, Indeterminate},
+    domains::{
+        float::Complex,
+        integer::IntegerRing,
+        rational::{Fraction, Rational},
+    },
+    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
+    id::{MatchSettings, Replacement},
+    parse_lit, symbol, try_parse,
+};
+
+#[derive(Debug, Deserialize)]
+struct Archive {
+    schema_version: u32,
+    evaluator_method: String,
+    optimization_settings: OptimizationSettingsRecord,
+    parameters: Vec<String>,
+    function_map_entries: Vec<FunctionMapEntryRecord>,
+    representative_input: Vec<ComplexValueRecord>,
+    calls: Vec<EvaluatorCallRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EvaluatorCallRecord {
+    label: String,
+    expressions: Vec<String>,
+    additional_function_map_entries: Vec<FunctionMapEntryRecord>,
+    dual_shape: Option<Vec<Vec<usize>>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct FunctionMapEntryRecord {
+    lhs: String,
+    rhs: String,
+    tags: Vec<String>,
+    args: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ComplexValueRecord {
+    re: String,
+    im: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OptimizationSettingsRecord {
+    horner_iterations: usize,
+    n_cores: usize,
+    cpe_iterations: Option<usize>,
+    abort_level: usize,
+    max_horner_scheme_variables: usize,
+    max_common_pair_cache_entries: usize,
+    max_common_pair_distance: usize,
+    verbose: bool,
+}
+
+type ParsedFnMapEntry = (Atom, Atom, Vec<Atom>, Vec<Indeterminate>);
+
+fn default_input_path() -> Result<PathBuf> {
+    if let Some(path) = env::args_os().nth(1) {
+        return Ok(PathBuf::from(path));
+    }
+    Ok(PathBuf::from(file!())
+        .canonicalize()
+        .with_context(|| format!("Could not canonicalize script path {}", file!()))?
+        .parent()
+        .ok_or_else(|| eyre!("Could not determine script directory"))?
+        .join("symbolica_expression_raw.json"))
+}
+
+fn parse_atom(value: &str) -> Result<Atom> {
+    try_parse!(value).map_err(|error| eyre!(error))
+}
+
+fn parse_complex(value: &ComplexValueRecord) -> Result<Complex<f64>> {
+    Ok(Complex::new(value.re.parse()?, value.im.parse()?))
+}
+
+fn parse_fn_map_entries(entries: &[FunctionMapEntryRecord]) -> Result<Vec<ParsedFnMapEntry>> {
+    entries
+        .iter()
+        .map(|entry| {
+            let lhs = parse_atom(&entry.lhs)?;
+            let rhs = parse_atom(&entry.rhs)?;
+            let tags = entry
+                .tags
+                .iter()
+                .map(|tag| parse_atom(tag))
+                .collect::<Result<Vec<_>>>()?;
+            let args = entry
+                .args
+                .iter()
+                .map(|arg| {
+                    let atom = parse_atom(arg)?;
+                    atom.try_into().map_err(|_| {
+                        eyre!("Expected indeterminate function-map argument, got {atom}")
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok((lhs, rhs, tags, args))
+        })
+        .collect()
+}
+
+fn build_function_map(entries: Vec<ParsedFnMapEntry>) -> Result<FunctionMap> {
+    let mut fn_map = FunctionMap::new();
+    fn_map.add_constant(
+        parse_lit!(gammalooprs::x),
+        Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
+    );
+
+    for (lhs, rhs, tags, args) in entries {
+        if let AtomView::Var(_) = lhs.as_view() {
+            if let Ok(value) = Complex::<Rational>::try_from(rhs.as_view()) {
+                fn_map.add_constant(lhs, value);
+            }
+        } else if let AtomView::Fun(function) = lhs.as_view() {
+            if tags.is_empty() {
+                fn_map
+                    .add_function(
+                        function.get_symbol(),
+                        function.get_symbol().get_name().into(),
+                        args.clone(),
+                        rhs.clone(),
+                    )
+                    .map_err(|error| eyre!(error))?;
+
+                let wildcards = args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, arg)| {
+                        Replacement::new(
+                            Atom::from(arg.clone()).to_pattern(),
+                            Atom::var(symbol!(format!("x{i}_"))),
+                        )
+                        .with_settings(MatchSettings {
+                            allow_new_wildcards_on_rhs: true,
+                            ..Default::default()
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let _ = lhs.replace_multiple(&wildcards);
+            } else {
+                fn_map
+                    .add_tagged_function(
+                        function.get_symbol(),
+                        tags,
+                        function.get_symbol().get_name().into(),
+                        args,
+                        rhs,
+                    )
+                    .map_err(|error| eyre!(error))?;
+            }
+        }
+    }
+
+    Ok(fn_map)
+}
+
+fn optimization_settings(record: &OptimizationSettingsRecord) -> OptimizationSettings {
+    OptimizationSettings {
+        horner_iterations: record.horner_iterations,
+        n_cores: record.n_cores,
+        cpe_iterations: record.cpe_iterations,
+        abort_check: Some(Box::new((|| false) as fn() -> bool)),
+        abort_level: record.abort_level,
+        max_horner_scheme_variables: record.max_horner_scheme_variables,
+        max_common_pair_cache_entries: record.max_common_pair_cache_entries,
+        max_common_pair_distance: record.max_common_pair_distance,
+        verbose: record.verbose,
+        ..OptimizationSettings::default()
+    }
+}
+
+fn build_evaluator(
+    expressions: &[Atom],
+    fn_map: &FunctionMap,
+    params: &[Atom],
+    settings: OptimizationSettings,
+) -> Result<ExpressionEvaluator<Complex<f64>>> {
+    let mut tree: Option<ExpressionEvaluator<Complex<Fraction<IntegerRing>>>> = None;
+    for expression in expressions {
+        let evaluator = expression
+            .evaluator(fn_map, params, settings.clone())
+            .map_err(|error| eyre!("Failed to build evaluator for {expression}: {error}"))?;
+        tree = Some(if let Some(mut tree) = tree {
+            tree.merge(evaluator, settings.cpe_iterations)
+                .map_err(|error| eyre!("Failed to merge evaluator trees: {error}"))?;
+            tree
+        } else {
+            evaluator
+        });
+    }
+    let tree = tree.ok_or_else(|| eyre!("No expressions found in raw evaluator input"))?;
+    Ok(tree.map_coeff(&|value| Complex {
+        re: value.re.to_f64(),
+        im: value.im.to_f64(),
+    }))
+}
+
+fn run(path: &Path) -> Result<()> {
+    let archive: Archive = serde_json::from_str(
+        &fs::read_to_string(path)
+            .with_context(|| format!("Could not read {}", path.display()))?,
+    )
+    .with_context(|| format!("Could not parse {}", path.display()))?;
+    if archive.schema_version != 1 {
+        return Err(eyre!(
+            "Unsupported raw evaluator input schema {}; expected 1",
+            archive.schema_version
+        ));
+    }
+    let params = archive
+        .parameters
+        .iter()
+        .map(|param| parse_atom(param))
+        .collect::<Result<Vec<_>>>()?;
+    let input = archive
+        .representative_input
+        .iter()
+        .map(parse_complex)
+        .collect::<Result<Vec<_>>>()?;
+
+    println!("Loaded {}", path.display());
+    println!("evaluator method: {}", archive.evaluator_method);
+    println!("parameter count: {}", params.len());
+    println!("representative input length: {}", input.len());
+
+    for call in &archive.calls {
+        if call.dual_shape.is_some() {
+            return Err(eyre!(
+                "Raw evaluator replay script does not support dual_shape for call {}",
+                call.label
+            ));
+        }
+        let expressions = call
+            .expressions
+            .iter()
+            .map(|expression| parse_atom(expression))
+            .collect::<Result<Vec<_>>>()?;
+        let mut entries = archive.function_map_entries.clone();
+        entries.extend(call.additional_function_map_entries.clone());
+        let fn_map = build_function_map(parse_fn_map_entries(&entries)?)?;
+        let started = Instant::now();
+        let mut evaluator = build_evaluator(
+            &expressions,
+            &fn_map,
+            &params,
+            optimization_settings(&archive.optimization_settings),
+        )?;
+        println!(
+            "built call '{}' with {} expression(s) in {:?}",
+            call.label,
+            expressions.len(),
+            started.elapsed()
+        );
+        let mut output = vec![Complex::new(0.0, 0.0); expressions.len()];
+        evaluator.evaluate(&input, &mut output);
+        for (index, value) in output.iter().enumerate() {
+            println!("{}[{index}] = {} + {} i", call.label, value.re, value.im);
+        }
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    color_eyre::install()?;
+    run(&default_input_path()?)
+}
+"#
+    .to_string()
+}
+
 fn write_path(path: &Path, text: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -4085,6 +4856,20 @@ fn render_evaluate_summary(output: &EvaluateOutput, show_parameters: bool) -> St
         "symbolica expression".to_string(),
         color_text(
             relative_display(&output.symbolica_expression_path),
+            Color::Purple,
+        ),
+    ]);
+    table.push_record(vec![
+        "raw symbolica expression".to_string(),
+        color_text(
+            relative_display(&output.symbolica_expression_raw_path),
+            Color::Purple,
+        ),
+    ]);
+    table.push_record(vec![
+        "raw symbolica replay script".to_string(),
+        color_text(
+            relative_display(&output.symbolica_expression_raw_script_path),
             Color::Purple,
         ),
     ]);
