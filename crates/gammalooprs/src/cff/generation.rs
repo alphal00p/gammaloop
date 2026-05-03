@@ -7,7 +7,7 @@ use crate::{
         surface::{HybridSurfaceID, LinearSurface, LinearSurfaceID, LinearSurfaceKind},
     },
     graph::{Graph, GraphThreeDSource},
-    settings::global::{GenerationSettings, UniformNumeratorSamplingScale},
+    settings::global::{GenerationSettings, ThreeDRepresentation, UniformNumeratorSamplingScale},
 };
 use ahash::HashSet;
 use color_eyre::Result;
@@ -34,6 +34,12 @@ pub struct ShiftRewrite {
     pub dependent_momentum_expr: ExternalShift,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct SurfaceMapEntry {
+    surface_id: HybridSurfaceID,
+    sign: i64,
+}
+
 impl Graph {
     pub(crate) fn generate_3d_expression_for_integrand(
         &mut self,
@@ -53,7 +59,7 @@ impl Graph {
         );
         if !source_contract_edges.is_empty() {
             debug!(
-                "contracting {} internal edges before generalized 3D CFF generation",
+                "contracting {} internal edges before generalized 3D expression generation",
                 source_contract_edges.len()
             );
         }
@@ -81,7 +87,7 @@ impl Graph {
                             format!("failed to rebuild 3D source summary: {source_error}")
                         });
                     eyre::eyre!(
-                        "generalized 3D CFF generation failed for graph `{}`: {error}\n{source_summary}",
+                        "generalized 3D expression generation failed for graph `{}`: {error}\n{source_summary}",
                         self.name
                     )
                 },
@@ -90,17 +96,19 @@ impl Graph {
 
         self.convert_generated_expression_surfaces(
             expression,
+            local_options.representation,
             canonize_esurface,
             &initial_state_cut_edges,
         )
     }
 
-    pub(crate) fn production_cff_3d_expression_options(
+    pub(crate) fn production_3d_expression_options(
         &self,
+        representation: ThreeDRepresentation,
         settings: &GenerationSettings,
     ) -> Result<Generate3DExpressionOptions> {
         self.three_d_expression_options(
-            RepresentationMode::Cff,
+            representation_mode(representation),
             numerator_sampling_scale_mode(settings.uniform_numerator_sampling_scale),
         )
     }
@@ -137,13 +145,9 @@ impl Graph {
 
     pub fn preserved_4d_denominator_edges_for_3d_expression(
         &self,
-        representation: RepresentationMode,
+        _representation: RepresentationMode,
     ) -> Vec<EdgeIndex> {
-        if representation == RepresentationMode::Cff {
-            self.external_tree_4d_denominator_edges()
-        } else {
-            Vec::new()
-        }
+        self.external_tree_4d_denominator_edges()
     }
 
     fn normalized_preserved_4d_denominator_edges(
@@ -152,15 +156,13 @@ impl Graph {
     ) -> Vec<EdgeIndex> {
         let mut preserved_edges =
             self.preserved_4d_denominator_edges_for_3d_expression(options.representation);
-        if options.representation == RepresentationMode::Cff {
-            preserved_edges.extend(
-                options
-                    .preserve_internal_edges_as_four_d_denominators
-                    .iter()
-                    .copied()
-                    .map(EdgeIndex),
-            );
-        }
+        preserved_edges.extend(
+            options
+                .preserve_internal_edges_as_four_d_denominators
+                .iter()
+                .copied()
+                .map(EdgeIndex),
+        );
         preserved_edges.sort_unstable();
         preserved_edges.dedup();
         preserved_edges
@@ -192,10 +194,11 @@ impl Graph {
     fn convert_generated_expression_surfaces(
         &mut self,
         mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
+        representation: RepresentationMode,
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
     ) -> Result<CFFExpression<OrientationID>> {
-        let mut linear_surface_map = BTreeMap::<LinearSurfaceID, HybridSurfaceID>::new();
+        let mut linear_surface_map = BTreeMap::<LinearSurfaceID, SurfaceMapEntry>::new();
         for (linear_surface_id, surface) in
             expression.surfaces.linear_surface_cache.iter_enumerated()
         {
@@ -208,20 +211,30 @@ impl Graph {
         }
 
         for orientation in expression.orientations.iter_mut() {
-            orientation.for_each_denominator_tree_mut(|denominator| {
-                denominator.map_mut(|surface_id| {
-                    remap_generated_surface_id(surface_id, &linear_surface_map)
-                });
-            });
             for variant in &mut orientation.variants {
-                for surface_id in &mut variant.numerator_surfaces {
-                    remap_generated_surface_id(surface_id, &linear_surface_map);
+                let denominator_sign = remap_denominator_tree_surface_ids(
+                    &mut variant.denominator,
+                    &linear_surface_map,
+                )?;
+                if denominator_sign < 0 {
+                    variant.prefactor *= Atom::num(-1);
                 }
-                // GammaLoop production CFF keeps inverse on-shell-energy factors
-                // outside the CFF denominator tree. The generalized crate stores
-                // them per variant, so strip them here to preserve the current
-                // production convention.
-                variant.half_edges.clear();
+                for surface_id in &mut variant.numerator_surfaces {
+                    let numerator_sign =
+                        remap_generated_surface_id(surface_id, &linear_surface_map);
+                    if numerator_sign < 0 {
+                        variant.prefactor *= Atom::num(-1);
+                    }
+                }
+                if representation == RepresentationMode::Cff {
+                    // GammaLoop production CFF keeps inverse on-shell-energy
+                    // factors outside the CFF denominator tree. The generalized
+                    // crate stores them per variant, so strip them here to
+                    // preserve the current production convention. LTD residue
+                    // half-edge factors are part of the generated formula and
+                    // must remain attached to their variants.
+                    variant.half_edges.clear();
+                }
             }
         }
 
@@ -237,14 +250,17 @@ impl Graph {
         surface: &LinearSurface,
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
-    ) -> Result<HybridSurfaceID> {
+    ) -> Result<SurfaceMapEntry> {
         if surface.numerator_only {
             let surface_id =
                 Into::<LinearSurfaceID>::into(self.surface_cache.linear_surface_cache.len());
             self.surface_cache
                 .linear_surface_cache
                 .push(surface.clone());
-            return Ok(HybridSurfaceID::Linear(surface_id));
+            return Ok(SurfaceMapEntry {
+                surface_id: HybridSurfaceID::Linear(surface_id),
+                sign: 1,
+            });
         }
 
         if !surface.expression.uniform_scale_coeff.is_zero()
@@ -274,11 +290,20 @@ impl Graph {
         negative_energies.sort();
         external_shift.sort_by_key(|(edge_id, _)| *edge_id);
 
-        match surface.kind {
+        let (surface_id, sign) = match surface.kind {
             LinearSurfaceKind::Esurface => {
+                let mut sign = 1;
+                if positive_energies.is_empty() && !negative_energies.is_empty() {
+                    sign = -1;
+                    positive_energies = negative_energies;
+                    negative_energies = Vec::new();
+                    for (_, coeff) in &mut external_shift {
+                        *coeff = -*coeff;
+                    }
+                }
                 if !negative_energies.is_empty() {
                     return Err(eyre::eyre!(
-                        "generalized CFF production cannot convert E-surface with negative internal terms {:?}",
+                        "generalized 3D production cannot convert E-surface with mixed-sign internal terms {:?}",
                         surface
                     ));
                 }
@@ -300,7 +325,7 @@ impl Graph {
                         Into::<EsurfaceID>::into(self.surface_cache.esurface_cache.len() - 1)
                     });
 
-                Ok(HybridSurfaceID::Esurface(esurface_id))
+                (HybridSurfaceID::Esurface(esurface_id), sign)
             }
             LinearSurfaceKind::Hsurface => {
                 let hsurface = Hsurface {
@@ -318,9 +343,10 @@ impl Graph {
                         Into::<HsurfaceID>::into(self.surface_cache.hsurface_cache.len() - 1)
                     });
 
-                Ok(HybridSurfaceID::Hsurface(hsurface_id))
+                (HybridSurfaceID::Hsurface(hsurface_id), 1)
             }
-        }
+        };
+        Ok(SurfaceMapEntry { surface_id, sign })
     }
 }
 
@@ -367,13 +393,62 @@ fn source_contract_edges_for_3d_expression(
 
 fn remap_generated_surface_id(
     surface_id: &mut HybridSurfaceID,
-    linear_surface_map: &BTreeMap<LinearSurfaceID, HybridSurfaceID>,
-) {
+    linear_surface_map: &BTreeMap<LinearSurfaceID, SurfaceMapEntry>,
+) -> i64 {
     if let HybridSurfaceID::Linear(linear_surface_id) = surface_id {
-        *surface_id = *linear_surface_map
+        let entry = *linear_surface_map
             .get(linear_surface_id)
             .expect("all generated linear surfaces should have been interned");
+        *surface_id = entry.surface_id;
+        entry.sign
+    } else {
+        1
     }
+}
+
+fn remap_denominator_tree_surface_ids(
+    denominator: &mut three_dimensional_reps::tree::Tree<HybridSurfaceID>,
+    linear_surface_map: &BTreeMap<LinearSurfaceID, SurfaceMapEntry>,
+) -> Result<i64> {
+    let node_signs = denominator
+        .iter_nodes()
+        .map(|node| {
+            let sign = if let HybridSurfaceID::Linear(linear_surface_id) = node.data {
+                linear_surface_map
+                    .get(&linear_surface_id)
+                    .map(|entry| entry.sign)
+                    .unwrap_or(1)
+            } else {
+                1
+            };
+            (node.node_id, sign)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut branch_sign = None;
+    for leaf in denominator.get_bottom_layer() {
+        let mut sign = 1;
+        let mut current = Some(leaf);
+        while let Some(node_id) = current {
+            sign *= node_signs.get(&node_id).copied().unwrap_or(1);
+            current = denominator.get_node(node_id).parent;
+        }
+        if let Some(existing) = branch_sign {
+            if existing != sign {
+                return Err(eyre::eyre!(
+                    "generated signed denominator tree has branch-dependent signs; cannot absorb canonical E-surface signs into a single variant prefactor"
+                ));
+            }
+        } else {
+            branch_sign = Some(sign);
+        }
+    }
+
+    denominator.map_mut(|surface_id| {
+        remap_generated_surface_id(surface_id, linear_surface_map);
+    });
+
+    Ok(branch_sign.unwrap_or(1))
 }
 
 fn collect_linear_surface_terms(
@@ -423,5 +498,12 @@ fn numerator_sampling_scale_mode(
             NumeratorSamplingScaleMode::BeyondQuadratic
         }
         UniformNumeratorSamplingScale::All => NumeratorSamplingScaleMode::All,
+    }
+}
+
+fn representation_mode(representation: ThreeDRepresentation) -> RepresentationMode {
+    match representation {
+        ThreeDRepresentation::Cff => RepresentationMode::Cff,
+        ThreeDRepresentation::Ltd => RepresentationMode::Ltd,
     }
 }

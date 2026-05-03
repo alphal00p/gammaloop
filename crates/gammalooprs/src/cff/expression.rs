@@ -278,6 +278,18 @@ pub trait GammaLoopThreeDExpression<O> {
         pattern: &OrientationPattern,
     ) -> typed_index_collections::TiVec<OrientationID, Atom>;
     fn get_orientation_atom_gs(&self, orientation_id: O) -> Atom;
+    fn diagnostic_parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom;
+    fn parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom;
     fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
     fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
 }
@@ -323,15 +335,19 @@ where
         self.orientations[orientation_id].to_atom_gs()
     }
 
-    fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
-        let numerator = graph.full_numerator_atom();
+    fn diagnostic_parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom {
         self.orientations
             .iter()
             .filter_map(|orientation| {
                 if pattern.filter_orientation(orientation.orientation()) {
                     Some(orientation.parametric_atom_without_orientation_thetas_gs(
                         graph,
-                        &numerator,
+                        numerator,
                         &self.surfaces,
                     ))
                 } else {
@@ -342,19 +358,35 @@ where
             .unwrap_or_default()
     }
 
-    fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
-        let numerator = graph.full_numerator_atom();
+    fn parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom {
         self.orientations
             .iter()
             .filter_map(|orientation| {
                 if pattern.filter_orientation(orientation.orientation()) {
-                    Some(orientation.parametric_atom_gs(graph, &numerator, &self.surfaces))
+                    Some(orientation.parametric_atom_gs(graph, numerator, &self.surfaces))
                 } else {
                     None
                 }
             })
             .reduce(|acc, atom| acc + atom)
             .unwrap_or_default()
+    }
+
+    fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
+        self.diagnostic_parametric_atom_with_numerator_gs(
+            graph,
+            &graph.full_numerator_atom(),
+            pattern,
+        )
+    }
+
+    fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
+        self.parametric_atom_with_numerator_gs(graph, &graph.full_numerator_atom(), pattern)
     }
 }
 

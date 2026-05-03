@@ -170,12 +170,11 @@ pub fn generate_3d_expression_from_parsed(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
-    if options.representation == RepresentationMode::Cff
-        && !options
-            .preserve_internal_edges_as_four_d_denominators
-            .is_empty()
+    if !options
+        .preserve_internal_edges_as_four_d_denominators
+        .is_empty()
     {
-        return build_cff_expression_preserving_internal_edges(parsed, options);
+        return build_expression_preserving_internal_edges(parsed, options);
     }
 
     if !options.energy_degree_bounds.is_empty() {
@@ -217,7 +216,7 @@ fn generate_pure_cff_expression_from_parsed(
     generate_pure_cff_expression_from_parsed_with_duplicate_sign(parsed, true)
 }
 
-fn build_cff_expression_preserving_internal_edges(
+fn build_expression_preserving_internal_edges(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
@@ -234,7 +233,7 @@ fn build_cff_expression_preserving_internal_edges(
 
     let (active_parsed, active_to_orig) = contract_preserved_parsed_edges(parsed, &preserved);
     if active_parsed.internal_edges.is_empty() {
-        return cff_expression_with_only_preserved_edges(parsed);
+        return expression_with_only_preserved_edges(parsed);
     }
 
     let orig_to_active = active_to_orig
@@ -274,10 +273,10 @@ fn build_cff_expression_preserving_internal_edges(
         .collect::<Result<Vec<_>>>()?;
 
     let active_expression = generate_3d_expression_from_parsed(&active_parsed, &active_options)?;
-    lift_cff_expression_to_preserved_graph(parsed, &active_expression, &active_to_orig, &preserved)
+    lift_expression_to_preserved_graph(parsed, &active_expression, &active_to_orig, &preserved)
 }
 
-fn cff_expression_with_only_preserved_edges(
+fn expression_with_only_preserved_edges(
     parsed: &ParsedGraph,
 ) -> Result<ThreeDExpression<OrientationID>> {
     if !parsed.loop_names.is_empty() {
@@ -426,7 +425,7 @@ fn contract_preserved_parsed_edges(
     )
 }
 
-fn lift_cff_expression_to_preserved_graph(
+fn lift_expression_to_preserved_graph(
     parsed: &ParsedGraph,
     source: &ThreeDExpression<OrientationID>,
     active_to_orig: &[usize],
@@ -5392,12 +5391,102 @@ mod ltd_tests {
     }
 
     #[test]
+    fn ltd_generation_preserves_external_tree_edges() {
+        let parsed = crate::graph_io::test_graphs::triangle_with_external_tree_graph();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
+                preserve_internal_edges_as_four_d_denominators: vec![3],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(!expression.orientations.is_empty());
+        assert!(expression.orientations.iter().all(|orientation| {
+            orientation.data.orientation[EdgeIndex(3)] == Orientation::Undirected
+                && orientation.edge_energy_map.len() == 4
+                && orientation.edge_energy_map[3] == LinearEnergyExpr::external(EdgeIndex(1), 1)
+        }));
+        assert_eq!(expression.residual_denominators.len(), 1);
+        assert_eq!(expression.residual_denominators[0].edge_id, EdgeIndex(3));
+        assert_eq!(expression.residual_denominators[0].power, 1);
+        assert!(
+            expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.edge_energy_map[3].internal_terms)
+                .next()
+                .is_none()
+        );
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .flat_map(|surface| &surface.expression.internal_terms)
+                .all(|(edge_id, _)| edge_id.0 != 3)
+        );
+    }
+
+    #[test]
     fn cff_generation_leaves_pure_trees_untouched() {
         let parsed = crate::graph_io::test_graphs::pure_tree_graph();
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
                 representation: RepresentationMode::Cff,
+                preserve_internal_edges_as_four_d_denominators: vec![0, 1],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(expression.orientations.len(), 1);
+        assert!(expression.surfaces.linear_surface_cache.is_empty());
+        assert_eq!(
+            expression
+                .residual_denominators
+                .iter()
+                .map(|denominator| denominator.edge_id)
+                .collect_vec(),
+            vec![EdgeIndex(0), EdgeIndex(1)]
+        );
+        let orientation = &expression.orientations[OrientationID(0)];
+        assert!(
+            orientation
+                .data
+                .orientation
+                .iter()
+                .all(|(_, value)| *value == Orientation::Undirected)
+        );
+        assert_eq!(
+            orientation.edge_energy_map,
+            vec![
+                LinearEnergyExpr::external(EdgeIndex(0), 1),
+                LinearEnergyExpr::external(EdgeIndex(0), 1)
+                    + LinearEnergyExpr::external(EdgeIndex(1), 1),
+            ]
+        );
+        assert_eq!(orientation.variants.len(), 1);
+        assert!(orientation.variants[0].half_edges.is_empty());
+        assert_eq!(
+            orientation.variants[0]
+                .denominator
+                .get_node(NodeId::root())
+                .data,
+            HybridSurfaceID::Unit
+        );
+    }
+
+    #[test]
+    fn ltd_generation_leaves_pure_trees_untouched() {
+        let parsed = crate::graph_io::test_graphs::pure_tree_graph();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
                 preserve_internal_edges_as_four_d_denominators: vec![0, 1],
                 ..Default::default()
             },

@@ -79,9 +79,9 @@ impl CutForests {
         settings: &UVgenerationSettings,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
-        if settings.local_uv_cts_from_expanded_4d_integrands && !explicit_orientation_sum_only {
+        if settings.local_uv_cts_from_expanded_4d_integrands {
             return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands` is not implemented yet"
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is not implemented yet in the UV forest"
             ));
         }
 

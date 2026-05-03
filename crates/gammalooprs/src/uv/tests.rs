@@ -166,8 +166,16 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
         uv,
         ..Default::default()
     };
-    amp.preprocess(&model, &generation_settings, &(&runtime).into(), &theadpool)
-        .unwrap();
+    amp.preprocess(
+        &model,
+        &GlobalSettings {
+            generation: generation_settings,
+            ..Default::default()
+        },
+        &(&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
 
     amp.build_integrand(
         &model,
@@ -1524,7 +1532,14 @@ mod failing {
         let vk = crate::utils::vakint().unwrap();
 
         amp.build_cff_expression_for_tests().unwrap();
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_integrands(
+            &GlobalSettings {
+                generation: set,
+                ..Default::default()
+            },
+            vk,
+        )
+        .unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -1565,7 +1580,14 @@ mod failing {
         let vk = crate::utils::vakint().unwrap();
 
         amp.build_cff_expression_for_tests().unwrap();
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_integrands(
+            &GlobalSettings {
+                generation: set,
+                ..Default::default()
+            },
+            vk,
+        )
+        .unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -1661,9 +1683,7 @@ mod failing {
         let runtime = RuntimeSettings::default();
         amp.preprocess(
             &model,
-            &GenerationSettings {
-                ..Default::default()
-            },
+            &GlobalSettings::default(),
             &(&runtime).into(),
             &theadpool,
         )

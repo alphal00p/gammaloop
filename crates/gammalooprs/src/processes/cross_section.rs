@@ -10,6 +10,7 @@ use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use rayon::{
     ThreadPool,
@@ -43,9 +44,13 @@ use crate::{
     processes::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
     },
-    settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{GS, hyperdual_utils::shape_for_t_derivatives},
-    uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
+    settings::{
+        GlobalSettings,
+        global::{GenerationSettings, ThreeDRepresentation},
+        runtime::LockedRuntimeSettings,
+    },
+    utils::{GS, W_, hyperdual_utils::shape_for_t_derivatives},
+    uv::{UltravioletGraph, approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
@@ -60,6 +65,7 @@ use symbolica::{
     evaluate::FunctionMap,
     function, parse, symbol,
 };
+use three_dimensional_reps::RepresentationMode;
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -259,7 +265,7 @@ impl CrossSection {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        global_settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
@@ -703,10 +709,28 @@ impl CrossSectionGraph {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
-        settings.ensure_step_iii_pending_options_are_supported()?;
+        global_settings.ensure_step_iii_pending_options_are_supported()?;
+        let settings = &global_settings.generation;
+        if global_settings.three_d_representation == ThreeDRepresentation::Ltd {
+            if settings.uv.subtract_uv && !settings.uv.local_uv_cts_from_expanded_4d_integrands {
+                return Err(eyre!(
+                    "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported for cross-section supergraphs; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
+                ));
+            }
+            if settings.uv.subtract_uv && settings.uv.local_uv_cts_from_expanded_4d_integrands {
+                return Err(eyre!(
+                    "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is not implemented yet in production cross-section generation"
+                ));
+            }
+            if settings.threshold_subtraction.enable_thresholds {
+                return Err(eyre!(
+                    "`global.3d_representation = LTD` with threshold subtraction is not implemented yet for cross-section supergraphs"
+                ));
+            }
+        }
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
         self.apply_spin_sum(model, settings, &runtime_default)?;
@@ -714,8 +738,8 @@ impl CrossSectionGraph {
         self.generate_cuts(model, process_definition, settings)?;
         debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
-        debug!("generating cff");
-        stats.merge_in_place(&self.build_cff_expression(settings)?);
+        debug!("generating 3D expression");
+        stats.merge_in_place(&self.build_3d_expression(global_settings)?);
         debug!("building lmbs");
         self.build_lmbs()?;
         debug!("building multi channeling channels");
@@ -726,7 +750,7 @@ impl CrossSectionGraph {
 
         let vk = crate::utils::vakint()?;
         debug!("building parametric integrand");
-        self.build_parametric_integrand(settings, vk)?;
+        self.build_parametric_integrand(global_settings, vk)?;
         //self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
@@ -756,20 +780,18 @@ impl CrossSectionGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    fn build_cff_expression(
-        &mut self,
-        settings: &GenerationSettings,
-    ) -> Result<GraphGenerationStats> {
+    fn build_3d_expression(&mut self, settings: &GlobalSettings) -> Result<GraphGenerationStats> {
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let global_cff = self.graph.generate_3d_expression_for_integrand(
-            &[],
-            &canonize_esurface,
-            &cff_options,
+        let options = self.graph.production_3d_expression_options(
+            settings.three_d_representation,
+            &settings.generation,
         )?;
+        let global_expression =
+            self.graph
+                .generate_3d_expression_for_integrand(&[], &canonize_esurface, &options)?;
 
         let cut_esurface_map = self
             .cut_esurface
@@ -802,15 +824,15 @@ impl CrossSectionGraph {
 
         let esurface_raised_data = self
             .graph
-            .determine_raised_esurfaces_from_expression(&global_cff);
+            .determine_raised_esurfaces_from_expression(&global_expression);
 
         let (raised_cut_data, raised_cut_stats) = RaisedCutData::new_from_esurface(
             &esurface_raised_data,
             &self.cut_esurface_id_map,
-            &settings.evaluator,
+            &settings.generation.evaluator,
         );
 
-        self.derived_data.global_cff_expression = Some(global_cff);
+        self.derived_data.global_cff_expression = Some(global_expression);
         self.derived_data.raised_data = raised_cut_data;
 
         Ok(raised_cut_stats)
@@ -900,18 +922,20 @@ impl CrossSectionGraph {
 
     pub(crate) fn build_parametric_integrand(
         &mut self,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         vakint: &Vakint,
     ) -> Result<()> {
-        self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
+        self.derived_data.cut_paramatric_integrand =
+            self.build_integrand(global_settings, vakint)?;
         Ok(())
     }
 
     fn build_integrand(
         &mut self,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         vakint: &Vakint,
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let settings = &global_settings.generation;
         let max_order = self
             .derived_data
             .raised_data
@@ -925,25 +949,11 @@ impl CrossSectionGraph {
             .param_builder
             .initialize_t_derivatives(max_order - 1);
 
-        let cuts = self
-            .derived_data
-            .raised_data
-            .raised_cut_groups
-            .iter()
-            .map(|cuts| CutSet {
-                residue_selector: ResidueSelector {
-                    lu_cut: Some(cuts.related_esurface_group.clone()),
-                    left_th_cut: None,
-                    right_th_cut: None,
-                },
-                union: cuts
-                    .cuts
-                    .iter()
-                    .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
-                    .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
-                    .unwrap_or_else(|| self.graph.empty_subgraph()),
-            })
-            .collect();
+        let cuts = self.cutsets_for_raised_cuts();
+
+        if global_settings.three_d_representation == ThreeDRepresentation::Ltd {
+            return self.build_ltd_original_integrand(&cuts, settings);
+        }
 
         let cut_structure = CutStructure { cuts };
 
@@ -983,6 +993,94 @@ impl CrossSectionGraph {
             })
             .map(|integrand| integrand.map(|a| a * &lu_prefactor))
             .collect())
+    }
+
+    fn cutsets_for_raised_cuts(&self) -> Vec<CutSet> {
+        self.derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|cuts| CutSet {
+                residue_selector: ResidueSelector {
+                    lu_cut: Some(cuts.related_esurface_group.clone()),
+                    left_th_cut: None,
+                    right_th_cut: None,
+                },
+                union: cuts
+                    .cuts
+                    .iter()
+                    .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
+                    .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
+                    .unwrap_or_else(|| self.graph.empty_subgraph()),
+            })
+            .collect()
+    }
+
+    fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
+        let reduced = self
+            .graph
+            .full_filter()
+            .subtract(&self.graph.initial_state_cut);
+        self.graph
+            .numerator(&reduced, &self.graph.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * self.graph.global_atom()
+    }
+
+    fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
+        Ok(atom
+            .replace(GS.dim)
+            .with(4)
+            .simplify_color()
+            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+            .with(W_.d_)
+            .expand_dots()?
+            .collect_factors())
+    }
+
+    fn build_ltd_original_integrand(
+        &self,
+        cuts: &[CutSet],
+        settings: &GenerationSettings,
+    ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let expression = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global 3D expression should have been created");
+        let numerator = self.production_numerator_atom_for_full_3d_expression();
+        let lu_prefactor = self.lu_prefactor_helper();
+
+        self.derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .zip(cuts.iter())
+            .map(|(raised_cut_group, cutset)| {
+                let integrands = expression
+                    .clone()
+                    .select_esurface_residue(&raised_cut_group.related_esurface_group)
+                    .into_iter()
+                    .map(|residue| {
+                        let atom = self
+                            .graph
+                            .three_d_expression_parametric_atom_with_numerator_gs(
+                                &residue,
+                                &numerator,
+                                RepresentationMode::Ltd,
+                                true,
+                                &settings.orientation_pattern,
+                            );
+                        self.finalize_parametric_integrand_atom(atom * &lu_prefactor)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(ParametricIntegrands {
+                    integrands,
+                    cuts: cutset.clone(),
+                })
+            })
+            .collect()
     }
 
     fn lu_prefactor_helper(&self) -> Atom {

@@ -8,11 +8,13 @@ use three_dimensional_reps::RepresentationMode;
 use crate::{
     cff::{
         expression::{
-            GammaLoopGraphOrientation, GammaLoopOrientationExpression, ResidualDenominator,
+            GammaLoopGraphOrientation, GammaLoopOrientationExpression, GammaLoopThreeDExpression,
+            OrientationID, ResidualDenominator, ThreeDExpression,
         },
         surface::GammaLoopSurfaceCache,
     },
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
+    settings::global::OrientationPattern,
     utils::GS,
     uv::UltravioletGraph,
 };
@@ -80,6 +82,42 @@ impl Graph {
             GS.wrap_tree_denoms(denominator)
         } else {
             denominator
+        }
+    }
+
+    pub(crate) fn three_d_expression_parametric_atom_with_numerator_gs(
+        &self,
+        expression: &ThreeDExpression<OrientationID>,
+        numerator: &Atom,
+        representation: RepresentationMode,
+        explicit_orientation_sum_only: bool,
+        pattern: &OrientationPattern,
+    ) -> Atom {
+        let atom = if explicit_orientation_sum_only {
+            expression.diagnostic_parametric_atom_with_numerator_gs(
+                self,
+                numerator,
+                &OrientationPattern::default(),
+            )
+        } else {
+            expression.parametric_atom_with_numerator_gs(self, numerator, pattern)
+        };
+        let atom =
+            atom * self.residual_denominator_factor_gs(&expression.residual_denominators, true);
+
+        if representation == RepresentationMode::Cff {
+            let graph_without_is_cut = self
+                .underlying
+                .full_filter()
+                .subtract(&self.initial_state_cut.left)
+                .subtract(&self.initial_state_cut.right);
+            let mut excluded_edges =
+                self.preserved_4d_denominator_edges_for_3d_expression(RepresentationMode::Cff);
+            excluded_edges.sort_unstable();
+            excluded_edges.dedup();
+            atom * get_cff_inverse_energy_product_impl(self, &graph_without_is_cut, &excluded_edges)
+        } else {
+            atom
         }
     }
 

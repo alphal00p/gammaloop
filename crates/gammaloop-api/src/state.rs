@@ -1614,7 +1614,7 @@ impl State {
                                     process_id,
                                     a.preprocess(
                                         &state.model,
-                                        &global_settings.generation,
+                                        global_settings,
                                         &runtime_default,
                                         generation_pool,
                                     )?,
@@ -1649,7 +1649,7 @@ impl State {
                                     cs.preprocess(
                                         &state.model,
                                         &p.definition,
-                                        &global_settings.generation,
+                                        global_settings,
                                         runtime_default,
                                         generation_pool,
                                     )?,

@@ -134,9 +134,19 @@ impl Default for GlobalSettings {
 
 impl GlobalSettings {
     pub fn ensure_step_iii_pending_options_are_supported(&self) -> EyreResult<()> {
-        if self.three_d_representation == ThreeDRepresentation::Ltd {
+        if self.three_d_representation == ThreeDRepresentation::Ltd
+            && !self.generation.explicit_orientation_sum_only
+        {
             return Err(eyre!(
-                "`global.3d_representation = LTD` is not implemented in production GammaLoop generation yet"
+                "`global.3d_representation = LTD` requires `global.generation.explicit_orientation_sum_only = true`; individual-orientation LTD generation is not supported"
+            ));
+        }
+
+        if self.generation.explicit_orientation_sum_only
+            && self.generation.orientation_pattern.pat.is_some()
+        {
+            return Err(eyre!(
+                "`global.generation.explicit_orientation_sum_only = true` requires summing all generated orientations; `global.generation.orientation_pattern` must be unset"
             ));
         }
 
@@ -221,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn step_iii_3d_settings_parse_and_guard_pending_modes() {
+    fn step_iii_3d_settings_parse_and_guard_modes() {
         let settings: GlobalSettings = toml::from_str(
             r#"
 3d_representation = "LTD"
@@ -244,12 +254,47 @@ local_uv_cts_from_expanded_4d_integrands = true
                 .local_uv_cts_from_expanded_4d_integrands
         );
 
+        settings
+            .ensure_step_iii_pending_options_are_supported()
+            .expect("LTD is supported when all orientations are explicitly summed");
+    }
+
+    #[test]
+    fn ltd_requires_explicit_orientation_sum_mode() {
+        let settings: GlobalSettings = toml::from_str(
+            r#"
+3d_representation = "LTD"
+"#,
+        )
+        .unwrap();
+
         let error = settings
             .ensure_step_iii_pending_options_are_supported()
             .unwrap_err()
             .to_string();
         assert!(error.contains("3d_representation = LTD"));
-        assert!(error.contains("not implemented"));
+        assert!(error.contains("explicit_orientation_sum_only = true"));
+    }
+
+    #[test]
+    fn explicit_orientation_sum_rejects_generation_orientation_pattern() {
+        let settings: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+explicit_orientation_sum_only = true
+
+[generation.orientation_pattern]
+pat = "(+,-)"
+"#,
+        )
+        .unwrap();
+
+        let error = settings
+            .ensure_step_iii_pending_options_are_supported()
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("explicit_orientation_sum_only = true"));
+        assert!(error.contains("orientation_pattern"));
     }
 
     #[test]

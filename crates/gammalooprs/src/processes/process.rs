@@ -38,7 +38,6 @@ use crate::{
     feyngen::{FeynGenFilters, GenerationType},
     graph::Graph,
     model::Model,
-    settings::global::GenerationSettings,
 };
 
 use super::{Amplitude, CrossSection, GeneratedGraphReport, NamedGraphGenerationReport};
@@ -454,7 +453,7 @@ impl Process {
         let reports = self.collection.preprocess(
             model,
             &self.definition,
-            &settings.generation,
+            settings,
             locked_runtime_settings,
             thread_pool,
         )?;
@@ -1056,7 +1055,7 @@ impl ProcessCollection {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        settings: &GenerationSettings,
+        settings: &GlobalSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {

@@ -13,7 +13,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::gamma::GammaSimplifier;
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -69,7 +69,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
     function,
 };
-use three_dimensional_reps::Generate3DExpressionOptions;
+use three_dimensional_reps::{Generate3DExpressionOptions, RepresentationMode};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -244,7 +244,7 @@ impl Amplitude {
     pub fn preprocess(
         &mut self,
         model: &Model,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
@@ -270,7 +270,7 @@ impl Amplitude {
                     }
                     let _guard = parent.enter();
                     let stats =
-                        amplitude_graph.preprocess(model, settings, locked_runtime_settings);
+                        amplitude_graph.preprocess(model, global_settings, locked_runtime_settings);
                     preprocess_span.pb_inc(1);
 
                     let stats = stats?;
@@ -565,35 +565,41 @@ impl AmplitudeGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
+    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating 3D expression"), err)]
     #[cfg(test)]
     pub(crate) fn build_cff_expression_for_tests(&mut self) -> Result<()> {
         let settings = GenerationSettings::default();
-        let cff_options = self.graph.production_cff_3d_expression_options(&settings)?;
-        self.build_cff_expression_with_options(&cff_options)
+        let cff_options = self.graph.production_3d_expression_options(
+            crate::settings::global::ThreeDRepresentation::Cff,
+            &settings,
+        )?;
+        self.build_3d_expression_with_options(&cff_options)
     }
 
     #[instrument(skip_all, err)]
-    pub(crate) fn build_cff_expression_with_settings(
+    pub(crate) fn build_3d_expression_with_settings(
         &mut self,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
     ) -> Result<()> {
-        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        self.build_cff_expression_with_options(&cff_options)
+        let options = self.graph.production_3d_expression_options(
+            global_settings.three_d_representation,
+            &global_settings.generation,
+        )?;
+        self.build_3d_expression_with_options(&options)
     }
 
-    fn build_cff_expression_with_options(
+    fn build_3d_expression_with_options(
         &mut self,
-        cff_options: &Generate3DExpressionOptions,
+        options: &Generate3DExpressionOptions,
     ) -> Result<()> {
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_expression =
+        let expression =
             self.graph
-                .generate_3d_expression_for_integrand(&[], &shift_rewrite, cff_options)?;
-        self.derived_data.cff_expression = Some(cff_expression);
+                .generate_3d_expression_for_integrand(&[], &shift_rewrite, options)?;
+        self.derived_data.cff_expression = Some(expression);
 
         Ok(())
     }
@@ -602,16 +608,36 @@ impl AmplitudeGraph {
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
-        settings.ensure_step_iii_pending_options_are_supported()?;
+        global_settings.ensure_step_iii_pending_options_are_supported()?;
+        let settings = &global_settings.generation;
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.build_cff_expression_with_settings(settings)?;
+        if global_settings.three_d_representation
+            == crate::settings::global::ThreeDRepresentation::Ltd
+            && settings.uv.subtract_uv
+            && !settings.uv.local_uv_cts_from_expanded_4d_integrands
+            && self.graph.get_loop_number() > 0
+        {
+            return Err(eyre!(
+                "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
+            ));
+        }
+        if settings.uv.subtract_uv
+            && settings.uv.local_uv_cts_from_expanded_4d_integrands
+            && self.graph.get_loop_number() > 0
+        {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is not implemented yet in production integrand generation"
+            ));
+        }
 
-        self.build_integrands(settings, vk)?;
+        self.build_3d_expression_with_settings(global_settings)?;
+
+        self.build_integrands(global_settings, vk)?;
 
         if self.graph.is_group_master {
             self.build_tropical_sampler(settings)?;
@@ -627,6 +653,7 @@ impl AmplitudeGraph {
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,
+                    global_settings.three_d_representation,
                     vk,
                     locked_runtime_settings,
                     model,
@@ -707,6 +734,36 @@ impl AmplitudeGraph {
 
         // debug!("result: {}", result);
         cff_atom / factors_of_pi
+    }
+
+    fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
+        let reduced = self
+            .graph
+            .full_filter()
+            .subtract(&self.graph.initial_state_cut);
+        self.graph
+            .numerator(&reduced, &self.graph.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * self.graph.global_atom()
+    }
+
+    fn prepare_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
+        Ok(atom
+            .replace(GS.dim)
+            .with(4)
+            .simplify_color()
+            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+            .with(W_.d_)
+            .expand_dots()?
+            .collect_factors())
+    }
+
+    fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
+        let prepared = self.prepare_parametric_integrand_atom(atom)?;
+        Ok(self
+            .add_additional_factors_to_cff_atom(&prepared)
+            .collect_factors())
     }
 
     pub fn to_numerical(
@@ -901,9 +958,10 @@ impl AmplitudeGraph {
     )]
     pub(crate) fn build_integrands(
         &mut self,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         vakint: &Vakint,
     ) -> Result<()> {
+        let settings = &global_settings.generation;
         let valid_orientations: Vec<_> = self
             .derived_data
             .cff_expression
@@ -913,6 +971,28 @@ impl AmplitudeGraph {
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
+        if global_settings.three_d_representation
+            == crate::settings::global::ThreeDRepresentation::Ltd
+        {
+            let expression = self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .expect("3D expression should have been created");
+            let numerator = self.production_numerator_atom_for_full_3d_expression();
+            let atom = self
+                .graph
+                .three_d_expression_parametric_atom_with_numerator_gs(
+                    expression,
+                    &numerator,
+                    RepresentationMode::Ltd,
+                    true,
+                    &settings.orientation_pattern,
+                );
+            self.derived_data.all_mighty_integrand =
+                self.finalize_parametric_integrand_atom(atom)?;
+            return Ok(());
+        }
         let cutstructure = CutStructure::empty(&self.graph);
         let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
@@ -948,10 +1028,19 @@ impl AmplitudeGraph {
     fn build_threshold_counterterm_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
+        representation: crate::settings::global::ThreeDRepresentation,
         vakint: &Vakint,
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
+        if representation == crate::settings::global::ThreeDRepresentation::Ltd {
+            return self.build_ltd_threshold_counterterm_parametric_integrand(
+                settings,
+                locked_runtime_settings,
+                model,
+            );
+        }
+
         let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = ti_vec![
             AmplitudeCountertermAtom::new();
             self.graph.surface_cache.esurface_cache.len()
@@ -1093,6 +1182,108 @@ impl AmplitudeGraph {
             let esurface_id = esurfaces.esurface_ids[0];
 
             counterterms[esurface_id] = counterterm_atom;
+        }
+
+        Ok(counterterms)
+    }
+
+    fn build_ltd_threshold_counterterm_parametric_integrand(
+        &self,
+        settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        model: &Model,
+    ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
+        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = ti_vec![
+            AmplitudeCountertermAtom::new();
+            self.graph.surface_cache.esurface_cache.len()
+        ];
+
+        let (local_prefactor, integrated_prefactor) = self.th_counterterm_prefactor_helpter();
+        let expression = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("3D expression should have been created");
+        let esurface_raising = self
+            .graph
+            .determine_raised_esurfaces_from_expression(expression);
+        let numerator = self.production_numerator_atom_for_full_3d_expression();
+
+        let external_filter: SuBitGraph = self.graph.external_filter();
+        let external_signature = self.graph.get_external_signature();
+
+        let mut incoming_externals = vec![];
+        let mut outgoing_externals = vec![];
+
+        for ((_, edge_id, _), external_sign) in self
+            .graph
+            .iter_edges_of(&external_filter)
+            .zip(external_signature.iter())
+        {
+            match external_sign {
+                SignOrZero::Plus => incoming_externals.push(edge_id),
+                SignOrZero::Minus => outgoing_externals.push(edge_id),
+                _ => {}
+            }
+        }
+
+        for raised_data in esurface_raising.raised_groups.into_iter() {
+            if raised_data.esurface_ids.len() != 1 {
+                return Err(eyre!(
+                    "raised threshold subtraction for grouped e-surfaces is not implemented yet"
+                ));
+            }
+            if raised_data.max_occurence != 1 {
+                return Err(eyre!(
+                    "raised threshold subtraction for repeated e-surfaces is not implemented yet"
+                ));
+            }
+
+            let esurface_id = raised_data.esurface_ids[0];
+            let esurface = &expression.surfaces.esurface_cache[esurface_id];
+
+            if settings.threshold_subtraction.check_esurface_at_generation {
+                let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
+                let lmb = &self.graph.loop_momentum_basis;
+                if !locked_runtime_settings.existence_check(
+                    esurface,
+                    &masses,
+                    &self.graph.get_external_signature(),
+                    lmb,
+                ) {
+                    continue;
+                }
+            }
+
+            if !(esurface.contains_all_with_minus_sign(&incoming_externals)
+                || esurface.contains_only_with_minus_sign(&outgoing_externals))
+            {
+                continue;
+            }
+
+            let residues = expression.clone().select_esurface_residue(&raised_data);
+            if residues.len() != 1 {
+                return Err(eyre!(
+                    "threshold counterterm generation is not implemented for raised e-surface groups with {} residue orders",
+                    residues.len()
+                ));
+            }
+            let residue = residues.into_iter().next().unwrap();
+            let atom = self
+                .graph
+                .three_d_expression_parametric_atom_with_numerator_gs(
+                    &residue,
+                    &numerator,
+                    RepresentationMode::Ltd,
+                    true,
+                    &settings.orientation_pattern,
+                );
+            let integrand = self.prepare_parametric_integrand_atom(atom)?;
+
+            counterterms[esurface_id] = AmplitudeCountertermAtom {
+                parametric_local: &local_prefactor * &integrand,
+                parametric_integrated: &integrated_prefactor * integrand,
+            };
         }
 
         Ok(counterterms)
@@ -1438,16 +1629,19 @@ pub mod test {
         .unwrap();
 
         let model = load_generic_model("scalars");
-        let generation_settings = GenerationSettings {
-            threshold_subtraction: ThresholdSubtractionSettings {
-                enable_thresholds: false,
+        let global_settings = GlobalSettings {
+            generation: GenerationSettings {
+                threshold_subtraction: ThresholdSubtractionSettings {
+                    enable_thresholds: false,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()
         };
         let runtime_settings = RuntimeSettings::default();
         graph
-            .preprocess(&model, &generation_settings, &(&runtime_settings).into())
+            .preprocess(&model, &global_settings, &(&runtime_settings).into())
             .unwrap();
 
         assert!(

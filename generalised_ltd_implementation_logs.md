@@ -4579,3 +4579,377 @@ git diff --check
 just test_gammaloop_detailed
 Summary [153.382s] 1039 tests run: 1039 passed, 125 skipped
 ```
+
+## 2026-05-03: Step III LTD production-support plan
+
+This is the next-to-last Step III subgoal: support
+`global.3d_representation = "LTD"` in production GammaLoop generation. LTD is
+only supported in the generation mode where orientations are explicitly summed.
+The intended runtime object is one effective summed orientation, with observable
+orientation id `0`; no individual-orientation Monte Carlo, no generated
+orientation selector, and no runtime orientation selector is supported.
+
+Clarified design constraints:
+
+- `global.3d_representation = "LTD"` must require
+  `global.generation.explicit_orientation_sum_only = true`. If this is false,
+  generation must fail with a clear not-supported error.
+- In any explicit-orientation-sum mode, a non-empty
+  `global.generation.orientation_pattern` is also invalid. The mode means "sum
+  all orientations", so user-provided orientation filtering must fail clearly
+  instead of being ignored.
+- The same per-orientation numerator logic applies to CFF and LTD in explicit
+  orientation-sum mode: each generated orientation carries its own numerator
+  energy map. LTD is not conceptually different here; its EMR energy
+  substitutions are just more general affine oriented maps.
+- H-surfaces in LTD are spurious singularities that cancel in the required full
+  orientation sum. They must be ignored for threshold-subtraction activation.
+- Physical threshold counterterms are driven only by generated E-surfaces. The
+  E-surfaces in the fully summed LTD expression should canonically match the
+  E-surfaces found by the fully summed CFF expression, because both represent
+  the same loop-energy-integrated function.
+- Integrated UV localization uses a representation-independent normalization
+  function of spatial loop momenta. It should not be made CFF- or LTD-aware.
+- Current CFF behavior is a hard regression boundary. The code can be renamed
+  and generalized, but choosing `CFF` must continue to produce the same local
+  inspect values and current test behavior.
+
+Implementation plan:
+
+1. Add the strict LTD/explicit-sum settings guards.
+   `LTD` with `explicit_orientation_sum_only = false` should error before
+   generation. Any non-trivial `orientation_pattern` together with
+   `explicit_orientation_sum_only = true` should also error.
+
+2. Generalize production naming and data flow away from CFF-specific concepts.
+   The production objects currently named `cff_expression`,
+   `global_cff_expression`, `CFFapprox`, and related helpers should become
+   representation-neutral 3D-expression concepts. CFF-specific behavior should
+   remain only in explicit `RepresentationMode::Cff` branches.
+
+3. Make the GammaLoop bridge preserve the rich generated oriented structure.
+   Production atom construction should use each orientation's own energy map,
+   variant prefactor, half-edge factors, numerator surfaces, denominator tree,
+   and residual denominators. For CFF, keep the existing convention that
+   generalized half-edge factors are stripped and supplied by the existing
+   inverse-OSE product. For LTD, keep the variant half-edge factors because they
+   are part of the residue formula. If matching the CFF normalization requires
+   an additional inverse-OSE factor, multiply it explicitly into the generated
+   atom/numerator side rather than hiding it in CFF-only plumbing.
+
+4. First enable the original integrand in LTD with UV disabled.
+   Build local inspect comparisons between CFF explicit-sum and LTD for simple
+   amplitudes, imported external-tree graphs, pure trees, and cross-section
+   fixtures that do not require UV counterterms. The expected comparison is
+   equality within the numerical accuracy of the selected precision.
+
+5. Threshold subtraction in LTD should scan only canonical E-surfaces.
+   H-surfaces are ignored. If an expected physical E-surface does not match the
+   CFF canonical surface set, the fix should be in E-surface canonicalization or
+   in how `generate_3d_expression` exposes E-surfaces, not in treating
+   H-surfaces as thresholds.
+
+6. Local UV counterterms for LTD must not use the current 3D-expansion UV
+   forest. That forest is intentionally CFF-shaped: it stores denominator-only
+   selector terms and introduces numerator energy substitutions later through
+   CFF on-shell-energy signs. LTD needs the full affine EMR-energy map attached
+   to each oriented term at numerator-insertion time. Supporting LTD through
+   that path would add complexity without a physics or maintenance benefit, so
+   `LTD + local UV from 3D expansions` is permanently `NotSupported`.
+
+7. Implement local UV counterterms from expanded 4D integrands instead. This
+   path should be allowed for both CFF and LTD, and LTD with
+   `uv.subtract_uv = true` should require
+   `uv.local_uv_cts_from_expanded_4d_integrands = true`. The 4D-expanded route
+   keeps the UV R-operation representation-neutral until the step where the
+   chosen 3D representation is applied, so CFF and LTD can share the same UV
+   construction while retaining their distinct oriented energy maps.
+
+8. Extend the inspect test matrix broadly.
+   Every integration-test function in the top-level `tests` crate that performs
+   a local `inspect` check should, where physically applicable, gain a CFF
+   explicit-sum versus LTD explicit-sum comparison at the same local sample
+   point. Do not add integrated-level LTD comparisons for this subgoal; local
+   inspect equality is the intended validation. These comparisons should cover
+   amplitudes and cross sections, and include configurations with threshold
+   subtraction and, after the UV port, local UV counterterms.
+
+Expected validation sequence:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+targeted inspect tests for bare LTD/CFF parity
+targeted inspect tests with threshold subtraction
+targeted inspect tests with local UV CTs after the UV port
+just test_gammaloop_detailed
+```
+
+## 2026-05-03: Step III LTD original-integrand implementation
+
+Implemented the first production LTD slice: original-integrand generation with
+all orientations explicitly summed and local UV/threshold counterterms disabled.
+
+Changes made:
+
+- Relaxed the production settings guard so `global.3d_representation = "LTD"`
+  is accepted when `global.generation.explicit_orientation_sum_only = true`.
+- Added a strict guard that rejects any non-empty
+  `global.generation.orientation_pattern` in explicit-orientation-sum mode.
+  This mode now means "sum every generated orientation" unambiguously.
+- Kept LTD individual-orientation generation unsupported. `LTD` with
+  `explicit_orientation_sum_only = false` errors before generation.
+- Generalized the GammaLoop production bridge so
+  `Graph::production_3d_expression_options(...)` selects CFF or LTD and passes
+  the representation to `three_dimensional_reps::generate_3d_expression`.
+- Generalized preserved-internal-edge handling in the `three-dimensional-reps`
+  generator. The preserve/re-attach wrapper is no longer CFF-only; LTD can now
+  leave selected internal tree structures as residual 4D denominators too.
+- Changed GammaLoop's automatic preserved-4D-denominator selection so external
+  tree denominators are preserved for both CFF and LTD. The generated LTD
+  expression keeps its variant half-edge factors, while CFF keeps the existing
+  production convention of stripping those factors and applying the separate
+  inverse-OSE product.
+- Added a production atom path that accepts an explicit numerator atom and then
+  applies the generated orientation's own EMR-energy substitution map. This is
+  needed because the diagnostic `full_numerator_atom()` carries raw graph-level
+  helper factors such as `AutG(...)`, while production must use
+  `graph.global_atom()` so those factors are evaluated before evaluator
+  parsing.
+- Added direct LTD original-integrand assembly in amplitude generation. This
+  uses the full generated 3D expression, sums orientations without theta
+  selectors, multiplies residual preserved 4D denominators, applies the
+  standard `(2π)^(-3L)` normalization, simplifies graph/global factors, unwraps
+  preserved tree denominators, and builds a single effective orientation
+  evaluator.
+- Canonicalized generated negative E-surfaces during GammaLoop surface import.
+  LTD can expose the same physical E-surface with all internal energy terms
+  carrying an overall minus sign. The bridge flips such surfaces to the
+  canonical positive-energy convention and absorbs the sign into the variant
+  prefactor. Mixed-sign E-surfaces still error explicitly.
+- Routed amplitude and cross-section preprocessing through `GlobalSettings`
+  rather than only `GenerationSettings`, so representation-aware generation
+  decisions cannot be silently lost.
+- Added explicit not-supported errors for LTD local UV counterterms from 3D
+  expansions and for cross-section threshold subtraction. This prevents
+  accidental CFF-shaped fallback while the remaining Step III subgoals are
+  still open.
+- Added amplitude threshold-subtraction support for LTD explicit-sum mode. The
+  amplitude path now derives the raised canonical E-surfaces directly from the
+  generated LTD expression, ignores non-E/H surfaces for threshold selection,
+  applies the existing generation-time existence checks and external-flow
+  threshold filters, selects the LTD E-surface residue, and builds the
+  parametric counterterm with the same threshold prefactors as CFF. The
+  threshold path deliberately uses only the algebra cleanup portion of the
+  normal integrand finalizer because the threshold prefactors already contain
+  the `(2π)^(-3L)` measure normalization.
+- Added the first narrow cross-section LTD original-integrand path. Cross
+  sections now build their global 3D expression through the same
+  representation-aware bridge as amplitudes, and bare LTD cross sections select
+  LU E-surface residues directly from the generated LTD expression instead of
+  sending those terms through the CFF UV forest. The path remains guarded to
+  `uv.subtract_uv = false` and threshold subtraction disabled.
+
+Tests added:
+
+- `three-dimensional-reps` unit tests proving LTD preservation of an external
+  tree edge and LTD pure-tree passthrough.
+- Integration tests comparing CFF explicit-sum and LTD explicit-sum local
+  inspect values for scalar triangle/box amplitudes with UV disabled.
+- Integration tests comparing CFF and LTD local inspect values for imported
+  external-tree loop graphs and a pure tree graph, again with UV disabled.
+- Integration test comparing CFF and LTD local inspect values for imported
+  scalar one-loop topologies with manually attached quartic numerators:
+  `box.dot` uses `(Q4.Q5) * (Q6.Q7)` and `box_pow3.dot` uses
+  `(Q4.Q6) * (Q7.Q9)`. This exercises automatic EMR energy-degree detection
+  up to quartic order in production GammaLoop generation, including a repeated
+  propagator topology.
+- Integration test comparing CFF and LTD local inspect values for scalar
+  triangle and box amplitudes with threshold subtraction enabled and UV
+  disabled. This covers the new LTD amplitude threshold path and catches the
+  threshold-measure normalization convention against the existing CFF result.
+- Integration test checking that LTD with default local UV subtraction fails
+  with a clear not-supported error.
+- Settings tests for LTD's explicit-sum requirement and the
+  explicit-sum/orientation-pattern incompatibility.
+
+Cross-section validation note:
+
+- I attempted to add a scalar generated cross-section local-inspect CFF/LTD
+  parity test, but the simplest scalar candidate generated a zero-loop
+  forward-scattering case. The existing CFF local-inspect evaluation for that
+  case panics while constructing the LU radial guess because it assumes at
+  least one loop momentum (`unit_loops[0]`). I therefore did not keep that test
+  as a LTD validation target. A useful cross-section parity test should use a
+  genuinely loopful forward-scattering topology without repeated propagators,
+  so that the CFF reference path is meaningful and the comparison probes LTD
+  rather than this pre-existing zero-loop cross-section limitation.
+- I also probed imported Standard Model forward-scattering fixtures. The
+  `epemttbar.dot` fixture reaches the relevant loopful CFF reference path but
+  is too expensive for a normal `just test_gammaloop` local-inspect parity test.
+  The smaller `addbar.dot` candidate fails in the existing CFF/imported-graph
+  generation path before it can test LTD. I therefore did not keep either as a
+  committed LTD parity test.
+- I also tried to promote `four_loop_stress.dot` to a production quartic
+  numerator parity test, but CFF generation itself rejected the manually chosen
+  numerator through the generalized degree-of-divergence guard before any LTD
+  comparison could be made. That probe is useful as a boundary check but not as
+  a retained LTD validation test.
+
+Verification so far:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p three-dimensional-reps ltd_generation --locked
+cargo test -p gammaloop-integration-tests ltd_ --locked
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_threshold_explicit_orientation_sum_inspect_matches_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_with_uv_subtraction_errors_cleanly --locked -- --nocapture
+cargo test -p gammalooprs step_iii --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [143.479s] 1048 tests run: 1048 passed, 125 skipped
+```
+
+Remaining structural boundary:
+
+- The local UV forest is still CFF-shaped internally. It stores denominator-only
+  local terms with orientation selectors, then introduces the numerator later
+  through simple `σ(edge) * OSE(edge)` substitutions. That is sufficient for the
+  old CFF path, but not for LTD because LTD requires each orientation's full
+  affine EMR-energy map at the exact point where the numerator is introduced.
+  Reusing the current denominator-only selector storage for LTD would silently
+  lose the LTD numerator energy substitutions, so `LTD + local UV from 3D
+  expansions` is permanently `NotSupported`.
+- The 4D-expanded local-UV route is the intended production UV path for LTD.
+  The implementation boundary is not the R-operation itself: GammaLoop already
+  has the 4D UV expansion machinery used by the integrated counterterm path.
+  The missing bridge is converting each expanded 4D local term into a generated
+  3D expression without losing its UV-limit denominator data. Expanded local
+  denominators may have UV masses such as `m_uv`, dropped external shifts, and
+  repeated powers that no longer correspond one-to-one to the original
+  production graph edge ids. The current `generate_3d_expr` bridge emits
+  `OSE(edge)` and spatial-vector references keyed only by graph edge id, so it
+  cannot yet represent an auxiliary UV denominator whose spatial momentum or
+  mass differs from the original edge with the same id.
+- The clean route is to add an intermediate representation for expanded 4D
+  local terms: numerator atom, denominator factors with signatures/masses/power
+  data, and explicit maps from generated denominator edges back to GammaLoop
+  spatial momentum expressions and OSE definitions. The representation can then
+  call `generate_3d_expr` on a parsed denominator graph and substitute the
+  generated auxiliary OSE/spatial references into GammaLoop atoms. Until that
+  bridge exists, `local_uv_cts_from_expanded_4d_integrands = true` now fails
+  loudly instead of falling back to the existing local-3D CFF forest.
+
+Bridge design note for expanded-4D local UV counterterms:
+
+- Local UV counterterms built from expanded 4D integrands must keep their
+  numerator in strict four dimensions. Unlike the integrated UV counterterm
+  path, this local branch must not call `gamma_simplify` or otherwise simplify
+  the numerator with integrated-counterterm algebra. Such simplification is
+  useful before feeding tensor integrals to Vakint, but it would change the
+  local numerator representation and can break pointwise cancellations against
+  the original integrand.
+- When `local_uv_cts_from_expanded_4d_integrands = true`, the local UV forest
+  must bypass the existing 3D-expanded local-UV path entirely. The bridge should
+  first build representation-neutral expanded 4D local terms, then apply the
+  selected 3D representation. This makes the three local inspect evaluations
+  `CFF + 3D-expanded UV`, `CFF + 4D-expanded UV`, and
+  `LTD + 4D-expanded UV` directly comparable at identical spatial sample
+  points.
+
+## 2026-05-03: Step III: final subgoal plan
+
+The final Step III subgoal is to implement local UV counterterms built from
+expanded 4D integrands and then apply the selected 3D representation to those
+terms. This is the missing bridge needed for `LTD` with UV subtraction. It is
+also useful for `CFF`, where it gives a representation-neutral validation path
+against the existing local-UV construction from 3D expansions.
+
+Design boundary:
+
+- `LTD + local UV from 3D expansions` remains permanently unsupported. The
+  current local-3D UV forest is intentionally CFF-shaped and stores
+  denominator-only selector terms before introducing numerator energies through
+  simple CFF OSE signs. LTD needs each orientation's full affine energy map at
+  numerator insertion time, so adapting that path would add maintenance cost
+  without a physics benefit.
+- `local_uv_cts_from_expanded_4d_integrands = true` must bypass the existing
+  local-3D UV path entirely for both CFF and LTD. The expanded-4D forest terms
+  are built first, and only then converted to the requested 3D representation.
+- Local expanded-4D UV numerators are strict four-dimensional objects. Unlike
+  the integrated UV path, this local branch must not call `gamma_simplify`,
+  tensor reduction, or Vakint topology canonicalization. Those operations are
+  appropriate for integrated counterterms but can change the local numerator
+  representation and break pointwise cancellations.
+
+Implementation plan:
+
+1. Add a local expanded-4D UV term representation in GammaLoop.
+   Each term should carry one numerator atom, a scalar prefactor, denominator
+   factor records, the compatible loop-momentum basis, and enough provenance to
+   report clear diagnostics. Denominator records should store source edge data
+   when available, endpoint data, momentum atom, momentum signature, mass-squared
+   atom, and integer power.
+
+2. Reuse the integrated UV topology-building strategy, but stop before Vakint.
+   The useful shared idea is to turn structured `GS.den(...)` factors into
+   propagator records with momenta, masses, powers, and a consistent loop basis.
+   The local bridge must not inherit Vakint-only simplifications, same-mass
+   contractions, tensor reduction, or component-merging steps unless a later
+   proof and regression tests justify them.
+
+3. Build one possibly disconnected parsed denominator graph per expanded local
+   term. The numerator remains global to that term because disconnected
+   denominator components can still carry numerator factors with open indices
+   contracted across components. If the 3D generator needs component
+   factorization internally, implement that inside `three-dimensional-reps` and
+   recombine component orientations, surfaces, prefactors, half-edge factors,
+   and energy maps into one global `ThreeDExpression`.
+
+4. Add a local 3D source/context for auxiliary denominator edges. The generated
+   auxiliary edge ids must map back to GammaLoop spatial momentum expressions,
+   OSE definitions built from the denominator mass-squared atom, and loop-energy
+   symbols in the local loop basis. This should generalize the existing
+   production `GraphThreeDSource` bridge without requiring a full production
+   `Graph` for auxiliary UV denominators.
+
+5. Generalize GammaLoop orientation substitution over a context instead of only
+   `Graph`. Production graphs and expanded local terms should share the same
+   code path for applying `OrientationExpression` energy maps to numerator
+   atoms. This is where CFF and LTD remain representation-specific only through
+   the generated orientation data.
+
+6. Generate the selected 3D representation for each local term. CFF and LTD call
+   `generate_3d_expr` with the same parsed denominator graph and automatic
+   numerator energy-degree bounds computed in the local auxiliary-edge context.
+   LTD remains restricted to `explicit_orientation_sum_only = true`; non-trivial
+   orientation patterns in explicit-sum mode still fail cleanly.
+
+7. Assemble the expanded-4D UV forest without CFF selectors. The final local
+   forest terms should be ordinary parametric atoms ready for evaluator
+   construction. The existing integrated finite insertion remains
+   representation-independent, but its reduced-factor localization must use this
+   new bridge when the expanded-4D mode is selected rather than calling the
+   CFF-shaped `localized_integrated_reduced_factor`.
+
+Validation plan:
+
+- First add unit tests for extracting expanded local denominator records:
+  original mass versus `m_uv`, repeated powers, strict `dim = 4`, absence of
+  gamma simplification, and disconnected denominator components with a single
+  global numerator.
+- Add `three-dimensional-reps` tests for disconnected parsed graphs or the
+  internal component-product recombination needed by the local bridge.
+- Add local inspect comparisons at identical spatial sample points for the
+  three UV modes:
+  `CFF + local UV from 3D expansions`,
+  `CFF + local UV from expanded 4D integrands`, and
+  `LTD + local UV from expanded 4D integrands`.
+- Extend the existing LTD/CFF local inspect matrix where runtime permits:
+  scalar UV amplitudes, threshold plus UV, external-tree loop cases, pure-tree
+  non-regressions, loopful scalar cross sections without repeated propagators,
+  and manually written quartic numerator cases.
+- The final validation target remains `just test_gammaloop_detailed`.
