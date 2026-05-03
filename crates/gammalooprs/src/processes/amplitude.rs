@@ -69,6 +69,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
     function,
 };
+use three_dimensional_reps::Generate3DExpressionOptions;
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -539,51 +540,12 @@ impl AmplitudeGraph {
         &mut self,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
-        if self.derived_data.cff_expression.is_none() {
-            self.generate_cff()?;
-        }
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .expect("cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+        let cuts = CutStructure::empty(&self.graph);
+        let wood = NewWood::new(cuts, &self.graph, settings);
+        let mut forest = wood.unfold();
+        forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
 
-        if settings.use_legacy {
-            let mut vk_settings = settings.vakint.true_settings();
-            let wood = self.graph.wood_with_settings(
-                &self.graph.no_dummy(),
-                settings,
-                &self.graph.loop_momentum_basis,
-            );
-            //  it needs to be the max number of loops across all divergent spinneys of that graph
-            vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-
-            let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let vk = (crate::utils::vakint()?, &vk_settings);
-            let cuts = CutSet::empty(self.graph.n_hedges());
-            forest.compute(
-                &mut self.graph,
-                vk,
-                &cuts,
-                &valid_orientations,
-                settings,
-                false,
-            )?;
-
-            forest.pole_part_of_ends(&self.graph)
-        } else {
-            let cuts = CutStructure::empty(&self.graph);
-            let wood = NewWood::new(cuts, &self.graph, settings);
-            let mut forest = wood.unfold();
-            forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
-
-            forest.pole_part_of_ends(&self.graph)
-        }
+        forest.pole_part_of_ends(&self.graph)
     }
 
     #[allow(dead_code)]
@@ -604,26 +566,37 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
-    pub(crate) fn generate_cff(&mut self) -> Result<()> {
+    #[cfg(test)]
+    pub(crate) fn build_cff_expression_for_tests(&mut self) -> Result<()> {
+        let settings = GenerationSettings::default();
+        let cff_options = self.graph.production_cff_3d_expression_options(&settings)?;
+        self.build_cff_expression_with_options(&cff_options)
+    }
+
+    #[instrument(skip_all, err)]
+    pub(crate) fn build_cff_expression_with_settings(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        self.build_cff_expression_with_options(&cff_options)
+    }
+
+    fn build_cff_expression_with_options(
+        &mut self,
+        cff_options: &Generate3DExpressionOptions,
+    ) -> Result<()> {
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let contract_edges = self
-            .graph
-            .iter_edges_of(
-                &self
-                    .graph
-                    .tree_edges
-                    .subtract(&self.graph.initial_state_cut)
-                    .subtract(&self.graph.external_filter::<SuBitGraph>()),
-            )
-            .map(|x| x.1)
-            .collect_vec();
+        let contract_edges = self.graph.external_tree_4d_denominator_edges();
 
-        let cff_expression = self
-            .graph
-            .generate_3d_expression_for_integrand(&contract_edges, &shift_rewrite)?;
+        let cff_expression = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &shift_rewrite,
+            cff_options,
+        )?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
@@ -640,7 +613,7 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.generate_cff()?;
+        self.build_cff_expression_with_settings(settings)?;
 
         self.build_integrands(settings, vk)?;
 
@@ -1434,7 +1407,7 @@ pub mod test {
 
         let _model = load_generic_model("sm");
 
-        graph.generate_cff().unwrap();
+        graph.build_cff_expression_for_tests().unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
         let param_builder = &graph.graph.param_builder;

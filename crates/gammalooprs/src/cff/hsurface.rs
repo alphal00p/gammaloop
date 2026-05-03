@@ -1,4 +1,4 @@
-use crate::cff::cff_graph::VertexSet;
+use crate::cff::VertexSet;
 use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
@@ -131,7 +131,7 @@ mod tests {
 
     use symbolica::parse;
 
-    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
+    use crate::cff::{VertexSet, esurface::Esurface};
 
     use super::Hsurface;
 

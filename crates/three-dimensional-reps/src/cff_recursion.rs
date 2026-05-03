@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ struct EdgeRef {
 enum EdgeType {
     Virtual,
     External,
+    InitialStateCut,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -283,9 +284,14 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
         .collect::<Vec<_>>();
 
     for edge in &parsed.internal_edges {
+        let edge_type = if parsed.is_initial_state_cut_edge(edge.edge_id) {
+            EdgeType::InitialStateCut
+        } else {
+            EdgeType::Virtual
+        };
         let edge_ref = EdgeRef {
             edge_id: edge.edge_id,
-            edge_type: EdgeType::Virtual,
+            edge_type,
         };
         vertices[edge.tail].outgoing.push(edge_ref);
         vertices[edge.head].incoming.push(edge_ref);
@@ -359,7 +365,15 @@ fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEne
             expr + LinearEnergyExpr::ose(linnet::half_edge::involution::EdgeIndex(edge.edge_id), 1);
     }
 
-    let mut external_shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
+    let mut external_shift =
+        if parsed.external_edges.is_empty() && parsed.initial_state_cut_edges.is_empty() {
+            boundary_external_shift_from_internal_labels(parsed, &vertex.nodes)
+        } else {
+            let mut external_shift = BTreeMap::new();
+            add_explicit_external_edge_shift(parsed, vertex, &mut external_shift);
+            add_initial_state_cut_external_shift(parsed, vertex, &mut external_shift);
+            external_shift
+        };
     if vertex.vertex_type() == VertexType::Source {
         for coeff in external_shift.values_mut() {
             *coeff *= -1;
@@ -375,12 +389,81 @@ fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEne
     expr.canonical()
 }
 
+fn add_explicit_external_edge_shift(
+    parsed: &ParsedGraph,
+    vertex: &CffVertex,
+    external_shift: &mut BTreeMap<usize, i32>,
+) {
+    for (edge, incidence_sign) in vertex
+        .incoming
+        .iter()
+        .filter(|edge| edge.edge_type == EdgeType::External)
+        .map(|edge| (edge, -1))
+        .chain(
+            vertex
+                .outgoing
+                .iter()
+                .filter(|edge| edge.edge_type == EdgeType::External)
+                .map(|edge| (edge, 1)),
+        )
+    {
+        let Some(external_edge) = parsed
+            .external_edges
+            .iter()
+            .find(|external_edge| external_edge.edge_id == edge.edge_id)
+        else {
+            continue;
+        };
+        for (external_id, coeff) in external_edge.external_coefficients.iter().enumerate() {
+            if *coeff != 0 {
+                *external_shift.entry(external_id).or_default() += -incidence_sign * *coeff;
+            }
+        }
+    }
+    external_shift.retain(|_, coeff| *coeff != 0);
+}
+
+fn add_initial_state_cut_external_shift(
+    parsed: &ParsedGraph,
+    vertex: &CffVertex,
+    external_shift: &mut BTreeMap<usize, i32>,
+) {
+    for (edge, incidence_sign) in vertex
+        .incoming
+        .iter()
+        .filter(|edge| edge.edge_type == EdgeType::InitialStateCut)
+        .map(|edge| (edge, -1))
+        .chain(
+            vertex
+                .outgoing
+                .iter()
+                .filter(|edge| edge.edge_type == EdgeType::InitialStateCut)
+                .map(|edge| (edge, 1)),
+        )
+    {
+        let Some(cut_edge) = parsed.initial_state_cut_edge(edge.edge_id) else {
+            continue;
+        };
+        *external_shift.entry(cut_edge.external_id).or_default() +=
+            -incidence_sign * cut_edge.external_sign;
+    }
+    external_shift.retain(|_, coeff| *coeff != 0);
+}
+
 fn boundary_external_shift_from_internal_labels(
     parsed: &ParsedGraph,
     node_set: &BTreeSet<usize>,
 ) -> std::collections::BTreeMap<usize, i32> {
     let mut acc = std::collections::BTreeMap::<usize, i32>::new();
+    let initial_state_external_ids = parsed
+        .initial_state_cut_edges
+        .iter()
+        .map(|edge| edge.external_id)
+        .collect::<BTreeSet<_>>();
     for edge in &parsed.internal_edges {
+        if parsed.is_initial_state_cut_edge(edge.edge_id) {
+            continue;
+        }
         let sign = if node_set.contains(&edge.tail) && !node_set.contains(&edge.head) {
             1
         } else if node_set.contains(&edge.head) && !node_set.contains(&edge.tail) {
@@ -389,7 +472,7 @@ fn boundary_external_shift_from_internal_labels(
             continue;
         };
         for (external_id, coeff) in edge.signature.external_signature.iter().enumerate() {
-            if *coeff != 0 {
+            if *coeff != 0 && !initial_state_external_ids.contains(&external_id) {
                 *acc.entry(external_id).or_default() += sign * *coeff;
             }
         }

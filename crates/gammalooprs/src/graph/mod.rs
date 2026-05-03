@@ -6,7 +6,7 @@ use itertools::Itertools;
 use linnet::{
     half_edge::{
         HedgeGraph,
-        involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
+        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
         subgraph::{
             HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
             subset::SubSet,
@@ -21,13 +21,16 @@ use rand::{Rng, SeedableRng, rngs::SmallRng};
 use color_eyre::Result;
 use eyre::eyre;
 use spenso::algebra::complex::Complex;
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    domains::rational::Rational,
+};
 use three_dimensional_reps::ThreeDGraphSource;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::SurfaceCache,
+    cff::surface::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::edge::EdgeMass,
@@ -556,84 +559,174 @@ impl three_dimensional_reps::ThreeDGraphSource for Graph {
     fn to_three_d_parsed_graph(
         &self,
     ) -> three_dimensional_reps::graph_io::Result<three_dimensional_reps::ParsedGraph> {
-        use std::collections::BTreeMap;
+        GraphThreeDSource::new(self, &[]).to_three_d_parsed_graph()
+    }
 
-        use linnet::half_edge::involution::{Flow, HedgePair};
+    fn energy_edge_index_map(
+        &self,
+        parsed: &three_dimensional_reps::ParsedGraph,
+    ) -> Option<three_dimensional_reps::EnergyEdgeIndexMap> {
+        GraphThreeDSource::new(self, &[]).energy_edge_index_map(parsed)
+    }
+}
+
+pub(crate) struct GraphThreeDSource<'a> {
+    graph: &'a Graph,
+    contract_edges: &'a [EdgeIndex],
+}
+
+impl<'a> GraphThreeDSource<'a> {
+    pub(crate) fn new(graph: &'a Graph, contract_edges: &'a [EdgeIndex]) -> Self {
+        Self {
+            graph,
+            contract_edges,
+        }
+    }
+
+    fn initial_state_cut_edge_ids(&self) -> AHashSet<EdgeIndex> {
+        self.graph
+            .iter_edges_of(&self.graph.initial_state_cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .collect()
+    }
+
+    fn active_loop_signature_rows(&self) -> Vec<Vec<i32>> {
+        let initial_state_cut_edge_ids = self.initial_state_cut_edge_ids();
+        self.graph
+            .underlying
+            .iter_edges()
+            .sorted_by_key(|(_, edge_index, _)| *edge_index)
+            .filter_map(|(pair, edge_index, edge_data)| {
+                (pair.is_paired()
+                    && !edge_data.data.is_dummy
+                    && !initial_state_cut_edge_ids.contains(&edge_index)
+                    && !self.contract_edges.contains(&edge_index))
+                .then(|| {
+                    self.graph.loop_momentum_basis.edge_signatures[edge_index]
+                        .internal
+                        .iter()
+                        .map(|sign| sign_to_i32(*sign))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect_vec()
+    }
+}
+
+impl three_dimensional_reps::ThreeDGraphSource for GraphThreeDSource<'_> {
+    fn to_three_d_parsed_graph(
+        &self,
+    ) -> three_dimensional_reps::graph_io::Result<three_dimensional_reps::ParsedGraph> {
         use three_dimensional_reps::graph_io::{
-            GraphIoError, ParsedGraph, ParsedGraphExternalEdge, ParsedGraphInternalEdge,
+            GraphIoError, ParsedGraph, ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge,
+            ParsedGraphInternalEdge, initial_state_cut_external_alias,
         };
 
-        fn sign_to_i32(sign: crate::momentum::SignOrZero) -> i32 {
-            match sign {
-                crate::momentum::SignOrZero::Minus => -1,
-                crate::momentum::SignOrZero::Zero => 0,
-                crate::momentum::SignOrZero::Plus => 1,
+        let mut parent = (0..self.graph.n_nodes()).collect_vec();
+        for (pair, edge_id, edge_data) in self.graph.underlying.iter_edges() {
+            if edge_data.data.is_dummy || !self.contract_edges.contains(&edge_id) {
+                continue;
+            }
+            if let HedgePair::Paired { source, sink } = pair {
+                union_parent(
+                    &mut parent,
+                    usize::from(self.graph.node_id(source)),
+                    usize::from(self.graph.node_id(sink)),
+                );
             }
         }
 
-        let loop_names = self
-            .loop_momentum_basis
-            .loop_edges
-            .iter()
-            .map(|edge_id| self.underlying[*edge_id].name.value.clone())
-            .collect::<Vec<_>>();
-        let external_names = self
-            .loop_momentum_basis
-            .ext_edges
-            .iter()
-            .map(|edge_id| self.underlying[*edge_id].name.value.clone())
-            .collect::<Vec<_>>();
-
         let node_ids = self
+            .graph
             .underlying
             .iter_nodes()
             .map(|(node_id, _, _)| node_id)
             .sorted()
             .collect::<Vec<_>>();
-        let node_to_internal = node_ids
+        let mut root_to_internal = BTreeMap::<usize, usize>::new();
+        for node_id in &node_ids {
+            let root = find_parent(&mut parent, usize::from(*node_id));
+            if !root_to_internal.contains_key(&root) {
+                root_to_internal.insert(root, root_to_internal.len());
+            }
+        }
+        let mut node_to_internal = BTreeMap::new();
+        for node_id in &node_ids {
+            let root = find_parent(&mut parent, usize::from(*node_id));
+            node_to_internal.insert(*node_id, root_to_internal[&root]);
+        }
+
+        let active_loop_signature_rows = self.active_loop_signature_rows();
+        let active_loop_columns = independent_loop_columns(&active_loop_signature_rows);
+
+        let loop_names = self
+            .graph
+            .loop_momentum_basis
+            .loop_edges
             .iter()
             .enumerate()
-            .map(|(internal_id, node_id)| (*node_id, internal_id))
-            .collect::<BTreeMap<_, _>>();
-        let node_name_to_internal = node_ids
+            .filter(|(loop_index, _)| active_loop_columns.contains(loop_index))
+            .map(|(_, edge_id)| self.graph.underlying[*edge_id].name.value.clone())
+            .collect::<Vec<_>>();
+        let external_names = self
+            .graph
+            .loop_momentum_basis
+            .ext_edges
             .iter()
-            .enumerate()
-            .map(|(internal_id, node_id)| (format!("n{}", usize::from(*node_id)), internal_id))
-            .collect::<BTreeMap<_, _>>();
+            .map(|edge_id| self.graph.underlying[*edge_id].name.value.clone())
+            .collect::<Vec<_>>();
 
         let mut internal_edges = Vec::new();
         let mut external_edges = Vec::new();
+        let mut initial_state_cut_edges = Vec::new();
         let mut next_external_id = 10_000_000usize;
+        let initial_state_cut_edge_ids = self.initial_state_cut_edge_ids();
 
         for (pair, edge_index, edge_data) in self
+            .graph
             .underlying
             .iter_edges()
             .sorted_by_key(|(_, edge_index, _)| *edge_index)
         {
-            let signature = &self.loop_momentum_basis.edge_signatures[edge_index];
+            if edge_data.data.is_dummy {
+                continue;
+            }
+            let signature = &self.graph.loop_momentum_basis.edge_signatures[edge_index];
             let momentum_signature = three_dimensional_reps::MomentumSignature {
-                loop_signature: (&signature.internal).into_iter().map(sign_to_i32).collect(),
+                loop_signature: active_loop_columns
+                    .iter()
+                    .map(|loop_index| {
+                        sign_to_i32(signature.internal.iter().nth(*loop_index).copied().unwrap())
+                    })
+                    .collect(),
                 external_signature: (&signature.external).into_iter().map(sign_to_i32).collect(),
             };
             let label = edge_data.data.name.value.clone();
             match pair {
                 HedgePair::Paired { source, sink } => {
-                    let tail_node = self.underlying.node_id(source);
-                    let head_node = self.underlying.node_id(sink);
-                    let Some(tail) = node_to_internal.get(&tail_node).copied() else {
-                        return Err(GraphIoError::Source(format!(
-                            "missing internal node mapping for source node {}",
-                            usize::from(tail_node)
-                        )));
-                    };
-                    let Some(head) = node_to_internal.get(&head_node).copied() else {
-                        return Err(GraphIoError::Source(format!(
-                            "missing internal node mapping for sink node {}",
-                            usize::from(head_node)
-                        )));
-                    };
+                    if self.contract_edges.contains(&edge_index) {
+                        continue;
+                    }
+                    let local_edge_id = internal_edges.len();
+                    let tail = *node_to_internal
+                        .get(&self.graph.node_id(source))
+                        .ok_or_else(|| {
+                            GraphIoError::Source(format!(
+                                "missing contracted source node mapping for edge {}",
+                                usize::from(edge_index)
+                            ))
+                        })?;
+                    let head =
+                        *node_to_internal
+                            .get(&self.graph.node_id(sink))
+                            .ok_or_else(|| {
+                                GraphIoError::Source(format!(
+                                    "missing contracted sink node mapping for edge {}",
+                                    usize::from(edge_index)
+                                ))
+                            })?;
                     internal_edges.push(ParsedGraphInternalEdge {
-                        edge_id: internal_edges.len(),
+                        edge_id: local_edge_id,
                         tail,
                         head,
                         label,
@@ -641,18 +734,30 @@ impl three_dimensional_reps::ThreeDGraphSource for Graph {
                         signature: momentum_signature,
                         had_pow: false,
                     });
+                    if initial_state_cut_edge_ids.contains(&edge_index) {
+                        let (external_id, external_sign) = initial_state_cut_external_alias(
+                            usize::from(edge_index),
+                            &internal_edges[local_edge_id].signature,
+                        )?;
+                        initial_state_cut_edges.push(ParsedGraphInitialStateCutEdge {
+                            edge_id: local_edge_id,
+                            external_id,
+                            external_sign,
+                        });
+                    }
                 }
                 HedgePair::Unpaired { hedge, flow } => {
-                    let node = self.underlying.node_id(hedge);
-                    let Some(node_id) = node_to_internal.get(&node).copied() else {
-                        return Err(GraphIoError::Source(format!(
-                            "missing internal node mapping for external node {}",
-                            usize::from(node)
-                        )));
-                    };
+                    let node = *node_to_internal
+                        .get(&self.graph.node_id(hedge))
+                        .ok_or_else(|| {
+                            GraphIoError::Source(format!(
+                                "missing contracted external node mapping for edge {}",
+                                usize::from(edge_index)
+                            ))
+                        })?;
                     let (source, destination) = match flow {
-                        Flow::Source => (Some(node_id), None),
-                        Flow::Sink => (None, Some(node_id)),
+                        Flow::Source => (Some(node), None),
+                        Flow::Sink => (None, Some(node)),
                     };
                     external_edges.push(ParsedGraphExternalEdge {
                         edge_id: next_external_id,
@@ -665,7 +770,7 @@ impl three_dimensional_reps::ThreeDGraphSource for Graph {
                 }
                 HedgePair::Split { .. } => {
                     return Err(GraphIoError::Source(
-                        "split edges are not supported when extracting full Graph input"
+                        "split edges are not supported when extracting GammaLoop Graph input"
                             .to_string(),
                     ));
                 }
@@ -675,9 +780,13 @@ impl three_dimensional_reps::ThreeDGraphSource for Graph {
         Ok(ParsedGraph {
             internal_edges,
             external_edges,
+            initial_state_cut_edges,
             loop_names,
             external_names,
-            node_name_to_internal,
+            node_name_to_internal: root_to_internal
+                .into_iter()
+                .map(|(root, node)| (format!("n{root}"), node))
+                .collect(),
         })
     }
 
@@ -686,14 +795,21 @@ impl three_dimensional_reps::ThreeDGraphSource for Graph {
         _parsed: &three_dimensional_reps::ParsedGraph,
     ) -> Option<three_dimensional_reps::EnergyEdgeIndexMap> {
         let internal = self
+            .graph
             .underlying
             .iter_edges()
             .sorted_by_key(|(_, edge_index, _)| *edge_index)
-            .filter_map(|(pair, edge_index, _)| pair.is_paired().then_some(usize::from(edge_index)))
+            .filter_map(|(pair, edge_index, edge_data)| {
+                (pair.is_paired()
+                    && !edge_data.data.is_dummy
+                    && !self.contract_edges.contains(&edge_index))
+                .then_some(usize::from(edge_index))
+            })
             .enumerate()
             .collect::<BTreeMap<_, _>>();
 
         let external = self
+            .graph
             .loop_momentum_basis
             .ext_edges
             .iter()
@@ -704,8 +820,101 @@ impl three_dimensional_reps::ThreeDGraphSource for Graph {
         Some(three_dimensional_reps::EnergyEdgeIndexMap {
             internal,
             external,
-            orientation_edge_count: self.underlying.n_edges(),
+            orientation_edge_count: self.graph.underlying.n_edges(),
         })
+    }
+}
+
+fn find_parent(parent: &mut [usize], node: usize) -> usize {
+    let parent_node = parent[node];
+    if parent_node == node {
+        node
+    } else {
+        let root = find_parent(parent, parent_node);
+        parent[node] = root;
+        root
+    }
+}
+
+fn union_parent(parent: &mut [usize], left: usize, right: usize) {
+    let left_root = find_parent(parent, left);
+    let right_root = find_parent(parent, right);
+    if left_root != right_root {
+        parent[right_root] = left_root;
+    }
+}
+
+fn independent_loop_columns(rows: &[Vec<i32>]) -> Vec<usize> {
+    let Some(column_count) = rows.iter().map(Vec::len).max() else {
+        return Vec::new();
+    };
+    let mut selected = Vec::new();
+    let mut rank = 0;
+    for column in 0..column_count {
+        let mut candidate = selected.clone();
+        candidate.push(column);
+        let candidate_rank = integer_matrix_column_rank(rows, &candidate);
+        if candidate_rank > rank {
+            selected.push(column);
+            rank = candidate_rank;
+        }
+    }
+    selected
+}
+
+fn integer_matrix_column_rank(rows: &[Vec<i32>], columns: &[usize]) -> usize {
+    let mut matrix = rows
+        .iter()
+        .map(|row| {
+            columns
+                .iter()
+                .map(|column| Rational::from(row.get(*column).copied().unwrap_or_default()))
+                .collect::<Vec<_>>()
+        })
+        .filter(|row| row.iter().any(|entry| *entry != 0))
+        .collect::<Vec<_>>();
+
+    let mut rank = 0;
+    let mut pivot_column = 0;
+    while rank < matrix.len() && pivot_column < columns.len() {
+        let Some(pivot_row) = (rank..matrix.len()).find(|row| matrix[*row][pivot_column] != 0)
+        else {
+            pivot_column += 1;
+            continue;
+        };
+        matrix.swap(rank, pivot_row);
+        let pivot = matrix[rank][pivot_column].clone();
+        for entry in matrix[rank].iter_mut().skip(pivot_column) {
+            *entry /= pivot.clone();
+        }
+        let pivot_row = matrix[rank].clone();
+        for (row, row_values) in matrix.iter_mut().enumerate() {
+            if row == rank {
+                continue;
+            }
+            let factor = row_values[pivot_column].clone();
+            if factor == 0 {
+                continue;
+            }
+            for (entry, pivot_entry) in row_values
+                .iter_mut()
+                .zip(pivot_row.iter())
+                .skip(pivot_column)
+            {
+                *entry -= factor.clone() * pivot_entry.clone();
+            }
+        }
+        rank += 1;
+        pivot_column += 1;
+    }
+    rank
+}
+
+fn sign_to_i32(sign: crate::momentum::SignOrZero) -> i32 {
+    match sign {
+        crate::momentum::SignOrZero::Minus => -1,
+        crate::momentum::SignOrZero::Zero => 0,
+        crate::momentum::SignOrZero::Plus => 1,
     }
 }
 

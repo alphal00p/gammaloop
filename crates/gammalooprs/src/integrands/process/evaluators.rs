@@ -1275,7 +1275,9 @@ impl GenericEvaluator {
 
         let exprs: Vec<Atom> = atoms
             .into_iter()
-            .map(|a| a.replace_multiple(&reps).replace_multiple(&reps))
+            .map(|a| {
+                GS.collect_orientation_if(a.replace_multiple(&reps).replace_multiple(&reps), false)
+            })
             .collect();
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
@@ -1403,7 +1405,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
     }
 
     pub(crate) fn set_orientation_values<O: GraphOrientation>(&mut self, orientation: &O) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let zero: Complex<F<T>> = Complex::new_re(F(T::new_zero()));
         let one = zero.ref_one();
         let mult_offset = self.multiplicative_offset;
         let start = self.orientations_start;
@@ -1418,7 +1420,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
     }
 
     pub(crate) fn override_if(&mut self, over_ride: bool) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let zero: Complex<F<T>> = Complex::new_re(F(T::new_zero()));
         let one = zero.ref_one();
         let multiplicative_offset = self.multiplicative_offset;
         let start = self.override_pos;

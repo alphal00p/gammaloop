@@ -7,7 +7,7 @@ use symbolica::{
     atom::{Atom, AtomCore},
     domains::{dual::HyperDual, float::Real},
     evaluate::{FunctionMap, OptimizationSettings},
-    function, parse, symbol,
+    function, parse,
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
@@ -26,7 +26,7 @@ use crate::{
         IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
     },
     utils::{
-        self, F, FloatLike,
+        self, F, FloatLike, GS,
         hyperdual_utils::{DualOrNot, new_constant, shape_for_t_derivatives},
     },
 };
@@ -258,7 +258,8 @@ impl RstarTDependenceEvaluator {
         for (i, result) in result.into_iter().enumerate() {
             if i > 0 {
                 n_factorial *= i;
-                dual_values.push(result.re / F::from_f64(n_factorial as f64));
+                let factorial = result.re.from_usize(n_factorial);
+                dual_values.push(result.re / factorial);
             } else {
                 dual_values.push(result.re);
             }
@@ -291,7 +292,7 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         });
     }
 
-    let t = symbol!("t");
+    let t = GS.rescale;
 
     let e_surface = parse!("η(r_star(t), t)");
     let rstar = parse!("r_star(t)");

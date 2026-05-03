@@ -31,6 +31,90 @@ fn setup_explicit_sum_scalar_topologies_cli(
     Ok(cli)
 }
 
+struct ImportedExternalTreeCase {
+    graph_file: &'static str,
+    momenta: &'static str,
+    helicities: &'static str,
+    x_space_point: Vec<f64>,
+}
+
+fn setup_imported_external_tree_cli(
+    test_name: &str,
+    case: &ImportedExternalTreeCase,
+    explicit_orientation_sum_only: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "remove processes",
+            "set global kv global.generation.evaluator.compile=false global.generation.evaluator.summed=true global.generation.threshold_subtraction.enable_thresholds=false",
+            r#"set default-runtime string '
+[general]
+evaluator_method = "Summed"
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+'"#,
+        ],
+    )?;
+
+    if explicit_orientation_sum_only {
+        cli.run_command("set global kv global.generation.explicit_orientation_sum_only=true")?;
+    }
+
+    cli.run_command(&format!(
+        r#"set default-runtime string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+{}
+]
+helicities = {}
+'"#,
+        case.momenta, case.helicities
+    ))?;
+    cli.run_command(&format!(
+        "import graphs ./tests/resources/graphs/{}",
+        case.graph_file
+    ))?;
+    cli.run_command("generate")?;
+
+    Ok(cli)
+}
+
+fn inspect_single_imported_process(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    point: &[f64],
+) -> Result<Complex<f64>> {
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: None,
+        point: point.to_vec(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(cli)?;
+    Ok(inspect)
+}
+
 #[test]
 fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
     let mut cli = get_test_cli(
@@ -200,6 +284,69 @@ mapping = "linear"
     );
 
     clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn imported_external_tree_inspects_match_explicit_orientation_sum() -> Result<()> {
+    let cases = [
+        ImportedExternalTreeCase {
+            graph_file: "scalar_triangle_external_tree.dot",
+            momenta: r#"    [3.0, 0.0, 0.0, 3.0],
+    [3.0, 0.0, 3.0, 0.0],
+    [3.0, 0.0, 0.0, -3.0],
+    "dependent""#,
+            helicities: "[0, 0, 0, 0]",
+            x_space_point: vec![0.23, 0.41, 0.67],
+        },
+        ImportedExternalTreeCase {
+            graph_file: "scalar_box_two_external_trees.dot",
+            momenta: r#"    [4.0, 0.0, 0.0, 4.0],
+    [2.0, 2.0, 0.0, 0.0],
+    [4.0, 0.0, 0.0, -4.0],
+    [2.0, -2.0, 0.0, 0.0],
+    [2.0, 0.0, 2.0, 0.0],
+    "dependent""#,
+            helicities: "[0, 0, 0, 0, 0, 0]",
+            x_space_point: vec![0.19, 0.37, 0.61],
+        },
+        ImportedExternalTreeCase {
+            graph_file: "scalar_pure_tree_four_point.dot",
+            momenta: r#"    [3.0, 0.0, 0.0, 3.0],
+    [3.0, 0.0, 0.0, -3.0],
+    [3.0, 0.0, 3.0, 0.0],
+    "dependent""#,
+            helicities: "[0, 0, 0, 0]",
+            x_space_point: Vec::new(),
+        },
+    ];
+
+    for case in cases {
+        let stem = case.graph_file.trim_end_matches(".dot");
+        let mut standard = setup_imported_external_tree_cli(
+            &format!("{stem}_standard_external_tree_inspect"),
+            &case,
+            false,
+        )?;
+        let mut explicit = setup_imported_external_tree_cli(
+            &format!("{stem}_explicit_external_tree_inspect"),
+            &case,
+            true,
+        )?;
+
+        let standard_value = inspect_single_imported_process(&mut standard, &case.x_space_point)?;
+        let explicit_value = inspect_single_imported_process(&mut explicit, &case.x_space_point)?;
+        assert_complex_approx_eq(
+            explicit_value,
+            standard_value,
+            &format!("imported external-tree inspect for {}", case.graph_file),
+        );
+
+        clean_test(&standard.cli_settings.state.folder);
+        clean_test(&explicit.cli_settings.state.folder);
+    }
+
     Ok(())
 }
 

@@ -715,7 +715,7 @@ impl CrossSectionGraph {
         debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
         debug!("generating cff");
-        stats.merge_in_place(&self.generate_cff(settings)?);
+        stats.merge_in_place(&self.build_cff_expression(settings)?);
         debug!("building lmbs");
         self.build_lmbs()?;
         debug!("building multi channeling channels");
@@ -756,25 +756,21 @@ impl CrossSectionGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
+    fn build_cff_expression(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<GraphGenerationStats> {
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let contract_edges = self
-            .graph
-            .iter_edges_of(
-                &self
-                    .graph
-                    .tree_edges
-                    .subtract(&self.graph.initial_state_cut),
-            )
-            .map(|x| x.1)
-            .collect_vec();
-
-        let global_cff = self
-            .graph
-            .generate_3d_expression_for_integrand(&contract_edges, &canonize_esurface)?;
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let contract_edges = self.graph.external_tree_4d_denominator_edges();
+        let global_cff = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonize_esurface,
+            &cff_options,
+        )?;
 
         let cut_esurface_map = self
             .cut_esurface

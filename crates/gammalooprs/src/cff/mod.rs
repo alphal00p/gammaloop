@@ -6,14 +6,17 @@ use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
     cff::{
-        expression::{GammaLoopGraphOrientation, GammaLoopOrientationExpression},
+        expression::{
+            GammaLoopGraphOrientation, GammaLoopOrientationExpression, ResidualDenominator,
+        },
         surface::GammaLoopSurfaceCache,
     },
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
+    utils::GS,
+    uv::UltravioletGraph,
 };
 use color_eyre::Result;
 
-pub mod cff_graph;
 //pub mod cut_expression;
 pub mod esurface;
 pub mod expression;
@@ -21,6 +24,8 @@ pub mod generation;
 pub mod hsurface;
 pub mod surface;
 pub mod tree;
+mod vertex_set;
+pub(crate) use vertex_set::VertexSet;
 
 pub struct CFFTerm {
     // One per orientation
@@ -52,6 +57,31 @@ impl CutCFF {
 }
 
 impl Graph {
+    fn residual_denominator_factor_gs(
+        &self,
+        residual_denominators: &[ResidualDenominator],
+        wrap_tree_denoms: bool,
+    ) -> Atom {
+        if residual_denominators.is_empty() {
+            return Atom::num(1);
+        }
+
+        let denominator = residual_denominators
+            .iter()
+            .map(|residual| {
+                let edge_subgraph = self.get_edge_subgraph(residual.edge_id);
+                self.denominator(&edge_subgraph, |_| -(residual.power as isize))
+            })
+            .reduce(|acc, atom| acc * atom)
+            .unwrap_or_else(|| Atom::num(1));
+
+        if wrap_tree_denoms {
+            GS.wrap_tree_denoms(denominator)
+        } else {
+            denominator
+        }
+    }
+
     pub fn cff<S: SubSetLike>(&mut self, contract_subgraph: &S, cutset: &CutSet) -> Result<CutCFF> {
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
@@ -61,8 +91,16 @@ impl Graph {
                 contract_edges.push(eid);
             }
         }
+        contract_edges.extend(self.external_tree_4d_denominator_edges());
+        contract_edges.sort_unstable();
+        contract_edges.dedup();
 
-        let cff = self.generate_3d_expression_for_integrand(&contract_edges, &canonize_esurface)?;
+        let cff_options = self.denominator_only_cff_3d_expression_options();
+        let cff = self.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonize_esurface,
+            &cff_options,
+        )?;
         let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
             cff.select_esurface_residue(right_threshold).pop().unwrap()
         } else {
@@ -103,6 +141,7 @@ impl Graph {
             for orientation in expr.orientations.iter() {
                 let eta_expr = orientation.to_atom_gs();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
+                ose_expr *= self.residual_denominator_factor_gs(&expr.residual_denominators, true);
 
                 let inverse_energies = get_cff_inverse_energy_product_impl(
                     self,

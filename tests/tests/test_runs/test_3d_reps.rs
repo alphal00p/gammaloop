@@ -699,6 +699,7 @@ fn expression_options(
         representation,
         energy_degree_bounds: bounds.to_vec(),
         numerator_sampling_scale: sampling_scale,
+        preserve_internal_edges_as_four_d_denominators: Vec::new(),
     }
 }
 

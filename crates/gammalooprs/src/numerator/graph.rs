@@ -481,7 +481,7 @@ mod test {
 
         // let model = crate::utils::load_generic_model("sm");
 
-        graph.generate_cff().unwrap();
+        graph.build_cff_expression_for_tests().unwrap();
         graph
             .build_integrands(&GenerationSettings::default(), vk)
             .unwrap();

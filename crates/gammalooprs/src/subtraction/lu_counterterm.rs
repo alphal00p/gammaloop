@@ -154,7 +154,7 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
         .iter()
         .map(|(index, sign)| {
             let external_signature = &lmb.edge_signatures[*index].external;
-            let sign = new_constant(&zero, &F::from_f64(*sign as f64));
+            let sign = new_constant(&zero, &zero.values[0].from_i64(*sign));
             let external_energy = external_signature
                 .try_apply(&external_moms.raw)
                 .map(|momentum| momentum.temporal.value)

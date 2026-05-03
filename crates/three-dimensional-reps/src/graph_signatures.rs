@@ -274,6 +274,7 @@ pub(crate) fn reconstruct_parsed_graph(
     Ok(ParsedGraph {
         internal_edges,
         external_edges,
+        initial_state_cut_edges: Vec::new(),
         loop_names: extracted.loop_names.clone(),
         external_names: extracted.external_names.clone(),
         node_name_to_internal,

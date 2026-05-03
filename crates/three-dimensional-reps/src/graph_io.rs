@@ -27,12 +27,69 @@ pub struct ParsedGraphExternalEdge {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedGraphInitialStateCutEdge {
+    pub edge_id: usize,
+    pub external_id: usize,
+    pub external_sign: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedGraph {
     pub internal_edges: Vec<ParsedGraphInternalEdge>,
     pub external_edges: Vec<ParsedGraphExternalEdge>,
+    pub initial_state_cut_edges: Vec<ParsedGraphInitialStateCutEdge>,
     pub loop_names: Vec<String>,
     pub external_names: Vec<String>,
     pub node_name_to_internal: BTreeMap<String, usize>,
+}
+
+impl ParsedGraph {
+    pub fn initial_state_cut_edge(
+        &self,
+        edge_id: usize,
+    ) -> Option<&ParsedGraphInitialStateCutEdge> {
+        self.initial_state_cut_edges
+            .iter()
+            .find(|edge| edge.edge_id == edge_id)
+    }
+
+    pub fn is_initial_state_cut_edge(&self, edge_id: usize) -> bool {
+        self.initial_state_cut_edge(edge_id).is_some()
+    }
+
+    pub fn denominator_internal_edge_ids(&self) -> Vec<usize> {
+        self.internal_edges
+            .iter()
+            .filter_map(|edge| {
+                (!self.is_initial_state_cut_edge(edge.edge_id)).then_some(edge.edge_id)
+            })
+            .collect()
+    }
+}
+
+pub fn initial_state_cut_external_alias(
+    edge_id: usize,
+    signature: &MomentumSignature,
+) -> Result<(usize, i32)> {
+    let nonzero = signature
+        .external_signature
+        .iter()
+        .enumerate()
+        .filter(|(_, coeff)| **coeff != 0)
+        .collect::<Vec<_>>();
+    if nonzero.len() != 1 {
+        return Err(GraphIoError::Source(format!(
+            "initial-state cut edge {edge_id} must carry exactly one external energy coordinate, found {:?}",
+            signature.external_signature
+        )));
+    }
+    let (external_id, coeff) = nonzero[0];
+    if coeff.unsigned_abs() != 1 {
+        return Err(GraphIoError::Source(format!(
+            "initial-state cut edge {edge_id} must carry external energy with unit sign, found coefficient {coeff}"
+        )));
+    }
+    Ok((external_id, *coeff))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -128,6 +185,9 @@ impl ThreeDGraphSource for ParsedGraph {
 pub fn repeated_groups(parsed: &ParsedGraph) -> Vec<RepeatedGroup> {
     let mut groups = BTreeMap::<RepeatedGroupKey, Vec<(usize, i32)>>::new();
     for edge in &parsed.internal_edges {
+        if parsed.is_initial_state_cut_edge(edge.edge_id) {
+            continue;
+        }
         let (signature, relative_sign) = edge.signature.canonical_up_to_sign();
         groups
             .entry(RepeatedGroupKey {
@@ -181,6 +241,7 @@ pub(crate) mod test_graphs {
                 internal(3, 3, 0, "q3", [1], [1, 1, 1], "m4"),
             ],
             external_edges: box_external_edges(4, 3),
+            initial_state_cut_edges: Vec::new(),
             loop_names: vec!["k1".to_string()],
             external_names: vec!["p1".to_string(), "p2".to_string(), "p3".to_string()],
             node_name_to_internal: node_map(4),
@@ -198,6 +259,7 @@ pub(crate) mod test_graphs {
                 internal(5, 5, 0, "q5", [1], [1, 1, 1], "m4"),
             ],
             external_edges: box_external_edges(6, 3),
+            initial_state_cut_edges: Vec::new(),
             loop_names: vec!["k1".to_string()],
             external_names: vec!["p1".to_string(), "p2".to_string(), "p3".to_string()],
             node_name_to_internal: node_map(6),
@@ -218,6 +280,7 @@ pub(crate) mod test_graphs {
                 external(10_000_000, None, Some(0), "p1", [1]),
                 external(10_000_001, Some(1), None, "-p1", [-1]),
             ],
+            initial_state_cut_edges: Vec::new(),
             loop_names: vec!["k1".to_string(), "k2".to_string()],
             external_names: vec!["p1".to_string()],
             node_name_to_internal: node_map(5),
@@ -228,6 +291,62 @@ pub(crate) mod test_graphs {
         let mut parsed = box_graph();
         parsed.internal_edges[0].signature.loop_signature = vec![0];
         parsed
+    }
+
+    pub(crate) fn triangle_with_external_tree_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "q0", [1], [0, 0], "m1"),
+                internal(1, 1, 2, "q1", [1], [1, 0], "m2"),
+                internal(2, 2, 0, "q2", [1], [1, 1], "m3"),
+                internal(3, 1, 3, "t0", [0], [0, 1], "mt"),
+            ],
+            external_edges: vec![
+                external(10_000_000, None, Some(0), "p1", [1, 0]),
+                external(10_000_001, Some(2), None, "-p1", [-1, 0]),
+                external(10_000_002, Some(3), None, "-p2", [0, -1]),
+            ],
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string()],
+            external_names: vec!["p1".to_string(), "p2".to_string()],
+            node_name_to_internal: node_map(4),
+        }
+    }
+
+    pub(crate) fn pure_tree_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "t0", [], [1, 0], "m1"),
+                internal(1, 1, 2, "t1", [], [1, 1], "m2"),
+            ],
+            external_edges: vec![
+                external(10_000_000, None, Some(0), "p1", [1, 0]),
+                external(10_000_001, Some(2), None, "-p1-p2", [-1, -1]),
+                external(10_000_002, None, Some(1), "p2", [0, 1]),
+            ],
+            initial_state_cut_edges: Vec::new(),
+            loop_names: Vec::new(),
+            external_names: vec!["p1".to_string(), "p2".to_string()],
+            node_name_to_internal: node_map(3),
+        }
+    }
+
+    pub(crate) fn initial_state_cut_line_graph(external_sign: i32) -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "p_in_cut", [0], [external_sign], "m_in"),
+                internal(1, 0, 1, "q0", [1], [0], "m_loop"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
+                edge_id: 0,
+                external_id: 0,
+                external_sign,
+            }],
+            loop_names: vec!["k1".to_string()],
+            external_names: vec!["p_in".to_string()],
+            node_name_to_internal: node_map(2),
+        }
     }
 
     fn internal<const L: usize, const E: usize>(

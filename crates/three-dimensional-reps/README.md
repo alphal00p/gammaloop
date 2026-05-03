@@ -19,7 +19,7 @@ implemented for GammaLoop's already-parsed graph representation. This crate does
 not parse user DOT graphs directly; DOT import remains owned by the GammaLoop
 CLI/state layer.
 
-`old_cff` exists only behind the `old-cff` feature as a migration/parity anchor
+`old_cff` exists only behind the `old_cff` feature as a migration/parity anchor
 for the legacy affine CFF implementation. It rejects higher energy-numerator
 powers.
 
@@ -29,7 +29,7 @@ powers.
 - `display`: colored/table expression summaries.
 - `diagnostics`: exposes diagnostic-only modes such as `pure_ltd`.
 - `eval`: eager f64 evaluator used by CLI diagnostics.
-- `old-cff`: exposes the legacy CFF comparison mode.
+- `old_cff`: exposes the legacy CFF comparison mode.
 - `test-support`: exposes internal diagnostic modes such as `pure_ltd`.
 
 The compiled Symbolica runtime evaluator from the Python prototype is not part

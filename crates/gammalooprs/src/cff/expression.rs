@@ -1,7 +1,7 @@
 pub use three_dimensional_reps::expression::{
     AllOrientations, CFFVariant, GraphOrientation, OrientationData, OrientationExpression,
     OrientationID, OrientationSelector, RaisedEsurfaceData, RaisedEsurfaceDataView,
-    RaisedEsurfaceGroup, RaisedEsurfaceGroupView, RaisedEsurfaceId,
+    RaisedEsurfaceGroup, RaisedEsurfaceGroupView, RaisedEsurfaceId, ResidualDenominator,
 };
 
 use itertools::{EitherOrBoth, Itertools};

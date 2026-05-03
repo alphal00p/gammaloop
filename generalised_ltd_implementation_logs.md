@@ -74,7 +74,7 @@ standalone CLI exploration:
 - `pure_ltd`: available in the `bin` CLI and tests. Repeated propagators are
   allowed, but the generation emits a warning that numerator derivatives would
   be required and that the result is diagnostic only.
-- `old_cff`: available behind an `old-cff` feature. This is the migrated legacy
+- `old_cff`: available behind an `old_cff` feature. This is the migrated legacy
   GammaLoop CFF generator, used for parity testing. It must cleanly error when
   higher-power energy numerator dependence is requested.
 
@@ -134,7 +134,7 @@ Optional components:
 - `eval`: standalone evaluator support.
 - `symbolica-eval`: Symbolica-based evaluator construction.
 - `compiled-eval`: compiled complex-valued evaluator support.
-- `old-cff`: migrated legacy CFF generator for parity tests and CLI exploration.
+- `old_cff`: migrated legacy CFF generator for parity tests and CLI exploration.
 - `test-support`: helpers for `pure_ltd` and multi-way comparison tests.
 
 ### Validation Commands
@@ -184,7 +184,7 @@ just test_gammaloop
 - Verified `cargo test -p generalise-ltd --all-features`.
 - Added a feature-gated `old_cff` mode selector and high-energy-power rejection
   path in the new crate. The legacy generator body still needs to be migrated
-  from GammaLoop into the `old-cff` feature module.
+  from GammaLoop into the `old_cff` feature module.
 - Verified `just clippy`.
 - The first `just test_gammaloop` attempt after the structural move failed
   during compilation because the local `target/` directory had exhausted the
@@ -273,7 +273,7 @@ cargo run -p generalise-ltd --features bin --bin generalise-ltd -- graph-from-si
   - repeated-topology support at the old pure-CFF level.
 - CFF contraction branches are stored as multiple `CFFVariant` entries under
   the same orientation/numerator energy map.
-- Wired the `old-cff` feature mode to the migrated pure-CFF generator for parsed
+- Wired the `old_cff` feature mode to the migrated pure-CFF generator for parsed
   DOT inputs and kept the explicit higher-energy-power rejection path.
 - Replaced the placeholder `build` CLI with a feature-gated implementation that:
   - accepts GammaLoop DOT input,
@@ -291,7 +291,7 @@ cargo run -p generalise-ltd --features bin --bin generalise-ltd -- graph-from-si
   repeated-propagator `ltd` kernel and the bounded-degree generalized `cff`
   kernel. The public `ltd` path still explicitly errors on repeated
   propagators until that kernel is ported; the old pure-CFF recursion is
-  available and feature-gated `old-cff` parity support is wired for parsed DOT
+  available and feature-gated `old_cff` parity support is wired for parsed DOT
   inputs.
 - Verified the expanded no-default-feature test set:
 
@@ -1147,7 +1147,7 @@ passed
   `three-dimensional-reps` / `three-dimensional-reps-cli` split:
 
 ```text
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 ```
 
@@ -1195,7 +1195,7 @@ cargo fmt
 RUSTFLAGS=-Dwarnings cargo check -p three-dimensional-reps -p three-dimensional-reps-cli -p gammalooprs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 42 passed
 ```
 
@@ -1242,10 +1242,10 @@ passed
   subproblem DOT roundtrip:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 39 passed
 
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 ```
 
@@ -1270,10 +1270,10 @@ passed
   storage:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 39 passed
 
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 ```
 
@@ -1343,10 +1343,10 @@ passed
 ### Verification 2026-04-29 Core Generalized Tests
 
 - Ran the current Rust port tests for the core crate, including diagnostics,
-  `old-cff`, and test-support paths:
+  `old_cff`, and test-support paths:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 39 passed
 ```
 
@@ -1488,10 +1488,10 @@ cargo fmt
 RUSTFLAGS=-Dwarnings cargo check -p three-dimensional-reps -p three-dimensional-reps-cli -p gammalooprs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 42 passed
 
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 
 cargo test -p three-dimensional-reps --no-default-features --lib -- --test-threads=1
@@ -1510,7 +1510,7 @@ just test_gammaloop
 - `three-dimensional-reps` remains the core library crate. It should stay free
   of GammaLoop API/evaluator dependencies and expose graph-source traits,
   expression construction, expression data structures, display helpers, and
-  optional diagnostic/old-cff support.
+  optional diagnostic/old_cff support.
 - The new `3Drep` command should obtain graphs through GammaLoop's existing
   state/model/process/integrand machinery, using the same `-p`, `-i`, and graph
   selection conventions as existing commands. Direct DOT parsing in the
@@ -1696,7 +1696,7 @@ cargo test -p three-dimensional-reps graph_from_signatures -- --test-threads=1
 - Verified this checkpoint with:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 43 passed
 ```
 
@@ -1800,7 +1800,7 @@ passed
 RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval --lib --tests -- --test-threads=1
 46 passed
 
 just test_gammaloop
@@ -1876,7 +1876,7 @@ passed
 RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval --lib --tests -- --test-threads=1
 46 passed
 
 just test_gammaloop
@@ -2017,7 +2017,7 @@ just test_gammaloop
 cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
 3 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 
 cargo fmt --check
@@ -2148,7 +2148,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old-cff,test-support,eval,display -- --nocapture
+cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old_cff,test-support,eval,display -- --nocapture
 passed
 
 cargo test -p gammaloop-api completion_offers_3drep_nested_selectors_and_enum_values -- --nocapture
@@ -2326,7 +2326,7 @@ Verification completed:
 cargo fmt
 passed
 
-cargo test -p three-dimensional-reps --features display,diagnostics,test-support,eval,old-cff display::tests -- --nocapture
+cargo test -p three-dimensional-reps --features display,diagnostics,test-support,eval,old_cff display::tests -- --nocapture
 3 passed
 
 cargo check -p gammaloop-api --features default
@@ -2387,7 +2387,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display graph_signatures -- --nocapture --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display graph_signatures -- --nocapture --test-threads=1
 5 passed; 35 filtered out
 
 cargo test -p gammaloop-integration-tests --test test_runs graph_from_signatures -- --nocapture --test-threads=1
@@ -2546,7 +2546,7 @@ old Python 3Drep case matrix: 309 ok, 0 failed, 309 total
 cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
 7 passed; 1 ignored
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 ```
 
@@ -2606,7 +2606,7 @@ cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_slow_f
 cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
 8 passed; 1 ignored
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 
 cargo fmt --check
@@ -2726,7 +2726,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo check -p three-dimensional-reps --features diagnostics,display,eval,test-support,old-cff
+cargo check -p three-dimensional-reps --features diagnostics,display,eval,test-support,old_cff
 passed
 
 cargo check -p gammaloop-api
@@ -2735,7 +2735,7 @@ passed
 cargo check -p gammaloop-integration-tests --test test_runs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 
 cargo test -p gammaloop-api completion_offers -- --nocapture
@@ -2784,7 +2784,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old-cff,test-support,eval,display -- --nocapture
+cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old_cff,test-support,eval,display -- --nocapture
 1 passed
 
 cargo test -p gammaloop-api completion_offers_3drep_nested_selectors_and_enum_values -- --nocapture
@@ -3527,6 +3527,131 @@ passed after assigning unique group ids in aa_aa.dot
 
 The full test suite was not run for this pass.
 
+## 2026-05-03: remove GammaLoop-side legacy CFF mode
+
+Follow-up correction:
+
+- `global.generation.uv.use_legacy` is no longer a supported setting. UV
+  renormalization always uses the hedge-poset forest implementation, and the old
+  branch-selection setting was removed from defaults, tests, and example cards.
+- The old CFF generator is no longer exposed through `gammalooprs`. Production
+  CFF construction now goes through `generate_3d_expr`; denominator-only helper
+  options remain available only for CFF denominator/orientation construction and
+  do not form a legacy mode.
+- The `gammalooprs` crate no longer has an `old_cff` feature. The optional
+  comparison anchor remains only in `crates/three-dimensional-reps` behind the
+  `old_cff` feature.
+- Removed the Python API helper methods that imported GammaLoop-side
+  subgraph-CFF generation directly.
+- Dropped the now-unused old forest pole-part helper and renamed stale comments
+  so the UV stack no longer carries a legacy-mode concept.
+
+Verification completed:
+
+```text
+cargo fmt --all
+cargo check -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked
+cargo check -p three-dimensional-reps --tests --features old_cff --locked
+
+just test_gammaloop
+Summary [169.177s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-02: external tree preservation in generalized CFF generation
+
+Step III.a external-tree follow-up:
+
+- `generate_3d_expr` now supports preserving selected internal edges as
+  residual four-dimensional denominators instead of feeding them into CFF
+  partial fractioning.
+- The generated expression carries these residual denominators explicitly, with
+  stable edge ids and powers, and remaps them alongside orientation edge maps.
+- Pure-tree inputs are handled as a degenerate CFF expression: one undirected
+  orientation, no CFF E-surfaces, and all internal tree propagators listed as
+  residual four-dimensional denominators.
+- GammaLoop's uncontracted full-amplitude CFF path now calls the generalized
+  `generate_3d_expr` path. External tree edges are detected from the graph
+  tree edges whose loop-momentum signature has no loop dependence; these are
+  excluded from the contracted CFF source graph and reintroduced through the
+  residual-denominator metadata.
+- The residual denominator factor is materialized centrally in `Graph::cff`,
+  including the integrated/local UV CFF paths that call through it, so the old
+  manual four-dimensional tree-denominator multiplications are no longer
+  duplicated in UV approximations.
+- The legacy pure-CFF generator has not yet been eliminated from `gammalooprs`.
+  It remains a bounded fallback for rank-deficient reduced sources,
+  initial-state cut graphs, and contracted-subgraph CFFs. A strict removal pass
+  was tried during this update, but it regressed the mass-approach inspect
+  checks, so retiring this fallback still requires generalized support for those
+  reduced/initial-cut cases.
+
+Coverage added:
+
+- 3D-reps unit coverage for preserving an external tree branch attached to a
+  loop and for the pure-tree degenerate expression.
+- Top-level end-to-end inspect comparison tests for imported scalar graphs:
+  a triangle with one external tree, a box with two external trees, and a pure
+  tree. Each compares normal CFF generation against
+  `explicit_orientation_sum_only=true` using local inspect only.
+
+Verification completed for this pass so far:
+
+```text
+cargo test -p three-dimensional-reps cff_generation_ --locked
+cargo check -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked
+cargo test -p gammaloop-integration-tests imported_external_tree_inspects_match_explicit_orientation_sum --locked -- --nocapture
+cargo fmt --all --check
+just test_gammaloop
+```
+
+`just test_gammaloop` passed with warnings enforced:
+
+```text
+1057 tests run: 1057 passed, 128 skipped
+```
+
+The recipe now supplies `RUST_MIN_STACK=33554432` by default, while preserving a
+caller-provided override, because the curated GammaLoop test suite otherwise
+stack-overflows in deep symbolic generation tests on the default Rust test
+thread stack.
+
+## 2026-05-02: production numerator energy bounds for `generate_3d_expression`
+
+Follow-up implementation after the initial Step III.c pass:
+
+- Moved automatic numerator energy-degree bound construction from the `3Drep`
+  command implementation into `gammalooprs`.
+- Added `Graph::automatic_numerator_energy_degree_bounds()`, which returns a
+  bound entry for every paired internal edge and overlays the detected numerator
+  energy powers from `Graph::numerator_energy_power_caps()`.
+- Updated `3Drep build` and `3Drep test-cff-ltd` to call the new `Graph` method
+  instead of carrying a local copy of the bound-building logic in the API crate.
+- Updated production `Graph::generate_3d_expression_for_integrand(...)` so the
+  caller supplies `Generate3DExpressionOptions` instead of using hard-coded empty
+  energy bounds.
+- Added production CFF option construction from `GenerationSettings`, mapping
+  `global.generation.uniform_numerator_sampling_scale` to the generalized
+  `NumeratorSamplingScaleMode`.
+- Updated amplitude and cross-section production CFF generation to pass automatic
+  numerator energy bounds and the selected numerator-sampling scale mode into
+  the generalized 3D expression generator.
+- Added a guard at the legacy `Graph::generate_cff(...)` entry point: if the
+  graph numerator has any detected EMR/loop-energy power above linear, legacy
+  CFF generation now errors with a clear message instead of silently proceeding
+  through an unsupported path.
+- Added a focused regression test that constructs a nonlinear energy numerator
+  and verifies the legacy CFF guard reports the unsupported edge degree.
+
+Verification completed before the full selected suite:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+cargo test -p gammalooprs \
+  cff::generation::tests_cff::legacy_cff_rejects_nonlinear_energy_numerator \
+  --locked -- --nocapture
+```
+
 ## 2026-05-02: commit summary for `ltd_in_gammaloop`
 
 This working-set commit collects the Step III production-integration work and
@@ -3871,11 +3996,11 @@ Semantics implemented:
   not-implemented without explicit orientation summation.
 - Local UV and threshold counterterm evaluator construction uses the same
   explicit-sum evaluator path when this mode is active.
-- The generalized CFF production helper keeps the legacy CFF fallback for
-  initial-state-cut and contracted-subgraph cases until the remaining III.a
-  parity boundaries are closed. This avoids destabilizing existing
-  threshold/UV orientation-localization behavior while the explicit-sum runtime
-  mode is introduced.
+- Superseded on 2026-05-03: the generalized CFF production helper no longer
+  keeps any GammaLoop-side legacy CFF fallback. Initial-state-cut and
+  contracted-subgraph support must be handled by `generate_3d_expr` directly;
+  the old comparison generator remains only in the `three-dimensional-reps`
+  `old_cff` feature.
 
 Test coverage added:
 
@@ -4315,3 +4440,96 @@ passed; the build summary shows both `numerator` and `simplified_numerator`.
 ```
 
 The full test suite was not run for this pass.
+
+## 2026-05-03: final Step III cleanup pass before staging
+
+Global review outcome:
+
+- Confirmed the retired `generate_cff` entry points are not present in active
+  GammaLoop source anymore. The only `old_cff` gate left is in
+  `crates/three-dimensional-reps`, and it is disabled by default.
+- Removed the GammaLoop crate-level `old_cff` feature so production GammaLoop
+  cannot accidentally enable or route through the old generator.
+- Renamed current GammaLoop CFF production wrappers from `generate_cff...` to
+  `build_cff_expression...` so the remaining production path is clearly a
+  `generate_3d_expr` bridge, not the retired generator.
+- Removed the Python API's direct subgraph-CFF helpers. The Python API no
+  longer imports the removed GammaLoop-side subgraph generator.
+- Moved `SurfaceCache` imports to `cff::surface`; `cff::generation` no longer
+  re-exports surface storage.
+- Removed stale `use_legacy` UV settings, example comments, and the old UV
+  branch. UV renormalization now has a single hedge-poset path.
+- Dropped the unused old forest pole-part helper that became dead code after
+  removing the UV branch.
+- Removed the last dead GammaLoop-side CFF graph-contraction implementation
+  (`CFFGenerationGraph`, its edge/vertex types, and its self-contained tests).
+  The module now contains only the compact `VertexSet` bitset still used by
+  surface bookkeeping.
+- Renamed that surviving surface bitset module from `cff_graph` to
+  `vertex_set` and re-exported `VertexSet` through `cff`, avoiding imports that
+  suggest a remaining GammaLoop-side CFF graph builder.
+- Removed the unregistered `benches_old` Criterion files that still called the
+  retired `Graph::generate_cff()` API. Keeping them would have left broken
+  source files in the tree and an implicit second CFF construction surface.
+- Added a public GammaLoop-side `Graph::three_d_expression_options(...)` helper
+  for the standalone `3Drep` CLI so auto-detected numerator energy bounds,
+  initial-state-cut exclusions, and preserved 4D tree denominators are selected
+  from the same place as production CFF generation.
+- Kept preserved tree edges in the caller-side contraction lists as well as in
+  the generalized-3D preservation options. This is intentionally redundant:
+  the preservation option keeps them as 4D residual denominators in the 3D
+  expression, while the contraction list still suppresses their inverse OSE
+  factors in GammaLoop's surrounding CFF normalization.
+- Changed the loop-signature rank helper used while extracting reduced
+  generalized-3D graph sources from a floating-point row reduction to exact
+  rational row reduction.
+- Replaced derived `from_f64` constants in CFF/evaluator/subtraction hot paths
+  with active-precision constants: exact integer signs now use representative
+  `.from_i64(...)` values, derivative factorial normalization uses
+  `.from_usize(...)`, and orientation/override zeros use `T::new_zero()`.
+- Unified GammaLoop graph extraction for generalized 3D generation behind a
+  single `GraphThreeDSource` adapter. The direct `Graph` API and production CFF
+  bridge now share dummy-edge filtering, initial-state-cut externalization,
+  contracted-edge handling, and active loop-energy column reduction.
+- Tightened automatic numerator energy-bound detection and generalized-3D graph
+  extraction so dummy/non-denominator edges do not participate in numerator
+  energy analysis or parsed 3D graph sources.
+- Normalized logbook feature spelling from `old_cff`'s earlier dashed spelling
+  to the current Cargo feature name.
+- Simplified the preserved-edge graph contraction helper to avoid repeatedly
+  cloning the union-find parent map while computing roots.
+
+Design observations:
+
+- Current CFF production in `gammalooprs` always calls
+  `three_dimensional_reps::generate_3d_expression`; there is no fallback to the
+  retired CFF generator.
+- GammaLoop no longer carries a hidden old-CFF graph builder behind
+  `allow(dead_code)`, so the remaining CFF-related code is limited to surface
+  representation/evaluation and the generalized 3D-expression bridge.
+- A repository-wide source scan now finds no active `generate_cff` references
+  outside historical logs/artifacts and the explicitly gated old-CFF mode in
+  `three-dimensional-reps`.
+- `3Drep build` and `3Drep test-cff-ltd` no longer hand-construct incomplete
+  generalized-3D options; they reuse GammaLoop graph defaults and then apply
+  only user-supplied energy-bound overrides.
+- Standalone 3Drep CLI graph validation/build paths now use the same GammaLoop
+  parsed-source extraction rules as production CFF generation.
+- Denominator-only CFF options still exist for UV/threshold denominator
+  construction, but they are explicit zero-degree generalized-3D options, not a
+  legacy mode.
+- The only old-CFF comparison anchor is `RepresentationMode::OldCff` in the
+  `three-dimensional-reps` crate, compiled only with `--features old_cff`.
+
+Verification completed:
+
+```text
+cargo fmt --all
+cargo check -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked
+cargo clippy -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo check -p three-dimensional-reps --tests --features old_cff --locked
+git diff --check
+
+just test_gammaloop
+Summary [152.605s] 1039 tests run: 1039 passed, 125 skipped
+```

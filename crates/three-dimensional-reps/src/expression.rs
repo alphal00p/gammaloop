@@ -309,6 +309,34 @@ impl CFFVariant {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
+pub struct ResidualDenominator {
+    pub edge_id: EdgeIndex,
+    pub power: usize,
+    pub origin: Option<String>,
+}
+
+impl ResidualDenominator {
+    pub fn new(edge_id: EdgeIndex, origin: Option<String>) -> Self {
+        Self {
+            edge_id,
+            power: 1,
+            origin,
+        }
+    }
+
+    pub fn remap_energy_edge_indices(&mut self, edge_map: &EnergyEdgeIndexMap) {
+        self.edge_id = EdgeIndex(
+            edge_map
+                .internal
+                .get(&self.edge_id.0)
+                .copied()
+                .unwrap_or(self.edge_id.0),
+        );
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct VariantFusionKey {
     prefactor: String,
@@ -606,6 +634,7 @@ where
 {
     pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache<E, H>,
+    pub residual_denominators: Vec<ResidualDenominator>,
 }
 
 pub type CFFExpression<O, E = (), H = ()> = ThreeDExpression<O, E, H>;
@@ -618,6 +647,7 @@ where
         Self {
             orientations: TiVec::new(),
             surfaces: SurfaceCache::new(),
+            residual_denominators: Vec::new(),
         }
     }
 
@@ -683,6 +713,9 @@ where
                 .expression
                 .clone()
                 .remap_energy_edges(&edge_map.internal, &edge_map.external);
+        }
+        for denominator in &mut self.residual_denominators {
+            denominator.remap_energy_edge_indices(edge_map);
         }
 
         self
@@ -811,8 +844,24 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "id | orientation | variant | pref | M power | half edges | den surfaces | num surfaces"
+            "id | orientation | variant | pref | M power | half edges | den surfaces | num surfaces | residual denominators"
         )?;
+        let residual_denominators = self
+            .residual_denominators
+            .iter()
+            .map(|denominator| {
+                format!(
+                    "e{}^{}{}",
+                    denominator.edge_id.0,
+                    denominator.power,
+                    denominator
+                        .origin
+                        .as_ref()
+                        .map(|origin| format!(":{origin}"))
+                        .unwrap_or_default()
+                )
+            })
+            .join(", ");
 
         for (orientation_id, orientation) in self.orientations.iter_enumerated() {
             let id: usize = orientation_id.into();
@@ -840,7 +889,7 @@ where
                     .join(", ");
                 writeln!(
                     f,
-                    "{} | {} | {} | {} | {} | [{}] | [{}] | [{}]",
+                    "{} | {} | {} | {} | {} | [{}] | [{}] | [{}] | [{}]",
                     id,
                     label,
                     variant
@@ -851,7 +900,8 @@ where
                     variant.uniform_scale_power,
                     half_edges,
                     denominator_surfaces,
-                    numerator_surfaces
+                    numerator_surfaces,
+                    residual_denominators
                 )?;
             }
         }

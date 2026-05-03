@@ -41,7 +41,7 @@ impl CutWoods {
             let wood = Wood::from_spinneys(spinneys, graph);
 
             let mut lvk_settings = settings.vakint.true_settings();
-            // Keep the legacy wood path aligned with the hedge-poset path:
+            // Keep the forest path aligned with the hedge-poset path:
             // the downstream integrand builder extracts the epsilon^0 term, so
             // Vakint must provide one term beyond the maximal pole order.
             lvk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64 + 1;

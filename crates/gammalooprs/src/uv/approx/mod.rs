@@ -206,24 +206,11 @@ impl CFFapprox {
         cuts: &CutSet,
         _settings: &UVgenerationSettings,
     ) -> Result<CFFapprox> {
-        let cff = graph
-            .cff(
-                &to_contract
-                    .union(&graph.tree_edges)
-                    .subtract(&graph.initial_state_cut),
-                cuts,
-            )?
-            .expression_with_selectors();
-
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let cff = graph.cff(to_contract, cuts)?.expression_with_selectors();
 
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
-            t_arg: IntegrandExpr {
-                integrands: cff.iter().map(|a| a * &fourddenoms).collect(),
-            },
+            t_arg: IntegrandExpr { integrands: cff },
         })
     }
 
@@ -252,16 +239,7 @@ fn localized_integrated_reduced_factor(
     cuts: &CutSet,
     valid_orientations: &[EdgeVec<Orientation>],
 ) -> Result<IntegrandExpr> {
-    let cff = graph.cff(
-        &to_contract
-            .union(&graph.tree_edges)
-            .subtract(&graph.initial_state_cut),
-        cuts,
-    )?;
-
-    let fourddenoms = GS.wrap_tree_denoms(
-        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-    );
+    let cff = graph.cff(to_contract, cuts)?;
 
     let internal_edges = internal_paired_edges_of_subgraph(graph, to_contract);
 
@@ -272,7 +250,7 @@ fn localized_integrated_reduced_factor(
             let mut localized = Atom::Zero;
             for (expr, orientation) in term.expression.into_iter().zip(term.orientations) {
                 localized += localize_reduced_orientation_term(
-                    &(expr * &fourddenoms),
+                    &expr,
                     &orientation,
                     valid_orientations,
                     &internal_edges,

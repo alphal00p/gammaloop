@@ -1,0 +1,13 @@
+digraph scalar_triangle_external_tree {
+num=1;
+overall_factor=1;
+ext    [style=invis]
+ext -> A:0 [particle="scalar_0" id=0];
+C:1 -> ext [particle="scalar_0" id=1];
+ext -> T:2 [particle="scalar_0" id=2];
+T:3 -> ext [particle="scalar_0" id=3];
+A -> B [particle="scalar_1" id=4, lmb_id=0];
+B -> C [particle="scalar_1" id=5];
+C -> A [particle="scalar_1" id=6];
+B -> T [particle="scalar_1" id=7];
+}

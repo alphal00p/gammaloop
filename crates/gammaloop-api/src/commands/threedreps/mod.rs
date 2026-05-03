@@ -52,9 +52,9 @@ use symbolica::{
 use tabled::{builder::Builder, settings::Style};
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, reconstruct_dot_from_expression, render_expression_summary,
-    validate_parsed_graph, DisplayOptions, Generate3DExpressionOptions, GraphInfo, GraphValidation,
-    NumeratorDisplay, OrientationID, ReconstructDotFormat, ReconstructDotOptions,
-    RepresentationMode, ThreeDExpression, ThreeDGraphSource,
+    validate_parsed_graph, DisplayOptions, GraphInfo, GraphValidation, NumeratorDisplay,
+    OrientationID, ReconstructDotFormat, ReconstructDotOptions, RepresentationMode,
+    ThreeDExpression, ThreeDGraphSource,
 };
 use typed_index_collections::TiVec;
 
@@ -988,20 +988,25 @@ impl Build {
     ) -> Result<()> {
         let selected = select_graph(state, &self.selection)?;
         let parsed = selected.graph.to_three_d_parsed_graph()?;
-        let automatic_energy_degree_bounds =
-            automatic_energy_degree_bounds_for_graph(selected.graph)?;
-        let override_energy_degree_bounds =
-            parse_energy_degree_bounds(self.energy_degree_bounds.as_deref())?;
-        let energy_degree_bounds = merge_energy_degree_bounds(
-            &automatic_energy_degree_bounds,
-            &override_energy_degree_bounds,
-        );
         let numerator_samples_normalization =
             self.numerator_samples_normalization.unwrap_or_else(|| {
                 CliNumeratorSamplesNormalization::resolve_from_global(global_cli_settings)
             });
         let numerator_sampling_scale_mode = numerator_samples_normalization.to_generation_mode();
         let representation = RepresentationMode::from(self.representation);
+        let mut options = selected
+            .graph
+            .three_d_expression_options(representation, numerator_sampling_scale_mode)?;
+        let automatic_energy_degree_bounds = options.energy_degree_bounds.clone();
+        let override_energy_degree_bounds =
+            parse_energy_degree_bounds(self.energy_degree_bounds.as_deref())?;
+        let energy_degree_bounds = merge_energy_degree_bounds(
+            &automatic_energy_degree_bounds,
+            &override_energy_degree_bounds,
+        );
+        options
+            .energy_degree_bounds
+            .clone_from(&energy_degree_bounds);
         let workspace = self.workspace_path(global_cli_settings);
         let artifact_dir = build_artifact_dir(
             &workspace,
@@ -1043,11 +1048,6 @@ impl Build {
         let (output, reused_cached_output) = if let Some(output) = cached_output {
             (output, true)
         } else {
-            let options = Generate3DExpressionOptions {
-                representation,
-                energy_degree_bounds: energy_degree_bounds.clone(),
-                numerator_sampling_scale: numerator_sampling_scale_mode,
-            };
             let expression = generate_3d_expression(selected.graph, &options)?;
             (
                 BuildOutput {
@@ -1434,8 +1434,9 @@ impl TestCffLtd {
             .unwrap_or_else(|| default_workspace_path(global_cli_settings));
         let graph_workspace = graph_workspace_dir(&workspace, &selected);
         let manifest_path = graph_workspace.join("test_cff_ltd_manifest.json");
-        let automatic_energy_degree_bounds =
-            automatic_energy_degree_bounds_for_graph(selected.graph)?;
+        let automatic_energy_degree_bounds = selected
+            .graph
+            .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
         let override_energy_degree_bounds =
             parse_energy_degree_bounds(self.energy_degree_bounds.as_deref())?;
         let energy_degree_bounds = merge_energy_degree_bounds(
@@ -1563,14 +1564,9 @@ impl TestCffLtd {
         let case_dir = workspace.join("test_cff_ltd").join(&name);
         let expression_path = case_dir.join("oriented_expression.json");
         let symbolica_expression_path = case_dir.join("symbolica_expression.txt");
-        let expression = match generate_3d_expression(
-            graph,
-            &Generate3DExpressionOptions {
-                representation,
-                energy_degree_bounds: energy_degree_bounds.to_vec(),
-                numerator_sampling_scale: scale_mode,
-            },
-        ) {
+        let mut options = graph.three_d_expression_options(representation, scale_mode)?;
+        options.energy_degree_bounds = energy_degree_bounds.to_vec();
+        let expression = match generate_3d_expression(graph, &options) {
             Ok(expression) => expression,
             Err(error) => {
                 let generation_error_path = case_dir.join("generation_error.txt");
@@ -1737,19 +1733,15 @@ impl TestCffLtd {
                 .split_repeated_masses_for_three_drep(request.model, epsilon)?;
             let mass_shift_values = mass_shift_value_records(&mass_shifts);
             let mass_shift = mass_shift_label(epsilon, &mass_shift_values);
-            let shifted_expression = generate_3d_expression(
-                &shifted_graph,
-                &Generate3DExpressionOptions {
-                    representation: RepresentationMode::Ltd,
-                    energy_degree_bounds: request.energy_degree_bounds.to_vec(),
-                    numerator_sampling_scale: request.scale_mode,
-                },
-            )
-            .with_context(|| {
-                format!(
+            let mut shifted_options = shifted_graph
+                .three_d_expression_options(RepresentationMode::Ltd, request.scale_mode)?;
+            shifted_options.energy_degree_bounds = request.energy_degree_bounds.to_vec();
+            let shifted_expression = generate_3d_expression(&shifted_graph, &shifted_options)
+                .with_context(|| {
+                    format!(
                     "while generating split-mass LTD expression for pure-LTD mass shift {epsilon}"
                 )
-            })?;
+                })?;
             let parametric_atom =
                 diagnostic_parametric_atom_for_evaluator(&shifted_expression, &shifted_graph);
             let orientations = diagnostic_evaluation_orientations(&shifted_expression);
@@ -3779,21 +3771,6 @@ fn profile_evaluator_for_precision(
         )),
         timing_per_sample_seconds,
     })
-}
-
-fn automatic_energy_degree_bounds_for_graph(graph: &Graph) -> Result<Vec<(usize, usize)>> {
-    let mut bounds = graph
-        .underlying
-        .iter_edges()
-        .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
-        .map(|(_, edge, _)| (edge.0, 0usize))
-        .collect::<BTreeMap<_, _>>();
-
-    for (edge, degree) in graph.numerator_energy_power_caps()?.iter() {
-        bounds.insert(edge.0, degree);
-    }
-
-    Ok(bounds.into_iter().collect())
 }
 
 fn select_graph<'a>(state: &'a State, selection: &GraphSelectorArgs) -> Result<SelectedGraph<'a>> {

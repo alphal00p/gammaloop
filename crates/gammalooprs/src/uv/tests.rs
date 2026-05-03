@@ -286,7 +286,6 @@ fn scalars_profile_new() {
         softct: false,
         add_sigma: true,
         subtract_uv: true,
-        use_legacy: false,
         ..Default::default()
     });
 
@@ -1524,7 +1523,7 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff().unwrap();
+        amp.build_cff_expression_for_tests().unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
@@ -1565,7 +1564,7 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff().unwrap();
+        amp.build_cff_expression_for_tests().unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);

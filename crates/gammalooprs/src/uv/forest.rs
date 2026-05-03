@@ -1,14 +1,13 @@
 use crate::{
     GammaLoopContext,
     cff::expression::GammaLoopGraphOrientation,
-    graph::{Graph, LMBext, cuts::CutSet},
+    graph::{Graph, cuts::CutSet},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use symbolica::{
@@ -22,7 +21,7 @@ use tracing::{debug, instrument};
 use vakint::Vakint;
 
 use super::{
-    RenormalizationPart, UVgenerationSettings,
+    UVgenerationSettings,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -206,98 +205,6 @@ impl Forest {
             }
         }
         Ok(())
-    }
-
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
-        let mut sum = Atom::Zero;
-
-        let wild = Atom::var(W_.x___);
-
-        let replacements =
-            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
-        for (_, n) in &self.dag.nodes {
-            if !n.children.is_empty() {
-                continue;
-            }
-
-            let (atom, sign) = n.data.integrated_4d.expr().ok_or(eyre!(
-                "Integrated pole part not computed for {} of graph {}",
-                n.data
-                    .simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),
-                graph.name
-            ))?;
-
-            let mut atom = atom[0].clone();
-
-            atom = sign * atom;
-
-            // debug!(
-            //     forest_term=%
-            //     n.data
-            //         .simple_approx
-            //         .as_ref()
-            //         .unwrap()
-            //         .expr(&graph.full_filter()),
-            //    expr = % atom,"Term before simplification"
-            // );
-            //
-            debug!(
-                forest_term=%
-                n.data
-                    .simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),
-               expr = % atom.expand_num().log_print(None),"Term before simplification"
-            );
-
-            let atom = (atom
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor)
-                .simplify_color()
-                .expand_num()
-                .to_dots();
-            // .replace(GS.dim)
-            // .max_level(0)
-            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
-
-            debug!(
-                forest_term=%
-                n.data
-                    .simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),
-               expr = % atom.log_print(None),"Term"
-            );
-            sum += atom;
-        }
-        // let n_loops = graph.n_loops(&graph.full_filter());
-        // let pole_stripped = sum
-        //     .series(
-        //         GS.dim_epsilon,
-        //         Atom::Zero,
-        //         (n_loops as i64 + 1).into(),
-        //         true,
-        //     )
-        //     .unwrap();
-
-        // let mut sum = Atom::Zero;
-
-        // for (power, p) in pole_stripped.terms() {
-        //     if power < 0 {
-        //         sum += p * Atom::var(GS.dim_epsilon).pow(power);
-        //     }
-        // }
-        Ok(RenormalizationPart::legacy(
-            sum.replace_multiple(&replacements)
-                .replace(GS.m_uv_int)
-                .with(GS.m_uv),
-        ))
     }
 
     #[instrument(skip_all)]

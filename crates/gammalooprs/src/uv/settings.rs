@@ -345,8 +345,6 @@ pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
     #[serde(skip_serializing_if = "is_true")]
-    pub use_legacy: bool,
-    #[serde(skip_serializing_if = "is_true")]
     pub cached: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub local_uv_cts_from_expanded_4d_integrands: bool,
@@ -372,7 +370,6 @@ impl Default for UVgenerationSettings {
             pole_part: false,
             only_integrated: false,
             inner_products: true,
-            use_legacy: true,
             cached: true,
             local_uv_cts_from_expanded_4d_integrands: false,
             generate_only_integrated_uv_with_n_loops: None,
