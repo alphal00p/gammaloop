@@ -264,6 +264,9 @@ test_gammaloop *args:
     printf '\n'
     "${cmd[@]}"
 
+test_gammaloop_detailed *args:
+    just test_gammaloop {{ args }} -- --show-progress=bar --status-level=slow --final-status-level=fail --max-progress-running=8
+
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all
 

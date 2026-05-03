@@ -45,13 +45,12 @@ impl Graph {
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
             .collect_vec();
-        let preserved_edges = self.external_tree_4d_denominator_edges();
-        let preserved_edge_set = preserved_edges.iter().copied().collect::<HashSet<_>>();
-        let source_contract_edges = contract_edges
-            .iter()
-            .copied()
-            .filter(|edge_id| !preserved_edge_set.contains(edge_id))
-            .collect_vec();
+        let preserved_edges = self.normalized_preserved_4d_denominator_edges(options);
+        let source_contract_edges = source_contract_edges_for_3d_expression(
+            contract_edges,
+            &initial_state_cut_edges,
+            &preserved_edges,
+        );
         if !source_contract_edges.is_empty() {
             debug!(
                 "contracting {} internal edges before generalized 3D CFF generation",
@@ -60,20 +59,15 @@ impl Graph {
         }
         if !preserved_edges.is_empty() {
             debug!(
-                "preserving {} loop-attached tree edges as four-dimensional residual denominators",
+                "preserving {} internal edges as four-dimensional residual denominators",
                 preserved_edges.len()
             );
         }
         let mut local_options = options.clone();
-        local_options
-            .preserve_internal_edges_as_four_d_denominators
-            .extend(preserved_edges.iter().map(|edge_id| usize::from(*edge_id)));
-        local_options
-            .preserve_internal_edges_as_four_d_denominators
-            .sort_unstable();
-        local_options
-            .preserve_internal_edges_as_four_d_denominators
-            .dedup();
+        local_options.preserve_internal_edges_as_four_d_denominators = preserved_edges
+            .iter()
+            .map(|edge_id| usize::from(*edge_id))
+            .collect();
 
         let source = GraphThreeDSource::new(self, &source_contract_edges);
 
@@ -150,6 +144,26 @@ impl Graph {
         } else {
             Vec::new()
         }
+    }
+
+    fn normalized_preserved_4d_denominator_edges(
+        &self,
+        options: &Generate3DExpressionOptions,
+    ) -> Vec<EdgeIndex> {
+        let mut preserved_edges =
+            self.preserved_4d_denominator_edges_for_3d_expression(options.representation);
+        if options.representation == RepresentationMode::Cff {
+            preserved_edges.extend(
+                options
+                    .preserve_internal_edges_as_four_d_denominators
+                    .iter()
+                    .copied()
+                    .map(EdgeIndex),
+            );
+        }
+        preserved_edges.sort_unstable();
+        preserved_edges.dedup();
+        preserved_edges
     }
 
     pub(crate) fn external_tree_4d_denominator_edges(&self) -> Vec<EdgeIndex> {
@@ -332,6 +346,23 @@ fn three_d_source_summary(parsed: &three_dimensional_reps::ParsedGraph) -> Strin
         parsed.internal_edges.len(),
         internal_edges
     )
+}
+
+fn source_contract_edges_for_3d_expression(
+    contract_edges: &[EdgeIndex],
+    initial_state_cut_edges: &[EdgeIndex],
+    preserved_edges: &[EdgeIndex],
+) -> Vec<EdgeIndex> {
+    let mut non_contractible_edges = initial_state_cut_edges
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    non_contractible_edges.extend(preserved_edges.iter().copied());
+    contract_edges
+        .iter()
+        .copied()
+        .filter(|edge_id| !non_contractible_edges.contains(edge_id))
+        .collect_vec()
 }
 
 fn remap_generated_surface_id(

@@ -3,6 +3,7 @@ use linnet::half_edge::{
     subgraph::{SubSetLike, SubSetOps},
 };
 use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::RepresentationMode;
 
 use crate::{
     cff::{
@@ -91,9 +92,14 @@ impl Graph {
                 contract_edges.push(eid);
             }
         }
-        contract_edges.extend(self.external_tree_4d_denominator_edges());
         contract_edges.sort_unstable();
         contract_edges.dedup();
+
+        let mut inverse_energy_excluded_edges = contract_edges.clone();
+        inverse_energy_excluded_edges
+            .extend(self.preserved_4d_denominator_edges_for_3d_expression(RepresentationMode::Cff));
+        inverse_energy_excluded_edges.sort_unstable();
+        inverse_energy_excluded_edges.dedup();
 
         let cff_options = self.denominator_only_cff_3d_expression_options();
         let cff = self.generate_3d_expression_for_integrand(
@@ -146,7 +152,7 @@ impl Graph {
                 let inverse_energies = get_cff_inverse_energy_product_impl(
                     self,
                     &graph_without_is_cut,
-                    &contract_edges,
+                    &inverse_energy_excluded_edges,
                 );
 
                 ose_expr *= inverse_energies;

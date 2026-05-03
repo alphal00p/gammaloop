@@ -4475,11 +4475,12 @@ Global review outcome:
   for the standalone `3Drep` CLI so auto-detected numerator energy bounds,
   initial-state-cut exclusions, and preserved 4D tree denominators are selected
   from the same place as production CFF generation.
-- Kept preserved tree edges in the caller-side contraction lists as well as in
-  the generalized-3D preservation options. This is intentionally redundant:
-  the preservation option keeps them as 4D residual denominators in the 3D
-  expression, while the contraction list still suppresses their inverse OSE
-  factors in GammaLoop's surrounding CFF normalization.
+- Centralized preserved tree-edge handling in the GammaLoop
+  `generate_3d_expression` bridge. Production callers no longer pass external
+  tree edges as contracted edges; the bridge selects preserved 4D denominators,
+  filters them out of virtual graph contraction, and the denominator-only CFF
+  wrapper explicitly excludes them from GammaLoop's surrounding inverse-OSE
+  normalization.
 - Changed the loop-signature rank helper used while extracting reduced
   generalized-3D graph sources from a floating-point row reduction to exact
   rational row reduction.
@@ -4532,4 +4533,49 @@ git diff --check
 
 just test_gammaloop
 Summary [152.605s] 1039 tests run: 1039 passed, 125 skipped
+```
+
+## 2026-05-03: final bridge cleanup, detailed test target, and state-artifact hardening
+
+Follow-up cleanup after the previous global pass:
+
+- Added `just test_gammaloop_detailed`, an alias for the curated GammaLoop
+  suite with nextest reporter flags:
+  `--show-progress=bar --status-level=slow --final-status-level=fail
+  --max-progress-running=8`.
+- Moved the GammaLoop-to-3D graph adapter into
+  `crates/gammalooprs/src/graph/three_d_source.rs`, keeping `graph/mod.rs`
+  focused on graph data and general graph operations.
+- Kept graph contraction virtual inside `GraphThreeDSource`. I checked the
+  linnet contraction helpers during this pass; they mutate/reindex graph
+  structure, while this adapter must preserve original `EdgeIndex` values for
+  energy caches, residual denominators, and orientation vectors.
+- Made `GraphThreeDSource` own the initial-state-cut edge set and refuse to
+  virtually contract those edges even if a future caller accidentally includes
+  them in a contracted-edge request.
+- Normalized preserved 4D denominator selection in one helper on the GammaLoop
+  generation bridge. Initial-state-cut edges and preserved 4D denominator edges
+  are now treated uniformly as non-contractible before the reduced source graph
+  reaches `three_dimensional_reps::generate_3d_expression`.
+- Adjusted denominator-only CFF construction so preserved 4D denominator edges
+  are also excluded from the separate inverse on-shell-energy product assembled
+  by GammaLoop around the generated expression.
+- Replaced several exact zero/one/two/three/four constants near the new path
+  with active-precision constructions (`T::new_zero()`, `.one()`,
+  `.from_i64(...)`, `.from_usize(...)`) so internally derived constants do not
+  pass through `f64` in generic-precision evaluation paths.
+- Hardened the mass-approach run card with an explicit
+  `tests/artifacts/mass_approach_scalar_self_energy` state folder and removed
+  stale top-level state artifacts that had been left from an earlier ad hoc run.
+
+Verification completed:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+git diff --check
+
+just test_gammaloop_detailed
+Summary [153.382s] 1039 tests run: 1039 passed, 125 skipped
 ```

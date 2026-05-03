@@ -1458,20 +1458,23 @@ fn stability_check<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
+    let zero = results[0].re.zero();
+    let sample_count = zero.from_usize(results.len());
+
     let average = results
         .iter()
         .skip(1)
         .fold(results[0].clone(), |acc, x| acc + x)
-        / F::<T>::from_f64(results.len() as f64);
+        / sample_count;
 
     let errors = results.iter().map(|res| {
         let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
-            F::<T>::from_f64(0.0)
+            zero.clone()
         } else {
             ((&res.re - &average.re) / &average.re).abs()
         };
         let error_im = if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
-            F::<T>::from_f64(0.0)
+            zero.clone()
         } else {
             ((&res.im - &average.im) / &average.im).abs()
         };
@@ -1484,11 +1487,7 @@ fn stability_check<T: FloatLike>(
     for (index, error) in errors.enumerate() {
         estimated_relative_accuracy =
             estimated_relative_accuracy.max(error.re.clone().max(error.im.clone()));
-        if !is_final_level
-            && escalate_if_exact_zero
-            && error.re == F::<T>::from_f64(0.0)
-            && error.im == F::<T>::from_f64(0.0)
-        {
+        if !is_final_level && escalate_if_exact_zero && error.re == zero && error.im == zero {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
             break;
@@ -1567,14 +1566,17 @@ fn stability_check_on_norm<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
-    let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
-        acc + x.norm_squared().sqrt()
-    }) / F::<T>::from_f64(results.len() as f64);
+    let zero = results[0].re.zero();
+    let sample_count = zero.from_usize(results.len());
+    let average = results
+        .iter()
+        .fold(zero.clone(), |acc, x| acc + x.norm_squared().sqrt())
+        / sample_count;
 
     let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
+            (zero.clone(), true) // true zero is fishy -> upgrade to next precision
         } else {
             (((res - average.clone()) / average.clone()).abs(), false)
         }
@@ -1585,11 +1587,7 @@ fn stability_check_on_norm<T: FloatLike>(
     let mut unstable_sample = None;
     for (index, (error, result_is_exact_zero)) in errors.enumerate() {
         estimated_relative_accuracy = estimated_relative_accuracy.max(error.clone());
-        if !is_final_level
-            && error == F::<T>::from_f64(0.0)
-            && result_is_exact_zero
-            && escalate_if_exact_zero
-        {
+        if !is_final_level && error == zero && result_is_exact_zero && escalate_if_exact_zero {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
             break;
@@ -2890,13 +2888,27 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
             )
         })
         .collect::<LoopMomenta<F<T>>>();
+    let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
+    let jacobian = if let Some(momentum) = loop_momenta.first() {
+        momentum.px.one()
+    } else {
+        integrand
+            .get_settings()
+            .kinematics
+            .externals
+            .get_dependent_externals::<T>(dependent_momenta_constructor)?
+            .first()
+            .map(|momentum| momentum.temporal.value.one())
+            .ok_or_else(|| eyre!("Cannot build a direct momentum sample with no momenta."))?
+    };
+
     let sample = MomentumSample::new(
         loop_momenta,
         integrand.loop_cache_id(),
         &integrand.get_settings().kinematics.externals,
         integrand.get_current_external_cache_id(),
-        F::<T>::from_f64(1.0),
-        integrand.get_dependent_momenta_constructor(),
+        jacobian,
+        dependent_momenta_constructor,
         input.orientation,
     )?;
 

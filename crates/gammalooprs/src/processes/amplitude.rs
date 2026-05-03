@@ -590,13 +590,9 @@ impl AmplitudeGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let contract_edges = self.graph.external_tree_4d_denominator_edges();
-
-        let cff_expression = self.graph.generate_3d_expression_for_integrand(
-            &contract_edges,
-            &shift_rewrite,
-            cff_options,
-        )?;
+        let cff_expression =
+            self.graph
+                .generate_3d_expression_for_integrand(&[], &shift_rewrite, cff_options)?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())

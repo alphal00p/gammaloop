@@ -765,9 +765,8 @@ impl CrossSectionGraph {
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let contract_edges = self.graph.external_tree_4d_denominator_edges();
         let global_cff = self.graph.generate_3d_expression_for_integrand(
-            &contract_edges,
+            &[],
             &canonize_esurface,
             &cff_options,
         )?;

@@ -1227,7 +1227,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             let solution = newton_iteration_and_derivative(
                 &guess,
                 function,
-                &F::from_f64(1.0),
+                &guess.one(),
                 2000,
                 &F::from_f64(context.settings.kinematics.e_cm),
             );
@@ -1389,7 +1389,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             _alpha,
                         )
                     } else {
-                        F::from_f64(1.0)
+                        momentum_sample.one()
                     },
                 );
 
@@ -1551,12 +1551,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.initial_state_cut.iter_edges(&self.graph).count(),
             );
         let flux_factor = if context.settings.general.disable_flux_factor {
-            F::from_f64(1.0)
+            momentum_sample.one()
         } else {
             match momentum_sample.external_moms().len() {
                 1 => {
                     momentum_sample.one()
-                        / (F::from_f64(2.0)
+                        / (momentum_sample.one().from_i64(2)
                             * &momentum_sample
                                 .external_moms()
                                 .first()
@@ -1583,7 +1583,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                         })
                         .re;
 
-                    let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                    let f = momentum_sample.one().from_i64(4)
+                        * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())
