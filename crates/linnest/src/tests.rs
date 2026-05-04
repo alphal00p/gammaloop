@@ -72,6 +72,7 @@ struct TestGraphSpec {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct TestTemplatedGraphSpec {
     name: String,
     #[serde(default)]
@@ -91,6 +92,7 @@ struct TestTemplatedGraphSpec {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct TestBuilderSpec {
     name: String,
     #[serde(default)]
@@ -738,15 +740,15 @@ fn test_force_center_gravity_keeps_disconnected_nodes_close() {
         .unwrap();
 
         let config = BTreeMap::from([
-            ("layout_algo".to_string(), "force".to_string()),
+            ("layout-algo".to_string(), "force".to_string()),
             ("seed".to_string(), "2".to_string()),
             ("steps".to_string(), "10".to_string()),
             ("epochs".to_string(), "3".to_string()),
             ("step".to_string(), "0.81".to_string()),
             ("delta".to_string(), "0.4".to_string()),
             ("beta".to_string(), "46.1".to_string()),
-            ("g_center".to_string(), g_center.to_string()),
-            ("length_scale".to_string(), "0.01".to_string()),
+            ("g-center".to_string(), g_center.to_string()),
+            ("length-scale".to_string(), "0.01".to_string()),
         ]);
         let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
         let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
@@ -824,11 +826,11 @@ fn test_pin_parsing() {
             steps=1
             step=0.4
             beta =13.1
-            k_spring=20.3;
-            g_center=0
-            gamma_ee=0.3
-            gamma_ev=0.01
-            length_scale = 0.25
+            "k-spring"=20.3;
+            "g-center"=0
+            "gamma-ee"=0.3
+            "gamma-ev"=0.01
+            "length-scale" = 0.25
             node[
               eval="(stroke:blue,fill :black,
          radius:2pt,
@@ -873,11 +875,11 @@ fn test_parsing() {
             steps=600
             step=.2
             beta =3.1
-            k_spring=15.3;
-            g_center=0
-            gamma_ee=0.3
-            gamma_ev=0.01
-            length_scale = 0.2
+            "k-spring"=15.3;
+            "g-center"=0
+            "gamma-ee"=0.3
+            "gamma-ev"=0.01
+            "length-scale" = 0.2
 
              node[
               eval="(stroke:blue,fill :black,
@@ -900,8 +902,8 @@ fn test_directional_constraints() {
     let figment = test_figment();
     let typst_graph = TypstGraph::from_dot(
         dot!(digraph {
-            tree_dy = 2.0
-            tree_dx = 3.0
+            "tree-dy" = 2.0
+            "tree-dx" = 3.0
             a [pin="x:+@group1"]
             b [pin="x:-@group1"]
             c [pin="y:+@group2"]
@@ -1003,12 +1005,12 @@ fn test_full() {
            steps=600
            step=0.4
            beta =13.1
-           k_spring=3.3;
-           g_center=0
-           gamma_dangling=50
-           gamma_ee=0.3
-           gamma_ev=0.01
-           length_scale = 0.25
+           "k-spring"=3.3;
+           "g-center"=0
+           "gamma-dangling"=50
+           "gamma-ee"=0.3
+           "gamma-ev"=0.01
+           "length-scale" = 0.25
            a->b
        }
     );

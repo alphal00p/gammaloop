@@ -260,9 +260,9 @@ impl TypstEdge {
             let shift =
                 TypstNode::parse_position(&d.statements, "shift").map(|(x, y)| Vector2::new(x, y));
 
-            let label_pos = TypstNode::parse_position(&d.statements, "label_pos")
+            let label_pos = TypstNode::parse_position(&d.statements, "label-pos")
                 .map(|(x, y)| Point2::new(x, y));
-            let label_angle = d.statements.get("label_angle").and_then(|value| {
+            let label_angle = d.statements.get("label-angle").and_then(|value| {
                 let unquoted = value.trim().trim_matches('"');
                 let cleaned = unquoted.trim().trim_end_matches("rad");
                 cleaned.trim().parse::<f64>().ok()
@@ -375,11 +375,11 @@ impl TypstEdge {
         }
 
         if let Some(p) = self.label_pos {
-            statements.insert("label_pos".to_string(), format!("{},{}", p.x, p.y));
+            statements.insert("label-pos".to_string(), format!("{},{}", p.x, p.y));
         }
 
         if let Some(a) = self.label_angle {
-            statements.insert("label_angle".to_string(), format!("{a}rad"));
+            statements.insert("label-angle".to_string(), format!("{a}rad"));
         }
 
         if let Some(eval) = &self.eval_sink {
@@ -598,10 +598,11 @@ enum LayoutAlgo {
 }
 
 fn default_layout_algo() -> LayoutAlgo {
-    LayoutAlgo::Anneal
+    LayoutAlgo::Force
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct LayoutConfig {
     #[serde(default = "default_viewport_w", deserialize_with = "deserialize_f64")]
     viewport_w: f64,
@@ -710,33 +711,33 @@ impl LayoutConfig {
             };
         }
 
-        insert!("viewport_w", self.viewport_w);
-        insert!("viewport_h", self.viewport_h);
-        insert!("tree_dx", self.tree_dx);
-        insert!("tree_dy", self.tree_dy);
+        insert!("viewport-w", self.viewport_w);
+        insert!("viewport-h", self.viewport_h);
+        insert!("tree-dx", self.tree_dx);
+        insert!("tree-dy", self.tree_dy);
         insert!("step", self.step);
         insert!("temp", self.temp);
         insert!("seed", self.seed);
         insert!("delta", self.delta);
-        insert!("directional_force", self.directional_force);
-        insert!("z_spring", self.z_spring);
-        insert!("z_spring_growth", self.z_spring_growth);
-        insert!("label_steps", self.label_steps);
-        insert!("label_step", self.label_step);
-        insert!("label_length_scale", self.label_length_scale);
-        insert!("label_charge", self.label_charge);
-        insert!("label_spring", self.label_spring);
-        insert!("label_early_tol", self.label_early_tol);
-        insert!("label_max_delta_scale", self.label_max_delta_scale);
+        insert!("directional-force", self.directional_force);
+        insert!("z-spring", self.z_spring);
+        insert!("z-spring-growth", self.z_spring_growth);
+        insert!("label-steps", self.label_steps);
+        insert!("label-step", self.label_step);
+        insert!("label-length-scale", self.label_length_scale);
+        insert!("label-charge", self.label_charge);
+        insert!("label-spring", self.label_spring);
+        insert!("label-early-tol", self.label_early_tol);
+        insert!("label-max-delta-scale", self.label_max_delta_scale);
         insert!(
-            "layout_algo",
+            "layout-algo",
             match self.layout_algo {
                 LayoutAlgo::Anneal => "anneal",
                 LayoutAlgo::Force => "force",
             }
         );
         global_data.statements.insert(
-            "incremental_energy".to_string(),
+            "incremental-energy".to_string(),
             self.incremental_energy.to_string(),
         );
 
@@ -771,15 +772,15 @@ fn default_tree_dx() -> f64 {
 }
 
 fn default_step() -> f64 {
-    0.2
+    0.81
 }
 
 fn default_temp() -> f64 {
-    1.1
+    0.3
 }
 
 fn default_seed() -> u64 {
-    42
+    2
 }
 
 fn default_delta() -> f64 {
@@ -787,15 +788,15 @@ fn default_delta() -> f64 {
 }
 
 fn default_directional_force() -> f64 {
-    0.0
+    5.0
 }
 
 fn default_z_spring() -> f64 {
-    0.0
+    0.05
 }
 
 fn default_z_spring_growth() -> f64 {
-    1.0
+    1.3
 }
 
 fn default_label_steps() -> usize {
@@ -807,15 +808,15 @@ fn default_label_step() -> f64 {
 }
 
 fn default_label_length_scale() -> f64 {
-    0.3
+    0.6
 }
 
 fn default_label_charge() -> f64 {
-    0.2
+    3.0
 }
 
 fn default_label_spring() -> f64 {
-    1.0
+    23.0
 }
 
 fn default_label_early_tol() -> f64 {
@@ -831,10 +832,11 @@ fn default_incremental_energy() -> bool {
 }
 
 fn default_crossing_penalty() -> f64 {
-    0.0
+    30.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct SpringConfig {
     #[serde(default = "default_length_scale", deserialize_with = "deserialize_f64")]
     length_scale: f64,
@@ -895,6 +897,7 @@ impl From<&SpringConfig> for ParamTuning {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct ScheduleConfig {
     #[serde(default = "default_steps", deserialize_with = "deserialize_usize")]
     steps: usize,
@@ -937,23 +940,23 @@ impl From<&ScheduleConfig> for GeoSchedule {
 }
 
 fn default_length_scale() -> f64 {
-    1.0
+    0.5
 }
 
 fn default_k_spring() -> f64 {
-    1.0
+    11.0
 }
 
 fn default_beta() -> f64 {
-    0.14
+    50.0
 }
 
 fn default_gamma_dangling() -> f64 {
-    0.14
+    5.0
 }
 
 fn default_gamma_ev() -> f64 {
-    0.20
+    0.01
 }
 
 fn default_gamma_ee() -> f64 {
@@ -961,7 +964,7 @@ fn default_gamma_ee() -> f64 {
 }
 
 fn default_g_center() -> f64 {
-    0.05
+    0.005
 }
 
 fn default_eps() -> f64 {
@@ -969,11 +972,11 @@ fn default_eps() -> f64 {
 }
 
 fn default_steps() -> usize {
-    200
+    30
 }
 
 fn default_epochs() -> usize {
-    8
+    30
 }
 
 fn default_cool() -> f64 {
@@ -985,7 +988,7 @@ fn default_accept_floor() -> f64 {
 }
 
 fn default_step_shrink() -> f64 {
-    0.7
+    0.21
 }
 
 fn default_early_tol() -> f64 {
@@ -2149,6 +2152,7 @@ impl TypstGraph {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct CBORTypstGraph {
     edges: EdgeVec<EdgeData<TypstEdge>>,
     nodes: NodeVec<TypstNode>,

@@ -103,7 +103,7 @@ Use destructuring to keep the builder value moving:
 ```
 
 `graph.edge` accepts `source` and `sink` endpoint dictionaries. An endpoint can
-contain `node`, `statement`, `id`, `port_label`, `compass`, and `in_subgraph`.
+contain `node`, `statement`, `id`, `port-label`, `compass`, and `in-subgraph`.
 Set `source: none` or `sink: none` to create an external half edge.
 
 String-valued DOT statements may contain `{name}` placeholders. `graph.build`
@@ -120,7 +120,7 @@ the per-edge `label` statement:
 #let b = graph.builder(
   edge-statements: (
     color: "000000",
-    display_label: "{label}",
+    display-label: "{label}",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a")
@@ -141,7 +141,7 @@ callbacks receive the merged `scope`, edge statements, endpoint records, and the
 edge index:
 
 ```typ
-#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display_label]
+#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display-label]
 #let source-style(edge) = (stroke: red + 0.5pt)
 #let sink-style(edge) = (stroke: blue + 0.5pt)
 #draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
@@ -176,7 +176,7 @@ of being manually nested under `edge-statements` or per-edge `statements`:
   node-statements: (shape: "circle"),
   edge-statements: (
     color: "000000",
-    display_label: "{label}",
+    display-label: "{label}",
   ),
   nodes: ((name: "a"), (name: "b")),
   edges: ((
@@ -194,7 +194,7 @@ and `graph.edges(g)` returns edge records. Pass `subgraph: sg` to filter nodes
 or edges by an subgraph object.
 
 `graph.join(left, right, key: "statement")` joins matching dangling half edges.
-The key is read from half-edge data and can be `"statement"`, `"port_label"`,
+The key is read from half-edge data and can be `"statement"`, `"port-label"`,
 `"compass"`, or `"id"`.
 
 `graph.cycles(g)` returns subgraph objects for a cycle basis.
@@ -208,8 +208,8 @@ graph nodes and edge control points. The initial tree spacing is
 $ L = lambda sqrt((W H) / max(n, 1)) $,
 
 with horizontal spacing $tau_x L$ and vertical spacing $tau_y L$. Here
-$lambda$ is `length_scale`, $W$ is `viewport_w`, $H$ is `viewport_h`, $tau_x$
-is `tree_dx`, and $tau_y$ is `tree_dy`. These fields set the geometry scale for
+$lambda$ is `length-scale`, $W$ is `viewport-w`, $H$ is `viewport-h`, $tau_x$
+is `tree-dx`, and $tau_y$ is `tree-dy`. These fields set the geometry scale for
 both layout modes.
 
 The shared spring/charge model uses the following coefficients:
@@ -220,12 +220,12 @@ $ c_("ee") = beta gamma_("ee") L^2 $
 $ c_("center") = beta g_("center") L^2 $
 $ c_("dangling") = beta gamma_("dangling") L^2 $
 
-The Typst parameter names are `beta` for $beta$, `gamma_ev` for
-$gamma_("ev")$, `gamma_ee` for $gamma_("ee")$, `g_center` for $g_("center")$,
-and `gamma_dangling` for $gamma_("dangling")$. The spring stiffness $k$ is
-`k_spring`, and the softening constant $epsilon$ is `eps`.
+The Typst parameter names are `beta` for $beta$, `gamma-ev` for
+$gamma_("ev")$, `gamma-ee` for $gamma_("ee")$, `g-center` for $g_("center")$,
+and `gamma-dangling` for $gamma_("dangling")$. The spring stiffness $k$ is
+`k-spring`, and the softening constant $epsilon$ is `eps`.
 
-In `layout_algo: "anneal"`, linnest minimizes an energy:
+In `layout-algo: "anneal"`, linnest minimizes an energy:
 
 $ E =
 sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
@@ -236,30 +236,30 @@ sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
 + sum_(i) 1/2 c_("center") / (d(v_i, 0) + epsilon)
 + p_("cross") N_("cross") $.
 
-Here $p_("cross")$ is `crossing_penalty` and $N_("cross")$ is the number of
+Here $p_("cross")$ is `crossing-penalty` and $N_("cross")$ is the number of
 detected edge crossings. `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
-`accept_floor`, `step_shrink`, and `incremental_energy` belong to this
-simulated annealing mode. `crossing_penalty` is also anneal-only; force mode
+`accept-floor`, `step-shrink`, and `incremental-energy` belong to this
+simulated annealing mode. `crossing-penalty` is also anneal-only; force mode
 does not currently add a crossing force.
 
-In `layout_algo: "force"`, linnest applies the direct forces corresponding to
+In `layout-algo: "force"`, linnest applies the direct forces corresponding to
 the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
 dangling-edge, and center terms. `step` is the integration step, `delta` clamps
 per-step movement, `steps` and `epochs` set the iteration budget, `cool` shrinks
-the step after each epoch, and `early_tol` stops when movement is small.
-`z_spring` and `z_spring_growth` are force-only helpers: the integrator gives
+the step after each epoch, and `early-tol` stops when movement is small.
+`z-spring` and `z-spring-growth` are force-only helpers: the integrator gives
 points temporary z coordinates to break overlaps and pulls them back toward the
 2D plane.
 
-`directional_force` is applied in both modes as an extra bias derived from
+`directional-force` is applied in both modes as an extra bias derived from
 pin/port direction constraints.
 
 After either graph layout mode, labels are relaxed separately. If $L_l$ is the
 label target distance and $q_l$ is the label repulsion strength, then
 $L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
-`label_length_scale` for $alpha_l$ and `label_charge` for $beta_l$.
-`label_spring` is the spring constant pulling each label toward its target.
-`label_steps`, `label_step`, `label_early_tol`, and `label_max_delta_scale`
+`label-length-scale` for $alpha_l$ and `label-charge` for $beta_l$.
+`label-spring` is the spring constant pulling each label toward its target.
+`label-steps`, `label-step`, `label-early-tol`, and `label-max-delta-scale`
 control the label relaxation iteration.
 
 == Subgraphs

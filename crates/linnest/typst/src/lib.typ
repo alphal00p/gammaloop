@@ -8,7 +8,7 @@
 /// Apply the linnest layout pass to a graph object.
 ///
 /// This is intentionally a second step: construct or parse a graph first, then
-/// call `layout`. Set `layout_algo` to `"force"` for deterministic force
+/// call `layout`. Set `layout-algo` to `"force"` for deterministic force
 /// integration or `"anneal"` for simulated annealing.
 ///
 /// ```example
@@ -48,13 +48,13 @@
   /// value; `"anneal"` uses it as the proposal step size. -> float
   step: 0.81,
   /// Anneal-only step shrink factor, applied when an epoch's acceptance ratio
-  /// falls below `accept_floor`. -> float
+  /// falls below `accept-floor`. -> float
   step-shrink: 0.21,
   /// Cooling factor applied once per epoch. `"anneal"` cools `temp`; `"force"`
   /// shrinks `step`. -> float
   cool: 0.85,
   /// Anneal-only acceptance-ratio threshold below which `step` is shrunk by
-  /// `step_shrink`. -> float
+  /// `step-shrink`. -> float
   accept-floor: 0.15,
   /// Force-only early stop threshold for maximum movement in one step. The
   /// annealing schedule stores this value but does not currently use it for
@@ -66,7 +66,7 @@
   /// Force-mode maximum movement clamp per point and per step. -> float
   delta: 0.4,
   /// Base repulsion strength for vertex-vertex interactions. Also scales
-  /// `gamma_ev`, `gamma_ee`, `gamma_dangling`, and `g_center`. Applies to both
+  /// `gamma-ev`, `gamma-ee`, `gamma-dangling`, and `g-center`. Applies to both
   /// modes through the shared spring energy.
   /// -> float
   beta: 50.0,
@@ -124,10 +124,10 @@
   /// for simulated annealing against the spring energy. -> string
   layout-algo: "force",
   /// Force-only spring pulling temporary z coordinates back toward the layout
-  /// plane. Use with `z_spring_growth` to help separate overlapping
+  /// plane. Use with `z-spring-growth` to help separate overlapping
   /// points during integration. -> float
   z-spring: 0.05,
-  /// Force-only per-epoch multiplier for `z_spring`. -> float
+  /// Force-only per-epoch multiplier for `z-spring`. -> float
   z-spring-growth: 1.3,
   /// Natural spring-length multiplier. This scales the graph's preferred edge
   /// length and the repulsive coefficients derived from it. Applies to both
@@ -135,41 +135,41 @@
   length-scale: 0.5,
 ) = {
   let settings = (
-    viewport_w: str(viewport-w),
-    viewport_h: str(viewport-h),
-    tree_dx: str(tree-dx),
-    tree_dy: str(tree-dy),
+    viewport-w: str(viewport-w),
+    viewport-h: str(viewport-h),
+    tree-dx: str(tree-dx),
+    tree-dy: str(tree-dy),
     steps: str(steps),
     seed: str(seed),
     step: str(step),
-    step_shrink: str(step-shrink),
+    step-shrink: str(step-shrink),
     cool: str(cool),
-    accept_floor: str(accept-floor),
-    early_tol: str(early-tol),
+    accept-floor: str(accept-floor),
+    early-tol: str(early-tol),
     temp: str(temp),
     delta: str(delta),
     beta: str(beta),
-    k_spring: str(k-spring),
-    g_center: str(g-center),
+    k-spring: str(k-spring),
+    g-center: str(g-center),
     epochs: str(epochs),
-    crossing_penalty: str(crossing-penalty),
-    gamma_dangling: str(gamma-dangling),
-    gamma_ee: str(gamma-ee),
-    directional_force: str(directional-force),
-    label_length_scale: str(label-length-scale),
-    label_spring: str(label-spring),
-    label_charge: str(label-charge),
-    label_steps: str(label-steps),
-    label_step: str(label-step),
-    label_early_tol: str(label-early-tol),
-    label_max_delta_scale: str(label-max-delta-scale),
-    gamma_ev: str(gamma-ev),
+    crossing-penalty: str(crossing-penalty),
+    gamma-dangling: str(gamma-dangling),
+    gamma-ee: str(gamma-ee),
+    directional-force: str(directional-force),
+    label-length-scale: str(label-length-scale),
+    label-spring: str(label-spring),
+    label-charge: str(label-charge),
+    label-steps: str(label-steps),
+    label-step: str(label-step),
+    label-early-tol: str(label-early-tol),
+    label-max-delta-scale: str(label-max-delta-scale),
+    gamma-ev: str(gamma-ev),
     eps: str(eps),
-    incremental_energy: incremental-energy,
-    layout_algo: layout-algo,
-    z_spring: str(z-spring),
-    z_spring_growth: str(z-spring-growth),
-    length_scale: str(length-scale),
+    incremental-energy: incremental-energy,
+    layout-algo: layout-algo,
+    z-spring: str(z-spring),
+    z-spring-growth: str(z-spring-growth),
+    length-scale: str(length-scale),
   )
   _plugin.layout_parsed_graph(bytes(graph), cbor.encode(settings))
 }
