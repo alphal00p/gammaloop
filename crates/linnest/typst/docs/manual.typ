@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": curve, draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
 
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
@@ -7,20 +7,20 @@
 
 = Linnest Typst API
 
-Linnest exposes the `linnest.wasm` graph layout plugin and the `kurvst.wasm`
-Bezier helper plugin through a small Typst API.
+Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst
+API. Its drawing layer bundles `kurvst.wasm`; the standalone Kurvst package
+manual documents the full curve and path-pattern API.
 The public surface is intentionally narrow:
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.
 - `subgraph` for subgraph object construction and inspection.
-- `curve` for Bezier splitting and CeTZ curve emission.
 - `layout` for the separate layout pass.
 - `draw` for rendering a laid-out graph object with CeTZ.
 
 == Minimal Builder Example
 
 ```typ
-#import "../src/lib.typ": curve, draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
 
 #let b = graph.builder(
   name: "demo",
@@ -44,14 +44,14 @@ The public surface is intentionally narrow:
   ),
 )
 #let g = graph.finish(b)
-#let g = layout(g, seed: 2, steps: 5)
+#let g = layout(g)
 #let east = subgraph.compass(g, "e")
 #let edges = graph.edges(g, subgraph: east)
 #let dot = graph.dot(g)
 #draw(g, subgraph: east)
 ```
 
-#import "../src/lib.typ": curve, draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
 
 #let b = graph.builder(
   name: "demo",
@@ -75,7 +75,7 @@ The public surface is intentionally narrow:
   ),
 )
 #let g = graph.finish(b)
-#let g = layout(g, seed: 2, steps: 5)
+#let g = layout(g)
 #let east = subgraph.compass(g, "e")
 #let edges = graph.edges(g, subgraph: east)
 #let dot = graph.dot(g)
@@ -95,7 +95,7 @@ objects back to `graph` or `subgraph` for inspection.
 - `graph.node(builder, ..)` returns `(node: index, builder: builder)`.
 - `graph.edge(builder, ..)` returns the updated builder.
 - `graph.finish(builder)` turns a builder into a graph.
-- `layout(graph, seed: 2, steps: 5, ..)` runs layout as an explicit
+- `layout(graph, ..)` runs layout as an explicit
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
 - `draw(graph, ..)` draws a laid-out graph object with CeTZ.
@@ -253,87 +253,6 @@ Subgraph objects are opaque zero-copy values.
 - `subgraph.hedges(sg)` returns included hedge indices.
 - `subgraph.contains(sg, hedge)` tests hedge membership.
 
-== Curve API
-
-The `curve` module is the Typst facade for `kurvst.wasm`. It keeps the
-graph drawing layer small by providing reusable Bezier helpers:
-
-- `curve.split-cubic` splits one cubic Bezier at parameter `t`.
-- `curve.trim-cubic` and `curve.trim-segment` trim a cubic by arc length from
-  either endpoint. `draw` uses this to start edges at the node outset instead of
-  at the node center.
-- `curve.split-through` builds a quadratic through a layout point and returns
-  two cubic halves.
-- `curve.hobby-through` builds the default smooth edge geometry through the
-  source node, edge layout point, and sink node.
-- `curve.edge-halves` combines `hobby-through` and trimming for graph edges.
-- `curve.cetz-bezier`, `curve.cetz-pattern`, and `curve.cetz-edge-halves`
-  convert returned geometry to CeTZ drawing commands.
-
-All geometric points passed to `curve` are dictionaries with numeric `x` and
-`y` fields. Cubic segments use:
-
-```typ
-#let segment = (
-  start: (x: 0, y: 0),
-  ctrl_a: (x: 1, y: 0.5),
-  ctrl_b: (x: 2, y: -0.5),
-  end: (x: 3, y: 0),
-)
-```
-
-=== Pattern Objects
-
-`curve.pattern-cubic` and `curve.pattern-segment` generate a one-dimensional
-pattern along a cubic path. Built-ins are plain Typst pattern dictionaries:
-
-```typ
-#let w = curve.wave()
-#let z = curve.zigzag()
-#let c = curve.coil(longitudinal-scale: 1.6)
-```
-
-String names such as `"wave"`, `"zigzag"`, and `"coil"` are accepted for
-convenience, but they are resolved in Typst before the wasm plugin is called.
-Custom patterns use the same dictionary shape:
-
-```typ
-#let hook = (
-  kind: "points",
-  name: "hook",
-  interpolation: "linear",
-  points: (
-    (at: 0, x: 0, y: 0),
-    (at: 0.25, x: 0.15, y: 1),
-    (at: 0.5, x: 0, y: 0),
-    (at: 0.75, x: -0.15, y: -1),
-    (at: 1, x: 0, y: 0),
-  ),
-)
-```
-
-`at` is the phase position within one wavelength, from `0` to `1`. `x` offsets
-along the path tangent and `y` offsets along the path normal; both are scaled by
-the pattern amplitude. If `at` is omitted, points are spaced evenly. Use
-`interpolation: "linear"` for sharp corners and `"smooth"` for a smooth spline
-through sampled points.
-
-`endpoint_ramp: true` tapers the pattern amplitude at anchored endpoints. This
-is useful for `coil`, whose longitudinal offset would otherwise make the first
-and last visible points sit inside the turn near nodes.
-
-```typ
-#let path = curve.pattern-segment(
-  segment,
-  pattern: hook,
-  amplitude: 0.15,
-  wavelength: 0.7,
-)
-#cetz.canvas({
-  curve.cetz-pattern(path, stroke: black + 0.5pt)
-})
-```
-
 == Generated Reference
 
 #let tidy-style = dictionary(tidy.styles.default)
@@ -341,34 +260,27 @@ and last visible points sit inside the turn near nodes.
 
 #let docs = tidy.parse-module(
   read("../src/lib.typ"),
-  scope: (curve: curve, draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(docs, style: tidy-style)
 
 #let graph-docs = tidy.parse-module(
   read("../src/graph.typ"),
   name: "graph",
-  scope: (curve: curve, draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(graph-docs, style: tidy-style)
-
-#let curve-docs = tidy.parse-module(
-  read("../src/curve.typ"),
-  name: "curve",
-  scope: (curve: curve, draw: draw, graph: graph, layout: layout, subgraph: subgraph),
-)
-#tidy.show-module(curve-docs, style: tidy-style)
 
 #let draw-docs = tidy.parse-module(
   read("../src/draw.typ"),
   name: "draw",
-  scope: (curve: curve, draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(draw-docs, style: tidy-style)
 
 #let subgraph-docs = tidy.parse-module(
   read("../src/subgraph.typ"),
   name: "subgraph",
-  scope: (curve: curve, draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
 )
 #tidy.show-module(subgraph-docs, style: tidy-style)
