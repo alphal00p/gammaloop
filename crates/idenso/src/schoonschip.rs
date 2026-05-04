@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use spenso::{
     algebra::ScalarMul,
@@ -41,6 +43,10 @@ fn is_sum(expr: &Atom) -> bool {
 
 fn expression_size(expr: &Atom) -> (usize, usize) {
     (expr.as_view().get_byte_size(), expr.nterms())
+}
+
+fn trace_sum_contractions() -> bool {
+    std::env::var_os("IDENSO_TRACE_SUM_CONTRACTIONS").is_some()
 }
 
 fn distribute_expanded_left_sum(expanded_left: &Atom, right: &Atom) -> Atom {
@@ -142,24 +148,11 @@ fn direct_contract_factor_into_expr<Aind: AbsInd + ParseableAind>(
     None
 }
 
-fn tensor_contains_any_other_slot<Aind: AbsInd + ParseableAind>(
-    tensor: &SymbolicTensor<Aind>,
-    slot: &LibrarySlot<Aind>,
-    slots: &[LibrarySlot<Aind>],
-) -> bool {
-    let slot_atom = slot.to_atom();
-    slots.iter().any(|other| {
-        let other_atom = other.to_atom();
-        other_atom != slot_atom && tensor_slot_pos(tensor, other).is_some()
-    })
-}
-
 fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
     expanded_sum_side: &Atom,
     target_expr: &Atom,
     slot_pairs: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
 ) -> Option<Atom> {
-    let sum_slots: Vec<_> = slot_pairs.iter().map(|(sum_slot, _)| *sum_slot).collect();
     let terms: Vec<_> = match expanded_sum_side.as_view() {
         AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
         _ => vec![expanded_sum_side.clone()],
@@ -170,53 +163,61 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
         let factors = multiplicative_factors(term.as_view());
         let parsed_factors: Vec<_> = factors.iter().map(parse_tensor_factor::<Aind>).collect();
         let mut consumed = vec![false; factors.len()];
+        let mut consumed_pairs = vec![false; slot_pairs.len()];
         let mut target = target_expr.clone();
 
-        for (sum_slot, target_slot) in slot_pairs {
-            let mut matching_factor = None;
+        for (index, (factor, factor_tensor)) in
+            factors.iter().zip(parsed_factors.iter()).enumerate()
+        {
+            let Some(factor_tensor) = factor_tensor else {
+                continue;
+            };
 
-            for (index, (factor, factor_tensor)) in
-                factors.iter().zip(parsed_factors.iter()).enumerate()
-            {
-                if consumed[index] {
-                    continue;
+            let matched_pairs: Vec<_> = slot_pairs
+                .iter()
+                .enumerate()
+                .filter(|(pair_index, (sum_slot, _))| {
+                    !consumed_pairs[*pair_index]
+                        && tensor_slot_pos(factor_tensor, sum_slot).is_some()
+                })
+                .collect();
+
+            match matched_pairs.as_slice() {
+                [] => {}
+                [(_, (sum_slot, target_slot))] => {
+                    target = direct_contract_factor_into_expr(
+                        factor,
+                        factor_tensor,
+                        sum_slot,
+                        &target,
+                        target_slot,
+                    )?;
+                    consumed[index] = true;
+                    consumed_pairs[matched_pairs[0].0] = true;
                 }
-
-                let Some(factor_tensor) = factor_tensor else {
-                    continue;
-                };
-
-                if tensor_slot_pos(factor_tensor, sum_slot).is_none() {
-                    continue;
+                [
+                    (first_pair_index, (_, first_target_slot)),
+                    (second_pair_index, (_, second_target_slot)),
+                ] if factor_tensor.is_metric && factor_tensor.structure.order() == 2 => {
+                    target = target
+                        .replace(first_target_slot.to_atom())
+                        .with(second_target_slot.to_atom());
+                    consumed[index] = true;
+                    consumed_pairs[*first_pair_index] = true;
+                    consumed_pairs[*second_pair_index] = true;
                 }
-
-                if tensor_contains_any_other_slot(factor_tensor, sum_slot, &sum_slots) {
-                    return None;
-                }
-
-                if matching_factor.is_some() {
-                    return None;
-                }
-
-                let contracted = direct_contract_factor_into_expr(
-                    factor,
-                    factor_tensor,
-                    sum_slot,
-                    &target,
-                    target_slot,
-                )?;
-                matching_factor = Some((index, contracted));
+                _ => return None,
             }
-
-            let (index, contracted) = matching_factor?;
-            consumed[index] = true;
-            target = contracted;
         }
 
-        sum += product_excluding(&factors, &consumed) * target;
+        if consumed_pairs.iter().any(|consumed| !consumed) {
+            return None;
+        }
+
+        sum += product_excluding(&factors, &consumed) * target.normalize_dots();
     }
 
-    Some(sum.normalize_dots())
+    Some(sum)
 }
 
 fn contracted_slot_pairs<Aind: AbsInd + ParseableAind>(
@@ -647,24 +648,60 @@ impl<
         }
 
         let expression = &oexpr * &sexpr;
-        let expression =
-            if EXPANDSUMS && pos_self.n_included() > 0 && is_sum(&sexpr) && is_sum(&oexpr) {
-                // Only distribute genuine sum-by-sum contractions. One-sided
-                // sums such as p(mu) * sum(mu) or g(mu,nu) * sum(mu) should be
-                // handled by the network-informed slot replacement above, not
-                // forced through expansion.
-                direct_contract_smallest_expanded_sum_side(
-                    other, self, &pos_other, &pos_self, &oexpr, &sexpr,
-                )
-                .unwrap_or_else(|| {
-                    distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
-                        .schoonschip_with_net::<false, false, Aind>(
-                            &recursive_schoonschip_settings::<DEPTH_FIRST>(),
-                        )
-                })
+        let expression = if EXPANDSUMS
+            && pos_self.n_included() > 0
+            && is_sum(&sexpr)
+            && is_sum(&oexpr)
+        {
+            // Only distribute genuine sum-by-sum contractions. One-sided
+            // sums such as p(mu) * sum(mu) or g(mu,nu) * sum(mu) should be
+            // handled by the network-informed slot replacement above, not
+            // forced through expansion.
+            let trace = trace_sum_contractions();
+            let start = trace.then(Instant::now);
+            let direct = direct_contract_smallest_expanded_sum_side(
+                other, self, &pos_other, &pos_self, &oexpr, &sexpr,
+            );
+
+            if let Some(result) = direct {
+                if let Some(start) = start {
+                    eprintln!(
+                        "sum_contract direct slots={} left_terms={} right_terms={} left_bytes={} right_bytes={} out_terms={} out_bytes={} elapsed={:.3?}",
+                        pos_self.n_included(),
+                        oexpr.nterms(),
+                        sexpr.nterms(),
+                        oexpr.as_view().get_byte_size(),
+                        sexpr.as_view().get_byte_size(),
+                        result.nterms(),
+                        result.as_view().get_byte_size(),
+                        start.elapsed()
+                    );
+                }
+                result
             } else {
-                expression
-            };
+                let fallback_start = trace.then(Instant::now);
+                let result = distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
+                    .schoonschip_with_net::<false, false, Aind>(&recursive_schoonschip_settings::<
+                        DEPTH_FIRST,
+                    >());
+                if let Some(start) = fallback_start {
+                    eprintln!(
+                        "sum_contract fallback slots={} left_terms={} right_terms={} left_bytes={} right_bytes={} out_terms={} out_bytes={} elapsed={:.3?}",
+                        pos_self.n_included(),
+                        oexpr.nterms(),
+                        sexpr.nterms(),
+                        oexpr.as_view().get_byte_size(),
+                        sexpr.as_view().get_byte_size(),
+                        result.nterms(),
+                        result.as_view().get_byte_size(),
+                        start.elapsed()
+                    );
+                }
+                result
+            }
+        } else {
+            expression
+        };
 
         finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
             Self {
