@@ -6781,13 +6781,11 @@ mod ltd_tests {
 
     #[cfg(feature = "eval")]
     #[test]
-    #[ignore = "diagnostic only: artificial repeated-mass alternating external fixture"]
-    fn diagnostic_artificial_repeated_mass_alternating_mismatch_boundary() {
+    fn ltd_repeated_mass_alternating_hexagon_matches_cff_through_quintic_numerator() {
         use crate::eval::{ComparisonRequest, compare_cff_ltd};
 
         let parsed = one_loop_repeated_mass_alternating_shift_hexagon_graph();
         assert!(crate::validator::validate_parsed_graph(&parsed).ok);
-        println!("repeated groups: {:?}", repeated_groups(&parsed));
         for degree in [0usize, 1, 2, 3, 5] {
             let bounds = if degree == 0 {
                 Vec::new()
@@ -6803,12 +6801,12 @@ mod ltd_tests {
                 parsed: &parsed,
                 cff_options: &Generate3DExpressionOptions {
                     representation: RepresentationMode::Cff,
-                    energy_degree_bounds: bounds,
+                    energy_degree_bounds: bounds.clone(),
                     ..Default::default()
                 },
                 ltd_options: &Generate3DExpressionOptions {
                     representation: RepresentationMode::Ltd,
-                    energy_degree_bounds: Vec::new(),
+                    energy_degree_bounds: bounds,
                     ..Default::default()
                 },
                 numerator_expr: &numerator_expr,
@@ -6817,8 +6815,13 @@ mod ltd_tests {
                 external_override: None,
                 loop_override: None,
                 mass_overrides: &BTreeMap::new(),
-            });
-            println!("degree {degree}: {result:?}");
+            })
+            .unwrap();
+            let tolerance = if degree >= 5 { 1.0e-7 } else { 1.0e-8 };
+            assert!(
+                result.abs_cff_minus_ltd < tolerance,
+                "repeated-mass alternating hexagon {numerator_expr} CFF/LTD mismatch: {result:?}"
+            );
         }
     }
 

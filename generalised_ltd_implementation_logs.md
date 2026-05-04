@@ -5693,12 +5693,18 @@ GL13 raised cut:
   old-Python parity matrix; using a concrete DOT numerator for that specific
   public CLI probe causes the automatic bound merger to produce a
   non-convergent sector, so it is not the right retained CLI fixture.
-- One remaining artificial repeated-mass alternating hexagon diagnostic agrees
-  for the constant numerator but fails as soon as the numerator depends on
-  repeated-channel energies. This graph is not a physical-like kinematic setup
-  and is kept only as an ignored diagnostic boundary for later repeated-channel
-  numerator localization work; it is not part of the supported Step III
-  validation set.
+- Revisited the artificial repeated-mass alternating hexagon diagnostic. The
+  apparent Rust failure was caused by comparing bounded CFF against an LTD
+  expression generated without the same numerator energy-degree bounds. This is
+  harmless for non-repeated LTD, but repeated-pole LTD needs the bounds in order
+  to build the finite-difference numerator-derivative samples. With matched
+  bounds, the graph now agrees from the constant numerator through the
+  double-quintic `edges[0][0]**5 * edges[1][0]**5` case and has been promoted
+  from an ignored diagnostic to a normal `three-dimensional-reps` regression.
+  The Python prototype was not a useful independent oracle for this degenerate
+  repeated-mass graph: its `test-cff-ltd` path already disagrees for the
+  constant numerator, which appears to be a prototype repeated-mass LTD
+  limitation rather than the Rust issue.
 
 Validation for this pass:
 
@@ -5721,6 +5727,9 @@ cargo test -p gammaloop-integration-tests cli_multiloop_high_power_energy_sector
 These passed with the retained double-quintic core probes, the seven public-CLI
 lower-sector box cases above, the physical hexagon public-CLI cubic/quartic
 cases, the multiloop sunrise public-CLI high-power cases, and the retained
-four-loop public-CLI quadratic stress case. The related fast negative check
+four-loop public-CLI quadratic stress case. A follow-up rerun of
+`cargo test -p three-dimensional-reps --features diagnostics,eval,test-support`
+also passed with the repeated-mass alternating hexagon enabled as a normal test
+(`53 passed; 0 ignored`). The related fast negative check
 `cff_box_double_quintic_is_rejected_by_infinity_residue_check` is covered by
 the feature-enabled `three-dimensional-reps` suite.
