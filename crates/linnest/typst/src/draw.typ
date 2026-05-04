@@ -28,11 +28,9 @@
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
 /// #let (node: d, builder: b) = graph.node(b, name: "d")
 /// #let b = graph.edge(b, source: (node: a), sink: (node: c))
-///  #let layed-out = layout(graph.finish(b), seed: 2, steps: 2,g-center:500000,length-scale:0.01)
-/// //#graph.info(layed-out)
+///  #let layed-out = layout(graph.finish(b), seed: 2, steps: 30,g-center:0.5,length-scale:0.1)
 ///
-/// #graph.nodes(layed-out)
-/// //#draw(layed-out)
+/// #draw(layed-out)
 /// ```
 /// -> content
 #let draw(
@@ -111,7 +109,7 @@
       }
       elements.push(edge(
         vertices: ((e.pos.x * unit, e.pos.y * unit), nodelab),
-        bend: bend * 0.5rad,
+        bend: -bend * 0.5rad,
         ..ev-sink,
       ))
       (nodelab, node-by-index.at(str(end.node)).pos)
@@ -132,7 +130,7 @@
       let nodelab = label(str(start.node))
       elements.push(edge(
         vertices: (nodelab, (e.pos.x * unit, e.pos.y * unit)),
-        bend: bend * 0.5rad,
+        bend: -bend * 0.5rad,
         ..ev-source,
       ))
       (nodelab, node-by-index.at(str(start.node)).pos)
