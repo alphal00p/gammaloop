@@ -55,7 +55,7 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 use thiserror::Error;
 
 use idenso::{
-    IndexTooling, color::CS, gamma::AGS, metric::PermuteWithMetric, representations::Bispinor,
+    IndexTooling, color::CS, dirac::AGS, metric::PermuteWithMetric, representations::Bispinor,
 };
 
 use super::{ModuleInit, SliceOrIntOrExpanded};

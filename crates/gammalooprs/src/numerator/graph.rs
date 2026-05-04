@@ -439,7 +439,7 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
 mod test {
 
     // use env_logger::WriteStyle;
-    use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
+    use idenso::{color::ColorSimplifier, dirac::GammaSimplifier};
 
     use spenso::network::parsing::{NetworkParse, ParseSettings};
     use symbolica::{

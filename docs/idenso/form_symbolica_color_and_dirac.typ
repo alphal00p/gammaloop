@@ -14,8 +14,8 @@
 #let color-src = "https://www.nikhef.nl/~form/maindir/packages/color/color.h"
 #let color-examples = "https://www.nikhef.nl/~form/maindir/packages/color/color.tar.gz"
 #let opera = "https://github.com/form-dev/form/blob/master/sources/opera.c"
-#let gamma-rs = "https://github.com/alphal00p/gammaloop/blob/main/crates/idenso/src/gamma.rs"
-#let color-rs = "https://github.com/alphal00p/gammaloop/blob/main/crates/idenso/src/color.rs"
+#let dirac-rs = "https://github.com/alphal00p/gammaloop/blob/main/crates/idenso/src/dirac/mod.rs"
+#let color-rs = "https://github.com/alphal00p/gammaloop/blob/main/crates/idenso/src/color/mod.rs"
 #let sym-pattern = "https://symbolica.io/docs/pattern_matching.html"
 #let sym-rust-id = "https://docs.rs/symbolica/latest/symbolica/id/index.html"
 #let sym-rust-replace = "https://docs.rs/symbolica/latest/symbolica/id/struct.ReplaceBuilder.html"
@@ -49,7 +49,7 @@ This is a specification-level pattern notation. GammaLoop currently has internal
 - FORM package page for `color.h`: #source(color-doc).
 - FORM package source `color.h`: #source(color-src). This source is not currently present in the `form-dev/form` GitHub tree; line references to `color.h` therefore use package-source line numbers recorded in this document and not GitHub anchors.
 - FORM color example programs: #source(color-examples). The package page describes these as simple FORM programs that use `color.h`.
-- GammaLoop/idenso current tensor simplifiers: #source(gamma-rs), #source(color-rs).
+- GammaLoop/idenso current tensor simplifiers: #source(dirac-rs), #source(color-rs).
 - Symbolica pattern matching documentation: #source(sym-pattern).
 - Symbolica Rust `id` API documentation: #source(sym-rust-id), #source(sym-rust-replace).
 - spenso Rust crate documentation: #source(spenso-doc), symbolic tensor-library source: #source(spenso-symbolic).
@@ -112,7 +112,7 @@ GammaLoop/idenso implementation currently collects adjacent gamma matrices by re
 AGS.gamma_pattern(RS.a__, RS.b__, RS.c__) * AGS.gamma_pattern(RS.d__, RS.c__, RS.e__),
 GS.chain_pattern(RS.b__, RS.e__, [RS.a__, RS.c__, RS.d__]),
 ```
-Source: #source(gamma-rs + "#L604-L613").
+Source: #source(dirac-rs + "#L604-L613").
 
 Symbolica + spenso pattern:
 ```rs
@@ -171,7 +171,7 @@ GammaLoop/idenso records the dimension contraction in its repeated-Lorentz chain
 function!(GS.gamma_chain, ..., mink(d_,a_), ..., mink(d_,a_), ...)
   -> function!(GS.gamma_chain, ...) * d_
 ```
-Source: #source(gamma-rs + "#L784-L829").
+Source: #source(dirac-rs + "#L784-L829").
 
 Assumptions: $D$ is the dimension attached to the Lorentz representation. Four-dimensional Chisholm rules below require $D = 4$.
 
@@ -208,7 +208,7 @@ replace(function!(GS.gamma_chain, RS.a__, RS.x_, RS.x_).to_pattern())
   .repeat()
   .with(function!(GS.gamma_trace, RS.a__).to_pattern())
 ```
-Source: #source(gamma-rs + "#L877-L879").
+Source: #source(dirac-rs + "#L877-L879").
 
 == G5. Odd and even trace recursion <rule-gamma-trace-recursion>
 
@@ -587,7 +587,7 @@ Implementation rules:
 
 == Gamma Collection Patterns
 
-Mathematical identity: @eq-gamma-chain-product. Source: #source(gamma-rs + "#L604-L613").
+Mathematical identity: @eq-gamma-chain-product. Source: #source(dirac-rs + "#L604-L613").
 
 Raw gamma pair:
 ```rs
@@ -652,7 +652,7 @@ chain(bis(d_,a_),bis(d_,b_),
   -> d_ * chain(bis(d_,a_),bis(d_,b_),xs___,ys___)
 ```
 
-GammaLoop/idenso currently has the equivalent repeated-object contraction in Rust at #source(gamma-rs + "#L784-L829") and trace closure at #source(gamma-rs + "#L877-L879"). FORM's corresponding short-circuit in `Trace4Gen` removes adjacent equal objects before deeper recursion; source #source(opera + "#L958-L972").
+GammaLoop/idenso currently has the equivalent repeated-object contraction in Rust at #source(dirac-rs + "#L784-L829") and trace closure at #source(dirac-rs + "#L877-L879"). FORM's corresponding short-circuit in `Trace4Gen` removes adjacent equal objects before deeper recursion; source #source(opera + "#L958-L972").
 
 == Gamma Chisholm and Trace Recursion Builders
 
@@ -1089,18 +1089,18 @@ The SU checker procedure uses $T_R = a$, $C_F = a (N_F^2 - 1) / N_F$, $C_A = 2 a
   [G1],
   [$γ(v)_α^β γ(w)_β^χ = (Γ^(v w))_α^χ$],
   [@eq-gamma-chain-join],
-  [#source(opera + "#L715-L745"); #source(gamma-rs + "#L604-L613")],
+  [#source(opera + "#L715-L745"); #source(dirac-rs + "#L604-L613")],
 
   [G2], [chain orientation], [@eq-gamma-orientation], [#source(sym-pattern); #source(spenso-doc)],
   [G3],
   [$γ^μ_α^β γ_(μ,β)^χ = D δ_α^χ$],
   [@eq-gamma-metric-contract],
-  [#source(opera + "#L958-L972"); #source(gamma-rs + "#L784-L829")],
+  [#source(opera + "#L958-L972"); #source(dirac-rs + "#L784-L829")],
 
   [G4],
   [$(Γ^(v_1 ... v_n))_α^α$],
   [@eq-gamma-trace-closure],
-  [#source(opera + "#L730-L745"); #source(gamma-rs + "#L877-L879")],
+  [#source(opera + "#L730-L745"); #source(dirac-rs + "#L877-L879")],
 
   [G5],
   [odd trace zero, two trace],
@@ -1206,7 +1206,7 @@ rg -n 'FORM-Side Test Cases|Q6 ->|F3F3 ->|g14 ->|fiveq ->' form_gamma_color_rule
 Results:
 - No word token `\x70rod` was found; intended occurrences use `product`.
 - No subscripted trace operator was immediately attached to a parenthesized argument; trace calls use explicit spacing.
-- GitHub line-anchor fragments were found for the FORM `opera.c`, GammaLoop `gamma.rs`, and GammaLoop `color.rs` source links. `color.h` rules cite exact package-source line numbers because no official GitHub-hosted `color.h` was found in `form-dev/form`.
+- GitHub line-anchor fragments were found for the FORM `opera.c`, GammaLoop Dirac, and GammaLoop color source links. `color.h` rules cite exact package-source line numbers because no official GitHub-hosted `color.h` was found in `form-dev/form`.
 - The internal names `spenso::gamma_chain` and `spenso::gamma_trace` occur only in source-code snippets or explanatory text documenting GammaLoop internals; target patterns use `chain` and `trace`.
 - Rust-only operations that cannot be static Symbolica RHS patterns, including sequence reversal, parity checks, cyclic loop detection, and fresh-index creation, are assigned to `with_map`, `replace_map`, or explicit Rust builders.
 - The FORM-side test-case section is present and contains expected values for compact gamma tests, compact color tests, and short `color.tar.gz` example instantiations.
@@ -1246,7 +1246,7 @@ cd /tmp/form-color && form -q su-gloop.frm
 - FORM `color.h` package page: #source(color-doc).
 - FORM `color.h` source: #source(color-src).
 - FORM `color.h` example programs: #source(color-examples).
-- GammaLoop/idenso gamma implementation: #source(gamma-rs).
+- GammaLoop/idenso Dirac implementation: #source(dirac-rs).
 - GammaLoop/idenso color implementation: #source(color-rs).
 - Symbolica pattern matching: #source(sym-pattern).
 - Symbolica Rust `id` API: #source(sym-rust-id).

@@ -4,7 +4,7 @@ use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
 use idenso::IndexTooling;
-use idenso::gamma::AGS;
+use idenso::dirac::AGS;
 use idenso::metric::PermuteWithMetric;
 use insta::assert_snapshot;
 use itertools::Itertools;
