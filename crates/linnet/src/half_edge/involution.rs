@@ -13,7 +13,7 @@ use thiserror::Error;
 use super::{
     builder::HedgeData,
     nodestore::{NodeStorage, NodeStorageOps},
-    subgraph::{Inclusion, SubSetLike},
+    subgraph::SubSetLike,
     swap::Swap,
     GVEdgeAttrs, HedgeGraph, NodeIndex,
 };

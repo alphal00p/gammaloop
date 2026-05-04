@@ -1261,13 +1261,13 @@ impl Particle {
         };
 
         // Generate base styles
-        let base_source = format!("source_stroke(c: {}, thickness: {})", color, thickness);
-        let base_sink = format!("sink_stroke(c: {}, thickness: {})", color, thickness);
+        let base_source = format!("source-stroke(c: {}, thickness: {})", color, thickness);
+        let base_sink = format!("sink-stroke(c: {}, thickness: {})", color, thickness);
 
         let (source, sink) = if self.is_ghost() {
             (
-                format!("source_stroke(c: {color}, thickness: {thickness},dash: dotted)",),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dotted)"),
+                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)",),
+                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
             )
         } else if self.is_fermion() {
             (base_source, base_sink)
@@ -1295,8 +1295,8 @@ impl Particle {
         } else if self.is_scalar() {
             // Scalar particles: dashed lines
             (
-                format!("source_stroke(c: {color}, thickness: {thickness},dash: dashed)",),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dashed)"),
+                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dashed)",),
+                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
             )
         } else {
             // Default: solid line
@@ -1850,31 +1850,56 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         }
 
         let mut edge_style_content = String::new();
-        edge_style_content.push_str(r#"#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, cetz,edge,hide
-#import "@preview/mitex:0.2.6": *
+        edge_style_content.push_str(
+            r#"#import "@preview/mitex:0.2.6": *
 
-#let massive = 1mm
-#let massless = 0.5mm
-#let source_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:(paint:c,thickness:thickness)+dash)
-#let sink_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:source_stroke(c:c.lighten(50%), thickness:thickness,dash:dash).stroke)
-#let wave = (decorations:cetz.decorations.wave.with(amplitude: 4pt,segment-length:0.2))
-#let double = (extrude:(-0.5mm, 0.5mm))
-#let arrow = (marks:((inherit:"solid",rev:false,pos:1.1,scale:50%),))
-#let antiarrow = (marks:((inherit:"solid",rev:true,pos:1.1,scale:50%),))
-#let arrowmap = orientation => if orientation == "Default"{
-  arrow
-} else if orientation == "Reversed"{
-  antiarrow
-} else{
-  (:)
+#let massive = 1.0pt
+#let massless = 0.55pt
+#let dashed = (0.1em, 0.45em)
+#let dotted = "dotted"
+
+#let stroke-style(c: black, thickness: massless, dash: none) = {
+  let stroke = (paint: c, thickness: thickness, cap: "round")
+  if dash == none {
+    (stroke: stroke)
+  } else {
+    (stroke: stroke + (dash: dash))
+  }
 }
-#let coil = (decorations:cetz.decorations.coil.with(amplitude: 4pt,segment-length:0.2))
-#let zigzag = (decorations:cetz.decorations.zigzag.with(amplitude: 4pt,segment-length:0.2))
-#let dashed = (dash: (0.1em, 0.5em))
-#let dotted = (dash: (0.01em, 0.3em))
+
+#let source-stroke(c: black, thickness: massless, dash: none) = {
+  stroke-style(c: c, thickness: thickness, dash: dash)
+}
+
+#let sink-stroke(c: black, thickness: massless, dash: none) = {
+  stroke-style(c: c.lighten(45%), thickness: thickness, dash: dash)
+}
+
+#let wave = (
+  pattern: "wave",
+  pattern-amplitude: 0.14,
+  pattern-wavelength: 0.55,
+)
+#let coil = (
+  pattern: "coil",
+  pattern-amplitude: 0.14,
+  pattern-wavelength: 0.55,
+  pattern-coil-longitudinal-scale: 1.6,
+)
+#let zigzag = (
+  pattern: "zigzag",
+  pattern-amplitude: 0.14,
+  pattern-wavelength: 0.55,
+)
+#let default-edge = (
+  source: source-stroke(),
+  sink: sink-stroke(),
+  label: none,
+)
 // Auto-generated particle styles from model (computed in Rust)
 #let map = (
-"#);
+"#,
+        );
 
         // Generate styles for all particles in the model
         for particle in self.particles.iter() {
@@ -1886,7 +1911,69 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             ));
         }
 
-        edge_style_content.push_str(")\n");
+        edge_style_content.push_str(
+            r#")
+
+#let particle-name(edge) = {
+  let particle = edge.at("particle", default: none)
+  if particle == none {
+    none
+  } else {
+    str(particle).trim("\"")
+  }
+}
+
+#let edge-entry(edge) = {
+  let particle = particle-name(edge)
+  if particle == none {
+    default-edge
+  } else {
+    map.at(particle, default: default-edge)
+  }
+}
+
+#let text-value(value) = str(value).trim("\"")
+
+#let interpolate-template(template, edge) = {
+  if template == none {
+    none
+  } else {
+    let text = text-value(template)
+    text = text.replace("{{", "\u{e000}").replace("}}", "\u{e001}")
+    for key in edge.keys() {
+      let value = edge.at(key)
+      if value != none {
+        text = text.replace("{" + str(key) + "}", text-value(value))
+      }
+    }
+    text.replace("\u{e000}", "{").replace("\u{e001}", "}")
+  }
+}
+
+#let label-content(value, edge) = {
+  if value == none {
+    none
+  } else if type(value) == content {
+    value
+  } else {
+    [#interpolate-template(value, edge)]
+  }
+}
+
+#let source-style(edge) = edge-entry(edge).source
+#let sink-style(edge) = edge-entry(edge).sink
+#let edge-label(edge) = {
+  let label-template = edge.at("display-label", default: edge.at("label-template", default: none))
+  if label-template != none {
+    label-content(label-template, edge)
+  } else if edge.at("label", default: none) != none {
+    label-content(edge.at("label"), edge)
+  } else {
+    label-content(edge-entry(edge).label, edge)
+  }
+}
+"#,
+        );
 
         fs::write(&template_path, edge_style_content)?;
         info!(
