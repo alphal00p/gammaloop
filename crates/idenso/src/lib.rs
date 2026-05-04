@@ -39,6 +39,7 @@ use crate::{
 
 pub mod tensor;
 
+pub mod chain;
 pub mod color;
 pub mod gamma;
 pub mod metric;
