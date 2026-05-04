@@ -22,14 +22,7 @@ The public surface is intentionally narrow:
 ```typ
 #import "../src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(
-  name: "demo",
-  edge-statements: (
-    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
-    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
-    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
-  ),
-)
+#let b = graph.builder(name: "demo")
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "c")
 #let b = graph.edge(
@@ -48,19 +41,15 @@ The public surface is intentionally narrow:
 #let east = subgraph.compass(g, "e")
 #let edges = graph.edges(g, subgraph: east)
 #let dot = graph.dot(g)
-#draw(g, subgraph: east)
+#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
+#let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
+#let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
+#draw(g, subgraph: east, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
 #import "../src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(
-  name: "demo",
-  edge-statements: (
-    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
-    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
-    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
-  ),
-)
+#let b = graph.builder(name: "demo")
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "c")
 #let b = graph.edge(
@@ -79,7 +68,10 @@ The public surface is intentionally narrow:
 #let east = subgraph.compass(g, "e")
 #let edges = graph.edges(g, subgraph: east)
 #let dot = graph.dot(g)
-#draw(g, subgraph: east)
+#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
+#let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
+#let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
+#draw(g, subgraph: east, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 
 == Graph Objects
 
@@ -119,17 +111,16 @@ and the builder object expand each placeholder while constructing the graph
 object. Use `{{` and `}}` for literal braces. Unknown placeholders are left
 unchanged.
 
-This is most useful for graph-level `edge-statements`: the default edge
-statement is merged into each edge, then expanded against that edge's complete
-statement dictionary. The following default label renderer consumes the
-per-edge `label` statement:
+This is useful for graph-level `edge-statements`: the default edge statement is
+merged into each edge, then expanded against that edge's complete statement
+dictionary. The following default metadata records a display label derived from
+the per-edge `label` statement:
 
 ```typ
 #let b = graph.builder(
   edge-statements: (
-    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
-    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
-    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
+    color: "000000",
+    display_label: "{label}",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a")
@@ -140,11 +131,20 @@ per-edge `label` statement:
   sink: (node: c),
   statements: (
     color: "0055ff",
-    source-color: "d72638",
-    sink-color: "1b7f4c",
     label: "a-c",
   ),
 )
+```
+
+Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge
+callbacks receive the merged `scope`, edge statements, endpoint records, and the
+edge index:
+
+```typ
+#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display_label]
+#let source-style(edge) = (stroke: red + 0.5pt)
+#let sink-style(edge) = (stroke: blue + 0.5pt)
+#draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
 `graph.build` accepts the same data in one dictionary:
@@ -156,7 +156,7 @@ per-edge `label` statement:
   node-statements: (shape: "circle"),
   edge-statements: (
     color: "000000",
-    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    display_label: "{label}",
   ),
   nodes: ((name: "a"), (name: "b")),
   edges: ((

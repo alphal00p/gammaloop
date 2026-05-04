@@ -1,5 +1,40 @@
 #let _plugin = plugin("./linnest.wasm")
 
+#let _edge-eval-statements(
+  statements,
+  eval-source: none,
+  eval-sink: none,
+  eval-label: none,
+) = {
+  let result = statements
+  if eval-source != none {
+    result = result + (eval-source: eval-source)
+  }
+  if eval-sink != none {
+    result = result + (eval-sink: eval-sink)
+  }
+  if eval-label != none {
+    result = result + (eval-label: eval-label)
+  }
+  result
+}
+
+#let _edge-spec(edge) = {
+  let statements = _edge-eval-statements(
+    edge.at("statements", default: (:)),
+    eval-source: edge.at("eval-source", default: none),
+    eval-sink: edge.at("eval-sink", default: none),
+    eval-label: edge.at("eval-label", default: none),
+  )
+  let clean = edge
+  for key in ("eval-source", "eval-sink", "eval-label") {
+    if clean.keys().contains(key) {
+      let _ = clean.remove(key)
+    }
+  }
+  clean + (statements: statements)
+}
+
 /// Parse one or more DOT digraphs into graph objects.
 ///
 /// ```example
@@ -34,6 +69,21 @@
   /// -> dictionary
   edge-statements: (:),
 
+  /// Kebab-case shorthand for the default `eval-source` edge statement.
+  /// This is metadata for downstream renderers; `draw` uses `source-style`.
+  /// -> none | string
+  eval-source: none,
+
+  /// Kebab-case shorthand for the default `eval-sink` edge statement.
+  /// This is metadata for downstream renderers; `draw` uses `sink-style`.
+  /// -> none | string
+  eval-sink: none,
+
+  /// Kebab-case shorthand for the default `eval-label` edge statement.
+  /// This is metadata for downstream renderers; `draw` uses `edge-label`.
+  /// -> none | string
+  eval-label: none,
+
   /// Default DOT statements for nodes. -> dictionary
   node-statements: (:),
 
@@ -43,17 +93,24 @@
   nodes: (),
 
   /// Edge specifications. Each edge may define `source`, `sink`,
-  /// `orientation`, `flow`, `id`, and `statements`. The `source` and `sink`
-  /// fields use the same endpoint dictionaries accepted by @edge. -> array
+  /// `orientation`, `flow`, `id`, `statements`, `eval-source`, `eval-sink`,
+  /// and `eval-label`. The `source` and `sink` fields use the same endpoint
+  /// dictionaries accepted by @edge. -> array
   edges: (),
 ) = {
+  let edge-statements = _edge-eval-statements(
+    edge-statements,
+    eval-source: eval-source,
+    eval-sink: eval-sink,
+    eval-label: eval-label,
+  )
   _plugin.graph_from_spec(cbor.encode((
     name: name,
     statements: statements,
     edge_statements: edge-statements,
     node_statements: node-statements,
     nodes: nodes,
-    edges: edges,
+    edges: edges.map(_edge-spec),
   )))
 }
 
@@ -62,20 +119,36 @@
 /// `statements`, `node-statements`, and `edge-statements` set graph-level DOT
 /// attributes that are carried into the finished graph. String values may use
 /// `{name}` placeholders; edge defaults expand after per-edge statements are
-/// merged, so an `edge-statements` value can refer to a `label` supplied by
-/// @edge.
+/// merged, so an `edge-statements`, `eval-source`, or `eval-sink` value can
+/// refer to a `label` supplied by @edge.
 ///
 /// ```example
 /// #let b = graph.builder(
 ///   name: "demo",
 ///   statements: (full_num: "x + y"),
-///   edge-statements: (eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])"),
+///   edge-statements: (display_label: "{label}"),
+///   eval-source: "(stroke: red + 0.5pt)",
+///   eval-sink: "(stroke: blue + 0.5pt)",
 /// )
 /// #let (node: a, builder: b) = graph.node(b, name: "a")
 /// #a
 /// ```
 /// -> bytes
-#let builder(name: none, statements: (:), node-statements: (:), edge-statements: (:)) = {
+#let builder(
+  name: none,
+  statements: (:),
+  node-statements: (:),
+  edge-statements: (:),
+  eval-source: none,
+  eval-sink: none,
+  eval-label: none,
+) = {
+  let edge-statements = _edge-eval-statements(
+    edge-statements,
+    eval-source: eval-source,
+    eval-sink: eval-sink,
+    eval-label: eval-label,
+  )
   _plugin.graph_builder(cbor.encode((
     name: name,
     statements: statements,
@@ -131,7 +204,16 @@
   flow: none,
   id: none,
   statements: (:),
+  eval-source: none,
+  eval-sink: none,
+  eval-label: none,
 ) = {
+  let statements = _edge-eval-statements(
+    statements,
+    eval-source: eval-source,
+    eval-sink: eval-sink,
+    eval-label: eval-label,
+  )
   _plugin.graph_builder_add_edge(
     bytes(builder),
     cbor.encode((
