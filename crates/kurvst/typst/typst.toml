@@ -1,0 +1,14 @@
+[package]
+name = "kurvst"
+version = "0.1.0"
+entrypoint = "src/lib.typ"
+authors = ["GammaLoop contributors"]
+license = "MIT"
+description = "Kurbo-backed Bezier and path pattern helpers for Typst."
+repository = "https://github.com/alphal00p/gammaloop"
+keywords = ["bezier", "curve", "path", "cetz", "wasm"]
+categories = ["visualization", "utility"]
+exclude = [
+  "docs",
+  "examples",
+]

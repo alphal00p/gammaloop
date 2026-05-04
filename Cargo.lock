@@ -2169,6 +2169,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kurvst"
+version = "0.1.0"
+dependencies = [
+ "ciborium",
+ "kurbo",
+ "serde",
+ "wasm-minimal-protocol",
+]
+
+[[package]]
 name = "lab"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2246,16 +2256,6 @@ dependencies = [
  "rkyv",
  "serde",
  "thiserror 2.0.18",
- "wasm-minimal-protocol",
-]
-
-[[package]]
-name = "linnest-curve"
-version = "0.1.0"
-dependencies = [
- "ciborium",
- "kurbo",
- "serde",
  "wasm-minimal-protocol",
 ]
 
