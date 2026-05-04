@@ -182,12 +182,12 @@
 /// The graph must already have positions, so call `layout` first. Node and edge
 /// DOT `eval_*` statements are evaluated in `scope` and forwarded to CeTZ.
 ///
-/// ```example
+/// #example(`
 /// #let b = graph.builder(
 ///   name: "demo",
 ///   edge-statements: (
-///     eval_source: "(stroke: black + 1.2pt, pattern: source-patterns.at(eid), pattern-amplitude: 0.18, pattern-wavelength: 0.55, pattern-coil-longitudinal-scale: 1.6)",
-///     eval_sink: "(stroke: black + 1.2pt, pattern: sink-patterns.at(eid), pattern-amplitude: 0.18, pattern-wavelength: 0.55, pattern-coil-longitudinal-scale: 1.6)",
+///     eval_source: "(stroke: red + 1.2pt, pattern: source-patterns.at(eid), pattern-amplitude: 0.18, pattern-wavelength: 0.55, pattern-coil-longitudinal-scale: 1.6)",
+///     eval_sink: "(stroke: blue + 1.2pt, pattern: sink-patterns.at(eid), pattern-amplitude: 0.18, pattern-wavelength: 0.55, pattern-coil-longitudinal-scale: 1.6)",
 ///   ),
 /// )
 /// #let source-patterns = (
@@ -225,10 +225,10 @@
 /// #let b = graph.edge(b, source: (node: d), sink: none)
 /// #let b = graph.edge(b, source: (node: e, compass: "e"), sink: none)
 /// #let b = graph.edge(b, source: (node: a), sink: none)
-/// #let layed-out = layout(graph.finish(b), beta: 50,gamma-ee:0.1,gamma-dangling:5,gamma-ev:0.01,seed: 2,epochs:30, steps: 30, g-center: 0.005, length-scale: 0.5)
+/// #let layed-out = layout(graph.finish(b))
 /// #let east = subgraph.compass(layed-out, "e")
 /// #draw(layed-out,node-radius: 1,subgraph:east,scope: (source-patterns: source-patterns, sink-patterns: sink-patterns))
-/// ```
+/// `,dir:ttb)
 /// -> content
 #let draw(
   /// Laid-out graph object returned by `layout`. -> bytes
