@@ -50,6 +50,28 @@ fn trace_sum_contractions() -> bool {
     std::env::var_os("IDENSO_TRACE_SUM_CONTRACTIONS").is_some()
 }
 
+fn disable_direct_sum_contractions() -> bool {
+    std::env::var_os("IDENSO_DISABLE_DIRECT_SUM_CONTRACTIONS").is_some()
+}
+
+fn trace_contraction_ordering() -> bool {
+    std::env::var_os("IDENSO_TRACE_CONTRACTION_ORDERING").is_some()
+}
+
+fn expression_order_metric_name<const METRIC: u8>() -> &'static str {
+    match METRIC {
+        ORDER_MIN_LARGEST_OPERAND_BYTES => "min_largest_operand_bytes",
+        ORDER_MIN_PRODUCT_TERMS => "min_product_terms",
+        ORDER_MIN_PRODUCT_BYTES => "min_product_bytes",
+        ORDER_SMALLEST_DEGREE_MIN_LARGEST_OPERAND_BYTES => {
+            "smallest_degree_min_largest_operand_bytes"
+        }
+        ORDER_SMALLEST_DEGREE_MIN_PRODUCT_TERMS => "smallest_degree_min_product_terms",
+        ORDER_SMALLEST_DEGREE_MIN_PRODUCT_BYTES => "smallest_degree_min_product_bytes",
+        _ => "unknown",
+    }
+}
+
 fn distribute_expanded_left_sum(expanded_left: &Atom, right: &Atom) -> Atom {
     expanded_left.terms().fold(Atom::Zero, |sum, term| {
         let term = term.to_owned();
@@ -253,6 +275,52 @@ fn contracted_slot_pairs<Aind: AbsInd + ParseableAind>(
     }
 
     Some(pairs)
+}
+
+fn structure_contains_slot<Aind: AbsInd + ParseableAind>(
+    structure: &OrderedStructure<LibraryRep, Aind>,
+    slot_atom: &Atom,
+) -> bool {
+    (0..structure.order()).any(|pos| {
+        structure
+            .get_slot(SlotIndex::from(pos))
+            .is_some_and(|slot| slot.to_atom() == *slot_atom)
+    })
+}
+
+fn removed_slots_still_in_expression<Aind: AbsInd + ParseableAind>(
+    left: &SymbolicTensor<Aind>,
+    right: &SymbolicTensor<Aind>,
+    left_positions: &SubSet<SlotIndex>,
+    right_positions: &SubSet<SlotIndex>,
+    result_structure: &OrderedStructure<LibraryRep, Aind>,
+    result: &Atom,
+) -> Vec<String> {
+    let mut residual = Vec::new();
+    for slot in left_positions
+        .included_iter()
+        .filter_map(|pos| left.structure.get_slot(pos))
+        .chain(
+            right_positions
+                .included_iter()
+                .filter_map(|pos| right.structure.get_slot(pos)),
+        )
+    {
+        let slot_atom = slot.to_atom();
+        if !structure_contains_slot(result_structure, &slot_atom)
+            && result
+                .replace(slot_atom.clone())
+                .match_iter()
+                .next()
+                .is_some()
+        {
+            let slot_name = slot_atom.to_string();
+            if !residual.contains(&slot_name) {
+                residual.push(slot_name);
+            }
+        }
+    }
+    residual
 }
 
 fn direct_contract_smallest_expanded_sum_side<Aind: AbsInd + ParseableAind>(
@@ -514,6 +582,9 @@ where
             Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
         >::contract(executor, graph, lib)?;
 
+        let trace_ordering = trace_contraction_ordering();
+        let mut step = 0usize;
+
         loop {
             graph.sync_order();
 
@@ -561,17 +632,41 @@ where
                             node_size(nid1, n1)?,
                             node_size(nid2, n2)?,
                         ),
+                        degree,
                         nid1,
                         n1,
                         nid2,
                         n2,
                     ))
                 })
-                .min_by_key(|(score, _, _, _, _)| *score);
+                .min_by_key(|(score, _, _, _, _, _)| *score);
 
-            let Some((_, nid1, n1, nid2, n2)) = edge_to_contract else {
+            let Some((score, degree, nid1, n1, nid2, n2)) = edge_to_contract else {
                 break;
             };
+
+            if trace_ordering {
+                let describe = |node: &NetworkNode<DummyKey, symbolica::atom::Symbol>| match node {
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                        let tensor = &executor.tensors[*index];
+                        let (bytes, terms) = expression_size(&tensor.expression);
+                        format!(
+                            "tensor#{index} degree_expr_terms={terms} bytes={bytes} structure={}",
+                            tensor.structure
+                        )
+                    }
+                    other => format!("{other:?}"),
+                };
+                eprintln!(
+                    "order_contract metric={} step={} degree={} score={:?} left={} right={}",
+                    expression_order_metric_name::<METRIC>(),
+                    step,
+                    degree,
+                    score,
+                    describe(n1),
+                    describe(n2),
+                );
+            }
 
             let new_node = match (n1, n2) {
                 (NetworkNode::Leaf(_), NetworkNode::Op(NetworkOp::Product))
@@ -613,6 +708,7 @@ where
                 NetworkNode::Leaf(new_node),
             );
             didsmth = true;
+            step += 1;
         }
 
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
@@ -939,14 +1035,21 @@ impl<
             // forced through expansion.
             let trace = trace_sum_contractions();
             let start = trace.then(Instant::now);
-            let direct = direct_contract_smallest_expanded_sum_side(
-                other, self, &pos_other, &pos_self, &oexpr, &sexpr,
-            );
+            let direct = if disable_direct_sum_contractions() {
+                None
+            } else {
+                direct_contract_smallest_expanded_sum_side(
+                    other, self, &pos_other, &pos_self, &oexpr, &sexpr,
+                )
+            };
 
             if let Some(result) = direct {
                 if let Some(start) = start {
+                    let residual_removed = removed_slots_still_in_expression(
+                        self, other, &pos_self, &pos_other, &structure, &result,
+                    );
                     eprintln!(
-                        "sum_contract direct slots={} left_terms={} right_terms={} left_bytes={} right_bytes={} out_terms={} out_bytes={} elapsed={:.3?}",
+                        "sum_contract direct slots={} left_terms={} right_terms={} left_bytes={} right_bytes={} out_terms={} out_bytes={} residual_removed_slots={:?} elapsed={:.3?}",
                         pos_self.n_included(),
                         oexpr.nterms(),
                         sexpr.nterms(),
@@ -954,6 +1057,7 @@ impl<
                         sexpr.as_view().get_byte_size(),
                         result.nterms(),
                         result.as_view().get_byte_size(),
+                        residual_removed,
                         start.elapsed()
                     );
                 }
@@ -965,8 +1069,11 @@ impl<
                         DEPTH_FIRST,
                     >());
                 if let Some(start) = fallback_start {
+                    let residual_removed = removed_slots_still_in_expression(
+                        self, other, &pos_self, &pos_other, &structure, &result,
+                    );
                     eprintln!(
-                        "sum_contract fallback slots={} left_terms={} right_terms={} left_bytes={} right_bytes={} out_terms={} out_bytes={} elapsed={:.3?}",
+                        "sum_contract fallback slots={} left_terms={} right_terms={} left_bytes={} right_bytes={} out_terms={} out_bytes={} residual_removed_slots={:?} elapsed={:.3?}",
                         pos_self.n_included(),
                         oexpr.nterms(),
                         sexpr.nterms(),
@@ -974,6 +1081,7 @@ impl<
                         sexpr.as_view().get_byte_size(),
                         result.nterms(),
                         result.as_view().get_byte_size(),
+                        residual_removed,
                         start.elapsed()
                     );
                 }

@@ -74,6 +74,7 @@ fn main() {
         .as_deref()
         .and_then(order_from_name)
         .unwrap_or_default();
+    let assert_full_simplification = std::env::args().nth(3).as_deref() != Some("no_assert");
 
     if selected(&filter, "bare_vertex_substitution_5") {
         let start = Instant::now();
@@ -104,7 +105,15 @@ fn main() {
                 order,
             );
             if vertex_count == 8 {
-                common::assert_no_network_internal_indices(&result);
+                let residual = common::residual_network_internal_indices(&result, vertex_count);
+                if residual.is_empty() {
+                    println!("network_full_algebra_8 residual_internal_indices=[]");
+                } else {
+                    println!("network_full_algebra_8 residual_internal_indices={residual:?}");
+                    if assert_full_simplification {
+                        panic!("internal indices remained: {residual:?}");
+                    }
+                }
             }
             report(&format!("{name}_{}", order_name(order)), start, &result);
         }
