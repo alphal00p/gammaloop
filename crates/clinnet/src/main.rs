@@ -42,7 +42,7 @@ impl TemplateKind {
             TemplateKind::Figure => "figure.typ",
             TemplateKind::Grid => "grid.typ",
             TemplateKind::Plugin => "linnest.wasm",
-            TemplateKind::CurvePlugin => "linnest-curve.wasm",
+            TemplateKind::CurvePlugin => "kurvst.wasm",
             TemplateKind::Layout => "layout.typ",
         }
     }
