@@ -8,7 +8,7 @@ use spenso::structure::PermutedStructure;
 use spenso::symbolica_atom::IntoAtom;
 use spenso::{chain, s, slot};
 
-use crate::gamma;
+use crate::{gamma, gamma0, gamma5};
 
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
@@ -43,7 +43,7 @@ fn assert_gamma_zero(expr: Atom) {
 
 #[test]
 fn gamma_construct() {
-    println!("{}", AGS.gamma_pattern(RS.a_, RS.b_, RS.c_));
+    println!("{}", gamma!(RS.a_, RS.b_, RS.c_));
 
     let f = GG
         .clone()
@@ -122,6 +122,29 @@ fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
     let expr = gamma!(mu, slot!(r.bis_d, a), 1);
 
     assert_bare_snapshot!(expr, @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
+}
+
+#[test]
+fn gamma5_macro_accepts_explicit_indices() {
+    let r = TestReps::new();
+    let expr = gamma5!(slot!(r.bis4, a), slot!(r.bis4, b));
+
+    assert_bare_snapshot!(expr, @"gamma5(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma_macros_accept_pattern_indices() {
+    let gamma = gamma!(RS.a__, RS.b__, RS.c__);
+    let gamma5 = gamma5!(RS.b__, RS.c__);
+    let gamma0 = gamma0!(RS.b__, RS.c__);
+    let dimensioned_gamma = gamma!(RS.a__, [RS.d_, RS.b_], [RS.d_, RS.c_]);
+    let dimensioned_gamma0 = gamma0!([RS.d_, RS.b_], [RS.d_, RS.c_]);
+
+    assert_bare_snapshot!(gamma, @"gamma(bis(b__),bis(c__),mink(a__))");
+    assert_bare_snapshot!(gamma5, @"gamma5(bis(b__),bis(c__))");
+    assert_bare_snapshot!(gamma0, @"gamma0(bis(b__),bis(c__))");
+    assert_bare_snapshot!(dimensioned_gamma, @"gamma(bis(d_,b_),bis(d_,c_),mink(a__))");
+    assert_bare_snapshot!(dimensioned_gamma0, @"gamma0(bis(d_,b_),bis(d_,c_))");
 }
 
 #[test]
