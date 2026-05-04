@@ -1,4 +1,4 @@
-use linnet::half_edge::subgraph::SubSetLike;
+use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use spenso::{
     algebra::ScalarMul,
     contraction::{Contract, ContractionError},
@@ -13,18 +13,21 @@ use spenso::{
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
-        StructureContract, TensorStructure,
+        OrderedStructure, SlotIndex, StructureContract, TensorStructure,
         permuted::PermuteTensor,
+        representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     function,
+    id::MatchStack,
 };
 
 use crate::{
     W_,
+    metric::not_slot,
     tensor::{SymbolicNetParse, SymbolicTensor},
 };
 
@@ -34,6 +37,43 @@ pub struct Schoonschipify<const EXPANDSUMS: bool, const RECURSE: bool, const DEP
 
 fn is_sum(expr: &Atom) -> bool {
     matches!(expr.as_view(), AtomView::Add(_))
+}
+
+fn positive_even_power(exp: AtomView<'_>) -> bool {
+    matches!(i64::try_from(exp), Ok(exp) if exp > 0 && exp % 2 == 0)
+}
+
+fn positive_odd_power(exp: AtomView<'_>) -> bool {
+    matches!(i64::try_from(exp), Ok(exp) if exp > 0 && exp % 2 == 1)
+}
+
+fn matched_power(matches: &MatchStack<'_>, power: symbolica::atom::Symbol) -> i64 {
+    i64::try_from(&matches.get(power).unwrap().to_atom()).unwrap()
+}
+
+fn matched_pattern(pattern: &Atom, matches: &MatchStack<'_>) -> Atom {
+    pattern.to_pattern().replace_wildcards_with_matches(matches)
+}
+
+fn pow_if_needed(base: Atom, exponent: i64) -> Atom {
+    match exponent {
+        0 => Atom::num(1),
+        1 => base,
+        _ => base.pow(Atom::num(exponent)),
+    }
+}
+
+fn even_power_replacement(base: Atom, exponent: i64) -> Atom {
+    pow_if_needed(base, exponent / 2)
+}
+
+fn odd_power_replacement(base: Atom, square: Atom, exponent: i64) -> Atom {
+    let half_power = exponent / 2;
+    if half_power == 0 {
+        base
+    } else {
+        pow_if_needed(square, half_power) * base
+    }
 }
 
 struct SchoonschipSmallestDegree<
@@ -120,6 +160,123 @@ where
     }
 }
 
+fn recursive_schoonschip_settings<const DEPTH_FIRST: bool>() -> SchoonschipSettings {
+    if DEPTH_FIRST {
+        SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
+    } else {
+        SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
+    }
+}
+
+fn recursive_schoonschip<
+    const EXPANDSUMS: bool,
+    const DEPTH_FIRST: bool,
+    Aind: AbsInd + DummyAind + ParseableAind + 'static,
+>(
+    expr: &Atom,
+) -> Atom {
+    expr.schoonschip_with_net::<EXPANDSUMS, true, Aind>(&recursive_schoonschip_settings::<
+        DEPTH_FIRST,
+    >())
+}
+
+fn finish_contract<
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+    Aind: AbsInd + DummyAind + ParseableAind + 'static,
+>(
+    mut result: SymbolicTensor<Aind>,
+    recurse_result: bool,
+) -> Result<SymbolicTensor<Aind>, ContractionError> {
+    if recurse_result {
+        result.expression =
+            recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&result.expression);
+    }
+    result.expression = result.expression.normalize_dots();
+    Ok(result)
+}
+
+fn single_contracted_pos(positions: &SubSet<SlotIndex>) -> Option<SlotIndex> {
+    // `merge` marks the slots from one side that participate in the current
+    // contraction. The metric shortcut is only unambiguous for one contracted
+    // metric leg and one contracted tensor leg.
+    (positions.n_included() == 1)
+        .then(|| positions.included_iter().next())
+        .flatten()
+}
+
+fn metric_free_slot<Aind: AbsInd>(
+    metric: &SymbolicTensor<Aind>,
+    contracted_pos: SlotIndex,
+) -> Option<LibrarySlot<Aind>> {
+    if metric.structure.order() != 2 {
+        return None;
+    }
+
+    (0..metric.structure.order())
+        .map(SlotIndex::from)
+        .find(|&pos| pos != contracted_pos)
+        .and_then(|pos| metric.structure.get_slot(pos))
+}
+
+fn contract_metric_into_tensor<Aind: AbsInd + ParseableAind>(
+    metric: &SymbolicTensor<Aind>,
+    tensor: &SymbolicTensor<Aind>,
+    metric_positions: &SubSet<SlotIndex>,
+    tensor_positions: &SubSet<SlotIndex>,
+    tensor_expr: &Atom,
+    structure: OrderedStructure<LibraryRep, Aind>,
+) -> Option<SymbolicTensor<Aind>> {
+    if metric.is_composite || !metric.is_metric {
+        return None;
+    }
+
+    // A rank-two metric acts as an index relabeling operator:
+    // g(i, j) * T(..., i, ...) -> T(..., j, ...).
+    // The actual contracted leg comes from the network merge information; the
+    // remaining metric leg is the slot that should be propagated into `tensor`.
+    let metric_pos = single_contracted_pos(metric_positions)?;
+    let tensor_pos = single_contracted_pos(tensor_positions)?;
+    let free_metric_slot = metric_free_slot(metric, metric_pos)?;
+    let contracted_tensor_slot = tensor.structure.get_slot(tensor_pos)?;
+
+    Some(SymbolicTensor {
+        structure,
+        is_composite: tensor.is_composite,
+        is_metric: tensor.is_metric,
+        expression: tensor_expr
+            .replace(contracted_tensor_slot.to_atom())
+            .with(free_metric_slot.to_atom()),
+    })
+}
+
+fn contract_rank_one_into_tensor<Aind: AbsInd + ParseableAind>(
+    rank_one: &SymbolicTensor<Aind>,
+    tensor: &SymbolicTensor<Aind>,
+    rank_one_expr: &Atom,
+    tensor_expr: &Atom,
+    structure: OrderedStructure<LibraryRep, Aind>,
+) -> Option<SymbolicTensor<Aind>> {
+    if rank_one.is_composite || rank_one.structure.order() != 1 {
+        return None;
+    }
+
+    let slot = rank_one.structure.get_slot(0)?;
+    let stripped = slot.rep().base().to_symbolic([]);
+    let contracted_expr = rank_one_expr.replace(slot.to_atom()).with(stripped);
+
+    Some(SymbolicTensor {
+        structure,
+        is_composite: true,
+        is_metric: tensor.is_metric,
+        expression: tensor_expr
+            .replace(slot.dual().to_atom())
+            .with(contracted_expr)
+            .normalize_dots(),
+    })
+}
+
 impl<
     const EXPANDSUMS: bool,
     const RECURSE: bool,
@@ -144,46 +301,28 @@ impl<
             );
         }
 
-        let recursive_settings = || {
-            if DEPTH_FIRST {
-                SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
-            } else {
-                SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
-            }
-        };
-
-        let recursive_schoonschip = |expr: &Atom| {
-            expr.schoonschip_with_net::<EXPANDSUMS, true, Aind>(&recursive_settings())
-        };
-
         let (sexpr, oexpr) = if RECURSE && DEPTH_FIRST {
             (
-                recursive_schoonschip(&self.expression),
-                recursive_schoonschip(&other.expression),
+                recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&self.expression),
+                recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&other.expression),
             )
         } else {
             (self.expression.clone(), other.expression.clone())
         };
 
-        let finish = |mut result: SymbolicTensor<Aind>, recurse_result: bool| {
-            if recurse_result {
-                result.expression = recursive_schoonschip(&result.expression);
-            }
-            Ok(result)
-        };
+        let (structure, pos_self, pos_other, _) = self.structure.merge(&other.structure)?;
 
         if self.structure.is_scalar() || other.structure.is_scalar() {
             let (sexpr, oexpr) = if RECURSE && !DEPTH_FIRST {
                 (
-                    recursive_schoonschip(&self.expression),
-                    recursive_schoonschip(&other.expression),
+                    recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&self.expression),
+                    recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&other.expression),
                 )
             } else {
                 (sexpr, oexpr)
             };
-            let (structure, _, _, _) = self.structure.merge(&other.structure)?;
 
-            return finish(
+            return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
                 SymbolicTensor {
                     structure,
                     is_composite: true,
@@ -194,66 +333,80 @@ impl<
             );
         }
 
-        if !self.is_composite && self.structure.order() == 1 {
-            let slot = self.structure.get_slot(0).unwrap();
-            let stripped = slot.rep().base().to_symbolic([]);
-
-            let expr = sexpr.replace(slot.to_atom()).with(stripped);
-            let (structure, _, _, _) = self.structure.merge(&other.structure)?;
-
-            return finish(
-                SymbolicTensor {
-                    structure,
-                    is_composite: true,
-                    is_metric: other.is_metric,
-                    expression: oexpr
-                        .replace(slot.dual().to_atom())
-                        .with(expr)
-                        .normalize_dots(),
-                },
+        // Metrics get first chance after scalar handling because they preserve
+        // the non-metric tensor expression shape and only rewrite one slot.
+        if let Some(result) = contract_metric_into_tensor(
+            self,
+            other,
+            &pos_self,
+            &pos_other,
+            &oexpr,
+            structure.clone(),
+        ) {
+            return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
+                result,
                 RECURSE && !DEPTH_FIRST,
             );
-        } else if !other.is_composite && other.structure.order() == 1 {
-            let slot = other.structure.get_slot(0).unwrap();
-            let stripped = slot.rep().base().to_symbolic([]);
-
-            let expr = oexpr.replace(slot.to_atom()).with(stripped);
-            let (structure, _, _, _) = self.structure.merge(&other.structure)?;
-
-            return finish(
-                SymbolicTensor {
-                    structure,
-                    is_composite: true,
-                    is_metric: self.is_metric,
-                    expression: sexpr
-                        .replace(slot.dual().to_atom())
-                        .with(expr)
-                        .normalize_dots(),
-                },
-                RECURSE && !DEPTH_FIRST,
-            );
-        } else {
-            let expression = &oexpr * &sexpr;
-            let (structure, pos_self, _, _) = self.structure.merge(&other.structure)?;
-            let expression =
-                if EXPANDSUMS && pos_self.n_included() > 0 && (is_sum(&sexpr) || is_sum(&oexpr)) {
-                    expression
-                        .expand()
-                        .schoonschip_with_net::<false, true, Aind>(&recursive_settings())
-                } else {
-                    expression
-                };
-
-            finish(
-                Self {
-                    structure,
-                    is_composite: true,
-                    is_metric: false,
-                    expression,
-                },
-                RECURSE && !DEPTH_FIRST,
-            )
         }
+
+        if let Some(result) = contract_metric_into_tensor(
+            other,
+            self,
+            &pos_other,
+            &pos_self,
+            &sexpr,
+            structure.clone(),
+        ) {
+            return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
+                result,
+                RECURSE && !DEPTH_FIRST,
+            );
+        }
+
+        // Rank-one tensors are the original Schoonschip contraction shortcut:
+        // their contracted slot is stripped from the vector and inserted into
+        // the matching dual slot of the other tensor expression.
+        if let Some(result) =
+            contract_rank_one_into_tensor(self, other, &sexpr, &oexpr, structure.clone())
+        {
+            return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
+                result,
+                RECURSE && !DEPTH_FIRST,
+            );
+        }
+
+        if let Some(result) =
+            contract_rank_one_into_tensor(other, self, &oexpr, &sexpr, structure.clone())
+        {
+            return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
+                result,
+                RECURSE && !DEPTH_FIRST,
+            );
+        }
+
+        let expression = &oexpr * &sexpr;
+        let expression =
+            if EXPANDSUMS && pos_self.n_included() > 0 && (is_sum(&sexpr) || is_sum(&oexpr)) {
+                // Sums are distributed only when this contraction actually
+                // consumes an index. This keeps ordinary products factored.
+                expression
+                    .expand()
+                    .schoonschip_with_net::<false, true, Aind>(&recursive_schoonschip_settings::<
+                        DEPTH_FIRST,
+                    >())
+            } else {
+                expression
+            };
+
+        finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
+            Self {
+                structure,
+                is_composite: true,
+                is_metric: false,
+                expression,
+            },
+            RECURSE && !DEPTH_FIRST,
+        )
     }
 }
 
@@ -402,7 +555,30 @@ impl Schoonschip for Atom {
 
 impl Schoonschip for AtomView<'_> {
     fn normalize_dots(&self) -> Atom {
+        let index_cond = T.index_fiter(W_.i_);
+        let other_index_cond = T.index_fiter(W_.j_);
+        let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
         let stripped = T.rep_::<0, _>([W_.d_]);
+        let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
+        let self_dual_j = T.self_dual_::<0, _>([W_.d_, W_.j_]);
+        let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
+        let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
+        let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
+        let dualizable_dual_j = T.dualizable_dual_::<0, _>([W_.d_, W_.j_]);
+        fn rank_one_with_slot(slot: &Atom) -> Atom {
+            T.rank1_::<0, _>([Atom::var(W_.c___), slot.clone()])
+        }
+        let self_dual_vector = rank_one_with_slot(&self_dual);
+        let self_dual_vector_stripped = rank_one_with_slot(&self_dual_stripped);
+        let dualizable_vector = rank_one_with_slot(&dualizable);
+        let dualizable_dual_vector = rank_one_with_slot(&dualizable_dual);
+        let dualizable_vector_stripped = rank_one_with_slot(&dualizable_stripped);
+
+        let self_dual_square = ETS.metric(&self_dual_vector_stripped, &self_dual_vector_stripped);
+        let self_dual_metric = function!(ETS.metric, &self_dual, &self_dual_j);
+        let dualizable_metric = function!(ETS.metric, &dualizable, &dualizable_dual_j);
+
+        // p(..,q(...,rep(d)))-> g(p(..,rep(d)),q(..,rep(d)))
         self.replace(T.rank1_::<0, _>([
             Atom::var(W_.c___),
             T.rank1_::<1, _>([&Atom::var(W_.a___), &stripped]),
@@ -411,71 +587,219 @@ impl Schoonschip for AtomView<'_> {
             T.rank1_::<0, _>([&Atom::var(W_.c___), &stripped]),
             T.rank1_::<1, _>([&Atom::var(W_.a___), &stripped]),
         ))
+        // g(rep(d,nu),p(..,rep(d)))->p(..,rep(d,nu))
+        .replace(function!(
+            ETS.metric,
+            &self_dual,
+            &self_dual_vector_stripped
+        ))
+        .when(index_cond.clone())
+        .repeat()
+        .with(self_dual_vector.clone())
+        .replace(function!(
+            ETS.metric,
+            &dualizable,
+            &dualizable_vector_stripped
+        ))
+        .when(index_cond.clone())
+        .repeat()
+        .with(dualizable_vector.clone())
+        .replace(function!(
+            ETS.metric,
+            &dualizable_dual,
+            &dualizable_vector_stripped
+        ))
+        .when(index_cond.clone())
+        .repeat()
+        .with(dualizable_dual_vector.clone())
+        // g(rep(d,nu),p(..))->p(..,rep(d,nu))
+        .replace(function!(
+            ETS.metric,
+            &self_dual,
+            T.rank1_::<0, _>([Atom::var(W_.c___)])
+        ))
+        .when(index_cond.clone())
+        .repeat()
+        .with(self_dual_vector.clone())
+        // Powers of a schoonschipped vector are normalized by parity:
+        // p(mu)^(2n) -> g(p,p)^n and
+        // p(mu)^(2n+1) -> g(p,p)^n p(mu).
+        .replace(self_dual_vector.clone().pow(Atom::var(W_.n_)))
+        .when(index_cond.clone() & W_.n_.filter_single(positive_even_power))
+        .with_map({
+            let self_dual_square = self_dual_square.clone();
+            move |matches| {
+                even_power_replacement(
+                    matched_pattern(&self_dual_square, matches),
+                    matched_power(matches, W_.n_),
+                )
+            }
+        })
+        .replace(self_dual_vector.clone().pow(Atom::var(W_.n_)))
+        .when(index_cond.clone() & W_.n_.filter_single(positive_odd_power))
+        .with_map({
+            let self_dual_square = self_dual_square.clone();
+            let self_dual_vector = self_dual_vector.clone();
+            move |matches| {
+                odd_power_replacement(
+                    matched_pattern(&self_dual_vector, matches),
+                    matched_pattern(&self_dual_square, matches),
+                    matched_power(matches, W_.n_),
+                )
+            }
+        })
+        // Metric powers follow the same parity split:
+        // g(mu,nu)^(2n) -> d^n and
+        // g(mu,nu)^(2n+1) -> d^n g(mu,nu).
+        .replace(self_dual_metric.clone().pow(Atom::var(W_.n_)))
+        .when(
+            index_cond.clone()
+                & other_index_cond.clone()
+                & W_.n_.filter_single(positive_even_power),
+        )
+        .with_map(move |matches| {
+            even_power_replacement(
+                matched_pattern(&Atom::var(W_.d_), matches),
+                matched_power(matches, W_.n_),
+            )
+        })
+        .replace(self_dual_metric.clone().pow(Atom::var(W_.n_)))
+        .when(
+            index_cond.clone() & other_index_cond.clone() & W_.n_.filter_single(positive_odd_power),
+        )
+        .with_map({
+            let self_dual_metric = self_dual_metric.clone();
+            move |matches| {
+                odd_power_replacement(
+                    matched_pattern(&self_dual_metric, matches),
+                    matched_pattern(&Atom::var(W_.d_), matches),
+                    matched_power(matches, W_.n_),
+                )
+            }
+        })
+        .replace(dualizable_metric.clone().pow(Atom::var(W_.n_)))
+        .when(
+            index_cond.clone()
+                & other_index_cond.clone()
+                & W_.n_.filter_single(positive_even_power),
+        )
+        .with_map(move |matches| {
+            even_power_replacement(
+                matched_pattern(&Atom::var(W_.d_), matches),
+                matched_power(matches, W_.n_),
+            )
+        })
+        .replace(dualizable_metric.clone().pow(Atom::var(W_.n_)))
+        .when(index_cond.clone() & other_index_cond & W_.n_.filter_single(positive_odd_power))
+        .with_map({
+            let dualizable_metric = dualizable_metric.clone();
+            move |matches| {
+                odd_power_replacement(
+                    matched_pattern(&dualizable_metric, matches),
+                    matched_pattern(&Atom::var(W_.d_), matches),
+                    matched_power(matches, W_.n_),
+                )
+            }
+        })
+        // Plain metric traces are the remaining non-power case.
+        .replace(function!(ETS.metric, &self_dual, &self_dual))
+        .when(&index_cond)
+        .with(Atom::var(W_.d_))
+        .replace(function!(ETS.metric, &dualizable, &dualizable_dual))
+        .when(&index_cond)
+        .with(Atom::var(W_.d_))
     }
+
     fn schoonschip(&self) -> Atom {
         let index_cond = T.index_fiter(W_.i_);
         let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-
         let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
         let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
         let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
         let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
 
-        // first replace vector(rep(d,i)) * vector(rep(d,i)) with g(vector(rep(d)),vector(rep(d)))
-        self.replace(
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
-                * T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual]),
-        )
-        .when(&index_cond)
-        .with(ETS.metric(
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-            T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual_stripped]),
-        ))
-        .replace(
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable])
-                * T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_dual]),
-        )
-        .when(&index_cond)
-        .with(ETS.metric(
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-            T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_stripped]),
-        ))
-        // Now replace vector(rep(d,i)) * T(..,rep(d,i),..) with T(..,vector(rep(d)),..)
-        .replace(
-            function!(W_.a_, W_.a___, &self_dual, W_.b___)
-                * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual]),
-        )
-        .when(&index_cond)
-        .repeat()
-        .with(function!(
-            W_.a_,
-            W_.a___,
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-            W_.b___
-        ))
-        .replace(
-            function!(W_.a_, W_.a___, &dualizable, W_.b___)
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]),
-        )
-        .when(&index_cond)
-        .repeat()
-        .with(function!(
-            W_.a_,
-            W_.a___,
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-            W_.b___
-        ))
-        .replace(
-            function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)
-                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]),
-        )
-        .repeat()
-        .with(function!(
-            W_.a_,
-            W_.a___,
-            T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
-            W_.b___
-        ))
+        // `schoonschip()` is the broad bare-symbolic pass. It may use product
+        // patterns over plain functions; the network path deliberately calls
+        // `normalize_dots()` instead so these broad patterns do not pre-empt
+        // network-backed contractions.
+        self.replace(function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual))
+            .when(index_cond.clone() & not_slot(W_.a___) & not_slot(W_.b___))
+            .with(ETS.metric(
+                function!(W_.f_, W_.a___, &self_dual_stripped),
+                function!(W_.g_, W_.b___, &self_dual_stripped),
+            ))
+            .replace(function!(W_.f_, W_.a___, &self_dual).pow(Atom::num(2)))
+            .when(index_cond.clone() & not_slot(W_.a___))
+            .with(ETS.metric(
+                function!(W_.f_, W_.a___, &self_dual_stripped),
+                function!(W_.f_, W_.a___, &self_dual_stripped),
+            ))
+            .replace(
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
+                    * T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual]),
+            )
+            .when(&index_cond)
+            .with(ETS.metric(
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
+                T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual_stripped]),
+            ))
+            .replace(
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
+                    .pow(Atom::num(2)),
+            )
+            .when(&index_cond)
+            .with(ETS.metric(
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
+            ))
+            .replace(
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable])
+                    * T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_dual]),
+            )
+            .when(&index_cond)
+            .with(ETS.metric(
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
+                T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_stripped]),
+            ))
+            // Bare product contraction: vector(rep(d,i)) * T(..,rep(d,i),..)
+            // becomes T(..,vector(rep(d)),..). Network contraction has a more
+            // structured version of this rule and does not use this pass.
+            .replace(
+                function!(W_.a_, W_.a___, &self_dual, W_.b___)
+                    * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual]),
+            )
+            .when(&index_cond)
+            .repeat()
+            .with(function!(
+                W_.a_,
+                W_.a___,
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
+                W_.b___
+            ))
+            .replace(
+                function!(W_.a_, W_.a___, &dualizable, W_.b___)
+                    * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]),
+            )
+            .when(&index_cond)
+            .repeat()
+            .with(function!(
+                W_.a_,
+                W_.a___,
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
+                W_.b___
+            ))
+            .replace(
+                function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)
+                    * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]),
+            )
+            .repeat()
+            .with(function!(
+                W_.a_,
+                W_.a___,
+                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
+                W_.b___
+            ))
+            .normalize_dots()
     }
 
     fn schoonschip_once_with_net<
@@ -487,7 +811,9 @@ impl Schoonschip for AtomView<'_> {
         &self,
         settings: &SchoonschipSettings,
     ) -> Atom {
-        let mut net = (*self)
+        let normalized = self.normalize_dots();
+        let mut net = normalized
+            .as_view()
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 depth_limit: settings.depth_limit,
                 take_first_term_from_sum: false,
@@ -526,6 +852,13 @@ impl Schoonschip for AtomView<'_> {
         &self,
         settings: &SchoonschipSettings,
     ) -> Atom {
+        if let AtomView::Add(add) = self {
+            return add
+                .iter()
+                .map(|term| term.schoonschip_with_net::<EXPANDSUMS, DEEPEST, Aind>(settings))
+                .fold(Atom::Zero, |sum, term| sum + term);
+        }
+
         let new = if settings.expand_contracted_sums {
             match (settings.mode, DEEPEST) {
                 (SchoonschipMode::SinglePass, _) | (_, false) => {
@@ -559,7 +892,7 @@ impl Schoonschip for AtomView<'_> {
             );
         }
 
-        new
+        new.normalize_dots()
     }
 }
 
@@ -588,6 +921,8 @@ mod tests {
         let p2 = function!(p, 2, mink.slot::<AbstractIndex, _>(1).to_atom());
         let p1_2 = function!(p, 1, mink.slot::<AbstractIndex, _>(2).to_atom());
         let p2_2 = function!(p, 2, mink.slot::<AbstractIndex, _>(2).to_atom());
+        let p1_stripped = function!(p, 1, mink.to_symbolic([]));
+        let p2_stripped = function!(p, 2, mink.to_symbolic([]));
 
         let q2 = function!(
             q,
@@ -605,8 +940,36 @@ mod tests {
         let q3 = function!(q, 3, mink.slot::<AbstractIndex, _>(1).to_atom());
         let q3_2 = function!(q, 3, mink.slot::<AbstractIndex, _>(2).to_atom());
 
-        let result = (&p1 * &q2).schoonschip();
+        let result = (&p1 * &q2)
+            .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
         assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),Q(2,bla,mink(D)))");
+
+        let result = (&p1 * &p1).schoonschip();
+        assert_snapshot!(result.to_bare_ordered_string(), @"g(P(1,mink(D)),P(1,mink(D)))");
+
+        let result = function!(p, 1, &p2_stripped).normalize_dots();
+        assert_snapshot!(result.to_bare_ordered_string(), @"g(P(1,mink(D)),P(2,mink(D)))");
+
+        let result = ETS
+            .metric(mink.slot::<AbstractIndex, _>(1).to_atom(), &p1_stripped)
+            .normalize_dots();
+        assert_snapshot!(result.to_bare_ordered_string(), @"P(1,mink(D,1))");
+
+        let result = p1.clone().pow(Atom::num(4)).normalize_dots();
+        assert_snapshot!(result.to_bare_ordered_string(), @"(g(P(1,mink(D)),P(1,mink(D))))^2");
+
+        let result = p1.clone().pow(Atom::num(3)).normalize_dots();
+        assert_snapshot!(result.to_bare_ordered_string(), @"P(1,mink(D,1))*g(P(1,mink(D)),P(1,mink(D)))");
+
+        let metric = ETS.metric(
+            mink.slot::<AbstractIndex, _>(1).to_atom(),
+            mink.slot::<AbstractIndex, _>(2).to_atom(),
+        );
+        let result = metric.clone().pow(Atom::num(4)).normalize_dots();
+        assert_snapshot!(result.to_bare_ordered_string(), @"D^2");
+
+        let result = metric.pow(Atom::num(3)).normalize_dots();
+        assert_snapshot!(result.to_bare_ordered_string(), @"D*g(mink(D,1),mink(D,2))");
 
         let result = (&p1 * (&q2 + &p2 * &q3_2 * &q2_2))
             .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::partial());
