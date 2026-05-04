@@ -2,7 +2,7 @@
 
 use idenso::{
     representations::initialize,
-    schoonschip::{Schoonschip, SchoonschipSettings},
+    schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
     tensor::{SymbolicNet, SymbolicNetParse},
 };
 use spenso::{
@@ -313,9 +313,42 @@ pub fn network_parse_normalized(expr: Atom) -> SymbolicNet<AbstractIndex> {
 }
 
 pub fn network_schoonschip_substituted(expr: Atom) -> Atom {
-    expr.schoonschip_with_net::<false, false, AbstractIndex>(
-        &SchoonschipSettings::partial().with_expanded_contracted_sums(),
-    )
+    network_schoonschip_substituted_with_order(expr, SchoonschipContractionOrder::default())
+}
+
+pub fn network_schoonschip_substituted_with_order(
+    expr: Atom,
+    order: SchoonschipContractionOrder,
+) -> Atom {
+    let mut result = expr.schoonschip_with_net::<false, false, AbstractIndex>(
+        &SchoonschipSettings::partial()
+            .with_expanded_contracted_sums()
+            .with_contraction_order(order),
+    );
+
+    let needs_cleanup = matches!(
+        order,
+        SchoonschipContractionOrder::LargestDegree
+            | SchoonschipContractionOrder::MinLargestOperandBytes
+            | SchoonschipContractionOrder::MinProductTerms
+            | SchoonschipContractionOrder::MinProductBytes
+    );
+
+    if needs_cleanup {
+        let cleanup_settings = SchoonschipSettings::partial()
+            .with_expanded_contracted_sums()
+            .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
+        for _ in 0..4 {
+            let next =
+                result.schoonschip_with_net::<false, false, AbstractIndex>(&cleanup_settings);
+            if next == result {
+                break;
+            }
+            result = next;
+        }
+    }
+
+    result
 }
 
 pub fn network_full_algebra_5(fixture: NetworkVertexFixture) -> Atom {
@@ -327,13 +360,25 @@ pub fn network_full_algebra_8(fixture: NetworkVertexFixture) -> Atom {
 }
 
 pub fn assert_no_network_internal_indices(result: &Atom) {
+    assert_no_network_internal_indices_with_count(result, 8);
+}
+
+pub fn assert_no_network_internal_indices_with_count(result: &Atom, vertex_count: usize) {
     let (mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11) = symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
         tags=["spenso::index"]);
 
-    for index in [mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11] {
+    let indices: &[symbolica::atom::Symbol] = match vertex_count {
+        5 => &[mu1, mu2, mu3, mu4],
+        6 => &[mu1, mu2, mu3, mu4, mu5, mu11],
+        7 => &[mu1, mu2, mu3, mu4, mu5, mu6, mu10, mu11],
+        8 => &[mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11],
+        _ => panic!("unsupported network vertex count: {vertex_count}"),
+    };
+
+    for index in indices {
         assert!(
-            result.replace(index).match_iter().next().is_none(),
-            "{result}"
+            result.replace(*index).match_iter().next().is_none(),
+            "internal index {index} remained"
         );
     }
 }
