@@ -78,6 +78,12 @@ struct TestTemplatedGraphSpec {
     statements: BTreeMap<String, String>,
     #[serde(default)]
     edge_statements: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-source")]
+    eval_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-sink")]
+    eval_sink: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-label")]
+    eval_label: Option<String>,
     #[serde(default)]
     node_statements: BTreeMap<String, String>,
     nodes: Vec<TestNodeSpec>,
@@ -91,6 +97,12 @@ struct TestBuilderSpec {
     statements: BTreeMap<String, String>,
     #[serde(default)]
     edge_statements: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-source")]
+    eval_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-sink")]
+    eval_sink: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-label")]
+    eval_label: Option<String>,
     #[serde(default)]
     node_statements: BTreeMap<String, String>,
 }
@@ -300,10 +312,10 @@ fn test_graph_spec_constructor_expands_default_statement_templates() {
     let spec = TestTemplatedGraphSpec {
         name: "templated".to_string(),
         statements: BTreeMap::new(),
-        edge_statements: BTreeMap::from([(
-            "eval_label".to_string(),
-            "(text(fill: rgb(\"#{color}\"))[{label}])".to_string(),
-        )]),
+        edge_statements: BTreeMap::new(),
+        eval_source: Some("(stroke: red + 0.5pt)".to_string()),
+        eval_sink: Some("(stroke: blue + 0.5pt)".to_string()),
+        eval_label: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
         node_statements: BTreeMap::from([(
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
@@ -347,7 +359,15 @@ fn test_graph_spec_constructor_expands_default_statement_templates() {
         Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
     );
     assert_eq!(
-        edges[0].statements.get("eval_label").map(String::as_str),
+        edges[0].eval_source.as_deref(),
+        Some("(stroke: red + 0.5pt)")
+    );
+    assert_eq!(
+        edges[0].eval_sink.as_deref(),
+        Some("(stroke: blue + 0.5pt)")
+    );
+    assert_eq!(
+        edges[0].statements.get("eval-label").map(String::as_str),
         Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
     );
 }
@@ -427,10 +447,10 @@ fn test_builder_pattern_expands_default_statement_templates() {
     let builder = builder_new_bytes(&encode_cbor(&TestBuilderSpec {
         name: "builder".to_string(),
         statements: BTreeMap::new(),
-        edge_statements: BTreeMap::from([(
-            "eval_label".to_string(),
-            "(text(fill: rgb(\"#{color}\"))[{label}])".to_string(),
-        )]),
+        edge_statements: BTreeMap::new(),
+        eval_source: Some("(stroke: red + 0.5pt)".to_string()),
+        eval_sink: Some("(stroke: blue + 0.5pt)".to_string()),
+        eval_label: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
         node_statements: BTreeMap::from([(
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
@@ -487,6 +507,14 @@ fn test_builder_pattern_expands_default_statement_templates() {
     assert_eq!(
         edges[0].eval_label.as_deref(),
         Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
+    );
+    assert_eq!(
+        edges[0].eval_source.as_deref(),
+        Some("(stroke: red + 0.5pt)")
+    );
+    assert_eq!(
+        edges[0].eval_sink.as_deref(),
+        Some("(stroke: blue + 0.5pt)")
     );
 }
 
@@ -790,44 +818,48 @@ fn test_typst_graph_convenience_serialization() {
 #[test]
 fn test_pin_parsing() {
     let figment = test_figment();
-    let mut g = TypstGraph::from_dot(dot!( digraph dot_80_0_GL208 {
+    let mut g = TypstGraph::from_dot(
+        dot!( digraph dot_80_0_GL208 {
 
-       steps=1
-       step=0.4
-       beta =13.1
-       k_spring=20.3;
-       g_center=0
-       gamma_ee=0.3
-       gamma_ev=0.01
-       length_scale = 0.25
-       node[
-         eval="(stroke:blue,fill :black,
+            steps=1
+            step=0.4
+            beta =13.1
+            k_spring=20.3;
+            g_center=0
+            gamma_ee=0.3
+            gamma_ev=0.01
+            length_scale = 0.25
+            node[
+              eval="(stroke:blue,fill :black,
          radius:2pt,
          outset: -2pt)"
-       ]
+            ]
 
-       edge[
-         eval=top
-       ]
-       v0[pin="x:@initial,y:@p1", style=invis]
-       v1[pin="x:@initial,y:@p2",style=invis]
-       v2[pin="x:@final,y:@p1",style=invis]
-       v3[pin="x:@final,y:@p2",style=invis]
-       v0 -> v11 [eval=photon]
-       v1 -> v10 [eval="(..photon,label:[$gamma$],label-side: left)", mom_eval="(label:[$p_1$],label-sep:0mm)"]
-       v9 -> v2 [eval=photon]
-       v8 -> v3 [eval=photon]
-       v4 -> v10
-       v10 -> v5
-       v5 -> v11 [dir=back]
-       v11 -> v4
-       v4 -> v7 [eval=gluon]
-       v5 -> v6 [eval=gluon]
-       v6 -> v8
-       v8 -> v7
-       v7 -> v9
-       v9 -> v6
-   }).unwrap(), &figment);
+            edge[
+              eval=top
+            ]
+            v0[pin="x:@initial,y:@p1", style=invis]
+            v1[pin="x:@initial,y:@p2",style=invis]
+            v2[pin="x:@final,y:@p1",style=invis]
+            v3[pin="x:@final,y:@p2",style=invis]
+            v0 -> v11 [eval=photon]
+            v1 -> v10 [eval="(..photon,label:[$gamma$],label-side: left)"]
+            v9 -> v2 [eval=photon]
+            v8 -> v3 [eval=photon]
+            v4 -> v10
+            v10 -> v5
+            v5 -> v11 [dir=back]
+            v11 -> v4
+            v4 -> v7 [eval=gluon]
+            v5 -> v6 [eval=gluon]
+            v6 -> v8
+            v8 -> v7
+            v7 -> v9
+            v9 -> v6
+        })
+        .unwrap(),
+        &figment,
+    );
 
     g.layout();
     println!("{}", g.to_dot_graph().debug_dot())

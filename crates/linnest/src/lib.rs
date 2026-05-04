@@ -268,7 +268,7 @@ impl TypstEdge {
                 cleaned.trim().parse::<f64>().ok()
             });
 
-            let mut eval_sink: Option<String> = d.get("eval_sink").transpose().unwrap();
+            let mut eval_sink: Option<String> = d.get("eval-sink").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
             eval_sink = eval_sink.map(|template| {
@@ -280,7 +280,7 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut eval_source: Option<String> = d.get("eval_source").transpose().unwrap();
+            let mut eval_source: Option<String> = d.get("eval-source").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
             eval_source = eval_source.map(|template| {
@@ -292,7 +292,7 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut eval_label: Option<String> = d.get("eval_label").transpose().unwrap();
+            let mut eval_label: Option<String> = d.get("eval-label").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
             eval_label = eval_label.map(|template| {
@@ -304,7 +304,7 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut mom_eval: Option<String> = d.get("mom_eval").transpose().unwrap();
+            let mut mom_eval: Option<String> = d.get("mom-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for mom_eval
             mom_eval = mom_eval.map(|template| {
@@ -383,19 +383,19 @@ impl TypstEdge {
         }
 
         if let Some(eval) = &self.eval_sink {
-            statements.insert("eval_sink".to_string(), eval.clone());
+            statements.insert("eval-sink".to_string(), eval.clone());
         }
 
         if let Some(eval) = &self.eval_source {
-            statements.insert("eval_source".to_string(), eval.clone());
+            statements.insert("eval-source".to_string(), eval.clone());
         }
 
         if let Some(eval) = &self.eval_label {
-            statements.insert("eval_label".to_string(), eval.clone());
+            statements.insert("eval-label".to_string(), eval.clone());
         }
 
         if let Some(eval) = &self.mom_eval {
-            statements.insert("mom_eval".to_string(), eval.clone());
+            statements.insert("mom-eval".to_string(), eval.clone());
         }
 
         DotEdgeData {
