@@ -31,6 +31,132 @@
 
 #let _line(start, end, style) = cetz.draw.line(_point(start), _point(end), ..style)
 
+#let _line-segment(start, end) = {
+  let ctrl-a = (
+    x: start.x + (end.x - start.x) / 3,
+    y: start.y + (end.y - start.y) / 3,
+  )
+  let ctrl-b = (
+    x: start.x + (end.x - start.x) * 2 / 3,
+    y: start.y + (end.y - start.y) * 2 / 3,
+  )
+  (
+    start: start,
+    ctrl_a: ctrl-a,
+    ctrl_b: ctrl-b,
+    end: end,
+  )
+}
+
+#let _pattern-style-keys = (
+  "pattern",
+  "pattern-amplitude",
+  "pattern-wavelength",
+  "pattern-phase",
+  "pattern-samples-per-period",
+  "pattern-coil-longitudinal-scale",
+  "pattern-accuracy",
+)
+
+#let _without-pattern-style(style) = {
+  let clean = style
+  for key in _pattern-style-keys {
+    if clean.keys().contains(key) {
+      let _ = clean.remove(key)
+    }
+  }
+  clean
+}
+
+#let _style-value(style, key, default) = style.at(key, default: default)
+
+#let _pattern-name(style) = _style-value(style, "pattern", none)
+
+#let _has-pattern(style) = {
+  let pattern = _pattern-name(style)
+  pattern != none and pattern != "normal" and pattern != "curve"
+}
+
+#let _same-pattern-geometry(source-style, sink-style) = {
+  let same = _has-pattern(source-style)
+  same = same and _pattern-name(source-style) == _pattern-name(sink-style)
+  same = (
+    same and _style-value(source-style, "pattern-amplitude", 0.1) == _style-value(sink-style, "pattern-amplitude", 0.1)
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-wavelength", 1.0) == _style-value(sink-style, "pattern-wavelength", 1.0)
+  )
+  same = same and _style-value(source-style, "pattern-phase", 0) == _style-value(sink-style, "pattern-phase", 0)
+  same = (
+    same
+      and _style-value(source-style, "pattern-samples-per-period", 16)
+        == _style-value(sink-style, "pattern-samples-per-period", 16)
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-coil-longitudinal-scale", 1.25)
+        == _style-value(sink-style, "pattern-coil-longitudinal-scale", 1.25)
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-accuracy", 0.001) == _style-value(sink-style, "pattern-accuracy", 0.001)
+  )
+  same
+}
+
+#let _pattern-path(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
+  curve-api.pattern-segment(
+    segment,
+    pattern: _pattern-name(style),
+    amplitude: _style-value(style, "pattern-amplitude", 0.1),
+    wavelength: _style-value(style, "pattern-wavelength", 1.0),
+    phase: if phase == auto { _style-value(style, "pattern-phase", 0) } else { phase },
+    samples-per-period: _style-value(style, "pattern-samples-per-period", 16),
+    coil-longitudinal-scale: _style-value(style, "pattern-coil-longitudinal-scale", 1.25),
+    anchor-start: anchor-start,
+    anchor-end: anchor-end,
+    accuracy: _style-value(style, "pattern-accuracy", 0.001),
+  )
+}
+
+#let _pattern-curve(segment, style) = {
+  if _has-pattern(style) {
+    curve-api.cetz-pattern(_pattern-path(segment, style), .._without-pattern-style(style))
+  } else {
+    curve-api.cetz-bezier(segment, .._without-pattern-style(style))
+  }
+}
+
+#let _pattern-edge-halves(halves, source-style, sink-style) = {
+  let elements = ()
+  if _same-pattern-geometry(source-style, sink-style) {
+    let source-path = _pattern-path(halves.source, source-style, anchor-end: false)
+    let wavelength = _style-value(source-style, "pattern-wavelength", 1.0)
+    let phase = _style-value(source-style, "pattern-phase", 0)
+    let sink-phase = phase + 2 * calc.pi * source-path.length / wavelength
+    elements.push(curve-api.cetz-pattern(source-path, .._without-pattern-style(source-style)))
+    elements.push(curve-api.cetz-pattern(
+      _pattern-path(halves.sink, sink-style, phase: sink-phase, anchor-start: false),
+      .._without-pattern-style(sink-style),
+    ))
+  } else {
+    elements.push(_pattern-curve(halves.source, source-style))
+    elements.push(_pattern-curve(halves.sink, sink-style))
+  }
+  elements
+}
+
+#let _pattern-line(start, end, style) = {
+  let pattern = _style-value(style, "pattern", none)
+  let draw-style = _without-pattern-style(style)
+  if pattern == none or pattern == "normal" or pattern == "curve" {
+    _line(start, end, draw-style)
+  } else {
+    _pattern-curve(_line-segment(start, end), style)
+  }
+}
+
 #let _node-outset(style, node-outset) = {
   if node-outset == auto {
     style.at("radius", default: 0)
@@ -60,9 +186,31 @@
 /// #let b = graph.builder(
 ///   name: "demo",
 ///   edge-statements: (
-///     eval_source: "(stroke: red + 1.5pt)",
-///     eval_sink: "(stroke: blue + 1.5pt)",
+///     eval_source: "(stroke: black + 1.2pt, pattern: source-patterns.at(eid), pattern-amplitude: 0.18, pattern-wavelength: 0.55, pattern-coil-longitudinal-scale: 1.6)",
+///     eval_sink: "(stroke: black + 1.2pt, pattern: sink-patterns.at(eid), pattern-amplitude: 0.18, pattern-wavelength: 0.55, pattern-coil-longitudinal-scale: 1.6)",
 ///   ),
+/// )
+/// #let source-patterns = (
+///   none,
+///   "wave",
+///   "zigzag",
+///   "coil",
+///   "wave",
+///   "zigzag",
+///   "coil",
+///   "wave",
+///   "zigzag",
+/// )
+/// #let sink-patterns = (
+///   none,
+///   "wave",
+///   "zigzag",
+///   "coil",
+///   "zigzag",
+///   "coil",
+///   "wave",
+///   "coil",
+///   "wave",
 /// )
 /// #let (node: a, builder: b) = graph.node(b, name: "a")
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
@@ -79,7 +227,7 @@
 /// #let b = graph.edge(b, source: (node: a), sink: none)
 /// #let layed-out = layout(graph.finish(b), beta: 50,gamma-ee:0.1,gamma-dangling:5,gamma-ev:0.01,seed: 2,epochs:30, steps: 30, g-center: 0.005, length-scale: 0.5)
 /// #let east = subgraph.compass(layed-out, "e")
-/// #draw(layed-out,node-radius: 1,subgraph:east)
+/// #draw(layed-out,node-radius: 1,subgraph:east,scope: (source-patterns: source-patterns, sink-patterns: sink-patterns))
 /// ```
 /// -> content
 #let draw(
@@ -212,8 +360,9 @@
       if sink-in-subgraph and subgraph-edge-underlay {
         elements.push(curve-api.cetz-bezier(halves.sink, ..subgraph-edge-style))
       }
-      elements.push(curve-api.cetz-bezier(halves.source, ..source-draw-style))
-      elements.push(curve-api.cetz-bezier(halves.sink, ..sink-draw-style))
+      for element in _pattern-edge-halves(halves, source-draw-style, sink-draw-style) {
+        elements.push(element)
+      }
     } else if start != none {
       let line-start = curve-api.outset-point(
         nodes.at(start.node).pos,
@@ -223,7 +372,7 @@
       if source-in-subgraph and subgraph-edge-underlay {
         elements.push(_line(line-start, e.pos, subgraph-edge-style))
       }
-      elements.push(_line(line-start, e.pos, source-draw-style))
+      elements.push(_pattern-line(line-start, e.pos, source-draw-style))
     } else if end != none {
       let line-end = curve-api.outset-point(
         nodes.at(end.node).pos,
@@ -233,7 +382,7 @@
       if sink-in-subgraph and subgraph-edge-underlay {
         elements.push(_line(e.pos, line-end, subgraph-edge-style))
       }
-      elements.push(_line(e.pos, line-end, sink-draw-style))
+      elements.push(_pattern-line(e.pos, line-end, sink-draw-style))
     }
 
     let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }

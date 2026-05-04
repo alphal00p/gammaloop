@@ -95,6 +95,75 @@
   ))))
 }
 
+/// Generate a sampled 1D pattern along a cubic Bezier path.
+///
+/// `pattern` may be `"wave"`, `"zigzag"`, or `"coil"`. The returned dictionary
+/// contains `points`, smooth `curves` for wave/coil patterns, and straight
+/// `segments` in graph coordinates.
+/// -> dictionary
+#let pattern-cubic(
+  start,
+  end,
+  ctrl-a,
+  ctrl-b,
+  pattern: "wave",
+  amplitude: 0.1,
+  wavelength: 1.0,
+  phase: 0,
+  samples-per-period: 16,
+  coil-longitudinal-scale: 1.25,
+  anchor-start: true,
+  anchor-end: true,
+  accuracy: 0.001,
+) = {
+  cbor(_plugin.curve_pattern_cubic(cbor.encode((
+    start: start,
+    end: end,
+    ctrl_a: ctrl-a,
+    ctrl_b: ctrl-b,
+    pattern: pattern,
+    amplitude: amplitude,
+    wavelength: wavelength,
+    phase: phase,
+    samples_per_period: samples-per-period,
+    coil_longitudinal_scale: coil-longitudinal-scale,
+    anchor_start: anchor-start,
+    anchor_end: anchor-end,
+    accuracy: accuracy,
+  ))))
+}
+
+/// Generate a sampled 1D pattern along a cubic segment returned by this module.
+/// -> dictionary
+#let pattern-segment(
+  segment,
+  pattern: "wave",
+  amplitude: 0.1,
+  wavelength: 1.0,
+  phase: 0,
+  samples-per-period: 16,
+  coil-longitudinal-scale: 1.25,
+  anchor-start: true,
+  anchor-end: true,
+  accuracy: 0.001,
+) = {
+  pattern-cubic(
+    segment.start,
+    segment.end,
+    segment.ctrl_a,
+    segment.ctrl_b,
+    pattern: pattern,
+    amplitude: amplitude,
+    wavelength: wavelength,
+    phase: phase,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+    anchor-start: anchor-start,
+    anchor-end: anchor-end,
+    accuracy: accuracy,
+  )
+}
+
 /// Convert a cubic segment returned by @split-cubic or @split-through into
 /// positional arguments accepted by `cetz.draw.bezier`.
 /// -> array
@@ -109,6 +178,31 @@
 /// -> content
 #let cetz-bezier(segment, unit: 1, ..style) = {
   cetz.draw.bezier(..cetz-args(segment, unit: unit), ..style)
+}
+
+#let _draw-merged-curves(segments, unit: 1, ..style) = {
+  if segments.len() > 0 {
+    cetz.draw.merge-path({
+      for segment in segments {
+        cetz-bezier(segment, unit: unit)
+      }
+    }, ..style)
+  } else {
+    ()
+  }
+}
+
+/// Draw a sampled pattern returned by @pattern-cubic or @pattern-segment.
+/// -> content
+#let cetz-pattern(path, unit: 1, ..style) = {
+  let style = style.named()
+  if path.keys().contains("curves") and path.curves.len() > 0 {
+    _draw-merged-curves(path.curves, unit: unit, ..style)
+  } else if path.points.len() > 1 {
+    cetz.draw.line(..path.points.map(point => _point(point, unit: unit)), ..style)
+  } else {
+    ()
+  }
 }
 
 /// Split a laid-out graph edge into source and sink half-edge cubic segments.
