@@ -717,7 +717,7 @@ impl LibraryRep {
                 name
             );
 
-            let (rep_name, tages) = match self {
+            let (rep_name, tags) = match self {
                 LibraryRep::SelfDual(a) => (
                     encode_base(*a as usize, &LATIN),
                     &[
@@ -1061,7 +1061,7 @@ impl LibraryRep {
                     //     // println!("Does not have 3 arguments: {}", f.get_nargs());
                     // }
                 },
-                tags = tages
+                tags = tags
             )
         }
     }
@@ -1458,7 +1458,7 @@ impl RepName for LibraryRep {
     }
 
     #[cfg(feature = "shadowing")]
-    /// yields a function builder for the representation, adding a first variable: the dimension.
+    /// yields a function builder for the representation
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
         &self,
         args: impl IntoIterator<Item = It>,

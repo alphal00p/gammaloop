@@ -13,6 +13,10 @@ pub struct SpensoTags {
     pub tag: String,
     pub rank1: String,
     pub rank1_: Symbol,
+    pub chain_in: Symbol,
+    pub chain_out: Symbol,
+    pub chain: Symbol,
+    pub trace: Symbol,
     pub upper: String,
     pub lower: String,
     pub bracket: Symbol,
@@ -44,6 +48,10 @@ impl SpensoTags {
         let self_dual = tag!("self_dual");
         let dualizable = tag!("dualizable");
         Self {
+            chain_in: symbol!("in"),
+            chain_out: symbol!("out"),
+            chain: symbol!("chain"),
+            trace: symbol!("trace"),
             rank1_: symbol!("rank1_", tags = [&tensor, &rank1]),
             bracket: symbol!("bracket"),
             pure_scalar: symbol!("pure_scalar"),
