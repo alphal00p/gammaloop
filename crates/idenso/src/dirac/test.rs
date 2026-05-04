@@ -8,6 +8,8 @@ use spenso::structure::PermutedStructure;
 use spenso::symbolica_atom::IntoAtom;
 use spenso::{chain, s, slot};
 
+use crate::gamma;
+
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
         [

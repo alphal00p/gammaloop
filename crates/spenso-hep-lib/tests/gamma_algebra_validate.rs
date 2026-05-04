@@ -1,5 +1,5 @@
 use ahash::{HashMap, HashMapExt};
-use idenso::{IndexTooling, gamma::GammaSimplifier, representations::Bispinor};
+use idenso::{IndexTooling, dirac::GammaSimplifier, representations::Bispinor};
 use spenso::{
     algebra::upgrading_arithmetic::FallibleSub,
     iterators::IteratableTensor,

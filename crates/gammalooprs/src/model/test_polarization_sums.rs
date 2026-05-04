@@ -1,5 +1,5 @@
 use ahash::HashMap;
-use idenso::gamma::AGS;
+use idenso::dirac::AGS;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::{

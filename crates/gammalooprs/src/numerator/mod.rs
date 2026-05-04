@@ -2,7 +2,7 @@
 
 use aind::Aind;
 use idenso::color::ColorSimplifier;
-use idenso::gamma::GammaSimplifier;
+use idenso::dirac::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;

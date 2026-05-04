@@ -12,7 +12,7 @@ use gammalooprs::{
 };
 use idenso::{
     color::{CS, ColorSimplifier},
-    gamma::GammaSimplifier,
+    dirac::GammaSimplifier,
     metric::MetricSimplifier,
 };
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
