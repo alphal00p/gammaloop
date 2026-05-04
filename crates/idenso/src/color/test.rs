@@ -32,11 +32,11 @@ static CT: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = La
 use spenso::{chain, network::parsing::ShadowedStructure, slot, structure::permuted::Perm, trace};
 use symbolica::{parse, parse_lit};
 
-use crate::gamma::PS;
+use crate::dirac::PS;
 use crate::tensor::SymbolicTensor;
 use crate::test::test_initialize;
 use crate::{
-    IndexTooling, gamma::GammaSimplifier, metric::MetricSimplifier, representations::initialize,
+    IndexTooling, dirac::GammaSimplifier, metric::MetricSimplifier, representations::initialize,
 };
 
 use super::*;

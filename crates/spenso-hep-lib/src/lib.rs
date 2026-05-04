@@ -1,6 +1,6 @@
 use std::{ops::Neg, sync::LazyLock};
 
-use idenso::{gamma::AGS, representations::initialize};
+use idenso::{dirac::AGS, representations::initialize};
 
 use spenso::{
     algebra::complex::Complex,

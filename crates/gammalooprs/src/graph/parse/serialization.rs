@@ -1,4 +1,4 @@
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, dirac::GammaSimplifier, metric::MetricSimplifier};
 use linnet::{
     half_edge::{
         HedgeGraph,

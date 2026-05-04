@@ -1,5 +1,5 @@
 use crate::color::{ColorSimplifier, SelectiveExpand};
-use crate::gamma::GammaSimplifier;
+use crate::dirac::GammaSimplifier;
 use crate::metric::MetricSimplifier;
 use crate::representations::initialize;
 

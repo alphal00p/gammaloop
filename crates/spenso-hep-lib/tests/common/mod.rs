@@ -1,5 +1,5 @@
 use idenso::{
-    gamma::AGS,
+    dirac::AGS,
     metric::{MetricSimplifier, PermuteWithMetric},
     representations::{Bispinor, initialize},
 };

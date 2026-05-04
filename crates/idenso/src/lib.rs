@@ -30,7 +30,7 @@ use symbolica::{
 use thiserror::Error;
 
 use crate::{
-    gamma::{AGS, GammaSimplifier},
+    dirac::{AGS, GammaSimplifier},
     metric::MetricSimplifier,
     rep_symbols::RS,
     representations::Bispinor,
@@ -41,7 +41,7 @@ pub mod tensor;
 
 pub mod chain;
 pub mod color;
-pub mod gamma;
+pub mod dirac;
 pub mod metric;
 pub mod parsing_ind;
 #[cfg(feature = "python")]
@@ -489,7 +489,7 @@ pub mod test {
 
     use crate::{
         IndexTooling,
-        gamma::AGS,
+        dirac::AGS,
         metric::PermuteWithMetric,
         representations::{Bispinor, initialize},
     };
