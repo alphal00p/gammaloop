@@ -570,6 +570,50 @@ fn test_single_graph_layout_mutates_graph_bytes() {
 }
 
 #[test]
+fn test_layout_preserves_hedge_compass_subgraphs() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "compass".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: 1,
+                compass: Some("e".to_string()),
+                statement: None,
+            }),
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+
+    let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
+    let east = graph_archived_compass_subgraph_bytes(&laid_out, &encode_cbor(&"e")).unwrap();
+    let hedges: Vec<usize> = decode_cbor(&subgraph_hedges_bytes(&east).unwrap());
+
+    assert_eq!(hedges.len(), 1);
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    assert_eq!(
+        edges[0].sink.as_ref().unwrap().compass.as_deref(),
+        Some("e")
+    );
+    assert_eq!(hedges[0], edges[0].sink.as_ref().unwrap().hedge);
+}
+
+#[test]
 fn test_layout_handles_disconnected_builder_nodes() {
     let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
         name: "demo".to_string(),

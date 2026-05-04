@@ -25,6 +25,7 @@ pub use graph_api::{
 pub use pin::{expand_template, PinConstraint};
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
+use dot_parser::ast::CompassPt;
 use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::swap::Swap;
 use linnet::{
@@ -410,12 +411,18 @@ pub struct TypstHedge {
     from: usize,
     to: usize,
     weight: f64,
+    statement: Option<String>,
+    id: Option<usize>,
+    port_label: Option<String>,
+    compasspt: Option<String>,
 }
 
 impl TypstHedge {
     /// Convert back to DotHedgeData
     fn to_dot(&self) -> DotHedgeData {
-        let statement = if self.weight != 0.0 {
+        let statement = if self.statement.is_some() {
+            self.statement.clone()
+        } else if self.weight != 0.0 {
             Some(format!("weight={}", self.weight))
         } else {
             None
@@ -423,15 +430,58 @@ impl TypstHedge {
 
         DotHedgeData {
             statement,
-            id: None,
-            port_label: None,
-            compasspt: None,
+            id: self.id.map(Hedge),
+            port_label: self.port_label.clone(),
+            compasspt: self
+                .compasspt
+                .as_deref()
+                .and_then(|value| parse_hedge_compass(value).ok())
+                .flatten(),
         }
     }
 
-    fn parse(_h: Hedge, _data: DotHedgeData) -> Self {
-        Self::default()
+    fn parse(_h: Hedge, data: DotHedgeData) -> Self {
+        Self {
+            statement: data.statement,
+            id: data.id.map(|id| id.0),
+            port_label: data.port_label,
+            compasspt: data.compasspt.map(hedge_compass_to_string),
+            ..Default::default()
+        }
     }
+}
+
+fn parse_hedge_compass(value: &str) -> Result<Option<CompassPt>, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" | "none" => Ok(None),
+        "n" => Ok(Some(CompassPt::N)),
+        "ne" => Ok(Some(CompassPt::NE)),
+        "e" => Ok(Some(CompassPt::E)),
+        "se" => Ok(Some(CompassPt::SE)),
+        "s" => Ok(Some(CompassPt::S)),
+        "sw" => Ok(Some(CompassPt::SW)),
+        "w" => Ok(Some(CompassPt::W)),
+        "nw" => Ok(Some(CompassPt::NW)),
+        "c" => Ok(Some(CompassPt::C)),
+        "_" => Ok(Some(CompassPt::Underscore)),
+        other => Err(format!("Invalid compass point: {other}")),
+    }
+}
+
+fn hedge_compass_to_string(compass: CompassPt) -> String {
+    match compass {
+        CompassPt::N => "n",
+        CompassPt::NE => "ne",
+        CompassPt::E => "e",
+        CompassPt::SE => "se",
+        CompassPt::S => "s",
+        CompassPt::SW => "sw",
+        CompassPt::W => "w",
+        CompassPt::NW => "nw",
+        CompassPt::C => "c",
+        CompassPt::Underscore => "_",
+    }
+    .to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
