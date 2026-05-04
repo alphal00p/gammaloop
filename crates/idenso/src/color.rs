@@ -257,6 +257,30 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
     nc: symbol!("spenso::Nc";Real),
 });
 
+/// Builds a fundamental color-generator factor for use inside `chain!` or
+/// `trace!`.
+///
+/// The adjoint-index argument is converted through
+/// `spenso::symbolica_atom::IntoAtom`, so it can be a typed color-adjoint slot,
+/// an atom, or an atom view. The factor uses the chain placeholder indices `in`
+/// and `out`; the surrounding chain or trace owns the physical endpoints.
+///
+/// # Examples
+///
+/// ```ignore
+/// use idenso::color_t;
+/// use spenso::{slot, trace};
+///
+/// let factor = color_t!(slot!(coad_na, a));
+/// let expr = trace!(&cof_nc, factor);
+/// ```
+#[macro_export]
+macro_rules! color_t {
+    ($a:expr) => {
+        $crate::color::CS.chain_t(spenso::symbolica_atom::IntoAtom::into_atom($a))
+    };
+}
+
 pub fn color_conj_impl(expression: AtomView) -> Atom {
     let expr = expression.to_owned();
     let cof = ColorFundamental {};
@@ -626,7 +650,9 @@ mod test {
                 None,
             )
         });
-    use spenso::{network::parsing::ShadowedStructure, structure::permuted::Perm};
+    use spenso::{
+        chain, network::parsing::ShadowedStructure, slot, structure::permuted::Perm, trace,
+    };
     use symbolica::{parse, parse_lit};
 
     use crate::gamma::PS;
@@ -638,40 +664,8 @@ mod test {
 
     use super::*;
 
-    macro_rules! assert_bare_snapshot {
-        ($expr:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!($expr.to_bare_ordered_string(), @$snapshot)
-        };
-    }
-
-    macro_rules! assert_color_snapshot {
-        ($expr:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!($expr.simplify_color().to_bare_ordered_string(), @$snapshot)
-        };
-    }
-
-    macro_rules! assert_color_expanded_metric_snapshot {
-        ($expr:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!(
-                $expr.simplify_color()
-                    .expand()
-                    .simplify_metrics()
-                    .to_bare_ordered_string(),
-                @$snapshot
-            )
-        };
-    }
-
-    macro_rules! assert_color_metric_snapshot {
-        ($expr:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!(
-                $expr.simplify_color()
-                    .simplify_metrics()
-                    .to_bare_ordered_string(),
-                @$snapshot
-            )
-        };
-    }
+    use crate::color_t;
+    use crate::test_support::{TestReps, assert_bare_snapshot};
 
     fn assert_color_zero(expr: Atom) {
         assert!(expr.simplify_color().is_zero());
@@ -775,7 +769,7 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_snapshot!(expr, @"TR*g(coad(-1+Nc^2,a),coad(-1+Nc^2,b))");
+        assert_bare_snapshot!(expr.simplify_color(),@"TR*g(coad(-1+Nc^2,a),coad(-1+Nc^2,b))");
     }
 
     #[test]
@@ -787,9 +781,7 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_expanded_metric_snapshot!(
-            expr,
-            @"-1*Nc^(-1)*TR*g(cof(Nc,i),dind(cof(Nc,j)))*g(cof(Nc,k),dind(cof(Nc,l)))+TR*g(cof(Nc,i),dind(cof(Nc,l)))*g(cof(Nc,k),dind(cof(Nc,j)))"
+        assert_bare_snapshot!(expr.simplify_color().expand().simplify_metrics(),@"-1*Nc^(-1)*TR*g(cof(Nc,i),dind(cof(Nc,j)))*g(cof(Nc,k),dind(cof(Nc,l)))+TR*g(cof(Nc,i),dind(cof(Nc,l)))*g(cof(Nc,k),dind(cof(Nc,j)))"
         );
     }
 
@@ -804,94 +796,80 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_metric_snapshot!(
-            expr,
-            @"-1*Nc^(-1)*TR*t(coad(-1+Nc^2,b),cof(Nc,i),dind(cof(Nc,l)))"
+        assert_bare_snapshot!(expr.simplify_color().simplify_metrics(),@"-1*Nc^(-1)*TR*t(coad(-1+Nc^2,b),cof(Nc,i),dind(cof(Nc,l)))"
         );
     }
 
     #[test]
     #[ignore = "pending public chain-based color trace simplification"]
     fn form_chain_one_generator_trace_vanishes() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(cof(Nc, i), default_namespace = "spenso"),
-            parse_lit!(dind(cof(Nc, i)), default_namespace = "spenso"),
-            [CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso"))],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), i),
+            color_t!(slot!(r.coad_na, a)),
         );
 
-        assert_color_snapshot!(expr, @"0");
+        assert_bare_snapshot!(expr.simplify_color(),@"0");
     }
 
     #[test]
     #[ignore = "pending public chain-based color trace simplification"]
     fn form_chain_two_generator_trace_normalizes() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(cof(Nc, i), default_namespace = "spenso"),
-            parse_lit!(dind(cof(Nc, i)), default_namespace = "spenso"),
-            [
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, b), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), i),
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
         );
 
-        assert_color_snapshot!(expr, @"TR*g(coad(NA,a),coad(NA,b))");
+        assert_bare_snapshot!(expr.simplify_color(),@"TR*g(coad(NA,a),coad(NA,b))");
     }
 
     #[test]
     #[ignore = "pending public chain-based three-generator color trace terminal"]
     fn form_three_generator_trace_terminal() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(cof(Nc, i), default_namespace = "spenso"),
-            parse_lit!(dind(cof(Nc, i)), default_namespace = "spenso"),
-            [
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, b), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, c), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), i),
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"dR(coad(NA,a),coad(NA,b),coad(NA,c))+1/2*1𝑖*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))"
+        assert_bare_snapshot!(expr.simplify_color(),@"dR(coad(NA,a),coad(NA,b),coad(NA,c))+1/2*1𝑖*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))"
         );
     }
 
     #[test]
     #[ignore = "pending public chain-based adjacent color Casimir reduction"]
     fn form_adjacent_generator_casimir_chain() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(cof(Nc, i), default_namespace = "spenso"),
-            parse_lit!(dind(cof(Nc, k)), default_namespace = "spenso"),
-            [
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), k),
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, a)),
         );
 
-        assert_color_snapshot!(expr, @"CF*g(cof(Nc,i),dind(cof(Nc,k)))");
+        assert_bare_snapshot!(expr.simplify_color(),@"CF*g(cof(Nc,i),dind(cof(Nc,k)))");
     }
 
     #[test]
     #[ignore = "pending public trace-based separated color Casimir reduction"]
     fn form_separated_generator_casimir_trace() {
-        initialize();
-        let expr = T.trace(
-            parse_lit!(cof(Nc), default_namespace = "spenso"),
-            [
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, b), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, c), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = trace!(
+            &r.cof_nc,
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, c)),
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"(CF+-1/2*CA)*trace(cof(Nc),t(coad(NA,b),in,out),t(coad(NA,c),in,out))"
+        assert_bare_snapshot!(expr.simplify_color(),@"(CF+-1/2*CA)*trace(cof(Nc),t(coad(NA,b),in,out),t(coad(NA,c),in,out))"
         );
     }
 
@@ -904,7 +882,7 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_snapshot!(expr, @"CA*g(coad(NA,a),coad(NA,b))");
+        assert_bare_snapshot!(expr.simplify_color(),@"CA*g(coad(NA,a),coad(NA,b))");
     }
 
     #[test]
@@ -918,31 +896,25 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"1/2*CA*f(coad(NA,e),coad(NA,f_),coad(NA,g_))"
+        assert_bare_snapshot!(expr.simplify_color(),@"1/2*CA*f(coad(NA,e),coad(NA,f_),coad(NA,g_))"
         );
     }
 
     #[test]
     #[ignore = "pending public trace-f shortcut"]
     fn form_mixed_trace_structure_contraction() {
-        initialize();
-        let expr = T.trace(
-            parse_lit!(cof(Nc), default_namespace = "spenso"),
-            [
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, b), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, d), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = trace!(
+            &r.cof_nc,
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, d)),
         ) * parse_lit!(
             f(coad(NA, a), coad(NA, b), coad(NA, c)),
             default_namespace = "spenso"
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"1/2*1𝑖*CA*trace(cof(Nc),t(coad(NA,c),in,out),t(coad(NA,d),in,out))"
+        assert_bare_snapshot!(expr.simplify_color(),@"1/2*1𝑖*CA*trace(cof(Nc),t(coad(NA,c),in,out),t(coad(NA,d),in,out))"
         );
     }
 
@@ -956,29 +928,23 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"NA^(-1)*d33(sym_x,sym_y)*g(coad(NA,c),coad(NA,d_))"
+        assert_bare_snapshot!(expr.simplify_color(),@"NA^(-1)*d33(sym_x,sym_y)*g(coad(NA,c),coad(NA,d_))"
         );
     }
 
     #[test]
     #[ignore = "pending four-generator color trace terminal"]
     fn form_four_generator_trace_terminal() {
-        initialize();
-        let expr = T.trace(
-            parse_lit!(cof(Nc), default_namespace = "spenso"),
-            [
-                CS.chain_t(parse_lit!(coad(NA, a), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, b), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, c), default_namespace = "spenso")),
-                CS.chain_t(parse_lit!(coad(NA, d), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = trace!(
+            &r.cof_nc,
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+            color_t!(slot!(r.coad_na, d)),
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"dR(coad(NA,a),coad(NA,b),coad(NA,c),coad(NA,d))+1/2*1𝑖*dR(coad(NA,a),coad(NA,b),coad(NA,x))*f(coad(NA,c),coad(NA,d),coad(NA,x))+1/2*1𝑖*dR(coad(NA,c),coad(NA,d),coad(NA,x))*f(coad(NA,a),coad(NA,b),coad(NA,x))+-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))"
+        assert_bare_snapshot!(expr.simplify_color(),@"dR(coad(NA,a),coad(NA,b),coad(NA,c),coad(NA,d))+1/2*1𝑖*dR(coad(NA,a),coad(NA,b),coad(NA,x))*f(coad(NA,c),coad(NA,d),coad(NA,x))+1/2*1𝑖*dR(coad(NA,c),coad(NA,d),coad(NA,x))*f(coad(NA,a),coad(NA,b),coad(NA,x))+-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))"
         );
     }
 
@@ -993,9 +959,7 @@ mod test {
             default_namespace = "spenso"
         );
 
-        assert_color_snapshot!(
-            expr,
-            @"1/2*CA*projected_invariant(a,b,invariant_environment(a,b))"
+        assert_bare_snapshot!(expr.simplify_color(),@"1/2*CA*projected_invariant(a,b,invariant_environment(a,b))"
         );
     }
 

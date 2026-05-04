@@ -1,0 +1,179 @@
+use crate::structure::{
+    representation::{RepName, Representation},
+    slot::{AbsInd, IsAbstractSlot, ParseableAind, Slot},
+};
+use symbolica::atom::{Atom, AtomOrView, AtomView, Symbol};
+
+/// Converts common symbolic Spenso values into owned Symbolica atoms.
+///
+/// This is used by the variadic chain and trace macros so callers can pass
+/// representation slots, stripped representations, symbols, atoms, or atom
+/// views without spelling out the conversion at every call site.
+pub trait IntoAtom {
+    fn into_atom(self) -> Atom;
+}
+
+impl IntoAtom for Atom {
+    fn into_atom(self) -> Atom {
+        self
+    }
+}
+
+impl IntoAtom for &Atom {
+    fn into_atom(self) -> Atom {
+        self.clone()
+    }
+}
+
+impl IntoAtom for AtomView<'_> {
+    fn into_atom(self) -> Atom {
+        self.to_owned()
+    }
+}
+
+impl IntoAtom for AtomOrView<'_> {
+    fn into_atom(self) -> Atom {
+        self.into_owned()
+    }
+}
+
+impl IntoAtom for Symbol {
+    fn into_atom(self) -> Atom {
+        Atom::var(self)
+    }
+}
+
+impl<R, A> IntoAtom for Slot<R, A>
+where
+    R: RepName,
+    A: AbsInd + ParseableAind,
+{
+    fn into_atom(self) -> Atom {
+        self.to_atom()
+    }
+}
+
+impl<R> IntoAtom for Representation<R>
+where
+    R: RepName,
+{
+    fn into_atom(self) -> Atom {
+        self.to_symbolic(std::iter::empty::<Atom>())
+    }
+}
+
+impl<R> IntoAtom for &Representation<R>
+where
+    R: RepName,
+{
+    fn into_atom(self) -> Atom {
+        self.to_symbolic(std::iter::empty::<Atom>())
+    }
+}
+
+/// Creates a Symbolica symbol from an identifier.
+///
+/// This is a small shorthand for `symbolica::symbol!(stringify!(name))`.
+/// It is useful in expression-building code where many symbolic abstract
+/// indices are needed.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::s;
+///
+/// let mu = s!(mu);
+/// let dim = s!(D);
+/// ```
+#[macro_export]
+macro_rules! s {
+    ($name:ident) => {
+        symbolica::symbol!(stringify!($name))
+    };
+}
+
+/// Creates an abstract-index slot from a representation and an index.
+///
+/// The slot index is fixed to Spenso's symbolic `AbstractIndex`, which avoids
+/// type-inference ambiguity when passing `Symbol`s. The second argument can be
+/// an identifier, expanded through [`s!`], an integer index, or an arbitrary
+/// expression convertible into `AbstractIndex`.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::{s, slot};
+/// use spenso::structure::representation::{Minkowski, RepName};
+///
+/// let mink4 = Minkowski {}.new_rep(4);
+/// let mu = slot!(mink4, mu);
+/// let nu = slot!(mink4, s!(nu));
+/// let one = slot!(mink4, 1);
+/// ```
+#[macro_export]
+macro_rules! slot {
+    ($rep:expr, $index:ident) => {
+        ($rep).slot::<$crate::structure::abstract_index::AbstractIndex, _>($crate::s!($index))
+    };
+    ($rep:expr, $index:expr) => {
+        ($rep).slot::<$crate::structure::abstract_index::AbstractIndex, _>($index)
+    };
+}
+
+/// Builds a symbolic open chain with a start slot, an end slot, and any number
+/// of factors.
+///
+/// Arguments are converted through [`IntoAtom`], so callers can pass Spenso
+/// slots, atoms, atom views, or symbols. This macro is only the variadic surface
+/// for [`SPENSO_TAG.chain`](crate::network::tags::SPENSO_TAG); it does not
+/// simplify or normalize the expression.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::{chain, slot};
+///
+/// let expr = chain!(
+///     slot!(bis4, a),
+///     slot!(bis4, b),
+///     gamma_mu,
+///     gamma_nu,
+/// );
+/// ```
+#[macro_export]
+macro_rules! chain {
+    ($start:expr, $end:expr $(, $factor:expr)* $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.chain(
+            $crate::symbolica_atom::IntoAtom::into_atom($start),
+            $crate::symbolica_atom::IntoAtom::into_atom($end),
+            vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*],
+        )
+    };
+}
+
+/// Builds a symbolic trace with a representation and any number of factors.
+///
+/// The representation and factors are converted through [`IntoAtom`]. This is
+/// the variadic surface for [`SPENSO_TAG.trace`](crate::network::tags::SPENSO_TAG)
+/// and intentionally leaves any algebraic simplification to the caller.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::trace;
+///
+/// let expr = trace!(
+///     &cof_nc,
+///     color_t_a,
+///     color_t_b,
+/// );
+/// ```
+#[macro_export]
+macro_rules! trace {
+    ($rep:expr $(, $factor:expr)* $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.trace(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*],
+        )
+    };
+}

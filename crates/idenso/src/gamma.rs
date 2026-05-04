@@ -1175,6 +1175,10 @@ pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
     function!(ETS.metric, i.into(), j.into())
 }
 
+/// Builds an identity atom between two indices.
+///
+/// The arguments are parsed as Symbolica literals, preserving the historical
+/// `id!(i, j)` shorthand used in idenso tests and examples.
 #[macro_export]
 macro_rules! id {
     ($i: expr, $j: expr) => {{
@@ -1182,6 +1186,98 @@ macro_rules! id {
         let j = symbolica::parse_lit!($j);
         id_atom(i, j)
     }};
+}
+
+/// Builds a gamma matrix.
+///
+/// With one argument, this builds a chain factor using the placeholder indices
+/// `in` and `out`; the surrounding `chain!` or `trace!` owns the physical
+/// endpoints. With three arguments, this builds the ordinary gamma tensor with
+/// explicit spinor endpoints and a Lorentz slot.
+///
+/// Arguments are converted through `spenso::symbolica_atom::IntoAtom`, so they
+/// can be typed slots, atoms, or atom views.
+///
+/// # Examples
+///
+/// ```ignore
+/// use idenso::gamma;
+/// use spenso::{chain, slot};
+///
+/// let factor = gamma!(slot!(mink4, mu));
+/// let chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);
+/// let default_tensor = gamma!(mu, a, b);
+/// let indexed_tensor = gamma!(1, 2, 3);
+/// let explicit_tensor = gamma!(mink_d, mu, bis_d, a, b);
+/// let slot_tensor = gamma!(slot!(mink4, mu), slot!(bis4, a), slot!(bis4, b));
+/// ```
+#[macro_export]
+macro_rules! gamma {
+    ($mu:expr) => {
+        $crate::gamma::AGS.chain_gamma(spenso::symbolica_atom::IntoAtom::into_atom($mu))
+    };
+    ($mu:ident, $i:ident, $j:ident) => {{
+        let mink = spenso::structure::representation::RepName::new_rep(
+            &spenso::structure::representation::Minkowski {},
+            4,
+        );
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::gamma!(
+            spenso::slot!(mink, $mu),
+            spenso::slot!(bis, $i),
+            spenso::slot!(bis, $j)
+        )
+    }};
+    ($mu:literal, $i:literal, $j:literal) => {{
+        let mink = spenso::structure::representation::RepName::new_rep(
+            &spenso::structure::representation::Minkowski {},
+            4,
+        );
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::gamma!(
+            spenso::slot!(mink, $mu),
+            spenso::slot!(bis, $i),
+            spenso::slot!(bis, $j)
+        )
+    }};
+    ($mink_rep:expr, $mu:ident, $bis_rep:expr, $i:ident, $j:ident) => {
+        $crate::gamma!(
+            spenso::slot!($mink_rep, $mu),
+            spenso::slot!($bis_rep, $i),
+            spenso::slot!($bis_rep, $j)
+        )
+    };
+    ($mink_rep:expr, $mu:expr, $bis_rep:expr, $i:expr, $j:expr) => {
+        $crate::gamma!(
+            spenso::slot!($mink_rep, $mu),
+            spenso::slot!($bis_rep, $i),
+            spenso::slot!($bis_rep, $j)
+        )
+    };
+    ($mu:expr, $i:expr, $j:expr) => {
+        symbolica::atom::FunctionBuilder::new($crate::gamma::AGS.gamma)
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($j))
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($mu))
+            .finish()
+    };
+}
+
+/// Builds a gamma-five factor for use inside `chain!` or `trace!`.
+///
+/// The factor uses the chain placeholder indices `in` and `out`; the surrounding
+/// chain or trace owns the physical endpoints.
+#[macro_export]
+macro_rules! gamma5 {
+    () => {
+        $crate::gamma::AGS.chain_gamma5()
+    };
 }
 #[cfg(test)]
 mod test {
@@ -1194,6 +1290,7 @@ mod test {
     use spenso::shadowing::symbolica_utils::TypstSettings;
     use spenso::structure::IndexlessNamedStructure;
     use spenso::structure::PermutedStructure;
+    use spenso::{chain, slot};
 
     static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> =
         LazyLock::new(|| {
@@ -1211,10 +1308,10 @@ mod test {
     use super::*;
 
     use crate::color::ColorSimplifier;
-    use crate::id;
     use crate::tensor::SymbolicNetParse;
     use crate::tensor::SymbolicTensor;
     use crate::test::test_initialize;
+    use crate::{gamma, id};
     use spenso::structure::{abstract_index::AbstractIndex, permuted::Perm};
     use symbolica::{
         atom::{Atom, AtomCore},
@@ -1222,30 +1319,10 @@ mod test {
     };
 
     use crate::representations::initialize;
-
-    macro_rules! assert_gamma_snapshot {
-        ($expr:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!($expr.simplify_gamma().to_bare_ordered_string(), @$snapshot)
-        };
-    }
-
-    macro_rules! assert_gamma_expanded_snapshot {
-        ($expr:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!(
-                $expr.simplify_gamma().expand().to_bare_ordered_string(),
-                @$snapshot
-            )
-        };
-    }
+    use crate::test_support::{TestReps, assert_bare_snapshot};
 
     fn assert_gamma_zero(expr: Atom) {
         assert!(expr.simplify_gamma().is_zero());
-    }
-
-    macro_rules! assert_usize_snapshot {
-        ($value:expr, @$snapshot:literal) => {
-            insta::assert_snapshot!($value.to_string(), @$snapshot)
-        };
     }
 
     #[test]
@@ -1310,23 +1387,23 @@ mod test {
     #[test]
     fn form_two_gamma_trace() {
         initialize();
-        let expr = parse_lit!(
-            gamma(bis(4, a), bis(4, b), mink(4, mu)) * gamma(bis(4, b), bis(4, a), mink(4, nu)),
-            default_namespace = "spenso"
-        );
+        let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
 
-        assert_gamma_snapshot!(expr, @"4*g(mink(4,mu),mink(4,nu))");
+        assert_bare_snapshot!(expr.simplify_gamma(),@"4*g(mink(4,mu),mink(4,nu))");
+    }
+
+    #[test]
+    fn gamma_macro_accepts_integer_indices() {
+        initialize();
+        let expr = gamma!(1, 2, 3);
+
+        assert_bare_snapshot!(expr, @"gamma(bis(4,2),bis(4,3),mink(4,1))");
     }
 
     #[test]
     fn form_odd_gamma_trace_vanishes() {
         initialize();
-        let expr = parse_lit!(
-            gamma(bis(4, a), bis(4, b), mink(4, mu))
-                * gamma(bis(4, b), bis(4, c), mink(4, nu))
-                * gamma(bis(4, c), bis(4, a), mink(4, rho)),
-            default_namespace = "spenso"
-        );
+        let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, a);
 
         assert_gamma_zero(expr);
     }
@@ -1334,107 +1411,82 @@ mod test {
     #[test]
     fn form_four_gamma_trace_recurses() {
         initialize();
-        let expr = parse_lit!(
-            gamma(bis(4, a), bis(4, b), mink(4, mu))
-                * gamma(bis(4, b), bis(4, c), mink(4, nu))
-                * gamma(bis(4, c), bis(4, d), mink(4, rho))
-                * gamma(bis(4, d), bis(4, a), mink(4, sigma)),
-            default_namespace = "spenso"
-        );
+        let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, d) * gamma!(sigma, d, a);
 
-        assert_gamma_expanded_snapshot!(
-            expr,
-            @"-4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))"
+        assert_bare_snapshot!(expr.simplify_gamma().expand(),@"-4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))"
         );
     }
 
     #[test]
     fn form_repeated_lorentz_gamma_chain_contracts_to_dimension() {
         initialize();
-        let expr = parse_lit!(
-            gamma(bis(4, a), bis(4, b), mink(4, mu)) * gamma(bis(4, b), bis(4, c), mink(4, mu)),
-            default_namespace = "spenso"
-        );
+        let expr = gamma!(mu, a, b) * gamma!(mu, b, c);
 
-        assert_gamma_snapshot!(expr, @"4*g(bis(4,a),bis(4,c))");
+        assert_bare_snapshot!(expr.simplify_gamma(),@"4*g(bis(4,a),bis(4,c))");
     }
 
     #[test]
     #[ignore = "pending public chain-based gamma contraction"]
     fn form_adjacent_chain_lorentz_contraction() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(bis(d, a), default_namespace = "spenso"),
-            parse_lit!(bis(d, b), default_namespace = "spenso"),
-            [
-                AGS.chain_gamma(parse_lit!(mink(d, mu), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(d, mu), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.bis_d, a),
+            slot!(r.bis_d, b),
+            gamma!(slot!(r.mink_d, mu)),
+            gamma!(slot!(r.mink_d, mu)),
         );
 
-        assert_gamma_snapshot!(expr, @"d*g(bis(d,a),bis(d,b))");
+        assert_bare_snapshot!(expr.simplify_gamma(), @"d*g(bis(d,a),bis(d,b))");
     }
 
     #[test]
     #[ignore = "pending public chain-based Chisholm reduction"]
     fn form_chisholm_odd_interior_chain() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(bis(4, a), default_namespace = "spenso"),
-            parse_lit!(bis(4, b), default_namespace = "spenso"),
-            [
-                AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, nu1), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, nu2), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, nu3), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+            gamma!(slot!(r.mink4, nu1)),
+            gamma!(slot!(r.mink4, nu2)),
+            gamma!(slot!(r.mink4, nu3)),
+            gamma!(slot!(r.mink4, mu)),
         );
 
-        assert_gamma_snapshot!(
-            expr,
-            @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu3)),gamma(in,out,mink(4,nu2)),gamma(in,out,mink(4,nu1)))"
+        assert_bare_snapshot!(expr.simplify_gamma(),@"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu3)),gamma(in,out,mink(4,nu2)),gamma(in,out,mink(4,nu1)))"
         );
     }
 
     #[test]
     #[ignore = "pending public chain-based Chisholm reduction"]
     fn form_chisholm_two_interior_chain() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(bis(4, a), default_namespace = "spenso"),
-            parse_lit!(bis(4, b), default_namespace = "spenso"),
-            [
-                AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, nu), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, rho), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+            gamma!(slot!(r.mink4, nu)),
+            gamma!(slot!(r.mink4, rho)),
+            gamma!(slot!(r.mink4, mu)),
         );
 
-        assert_gamma_snapshot!(
-            expr,
-            @"4*g(bis(4,a),bis(4,b))*g(mink(4,nu),mink(4,rho))"
+        assert_bare_snapshot!(expr.simplify_gamma(),@"4*g(bis(4,a),bis(4,b))*g(mink(4,nu),mink(4,rho))"
         );
     }
 
     #[test]
     #[ignore = "pending public chain-based gamma-five epsilon reduction"]
     fn form_gamma_five_epsilon_trick() {
-        initialize();
-        let expr = T.chain(
-            parse_lit!(bis(4, a), default_namespace = "spenso"),
-            parse_lit!(bis(4, b), default_namespace = "spenso"),
-            [
-                AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, nu), default_namespace = "spenso")),
-                AGS.chain_gamma(parse_lit!(mink(4, rho), default_namespace = "spenso")),
-            ],
+        let r = TestReps::new();
+        let expr = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+            gamma!(slot!(r.mink4, nu)),
+            gamma!(slot!(r.mink4, rho)),
         );
 
-        assert_gamma_snapshot!(
-            expr,
-            @"chain(bis(4,a),bis(4,b),gamma5(in,out),gamma(in,out,mink(4,sigma)))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))"
+        assert_bare_snapshot!(expr.simplify_gamma(),@"chain(bis(4,a),bis(4,b),gamma5(in,out),gamma(in,out,mink(4,sigma)))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))"
         );
     }
 
@@ -1444,7 +1496,7 @@ mod test {
         initialize();
         let term_count = 0usize;
 
-        assert_usize_snapshot!(term_count, @"51975");
+        insta::assert_snapshot!(term_count.to_string(), @"51975");
     }
 
     #[test]
@@ -1453,7 +1505,7 @@ mod test {
         initialize();
         let term_count = 0usize;
 
-        assert_usize_snapshot!(term_count, @"1029");
+        insta::assert_snapshot!(term_count.to_string(), @"1029");
     }
 
     #[test]

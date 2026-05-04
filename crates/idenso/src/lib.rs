@@ -49,6 +49,8 @@ pub mod python;
 pub mod rep_symbols;
 pub mod representations;
 pub mod schoonschip;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 #[macro_export]
 macro_rules!  symbol_set {
