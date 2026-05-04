@@ -19,9 +19,7 @@ use symbolica::{
     utils::Settable,
 };
 
-use crate::{
-    IndexTooling, chain::Chain, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS,
-};
+use crate::{IndexTooling, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS};
 use eyre::Result;
 
 use super::representations::Bispinor;
@@ -892,6 +890,7 @@ pub fn gamma_simplify_impl(expr: AtomView) -> Atom {
         .iter()
         .fold(Atom::Zero, |a, (c, s)| a + c * s)
 }
+
 /// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
 ///
 /// Implementors provide a method to apply gamma matrix identities, such as
@@ -907,6 +906,9 @@ pub trait GammaSimplifier {
     /// An [`Atom`] representing the expression after gamma matrix simplification.
     fn simplify_gamma(&self) -> Atom;
 
+    /// Simplifies gamma matrices with explicit chain-ordering and trace settings.
+    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom;
+
     fn simplify_gamma0(&self) -> Atom;
 
     fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom>;
@@ -914,7 +916,11 @@ pub trait GammaSimplifier {
 
 impl GammaSimplifier for Atom {
     fn simplify_gamma(&self) -> Atom {
-        gamma_simplify_impl(self.as_atom_view())
+        self.as_view().simplify_gamma()
+    }
+
+    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
+        self.as_view().simplify_gamma_with(settings)
     }
 
     fn simplify_gamma0(&self) -> Atom {
@@ -928,7 +934,11 @@ impl GammaSimplifier for Atom {
 
 impl GammaSimplifier for AtomView<'_> {
     fn simplify_gamma(&self) -> Atom {
-        self.collect_chains(Bispinor {}.into())
+        self.simplify_gamma_with(GammaSimplifySettings::default())
+    }
+
+    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
+        simplify::simplify_dirac_chains_impl(*self, settings)
     }
 
     fn simplify_gamma0(&self) -> Atom {
@@ -1002,5 +1012,7 @@ pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
 }
 
 mod macros;
+mod simplify;
+pub use simplify::{GammaChainOrdering, GammaSimplifySettings};
 #[cfg(test)]
 mod test;

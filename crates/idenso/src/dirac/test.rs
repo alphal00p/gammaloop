@@ -173,7 +173,6 @@ fn form_repeated_lorentz_gamma_chain_contracts_to_dimension() {
 }
 
 #[test]
-#[ignore = "pending public chain-based gamma contraction"]
 fn form_adjacent_chain_lorentz_contraction() {
     let r = TestReps::new();
     let expr = chain!(
@@ -184,6 +183,38 @@ fn form_adjacent_chain_lorentz_contraction() {
     );
 
     assert_bare_snapshot!(expr.simplify_gamma(), @"d*g(bis(d,a),bis(d,b))");
+}
+
+#[test]
+fn gamma_chain_canonical_ordering_is_opt_in() {
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma!(slot!(r.mink4, nu)),
+        gamma!(slot!(r.mink4, mu)),
+    );
+
+    assert_bare_snapshot!(
+        expr.simplify_gamma(),
+        @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))"
+    );
+
+    assert_bare_snapshot!(
+        expr.simplify_gamma_with(GammaSimplifySettings::canonical()),
+        @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))"
+    );
+}
+
+#[test]
+fn gamma_trace_evaluation_can_be_disabled() {
+    initialize();
+    let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
+
+    assert_bare_snapshot!(
+        expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()),
+        @"trace(bis(4),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))"
+    );
 }
 
 #[test]
