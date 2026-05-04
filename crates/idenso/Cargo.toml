@@ -37,6 +37,18 @@ harness = false
 name = "schoonschip_modes_time"
 harness = false
 
+[[bench]]
+name = "vertex_algebra"
+harness = false
+
+[[bench]]
+name = "vertex_algebra_time"
+harness = false
+
+[[bench]]
+name = "vertex_algebra_once"
+harness = false
+
 [features]
 default = []
 bincode = ["dep:bincode", "dep:bincode-trait-derive"]

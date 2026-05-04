@@ -463,7 +463,7 @@
         };
       };
 
-      devShells.default = craneLib.devShell {
+      devShells.default = craneLib.devShell ({
         # checks = self.checks.${system};
 
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
@@ -545,6 +545,8 @@
             cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
           })
         ];
-      };
+      } // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
+        GUNGRAUN_RUNNER = "${gungraunRunner}/bin/gungraun-runner";
+      });
     });
 }
