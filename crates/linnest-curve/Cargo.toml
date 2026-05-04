@@ -1,0 +1,18 @@
+[package]
+name = "linnest-curve"
+version = "0.1.0"
+edition.workspace = true
+description = "Bezier curve helpers for Typst WebAssembly plugins"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT"
+publish = false
+
+[lib]
+name = "linnest_curve"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ciborium = "0.2.2"
+kurbo = "0.11.1"
+serde = { version = "1.0", features = ["derive"] }
+wasm-minimal-protocol = "0.2.0"

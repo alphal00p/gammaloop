@@ -4,6 +4,8 @@
   name: "example",
   edge-statements: (
     eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
+    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a")
@@ -12,7 +14,12 @@
   b,
   source: (node: a, compass: "e"),
   sink: (node: c, compass: "w"),
-  statements: (color: "0055ff", label: "a-c"),
+  statements: (
+    color: "0055ff",
+    source-color: "d72638",
+    sink-color: "1b7f4c",
+    label: "a-c",
+  ),
 )
 #let g = layout(graph.finish(b), seed: 2, steps: 5)
 #let east = subgraph.compass(g, "e")
