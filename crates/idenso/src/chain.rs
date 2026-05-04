@@ -11,10 +11,24 @@ use symbolica::{
 use crate::W_;
 
 pub trait Chain {
+    /// combine adjacent chain expressions into a single chain expression.
+    ///
+    /// `chain(rep(d,i), rep(d,j), ...,A(..,in,out...))*chain(rep(d,j), rep(d,k), B(..,in,out...),...)`
+    ///
+    ///  becomes
+    ///
+    /// `chain(rep(d,i), rep(d,k), ...,A(..,in,out...),B(..,in,out...),...)`
     fn collect_chains(&self, representation: LibraryRep) -> Atom;
 
+    /// Turns traced out chains into traces e.g.
+    ///
+    /// `chain(rep(d,i), rep(d,i), ...)` becomes `trace(rep(d),...)`
     fn normalize_chains(&self) -> Atom;
 
+    /// turns tensors with two indices of the representation into chain expressions, for collecting using [`Atom::collect_chains`]
+    ///
+    /// `A(..,rep(d,i),rep(d,j),...)` becomes `chain(rep(d,i),rep(d,j),A(..,in,out...))`
+    ///
     fn chainify(&self, representation: LibraryRep) -> Atom;
 }
 

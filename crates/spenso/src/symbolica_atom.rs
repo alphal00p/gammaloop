@@ -139,9 +139,30 @@ macro_rules! slot {
 ///     gamma_mu,
 ///     gamma_nu,
 /// );
+///
+/// let factors = vec![gamma_mu, gamma_nu];
+/// let expr = chain!(slot!(bis4, a), slot!(bis4, b); factors);
 /// ```
 #[macro_export]
 macro_rules! chain {
+    ($start:expr, $end:expr; $factors:expr $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.chain(
+            $crate::symbolica_atom::IntoAtom::into_atom($start),
+            $crate::symbolica_atom::IntoAtom::into_atom($end),
+            ($factors)
+                .into_iter()
+                .map($crate::symbolica_atom::IntoAtom::into_atom),
+        )
+    };
+    ($start:expr, $end:expr $(, $factor:expr)+; $factors:expr $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.chain(
+            $crate::symbolica_atom::IntoAtom::into_atom($start),
+            $crate::symbolica_atom::IntoAtom::into_atom($end),
+            vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*]
+                .into_iter()
+                .chain(($factors).into_iter().map($crate::symbolica_atom::IntoAtom::into_atom)),
+        )
+    };
     ($start:expr, $end:expr $(, $factor:expr)* $(,)?) => {
         $crate::network::tags::SPENSO_TAG.chain(
             $crate::symbolica_atom::IntoAtom::into_atom($start),
@@ -167,13 +188,62 @@ macro_rules! chain {
 ///     color_t_a,
 ///     color_t_b,
 /// );
+///
+/// let factors = vec![color_t_a, color_t_b];
+/// let expr = trace!(&cof_nc; factors);
 /// ```
 #[macro_export]
 macro_rules! trace {
+    ($rep:expr; $factors:expr $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.trace(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            ($factors)
+                .into_iter()
+                .map($crate::symbolica_atom::IntoAtom::into_atom),
+        )
+    };
+    ($rep:expr $(, $factor:expr)+; $factors:expr $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.trace(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*]
+                .into_iter()
+                .chain(($factors).into_iter().map($crate::symbolica_atom::IntoAtom::into_atom)),
+        )
+    };
     ($rep:expr $(, $factor:expr)* $(,)?) => {
         $crate::network::tags::SPENSO_TAG.trace(
             $crate::symbolica_atom::IntoAtom::into_atom($rep),
             vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*],
         )
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use symbolica::{atom::Atom, symbol};
+
+    #[test]
+    fn chain_macro_accepts_iterable_factors() {
+        let start = Atom::var(symbol!("start"));
+        let end = Atom::var(symbol!("end"));
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+
+        assert_eq!(
+            crate::chain!(start.clone(), end.clone(); vec![first.clone(), second.clone()]),
+            crate::chain!(start, end, first, second)
+        );
+    }
+
+    #[test]
+    fn trace_macro_accepts_iterable_factors() {
+        let rep = Atom::var(symbol!("rep"));
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+
+        assert_eq!(
+            crate::trace!(rep.clone(); vec![first.clone(), second.clone()]),
+            crate::trace!(rep, first, second)
+        );
+    }
 }
