@@ -21,7 +21,7 @@
     label: "a-c",
   ),
 )
-#let g = layout(graph.finish(b), seed: 2, steps: 5)
+#let g = layout(graph.finish(b))
 #let east = subgraph.compass(g, "e")
 
 = Builder Example

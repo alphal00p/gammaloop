@@ -16,7 +16,7 @@
 ///   nodes: ((name: "a"), (name: "b")),
 ///   edges: ((source: (node: 0), sink: (node: 1)),),
 /// )
-/// #let g = layout(g, seed: 2, steps: 5)
+/// #let g = layout(g)
 /// #graph.edges(g).map(edge => edge.pos)
 /// ```
 /// -> bytes
@@ -45,11 +45,11 @@
   /// Iterations per epoch. In `"force"` mode this is the number of force
   /// integration steps; in `"anneal"` mode this is the number of proposals per
   /// temperature epoch. -> int
-  steps: int(sys.inputs.at("steps", default: "15")),
+  steps: int(sys.inputs.at("steps", default: "30")),
 
   /// Seed for deterministic initialization, force-mode jitter, and annealing
   /// proposals. Applies to both modes. -> int
-  seed: int(sys.inputs.at("seed", default: "14")),
+  seed: int(sys.inputs.at("seed", default: "2")),
 
   /// Initial movement scale. `"force"` multiplies computed forces by this
   /// value; `"anneal"` uses it as the proposal step size. -> float
@@ -83,7 +83,7 @@
   /// `gamma_ev`, `gamma_ee`, `gamma_dangling`, and `g_center`. Applies to both
   /// modes through the shared spring energy.
   /// -> float
-  beta: 46.1,
+  beta: 50.0,
 
   /// Spring stiffness for node-to-edge incidence lengths. Applies to both
   /// modes. -> float
@@ -91,7 +91,7 @@
 
   /// Centering strength relative to `beta`. Applies to both modes.
   /// -> float
-  g_center: 40.0,
+  g_center: 0.005,
 
   /// Number of epochs. Both modes run up to `steps` iterations inside
   /// each epoch. -> int
@@ -103,7 +103,7 @@
 
   /// Repulsion for dangling half edges, relative to `beta`. Applies to
   /// both modes through the shared spring energy. -> float
-  gamma_dangling: 40.0,
+  gamma_dangling: 5.0,
 
   /// Local edge-edge repulsion, relative to `beta`. Applies to both
   /// modes. -> float
@@ -141,7 +141,7 @@
 
   /// Edge-vertex repulsion, relative to `beta`. Applies to both modes.
   /// -> float
-  gamma_ev: 0.1,
+  gamma_ev: 0.01,
 
   /// Softening epsilon used in inverse-square force/energy terms. Applies to
   /// both modes. -> float
@@ -167,7 +167,7 @@
   /// Natural spring-length multiplier. This scales the graph's preferred edge
   /// length and the repulsive coefficients derived from it. Applies to both
   /// modes. -> float
-  length_scale: 0.1,
+  length_scale: 0.5,
 ) = {
   let settings = (
     viewport_w: str(viewport_w),
