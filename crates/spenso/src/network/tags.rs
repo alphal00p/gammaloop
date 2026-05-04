@@ -221,6 +221,57 @@ impl SpensoTags {
         }
     }
 
+    pub fn chain<'a, 'b, 'c, A, B, F>(
+        &self,
+        start: A,
+        end: B,
+        factors: impl IntoIterator<Item = F>,
+    ) -> Atom
+    where
+        A: Into<AtomOrView<'a>>,
+        B: Into<AtomOrView<'b>>,
+        F: Into<AtomOrView<'c>>,
+    {
+        let mut f = FunctionBuilder::new(self.chain).add_arg(start).add_arg(end);
+        for factor in factors {
+            f = f.add_arg(factor);
+        }
+        f.finish()
+    }
+
+    pub fn trace<'a, 'b, R, F>(&self, rep: R, factors: impl IntoIterator<Item = F>) -> Atom
+    where
+        R: Into<AtomOrView<'a>>,
+        F: Into<AtomOrView<'b>>,
+    {
+        let mut f = FunctionBuilder::new(self.trace).add_arg(rep);
+        for factor in factors {
+            f = f.add_arg(factor);
+        }
+        f.finish()
+    }
+
+    pub fn reverse_flip_factor(&self, factor: AtomView<'_>) -> Atom {
+        let tmp = symbol!("spenso::chain_flip_tmp");
+        factor
+            .to_owned()
+            .replace(self.chain_in)
+            .with(tmp)
+            .replace(self.chain_out)
+            .with(self.chain_in)
+            .replace(tmp)
+            .with(self.chain_out)
+    }
+
+    pub fn reverse_flip_factors(&self, factors: impl IntoIterator<Item = Atom>) -> Vec<Atom> {
+        let mut factors = factors.into_iter().collect::<Vec<_>>();
+        factors.reverse();
+        factors
+            .into_iter()
+            .map(|factor| self.reverse_flip_factor(factor.as_view()))
+            .collect()
+    }
+
     pub fn self_dual_<'a, const N: usize, A: Into<AtomOrView<'a>>>(
         &self,
         args: impl IntoIterator<Item = A>,

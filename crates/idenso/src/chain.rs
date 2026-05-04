@@ -1,6 +1,6 @@
 use spenso::{
     network::tags::SPENSO_TAG as T,
-    structure::representation::{LibraryRep, RepName, Representation},
+    structure::representation::{LibraryRep, RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -107,14 +107,22 @@ impl<'a> Chain for AtomView<'a> {
 
 #[cfg(test)]
 mod tests {
+    use spenso::shadowing::symbolica_utils::AtomCoreExt;
     use symbolica::parse_lit;
 
+    use crate::gamma::AGS;
     use crate::representations::{Bispinor, initialize};
 
     use super::*;
 
+    macro_rules! assert_bare_snapshot {
+        ($expr:expr, @$snapshot:literal) => {
+            insta::assert_snapshot!($expr.to_bare_ordered_string(), @$snapshot)
+        };
+    }
+
     #[test]
-    fn collect_gamma_chains() {
+    fn collect_gamma_chains_and_close_trace() {
         initialize();
         let gammas = parse_lit!(
             gamma(bis(4, 3), bis(4, 4), p(2, mink(4)))
@@ -124,9 +132,58 @@ mod tests {
         );
         let rep = Bispinor {}.into();
         let normalized = gammas.chainify(rep).chainify(rep);
-        println!("{}", normalized);
         let collected = normalized.collect_chains(rep);
 
-        println!("{}", collected);
+        assert_bare_snapshot!(
+            collected,
+            @"trace(bis(4),gamma(in,out,p(2,mink(4))),gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))))"
+        );
+    }
+
+    #[test]
+    fn collect_two_open_chains() {
+        initialize();
+        let chains = T.chain(
+            parse_lit!(bis(4, a), default_namespace = "spenso"),
+            parse_lit!(bis(4, b), default_namespace = "spenso"),
+            [
+                AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso")),
+                AGS.chain_gamma(parse_lit!(mink(4, nu), default_namespace = "spenso")),
+            ],
+        ) * T.chain(
+            parse_lit!(bis(4, b), default_namespace = "spenso"),
+            parse_lit!(bis(4, c), default_namespace = "spenso"),
+            [AGS.chain_gamma(parse_lit!(p(1, mink(4)), default_namespace = "spenso"))],
+        );
+        let rep = Bispinor {}.into();
+
+        assert_bare_snapshot!(
+            chains.collect_chains(rep),
+            @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))"
+        );
+    }
+
+    #[test]
+    #[ignore = "pending reverse-orientation chain collection"]
+    fn collect_oppositely_oriented_chain() {
+        initialize();
+        let chains = T.chain(
+            parse_lit!(bis(4, a), default_namespace = "spenso"),
+            parse_lit!(bis(4, b), default_namespace = "spenso"),
+            [AGS.chain_gamma(parse_lit!(mink(4, mu), default_namespace = "spenso"))],
+        ) * T.chain(
+            parse_lit!(bis(4, c), default_namespace = "spenso"),
+            parse_lit!(bis(4, b), default_namespace = "spenso"),
+            [
+                AGS.chain_gamma(parse_lit!(mink(4, nu), default_namespace = "spenso")),
+                AGS.chain_gamma(parse_lit!(p(1, mink(4)), default_namespace = "spenso")),
+            ],
+        );
+        let rep = Bispinor {}.into();
+
+        assert_bare_snapshot!(
+            chains.collect_chains(rep),
+            @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(out,in,p(1,mink(4))),gamma(out,in,mink(4,nu)))"
+        );
     }
 }
