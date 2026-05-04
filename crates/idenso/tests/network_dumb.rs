@@ -66,7 +66,7 @@ fn spenso_bare_symb_vertex_substitution() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
-    symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
+    let (mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11) = symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
         tags=["spenso::index"]);
 
     symbol!("k";
@@ -106,7 +106,7 @@ fn spenso_bare_symb_vertex_substitution() {
     )
     .to_pattern();
 
-    let mut r = v1 * v2 * v3 * v4; //* v5 * v6;
+    let mut r = v1 * v2 * v3 * v4 * v5; // * v6 * v7 * v8;
 
     for i in 0..8 {
         let gluon_rule = gluon_rule.clone();
@@ -134,10 +134,14 @@ fn spenso_bare_symb_vertex_substitution() {
     let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
         &SchoonschipSettings::partial().with_expanded_contracted_sums(),
     );
-    let out_string = out.to_bare_ordered_string();
-    assert!(!contains_index(&out_string, "mu1"), "{out_string}");
-    assert!(!contains_index(&out_string, "mu2"), "{out_string}");
-    assert!(!contains_index(&out_string, "mu3"), "{out_string}");
-    assert!(!contains_index(&out_string, "mu4"), "{out_string}");
-    println!("out:{}", out.printer(settings))
+
+    println!("out:{}", out.printer(settings));
+
+    for mu in [mu1, mu2, mu3, mu4] {
+        assert!(
+            out.replace(mu).match_iter().next().is_none(),
+            "{}",
+            out.printer(settings)
+        );
+    }
 }
