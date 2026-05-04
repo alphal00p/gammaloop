@@ -1,6 +1,7 @@
 #import "@preview/cetz:0.3.4" as cetz
 #import "curve.typ" as curve-api
 #import "graph.typ" as graph-api
+#import "subgraph.typ" as subgraph-api
 
 #let _eval-dict(data, name, scope) = {
   let dict = data.at(name, default: "(:)")
@@ -46,6 +47,10 @@
   }
 }
 
+#let _in-subgraph(hedges, endpoint) = {
+  hedges != none and endpoint != none and hedges.contains(endpoint.hedge)
+}
+
 /// Draw a laid-out graph object with CeTZ.
 ///
 /// The graph must already have positions, so call `layout` first. Node and edge
@@ -80,6 +85,9 @@
   /// Optional title displayed above the diagram. Use `auto` for the graph name.
   /// -> none | auto | content | string
   title: none,
+
+  /// Optional subgraph whose half-edges are shaded. -> none | bytes
+  subgraph: none,
 
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
@@ -124,13 +132,21 @@
 
   /// Label fill for edge-position markers shown at `debug >= 2`. -> any
   debug-edge-label-fill: rgb("#7a1020"),
+
+  /// CeTZ style used to shade half-edges included in `subgraph`. -> dictionary
+  subgraph-edge-style: (stroke: rgb("#ffd166") + 0.35em),
+
+  /// Draw subgraph shading below the normal half-edge style. -> bool
+  subgraph-edge-underlay: true,
 ) = {
   let info = graph-api.info(graph)
   let nodes = graph-api.nodes(graph)
   let edges = graph-api.edges(graph)
   let elements = ()
+  let node-elements = ()
   let node-outsets = ()
   let debug-level = _debug-level(debug)
+  let subgraph-hedges = if subgraph == none { none } else { subgraph-api.hedges(subgraph) }
 
   for (i, v) in nodes.enumerate() {
     let pos = v.pos
@@ -143,11 +159,11 @@
       fill: node-fill,
       stroke: node-stroke,
     ) + eval(ev, scope: scope + (vid: i), mode: "code")
-    elements.push(cetz.draw.circle(_point(pos), name: "n" + str(i), ..node-style))
+    node-elements.push(cetz.draw.circle(_point(pos), name: "n" + str(i), ..node-style))
     node-outsets.push(_node-outset(node-style, node-outset))
 
     if v.name != none {
-      elements.push(cetz.draw.content(
+      node-elements.push(cetz.draw.content(
         _point(pos),
         [#v.name],
         padding: 0,
@@ -165,9 +181,21 @@
     let data = e.statements
     let orientation = e.orientation
     let local-scope = scope + (orientation: orientation) + (eid: i) + (ext: ext)
+    let source-in-subgraph = _in-subgraph(subgraph-hedges, start)
+    let sink-in-subgraph = _in-subgraph(subgraph-hedges, end)
 
     let source-style = (stroke: edge-stroke) + _eval-dict(data, "eval_source", local-scope)
     let sink-style = (stroke: edge-stroke) + _eval-dict(data, "eval_sink", local-scope)
+    let source-draw-style = if source-in-subgraph and not subgraph-edge-underlay {
+      source-style + subgraph-edge-style
+    } else {
+      source-style
+    }
+    let sink-draw-style = if sink-in-subgraph and not subgraph-edge-underlay {
+      sink-style + subgraph-edge-style
+    } else {
+      sink-style
+    }
     let ev-label = _eval-content(
       data,
       "eval_label",
@@ -183,22 +211,34 @@
         sink-outset: node-outsets.at(end.node),
         accuracy: edge-trim-accuracy,
       )
-      elements.push(curve-api.cetz-bezier(halves.source, ..source-style))
-      elements.push(curve-api.cetz-bezier(halves.sink, ..sink-style))
+      if source-in-subgraph and subgraph-edge-underlay {
+        elements.push(curve-api.cetz-bezier(halves.source, ..subgraph-edge-style))
+      }
+      if sink-in-subgraph and subgraph-edge-underlay {
+        elements.push(curve-api.cetz-bezier(halves.sink, ..subgraph-edge-style))
+      }
+      elements.push(curve-api.cetz-bezier(halves.source, ..source-draw-style))
+      elements.push(curve-api.cetz-bezier(halves.sink, ..sink-draw-style))
     } else if start != none {
       let line-start = curve-api.outset-point(
         nodes.at(start.node).pos,
         e.pos,
         distance: node-outsets.at(start.node),
       )
-      elements.push(_line(line-start, e.pos, source-style))
+      if source-in-subgraph and subgraph-edge-underlay {
+        elements.push(_line(line-start, e.pos, subgraph-edge-style))
+      }
+      elements.push(_line(line-start, e.pos, source-draw-style))
     } else if end != none {
       let line-end = curve-api.outset-point(
         nodes.at(end.node).pos,
         e.pos,
         distance: node-outsets.at(end.node),
       )
-      elements.push(_line(e.pos, line-end, sink-style))
+      if sink-in-subgraph and subgraph-edge-underlay {
+        elements.push(_line(e.pos, line-end, subgraph-edge-style))
+      }
+      elements.push(_line(e.pos, line-end, sink-draw-style))
     }
 
     let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }
@@ -217,6 +257,10 @@
         padding: 0,
       ))
     }
+  }
+
+  for element in node-elements {
+    elements.push(element)
   }
 
   let diagram-content = cetz.canvas(
