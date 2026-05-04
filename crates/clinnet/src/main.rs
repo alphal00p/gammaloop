@@ -31,6 +31,7 @@ enum TemplateKind {
     Figure,
     Grid,
     Plugin,
+    CurvePlugin,
     Layout,
 }
 
@@ -41,6 +42,7 @@ impl TemplateKind {
             TemplateKind::Figure => "figure.typ",
             TemplateKind::Grid => "grid.typ",
             TemplateKind::Plugin => "linnest.wasm",
+            TemplateKind::CurvePlugin => "linnest-curve.wasm",
             TemplateKind::Layout => "layout.typ",
         }
     }
@@ -343,7 +345,7 @@ fn run() -> Result<()> {
                 .unwrap_or(Path::new("."))
                 .join("fig-index.typ")
         });
-    let _plugin_path = ensure_plugin_asset(&build_dir)?;
+    ensure_plugin_assets(&build_dir)?;
 
     let dot_files = collect_dot_files(&root)?;
     if dot_files.is_empty() {
@@ -1025,19 +1027,23 @@ fn resolve_template(requested: &Path, kind: TemplateKind, build_dir: &Path) -> R
     Ok(target)
 }
 
-/// Ensure the embedded linnest plugin is available under `build/templates`.
-fn ensure_plugin_asset(build_dir: &Path) -> Result<PathBuf> {
-    let target = build_dir
-        .join(TEMPLATE_SUBDIR)
-        .join(TemplateKind::Plugin.file_name());
+/// Ensure the embedded WASM plugins are available under `build/templates`.
+fn ensure_plugin_asset(build_dir: &Path, kind: TemplateKind) -> Result<PathBuf> {
+    let target = build_dir.join(TEMPLATE_SUBDIR).join(kind.file_name());
     if target.exists() {
         return Ok(target);
     }
     ensure_parent_dir(&target)?;
-    let contents = TemplateKind::Plugin.embedded_bytes()?;
+    let contents = kind.embedded_bytes()?;
     fs::write(&target, contents.as_ref())
         .with_context(|| format!("failed to write embedded plugin {}", target.display()))?;
     Ok(target)
+}
+
+fn ensure_plugin_assets(build_dir: &Path) -> Result<()> {
+    ensure_plugin_asset(build_dir, TemplateKind::Plugin)?;
+    ensure_plugin_asset(build_dir, TemplateKind::CurvePlugin)?;
+    Ok(())
 }
 
 /// Ensure the default layout template exists unless the user already created one.

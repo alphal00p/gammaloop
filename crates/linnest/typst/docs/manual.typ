@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": curve, draw, graph, layout, subgraph
 
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
@@ -7,28 +7,42 @@
 
 = Linnest Typst API
 
-Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst API.
+Linnest exposes the `linnest.wasm` graph layout plugin and the
+`linnest-curve.wasm` Bezier helper plugin through a small Typst API.
 The public surface is intentionally narrow:
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.
 - `subgraph` for subgraph object construction and inspection.
+- `curve` for Bezier splitting and CeTZ curve emission.
 - `layout` for the separate layout pass.
-- `draw` for rendering a laid-out graph object with Fletcher.
+- `draw` for rendering a laid-out graph object with CeTZ.
 
 == Minimal Builder Example
 
 ```typ
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": curve, draw, graph, layout, subgraph
 
 #let b = graph.builder(
   name: "demo",
   edge-statements: (
     eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
+    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-c"))
+#let b = graph.edge(
+  b,
+  source: (node: a),
+  sink: (node: c),
+  statements: (
+    color: "0055ff",
+    source-color: "d72638",
+    sink-color: "1b7f4c",
+    label: "a-c",
+  ),
+)
 #let g = graph.finish(b)
 #let g = layout(g, seed: 2, steps: 5)
 #let north = subgraph.compass(g, "n")
@@ -54,7 +68,7 @@ objects back to `graph` or `subgraph` for inspection.
 - `layout(graph, seed: 2, steps: 5, ..)` runs layout as an explicit
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
-- `draw(graph, ..)` draws a laid-out graph object with Fletcher.
+- `draw(graph, ..)` draws a laid-out graph object with CeTZ.
 - `graph.dot(graph)` returns a DOT string for inspection or export.
 
 == Builder Spec
@@ -84,11 +98,23 @@ per-edge `label` statement:
 #let b = graph.builder(
   edge-statements: (
     eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
+    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a")
 #let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-c"))
+#let b = graph.edge(
+  b,
+  source: (node: a),
+  sink: (node: c),
+  statements: (
+    color: "0055ff",
+    source-color: "d72638",
+    sink-color: "1b7f4c",
+    label: "a-c",
+  ),
+)
 ```
 
 `graph.build` accepts the same data in one dictionary:
