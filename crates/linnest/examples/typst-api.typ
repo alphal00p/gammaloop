@@ -3,14 +3,9 @@
 #let b = graph.builder(
   name: "constructed",
   statements: (full_num: "x + y"),
-  edge-statements: (
-    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
-    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
-    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
-  ),
 )
-#let (node: a, builder: b) = graph.node(b, name: "a", statements: (eval: "(fill: blue.lighten(70%))"))
-#let (node: c, builder: b) = graph.node(b, name: "b", statements: (eval: "(fill: green.lighten(70%))"))
+#let (node: a, builder: b) = graph.node(b, name: "a", statements: (fill-color: "cfe8ff"))
+#let (node: c, builder: b) = graph.node(b, name: "b", statements: (fill-color: "d6f5d6"))
 #let b = graph.edge(
   b,
   source: (node: a, compass: "e", statement: "out"),
@@ -64,7 +59,12 @@
 
 This example imports the local `linnest.typ` wrapper, builds a graph object through the builder object API, lays it out, and queries it through subgraph objects.
 
-#draw(g)
+#let node-style(node) = (fill: rgb("#" + node.fill-color))
+#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
+#let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
+#let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
+
+#draw(g, node-style: node-style, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 
 #table(
   columns: (auto, 1fr),

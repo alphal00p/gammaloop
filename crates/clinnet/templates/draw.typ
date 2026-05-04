@@ -3,22 +3,6 @@
 #import "graph.typ" as graph-api
 #import "subgraph.typ" as subgraph-api
 
-#let _eval-dict(data, name, scope) = {
-  let dict = data.at(name, default: "(:)")
-  if dict == none {
-    dict = "(:)"
-  }
-  eval(dict, scope: scope + data, mode: "code")
-}
-
-#let _eval-content(data, name, scope) = {
-  let content = data.at(name, default: "[]")
-  if content == none {
-    content = "[]"
-  }
-  eval(content, scope: scope + data, mode: "code")
-}
-
 #let _point(p) = (p.x, p.y)
 
 #let _canvas-length(unit) = {
@@ -77,6 +61,28 @@
 }
 
 #let _style-value(style, key, default) = style.at(key, default: default)
+
+#let _call(value, data) = {
+  if type(value) == function {
+    value(data)
+  } else {
+    value
+  }
+}
+
+#let _style(value, data) = {
+  let value = _call(value, data)
+  if value == none { (:) } else { value }
+}
+
+#let _content(value, data, default: none) = {
+  if value == auto {
+    default
+  } else {
+    let value = _call(value, data)
+    if type(value) == str { [#value] } else { value }
+  }
+}
 
 #let _pattern-name(style) = _style-value(style, "pattern", none)
 
@@ -192,27 +198,21 @@
 /// Draw a laid-out graph object with CeTZ.
 ///
 /// The graph must already have positions, so call `layout` first. Node and edge
-/// DOT `eval_*` statements are evaluated in `scope` and forwarded to CeTZ.
+/// Typst style dictionaries or callbacks are evaluated and forwarded to CeTZ.
 ///
 /// ```example
-/// #let b = graph.builder(
-///   name: "demo",
-///   edge-statements: (
-///     eval_source: "(stroke: red + 0.5pt)",
-///     eval_sink: "(stroke: blue + 0.5pt)",
-///   ),
-/// )
+/// #let b = graph.builder(name: "demo")
 /// #let (node: a, builder: b) = graph.node(b, name: "a")
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
 /// #let b = graph.edge(b, source: (node: a), sink: (node: c))
-/// #draw(layout(graph.finish(b)))
+/// #draw(layout(graph.finish(b)), source-style: (stroke: red + 0.5pt), sink-style: (stroke: blue + 0.5pt))
 /// ```
 /// -> content
 #let draw(
   /// Laid-out graph object returned by `layout`. -> bytes
   graph,
 
-  /// Additional symbols available while evaluating DOT `eval_*` statements.
+  /// Additional values merged into node and edge callback dictionaries.
   /// -> dictionary
   scope: (:),
 
@@ -255,8 +255,28 @@
   /// Default node-label style forwarded to `cetz.draw.content`. -> dictionary
   node-label-style: (:),
 
+  /// Node style dictionary or callback. A callback receives node data.
+  /// -> dictionary | function | none
+  node-style: (:),
+
+  /// Node label content or callback. `auto` uses the node name.
+  /// -> auto | content | string | function | none
+  node-label: auto,
+
   /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
+
+  /// Source half-edge style dictionary or callback. A callback receives edge data.
+  /// -> dictionary | function | none
+  source-style: (:),
+
+  /// Sink half-edge style dictionary or callback. A callback receives edge data.
+  /// -> dictionary | function | none
+  sink-style: (:),
+
+  /// Edge label content or callback. A callback receives edge data.
+  /// -> content | string | function | none
+  edge-label: none,
 
   /// Hobby curl used at the endpoints of paired edge curves. -> float
   edge-omega: 1.0,
@@ -303,18 +323,20 @@
 
         for (i, v) in nodes.enumerate() {
           let pos = v.pos
-          let ev = v.eval
-          if ev == none {
-            ev = "(:)"
-          }
-          let label = if v.name == none { none } else { [#v.name] }
-          let node-style = (
+          let node-data = scope + v.statements + (
+            vid: i,
+            node: v,
+            name: v.name,
+          )
+          let default-label = if v.name == none { none } else { [#v.name] }
+          let label = _content(node-label, node-data, default: default-label)
+          let node-style-value = (
             radius: node-radius,
             fill: node-fill,
             stroke: node-stroke,
-          ) + eval(ev, scope: scope + (vid: i), mode: "code")
-          let node-style = node-style + (
-            radius: _node-radius(ctx, label, node-style, node-min-radius, node-label-padding),
+          ) + _style(node-style, node-data)
+          let node-style = node-style-value + (
+            radius: _node-radius(ctx, label, node-style-value, node-min-radius, node-label-padding),
           )
           node-elements.push(cetz.draw.circle(_point(pos), name: "n" + str(i), ..node-style))
           node-outsets.push(_node-outset(node-style, node-outset))
@@ -337,27 +359,32 @@
           let ext = start == none or end == none
           let data = e.statements
           let orientation = e.orientation
-          let local-scope = scope + (orientation: orientation) + (eid: i) + (ext: ext)
+          let edge-data = scope + data + (
+            eid: i,
+            edge: e,
+            source: source,
+            sink: sink,
+            source-endpoint: start,
+            sink-endpoint: end,
+            orientation: orientation,
+            ext: ext,
+          )
           let source-in-subgraph = _in-subgraph(subgraph-hedges, start)
           let sink-in-subgraph = _in-subgraph(subgraph-hedges, end)
 
-          let source-style = (stroke: edge-stroke) + _eval-dict(data, "eval_source", local-scope)
-          let sink-style = (stroke: edge-stroke) + _eval-dict(data, "eval_sink", local-scope)
+          let source-style-value = (stroke: edge-stroke) + _style(source-style, edge-data)
+          let sink-style-value = (stroke: edge-stroke) + _style(sink-style, edge-data)
           let source-draw-style = if source-in-subgraph and not subgraph-edge-underlay {
-            source-style + subgraph-edge-style
+            source-style-value + subgraph-edge-style
           } else {
-            source-style
+            source-style-value
           }
           let sink-draw-style = if sink-in-subgraph and not subgraph-edge-underlay {
-            sink-style + subgraph-edge-style
+            sink-style-value + subgraph-edge-style
           } else {
-            sink-style
+            sink-style-value
           }
-          let ev-label = _eval-content(
-            data,
-            "eval_label",
-            local-scope + (sink: sink) + (source: source) + data,
-          )
+          let ev-label = _content(edge-label, edge-data, default: none)
 
           if start != none and end != none {
             let halves = curve-api.edge-halves(
@@ -399,8 +426,10 @@
             elements.push(_pattern-line(e.pos, line-end, sink-draw-style))
           }
 
-          let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }
-          elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0))
+          if ev-label != none {
+            let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }
+            elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0))
+          }
 
           if debug-level >= 2 {
             elements.push(cetz.draw.circle(
