@@ -65,9 +65,13 @@ pub struct TypstDotEdge {
     pub label_pos: Option<TypstPoint>,
     pub label_angle: Option<f64>,
     pub bend: Option<f64>,
+    #[serde(rename = "eval-sink")]
     pub eval_sink: Option<String>,
+    #[serde(rename = "eval-source")]
     pub eval_source: Option<String>,
+    #[serde(rename = "eval-label")]
     pub eval_label: Option<String>,
+    #[serde(rename = "mom-eval")]
     pub mom_eval: Option<String>,
     pub statements: BTreeMap<String, String>,
 }
@@ -80,6 +84,12 @@ pub struct TypstGraphSpec {
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
     pub edge_statements: BTreeMap<String, String>,
+    #[serde(default, rename = "eval-source")]
+    pub eval_source: Option<String>,
+    #[serde(default, rename = "eval-sink")]
+    pub eval_sink: Option<String>,
+    #[serde(default, rename = "eval-label")]
+    pub eval_label: Option<String>,
     #[serde(default)]
     pub node_statements: BTreeMap<String, String>,
     #[serde(default)]
@@ -112,6 +122,12 @@ pub struct TypstEdgeSpec {
     pub id: Option<usize>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
+    #[serde(default, rename = "eval-source")]
+    pub eval_source: Option<String>,
+    #[serde(default, rename = "eval-sink")]
+    pub eval_sink: Option<String>,
+    #[serde(default, rename = "eval-label")]
+    pub eval_label: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,7 +152,7 @@ pub struct TypstDotGraphBuilder {
     pub node_count: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct TypstBuilderSpec {
     #[serde(default)]
     pub name: Option<String>,
@@ -144,6 +160,12 @@ pub struct TypstBuilderSpec {
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
     pub edge_statements: BTreeMap<String, String>,
+    #[serde(default, rename = "eval-source")]
+    pub eval_source: Option<String>,
+    #[serde(default, rename = "eval-sink")]
+    pub eval_sink: Option<String>,
+    #[serde(default, rename = "eval-label")]
+    pub eval_label: Option<String>,
     #[serde(default)]
     pub node_statements: BTreeMap<String, String>,
 }
@@ -198,21 +220,23 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
 
 pub fn builder_new_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec = if arg.is_empty() {
-        TypstBuilderSpec {
-            name: None,
-            statements: BTreeMap::new(),
-            edge_statements: BTreeMap::new(),
-            node_statements: BTreeMap::new(),
-        }
+        TypstBuilderSpec::default()
     } else {
         decode_cbor(arg, "builder spec")?
     };
+
+    let edge_statements = edge_eval_statements(
+        spec.edge_statements,
+        spec.eval_source,
+        spec.eval_sink,
+        spec.eval_label,
+    );
 
     encode_builder(&TypstDotGraphBuilder {
         global_data: global_data_from_parts(
             spec.name,
             spec.statements,
-            spec.edge_statements,
+            edge_statements,
             spec.node_statements,
         ),
         builder: HedgeGraphBuilder::new(),
@@ -502,10 +526,16 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
 fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, String> {
     let node_count = spec.nodes.len();
     let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
+    let edge_statements = edge_eval_statements(
+        spec.edge_statements,
+        spec.eval_source,
+        spec.eval_sink,
+        spec.eval_label,
+    );
     let global_data = global_data_from_parts(
         spec.name,
         spec.statements,
-        spec.edge_statements,
+        edge_statements,
         spec.node_statements,
     );
 
@@ -536,7 +566,12 @@ fn add_edge_to_builder(
         .map(parse_orientation)
         .transpose()?
         .unwrap_or(Orientation::Default);
-    let local_statements = edge.statements;
+    let local_statements = edge_eval_statements(
+        edge.statements,
+        edge.eval_source,
+        edge.eval_sink,
+        edge.eval_label,
+    );
     let edge_data = DotEdgeData {
         statements: merged_expanded_statements(&global_data.edge_statements, &local_statements),
         local_statements,
@@ -587,6 +622,24 @@ fn global_data_from_parts(
         edge_statements: expanded_statements(edge_statements),
         node_statements: expanded_statements(node_statements),
     }
+}
+
+fn edge_eval_statements(
+    mut statements: BTreeMap<String, String>,
+    eval_source: Option<String>,
+    eval_sink: Option<String>,
+    eval_label: Option<String>,
+) -> BTreeMap<String, String> {
+    if let Some(eval_source) = eval_source {
+        statements.insert("eval-source".to_string(), eval_source);
+    }
+    if let Some(eval_sink) = eval_sink {
+        statements.insert("eval-sink".to_string(), eval_sink);
+    }
+    if let Some(eval_label) = eval_label {
+        statements.insert("eval-label".to_string(), eval_label);
+    }
+    statements
 }
 
 fn node_data_from_spec(
@@ -729,10 +782,10 @@ fn edge_view_to_output(
         label_pos: parse_point(&statements, "label_pos"),
         label_angle: parse_rad(&statements, "label_angle"),
         bend: parse_rad(&statements, "bend"),
-        eval_sink: statements.get("eval_sink").cloned(),
-        eval_source: statements.get("eval_source").cloned(),
-        eval_label: statements.get("eval_label").cloned(),
-        mom_eval: statements.get("mom_eval").cloned(),
+        eval_sink: statements.get("eval-sink").cloned(),
+        eval_source: statements.get("eval-source").cloned(),
+        eval_label: statements.get("eval-label").cloned(),
+        mom_eval: statements.get("mom-eval").cloned(),
         statements,
     }
 }
