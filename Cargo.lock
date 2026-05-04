@@ -2250,6 +2250,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "linnest-curve"
+version = "0.1.0"
+dependencies = [
+ "ciborium",
+ "kurbo",
+ "serde",
+ "wasm-minimal-protocol",
+]
+
+[[package]]
 name = "linnet"
 version = "0.17.0"
 dependencies = [

@@ -125,6 +125,7 @@
         root = workspaceRoot;
         fileset = lib.fileset.unions [
           cargoSources
+          ./crates/clinnet/templates/curve.typ
           ./crates/clinnet/templates/draw.typ
           ./crates/clinnet/templates/figure.typ
           ./crates/clinnet/templates/graph.typ
@@ -308,7 +309,7 @@
         doCheck = false;
         buildType = "release";
         CARGO_BUILD_TARGET = wasmTarget;
-        cargoExtraArgs = "--locked -p linnest --features custom --target ${wasmTarget}";
+        cargoExtraArgs = "--locked -p linnest -p linnest-curve --features linnest/custom --target ${wasmTarget}";
       };
 
       linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (linnestWasmArgs
@@ -323,8 +324,10 @@
           installPhaseCommand = ''
             mkdir -p "$out/templates"
             cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
+            cp "target/${wasmTarget}/release/linnest_curve.wasm" "$out/linnest-curve.wasm"
             cp crates/clinnet/templates/*.typ "$out/templates/"
             cp "$out/linnest.wasm" "$out/templates/linnest.wasm"
+            cp "$out/linnest-curve.wasm" "$out/templates/linnest-curve.wasm"
           '';
         });
 
@@ -405,9 +408,13 @@
             nativeBuildInputs = [pkgs.wasm-tools];
           } ''
             test -s ${linnest-wasm}/linnest.wasm
+            test -s ${linnest-wasm}/linnest-curve.wasm
             test -s ${linnest-wasm}/templates/linnest.wasm
+            test -s ${linnest-wasm}/templates/linnest-curve.wasm
             cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
+            cmp ${linnest-wasm}/linnest-curve.wasm ${linnest-wasm}/templates/linnest-curve.wasm
             wasm-tools validate ${linnest-wasm}/linnest.wasm
+            wasm-tools validate ${linnest-wasm}/linnest-curve.wasm
             test -s ${linnest-wasm}/templates/layout.typ
             mkdir -p "$out"
           '';

@@ -1,4 +1,5 @@
-#import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
+#import "@preview/cetz:0.3.4" as cetz
+#import "curve.typ" as curve-api
 #import "graph.typ" as graph-api
 
 #let _eval-dict(data, name, scope) = {
@@ -17,20 +18,60 @@
   eval(content, scope: scope + data, mode: "code")
 }
 
-/// Draw a laid-out graph object with Fletcher.
+#let _point(p) = (p.x, p.y)
+
+#let _canvas-length(unit) = {
+  if type(unit) in (int, float) {
+    unit * 1em
+  } else {
+    unit
+  }
+}
+
+#let _line(start, end, style) = cetz.draw.line(_point(start), _point(end), ..style)
+
+#let _node-outset(style, node-outset) = {
+  if node-outset == auto {
+    style.at("radius", default: 0)
+  } else {
+    node-outset
+  }
+}
+
+#let _debug-level(debug) = {
+  if type(debug) == bool {
+    if debug { 1 } else { 0 }
+  } else {
+    debug
+  }
+}
+
+/// Draw a laid-out graph object with CeTZ.
 ///
 /// The graph must already have positions, so call `layout` first. Node and edge
-/// DOT `eval_*` statements are evaluated in `scope` and forwarded to Fletcher.
+/// DOT `eval_*` statements are evaluated in `scope` and forwarded to CeTZ.
 ///
 /// ```example
-/// #let b = graph.builder(name: "demo")
+/// #let b = graph.builder(
+///   name: "demo",
+///   edge-statements: (
+///     eval_source: "(stroke: red + 1.5pt)",
+///     eval_sink: "(stroke: blue + 1.5pt)",
+///   ),
+/// )
 /// #let (node: a, builder: b) = graph.node(b, name: "a")
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
 /// #let (node: d, builder: b) = graph.node(b, name: "d")
+/// #let (node: e, builder: b) = graph.node(b, name: "e")
 /// #let b = graph.edge(b, source: (node: a), sink: (node: c))
-///  #let layed-out = layout(graph.finish(b), seed: 2, steps: 30,g-center:0.5,length-scale:0.1)
+/// #let b = graph.edge(b, source: (node: a), sink: (node: c))
+/// #let b = graph.edge(b, source: (node: c), sink: (node: a))
+/// #let b = graph.edge(b, source: (node: d), sink: none)
+/// #let b = graph.edge(b, source: (node: e), sink: none)
+/// #let b = graph.edge(b, source: (node: a), sink: none)
+/// #let layed-out = layout(graph.finish(b), beta: 50,gamma-ee:0.1,gamma-ev:0.01,seed: 2,epochs:30, steps: 30, g-center: 0.005, length-scale: 0.5)
 ///
-/// #draw(layed-out)
+/// #draw(layed-out,node-radius: 1,edge-stroke:1em)
 /// ```
 /// -> content
 #let draw(
@@ -39,43 +80,75 @@
   /// Additional symbols available while evaluating DOT `eval_*` statements.
   /// -> dictionary
   scope: (:),
-  /// Coordinate scale applied to node and edge positions. -> int | float
+  /// Coordinate length for one graph-layout unit. Numbers are interpreted as em.
+  /// -> int | float | length | ratio
   unit: 1,
   /// Optional title displayed above the diagram. Use `auto` for the graph name.
   /// -> none | auto | content | string
   title: none,
-  /// Fletcher diagram debug flag. -> int
-  debug: 0,
-  /// Default Fletcher node shape. -> any
-  node-shape: circle,
-  /// Default Fletcher node fill. -> any
-  node-fill: black,
-  /// Default Fletcher edge stroke. -> any
+  /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
+  /// -> bool | int
+  debug: false,
+  /// Default CeTZ node radius. -> int | float
+  node-radius: 0.16,
+  /// Default CeTZ node fill. -> any
+  node-fill: white,
+  /// Default CeTZ node stroke. -> any
+  node-stroke: black,
+  /// Edge clearance from node centers. `auto` uses each node circle radius.
+  /// Increase this when labels extend beyond the circle. -> auto | int | float
+  node-outset: auto,
+  /// Default node-label style forwarded to `cetz.draw.content`. -> dictionary
+  node-label-style: (:),
+  /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
-  /// Fletcher spacing option passed to `diagram`. -> any
-  spacing: 2em,
+  /// Hobby curl used at the endpoints of paired edge curves. -> float
+  edge-omega: 1.0,
+  /// Arc-length accuracy for trimming edge curves at node outsets. -> float
+  edge-trim-accuracy: 0.001,
+  /// CeTZ canvas padding. -> none | int | float | array | dictionary
+  padding: 0.4,
+  /// Radius for edge-position markers shown at `debug >= 2`. -> int | float
+  debug-edge-radius: 0.08,
+  /// Fill for edge-position markers shown at `debug >= 2`. -> any
+  debug-edge-fill: rgb("#ff9f1c"),
+  /// Stroke for edge-position markers shown at `debug >= 2`. -> any
+  debug-edge-stroke: rgb("#d72638") + 0.35pt,
+  /// Label fill for edge-position markers shown at `debug >= 2`. -> any
+  debug-edge-label-fill: rgb("#7a1020"),
 ) = {
   let info = graph-api.info(graph)
   let nodes = graph-api.nodes(graph)
   let edges = graph-api.edges(graph)
   let elements = ()
-  let node-by-index = (:)
+  let node-outsets = ()
+  let debug-level = _debug-level(debug)
 
   for (i, v) in nodes.enumerate() {
-    node-by-index.insert(str(i), v)
     let pos = v.pos
     let ev = v.eval
     if ev == none {
       ev = "(:)"
     }
-    let node-label = if v.name == none { [] } else { [#v.name] }
-    elements.push(node(
-      pos: (pos.x * unit, pos.y * unit),
-      name: label(str(i)),
-      label: node-label,
-      ..eval(ev, scope: scope + (vid: i), mode: "code"),
-      layer: 2,
-    ))
+    let node-style = (
+      (
+        radius: node-radius,
+        fill: node-fill,
+        stroke: node-stroke,
+      )
+        + eval(ev, scope: scope + (vid: i), mode: "code")
+    )
+    elements.push(cetz.draw.circle(_point(pos), name: "n" + str(i), ..node-style))
+    node-outsets.push(_node-outset(node-style, node-outset))
+
+    if v.name != none {
+      elements.push(cetz.draw.content(
+        _point(pos),
+        [#v.name],
+        padding: 0,
+        ..node-label-style,
+      ))
+    }
   }
 
   for (i, e) in edges.enumerate() {
@@ -88,105 +161,68 @@
     let orientation = e.orientation
     let local-scope = scope + (orientation: orientation) + (eid: i) + (ext: ext)
 
-    let ev-sink = _eval-dict(data, "eval_sink", local-scope)
+    let source-style = (stroke: edge-stroke) + _eval-dict(data, "eval_source", local-scope)
+    let sink-style = (stroke: edge-stroke) + _eval-dict(data, "eval_sink", local-scope)
     let ev-label = _eval-content(
       data,
       "eval_label",
       local-scope + (sink: sink) + (source: source) + data,
     )
-    let ev-source = _eval-dict(data, "eval_source", local-scope)
 
-    let bend = e.bend
-    if bend == none {
-      bend = 0.
-    }
-
-    let end-marker = label("em" + str(i))
-    let (end-node, end-node-pos) = if end != none {
-      let nodelab = label(str(end.node))
-      if start != none and nodelab == label(str(start.node)) {
-        bend = bend + 2
-      }
-      elements.push(edge(
-        vertices: ((e.pos.x * unit, e.pos.y * unit), nodelab),
-        bend: -bend * 0.5rad,
-        ..ev-sink,
-      ))
-      (nodelab, node-by-index.at(str(end.node)).pos)
-    } else {
-      let lab = label("exte" + str(i))
-      elements.push(node(
-        (e.pos.x * unit, e.pos.y * unit),
-        name: lab,
-        outset: -5mm,
-        radius: 5mm,
-        fill: none,
-      ))
-      (lab, e.pos)
-    }
-
-    let start-marker = label("sm" + str(i))
-    let (start-node, start-node-pos) = if start != none {
-      let nodelab = label(str(start.node))
-      elements.push(edge(
-        vertices: (nodelab, (e.pos.x * unit, e.pos.y * unit)),
-        bend: -bend * 0.5rad,
-        ..ev-source,
-      ))
-      (nodelab, node-by-index.at(str(start.node)).pos)
-    } else {
-      let lab = label("exts" + str(i))
-      elements.push(node(
-        (e.pos.x * unit, e.pos.y * unit),
-        name: lab,
-        outset: -5mm,
-        radius: 5mm,
-        fill: none,
-      ))
-      (lab, e.pos)
-    }
-
-    let bend-scale = 1 + calc.abs(bend / calc.pi)
-    let marker-outset = (
-      calc.sqrt(
-        calc.pow(start-node-pos.x - end-node-pos.x, 2) + calc.pow(start-node-pos.y - end-node-pos.y, 2),
+    if start != none and end != none {
+      let halves = curve-api.edge-halves(
+        e,
+        nodes,
+        omega: edge-omega,
+        source-outset: node-outsets.at(start.node),
+        sink-outset: node-outsets.at(end.node),
+        accuracy: edge-trim-accuracy,
       )
-        * 2.5
-        * bend-scale
-        * unit
-    )
-
-    elements.push(node(
-      pos: (start-node-pos.x * unit, start-node-pos.y * unit),
-      name: start-marker,
-      label: [],
-      outset: marker-outset * 1em,
-    ))
-    elements.push(node(
-      pos: (end-node-pos.x * unit, end-node-pos.y * unit),
-      name: end-marker,
-      label: [],
-      outset: marker-outset * 1em,
-    ))
+      elements.push(curve-api.cetz-bezier(halves.source, ..source-style))
+      elements.push(curve-api.cetz-bezier(halves.sink, ..sink-style))
+    } else if start != none {
+      let line-start = curve-api.outset-point(
+        nodes.at(start.node).pos,
+        e.pos,
+        distance: node-outsets.at(start.node),
+      )
+      elements.push(_line(line-start, e.pos, source-style))
+    } else if end != none {
+      let line-end = curve-api.outset-point(
+        nodes.at(end.node).pos,
+        e.pos,
+        distance: node-outsets.at(end.node),
+      )
+      elements.push(_line(e.pos, line-end, sink-style))
+    }
 
     let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }
-    elements.push(node(
-      (label-pos.x * unit, label-pos.y * unit),
-      ev-label,
-      inset: 0mm,
-      snap: false,
-      name: label("e" + str(i)),
-      fill: none,
-    ))
+    elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0))
+
+    if debug-level >= 2 {
+      elements.push(cetz.draw.circle(
+        _point(e.pos),
+        radius: debug-edge-radius,
+        fill: debug-edge-fill,
+        stroke: debug-edge-stroke,
+      ))
+      elements.push(cetz.draw.content(
+        _point(e.pos),
+        text(size: 0.65em, fill: debug-edge-label-fill)[e#i],
+        padding: 0,
+      ))
+    }
   }
 
-  let diagram-content = diagram(
-    debug: debug,
-    node-shape: node-shape,
-    node-fill: node-fill,
-    edge-stroke: edge-stroke,
-    spacing: spacing,
-    ..elements,
+  let diagram-content = cetz.canvas(
+    length: _canvas-length(unit),
+    debug: debug-level >= 1,
+    padding: padding,
+    {
+      for element in elements {
+        element
+      }
+    },
   )
 
   if title == none {

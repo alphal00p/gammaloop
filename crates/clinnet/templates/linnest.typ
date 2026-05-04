@@ -1,5 +1,6 @@
 #import "graph.typ" as graph-module
 #import "subgraph.typ" as subgraph-module
+#import "curve.typ" as curve-module
 #import "draw.typ": draw
 
 #let _plugin = plugin("./linnest.wasm")
@@ -214,6 +215,12 @@
 /// this module, @subgraph, or @layout.
 /// -> module
 #let graph = graph-module
+
+/// Curve namespace.
+///
+/// Helpers for splitting and drawing Bezier edge geometry.
+/// -> module
+#let curve = curve-module
 
 /// Subgraph namespace.
 ///

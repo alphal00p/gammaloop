@@ -5,6 +5,8 @@
   statements: (full_num: "x + y"),
   edge-statements: (
     eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
+    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a", statements: (eval: "(fill: blue.lighten(70%))"))
@@ -13,19 +15,34 @@
   b,
   source: (node: a, compass: "e", statement: "out"),
   sink: (node: c, compass: "w", statement: "in"),
-  statements: (color: "8a2be2", label: "a-to-b"),
+  statements: (
+    color: "8a2be2",
+    source-color: "d72638",
+    sink-color: "1b7f4c",
+    label: "a-to-b",
+  ),
 )
 #let b = graph.edge(
   b,
   source: none,
   sink: (node: a, compass: "n"),
-  statements: (color: "666666", label: "incoming"),
+  statements: (
+    color: "666666",
+    source-color: "666666",
+    sink-color: "355c9a",
+    label: "incoming",
+  ),
 )
 #let b = graph.edge(
   b,
   source: (node: c, compass: "s"),
   sink: none,
-  statements: (color: "666666", label: "outgoing"),
+  statements: (
+    color: "666666",
+    source-color: "8f5d2a",
+    sink-color: "666666",
+    label: "outgoing",
+  ),
 )
 #let raw-graph = graph.finish(b)
 
