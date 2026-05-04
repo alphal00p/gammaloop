@@ -43,7 +43,7 @@
   kind: "points",
   name: "coil",
   interpolation: "smooth",
-  endpoint_ramp: true,
+  endpoint-ramp: true,
   points: _sampled-pattern(
     samples-per-period,
     theta => (x: longitudinal-scale * calc.cos(theta), y: calc.sin(theta)),
@@ -87,14 +87,14 @@
 /// Split a cubic Bezier curve into two cubic Bezier segments.
 ///
 /// Returns a dictionary with `curve` and `segments`. Each segment has `start`,
-/// `ctrl_a`, `ctrl_b`, and `end` points.
+/// `ctrl-a`, `ctrl-b`, and `end` points.
 /// -> dictionary
 #let split-cubic(start, end, ctrl-a, ctrl-b, t: 0.5) = {
   cbor(_plugin.curve_split_cubic(cbor.encode((
     start: start,
     end: end,
-    ctrl_a: ctrl-a,
-    ctrl_b: ctrl-b,
+    ctrl-a: ctrl-a,
+    ctrl-b: ctrl-b,
     t: t,
   ))))
 }
@@ -107,10 +107,10 @@
   cbor(_plugin.curve_trim_cubic(cbor.encode((
     start: start,
     end: end,
-    ctrl_a: ctrl-a,
-    ctrl_b: ctrl-b,
-    start_outset: start-outset,
-    end_outset: end-outset,
+    ctrl-a: ctrl-a,
+    ctrl-b: ctrl-b,
+    start-outset: start-outset,
+    end-outset: end-outset,
     accuracy: accuracy,
   ))))
 }
@@ -122,8 +122,8 @@
   trim-cubic(
     segment.start,
     segment.end,
-    segment.ctrl_a,
-    segment.ctrl_b,
+    segment.ctrl-a,
+    segment.ctrl-b,
     start-outset: start-outset,
     end-outset: end-outset,
     accuracy: accuracy,
@@ -189,16 +189,16 @@
   cbor(_plugin.curve_pattern_cubic(cbor.encode((
     start: start,
     end: end,
-    ctrl_a: ctrl-a,
-    ctrl_b: ctrl-b,
+    ctrl-a: ctrl-a,
+    ctrl-b: ctrl-b,
     pattern: pattern,
     amplitude: amplitude,
     wavelength: wavelength,
     phase: phase,
-    samples_per_period: samples-per-period,
-    coil_longitudinal_scale: coil-longitudinal-scale,
-    anchor_start: anchor-start,
-    anchor_end: anchor-end,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+    anchor-start: anchor-start,
+    anchor-end: anchor-end,
     accuracy: accuracy,
   ))))
 }
@@ -220,8 +220,8 @@
   pattern-cubic(
     segment.start,
     segment.end,
-    segment.ctrl_a,
-    segment.ctrl_b,
+    segment.ctrl-a,
+    segment.ctrl-b,
     pattern: pattern,
     amplitude: amplitude,
     wavelength: wavelength,
@@ -240,8 +240,8 @@
 #let cetz-args(segment, unit: 1) = (
   _point(segment.start, unit: unit),
   _point(segment.end, unit: unit),
-  _point(segment.ctrl_a, unit: unit),
-  _point(segment.ctrl_b, unit: unit),
+  _point(segment.ctrl-a, unit: unit),
+  _point(segment.ctrl-b, unit: unit),
 )
 
 /// Draw one cubic segment through CeTZ.

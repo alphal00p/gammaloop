@@ -9,8 +9,8 @@ one-dimensional path patterns that can be emitted as CeTZ drawing commands.
 
 #let segment = (
   start: (x: 0, y: 0),
-  ctrl_a: (x: 1, y: 0.5),
-  ctrl_b: (x: 2, y: -0.5),
+  ctrl-a: (x: 1, y: 0.5),
+  ctrl-b: (x: 2, y: -0.5),
   end: (x: 3, y: 0),
 )
 

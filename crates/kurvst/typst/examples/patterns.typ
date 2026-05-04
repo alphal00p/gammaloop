@@ -5,8 +5,8 @@
 
 #let segment = (
   start: (x: 0, y: 0),
-  ctrl_a: (x: 1.1, y: 0.6),
-  ctrl_b: (x: 2.2, y: -0.6),
+  ctrl-a: (x: 1.1, y: 0.6),
+  ctrl-b: (x: 2.2, y: -0.6),
   end: (x: 3.3, y: 0),
 )
 
@@ -37,8 +37,8 @@
       points: path.points.map(point => (x: point.x, y: point.y - index * 0.65)),
       curves: path.curves.map(curve => (
         start: (x: curve.start.x, y: curve.start.y - index * 0.65),
-        ctrl_a: (x: curve.ctrl_a.x, y: curve.ctrl_a.y - index * 0.65),
-        ctrl_b: (x: curve.ctrl_b.x, y: curve.ctrl_b.y - index * 0.65),
+        ctrl-a: (x: curve.ctrl-a.x, y: curve.ctrl-a.y - index * 0.65),
+        ctrl-b: (x: curve.ctrl-b.x, y: curve.ctrl-b.y - index * 0.65),
         end: (x: curve.end.x, y: curve.end.y - index * 0.65),
       )),
       segments: path.segments,

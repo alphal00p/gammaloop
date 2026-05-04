@@ -21,6 +21,7 @@ use crate::expand_template;
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstDotGraphInfo {
     pub name: String,
     pub global_statements: BTreeMap<String, String>,
@@ -46,6 +47,7 @@ pub struct TypstDotNode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstDotEndpoint {
     pub node: usize,
     pub hedge: usize,
@@ -55,6 +57,7 @@ pub struct TypstDotEndpoint {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstDotEdge {
     pub edge: usize,
     pub orientation: String,
@@ -77,6 +80,7 @@ pub struct TypstDotEdge {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstGraphSpec {
     #[serde(default)]
     pub name: Option<String>,
@@ -109,6 +113,7 @@ pub struct TypstNodeSpec {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstEdgeSpec {
     #[serde(default)]
     pub source: Option<TypstEndpointSpec>,
@@ -131,6 +136,7 @@ pub struct TypstEdgeSpec {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstEndpointSpec {
     pub node: usize,
     #[serde(default)]
@@ -153,6 +159,7 @@ pub struct TypstDotGraphBuilder {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypstBuilderSpec {
     #[serde(default)]
     pub name: Option<String>,
@@ -726,7 +733,7 @@ fn statement_value<'a>(data: EdgeData<&'a DotEdgeData>, key: &str) -> Option<&'a
 fn hedge_value(data: &DotHedgeData, key: &str) -> Option<String> {
     match key {
         "statement" => data.statement.clone(),
-        "port_label" => data.port_label.clone(),
+        "port-label" => data.port_label.clone(),
         "compass" => data.compasspt.map(compass_pt_to_string),
         "id" => data.id.map(|id| id.0.to_string()),
         _ => None,
@@ -779,8 +786,8 @@ fn edge_view_to_output(
         sink: endpoints.sink.map(endpoint_to_output),
         pos: parse_point(&statements, "pos"),
         shift: parse_point(&statements, "shift"),
-        label_pos: parse_point(&statements, "label_pos"),
-        label_angle: parse_rad(&statements, "label_angle"),
+        label_pos: parse_point(&statements, "label-pos"),
+        label_angle: parse_rad(&statements, "label-angle"),
         bend: parse_rad(&statements, "bend"),
         eval_sink: statements.get("eval-sink").cloned(),
         eval_source: statements.get("eval-source").cloned(),
