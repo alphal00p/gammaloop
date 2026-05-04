@@ -787,7 +787,7 @@ pub struct SpringChargeEnergy {
     pub dangling_charge: f64,  // dangling edge charge (≈ 0.14*L^3)
     pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
     pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,         // central pull (≈ 0.007*L^3)
+    pub c_center: f64,         // central pull (≈ 0.007*L^2)
     pub crossing_penalty: f64, // fixed penalty per crossing
     pub eps: f64,              // 1e-4
 }
@@ -1077,7 +1077,7 @@ impl SpringChargeEnergy {
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
     fn center_term(&self, r: f64) -> f64 {
-        0.5 * self.c_center / (r + self.eps)
+        0.5 * self.c_center * r.powi(2)
     }
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
@@ -1251,10 +1251,7 @@ impl SpringChargeEnergy {
             let ni = NodeIndex(i);
             let np = s.vertex_points[ni];
             if self.c_center != 0.0 {
-                let r = np.distance(EuclideanSpace::origin());
-                if r > 1.0 {
-                    energy += self.center_term(r);
-                }
+                energy += self.center_term(np.distance(EuclideanSpace::origin()));
             }
         }
         #[cfg(feature = "energy_trace")]
@@ -1418,12 +1415,8 @@ impl SpringChargeEnergy {
                 let next_np = next.vertex_points[ni];
                 let prev_r = prev_np.distance(EuclideanSpace::origin());
                 let next_r = next_np.distance(EuclideanSpace::origin());
-                if prev_r > 1.0 {
-                    delta -= self.center_term(prev_r);
-                }
-                if next_r > 1.0 {
-                    delta += self.center_term(next_r);
-                }
+                delta -= self.center_term(prev_r);
+                delta += self.center_term(next_r);
             }
         }
         #[cfg(feature = "energy_trace")]
@@ -1500,5 +1493,32 @@ impl SpringChargeEnergy {
             crossing_penalty: tune.crossing_penalty,
             eps: tune.eps,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_energy(c_center: f64) -> SpringChargeEnergy {
+        SpringChargeEnergy {
+            spring_length: 1.0,
+            k_spring: 1.0,
+            c_vv: 0.0,
+            dangling_charge: 0.0,
+            c_ev: 0.0,
+            c_ee_local: 0.0,
+            c_center,
+            crossing_penalty: 0.0,
+            eps: 1e-4,
+        }
+    }
+
+    #[test]
+    fn center_term_penalizes_distance_from_origin() {
+        let energy = test_energy(2.0);
+
+        assert_eq!(energy.center_term(0.0), 0.0);
+        assert!(energy.center_term(2.0) > energy.center_term(1.0));
     }
 }
