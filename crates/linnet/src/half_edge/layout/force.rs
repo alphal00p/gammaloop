@@ -11,7 +11,6 @@ use crate::half_edge::{
     swap::Swap,
     NodeIndex, NodeVec,
 };
-use cgmath::MetricSpace;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 #[derive(Debug, Clone, Copy)]
 pub struct ForceLayoutConfig {
@@ -286,18 +285,14 @@ where
         }
     }
 
-    // Center repulsion (if enabled).
+    // Center gravity (if enabled).
     if energy.c_center != 0.0 {
         for i in 0..n {
             let ni = NodeIndex(i);
-            let pi = point3_from_point(state.vertex_points[ni], node_z[ni]);
-            let r = pi.distance(EuclideanSpace::origin());
-            if r <= 1.0 {
-                continue;
-            }
-            let dir = (pi - Point3::origin()) / r;
-            let fmag = 0.5 * energy.c_center / (r + energy.eps).powi(2);
-            forces_v[ni] += dir * fmag;
+            forces_v[ni] += center_gravity_force(
+                point3_from_point(state.vertex_points[ni], node_z[ni]),
+                energy.c_center,
+            );
         }
     }
 
@@ -317,6 +312,10 @@ where
 
 fn point3_from_point(p: Point2<f64>, z: f64) -> Point3<f64> {
     Point3::new(p.x, p.y, z)
+}
+
+fn center_gravity_force(point: Point3<f64>, c_center: f64) -> Vector3<f64> {
+    (Point3::origin() - point) * c_center
 }
 
 fn edge_spring_length<'a, E, V, H, N>(
@@ -348,4 +347,16 @@ fn init_edge_z(rng: &mut impl Rng, len: usize, spread: f64) -> EdgeVec<f64> {
         out.push(rng.gen_range(-spread..=spread));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn center_gravity_force_points_toward_origin() {
+        let force = center_gravity_force(Point3::new(2.0, -3.0, 4.0), 0.5);
+
+        assert_eq!(force, Vector3::new(-1.0, 1.5, -2.0));
+    }
 }

@@ -630,6 +630,74 @@ fn test_layout_handles_disconnected_builder_nodes() {
 }
 
 #[test]
+fn test_force_center_gravity_keeps_disconnected_nodes_close() {
+    fn max_node_radius(g_center: &str) -> f64 {
+        let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+            name: "demo".to_string(),
+            statements: BTreeMap::new(),
+            nodes: vec![
+                TestNodeSpec {
+                    name: "a".to_string(),
+                    statements: BTreeMap::new(),
+                },
+                TestNodeSpec {
+                    name: "c".to_string(),
+                    statements: BTreeMap::new(),
+                },
+                TestNodeSpec {
+                    name: "d".to_string(),
+                    statements: BTreeMap::new(),
+                },
+            ],
+            edges: vec![TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: BTreeMap::new(),
+            }],
+        }))
+        .unwrap();
+
+        let config = BTreeMap::from([
+            ("layout_algo".to_string(), "force".to_string()),
+            ("seed".to_string(), "2".to_string()),
+            ("steps".to_string(), "10".to_string()),
+            ("epochs".to_string(), "3".to_string()),
+            ("step".to_string(), "0.81".to_string()),
+            ("delta".to_string(), "0.4".to_string()),
+            ("beta".to_string(), "46.1".to_string()),
+            ("g_center".to_string(), g_center.to_string()),
+            ("length_scale".to_string(), "0.01".to_string()),
+        ]);
+        let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
+        let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+
+        nodes
+            .iter()
+            .map(|node| {
+                let pos = node.pos.as_ref().unwrap();
+                (pos.x.powi(2) + pos.y.powi(2)).sqrt()
+            })
+            .fold(0.0, f64::max)
+    }
+
+    let uncentered = max_node_radius("0");
+    let centered = max_node_radius("500000");
+
+    assert!(
+        centered < uncentered,
+        "expected center gravity to reduce max radius, got {centered} >= {uncentered}"
+    );
+}
+
+#[test]
 fn dot_cbor() {
     let figment = test_figment();
     let g = TypstGraph::from_dot(dot!(digraph{ a; a->b}).unwrap(), &figment);
