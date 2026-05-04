@@ -7,7 +7,7 @@ use spenso::{
         TensorNetworkError, TensorOrScalarOrKey,
         graph::NetworkGraph,
         library::{DummyKey, DummyLibrary, function_lib::Wrap, symbolic::ETS},
-        parsing::ParseSettings,
+        parsing::{Parse, ParseSettings},
         store::NetworkStore,
         tags::SPENSO_TAG as T,
     },
@@ -69,6 +69,212 @@ fn distribute_smallest_expanded_sum_side(left: &Atom, right: &Atom) -> Atom {
         (true, false) => distribute_expanded_left_sum(&left.expand(), right),
         (false, true) => distribute_expanded_right_sum(left, &right.expand()),
         (false, false) => left * right,
+    }
+}
+
+fn multiplicative_factors(expr: AtomView<'_>) -> Vec<Atom> {
+    match expr {
+        AtomView::Mul(mul) => mul.iter().map(|factor| factor.to_owned()).collect(),
+        _ => vec![expr.to_owned()],
+    }
+}
+
+fn product_excluding(factors: &[Atom], excluded: &[bool]) -> Atom {
+    factors
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !excluded[*index])
+        .fold(Atom::num(1), |product, (_, factor)| product * factor)
+}
+
+fn tensor_slot_pos<Aind: AbsInd + ParseableAind>(
+    tensor: &SymbolicTensor<Aind>,
+    slot: &LibrarySlot<Aind>,
+) -> Option<SlotIndex> {
+    let slot_atom = slot.to_atom();
+    (0..tensor.structure.order())
+        .map(SlotIndex::from)
+        .find(|&pos| {
+            tensor
+                .structure
+                .get_slot(pos)
+                .is_some_and(|s| s.to_atom() == slot_atom)
+        })
+}
+
+fn parse_tensor_factor<Aind: AbsInd + ParseableAind>(
+    factor: &Atom,
+) -> Option<SymbolicTensor<Aind>> {
+    SymbolicTensor::parse(factor.as_view())
+        .ok()
+        .map(|parsed| parsed.structure)
+}
+
+fn direct_contract_factor_into_expr<Aind: AbsInd + ParseableAind>(
+    factor: &Atom,
+    factor_tensor: &SymbolicTensor<Aind>,
+    factor_slot: &LibrarySlot<Aind>,
+    target_expr: &Atom,
+    target_slot: &LibrarySlot<Aind>,
+) -> Option<Atom> {
+    let factor_pos = tensor_slot_pos(factor_tensor, factor_slot)?;
+
+    if factor_tensor.is_metric && factor_tensor.structure.order() == 2 {
+        let free_slot = metric_free_slot(factor_tensor, factor_pos)?;
+        return Some(
+            target_expr
+                .replace(target_slot.to_atom())
+                .with(free_slot.to_atom()),
+        );
+    }
+
+    if factor_tensor.structure.order() == 1 {
+        let factor_slot = factor_tensor.structure.get_slot(factor_pos)?;
+        let stripped = factor_slot.rep().base().to_symbolic([]);
+        let contracted_expr = factor.replace(factor_slot.to_atom()).with(stripped);
+        return Some(
+            target_expr
+                .replace(target_slot.to_atom())
+                .with(contracted_expr),
+        );
+    }
+
+    None
+}
+
+fn tensor_contains_any_other_slot<Aind: AbsInd + ParseableAind>(
+    tensor: &SymbolicTensor<Aind>,
+    slot: &LibrarySlot<Aind>,
+    slots: &[LibrarySlot<Aind>],
+) -> bool {
+    let slot_atom = slot.to_atom();
+    slots.iter().any(|other| {
+        let other_atom = other.to_atom();
+        other_atom != slot_atom && tensor_slot_pos(tensor, other).is_some()
+    })
+}
+
+fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
+    expanded_sum_side: &Atom,
+    target_expr: &Atom,
+    slot_pairs: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
+) -> Option<Atom> {
+    let sum_slots: Vec<_> = slot_pairs.iter().map(|(sum_slot, _)| *sum_slot).collect();
+    let terms: Vec<_> = match expanded_sum_side.as_view() {
+        AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
+        _ => vec![expanded_sum_side.clone()],
+    };
+
+    let mut sum = Atom::Zero;
+    for term in terms {
+        let factors = multiplicative_factors(term.as_view());
+        let parsed_factors: Vec<_> = factors.iter().map(parse_tensor_factor::<Aind>).collect();
+        let mut consumed = vec![false; factors.len()];
+        let mut target = target_expr.clone();
+
+        for (sum_slot, target_slot) in slot_pairs {
+            let mut matching_factor = None;
+
+            for (index, (factor, factor_tensor)) in
+                factors.iter().zip(parsed_factors.iter()).enumerate()
+            {
+                if consumed[index] {
+                    continue;
+                }
+
+                let Some(factor_tensor) = factor_tensor else {
+                    continue;
+                };
+
+                if tensor_slot_pos(factor_tensor, sum_slot).is_none() {
+                    continue;
+                }
+
+                if tensor_contains_any_other_slot(factor_tensor, sum_slot, &sum_slots) {
+                    return None;
+                }
+
+                if matching_factor.is_some() {
+                    return None;
+                }
+
+                let contracted = direct_contract_factor_into_expr(
+                    factor,
+                    factor_tensor,
+                    sum_slot,
+                    &target,
+                    target_slot,
+                )?;
+                matching_factor = Some((index, contracted));
+            }
+
+            let (index, contracted) = matching_factor?;
+            consumed[index] = true;
+            target = contracted;
+        }
+
+        sum += product_excluding(&factors, &consumed) * target;
+    }
+
+    Some(sum.normalize_dots())
+}
+
+fn contracted_slot_pairs<Aind: AbsInd + ParseableAind>(
+    left: &SymbolicTensor<Aind>,
+    right: &SymbolicTensor<Aind>,
+    left_positions: &SubSet<SlotIndex>,
+    right_positions: &SubSet<SlotIndex>,
+) -> Option<Vec<(LibrarySlot<Aind>, LibrarySlot<Aind>)>> {
+    if left_positions.n_included() != right_positions.n_included() {
+        return None;
+    }
+
+    let right_slots: Vec<_> = right_positions
+        .included_iter()
+        .map(|pos| right.structure.get_slot(pos))
+        .collect::<Option<_>>()?;
+    let mut used_right_slots = vec![false; right_slots.len()];
+    let mut pairs = Vec::new();
+
+    for left_pos in left_positions.included_iter() {
+        let left_slot = left.structure.get_slot(left_pos)?;
+        let left_slot_atom = left_slot.to_atom();
+        let right_index = right_slots
+            .iter()
+            .enumerate()
+            .find_map(|(index, right_slot)| {
+                (!used_right_slots[index] && right_slot.to_atom() == left_slot_atom)
+                    .then_some(index)
+            })?;
+        used_right_slots[right_index] = true;
+        pairs.push((left_slot, right_slots[right_index]));
+    }
+
+    Some(pairs)
+}
+
+fn direct_contract_smallest_expanded_sum_side<Aind: AbsInd + ParseableAind>(
+    left: &SymbolicTensor<Aind>,
+    right: &SymbolicTensor<Aind>,
+    left_positions: &SubSet<SlotIndex>,
+    right_positions: &SubSet<SlotIndex>,
+    left_expr: &Atom,
+    right_expr: &Atom,
+) -> Option<Atom> {
+    let slot_pairs = contracted_slot_pairs(left, right, left_positions, right_positions)?;
+
+    if expression_size(left_expr) <= expression_size(right_expr) {
+        direct_contract_expanded_sum_side::<Aind>(&left_expr.expand(), right_expr, &slot_pairs)
+    } else {
+        let reversed_slot_pairs: Vec<_> = slot_pairs
+            .into_iter()
+            .map(|(left_slot, right_slot)| (right_slot, left_slot))
+            .collect();
+        direct_contract_expanded_sum_side::<Aind>(
+            &right_expr.expand(),
+            left_expr,
+            &reversed_slot_pairs,
+        )
     }
 }
 
@@ -442,16 +648,20 @@ impl<
 
         let expression = &oexpr * &sexpr;
         let expression =
-            if EXPANDSUMS && pos_self.n_included() > 0 && (is_sum(&sexpr) || is_sum(&oexpr)) {
-                // Sums are distributed only when this contraction actually
-                // consumes an index. Expand the smaller additive side fully,
-                // iterate over its terms, and fold those terms against the
-                // other side. This mirrors the bare Symbolica flow without
-                // eagerly expanding the product of both sides.
-                distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
-                    .schoonschip_with_net::<false, true, Aind>(&recursive_schoonschip_settings::<
-                        DEPTH_FIRST,
-                    >())
+            if EXPANDSUMS && pos_self.n_included() > 0 && is_sum(&sexpr) && is_sum(&oexpr) {
+                // Only distribute genuine sum-by-sum contractions. One-sided
+                // sums such as p(mu) * sum(mu) or g(mu,nu) * sum(mu) should be
+                // handled by the network-informed slot replacement above, not
+                // forced through expansion.
+                direct_contract_smallest_expanded_sum_side(
+                    other, self, &pos_other, &pos_self, &oexpr, &sexpr,
+                )
+                .unwrap_or_else(|| {
+                    distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
+                        .schoonschip_with_net::<false, false, Aind>(
+                            &recursive_schoonschip_settings::<DEPTH_FIRST>(),
+                        )
+                })
             } else {
                 expression
             };
