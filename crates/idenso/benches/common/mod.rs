@@ -364,23 +364,64 @@ pub fn assert_no_network_internal_indices(result: &Atom) {
 }
 
 pub fn assert_no_network_internal_indices_with_count(result: &Atom, vertex_count: usize) {
+    let residual = residual_network_internal_indices(result, vertex_count);
+    assert!(
+        residual.is_empty(),
+        "internal indices remained: {residual:?}"
+    );
+}
+
+pub fn residual_network_internal_indices(result: &Atom, vertex_count: usize) -> Vec<&'static str> {
     let (mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11) = symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
         tags=["spenso::index"]);
 
-    let indices: &[symbolica::atom::Symbol] = match vertex_count {
-        5 => &[mu1, mu2, mu3, mu4],
-        6 => &[mu1, mu2, mu3, mu4, mu5, mu11],
-        7 => &[mu1, mu2, mu3, mu4, mu5, mu6, mu10, mu11],
-        8 => &[mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11],
+    let indices: &[(&'static str, symbolica::atom::Symbol)] = match vertex_count {
+        5 => &[("mu1", mu1), ("mu2", mu2), ("mu3", mu3), ("mu4", mu4)],
+        6 => &[
+            ("mu1", mu1),
+            ("mu2", mu2),
+            ("mu3", mu3),
+            ("mu4", mu4),
+            ("mu5", mu5),
+            ("mu11", mu11),
+        ],
+        7 => &[
+            ("mu1", mu1),
+            ("mu2", mu2),
+            ("mu3", mu3),
+            ("mu4", mu4),
+            ("mu5", mu5),
+            ("mu6", mu6),
+            ("mu10", mu10),
+            ("mu11", mu11),
+        ],
+        8 => &[
+            ("mu1", mu1),
+            ("mu2", mu2),
+            ("mu3", mu3),
+            ("mu4", mu4),
+            ("mu5", mu5),
+            ("mu6", mu6),
+            ("mu7", mu7),
+            ("mu8", mu8),
+            ("mu9", mu9),
+            ("mu10", mu10),
+            ("mu11", mu11),
+        ],
         _ => panic!("unsupported network vertex count: {vertex_count}"),
     };
 
-    for index in indices {
-        assert!(
-            result.replace(*index).match_iter().next().is_none(),
-            "internal index {index} remained"
-        );
-    }
+    indices
+        .iter()
+        .filter_map(|(name, index)| {
+            result
+                .replace(*index)
+                .match_iter()
+                .next()
+                .is_some()
+                .then_some(*name)
+        })
+        .collect()
 }
 
 fn activate_symbolica_license() {
