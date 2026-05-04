@@ -1,6 +1,6 @@
 #import "@preview/cetz:0.3.4" as cetz
 
-#let _plugin = plugin("./linnest-curve.wasm")
+#let _plugin = plugin("./kurvst.wasm")
 
 #let _point(p, unit: 1) = (p.x * unit, p.y * unit)
 

@@ -7,8 +7,8 @@
 
 = Linnest Typst API
 
-Linnest exposes the `linnest.wasm` graph layout plugin and the
-`linnest-curve.wasm` Bezier helper plugin through a small Typst API.
+Linnest exposes the `linnest.wasm` graph layout plugin and the `kurvst.wasm`
+Bezier helper plugin through a small Typst API.
 The public surface is intentionally narrow:
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.
@@ -255,7 +255,7 @@ Subgraph objects are opaque zero-copy values.
 
 == Curve API
 
-The `curve` module is the Typst facade for `linnest-curve.wasm`. It keeps the
+The `curve` module is the Typst facade for `kurvst.wasm`. It keeps the
 graph drawing layer small by providing reusable Bezier helpers:
 
 - `curve.split-cubic` splits one cubic Bezier at parameter `t`.
