@@ -105,6 +105,10 @@ pub fn network_vertex_fixture_8() -> NetworkVertexFixture {
     network_vertex_fixture(8)
 }
 
+pub fn network_vertex_fixture_with_count(vertex_count: usize) -> NetworkVertexFixture {
+    network_vertex_fixture(vertex_count)
+}
+
 fn network_vertex_fixture(vertex_count: usize) -> NetworkVertexFixture {
     activate_symbolica_license();
     initialize();
@@ -129,7 +133,7 @@ fn network_vertex_fixture(vertex_count: usize) -> NetworkVertexFixture {
     ];
     match vertex_count {
         5 => {}
-        8 => {
+        6..=8 => {
             vertices.extend([
                 parse!(
                     "vx(6,-k(4)+k(0), -k(3)+k(4), k(3)-k(0), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
@@ -141,6 +145,7 @@ fn network_vertex_fixture(vertex_count: usize) -> NetworkVertexFixture {
                     "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
                 ),
             ]);
+            vertices.truncate(vertex_count);
         }
         _ => panic!("unsupported network vertex count: {vertex_count}"),
     }
