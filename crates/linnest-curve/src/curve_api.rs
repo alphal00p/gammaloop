@@ -1,4 +1,4 @@
-use kurbo::{CubicBez, ParamCurve, ParamCurveArclen, Point, QuadBez};
+use kurbo::{CubicBez, ParamCurve, ParamCurveArclen, ParamCurveDeriv, Point, QuadBez, Vec2};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{self, Visitor},
@@ -42,6 +42,42 @@ pub struct TrimCubicSpec {
     pub accuracy: f64,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct PatternCubicSpec {
+    #[serde(flatten)]
+    pub curve: CubicBezierSpec,
+    #[serde(default = "default_pattern")]
+    pub pattern: String,
+    #[serde(
+        default = "default_pattern_amplitude",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub amplitude: f64,
+    #[serde(
+        default = "default_pattern_wavelength",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub wavelength: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub phase: f64,
+    #[serde(default = "default_samples_per_period")]
+    pub samples_per_period: usize,
+    #[serde(
+        default = "default_coil_longitudinal_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub coil_longitudinal_scale: f64,
+    #[serde(default = "default_anchor_endpoint")]
+    pub anchor_start: bool,
+    #[serde(default = "default_anchor_endpoint")]
+    pub anchor_end: bool,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct QuadraticThroughSpec {
     pub start: CurvePoint,
@@ -71,6 +107,21 @@ pub struct CubicSplineOutput {
     pub segments: Vec<CubicBezierSpec>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct LineSegmentSpec {
+    pub start: CurvePoint,
+    pub end: CurvePoint,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PatternPathOutput {
+    pub pattern: String,
+    pub length: f64,
+    pub points: Vec<CurvePoint>,
+    pub curves: Vec<CubicBezierSpec>,
+    pub segments: Vec<LineSegmentSpec>,
+}
+
 fn default_split_t() -> f64 {
     0.5
 }
@@ -81,6 +132,30 @@ fn default_hobby_omega() -> f64 {
 
 fn default_arclen_accuracy() -> f64 {
     1e-3
+}
+
+fn default_pattern() -> String {
+    "wave".to_string()
+}
+
+fn default_pattern_amplitude() -> f64 {
+    0.1
+}
+
+fn default_pattern_wavelength() -> f64 {
+    1.0
+}
+
+fn default_samples_per_period() -> usize {
+    16
+}
+
+fn default_coil_longitudinal_scale() -> f64 {
+    1.25
+}
+
+fn default_anchor_endpoint() -> bool {
+    true
 }
 
 fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
@@ -185,6 +260,13 @@ pub fn curve_hobby_through_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
+pub fn curve_pattern_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PatternCubicSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize cubic curve pattern spec: {err}"))?;
+    let output = pattern_cubic(spec)?;
+    encode_cbor(&output)
+}
+
 fn split_cubic(spec: SplitCubicSpec) -> Result<SplitCurveOutput, String> {
     let t = validate_t(spec.t)?;
     let curve = CubicBez::from(spec.curve);
@@ -254,6 +336,216 @@ fn validate_outset(value: f64, end: &str) -> Result<f64, String> {
         Err(format!(
             "{end} curve outset must be finite and non-negative"
         ))
+    }
+}
+
+fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
+    let pattern = PatternKind::parse(&spec.pattern)?;
+    let amplitude = validate_finite(spec.amplitude, "pattern amplitude")?;
+    let wavelength = validate_positive(spec.wavelength, "pattern wavelength")?;
+    let phase = validate_finite(spec.phase, "pattern phase")?;
+    let coil_longitudinal_scale =
+        validate_finite(spec.coil_longitudinal_scale, "coil longitudinal scale")?;
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    if spec.samples_per_period == 0 {
+        return Err("pattern samples_per_period must be positive".to_string());
+    }
+
+    let curve = CubicBez::from(spec.curve);
+    let length = curve.arclen(accuracy);
+    if length <= f64::EPSILON {
+        return Ok(PatternPathOutput {
+            pattern: pattern.name().to_string(),
+            length,
+            points: vec![spec.curve.start],
+            curves: Vec::new(),
+            segments: Vec::new(),
+        });
+    }
+
+    let distances = pattern_distances(pattern, length, wavelength, spec.samples_per_period);
+    let deriv = curve.deriv();
+    let mut points = Vec::with_capacity(distances.len());
+    for distance in distances {
+        let t = curve.inv_arclen(distance, accuracy);
+        let base = curve.eval(t);
+        let tangent = normalized_tangent(deriv.eval(t).to_vec2(), spec.curve);
+        let normal = Vec2::new(-tangent.y, tangent.x);
+        let theta = std::f64::consts::TAU * distance / wavelength + phase;
+        let (longitudinal, lateral) =
+            pattern_offsets(pattern, theta, amplitude, coil_longitudinal_scale);
+        points.push((base + tangent * longitudinal + normal * lateral).into());
+    }
+    if spec.anchor_start {
+        points[0] = spec.curve.start;
+    }
+    if spec.anchor_end {
+        let last_index = points.len() - 1;
+        points[last_index] = spec.curve.end;
+    }
+
+    let segments = line_segments(&points);
+    let curves = match pattern {
+        PatternKind::Zigzag => Vec::new(),
+        PatternKind::Coil | PatternKind::Wave => cubic_spline_through_points(&points),
+    };
+
+    Ok(PatternPathOutput {
+        pattern: pattern.name().to_string(),
+        length,
+        curves,
+        segments,
+        points,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PatternKind {
+    Coil,
+    Wave,
+    Zigzag,
+}
+
+impl PatternKind {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "coil" | "helix" | "spring" => Ok(Self::Coil),
+            "wave" | "sine" | "sin" => Ok(Self::Wave),
+            "zigzag" | "zig-zag" | "triangle" => Ok(Self::Zigzag),
+            other => Err(format!("Unsupported path pattern: {other}")),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Coil => "coil",
+            Self::Wave => "wave",
+            Self::Zigzag => "zigzag",
+        }
+    }
+}
+
+fn pattern_distances(
+    pattern: PatternKind,
+    length: f64,
+    wavelength: f64,
+    samples_per_period: usize,
+) -> Vec<f64> {
+    let step = match pattern {
+        PatternKind::Zigzag => wavelength / 4.0,
+        PatternKind::Coil | PatternKind::Wave => wavelength / samples_per_period as f64,
+    };
+    let count = (length / step).ceil().max(1.0) as usize;
+    let mut distances = Vec::with_capacity(count + 1);
+    for i in 0..=count {
+        distances.push((i as f64 * step).min(length));
+    }
+    if distances
+        .last()
+        .is_none_or(|last| (length - last).abs() > f64::EPSILON)
+    {
+        distances.push(length);
+    }
+    distances.dedup_by(|a, b| (*a - *b).abs() <= f64::EPSILON);
+    distances
+}
+
+fn pattern_offsets(
+    pattern: PatternKind,
+    theta: f64,
+    amplitude: f64,
+    coil_longitudinal_scale: f64,
+) -> (f64, f64) {
+    match pattern {
+        PatternKind::Coil => (
+            amplitude * coil_longitudinal_scale * theta.cos(),
+            amplitude * theta.sin(),
+        ),
+        PatternKind::Wave => (0.0, amplitude * theta.sin()),
+        PatternKind::Zigzag => (0.0, amplitude * triangle_wave(theta)),
+    }
+}
+
+fn triangle_wave(theta: f64) -> f64 {
+    let phase = (theta / std::f64::consts::TAU).rem_euclid(1.0);
+    if phase < 0.25 {
+        4.0 * phase
+    } else if phase < 0.75 {
+        2.0 - 4.0 * phase
+    } else {
+        -4.0 + 4.0 * phase
+    }
+}
+
+fn normalized_tangent(tangent: Vec2, curve: CubicBezierSpec) -> Vec2 {
+    if tangent.hypot2() > f64::EPSILON {
+        tangent.normalize()
+    } else {
+        let chord = Point::from(curve.end) - Point::from(curve.start);
+        if chord.hypot2() > f64::EPSILON {
+            chord.normalize()
+        } else {
+            Vec2::new(1.0, 0.0)
+        }
+    }
+}
+
+fn line_segments(points: &[CurvePoint]) -> Vec<LineSegmentSpec> {
+    points
+        .windows(2)
+        .map(|window| LineSegmentSpec {
+            start: window[0],
+            end: window[1],
+        })
+        .collect()
+}
+
+fn cubic_spline_through_points(points: &[CurvePoint]) -> Vec<CubicBezierSpec> {
+    if points.len() < 2 {
+        return Vec::new();
+    }
+
+    let points: Vec<Point> = points.iter().copied().map(Into::into).collect();
+    let tangents: Vec<Vec2> = (0..points.len())
+        .map(|i| {
+            if i == 0 {
+                points[1] - points[0]
+            } else if i == points.len() - 1 {
+                points[i] - points[i - 1]
+            } else {
+                (points[i + 1] - points[i - 1]) * 0.5
+            }
+        })
+        .collect();
+
+    points
+        .windows(2)
+        .zip(tangents.windows(2))
+        .map(|(point_pair, tangent_pair)| {
+            CubicBez::new(
+                point_pair[0],
+                point_pair[0] + tangent_pair[0] / 3.0,
+                point_pair[1] - tangent_pair[1] / 3.0,
+                point_pair[1],
+            )
+            .into()
+        })
+        .collect()
+}
+
+fn validate_finite(value: f64, name: &str) -> Result<f64, String> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(format!("{name} must be finite"))
+    }
+}
+
+fn validate_positive(value: f64, name: &str) -> Result<f64, String> {
+    if value.is_finite() && value > 0.0 {
+        Ok(value)
+    } else {
+        Err(format!("{name} must be finite and positive"))
     }
 }
 
@@ -469,6 +761,140 @@ mod tests {
         assert_eq!(output.start.y, 0.0);
         assert!((output.end.x - 2.5).abs() < 1e-6);
         assert_eq!(output.end.y, 0.0);
+    }
+
+    fn straight_curve(length: f64) -> CubicBezierSpec {
+        CubicBezierSpec {
+            start: point(0.0, 0.0),
+            ctrl_a: point(length / 3.0, 0.0),
+            ctrl_b: point(2.0 * length / 3.0, 0.0),
+            end: point(length, 0.0),
+        }
+    }
+
+    fn nearest_x(points: &[CurvePoint], x: f64) -> CurvePoint {
+        *points
+            .iter()
+            .min_by(|a, b| (a.x - x).abs().partial_cmp(&(b.x - x).abs()).unwrap())
+            .unwrap()
+    }
+
+    #[test]
+    fn wave_pattern_offsets_along_curve_normal() {
+        let output = pattern_cubic(PatternCubicSpec {
+            curve: straight_curve(4.0),
+            pattern: "wave".to_string(),
+            amplitude: 0.5,
+            wavelength: 4.0,
+            phase: 0.0,
+            samples_per_period: 4,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: default_anchor_endpoint(),
+            anchor_end: default_anchor_endpoint(),
+            accuracy: 1e-6,
+        })
+        .unwrap();
+
+        assert_eq!(output.pattern, "wave");
+        assert!(output.points.len() >= 5);
+        assert!((output.points[0].y - 0.0).abs() < 1e-9);
+        let peak = nearest_x(&output.points, 1.0);
+        assert!((peak.x - 1.0).abs() < 1e-6);
+        assert!((peak.y - 0.5).abs() < 1e-6);
+        assert_eq!(output.segments.len(), output.points.len() - 1);
+        assert_eq!(output.curves.len(), output.points.len() - 1);
+    }
+
+    #[test]
+    fn zigzag_pattern_samples_corners() {
+        let output = pattern_cubic(PatternCubicSpec {
+            curve: straight_curve(4.0),
+            pattern: "zigzag".to_string(),
+            amplitude: 1.0,
+            wavelength: 4.0,
+            phase: 0.0,
+            samples_per_period: 2,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: default_anchor_endpoint(),
+            anchor_end: default_anchor_endpoint(),
+            accuracy: 1e-6,
+        })
+        .unwrap();
+
+        assert_eq!(output.pattern, "zigzag");
+        assert!(output.points.len() >= 5);
+        assert!((nearest_x(&output.points, 1.0).y - 1.0).abs() < 1e-9);
+        assert!((nearest_x(&output.points, 3.0).y + 1.0).abs() < 1e-9);
+        assert!(output.curves.is_empty());
+    }
+
+    #[test]
+    fn coil_pattern_adds_longitudinal_and_lateral_offsets() {
+        let output = pattern_cubic(PatternCubicSpec {
+            curve: straight_curve(4.0),
+            pattern: "coil".to_string(),
+            amplitude: 0.5,
+            wavelength: 4.0,
+            phase: 0.0,
+            samples_per_period: 4,
+            coil_longitudinal_scale: 0.5,
+            anchor_start: false,
+            anchor_end: false,
+            accuracy: 1e-6,
+        })
+        .unwrap();
+
+        assert_eq!(output.pattern, "coil");
+        assert!((output.points[0].x - 0.25).abs() < 1e-9);
+        assert!((output.points[0].y - 0.0).abs() < 1e-9);
+        assert!((output.points[1].x - 1.0).abs() < 1e-6);
+        assert!((output.points[1].y - 0.5).abs() < 1e-6);
+        assert_eq!(output.curves.len(), output.points.len() - 1);
+    }
+
+    #[test]
+    fn coil_default_turns_back_over_the_baseline() {
+        let output = pattern_cubic(PatternCubicSpec {
+            curve: straight_curve(2.0),
+            pattern: "coil".to_string(),
+            amplitude: 0.08,
+            wavelength: 0.55,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: default_anchor_endpoint(),
+            anchor_end: default_anchor_endpoint(),
+            accuracy: 1e-6,
+        })
+        .unwrap();
+
+        assert!(
+            output
+                .points
+                .windows(2)
+                .any(|window| window[1].x < window[0].x)
+        );
+    }
+
+    #[test]
+    fn coil_pattern_anchors_requested_endpoints() {
+        let curve = straight_curve(2.0);
+        let output = pattern_cubic(PatternCubicSpec {
+            curve,
+            pattern: "coil".to_string(),
+            amplitude: 0.08,
+            wavelength: 0.55,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: true,
+            anchor_end: true,
+            accuracy: 1e-6,
+        })
+        .unwrap();
+
+        assert_eq!(output.points[0], curve.start);
+        assert_eq!(*output.points.last().unwrap(), curve.end);
     }
 
     #[test]
