@@ -4,6 +4,69 @@
 
 #let _point(p, unit: 1) = (p.x * unit, p.y * unit)
 
+#let _sampled-pattern(samples-per-period, offset) = {
+  let samples = calc.max(1, samples-per-period)
+  range(0, samples + 1).map(index => {
+    let at = index / samples
+    let theta = 2 * calc.pi * at
+    let point = offset(theta)
+    (at: at, x: point.x, y: point.y)
+  })
+}
+
+/// A smooth sinusoidal path pattern.
+/// -> dictionary
+#let wave(samples-per-period: 16) = (
+  kind: "points",
+  name: "wave",
+  interpolation: "smooth",
+  points: _sampled-pattern(samples-per-period, theta => (x: 0, y: calc.sin(theta))),
+)
+
+/// A straight-segment triangular path pattern.
+/// -> dictionary
+#let zigzag() = (
+  kind: "points",
+  name: "zigzag",
+  interpolation: "linear",
+  points: (
+    (at: 0, x: 0, y: 0),
+    (at: 0.25, x: 0, y: 1),
+    (at: 0.75, x: 0, y: -1),
+    (at: 1, x: 0, y: 0),
+  ),
+)
+
+/// A smooth coil path pattern.
+/// -> dictionary
+#let coil(samples-per-period: 16, longitudinal-scale: 1.25) = (
+  kind: "points",
+  name: "coil",
+  interpolation: "smooth",
+  endpoint_ramp: true,
+  points: _sampled-pattern(
+    samples-per-period,
+    theta => (x: longitudinal-scale * calc.cos(theta), y: calc.sin(theta)),
+  ),
+)
+
+#let _resolve-pattern(pattern, samples-per-period: 16, coil-longitudinal-scale: 1.25) = {
+  if type(pattern) != str {
+    pattern
+  } else {
+    let name = pattern.trim()
+    if name == "wave" or name == "sine" or name == "sin" {
+      wave(samples-per-period: samples-per-period)
+    } else if name == "zigzag" or name == "zig-zag" or name == "triangle" {
+      zigzag()
+    } else if name == "coil" or name == "helix" or name == "spring" {
+      coil(samples-per-period: samples-per-period, longitudinal-scale: coil-longitudinal-scale)
+    } else {
+      panic("Unsupported path pattern: " + pattern)
+    }
+  }
+}
+
 /// Move `from` toward `toward` by `distance`, capped before `toward`.
 /// -> dictionary
 #let outset-point(from, toward, distance: 0) = {
@@ -97,9 +160,11 @@
 
 /// Generate a sampled 1D pattern along a cubic Bezier path.
 ///
-/// `pattern` may be `"wave"`, `"zigzag"`, or `"coil"`. The returned dictionary
-/// contains `points`, smooth `curves` for wave/coil patterns, and straight
-/// `segments` in graph coordinates.
+/// `pattern` may be `wave()`, `zigzag()`, `coil()`, a compatible string name,
+/// or a point pattern:
+/// `(kind: "points", interpolation: "linear" or "smooth", points: ((at: 0, x: 0, y: 0), ...))`.
+/// The returned dictionary contains `points`, smooth `curves` for smooth
+/// patterns, and straight `segments` in graph coordinates.
 /// -> dictionary
 #let pattern-cubic(
   start,
@@ -116,6 +181,11 @@
   anchor-end: true,
   accuracy: 0.001,
 ) = {
+  let pattern = _resolve-pattern(
+    pattern,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+  )
   cbor(_plugin.curve_pattern_cubic(cbor.encode((
     start: start,
     end: end,

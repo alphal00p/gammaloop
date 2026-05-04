@@ -47,7 +47,7 @@ pub struct PatternCubicSpec {
     #[serde(flatten)]
     pub curve: CubicBezierSpec,
     #[serde(default = "default_pattern")]
-    pub pattern: String,
+    pub pattern: PatternInput,
     #[serde(
         default = "default_pattern_amplitude",
         deserialize_with = "deserialize_f64"
@@ -76,6 +76,41 @@ pub struct PatternCubicSpec {
         deserialize_with = "deserialize_f64"
     )]
     pub accuracy: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum PatternInput {
+    Name(String),
+    Points(PointPatternInput),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct PointPatternInput {
+    #[serde(default = "default_points_pattern_kind")]
+    pub kind: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    pub points: Vec<PatternPointInput>,
+    #[serde(default = "default_pattern_interpolation")]
+    pub interpolation: String,
+    #[serde(default, alias = "endpoint-ramp")]
+    pub endpoint_ramp: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct PatternPointInput {
+    #[serde(
+        default,
+        alias = "t",
+        alias = "phase",
+        deserialize_with = "deserialize_optional_f64"
+    )]
+    pub at: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub x: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub y: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -134,8 +169,16 @@ fn default_arclen_accuracy() -> f64 {
     1e-3
 }
 
-fn default_pattern() -> String {
-    "wave".to_string()
+fn default_pattern() -> PatternInput {
+    PatternInput::Name("wave".to_string())
+}
+
+fn default_points_pattern_kind() -> String {
+    "points".to_string()
+}
+
+fn default_pattern_interpolation() -> String {
+    "smooth".to_string()
 }
 
 fn default_pattern_amplitude() -> f64 {
@@ -198,6 +241,25 @@ where
     }
 
     deserializer.deserialize_any(F64Visitor)
+}
+
+fn deserialize_optional_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<F64OrInt>::deserialize(deserializer).map(|value| value.map(|value| value.0))
+}
+
+#[derive(Debug, Clone, Copy)]
+struct F64OrInt(f64);
+
+impl<'de> Deserialize<'de> for F64OrInt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_f64(deserializer).map(Self)
+    }
 }
 
 impl From<CurvePoint> for Point {
@@ -340,22 +402,21 @@ fn validate_outset(value: f64, end: &str) -> Result<f64, String> {
 }
 
 fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
-    let pattern = PatternKind::parse(&spec.pattern)?;
     let amplitude = validate_finite(spec.amplitude, "pattern amplitude")?;
     let wavelength = validate_positive(spec.wavelength, "pattern wavelength")?;
     let phase = validate_finite(spec.phase, "pattern phase")?;
-    let coil_longitudinal_scale =
-        validate_finite(spec.coil_longitudinal_scale, "coil longitudinal scale")?;
+    validate_finite(spec.coil_longitudinal_scale, "coil longitudinal scale")?;
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     if spec.samples_per_period == 0 {
         return Err("pattern samples_per_period must be positive".to_string());
     }
+    let pattern = PointPattern::from_input(spec.pattern)?;
 
     let curve = CubicBez::from(spec.curve);
     let length = curve.arclen(accuracy);
     if length <= f64::EPSILON {
         return Ok(PatternPathOutput {
-            pattern: pattern.name().to_string(),
+            pattern: pattern.name.clone(),
             length,
             points: vec![spec.curve.start],
             curves: Vec::new(),
@@ -363,7 +424,7 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
         });
     }
 
-    let distances = pattern_distances(pattern, length, wavelength, spec.samples_per_period);
+    let distances = pattern.distances(length, wavelength, spec.samples_per_period);
     let deriv = curve.deriv();
     let mut points = Vec::with_capacity(distances.len());
     for distance in distances {
@@ -371,27 +432,36 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
         let base = curve.eval(t);
         let tangent = normalized_tangent(deriv.eval(t).to_vec2(), spec.curve);
         let normal = Vec2::new(-tangent.y, tangent.x);
-        let theta = std::f64::consts::TAU * distance / wavelength + phase;
-        let (longitudinal, lateral) =
-            pattern_offsets(pattern, theta, amplitude, coil_longitudinal_scale);
+        let pattern_point = pattern.evaluate(distance / wavelength + phase / std::f64::consts::TAU);
+        let tapered_amplitude = amplitude
+            * pattern_endpoint_envelope(
+                &pattern,
+                distance,
+                length,
+                wavelength,
+                spec.anchor_start,
+                spec.anchor_end,
+            );
+        let longitudinal = tapered_amplitude * pattern_point.x;
+        let lateral = tapered_amplitude * pattern_point.y;
         points.push((base + tangent * longitudinal + normal * lateral).into());
     }
-    if spec.anchor_start {
+    if !pattern.endpoint_ramp && spec.anchor_start {
         points[0] = spec.curve.start;
     }
-    if spec.anchor_end {
+    if !pattern.endpoint_ramp && spec.anchor_end {
         let last_index = points.len() - 1;
         points[last_index] = spec.curve.end;
     }
 
     let segments = line_segments(&points);
-    let curves = match pattern {
-        PatternKind::Zigzag => Vec::new(),
-        PatternKind::Coil | PatternKind::Wave => cubic_spline_through_points(&points),
+    let curves = match pattern.interpolation {
+        PatternInterpolation::Linear => Vec::new(),
+        PatternInterpolation::Smooth => cubic_spline_through_points(&points),
     };
 
     Ok(PatternPathOutput {
-        pattern: pattern.name().to_string(),
+        pattern: pattern.name,
         length,
         curves,
         segments,
@@ -399,42 +469,192 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
     })
 }
 
+#[derive(Debug, Clone)]
+struct PointPattern {
+    name: String,
+    points: Vec<ResolvedPatternPoint>,
+    interpolation: PatternInterpolation,
+    endpoint_ramp: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ResolvedPatternPoint {
+    at: f64,
+    x: f64,
+    y: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PatternKind {
-    Coil,
-    Wave,
-    Zigzag,
+enum PatternInterpolation {
+    Linear,
+    Smooth,
 }
 
-impl PatternKind {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "coil" | "helix" | "spring" => Ok(Self::Coil),
-            "wave" | "sine" | "sin" => Ok(Self::Wave),
-            "zigzag" | "zig-zag" | "triangle" => Ok(Self::Zigzag),
-            other => Err(format!("Unsupported path pattern: {other}")),
+impl PointPattern {
+    fn from_input(input: PatternInput) -> Result<Self, String> {
+        match input {
+            PatternInput::Name(name) => Err(format!(
+                "Unsupported unresolved path pattern `{}`; use a point pattern object",
+                name
+            )),
+            PatternInput::Points(input) => Self::from_points(input),
         }
     }
 
-    fn name(self) -> &'static str {
-        match self {
-            Self::Coil => "coil",
-            Self::Wave => "wave",
-            Self::Zigzag => "zigzag",
+    fn from_points(input: PointPatternInput) -> Result<Self, String> {
+        if !input.kind.trim().eq_ignore_ascii_case("points") {
+            return Err(format!("Unsupported point pattern kind: {}", input.kind));
+        }
+        if input.points.len() < 2 {
+            return Err("point pattern requires at least two points".to_string());
+        }
+
+        let interpolation = PatternInterpolation::parse(&input.interpolation)?;
+        let denom = (input.points.len() - 1) as f64;
+        let mut points = input
+            .points
+            .into_iter()
+            .enumerate()
+            .map(|(index, point)| {
+                let at = point.at.unwrap_or(index as f64 / denom);
+                validate_pattern_point(at, point.x, point.y)?;
+                Ok(ResolvedPatternPoint {
+                    at,
+                    x: point.x,
+                    y: point.y,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        points.sort_by(|a, b| a.at.partial_cmp(&b.at).unwrap());
+        if points.first().is_some_and(|point| point.at > 0.0) {
+            let first = *points.first().unwrap();
+            points.insert(
+                0,
+                ResolvedPatternPoint {
+                    at: 0.0,
+                    x: first.x,
+                    y: first.y,
+                },
+            );
+        }
+        if points.last().is_some_and(|point| point.at < 1.0) {
+            let last = *points.last().unwrap();
+            points.push(ResolvedPatternPoint {
+                at: 1.0,
+                x: last.x,
+                y: last.y,
+            });
+        }
+
+        Ok(Self {
+            name: input.name.unwrap_or_else(|| "points".to_string()),
+            points,
+            interpolation,
+            endpoint_ramp: input.endpoint_ramp,
+        })
+    }
+
+    fn distances(&self, length: f64, wavelength: f64, samples_per_period: usize) -> Vec<f64> {
+        match self.interpolation {
+            PatternInterpolation::Smooth => {
+                sampled_distances(length, wavelength, samples_per_period)
+            }
+            PatternInterpolation::Linear => self.linear_distances(length, wavelength),
+        }
+    }
+
+    fn linear_distances(&self, length: f64, wavelength: f64) -> Vec<f64> {
+        let periods = (length / wavelength).ceil().max(1.0) as usize;
+        let mut distances = Vec::new();
+        for period in 0..=periods {
+            let offset = period as f64 * wavelength;
+            for point in &self.points {
+                let distance = offset + point.at * wavelength;
+                if distance <= length {
+                    distances.push(distance);
+                }
+            }
+        }
+        distances.push(length);
+        distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        distances.dedup_by(|a, b| (*a - *b).abs() <= f64::EPSILON);
+        distances
+    }
+
+    fn evaluate(&self, period_position: f64) -> ResolvedPatternPoint {
+        let at = period_position.rem_euclid(1.0);
+        let next_index = self
+            .points
+            .iter()
+            .position(|point| point.at >= at)
+            .unwrap_or(0);
+        let (start, end) = if next_index == 0 {
+            (*self.points.last().unwrap(), self.points[0])
+        } else {
+            (self.points[next_index - 1], self.points[next_index])
+        };
+        let span = if end.at >= start.at {
+            end.at - start.at
+        } else {
+            end.at + 1.0 - start.at
+        };
+        if span <= f64::EPSILON {
+            return end;
+        }
+
+        let local_at = if at >= start.at {
+            at - start.at
+        } else {
+            at + 1.0 - start.at
+        };
+        let t = local_at / span;
+        ResolvedPatternPoint {
+            at,
+            x: start.x + (end.x - start.x) * t,
+            y: start.y + (end.y - start.y) * t,
         }
     }
 }
 
-fn pattern_distances(
-    pattern: PatternKind,
+fn pattern_endpoint_envelope(
+    pattern: &PointPattern,
+    distance: f64,
     length: f64,
     wavelength: f64,
-    samples_per_period: usize,
-) -> Vec<f64> {
-    let step = match pattern {
-        PatternKind::Zigzag => wavelength / 4.0,
-        PatternKind::Coil | PatternKind::Wave => wavelength / samples_per_period as f64,
-    };
+    anchor_start: bool,
+    anchor_end: bool,
+) -> f64 {
+    if !pattern.endpoint_ramp {
+        return 1.0;
+    }
+
+    let ramp = (wavelength * 0.5).min(length * 0.5);
+    if ramp <= f64::EPSILON {
+        return 1.0;
+    }
+
+    let mut envelope: f64 = 1.0;
+    if anchor_start {
+        envelope = envelope.min(smoothstep((distance / ramp).clamp(0.0, 1.0)));
+    }
+    if anchor_end {
+        envelope = envelope.min(smoothstep(((length - distance) / ramp).clamp(0.0, 1.0)));
+    }
+    envelope
+}
+
+impl PatternInterpolation {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "linear" | "line" => Ok(Self::Linear),
+            "smooth" | "spline" | "cubic" => Ok(Self::Smooth),
+            other => Err(format!("Unsupported point pattern interpolation: {other}")),
+        }
+    }
+}
+
+fn sampled_distances(length: f64, wavelength: f64, samples_per_period: usize) -> Vec<f64> {
+    let step = wavelength / samples_per_period as f64;
     let count = (length / step).ceil().max(1.0) as usize;
     let mut distances = Vec::with_capacity(count + 1);
     for i in 0..=count {
@@ -450,31 +670,17 @@ fn pattern_distances(
     distances
 }
 
-fn pattern_offsets(
-    pattern: PatternKind,
-    theta: f64,
-    amplitude: f64,
-    coil_longitudinal_scale: f64,
-) -> (f64, f64) {
-    match pattern {
-        PatternKind::Coil => (
-            amplitude * coil_longitudinal_scale * theta.cos(),
-            amplitude * theta.sin(),
-        ),
-        PatternKind::Wave => (0.0, amplitude * theta.sin()),
-        PatternKind::Zigzag => (0.0, amplitude * triangle_wave(theta)),
+fn validate_pattern_point(at: f64, x: f64, y: f64) -> Result<(), String> {
+    if !(at.is_finite() && (0.0..=1.0).contains(&at)) {
+        return Err("point pattern `at` values must be finite and between 0 and 1".to_string());
     }
+    validate_finite(x, "point pattern x")?;
+    validate_finite(y, "point pattern y")?;
+    Ok(())
 }
 
-fn triangle_wave(theta: f64) -> f64 {
-    let phase = (theta / std::f64::consts::TAU).rem_euclid(1.0);
-    if phase < 0.25 {
-        4.0 * phase
-    } else if phase < 0.75 {
-        2.0 - 4.0 * phase
-    } else {
-        -4.0 + 4.0 * phase
-    }
+fn smoothstep(t: f64) -> f64 {
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn normalized_tangent(tangent: Vec2, curve: CubicBezierSpec) -> Vec2 {
@@ -779,11 +985,90 @@ mod tests {
             .unwrap()
     }
 
+    fn point_pattern(
+        name: &str,
+        interpolation: &str,
+        points: Vec<PatternPointInput>,
+        endpoint_ramp: bool,
+    ) -> PatternInput {
+        PatternInput::Points(PointPatternInput {
+            kind: "points".to_string(),
+            name: Some(name.to_string()),
+            points,
+            interpolation: interpolation.to_string(),
+            endpoint_ramp,
+        })
+    }
+
+    fn sampled_pattern(
+        name: &str,
+        samples_per_period: usize,
+        mut offset: impl FnMut(f64) -> (f64, f64),
+        endpoint_ramp: bool,
+    ) -> PatternInput {
+        let points = (0..=samples_per_period)
+            .map(|index| {
+                let at = index as f64 / samples_per_period as f64;
+                let (x, y) = offset(std::f64::consts::TAU * at);
+                PatternPointInput { at: Some(at), x, y }
+            })
+            .collect();
+        point_pattern(name, "smooth", points, endpoint_ramp)
+    }
+
+    fn wave_pattern(samples_per_period: usize) -> PatternInput {
+        sampled_pattern(
+            "wave",
+            samples_per_period,
+            |theta| (0.0, theta.sin()),
+            false,
+        )
+    }
+
+    fn coil_pattern(samples_per_period: usize, longitudinal_scale: f64) -> PatternInput {
+        sampled_pattern(
+            "coil",
+            samples_per_period,
+            |theta| (longitudinal_scale * theta.cos(), theta.sin()),
+            true,
+        )
+    }
+
+    fn zigzag_pattern() -> PatternInput {
+        point_pattern(
+            "zigzag",
+            "linear",
+            vec![
+                PatternPointInput {
+                    at: Some(0.0),
+                    x: 0.0,
+                    y: 0.0,
+                },
+                PatternPointInput {
+                    at: Some(0.25),
+                    x: 0.0,
+                    y: 1.0,
+                },
+                PatternPointInput {
+                    at: Some(0.75),
+                    x: 0.0,
+                    y: -1.0,
+                },
+                PatternPointInput {
+                    at: Some(1.0),
+                    x: 0.0,
+                    y: 0.0,
+                },
+            ],
+            false,
+        )
+    }
+
     #[test]
     fn wave_pattern_offsets_along_curve_normal() {
         let output = pattern_cubic(PatternCubicSpec {
             curve: straight_curve(4.0),
-            pattern: "wave".to_string(),
+            pattern: wave_pattern(4),
             amplitude: 0.5,
             wavelength: 4.0,
             phase: 0.0,
@@ -809,7 +1094,7 @@ mod tests {
     fn zigzag_pattern_samples_corners() {
         let output = pattern_cubic(PatternCubicSpec {
             curve: straight_curve(4.0),
-            pattern: "zigzag".to_string(),
+            pattern: zigzag_pattern(),
             amplitude: 1.0,
             wavelength: 4.0,
             phase: 0.0,
@@ -829,10 +1114,53 @@ mod tests {
     }
 
     #[test]
+    fn point_pattern_interpolates_declared_points() {
+        let output = pattern_cubic(PatternCubicSpec {
+            curve: straight_curve(4.0),
+            pattern: PatternInput::Points(PointPatternInput {
+                kind: "points".to_string(),
+                name: None,
+                interpolation: "linear".to_string(),
+                endpoint_ramp: false,
+                points: vec![
+                    PatternPointInput {
+                        at: Some(0.0),
+                        x: 0.0,
+                        y: 0.0,
+                    },
+                    PatternPointInput {
+                        at: Some(0.5),
+                        x: 0.0,
+                        y: 1.0,
+                    },
+                    PatternPointInput {
+                        at: Some(1.0),
+                        x: 0.0,
+                        y: 0.0,
+                    },
+                ],
+            }),
+            amplitude: 0.5,
+            wavelength: 4.0,
+            phase: 0.0,
+            samples_per_period: 4,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: true,
+            anchor_end: true,
+            accuracy: 1e-6,
+        })
+        .unwrap();
+
+        assert_eq!(output.pattern, "points");
+        assert!((nearest_x(&output.points, 2.0).y - 0.5).abs() < 1e-9);
+        assert!(output.curves.is_empty());
+    }
+
+    #[test]
     fn coil_pattern_adds_longitudinal_and_lateral_offsets() {
         let output = pattern_cubic(PatternCubicSpec {
             curve: straight_curve(4.0),
-            pattern: "coil".to_string(),
+            pattern: coil_pattern(4, 0.5),
             amplitude: 0.5,
             wavelength: 4.0,
             phase: 0.0,
@@ -856,7 +1184,7 @@ mod tests {
     fn coil_default_turns_back_over_the_baseline() {
         let output = pattern_cubic(PatternCubicSpec {
             curve: straight_curve(2.0),
-            pattern: "coil".to_string(),
+            pattern: coil_pattern(16, default_coil_longitudinal_scale()),
             amplitude: 0.08,
             wavelength: 0.55,
             phase: 0.0,
@@ -881,7 +1209,7 @@ mod tests {
         let curve = straight_curve(2.0);
         let output = pattern_cubic(PatternCubicSpec {
             curve,
-            pattern: "coil".to_string(),
+            pattern: coil_pattern(16, default_coil_longitudinal_scale()),
             amplitude: 0.08,
             wavelength: 0.55,
             phase: 0.0,
@@ -895,6 +1223,7 @@ mod tests {
 
         assert_eq!(output.points[0], curve.start);
         assert_eq!(*output.points.last().unwrap(), curve.end);
+        assert!(output.points[1].y.abs() < 0.08);
     }
 
     #[test]
