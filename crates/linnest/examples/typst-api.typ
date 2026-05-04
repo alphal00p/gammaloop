@@ -46,7 +46,7 @@
 )
 #let raw-graph = graph.finish(b)
 
-#let g = layout(raw-graph, seed: 2, steps: 5)
+#let g = layout(raw-graph)
 #let info = graph.info(g)
 #let nodes = graph.nodes(g)
 #let edges = graph.edges(g)

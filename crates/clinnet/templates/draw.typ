@@ -177,7 +177,7 @@
 /// #let (node: a, builder: b) = graph.node(b, name: "a")
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
 /// #let b = graph.edge(b, source: (node: a), sink: (node: c))
-/// #draw(layout(graph.finish(b), seed: 2, steps: 5))
+/// #draw(layout(graph.finish(b)))
 /// ```
 /// -> content
 #let draw(
