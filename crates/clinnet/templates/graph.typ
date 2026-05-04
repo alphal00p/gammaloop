@@ -107,8 +107,8 @@
   _plugin.graph_from_spec(cbor.encode((
     name: name,
     statements: statements,
-    edge_statements: edge-statements,
-    node_statements: node-statements,
+    edge-statements: edge-statements,
+    node-statements: node-statements,
     nodes: nodes,
     edges: edges.map(_edge-spec),
   )))
@@ -126,7 +126,7 @@
 /// #let b = graph.builder(
 ///   name: "demo",
 ///   statements: (full_num: "x + y"),
-///   edge-statements: (display_label: "{label}"),
+///   edge-statements: (display-label: "{label}"),
 ///   eval-source: "(stroke: red + 0.5pt)",
 ///   eval-sink: "(stroke: blue + 0.5pt)",
 /// )
@@ -152,8 +152,8 @@
   _plugin.graph_builder(cbor.encode((
     name: name,
     statements: statements,
-    node_statements: node-statements,
-    edge_statements: edge-statements,
+    node-statements: node-statements,
+    edge-statements: edge-statements,
   )))
 }
 
@@ -180,8 +180,8 @@
 /// Add a paired or external edge to a builder object.
 ///
 /// Set `source` to `none` or `sink` to `none` for an external edge.
-/// Endpoint dictionaries accept `node`, `statement`, `id`, `port_label`,
-/// `compass`, and `in_subgraph`.
+/// Endpoint dictionaries accept `node`, `statement`, `id`, `port-label`,
+/// `compass`, and `in-subgraph`.
 ///
 /// ```example
 /// #let b = graph.builder(name: "demo")
@@ -240,8 +240,8 @@
 
 /// Return graph metadata.
 ///
-/// The result has `name`, `global_statements`, `edge_statements`, and
-/// `node_statements`.
+/// The result has `name`, `global-statements`, `edge-statements`, and
+/// `node-statements`.
 ///
 /// ```example
 /// #let g = graph.build(name: "demo", nodes: ((name: "a"),))
@@ -299,7 +299,7 @@
 
 /// Join two graphs by matching dangling half-edge data on `key`.
 ///
-/// Supported key values are `"statement"`, `"port_label"`, `"compass"`, and
+/// Supported key values are `"statement"`, `"port-label"`, `"compass"`, and
 /// `"id"`.
 ///
 /// ```example

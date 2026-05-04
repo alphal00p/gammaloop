@@ -12,7 +12,7 @@
 
 #let straight-segment(y) = (
   start: (x: 0, y: y),
-  ctrl_a: (x: width / 3, y: y),
-  ctrl_b: (x: width * 2 / 3, y: y),
+  ctrl-a: (x: width / 3, y: y),
+  ctrl-b: (x: width * 2 / 3, y: y),
   end: (x: width, y: y),
 )

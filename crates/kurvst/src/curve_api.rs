@@ -12,6 +12,7 @@ pub struct CurvePoint {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct CubicBezierSpec {
     pub start: CurvePoint,
     pub end: CurvePoint,
@@ -28,6 +29,7 @@ pub struct SplitCubicSpec {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct TrimCubicSpec {
     #[serde(flatten)]
     pub curve: CubicBezierSpec,
@@ -43,6 +45,7 @@ pub struct TrimCubicSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct PatternCubicSpec {
     #[serde(flatten)]
     pub curve: CubicBezierSpec,
@@ -86,6 +89,7 @@ pub enum PatternInput {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub struct PointPatternInput {
     #[serde(default = "default_points_pattern_kind")]
     pub kind: String,
@@ -94,7 +98,7 @@ pub struct PointPatternInput {
     pub points: Vec<PatternPointInput>,
     #[serde(default = "default_pattern_interpolation")]
     pub interpolation: String,
-    #[serde(default, alias = "endpoint-ramp")]
+    #[serde(default)]
     pub endpoint_ramp: bool,
 }
 
@@ -408,7 +412,7 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
     validate_finite(spec.coil_longitudinal_scale, "coil longitudinal scale")?;
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     if spec.samples_per_period == 0 {
-        return Err("pattern samples_per_period must be positive".to_string());
+        return Err("pattern samples-per-period must be positive".to_string());
     }
     let pattern = PointPattern::from_input(spec.pattern)?;
 
