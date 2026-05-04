@@ -1,6 +1,6 @@
 use idenso::{
     representations::initialize,
-    schoonschip::{Schoonschip, SchoonschipSettings},
+    schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
 };
 use spenso::{
     shadowing::symbolica_utils::{AtomCoreExt, SpensoPrintSettings},
@@ -144,4 +144,61 @@ fn spenso_bare_symb_vertex_substitution() {
             out.printer(settings)
         );
     }
+}
+
+#[test]
+fn min_product_terms_three_vertex_residual_mu9() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (mu1, _mu2, _mu7, mu8, mu9) =
+        symbol!("mu1", "mu2", "mu7", "mu8", "mu9"; tags=["spenso::index"]);
+
+    symbol!("k";
+        tags=["spenso::tensor","spenso::rank1"]);
+
+    let v1 =
+        parse!("vx(1,-k(0), k(0)-k(1), k(1), k(10), spenso::mink(4,mu1), spenso::mink(4,mu8))");
+    let v2 = parse!(
+        "vx(2,-k(1), k(2), k(1)-k(2), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
+    );
+    let v8 = parse!(
+        "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
+    );
+
+    let gluon_rule = parse!(
+        "(- spenso::g(mu1_,mu3_) * spenso::g(k1_,mu2_)
+                + spenso::g(mu1_,mu2_) * spenso::g(k1_,mu3_)
+                + spenso::g(mu2_,mu3_) * spenso::g(k2_,mu1_)
+                - spenso::g(mu1_,mu2_) * spenso::g(k2_,mu3_)
+                - spenso::g(mu2_,mu3_) * spenso::g(k3_,mu1_)
+                + spenso::g(mu1_,mu3_) * spenso::g(k3_,mu2_)
+                )"
+    )
+    .to_pattern();
+
+    let mut r = v1 * v2 * v8;
+
+    for i in [1, 2, 8] {
+        let gluon_rule = gluon_rule.clone();
+        r = r
+            .replace(parse!(format!("vx({i}, k1_, k2_, k3_, mu1_, mu2_, mu3_)",)))
+            .level_range((0, Some(0)))
+            .rhs_cache_size(1000)
+            .with_map(move |matches| {
+                gluon_rule
+                    .replace_wildcards_with_matches(matches)
+                    .normalize_dots()
+            });
+    }
+
+    let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
+        &SchoonschipSettings::partial()
+            .with_expanded_contracted_sums()
+            .with_contraction_order(SchoonschipContractionOrder::MinProductTerms),
+    );
+
+    assert!(out.replace(mu1).match_iter().next().is_none());
+    assert!(out.replace(mu8).match_iter().next().is_none());
+    assert!(out.replace(mu9).match_iter().next().is_some());
 }
