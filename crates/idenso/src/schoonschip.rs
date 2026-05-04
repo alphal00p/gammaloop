@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{cmp::Reverse, time::Instant};
 
 use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use spenso::{
@@ -7,7 +7,8 @@ use spenso::{
     network::{
         ContractScalars, ContractionStrategy, ExecutionResult, Sequential, SingleSmallestDegree,
         TensorNetworkError, TensorOrScalarOrKey,
-        graph::NetworkGraph,
+        contract::SingleLargestDegree,
+        graph::{NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp},
         library::{DummyKey, DummyLibrary, function_lib::Wrap, symbolic::ETS},
         parsing::{Parse, ParseSettings},
         store::NetworkStore,
@@ -322,6 +323,26 @@ struct SchoonschipSmallestDegree<
     const DEPTH_FIRST: bool,
 >;
 
+struct SchoonschipLargestDegree<
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+>;
+
+struct SchoonschipExpressionOrder<
+    const METRIC: u8,
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+>;
+
+const ORDER_MIN_LARGEST_OPERAND_BYTES: u8 = 0;
+const ORDER_MIN_PRODUCT_TERMS: u8 = 1;
+const ORDER_MIN_PRODUCT_BYTES: u8 = 2;
+const ORDER_SMALLEST_DEGREE_MIN_LARGEST_OPERAND_BYTES: u8 = 3;
+const ORDER_SMALLEST_DEGREE_MIN_PRODUCT_TERMS: u8 = 4;
+const ORDER_SMALLEST_DEGREE_MIN_PRODUCT_BYTES: u8 = 5;
+
 impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
     SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 {
@@ -392,6 +413,265 @@ where
         }
 
         Self::simplify_scalar_tensors(executor);
+        let (graph, scalar_didsmth) = ContractScalars::<
+            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+        >::contract(executor, graph, lib)?;
+
+        Ok((graph, didsmth || scalar_didsmth))
+    }
+}
+
+fn expression_order_score<const METRIC: u8>(
+    degree: u32,
+    left_size: (usize, usize),
+    right_size: (usize, usize),
+) -> (u8, u128, u128, Reverse<u32>, u128) {
+    let (left_bytes, left_terms) = (left_size.0 as u128, left_size.1 as u128);
+    let (right_bytes, right_terms) = (right_size.0 as u128, right_size.1 as u128);
+    let non_internal_penalty = u8::from(degree == 0);
+    let max_operand_bytes = left_bytes.max(right_bytes);
+    let sum_operand_bytes = left_bytes + right_bytes;
+    let product_terms = left_terms * right_terms;
+    let product_bytes = left_bytes * right_bytes;
+
+    match METRIC {
+        ORDER_MIN_LARGEST_OPERAND_BYTES => (
+            non_internal_penalty,
+            max_operand_bytes,
+            sum_operand_bytes,
+            Reverse(degree),
+            product_terms,
+        ),
+        ORDER_MIN_PRODUCT_TERMS => (
+            non_internal_penalty,
+            product_terms,
+            max_operand_bytes,
+            Reverse(degree),
+            sum_operand_bytes,
+        ),
+        ORDER_MIN_PRODUCT_BYTES => (
+            non_internal_penalty,
+            product_bytes,
+            product_terms,
+            Reverse(degree),
+            max_operand_bytes,
+        ),
+        ORDER_SMALLEST_DEGREE_MIN_LARGEST_OPERAND_BYTES => (
+            non_internal_penalty,
+            degree as u128,
+            max_operand_bytes,
+            Reverse(degree),
+            sum_operand_bytes,
+        ),
+        ORDER_SMALLEST_DEGREE_MIN_PRODUCT_TERMS => (
+            non_internal_penalty,
+            degree as u128,
+            product_terms,
+            Reverse(degree),
+            max_operand_bytes,
+        ),
+        ORDER_SMALLEST_DEGREE_MIN_PRODUCT_BYTES => (
+            non_internal_penalty,
+            degree as u128,
+            product_bytes,
+            Reverse(degree),
+            product_terms,
+        ),
+        _ => unreachable!("unknown symbolic contraction ordering metric"),
+    }
+}
+
+impl<
+    const METRIC: u8,
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+    Aind: AbsInd + DummyAind + ParseableAind + 'static,
+>
+    ContractionStrategy<
+        NetworkStore<SymbolicTensor<Aind>, Atom>,
+        DummyLibrary<SymbolicTensor<Aind>>,
+        DummyKey,
+        symbolica::atom::Symbol,
+        Aind,
+    > for SchoonschipExpressionOrder<METRIC, EXPANDSUMS, RECURSE, DEPTH_FIRST>
+where
+    SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
+        + PermuteTensor<Permuted = SymbolicTensor<Aind>>,
+{
+    fn contract(
+        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        graph: NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>,
+        lib: &DummyLibrary<SymbolicTensor<Aind>>,
+    ) -> Result<
+        (NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>, bool),
+        TensorNetworkError<DummyKey, symbolica::atom::Symbol>,
+    > {
+        SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
+            executor,
+        );
+        let (mut graph, mut didsmth) = ContractScalars::<
+            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+        >::contract(executor, graph, lib)?;
+
+        loop {
+            graph.sync_order();
+
+            let node_size = |_nid, node: &NetworkNode<DummyKey, symbolica::atom::Symbol>| match node
+            {
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                    Some(expression_size(&executor.tensors[*index].expression))
+                }
+                NetworkNode::Leaf(NetworkLeaf::LibraryKey(_)) => None,
+                _ => None,
+            };
+
+            let mut last_tensor = None;
+            let edge_to_contract = graph
+                .graph
+                .iter_nodes()
+                .filter(|(_, _, node)| node.is_tensor())
+                .filter_map(|(nid1, adjacencies, n1)| {
+                    let mut degree = 0;
+                    let mut first = None;
+                    for hedge in adjacencies {
+                        if graph.graph[[&hedge]].is_slot() && graph.graph.inv(hedge) != hedge {
+                            first = Some(hedge);
+                            degree += 1;
+                        }
+                    }
+
+                    let nid2 = if degree == 0 {
+                        if let Some(last_tensor) = last_tensor {
+                            last_tensor
+                        } else {
+                            last_tensor = Some(nid1);
+                            return None;
+                        }
+                    } else {
+                        graph.graph.involved_node_id(first?)?
+                    };
+
+                    let n2 = &graph.graph[nid2];
+                    last_tensor = Some(nid1);
+
+                    Some((
+                        expression_order_score::<METRIC>(
+                            degree,
+                            node_size(nid1, n1)?,
+                            node_size(nid2, n2)?,
+                        ),
+                        nid1,
+                        n1,
+                        nid2,
+                        n2,
+                    ))
+                })
+                .min_by_key(|(score, _, _, _, _)| *score);
+
+            let Some((_, nid1, n1, nid2, n2)) = edge_to_contract else {
+                break;
+            };
+
+            let new_node = match (n1, n2) {
+                (NetworkNode::Leaf(_), NetworkNode::Op(NetworkOp::Product))
+                | (NetworkNode::Op(NetworkOp::Product), NetworkNode::Leaf(_)) => {
+                    return Err(TensorNetworkError::SlotEdgeToProdNode);
+                }
+                (NetworkNode::Leaf(l1), NetworkNode::Leaf(l2)) => match (l1, l2) {
+                    (NetworkLeaf::Scalar(_), _) | (_, NetworkLeaf::Scalar(_)) => {
+                        return Err(TensorNetworkError::SlotEdgeToScalarNode);
+                    }
+                    (NetworkLeaf::LocalTensor(l1), NetworkLeaf::LocalTensor(l2)) => {
+                        let contracted = <SymbolicTensor<Aind> as Contract<
+                            SymbolicTensor<Aind>,
+                            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+                        >>::contract(
+                            &executor.tensors[*l1], &executor.tensors[*l2]
+                        )?;
+                        let pos = executor.tensors.len();
+                        executor.tensors.push(contracted);
+                        NetworkLeaf::LocalTensor(pos)
+                    }
+                    (NetworkLeaf::LibraryKey(_), _) | (_, NetworkLeaf::LibraryKey(_)) => {
+                        return Err(TensorNetworkError::FailedContractMsg(
+                            "expression-order contraction does not support library tensors"
+                                .to_owned(),
+                        ));
+                    }
+                },
+                (a, b) => {
+                    return Err(TensorNetworkError::CannotContractEdgeBetween(
+                        a.clone(),
+                        b.clone(),
+                    ));
+                }
+            };
+
+            graph.identify_nodes_without_self_edges_merge_heads(
+                &[nid1, nid2],
+                NetworkNode::Leaf(new_node),
+            );
+            didsmth = true;
+        }
+
+        SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
+            executor,
+        );
+        let (graph, scalar_didsmth) = ContractScalars::<
+            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+        >::contract(executor, graph, lib)?;
+
+        Ok((graph, didsmth || scalar_didsmth))
+    }
+}
+
+impl<
+    const EXPANDSUMS: bool,
+    const RECURSE: bool,
+    const DEPTH_FIRST: bool,
+    Aind: AbsInd + DummyAind + ParseableAind + 'static,
+>
+    ContractionStrategy<
+        NetworkStore<SymbolicTensor<Aind>, Atom>,
+        DummyLibrary<SymbolicTensor<Aind>>,
+        DummyKey,
+        symbolica::atom::Symbol,
+        Aind,
+    > for SchoonschipLargestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
+where
+    SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
+        + PermuteTensor<Permuted = SymbolicTensor<Aind>>,
+{
+    fn contract(
+        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        graph: NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>,
+        lib: &DummyLibrary<SymbolicTensor<Aind>>,
+    ) -> Result<
+        (NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>, bool),
+        TensorNetworkError<DummyKey, symbolica::atom::Symbol>,
+    > {
+        SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
+            executor,
+        );
+        let (mut graph, mut didsmth) = ContractScalars::<
+            Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+        >::contract(executor, graph, lib)?;
+
+        while {
+            let (newgraph, smth) = SingleLargestDegree::<
+                false,
+                Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+            >::contract(executor, graph, lib)?;
+            graph = newgraph;
+            smth
+        } {
+            didsmth = true;
+        }
+
+        SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
+            executor,
+        );
         let (graph, scalar_didsmth) = ContractScalars::<
             Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
         >::contract(executor, graph, lib)?;
@@ -720,6 +1000,7 @@ pub struct SchoonschipSettings {
     mode: SchoonschipMode,
     parse_inner_products: bool,
     expand_contracted_sums: bool,
+    contraction_order: SchoonschipContractionOrder,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -732,6 +1013,19 @@ enum SchoonschipMode {
 pub enum SchoonschipTraversal {
     DepthFirst,
     BreadthFirst,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SchoonschipContractionOrder {
+    #[default]
+    SmallestDegree,
+    LargestDegree,
+    MinLargestOperandBytes,
+    MinProductTerms,
+    MinProductBytes,
+    SmallestDegreeMinLargestOperandBytes,
+    SmallestDegreeMinProductTerms,
+    SmallestDegreeMinProductBytes,
 }
 
 impl Default for SchoonschipSettings {
@@ -751,6 +1045,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
             parse_inner_products: true,
             expand_contracted_sums: false,
+            contraction_order: SchoonschipContractionOrder::default(),
         }
     }
 
@@ -760,6 +1055,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
             parse_inner_products: true,
             expand_contracted_sums: false,
+            contraction_order: SchoonschipContractionOrder::default(),
         }
     }
 
@@ -769,6 +1065,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::SinglePass,
             parse_inner_products: true,
             expand_contracted_sums: false,
+            contraction_order: SchoonschipContractionOrder::default(),
         }
     }
 
@@ -790,6 +1087,11 @@ impl SchoonschipSettings {
 
     pub fn with_expanded_contracted_sums(mut self) -> Self {
         self.expand_contracted_sums = true;
+        self
+    }
+
+    pub fn with_contraction_order(mut self, order: SchoonschipContractionOrder) -> Self {
+        self.contraction_order = order;
         self
     }
 
@@ -1129,14 +1431,110 @@ impl Schoonschip for AtomView<'_> {
             .unwrap();
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
 
-        net.execute::<
-            Sequential,
-            SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
-            _,
-            _,
-            _,
-        >(&lib, &Wrap {})
-        .unwrap();
+        match settings.contraction_order {
+            SchoonschipContractionOrder::SmallestDegree => net
+                .execute::<
+                    Sequential,
+                    SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::LargestDegree => net
+                .execute::<
+                    Sequential,
+                    SchoonschipLargestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::MinLargestOperandBytes => net
+                .execute::<
+                    Sequential,
+                    SchoonschipExpressionOrder<
+                        ORDER_MIN_LARGEST_OPERAND_BYTES,
+                        EXPANDSUMS,
+                        RECURSE,
+                        DEPTH_FIRST,
+                    >,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::MinProductTerms => net
+                .execute::<
+                    Sequential,
+                    SchoonschipExpressionOrder<
+                        ORDER_MIN_PRODUCT_TERMS,
+                        EXPANDSUMS,
+                        RECURSE,
+                        DEPTH_FIRST,
+                    >,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::MinProductBytes => net
+                .execute::<
+                    Sequential,
+                    SchoonschipExpressionOrder<
+                        ORDER_MIN_PRODUCT_BYTES,
+                        EXPANDSUMS,
+                        RECURSE,
+                        DEPTH_FIRST,
+                    >,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::SmallestDegreeMinLargestOperandBytes => net
+                .execute::<
+                    Sequential,
+                    SchoonschipExpressionOrder<
+                        ORDER_SMALLEST_DEGREE_MIN_LARGEST_OPERAND_BYTES,
+                        EXPANDSUMS,
+                        RECURSE,
+                        DEPTH_FIRST,
+                    >,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::SmallestDegreeMinProductTerms => net
+                .execute::<
+                    Sequential,
+                    SchoonschipExpressionOrder<
+                        ORDER_SMALLEST_DEGREE_MIN_PRODUCT_TERMS,
+                        EXPANDSUMS,
+                        RECURSE,
+                        DEPTH_FIRST,
+                    >,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+            SchoonschipContractionOrder::SmallestDegreeMinProductBytes => net
+                .execute::<
+                    Sequential,
+                    SchoonschipExpressionOrder<
+                        ORDER_SMALLEST_DEGREE_MIN_PRODUCT_BYTES,
+                        EXPANDSUMS,
+                        RECURSE,
+                        DEPTH_FIRST,
+                    >,
+                    _,
+                    _,
+                    _,
+                >(&lib, &Wrap {})
+                .unwrap(),
+        };
 
         match net.result().unwrap() {
             ExecutionResult::One => Atom::num(1),
