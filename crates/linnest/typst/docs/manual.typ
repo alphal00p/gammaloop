@@ -34,8 +34,8 @@ The public surface is intentionally narrow:
 #let (node: c, builder: b) = graph.node(b, name: "c")
 #let b = graph.edge(
   b,
-  source: (node: a),
-  sink: (node: c),
+  source: (node: a, compass: "e"),
+  sink: (node: c, compass: "w"),
   statements: (
     color: "0055ff",
     source-color: "d72638",
@@ -45,11 +45,41 @@ The public surface is intentionally narrow:
 )
 #let g = graph.finish(b)
 #let g = layout(g, seed: 2, steps: 5)
-#let north = subgraph.compass(g, "n")
-#let edges = graph.edges(g, subgraph: north)
+#let east = subgraph.compass(g, "e")
+#let edges = graph.edges(g, subgraph: east)
 #let dot = graph.dot(g)
-#draw(g)
+#draw(g, subgraph: east)
 ```
+
+#import "../src/lib.typ": curve, draw, graph, layout, subgraph
+
+#let b = graph.builder(
+  name: "demo",
+  edge-statements: (
+    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    eval_source: "(stroke: rgb(\"#{source-color}\") + 0.5pt)",
+    eval_sink: "(stroke: rgb(\"#{sink-color}\") + 0.5pt)",
+  ),
+)
+#let (node: a, builder: b) = graph.node(b, name: "a")
+#let (node: c, builder: b) = graph.node(b, name: "c")
+#let b = graph.edge(
+  b,
+  source: (node: a, compass: "e"),
+  sink: (node: c, compass: "w"),
+  statements: (
+    color: "0055ff",
+    source-color: "d72638",
+    sink-color: "1b7f4c",
+    label: "a-c",
+  ),
+)
+#let g = graph.finish(b)
+#let g = layout(g, seed: 2, steps: 5)
+#let east = subgraph.compass(g, "e")
+#let edges = graph.edges(g, subgraph: east)
+#let dot = graph.dot(g)
+#draw(g, subgraph: east)
 
 == Graph Objects
 
@@ -181,7 +211,7 @@ $ E =
 sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
 + sum_(i, e) c_("ev") / (d(v_i, e) + epsilon)
 + sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
-+ sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
+\ + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
 + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
 + sum_(i) 1/2 c_("center") / (d(v_i, 0) + epsilon)
 + p_("cross") N_("cross") $.
