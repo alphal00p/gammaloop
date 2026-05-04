@@ -34,8 +34,8 @@
   )
   (
     start: start,
-    ctrl_a: ctrl-a,
-    ctrl_b: ctrl-b,
+    ctrl-a: ctrl-a,
+    ctrl-b: ctrl-b,
     end: end,
   )
 }
@@ -427,7 +427,7 @@
           }
 
           if ev-label != none {
-            let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }
+            let label-pos = if e.label-pos == none { e.pos } else { e.label-pos }
             elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0))
           }
 

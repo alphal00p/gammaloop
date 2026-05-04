@@ -777,7 +777,7 @@ fn build_figure(
         .arg("--root")
         .arg(root)
         .arg("--input")
-        .arg(format!("data_path={}", relative_input))
+        .arg(format!("data-path={}", relative_input))
         .arg("--input")
         .arg(format!("title={}", title));
 

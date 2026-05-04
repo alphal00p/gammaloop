@@ -24,13 +24,13 @@ All points are dictionaries with numeric `x` and `y` fields:
 #let p = (x: 1.2, y: -0.4)
 ```
 
-Cubic segments use `start`, `ctrl_a`, `ctrl_b`, and `end`:
+Cubic segments use `start`, `ctrl-a`, `ctrl-b`, and `end`:
 
 ```typ
 #let segment = (
   start: (x: 0, y: 0),
-  ctrl_a: (x: 1, y: 0.5),
-  ctrl_b: (x: 2, y: -0.5),
+  ctrl-a: (x: 1, y: 0.5),
+  ctrl-b: (x: 2, y: -0.5),
   end: (x: 3, y: 0),
 )
 ```
@@ -46,8 +46,8 @@ return cubic segment dictionaries, so the output can be passed back into
 #let split = kurvst.split-cubic(
   segment.start,
   segment.end,
-  segment.ctrl_a,
-  segment.ctrl_b,
+  segment.ctrl-a,
+  segment.ctrl-b,
   t: 0.5,
 )
 #let trimmed = kurvst.trim-segment(split.segments.at(0), start-outset: 0.15)
@@ -94,7 +94,7 @@ both are scaled by `amplitude`. If `at` is omitted, points are spaced evenly.
 Use `interpolation: "linear"` for corners and `"smooth"` for a spline through
 sampled points.
 
-`endpoint_ramp: true` tapers amplitude at anchored endpoints. This is useful
+`endpoint-ramp: true` tapers amplitude at anchored endpoints. This is useful
 for coils, whose longitudinal offset would otherwise put the first and last
 visible points inside the turn near nodes.
 
