@@ -5462,11 +5462,265 @@ Current targeted LTD cross-section tests:
 | `ltd_generated_forward_cross_section_threshold_inspects_match_cff` | Generated `GL0`, `GL2`, and `GL06` scalar forward-scattering graphs with threshold subtraction | yes | no |
 | `ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff` | Same generated graphs with threshold subtraction and UV subtraction through the expanded-4D local-UV path | yes | yes |
 | `ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade` | Generated `GL2` scalar forward-scattering graph with quartic numerator and an energy-conservation-equivalent traded numerator | yes | no |
+| `ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade` | Generated repeated-propagator `GL10` scalar forward-scattering graph with a quartic numerator. The CFF reference uses the external-momentum form, while LTD is checked both on that form and on an equivalent `Q(1)+Q(2)` energy-conservation trade that forces quartic EMR-energy dependence through the repeated topology | yes | no |
+| `ltd_generated_gl11_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL11` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl10_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL10` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl10_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL10` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl11_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL11` topology with the original `scalar_0 scalar_0` final-state selection, three raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl12_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL12` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl13_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL13` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl13_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL13` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_with_uv_subtraction_errors_cleanly` | Guard that LTD with UV subtraction rejects unsupported local-UV-from-3D-expansion mode | n/a | n/a |
 
-Remaining work from this plan:
+Path-c repeated-propagator progress:
 
-- Repeated-propagator scalar forward-scattering fixtures have not been added in
-  this pass. They should be explored with threshold subtraction disabled where
-  needed, while avoiding the existing disconnected-UV-union and raised-threshold
-  limitations.
+- Repeated-topology scalar forward-scattering coverage now includes a retained
+  `GL11` and `GL10` simple-cut local inspect comparisons between CFF and LTD.
+  Both tests use the `scalar_0 scalar_0 scalar_0` final-state selection so that
+  the selected topologies avoid raised Cutkosky cuts while still exercising the
+  new forward-scattering LTD path on repeated generated fixtures.
+- The `GL10` fixture exposed a representation issue before this pass:
+  canonicalizing E-surface signs in a branching denominator tree can produce
+  different signs on different branches. This is now handled generically by
+  splitting a generated variant into sign-homogeneous denominator-tree variants
+  during the GammaLoop surface conversion step.
+- A direct diagnostic reconstructed the generated `GL10` simple-cut parsed
+  graph and evaluated the core `three-dimensional-reps` CFF and LTD formulas
+  at an arbitrary f64 point. The two core expressions agreed at the expected
+  numerical level, which ruled out the repeated-channel LTD kernel as the
+  immediate source of the GammaLoop mismatch and redirected the search to the
+  GammaLoop surface conversion/cache layer.
+- The concrete conversion bug was in `Hsurface` equality: `to_atom()` includes
+  the `external_shift`, but `PartialEq` only compared the positive and negative
+  energy edge lists. Generated H-surfaces with different external shifts could
+  therefore share one cache entry and reuse the wrong atom in the converted
+  GammaLoop expression. `Hsurface::eq` now includes `external_shift`, fixing the
+  retained `GL10` simple-cut and `GL12` raised-cut CFF/LTD inspect comparisons.
+- The original `scalar_0 scalar_0` final-state selection for `GL10`-`GL13`
+  exposes raised Cutkosky cuts, e.g. `GL10` has `(1,3)^2` and `(1,2)^2`, while
+  `GL11` has cubic raised cuts. The first blocker there was that Cutkosky cuts
+  were mapped to generated E-surfaces before repeated-edge normalization, so a
+  cut such as `(1,3)-P` failed to resolve even though the generated expression
+  contained the normalized representative `(1,2)-P`. Cutkosky map resolution
+  now uses the same repeated-edge normalization as raised E-surface detection.
+  The repeated-edge groups are computed once, generated E-surfaces are
+  normalized once for matching, and `RaisedCutData` now uses an
+  `EsurfaceID -> Vec<CutId>` multimap so several Cutkosky cuts can share one
+  normalized generated E-surface.
+- The retained `GL10`, `GL11`, `GL12`, and `GL13` raised-cut inspect tests verify that
+  this normalized Cutkosky bridge plus the corrected H-surface cache equality
+  give identical local CFF/LTD rich event output for raised repeated-edge cuts.
+  The `GL11` original two-particle final-state fixture is particularly useful
+  here because it exposes three cuts and requires second-order `t` derivatives
+  in the raised-cut construction.
+- A attempted `GL12` simple-cut fixture with the
+  `scalar_0 scalar_0 scalar_0` final-state selection exposed a remaining
+  unresolved sign diagnostic and was not retained as a passing test. It has one
+  cut and the same visible representative cut-orientation pattern as the
+  passing `GL13` simple-cut fixture, namely `e1` reversed, `e4` reversed, and
+  `e7` default, with the same effective loop parity. Nevertheless the LTD
+  local value is the exact opposite of the CFF local value at the standard
+  probe point. This shows that the current `-prod(sigma_cut)` correction is not
+  yet a complete invariant for all simple repeated forward-scattering cuts.
+  The next pass should inspect the cut-side or graph-orientation data beyond
+  the visible edge orientations before adding this fixture.
+- The remaining `GL13` sign flip was traced to the local-unitarity Cutkosky cut
+  orientation convention. The passing representative cuts had
+  `-prod(sigma_cut) = +1`, while the `GL13` representative cut had
+  `-prod(sigma_cut) = -1`. The LTD local-unitarity prefactor now includes this
+  representative oriented-cut factor in addition to the loop-count parity.
+  This fixes both the `GL13` simple-cut and raised-cut comparisons without
+  changing the already retained `GL10`, `GL11`, and `GL12` comparisons.
+- Repeated LTD numerator samples now reapply the initial-state cut edge
+  energy-expression override after solving edge energies from the loop-basis
+  targets. This is the same forward-scattering convention required elsewhere:
+  initial-state cut edges are external half-edge data for the 3D representation,
+  not ordinary vacuum-loop energy variables. This did not change the remaining
+  GL12/GL13 mismatch, but it removes a structurally inconsistent path from the
+  repeated LTD builder.
+- Spectator repeated channels in `RepeatedLtdBuilder` are now expanded as the
+  explicit product over member propagators. Only repeated channels that are
+  part of the residue basis keep the confluent repeated-pole treatment.
+  This preserves the member-level energy expressions and derivative rows for
+  spectators instead of replacing them by a representative edge with an
+  aggregate power. The change is structurally cleaner, especially for repeated
+  groups whose members have opposite signature signs, but the GL10 simple-cut
+  and GL12/GL13 raised-cut values are unchanged. This rules out the
+  representative-edge spectator denominator as the sole source of the mismatch.
+- Temporarily skipping all repeated-basis residues in the GL10 simple-cut LTD
+  probe also left the LTD value unchanged. In contrast, temporarily dropping
+  the repeated spectator denominator factors changed the value from
+  `+1.1441280845305029e-9` to `+8.2864154007900689e-10`. The repeated
+  spectator factors therefore participate in the failing local value, but the
+  mismatch is not explained by the previously collapsed representative-edge
+  implementation alone.
+- A controlled diagnostic that forced the repeated LTD builder to use its
+  affine numerator path instead of the bounded-degree path left the `GL10`
+  simple-cut LTD value unchanged. This predated the H-surface equality fix and
+  is retained as a diagnostic that the old mismatch was not merely a bounded
+  numerator-sampling dispatch issue.
+- A repeated-topology quartic-numerator fixture is now retained. The direct
+  numerator uses `Q(0)^2` squared, which is external from the 3D-generation
+  point of view and therefore gives a clean CFF reference. The LTD side is
+  checked both on that same numerator and on the equivalent
+  `(Q(1)+Q(2))^2` squared form, forcing quartic EMR-energy dependence through
+  the repeated generated `GL10` topology. An attempted CFF generation of the
+  traded repeated quartic numerator still hits the current generalized-CFF
+  higher-energy-sector support boundary, so the retained validation uses the
+  external CFF reference plus the LTD energy-conservation trade.
+- During the final path-c cleanup pass, the denominator-tree reconstruction
+  helpers were tightened to preserve strict-prefix branches by installing an
+  explicit terminal `Unit` leaf. This affects both the GammaLoop sign-splitting
+  remapper and the mirrored helper in `three-dimensional-reps`, preventing a
+  latent loss of one branch when one remapped denominator chain is a prefix of
+  another.
+
+Path-c validation during this pass:
+
+```text
+cargo fmt
+cargo check -p gammalooprs --tests --locked
+cargo test -p three-dimensional-reps --lib denominator_tree --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_gl --locked -- --nocapture
+```
+
+Additional manual probes:
+
+```text
+IGNORE/probe_gl10_simple_inspect.toml with the repeated-LTD affine path forced
+IGNORE/probe_GL12_CFF_raised_inspect.toml
+IGNORE/probe_GL12_LTD_raised_inspect.toml
+IGNORE/probe_GL13_CFF_raised_inspect.toml
+IGNORE/probe_GL13_LTD_raised_inspect.toml
+```
+
+The retained post-cleanup repeated probes now agree:
+
+```text
+GL10 simple cut:
+  CFF integrand = +5.2977428778665059e-10
+  LTD integrand = +5.2977428778665659e-10
+
+GL12 raised cut:
+  CFF integrand = +3.1147472899130842e-14
+  LTD integrand = +3.1147472900192478e-14
+
+GL13 raised cut:
+  CFF integrand = -4.9561763361297923e-15
+  LTD integrand = -4.9561763361293142e-15
+```
+
+## 2026-05-04: generalized 3Drep bounded-CFF parity completion
+
+- Investigated the remaining one-loop box discrepancies in the generalized CFF
+  higher-energy-sector scan. The simplest failing Rust cases were already
+  inconsistent for the ordinary CFF/LTD box with explicit external bookkeeping
+  half-edges, while the Python prototype in
+  `IGNORE/generalised_ltd/generalised_ltd.py` agreed with LTD to high precision
+  for the same kinematics and numerators. This showed that the issue was an
+  implementation bug, not a limitation of the generalized construction in
+  `docs/3Dreps/generalised_ltd.tex`.
+- The CFF recursion now derives ordinary external-energy shifts from internal
+  momentum labels, matching the Python prototype. Explicit dashed external
+  half-edges are bookkeeping data and must not be counted independently in the
+  CFF surface shifts. Initial-state cut edges remain a separate contribution
+  because they represent forward-scattering externalized cut data rather than
+  ordinary dashed bookkeeping edges.
+- The bounded known-factor CFF recursion now only falls back to the generalized
+  polynomial normal-form completion when remapping known factors into a lower
+  sector genuinely fails. For ordinary high powers, including quintic/sextic
+  one-loop box contacts, the recursive finite-pole/contact construction is the
+  cleaner path and matches the Python reference. This avoids the earlier
+  over-eager normal-form expansion that produced many extra branches and wrong
+  values in the degree-five and degree-six scan.
+- The broad old-Python parity matrix is now a real assertion rather than a
+  status-only report: all 310 cases must pass. The matrix covers imported
+  3Drep fixtures plus every UV-convergent one-loop box monomial bound with
+  total energy degree up to six, including lower-sector quintic/sextic and
+  quartic-plus-lower terminal-contact cases.
+- Added a dedicated `3Drep test-cff-ltd` CLI integration test for representative
+  lower-contact high-power box numerators. The retained cases are:
+  `single_quartic` (`d_0=4`), `single_quintic` (`d_3=5`),
+  `single_sextic` (`d_0=6`), `cubic_quadratic_lower_contact`
+  (`d_0=3,d_1=2`), `quadratic_linear_cubic_lower_contact`
+  (`d_0=2,d_1=1,d_3=3`), `quartic_linear_terminal`
+  (`d_2=4,d_3=1`), and `quartic_quadratic_terminal` (`d_0=4,d_1=2`).
+  Each test imports a DOT graph with a concrete numerator, lets GammaLoop
+  auto-detect the energy caps, and compares direct CFF/LTD/PureLTD local
+  evaluations through the public CLI manifest path. A cubic-cubic box terminal
+  case was deliberately left to the broad internal matrix instead of the normal
+  CLI test because the public evaluator path is too slow for regular
+  integration runs.
+- Added explicit core CFF/LTD eval regressions for high-power one-loop
+  hexagons. The plain one-loop box, one-loop pentagon, and compact sunrise
+  attempts are rejected by the UV convergence guard with a non-vanishing residue
+  at infinity; the box rejection is now a fast explicit negative regression. A
+  one-loop decagon is convergent but too slow for a normal regression.
+  The retained minimal convergent double-quintic probe is a generated physical
+  one-loop hexagon with momentum-conserving external kinematics and
+  `d_0=5,d_1=5`; it verifies CFF/LTD agreement at one deterministic
+  phase-space point and currently takes about one minute in the
+  feature-enabled `three-dimensional-reps` test target. This is much lighter
+  than pushing the same double-quintic case through the public CLI evaluator
+  path, where the final Symbolica evaluator construction dominates.
+- Fixed the equal-signature vacuum hexagon boundary rather than dismissing it.
+  The duplicated-signature CFF sign correction now keys duplicate sectors by
+  both momentum signature and mass label, so denominators with the same energy
+  routing but different masses are not treated as identical copies. The retained
+  core regression checks the vacuum hexagon with numerator degrees
+  `0,1,2,3,5`, including the double-quintic case.
+- Added a physical-like public CLI hexagon fixture with six external half-edges
+  and momentum conservation enforced by the last external leg. The retained
+  `3Drep test-cff-ltd` integration test covers a direct quadratic sector
+  (`d_0=2,d_1=2`), a direct cubic sector (`d_0=3,d_1=3`), and a quartic
+  single-sector numerator obtained by rewriting the second energy through the
+  first edge and an external half-edge (`d_0=4`). Each case compares CFF, LTD,
+  and PureLTD through the public CLI manifest. The direct double-quintic version
+  was explored but is not retained because it is dominated by public evaluator
+  construction time; the explicit cubic CLI case is the practical integration
+  anchor, while the core crate test keeps the full double-quintic coverage.
+- Added explicit multiloop high-power parity anchors for the lifted guard
+  cases. In `three-dimensional-reps`, the retained core regression compares
+  CFF/LTD numerically for `sunrise_pow4` with the formerly guarded quintic
+  lower sector (`d_2=5`) and repeated-channel cubic pair (`d_2=3,d_3=3`).
+  In the public GammaLoop integration suite, `3Drep test-cff-ltd` now runs the
+  same two multiloop sunrise cases plus the deeper `four_loop_stress`
+  quadratic case through DOT import, concrete numerator injection, explicit
+  energy-degree bounds, and manifest-level CFF/LTD/PureLTD comparison. The
+  four-loop eager-evaluator path needs a larger test-thread stack, so the test
+  runs this multiloop CLI comparison inside a 64 MiB worker thread. The
+  `proper_iterated_sandwiched_bubble` cubic-pair case remains covered by the
+  old-Python parity matrix; using a concrete DOT numerator for that specific
+  public CLI probe causes the automatic bound merger to produce a
+  non-convergent sector, so it is not the right retained CLI fixture.
+- One remaining artificial repeated-mass alternating hexagon diagnostic agrees
+  for the constant numerator but fails as soon as the numerator depends on
+  repeated-channel energies. This graph is not a physical-like kinematic setup
+  and is kept only as an ignored diagnostic boundary for later repeated-channel
+  numerator localization work; it is not part of the supported Step III
+  validation set.
+
+Validation for this pass:
+
+```text
+cargo test -p three-dimensional-reps --features diagnostics,eval,test-support
+cargo test -p gammaloop-integration-tests cli_old_python_case_matrix_records_current_three_drep_status -- --nocapture
+cargo test -p gammaloop-integration-tests cli_box_lower_contact_high_powers_match_ltd -- --nocapture
+cargo test -p gammaloop-integration-tests cli_physical_hexagon_high_power_energy_sectors_match_ltd -- --nocapture
+cargo test -p gammaloop-integration-tests cli_multiloop_high_power_energy_sectors_match_ltd -- --nocapture
+```
+
+Latest focused rerun:
+
+```text
+cargo test -p three-dimensional-reps --features diagnostics,eval,test-support
+cargo test -p gammaloop-integration-tests cli_physical_hexagon_high_power_energy_sectors_match_ltd -- --nocapture
+cargo test -p gammaloop-integration-tests cli_multiloop_high_power_energy_sectors_match_ltd -- --nocapture
+```
+
+These passed with the retained double-quintic core probes, the seven public-CLI
+lower-sector box cases above, the physical hexagon public-CLI cubic/quartic
+cases, the multiloop sunrise public-CLI high-power cases, and the retained
+four-loop public-CLI quadratic stress case. The related fast negative check
+`cff_box_double_quintic_is_rejected_by_infinity_residue_check` is covered by
+the feature-enabled `three-dimensional-reps` suite.

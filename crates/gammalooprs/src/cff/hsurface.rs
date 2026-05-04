@@ -28,6 +28,7 @@ impl PartialEq for Hsurface {
     fn eq(&self, other: &Self) -> bool {
         self.positive_energies == other.positive_energies
             && self.negative_energies == other.negative_energies
+            && self.external_shift == other.external_shift
     }
 }
 

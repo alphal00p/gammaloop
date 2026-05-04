@@ -844,28 +844,35 @@ impl RaisedEsurfaceDataView for RaisedEsurfaceData {
 }
 
 impl Graph {
+    pub(crate) fn normalize_esurface_with_raised_edge_groups(
+        esurface: &Esurface,
+        raised_edges: &[Vec<EdgeIndex>],
+    ) -> Esurface {
+        let mut normalized = esurface.clone();
+        for energy in normalized.energies.iter_mut() {
+            if let Some(representative) = raised_edges
+                .iter()
+                .find(|group| group.contains(energy))
+                .and_then(|group| group.first())
+            {
+                *energy = *representative;
+            }
+        }
+        normalized.energies.sort();
+        normalized
+    }
+
     pub(crate) fn determine_raised_esurfaces_from_expression(
         &self,
         expr: &CFFExpression<OrientationID>,
     ) -> RaisedEsurfaceData {
         let raised_edges = self.get_raised_edge_groups();
-
         let normalized_cut_esurfaces = self
             .surface_cache
             .esurface_cache
             .iter()
             .map(|esurface| {
-                let mut new_esurface = esurface.clone();
-                for energy in new_esurface.energies.iter_mut() {
-                    let group_index_of_energy =
-                        raised_edges.iter().position(|group| group.contains(energy));
-
-                    if let Some(found_group_index) = group_index_of_energy {
-                        *energy = *raised_edges[found_group_index].first().unwrap();
-                    }
-                }
-                new_esurface.energies.sort();
-                new_esurface
+                Self::normalize_esurface_with_raised_edge_groups(esurface, &raised_edges)
             })
             .collect::<TiVec<EsurfaceID, _>>();
 

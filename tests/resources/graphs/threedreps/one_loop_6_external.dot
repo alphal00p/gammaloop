@@ -1,0 +1,30 @@
+digraph one_loop_6_external {
+  num="1";
+  overall_factor="1";
+  edge [num="1"];
+  node [num="1"];
+  v0;
+  v1;
+  v2;
+  v3;
+  v4;
+  v5;
+  ext_p1 [style=invis,label="p1"];
+  ext_p2 [style=invis,label="p2"];
+  ext_p3 [style=invis,label="p3"];
+  ext_p4 [style=invis,label="p4"];
+  ext_p5 [style=invis,label="p5"];
+  ext_p6 [style=invis,label="p6"];
+  v0:0 -> v1:1 [id=0 dir=none lmb_id="0" name="q0" particle="scalar_1" lmb_rep="K(0,a___)" mass="0.53"];
+  v1:2 -> v2:3 [id=1 dir=none name="q1" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)" mass="0.56"];
+  v2:4 -> v3:5 [id=2 dir=none name="q2" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)" mass="0.59"];
+  v3:6 -> v4:7 [id=3 dir=none name="q3" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)+P(2,a___)" mass="0.62"];
+  v4:8 -> v5:9 [id=4 dir=none name="q4" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)+P(2,a___)+P(3,a___)" mass="0.65"];
+  v5:10 -> v0:11 [id=5 dir=none name="q5" particle="scalar_1" lmb_rep="K(0,a___)+P(0,a___)+P(1,a___)+P(2,a___)+P(3,a___)+P(4,a___)" mass="0.68"];
+  v0:12 -> ext_p6 [id=6 dir=none name="p6" particle="scalar_0" lmb_rep="P(0,a___)+P(1,a___)+P(2,a___)+P(3,a___)+P(4,a___)" mass="0"];
+  v1:13 -> ext_p1 [id=7 dir=none name="p1" particle="scalar_0" lmb_rep="-1*P(0,a___)" mass="0"];
+  v2:14 -> ext_p2 [id=8 dir=none name="p2" particle="scalar_0" lmb_rep="-1*P(1,a___)" mass="0"];
+  v3:15 -> ext_p3 [id=9 dir=none name="p3" particle="scalar_0" lmb_rep="-1*P(2,a___)" mass="0"];
+  v4:16 -> ext_p4 [id=10 dir=none name="p4" particle="scalar_0" lmb_rep="-1*P(3,a___)" mass="0"];
+  v5:17 -> ext_p5 [id=11 dir=none name="p5" particle="scalar_0" lmb_rep="-1*P(4,a___)" mass="0"];
+}

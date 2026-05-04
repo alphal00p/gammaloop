@@ -1085,6 +1085,467 @@ fn ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_
 
 #[test]
 #[serial]
+fn ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade() -> Result<()> {
+    let external_dot = dot_self(0);
+    let edge_1_plus_2_dot = dot_sum_self(1, 2);
+    let direct_prefactor = format!("{external_dot}*{external_dot}");
+    let traded_prefactor = format!("{edge_1_plus_2_dot}*{edge_1_plus_2_dot}");
+    let direct_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl10_quartic_direct -i numerator -o --select-graphs GL10 --global-prefactor-num '{direct_prefactor}'"
+    );
+    let traded_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl10_quartic_traded -i numerator -o --select-graphs GL10 --global-prefactor-num '{traded_prefactor}'"
+    );
+    let cff_graph_commands = [direct_command.as_str()];
+    let cff_integrand_commands =
+        ["generate existing -p scalar_xs_gl10_quartic_direct -i numerator"];
+    let ltd_graph_commands = [direct_command.as_str(), traded_command.as_str()];
+    let ltd_integrand_commands = [
+        "generate existing -p scalar_xs_gl10_quartic_direct -i numerator",
+        "generate existing -p scalar_xs_gl10_quartic_traded -i numerator",
+    ];
+
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl10_repeated_quartic_cff_reference",
+        "CFF",
+        false,
+        &cff_graph_commands,
+        &cff_integrand_commands,
+        Some("all"),
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl10_repeated_quartic_ltd",
+        "LTD",
+        false,
+        &ltd_graph_commands,
+        &ltd_integrand_commands,
+        Some("all"),
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_direct = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_gl10_quartic_direct",
+        "numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_direct = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_gl10_quartic_direct",
+        "numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_traded = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_gl10_quartic_traded",
+        "numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_direct.sample.evaluation,
+        &cff_direct.sample.evaluation,
+        "LTD generated scalar forward cross-section GL10 repeated quartic numerator",
+    );
+    assert_evaluation_outputs_match(
+        &ltd_traded.sample.evaluation,
+        &cff_direct.sample.evaluation,
+        "LTD generated scalar forward cross-section GL10 repeated quartic numerator energy-conservation trade",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl11_simple_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl11 -i no_numerator -o --select-graphs GL11",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl11 -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_simple_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_simple_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    for process in ["scalar_xs_rep_gl11"] {
+        let cff_result =
+            evaluate_xspace_process_with_events(&mut cff, process, "no_numerator", &point, &[])?;
+        let ltd_result =
+            evaluate_xspace_process_with_events(&mut ltd, process, "no_numerator", &point, &[])?;
+
+        assert_evaluation_outputs_match(
+            &ltd_result.sample.evaluation,
+            &cff_result.sample.evaluation,
+            &format!(
+                "LTD generated scalar forward cross-section repeated-topology simple-cut fixture {process}"
+            ),
+        );
+    }
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl10_simple_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl10_simple -i no_numerator -o --select-graphs GL10",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl10_simple -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl10_simple_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl10_simple_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl10_simple",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl10_simple",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL10 simple-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl10_raised_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl10 -i no_numerator -o --select-graphs GL10",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl10 -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_raised_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_raised_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl10",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl10",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section repeated-topology raised-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl12_raised_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl12 -i no_numerator -o --select-graphs GL12",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl12 -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_gl12_raised_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_gl12_raised_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl12",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl12",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL12 repeated-topology raised-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl13_simple_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl13_simple -i no_numerator -o --select-graphs GL13",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl13_simple -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl13_simple_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl13_simple_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl13_simple",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl13_simple",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL13 simple-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl13_raised_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl13 -i no_numerator -o --select-graphs GL13",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl13 -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_gl13_raised_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_gl13_raised_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl13",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl13",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL13 repeated-topology raised-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl11_raised_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl11_raised -i no_numerator -o --select-graphs GL11",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl11_raised -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_gl11_raised_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_repeated_topology_gl11_raised_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl11_raised",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl11_raised",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL11 repeated-topology raised-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn ltd_with_uv_subtraction_errors_cleanly() -> Result<()> {
     let test_name = "scalar_ltd_uv_subtraction_not_supported";
     let mut cli = get_test_cli(

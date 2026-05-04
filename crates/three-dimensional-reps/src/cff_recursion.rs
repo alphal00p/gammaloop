@@ -365,15 +365,8 @@ fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEne
             expr + LinearEnergyExpr::ose(linnet::half_edge::involution::EdgeIndex(edge.edge_id), 1);
     }
 
-    let mut external_shift =
-        if parsed.external_edges.is_empty() && parsed.initial_state_cut_edges.is_empty() {
-            boundary_external_shift_from_internal_labels(parsed, &vertex.nodes)
-        } else {
-            let mut external_shift = BTreeMap::new();
-            add_explicit_external_edge_shift(parsed, vertex, &mut external_shift);
-            add_initial_state_cut_external_shift(parsed, vertex, &mut external_shift);
-            external_shift
-        };
+    let mut external_shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
+    add_initial_state_cut_external_shift(parsed, vertex, &mut external_shift);
     if vertex.vertex_type() == VertexType::Source {
         for coeff in external_shift.values_mut() {
             *coeff *= -1;
@@ -387,40 +380,6 @@ fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEne
             );
     }
     expr.canonical()
-}
-
-fn add_explicit_external_edge_shift(
-    parsed: &ParsedGraph,
-    vertex: &CffVertex,
-    external_shift: &mut BTreeMap<usize, i32>,
-) {
-    for (edge, incidence_sign) in vertex
-        .incoming
-        .iter()
-        .filter(|edge| edge.edge_type == EdgeType::External)
-        .map(|edge| (edge, -1))
-        .chain(
-            vertex
-                .outgoing
-                .iter()
-                .filter(|edge| edge.edge_type == EdgeType::External)
-                .map(|edge| (edge, 1)),
-        )
-    {
-        let Some(external_edge) = parsed
-            .external_edges
-            .iter()
-            .find(|external_edge| external_edge.edge_id == edge.edge_id)
-        else {
-            continue;
-        };
-        for (external_id, coeff) in external_edge.external_coefficients.iter().enumerate() {
-            if *coeff != 0 {
-                *external_shift.entry(external_id).or_default() += -incidence_sign * *coeff;
-            }
-        }
-    }
-    external_shift.retain(|_, coeff| *coeff != 0);
 }
 
 fn add_initial_state_cut_external_shift(

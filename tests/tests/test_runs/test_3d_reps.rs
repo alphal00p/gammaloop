@@ -65,6 +65,15 @@ fn latest_oriented_expression_path(workspace: &Path) -> Result<PathBuf> {
     }
 }
 
+fn run_on_large_stack(name: &str, f: fn() -> Result<()>) -> Result<()> {
+    std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(f)?
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+}
+
 #[derive(Clone, Copy)]
 struct ImportedGraphSpec {
     dot_name: &'static str,
@@ -794,6 +803,19 @@ fn imported_k_dot_q(loop_id: usize, edge_id: usize) -> String {
     )
 }
 
+fn q0_component(edge_id: usize) -> String {
+    format!("Q({edge_id},spenso::cind(0))")
+}
+
+fn energy_component_power(edge_id: usize, degree: usize) -> String {
+    if degree == 0 {
+        return "1".to_string();
+    }
+    std::iter::repeat_with(|| q0_component(edge_id))
+        .take(degree)
+        .join("*")
+}
+
 fn dot_with_global_numerator(test_name: &str, dot_name: &str, numerator: &str) -> Result<PathBuf> {
     let test_root = get_tests_workspace_path().join(test_name);
     fs::create_dir_all(&test_root)?;
@@ -1028,6 +1050,7 @@ fn run_threedrep_test_cff_ltd_manifest(
         precision,
         seed,
         scale,
+        None,
     )
 }
 
@@ -1039,9 +1062,13 @@ fn run_threedrep_test_cff_ltd_manifest_for_graph(
     precision: &str,
     seed: u64,
     scale: f64,
+    energy_degree_bounds: Option<&str>,
 ) -> Result<JsonValue> {
+    let energy_degree_bounds = energy_degree_bounds
+        .map(|bounds| format!(" --energy-degree-bounds {bounds}"))
+        .unwrap_or_default();
     cli.run_command(&format!(
-        "3Drep test-cff-ltd -p {process_name} -i default -g {graph_id} --workspace-path {} --precision {precision} --seed {seed} --scale {scale:.17e} --clean",
+        "3Drep test-cff-ltd -p {process_name} -i default -g {graph_id} --workspace-path {} --precision {precision} --seed {seed} --scale {scale:.17e}{energy_degree_bounds} --clean",
         workspace_path.display()
     ))?;
     let manifest_path = find_named_artifact(workspace_path, "test_cff_ltd_manifest.json")?;
@@ -2365,6 +2392,315 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
 
 #[test]
 #[serial]
+fn cli_box_lower_contact_high_powers_match_ltd() -> Result<()> {
+    let test_name = "threedreps_box_lower_contact_high_powers";
+    clean_test(get_tests_workspace_path().join(test_name));
+    let bootstrap = import_threedrep_graph(
+        &format!("{test_name}_bootstrap"),
+        &gammaloop_threedreps_dot_path("box.dot"),
+        "bootstrap",
+    )?;
+    let bootstrap_graph = imported_graph_from_cli(&bootstrap, "bootstrap", "default", 0)?;
+    let source_internal_edges = source_internal_edges(bootstrap_graph);
+    let source_external_edges = source_external_edges(bootstrap_graph);
+    clean_test(&bootstrap.cli_settings.state.folder);
+    clean_test(get_tests_workspace_path().join(format!("{test_name}_bootstrap")));
+
+    let cases = [
+        ("single_quartic", vec![(0usize, 4usize)], 1337, 1.0e-1),
+        ("single_quintic", vec![(3usize, 5usize)], 1337, 1.0e-1),
+        ("single_sextic", vec![(0usize, 6usize)], 1337, 1.0e-1),
+        (
+            "cubic_quadratic_lower_contact",
+            vec![(0usize, 3usize), (1, 2)],
+            1337,
+            1.0e-1,
+        ),
+        (
+            "quadratic_linear_cubic_lower_contact",
+            vec![(0usize, 2usize), (1, 1), (3, 3)],
+            1337,
+            1.0e-1,
+        ),
+        (
+            "quartic_linear_terminal",
+            vec![(2usize, 4usize), (3, 1)],
+            1337,
+            1.0e-1,
+        ),
+        (
+            "quartic_quadratic_terminal",
+            vec![(0usize, 4usize), (1, 2)],
+            1337,
+            1.0e-1,
+        ),
+    ];
+
+    let state_path = get_tests_workspace_path().join(test_name).join("state");
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command("import model scalars-default.json")?;
+    set_threedrep_compile_backend(&mut cli, None)?;
+    set_threedrep_sampling_mode(&mut cli, "none")?;
+
+    for (case_name, local_bounds, seed, scale) in cases {
+        let numerator = dense_edge_energy_power_numerator(
+            &source_internal_edges,
+            &source_external_edges,
+            &local_bounds,
+        );
+        let dot_path =
+            dot_with_global_numerator(&format!("{test_name}_{case_name}"), "box.dot", &numerator)?;
+        let process_name = format!("{test_name}_{case_name}");
+        cli.run_command(&format!(
+            "import graphs {} -p {process_name} -i default -o",
+            dot_path.display()
+        ))?;
+        if let Some(dot_dir) = dot_path.parent() {
+            clean_test(dot_dir);
+        }
+        let case_workspace = workspace_path.join(case_name);
+        let manifest = run_threedrep_test_cff_ltd_manifest(
+            &mut cli,
+            &case_workspace,
+            &process_name,
+            "Double",
+            seed,
+            scale,
+        )?;
+        let graph = imported_graph_from_cli(&cli, &process_name, "default", 0)?;
+        let expected_automatic_bounds = graph
+            .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
+        assert_eq!(
+            serde_json::from_value::<Vec<(usize, usize)>>(
+                manifest["automatic_energy_degree_bounds"].clone()
+            )?,
+            expected_automatic_bounds,
+            "{case_name} should infer high-power energy caps from the graph numerator"
+        );
+        let cff_value = direct_manifest_evaluation_value(&manifest, "cff")?;
+        let ltd_value = direct_manifest_evaluation_value(&manifest, "ltd")?;
+        assert_manifest_direct_values_agree(
+            &ltd_value,
+            &cff_value,
+            &format!("LTD vs CFF for lower-contact high-power box case {case_name}"),
+            1.0e-7,
+        );
+    }
+
+    clean_test(get_tests_workspace_path().join(test_name));
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_physical_hexagon_high_power_energy_sectors_match_ltd() -> Result<()> {
+    let test_name = "threedreps_physical_hexagon_high_power_sectors";
+    clean_test(get_tests_workspace_path().join(test_name));
+
+    let bootstrap = import_threedrep_graph(
+        &format!("{test_name}_bootstrap"),
+        &gammaloop_threedreps_dot_path("one_loop_6_external.dot"),
+        "bootstrap",
+    )?;
+    let bootstrap_graph = imported_graph_from_cli(&bootstrap, "bootstrap", "default", 0)?;
+    let source_internal_edges = source_internal_edges(bootstrap_graph);
+    let source_external_edges = source_external_edges(bootstrap_graph);
+    let q0 = source_internal_edges[0];
+    let q1 = source_internal_edges[1];
+    let p0 = source_external_edges[1];
+    clean_test(&bootstrap.cli_settings.state.folder);
+    clean_test(get_tests_workspace_path().join(format!("{test_name}_bootstrap")));
+
+    let quadratic_direct = format!(
+        "{}*{}",
+        energy_component_power(q0, 2),
+        energy_component_power(q1, 2)
+    );
+    let quadratic_direct_bounds = format!("{q0}:2,{q1}:2");
+    let cubic_direct = format!(
+        "{}*{}",
+        energy_component_power(q0, 3),
+        energy_component_power(q1, 3)
+    );
+    let cubic_direct_bounds = format!("{q0}:3,{q1}:3");
+    let q1_from_q0 = format!("({}-{})", q0_component(q0), q0_component(p0));
+    let quadratic_traded = format!(
+        "{}*{}*{}",
+        energy_component_power(q0, 2),
+        q1_from_q0,
+        q1_from_q0
+    );
+    let quadratic_traded_bounds = format!("{q0}:4");
+    let cases = [
+        (
+            "quadratic_direct",
+            quadratic_direct.as_str(),
+            quadratic_direct_bounds.as_str(),
+            1.0e-7,
+        ),
+        (
+            "cubic_direct",
+            cubic_direct.as_str(),
+            cubic_direct_bounds.as_str(),
+            1.0e-7,
+        ),
+        (
+            "quadratic_traded",
+            quadratic_traded.as_str(),
+            quadratic_traded_bounds.as_str(),
+            1.0e-7,
+        ),
+    ];
+
+    let state_path = get_tests_workspace_path().join(test_name).join("state");
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command("import model scalars-default.json")?;
+    set_threedrep_compile_backend(&mut cli, None)?;
+    set_threedrep_sampling_mode(&mut cli, "none")?;
+
+    for (case_name, numerator, energy_degree_bounds, tolerance) in cases {
+        let dot_path = dot_with_global_numerator(
+            &format!("{test_name}_{case_name}"),
+            "one_loop_6_external.dot",
+            numerator,
+        )?;
+        let process_name = format!("{test_name}_{case_name}");
+        cli.run_command(&format!(
+            "import graphs {} -p {process_name} -i default -o",
+            dot_path.display()
+        ))?;
+        if let Some(dot_dir) = dot_path.parent() {
+            clean_test(dot_dir);
+        }
+        let case_workspace = workspace_path.join(case_name);
+        let manifest = run_threedrep_test_cff_ltd_manifest_for_graph(
+            &mut cli,
+            &case_workspace,
+            &process_name,
+            0,
+            "Double",
+            291,
+            1.0e-1,
+            Some(energy_degree_bounds),
+        )?;
+        let cff_value = direct_manifest_evaluation_value(&manifest, "cff")?;
+        let ltd_value = direct_manifest_evaluation_value(&manifest, "ltd")?;
+        assert_manifest_direct_values_agree(
+            &ltd_value,
+            &cff_value,
+            &format!("LTD vs CFF for physical hexagon {case_name}"),
+            tolerance,
+        );
+    }
+
+    clean_test(get_tests_workspace_path().join(test_name));
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_multiloop_high_power_energy_sectors_match_ltd() -> Result<()> {
+    run_on_large_stack(
+        "cli_multiloop_high_power_energy_sectors_match_ltd",
+        cli_multiloop_high_power_energy_sectors_match_ltd_inner,
+    )
+}
+
+fn cli_multiloop_high_power_energy_sectors_match_ltd_inner() -> Result<()> {
+    let test_name = "threedreps_multiloop_high_power_sectors";
+    clean_test(get_tests_workspace_path().join(test_name));
+
+    let cases: [(&str, &str, &[(usize, usize)], u64, f64); 3] = [
+        (
+            "sunrise_pow4_free_lower_sector_quintic",
+            "sunrise_pow4.dot",
+            BOUNDS_SUNRISE_QUINTIC_2,
+            1337,
+            1.0e-1,
+        ),
+        (
+            "sunrise_pow4_repeated_channel_cubic_pair",
+            "sunrise_pow4.dot",
+            BOUNDS_SUNRISE_CUBIC_PAIR,
+            123,
+            1.0e-1,
+        ),
+        (
+            "four_loop_stress_quadratic",
+            "four_loop_stress.dot",
+            BOUNDS_FOUR_LOOP_QUADRATIC,
+            1337,
+            1.0e-1,
+        ),
+    ];
+
+    let state_path = get_tests_workspace_path().join(test_name).join("state");
+    let workspace_path = imported_graph_threedrep_workspace(test_name);
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+    cli.run_command("import model scalars-default.json")?;
+    set_threedrep_compile_backend(&mut cli, None)?;
+    set_threedrep_sampling_mode(&mut cli, "none")?;
+
+    for (case_name, dot_name, local_bounds, seed, scale) in cases {
+        let bootstrap = import_threedrep_graph(
+            &format!("{test_name}_{case_name}_bootstrap"),
+            &gammaloop_threedreps_dot_path(dot_name),
+            "bootstrap",
+        )?;
+        let bootstrap_graph = imported_graph_from_cli(&bootstrap, "bootstrap", "default", 0)?;
+        let source_internal_edges = source_internal_edges(bootstrap_graph);
+        let source_external_edges = source_external_edges(bootstrap_graph);
+        let numerator = dense_edge_energy_power_numerator(
+            &source_internal_edges,
+            &source_external_edges,
+            local_bounds,
+        );
+        let energy_degree_bounds = source_bounds_from_local(&source_internal_edges, local_bounds);
+        clean_test(&bootstrap.cli_settings.state.folder);
+        clean_test(get_tests_workspace_path().join(format!("{test_name}_{case_name}_bootstrap")));
+
+        let dot_path =
+            dot_with_global_numerator(&format!("{test_name}_{case_name}"), dot_name, &numerator)?;
+        let process_name = format!("{test_name}_{case_name}");
+        cli.run_command(&format!(
+            "import graphs {} -p {process_name} -i default -o",
+            dot_path.display()
+        ))?;
+        if let Some(dot_dir) = dot_path.parent() {
+            clean_test(dot_dir);
+        }
+
+        let manifest = run_threedrep_test_cff_ltd_manifest_for_graph(
+            &mut cli,
+            &workspace_path.join(case_name),
+            &process_name,
+            0,
+            "Double",
+            seed,
+            scale,
+            Some(&energy_degree_bounds),
+        )?;
+        let cff_value = direct_manifest_evaluation_value(&manifest, "cff")?;
+        let ltd_value = direct_manifest_evaluation_value(&manifest, "ltd")?;
+        assert_manifest_direct_values_agree(
+            &ltd_value,
+            &cff_value,
+            &format!("LTD vs CFF for multiloop high-power case {case_name}"),
+            1.0e-7,
+        );
+    }
+
+    clean_test(get_tests_workspace_path().join(test_name));
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn cli_box_pow3_high_power_agrees_for_all_numerator_sample_normalizations() -> Result<()> {
     let test_name = "threedreps_box_pow3_high_power_sample_normalizations";
     clean_test(get_tests_workspace_path().join(test_name));
@@ -2587,6 +2923,7 @@ fn cli_aa_aa_box_and_double_box_multibackend_threedrep_comparisons() -> Result<(
                 precision,
                 11,
                 0.25,
+                None,
             )?;
             assert_eq!(
                 manifest["graph_id"].as_u64(),
@@ -2937,6 +3274,10 @@ fn cli_old_python_case_matrix_records_current_three_drep_status() -> Result<()> 
             report.name, report.comparison, report.detail
         );
     }
+    assert_eq!(
+        failed_count, 0,
+        "all old Python 3Drep parity cases should pass; see {report_path:?}"
+    );
 
     clean_test(test_root);
     clean_test(&cli.cli_settings.state.folder);

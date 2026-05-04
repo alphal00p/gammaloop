@@ -19,6 +19,7 @@ use linnet::half_edge::{
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::{
     Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode, ThreeDGraphSource,
+    tree::{NodeId, Tree},
 };
 
 use tracing::debug;
@@ -217,14 +218,10 @@ impl Graph {
         }
 
         for orientation in expression.orientations.iter_mut() {
-            for variant in &mut orientation.variants {
-                let denominator_sign = remap_denominator_tree_surface_ids(
-                    &mut variant.denominator,
-                    &linear_surface_map,
-                )?;
-                if denominator_sign < 0 {
-                    variant.prefactor *= Atom::num(-1);
-                }
+            let mut remapped_variants = Vec::with_capacity(orientation.variants.len());
+            for mut variant in std::mem::take(&mut orientation.variants) {
+                let signed_denominators =
+                    remap_denominator_tree_surface_ids(&variant.denominator, &linear_surface_map);
                 for surface_id in &mut variant.numerator_surfaces {
                     let numerator_sign =
                         remap_generated_surface_id(surface_id, &linear_surface_map);
@@ -241,7 +238,16 @@ impl Graph {
                     // must remain attached to their variants.
                     variant.half_edges.clear();
                 }
+                for (denominator_sign, denominator) in signed_denominators {
+                    let mut signed_variant = variant.clone();
+                    signed_variant.denominator = denominator;
+                    if denominator_sign < 0 {
+                        signed_variant.prefactor *= Atom::num(-1);
+                    }
+                    remapped_variants.push(signed_variant);
+                }
             }
+            orientation.variants = remapped_variants;
         }
 
         Ok(CFFExpression {
@@ -413,9 +419,9 @@ fn remap_generated_surface_id(
 }
 
 fn remap_denominator_tree_surface_ids(
-    denominator: &mut three_dimensional_reps::tree::Tree<HybridSurfaceID>,
+    denominator: &Tree<HybridSurfaceID>,
     linear_surface_map: &BTreeMap<LinearSurfaceID, SurfaceMapEntry>,
-) -> Result<i64> {
+) -> Vec<(i64, Tree<HybridSurfaceID>)> {
     let node_signs = denominator
         .iter_nodes()
         .map(|node| {
@@ -431,30 +437,75 @@ fn remap_denominator_tree_surface_ids(
         })
         .collect::<BTreeMap<_, _>>();
 
-    let mut branch_sign = None;
+    let mut chains_by_sign = BTreeMap::<i64, Vec<Vec<HybridSurfaceID>>>::new();
     for leaf in denominator.get_bottom_layer() {
         let mut sign = 1;
+        let mut chain = Vec::new();
         let mut current = Some(leaf);
         while let Some(node_id) = current {
             sign *= node_signs.get(&node_id).copied().unwrap_or(1);
+            let mut surface_id = denominator.get_node(node_id).data;
+            remap_generated_surface_id(&mut surface_id, linear_surface_map);
+            if surface_id != HybridSurfaceID::Unit {
+                chain.push(surface_id);
+            }
             current = denominator.get_node(node_id).parent;
         }
-        if let Some(existing) = branch_sign {
-            if existing != sign {
-                return Err(eyre::eyre!(
-                    "generated signed denominator tree has branch-dependent signs; cannot absorb canonical E-surface signs into a single variant prefactor"
-                ));
-            }
-        } else {
-            branch_sign = Some(sign);
-        }
+        chain.reverse();
+        chains_by_sign.entry(sign).or_default().push(chain);
     }
 
-    denominator.map_mut(|surface_id| {
-        remap_generated_surface_id(surface_id, linear_surface_map);
-    });
+    if chains_by_sign.is_empty() {
+        return vec![(1, Tree::from_root(HybridSurfaceID::Unit))];
+    }
 
-    Ok(branch_sign.unwrap_or(1))
+    chains_by_sign
+        .into_iter()
+        .map(|(sign, chains)| (sign, denominator_tree_from_chains(&chains)))
+        .collect()
+}
+
+fn denominator_tree_from_chains(chains: &[Vec<HybridSurfaceID>]) -> Tree<HybridSurfaceID> {
+    if chains.is_empty() || chains.iter().all(Vec::is_empty) {
+        return Tree::from_root(HybridSurfaceID::Unit);
+    }
+
+    let mut tree = Tree::from_root(HybridSurfaceID::Unit);
+    for chain in chains {
+        if chain.is_empty() {
+            insert_terminal_unit_if_missing(&mut tree, NodeId::root());
+            continue;
+        }
+        let mut parent = NodeId::root();
+        for surface_id in chain {
+            let existing_child = tree
+                .get_node(parent)
+                .children
+                .iter()
+                .copied()
+                .find(|child| tree.get_node(*child).data == *surface_id);
+            if let Some(child) = existing_child {
+                parent = child;
+                continue;
+            }
+            let child = NodeId(tree.get_num_nodes());
+            tree.insert_node(parent, *surface_id);
+            parent = child;
+        }
+        insert_terminal_unit_if_missing(&mut tree, parent);
+    }
+    tree
+}
+
+fn insert_terminal_unit_if_missing(tree: &mut Tree<HybridSurfaceID>, parent: NodeId) {
+    let has_terminal_unit = tree
+        .get_node(parent)
+        .children
+        .iter()
+        .any(|child| tree.get_node(*child).data == HybridSurfaceID::Unit);
+    if !has_terminal_unit {
+        tree.insert_node(parent, HybridSurfaceID::Unit);
+    }
 }
 
 fn collect_linear_surface_terms(

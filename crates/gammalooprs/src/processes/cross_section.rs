@@ -783,32 +783,43 @@ impl CrossSectionGraph {
             self.graph
                 .generate_3d_expression_for_integrand(&[], &canonize_esurface, &options)?;
 
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let normalized_generated_esurfaces = self
+            .graph
+            .surface_cache
+            .esurface_cache
+            .iter()
+            .map(|esurface| {
+                Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups)
+            })
+            .collect::<TiVec<EsurfaceID, _>>();
         let cut_esurface_map = self
             .cut_esurface
             .iter()
             .map(|esurface| {
+                let normalized_cut_esurface =
+                    Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups);
                 self.graph
                     .surface_cache
                     .esurface_cache
                     .iter()
-                    .position(|e_sf| e_sf == esurface)
-                    .unwrap_or_else(|| {
-                        println!("esurfaces corruped");
-
-                        println!("cut esurfaces: {:?}", self.cut_esurface);
-                        println!(
-                            "graph esurfaces: {:?}",
-                            self.graph.surface_cache.esurface_cache
-                        );
-                        println!(
-                            "graph hsurfaces: {:?}",
-                            self.graph.surface_cache.hsurface_cache
-                        );
-                        panic!()
+                    .zip(normalized_generated_esurfaces.iter())
+                    .position(|(e_sf, normalized_generated_esurface)| {
+                        e_sf == esurface || *normalized_generated_esurface == normalized_cut_esurface
                     })
-                    .into()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Cutkosky cut E-surface {esurface:?} for graph {} was not present in the generated 3D expression surface cache.\n\
+                             Cut E-surfaces: {:?}\nGenerated E-surfaces: {:?}\nGenerated H-surfaces: {:?}",
+                            self.graph.name,
+                            self.cut_esurface,
+                            self.graph.surface_cache.esurface_cache,
+                            self.graph.surface_cache.hsurface_cache,
+                        )
+                    })
+                    .map(Into::into)
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         self.cut_esurface_id_map = cut_esurface_map;
 
@@ -886,7 +897,6 @@ impl CrossSectionGraph {
             self.cuts.len(),
             self.graph.name
         );
-
         Ok(())
     }
 
@@ -962,12 +972,6 @@ impl CrossSectionGraph {
 
         let lu_prefactor = self.lu_prefactor_helper();
         let representation = global_settings.three_d_representation;
-        let representation_prefactor = if representation == ThreeDRepresentation::Ltd {
-            self.ltd_cut_parity_factor()
-        } else {
-            Atom::num(1)
-        };
-
         let mut cut_forests = cut_woods.unfold(&self.graph);
         cut_forests.compute(
             &mut self.graph,
@@ -992,7 +996,15 @@ impl CrossSectionGraph {
                     integrand
                 }
             })
-            .map(|integrand| integrand.map(|a| a * &lu_prefactor * &representation_prefactor))
+            .zip(self.derived_data.raised_data.raised_cut_groups.iter())
+            .map(|(integrand, raised_cut_group)| {
+                let representation_prefactor = if representation == ThreeDRepresentation::Ltd {
+                    self.ltd_cut_parity_factor(raised_cut_group)
+                } else {
+                    Atom::num(1)
+                };
+                integrand.map(|a| a * &lu_prefactor * &representation_prefactor)
+            })
             .collect())
     }
 
@@ -1063,7 +1075,6 @@ impl CrossSectionGraph {
             .expect("global 3D expression should have been created");
         let numerator = self.production_numerator_atom_for_full_3d_expression();
         let lu_prefactor = self.lu_prefactor_helper();
-        let cut_parity_factor = self.ltd_cut_parity_factor();
 
         self.derived_data
             .raised_data
@@ -1071,6 +1082,7 @@ impl CrossSectionGraph {
             .iter()
             .zip(cuts.iter())
             .map(|(raised_cut_group, cutset)| {
+                let cut_parity_factor = self.ltd_cut_parity_factor(raised_cut_group);
                 let integrands = expression
                     .clone()
                     .select_esurface_residue(&raised_cut_group.related_esurface_group)
@@ -1111,14 +1123,27 @@ impl CrossSectionGraph {
         tsrat_pow * hfunction / factors_of_pi
     }
 
-    fn ltd_cut_parity_factor(&self) -> Atom {
+    fn ltd_cut_parity_factor(&self, raised_cut_group: &RaisedCutGroup) -> Atom {
         let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
             - self.graph.initial_state_cut.nedges(&self.graph);
-        if loop_number % 2 == 0 {
-            -Atom::num(1)
-        } else {
-            Atom::num(1)
-        }
+        let loop_parity = if loop_number % 2 == 0 { -1 } else { 1 };
+        Atom::num(i64::from(
+            loop_parity * self.ltd_representative_cut_orientation_factor(raised_cut_group),
+        ))
+    }
+
+    fn ltd_representative_cut_orientation_factor(&self, raised_cut_group: &RaisedCutGroup) -> i32 {
+        let Some(cut_id) = raised_cut_group.cuts.first() else {
+            return 1;
+        };
+        -self.cuts[*cut_id]
+            .cut
+            .iter_edges(&self.graph.underlying)
+            .map(|(orientation, _)| match orientation {
+                Orientation::Default | Orientation::Undirected => 1,
+                Orientation::Reversed => -1,
+            })
+            .product::<i32>()
     }
 
     fn th_prefactor_helper(
@@ -1851,23 +1876,26 @@ impl RaisedCutData {
         evaluator_settings: &EvaluatorSettings,
     ) -> (Self, GraphGenerationStats) {
         let mut stats = GraphGenerationStats::default();
-        let reversed_map = cut_esurface_map
-            .iter_enumerated()
-            .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
-            .collect::<HashMap<EsurfaceID, CutId>>();
+        let mut reversed_map = HashMap::<EsurfaceID, Vec<CutId>>::default();
+        for (cut_id, &esurface_id) in cut_esurface_map.iter_enumerated() {
+            reversed_map.entry(esurface_id).or_default().push(cut_id);
+        }
 
         let mut groups = TiVec::new();
 
         for (_raised_esurface_id, raised_esurface_group) in
             raised_esurface_data.raised_groups.iter_enumerated()
         {
-            if cut_esurface_map.contains(&raised_esurface_group.esurface_ids[0]) {
-                let cuts = raised_esurface_group
-                    .esurface_ids
-                    .iter()
-                    .map(|esurface_id| reversed_map[esurface_id])
-                    .collect::<Vec<_>>();
+            let cuts = raised_esurface_group
+                .esurface_ids
+                .iter()
+                .filter_map(|esurface_id| reversed_map.get(esurface_id))
+                .flatten()
+                .copied()
+                .unique()
+                .collect::<Vec<_>>();
 
+            if !cuts.is_empty() {
                 let raised_cut_group = RaisedCutGroup {
                     cuts,
                     related_esurface_group: raised_esurface_group.clone(),
