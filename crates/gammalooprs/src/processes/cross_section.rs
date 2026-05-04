@@ -54,7 +54,7 @@ use crate::{
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeVec, Orientation},
+    involution::{EdgeVec, HedgePair, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
@@ -720,11 +720,6 @@ impl CrossSectionGraph {
                     "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported for cross-section supergraphs; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
                 ));
             }
-            if settings.threshold_subtraction.enable_thresholds {
-                return Err(eyre!(
-                    "`global.3d_representation = LTD` with threshold subtraction is not implemented yet for cross-section supergraphs"
-                ));
-            }
         }
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
@@ -751,7 +746,7 @@ impl CrossSectionGraph {
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
             self.build_subspace_data()?;
-            self.build_threshold_counterterm(settings, vk)?;
+            self.build_threshold_counterterm(settings, global_settings.three_d_representation, vk)?;
         }
 
         stats.total_time += preprocess_started.elapsed();
@@ -947,7 +942,7 @@ impl CrossSectionGraph {
         let cuts = self.cutsets_for_raised_cuts();
 
         if global_settings.three_d_representation == ThreeDRepresentation::Ltd
-            && !(settings.uv.subtract_uv && settings.uv.local_uv_cts_from_expanded_4d_integrands)
+            && !settings.uv.subtract_uv
         {
             return self.build_ltd_original_integrand(&cuts, settings);
         }
@@ -967,6 +962,11 @@ impl CrossSectionGraph {
 
         let lu_prefactor = self.lu_prefactor_helper();
         let representation = global_settings.three_d_representation;
+        let representation_prefactor = if representation == ThreeDRepresentation::Ltd {
+            self.ltd_cut_parity_factor()
+        } else {
+            Atom::num(1)
+        };
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
         cut_forests.compute(
@@ -992,7 +992,7 @@ impl CrossSectionGraph {
                     integrand
                 }
             })
-            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
+            .map(|integrand| integrand.map(|a| a * &lu_prefactor * &representation_prefactor))
             .collect())
     }
 
@@ -1022,11 +1022,22 @@ impl CrossSectionGraph {
             .graph
             .full_filter()
             .subtract(&self.graph.initial_state_cut);
-        self.graph
+        let numerator = self
+            .graph
             .numerator(&reduced, &self.graph.empty_subgraph())
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * self.graph.global_atom()
+            * self.graph.global_atom();
+        let momentum_replacements = self.graph.normal_emr_replacement(
+            &self.graph.full_filter(),
+            &self.graph.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        numerator
+            .replace_multiple(&momentum_replacements)
+            .expand()
+            .collect_factors()
     }
 
     fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
@@ -1052,6 +1063,7 @@ impl CrossSectionGraph {
             .expect("global 3D expression should have been created");
         let numerator = self.production_numerator_atom_for_full_3d_expression();
         let lu_prefactor = self.lu_prefactor_helper();
+        let cut_parity_factor = self.ltd_cut_parity_factor();
 
         self.derived_data
             .raised_data
@@ -1073,7 +1085,9 @@ impl CrossSectionGraph {
                                 true,
                                 &settings.orientation_pattern,
                             );
-                        self.finalize_parametric_integrand_atom(atom * &lu_prefactor)
+                        self.finalize_parametric_integrand_atom(
+                            atom * &lu_prefactor * &cut_parity_factor,
+                        )
                     })
                     .collect::<Result<Vec<_>>>()?;
                 Ok(ParametricIntegrands {
@@ -1095,6 +1109,16 @@ impl CrossSectionGraph {
         let tsrat_pow = tstar.pow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
         tsrat_pow * hfunction / factors_of_pi
+    }
+
+    fn ltd_cut_parity_factor(&self) -> Atom {
+        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
+            - self.graph.initial_state_cut.nedges(&self.graph);
+        if loop_number % 2 == 0 {
+            -Atom::num(1)
+        } else {
+            Atom::num(1)
+        }
     }
 
     fn th_prefactor_helper(
@@ -1305,6 +1329,7 @@ impl CrossSectionGraph {
     fn build_threshold_counterterm(
         &mut self,
         settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
         vakint: &Vakint,
     ) -> Result<()> {
         // threshold enumeration as st cuts
@@ -1583,7 +1608,7 @@ impl CrossSectionGraph {
             vakint,
             &valid_orientations,
             settings,
-            ThreeDRepresentation::Cff,
+            representation,
             settings.explicit_orientation_sum_only,
         )?;
 
@@ -1622,7 +1647,9 @@ impl CrossSectionGraph {
 
             for _ in 0..left_raised_cut_threshold_data[raised_cut_id].len() {
                 let atoms = threshold_counterterms.next().unwrap();
-                let atoms = if settings.explicit_orientation_sum_only {
+                let atoms = if representation == ThreeDRepresentation::Cff
+                    && settings.explicit_orientation_sum_only
+                {
                     atoms.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     atoms
@@ -1632,7 +1659,9 @@ impl CrossSectionGraph {
 
             for _ in 0..right_raised_cut_threshold_data[raised_cut_id].len() {
                 let atoms = threshold_counterterms.next().unwrap();
-                let atoms = if settings.explicit_orientation_sum_only {
+                let atoms = if representation == ThreeDRepresentation::Cff
+                    && settings.explicit_orientation_sum_only
+                {
                     atoms.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     atoms
@@ -1644,7 +1673,9 @@ impl CrossSectionGraph {
                 * right_raised_cut_threshold_data[raised_cut_id].len())
             {
                 let atoms = threshold_counterterms.next().unwrap();
-                let atoms = if settings.explicit_orientation_sum_only {
+                let atoms = if representation == ThreeDRepresentation::Cff
+                    && settings.explicit_orientation_sum_only
+                {
                     atoms.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     atoms

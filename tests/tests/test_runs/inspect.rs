@@ -203,6 +203,303 @@ helicities = [0]
     Ok(cli)
 }
 
+fn setup_generated_scalar_forward_cross_sections_cli(
+    test_name: &str,
+    representation: &str,
+    subtract_uv: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        test_name,
+        representation,
+        subtract_uv,
+        &[
+            "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{1}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_1l -i no_numerator -o --select-graphs GL0",
+            "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{2}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_2l -i no_numerator -o --select-graphs GL2",
+            "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_3l -i no_numerator -o --select-graphs GL06",
+        ],
+        &[
+            "generate existing -p scalar_xs_1l -i no_numerator",
+            "generate existing -p scalar_xs_2l -i no_numerator",
+            "generate existing -p scalar_xs_3l -i no_numerator",
+        ],
+        None,
+        true,
+        false,
+    )
+}
+
+fn setup_generated_scalar_forward_cross_sections_cli_with_commands(
+    test_name: &str,
+    representation: &str,
+    subtract_uv: bool,
+    graph_commands: &[&str],
+    integrand_commands: &[&str],
+    numerator_sampling_scale: Option<&str>,
+    enable_thresholds: bool,
+    disable_threshold_subtraction_runtime: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "remove processes",
+            &format!(
+                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.local_uv_cts_from_expanded_4d_integrands={subtract_uv} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds}{}",
+                numerator_sampling_scale
+                    .map(|scale| format!(
+                        " global.generation.uniform_numerator_sampling_scale={scale}"
+                    ))
+                    .unwrap_or_default()
+            ),
+            &format!(
+                r#"set default-runtime string '
+[general]
+evaluator_method = "Summed"
+generate_events = true
+store_additional_weights_in_event = true
+mu_r = 3.0
+m_uv = 20.0
+
+[subtraction]
+disable_threshold_subtraction = {disable_threshold_subtraction_runtime}
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [1.0, 0.0, 0.0, 0.0]
+]
+helicities = [0]
+'"#,
+            ),
+        ],
+    )?;
+    run_commands(&mut cli, graph_commands)?;
+    run_commands(&mut cli, &["set model mass_scalar_1=1.0"])?;
+    run_commands(&mut cli, integrand_commands)?;
+    run_commands(&mut cli, &["set model mass_scalar_1=0.1"])?;
+
+    Ok(cli)
+}
+
+fn dot_self(edge: usize) -> String {
+    format!(
+        "({q0}*{q0}-{q1}*{q1}-{q2}*{q2}-{q3}*{q3})",
+        q0 = format_args!("gammalooprs::Q({edge},spenso::cind(0))"),
+        q1 = format_args!("gammalooprs::Q({edge},spenso::cind(1))"),
+        q2 = format_args!("gammalooprs::Q({edge},spenso::cind(2))"),
+        q3 = format_args!("gammalooprs::Q({edge},spenso::cind(3))"),
+    )
+}
+
+fn dot_sum_self(left_edge: usize, right_edge: usize) -> String {
+    format!(
+        "(({l0}+{r0})*({l0}+{r0})-({l1}+{r1})*({l1}+{r1})-({l2}+{r2})*({l2}+{r2})-({l3}+{r3})*({l3}+{r3}))",
+        l0 = format_args!("gammalooprs::Q({left_edge},spenso::cind(0))"),
+        l1 = format_args!("gammalooprs::Q({left_edge},spenso::cind(1))"),
+        l2 = format_args!("gammalooprs::Q({left_edge},spenso::cind(2))"),
+        l3 = format_args!("gammalooprs::Q({left_edge},spenso::cind(3))"),
+        r0 = format_args!("gammalooprs::Q({right_edge},spenso::cind(0))"),
+        r1 = format_args!("gammalooprs::Q({right_edge},spenso::cind(1))"),
+        r2 = format_args!("gammalooprs::Q({right_edge},spenso::cind(2))"),
+        r3 = format_args!("gammalooprs::Q({right_edge},spenso::cind(3))"),
+    )
+}
+
+fn evaluate_xspace_process_with_events(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process: &str,
+    integrand: &str,
+    point: &[f64],
+    discrete_dims: &[usize],
+) -> Result<gammalooprs::integrands::evaluation::SingleSampleEvaluationResult> {
+    let (process_id, resolved_integrand_name) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified(process.to_string())),
+        Some(&integrand.to_string()),
+    )?;
+    let points = ndarray::Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let discrete_dims =
+        ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims.to_vec())?;
+    evaluate_sample(
+        &mut cli.state,
+        &EvaluateSamples {
+            process_id: Some(process_id),
+            integrand_name: Some(resolved_integrand_name),
+            use_arb_prec: false,
+            minimal_output: false,
+            return_generated_events: Some(true),
+            momentum_space: false,
+            points: points.view(),
+            integrator_weights: None,
+            discrete_dims: Some(discrete_dims.view()),
+            graph_names: None,
+            orientations: None,
+        },
+    )
+}
+
+fn complex_ff64(value: &Complex<F<f64>>) -> Complex<f64> {
+    Complex::new(value.re.0, value.im.0)
+}
+
+fn assert_f64_approx_eq(actual: f64, expected: f64, context: &str) {
+    let scale = actual.abs().max(expected.abs()).max(1.0);
+    let tolerance = 1.0e-10 * scale;
+    assert!(
+        (actual - expected).abs() <= tolerance,
+        "{context}: actual={actual}, expected={expected}, tolerance={tolerance}"
+    );
+}
+
+fn assert_evaluation_outputs_match(
+    actual: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+    expected: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+    context: &str,
+) {
+    assert_complex_approx_eq(
+        complex_ff64(&actual.integrand_result),
+        complex_ff64(&expected.integrand_result),
+        &format!("{context}: integrand result"),
+    );
+    match (
+        actual.parameterization_jacobian.as_ref(),
+        expected.parameterization_jacobian.as_ref(),
+    ) {
+        (Some(actual), Some(expected)) => {
+            assert_f64_approx_eq(actual.0, expected.0, &format!("{context}: jacobian"));
+        }
+        (None, None) => {}
+        _ => panic!("{context}: jacobian presence differs"),
+    }
+    assert_f64_approx_eq(
+        actual.integrator_weight.0,
+        expected.integrator_weight.0,
+        &format!("{context}: integrator weight"),
+    );
+
+    assert_eq!(
+        actual.event_groups.len(),
+        expected.event_groups.len(),
+        "{context}: event-group count differs"
+    );
+    for (group_index, (actual_group, expected_group)) in actual
+        .event_groups
+        .iter()
+        .zip(expected.event_groups.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            actual_group.len(),
+            expected_group.len(),
+            "{context}: event count differs in group {group_index}"
+        );
+        let actual_events = actual_group
+            .iter()
+            .sorted_by_key(|event| {
+                (
+                    event.cut_info.graph_group_id,
+                    event.cut_info.graph_id,
+                    event.cut_info.cut_id,
+                    event.cut_info.orientation_id,
+                    event.cut_info.lmb_channel_id,
+                )
+            })
+            .collect_vec();
+        let expected_events = expected_group
+            .iter()
+            .sorted_by_key(|event| {
+                (
+                    event.cut_info.graph_group_id,
+                    event.cut_info.graph_id,
+                    event.cut_info.cut_id,
+                    event.cut_info.orientation_id,
+                    event.cut_info.lmb_channel_id,
+                )
+            })
+            .collect_vec();
+
+        for (event_index, (actual_event, expected_event)) in
+            actual_events.iter().zip(expected_events.iter()).enumerate()
+        {
+            let event_context = format!("{context}: group {group_index} event {event_index}");
+            assert_eq!(
+                actual_event.cut_info.cut_id, expected_event.cut_info.cut_id,
+                "{event_context}: cut id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.graph_id, expected_event.cut_info.graph_id,
+                "{event_context}: graph id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.graph_group_id, expected_event.cut_info.graph_group_id,
+                "{event_context}: graph-group id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.orientation_id, expected_event.cut_info.orientation_id,
+                "{event_context}: orientation id differs"
+            );
+            assert_complex_approx_eq(
+                complex_ff64(&actual_event.weight),
+                complex_ff64(&expected_event.weight),
+                &format!("{event_context}: event weight"),
+            );
+            assert_eq!(
+                actual_event.additional_weights.weights.keys().collect_vec(),
+                expected_event
+                    .additional_weights
+                    .weights
+                    .keys()
+                    .collect_vec(),
+                "{event_context}: additional-weight keys differ"
+            );
+            for (key, expected_weight) in &expected_event.additional_weights.weights {
+                let actual_weight = &actual_event.additional_weights.weights[key];
+                assert_complex_approx_eq(
+                    complex_ff64(actual_weight),
+                    complex_ff64(expected_weight),
+                    &format!("{event_context}: additional weight {key:?}"),
+                );
+            }
+        }
+    }
+}
+
+fn evaluation_has_threshold_counterterm(
+    evaluation: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+) -> bool {
+    evaluation
+        .event_groups
+        .iter()
+        .flat_map(|group| group.iter())
+        .any(|event| {
+            event.additional_weights.weights.keys().any(|key| {
+                matches!(
+                    key,
+                    gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm {
+                        ..
+                    }
+                )
+            })
+        })
+}
+
 struct ImportedExternalTreeCase {
     graph_file: &'static str,
     momenta: &'static str,
@@ -610,6 +907,175 @@ fn ltd_scalar_cross_section_local_uv_from_expanded_4d_inspect_matches_cff() -> R
         ltd_value,
         cff_value,
         "LTD scalar cross-section expanded-4D local UV inspect",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_forward_cross_section_threshold_inspects_match_cff() -> Result<()> {
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli(
+        "generated_forward_xs_threshold_cff_reference",
+        "CFF",
+        false,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli(
+        "generated_forward_xs_threshold_ltd",
+        "LTD",
+        false,
+    )?;
+
+    for (process, point, has_threshold_counterterm) in [
+        ("scalar_xs_1l", vec![0.1, 0.2, 0.3], false),
+        ("scalar_xs_2l", vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6], true),
+        (
+            "scalar_xs_3l",
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+            true,
+        ),
+    ] {
+        let cff_result =
+            evaluate_xspace_process_with_events(&mut cff, process, "no_numerator", &point, &[])?;
+        let ltd_result =
+            evaluate_xspace_process_with_events(&mut ltd, process, "no_numerator", &point, &[])?;
+
+        assert_evaluation_outputs_match(
+            &ltd_result.sample.evaluation,
+            &cff_result.sample.evaluation,
+            &format!("LTD threshold-subtracted generated scalar forward cross-section {process}"),
+        );
+        if has_threshold_counterterm {
+            assert!(
+                evaluation_has_threshold_counterterm(&ltd_result.sample.evaluation),
+                "{process}: LTD evaluation should expose threshold-counterterm event weights"
+            );
+        }
+    }
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff() -> Result<()> {
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli(
+        "generated_forward_xs_threshold_4d_uv_cff_reference",
+        "CFF",
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli(
+        "generated_forward_xs_threshold_4d_uv_ltd",
+        "LTD",
+        true,
+    )?;
+
+    for (process, point) in [
+        ("scalar_xs_1l", vec![0.1, 0.2, 0.3]),
+        ("scalar_xs_2l", vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+        (
+            "scalar_xs_3l",
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        ),
+    ] {
+        let cff_result =
+            evaluate_xspace_process_with_events(&mut cff, process, "no_numerator", &point, &[])?;
+        let ltd_result =
+            evaluate_xspace_process_with_events(&mut ltd, process, "no_numerator", &point, &[])?;
+
+        assert_evaluation_outputs_match(
+            &ltd_result.sample.evaluation,
+            &cff_result.sample.evaluation,
+            &format!(
+                "LTD threshold-subtracted generated scalar forward cross-section with expanded-4D local UV {process}"
+            ),
+        );
+    }
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade() -> Result<()>
+{
+    let external_dot = dot_self(0);
+    let edge_1_plus_2_dot = dot_sum_self(1, 2);
+    let direct_prefactor = format!("{external_dot}*{external_dot}");
+    let traded_prefactor = format!("{edge_1_plus_2_dot}*{edge_1_plus_2_dot}");
+    let direct_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{2}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_2l_quartic_direct -i numerator -o --select-graphs GL2 --global-prefactor-num '{direct_prefactor}'"
+    );
+    let traded_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{2}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_2l_quartic_traded -i numerator -o --select-graphs GL2 --global-prefactor-num '{traded_prefactor}'"
+    );
+    let cff_graph_commands = [direct_command.as_str()];
+    let cff_integrand_commands = ["generate existing -p scalar_xs_2l_quartic_direct -i numerator"];
+    let ltd_graph_commands = [direct_command.as_str(), traded_command.as_str()];
+    let ltd_integrand_commands = [
+        "generate existing -p scalar_xs_2l_quartic_direct -i numerator",
+        "generate existing -p scalar_xs_2l_quartic_traded -i numerator",
+    ];
+
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_quartic_cff_reference",
+        "CFF",
+        false,
+        &cff_graph_commands,
+        &cff_integrand_commands,
+        Some("all"),
+        true,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_quartic_ltd",
+        "LTD",
+        false,
+        &ltd_graph_commands,
+        &ltd_integrand_commands,
+        Some("all"),
+        true,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+    let cff_direct = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_2l_quartic_direct",
+        "numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_direct = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_2l_quartic_direct",
+        "numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_traded = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_2l_quartic_traded",
+        "numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_direct.sample.evaluation,
+        &cff_direct.sample.evaluation,
+        "LTD generated scalar forward cross-section external quartic numerator",
+    );
+    assert_evaluation_outputs_match(
+        &ltd_traded.sample.evaluation,
+        &cff_direct.sample.evaluation,
+        "LTD generated scalar forward cross-section quartic numerator energy-conservation trade",
     );
 
     clean_test(&cff.cli_settings.state.folder);

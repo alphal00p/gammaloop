@@ -63,6 +63,8 @@ use crate::{
     CLISettings,
 };
 
+const GENERATION_THREAD_STACK_SIZE: usize = 128 * 1024 * 1024;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GenerationResourceSummary {
     pub peak_ram_bytes: u64,
@@ -1708,6 +1710,7 @@ impl State {
     {
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(global_settings.n_cores.generate)
+            .stack_size(GENERATION_THREAD_STACK_SIZE)
             .build()?;
         let generation_cores = generation_pool.current_num_threads();
         clear_interrupt_request();

@@ -4219,13 +4219,16 @@ Follow-up implementation completed:
   - Double precision + assembly compiled evaluator;
   - Double precision + symjit compiled evaluator;
   - Quad precision eager evaluator.
-- Added an `evaluate` cache-reuse test for both graphs that:
+- Added an `evaluate` cache-reuse test for the one-loop Box graph that:
   - builds and evaluates the CFF expression once with `--clean`;
   - runs `3Drep evaluate` again without `--clean` and asserts the evaluator
     build time is absent, proving the cached evaluator was reused;
   - exercises `--numerator-only` directly from the graph, with an explicit
     `--numerator-q0 4:1.25e-1` override;
   - asserts the numerator-only evaluator cache is reused on the second call.
+  The two-loop DoubleBox remains part of the parsed-graph structural coverage
+  but is no longer used for this cache diagnostic because its automatic
+  `beyond_quadratic` bounds are a nonconvergent generalized-CFF sector.
 
 Verification completed:
 
@@ -5283,3 +5286,187 @@ just test_gammaloop_detailed
 
 Summary [150.212s] 1054 tests run: 1054 passed, 125 skipped
 ```
+
+## 2026-05-04: Step III cross-section LTD completion plan
+
+The remaining LTD production work should now be anchored on generated scalar
+forward-scattering cross sections rather than imported DOT graphs. The
+prepared scratch card in `IGNORE/run_cross_section_test.toml` gives three
+small but representative generated cross-section fixtures:
+
+- `GL0`: one-loop bubble-like forward-scattering graph with one selected
+  Cutkosky cut.
+- `GL2`: two-loop double-triangle graph with two selected Cutkosky cuts.
+- `GL06`: three-loop triangle-box-triangle graph with three selected Cutkosky
+  cuts.
+
+These must be generated with `generate xs ... --select-graphs ...` in the tests
+so that the final-state process definition filters the active Cutkosky cuts
+correctly. Saved DOT files may be used for debugging edge signatures and
+momentum decompositions, but DOT imports should not be the primary test path.
+`display integrand` should be used while developing to inspect cut groups,
+loop-momentum bases, threshold surfaces, raised cuts, and repeated-propagator
+structure.
+
+Planned implementation steps:
+
+1. Establish generated-CFF baselines for the three selected no-extra-numerator
+   fixtures against the main-branch local inspect output in
+   `IGNORE/cross_section_tests_output_from_main.txt`. This validates that the
+   test harness reproduces the intended forward-scattering graphs and cut
+   filtering.
+2. Implement LTD threshold subtraction for cross-section supergraphs by
+   generalizing the existing CFF threshold-counterterm path. The existing
+   left/right threshold enumeration, raised-cut grouping, skip-threshold logic,
+   and event additional-weight bookkeeping should remain the authority. The LTD
+   path should select only physical E-surface residues from the generated LTD
+   expression, ignore H-surfaces, and remain restricted to
+   `explicit_orientation_sum_only = true`.
+3. Compare local inspect results across generation scenarios, not integrated
+   results. The core matrix is CFF/LTD with threshold subtraction on/off, UV
+   subtraction off, then CFF local-3D UV, CFF expanded-4D UV, and LTD
+   expanded-4D UV where the graph supports it. The comparison must include the
+   rich event output: event-group structure, cut ids, event weights,
+   `Original`, `ThresholdCounterterm { subset_index }`, and
+   `FullMultiplicativeFactor`.
+4. Add higher-power numerator cross-section coverage using
+   `--global-prefactor-num`. The prepared quadratic/cubic/quartic examples are
+   starting points, but the numerator strings may be changed to useful dot
+   products or edge-energy powers. Validate nontrivially by generating paired
+   numerator variants related by edge-energy conservation and comparing local
+   inspect results and rich event weights exactly within numerical tolerance.
+5. Explore additional generated scalar graphs if useful. If a candidate hits
+   the current `union of disconnected UVs are not supported` limitation, skip it
+   for this subgoal. If a graph exposes raised threshold subtraction, do not fix
+   raised thresholds here; either skip threshold subtraction for that graph or
+   use it only with thresholds disabled. Repeated-propagator cases may still be
+   useful with threshold subtraction disabled to compare CFF/LTD and UV modes.
+6. Optionally try `profile uv` or `profile bulk` as diagnostics only. They are
+   not required for this Step III completion; local inspect consistency is the
+   target.
+7. After behavior is pinned by tests, do only a focused cleanup of the
+   expanded-4D UV bridge if it improves clarity without broad churn. The
+   desired eventual split remains extraction, auxiliary source construction,
+   residue projection, and atom reconstruction.
+
+Implementation status for the first part:
+
+- The cross-section supergraph guard blocking `global.3d_representation = LTD`
+  together with threshold subtraction has been removed. LTD remains restricted
+  to explicit orientation sums, and `LTD + local UV from 3D expansions` still
+  errors cleanly; UV-subtracted LTD cross sections must use
+  `local_uv_cts_from_expanded_4d_integrands = true`.
+- Threshold counterterm generation now receives the selected 3D representation
+  instead of hard-coding CFF. The CFF path keeps the previous explicit
+  orientation summation behavior, while LTD keeps the representation-native
+  explicitly summed expression and ignores orientation-specific selectors.
+- The no-UV LTD original-integrand path and the forest-based LTD UV path now
+  share the same loop-parity normalization needed for forward-scattering
+  cross-section residues. This keeps the generated LTD local inspect result
+  aligned with the CFF reference for the selected one-, two-, and three-loop
+  scalar forward-scattering graphs.
+- The expanded-4D local-UV route is selected for LTD UV subtraction, avoiding
+  the unsupported LTD local-UV-from-3D-expansion path. CFF without UV
+  subtraction no longer changes behavior just because the expanded-4D UV
+  setting is present.
+- The generated scalar forward-scattering integration tests now build the three
+  selected fixtures directly through `generate xs ... --select-graphs ...`:
+  `GL0`, `GL2`, and `GL06`. They compare CFF and LTD local inspect results with
+  rich event output for threshold subtraction only, and for threshold
+  subtraction plus expanded-4D local UV. The comparison checks the integrand
+  result, Jacobian, integrator weight, event-group sizes, graph/cut/orientation
+  metadata, event weights, and additional weights including threshold
+  counterterms.
+- The generation Rayon pool now uses a larger worker stack. The three-loop
+  expanded-4D UV test builds substantially larger symbolic atoms and overflowed
+  the default worker stack before this change; the stack-size adjustment keeps
+  this as a normal generated-integrand test instead of special-casing the test
+  harness.
+
+Targeted validation run while implementing this first part:
+
+```text
+cargo fmt
+cargo check -p gammalooprs --tests --locked
+cargo check -p gammaloop-api --tests --locked
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_forward_cross_section_threshold_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_with_uv_subtraction_errors_cleanly --locked -- --nocapture
+```
+
+Follow-up completion work:
+
+- The automatic numerator energy-power analysis now first canonicalizes all EMR
+  momenta into the graph loop-momentum basis and external variables. This makes
+  energy-conservation-equivalent numerator forms produce the same detected
+  energy-power bounds instead of overestimating the shape from a noncanonical
+  edge choice.
+- The generated cross-section numerator passed to `generate_3d_expr` is
+  canonicalized with the same momentum replacement. This is especially
+  important for forward-scattering graphs with initial-state cut edges: a
+  numerator written with a cut-edge momentum and an equivalent numerator written
+  with external/loop-basis momenta now reach the 3D-representation generator in
+  the same physical form.
+- The expanded-4D local-UV bridge has been split into explicit projection,
+  source-expression generation, and residue-accumulation helpers. The refactor
+  keeps the previous algebraic behavior but makes the path easier to audit:
+  each forest term is either ignored as zero, projected into representation
+  residues, or accumulated with a checked residue-count match.
+- Added a generated scalar forward-scattering higher-power fixture based on the
+  selected two-loop `GL2` graph. It compares a quartic external numerator
+  `((Q(0).Q(0)))^2` against the energy-conservation-equivalent traded form
+  `((Q(1)+Q(2)).(Q(1)+Q(2)))^2`, using the graph relation
+  `Q(1)+Q(2)=-P(0)`. The test checks that CFF and LTD agree locally, and that
+  the LTD traded numerator agrees with the direct CFF reference, including the
+  generated event groups and event weights. Runtime threshold subtraction is
+  disabled in this fixture so the test isolates the higher-power numerator and
+  automatic-bound machinery.
+- A three-loop `GL06` traded-quartic variant was useful as a manual diagnostic
+  but was not retained as a regression test because generation is substantially
+  slower. The retained `GL2` fixture still exercises generated
+  forward-scattering cuts, multiple loop momenta, and a quartic numerator while
+  keeping the integration-test suite practical.
+- Production CFF generation now keeps automatic numerator energy-degree bounds
+  out of the default `uniform_numerator_sampling_scale = none` path. This
+  preserves the previous CFF behavior for ordinary production generation while
+  still enabling the generalized bounded high-power machinery when the user
+  explicitly selects `all` or `beyond_quadratic`. This avoids accidentally
+  routing default CFF jobs through unsupported nonconvergent generalized-CFF
+  sectors.
+- The 3Drep aa -> aa backend/cache diagnostics now keep the two-loop DoubleBox
+  as a structural parsed-graph check only. The evaluator backend and
+  cache-reuse assertions are restricted to the one-loop Box graph because the
+  imported DoubleBox with `beyond_quadratic` automatic bounds is a
+  nonconvergent diagnostic sector, not a required evaluator-cache behavior.
+- The expanded-4D scalar-bubble inspect fixture uses summed graph sampling
+  again. The expanded-4D UV equivalence tests should compare UV construction
+  choices, not require an unrelated discrete graph-group coordinate.
+
+Follow-up validation:
+
+```text
+cargo fmt
+cargo check -p gammalooprs --tests --locked
+cargo check -p gammaloop-api --tests --locked
+cargo test -p gammaloop-integration-tests --test test_runs expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_forward_cross_section --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches --locked -- --nocapture
+just test_gammaloop
+```
+
+Current targeted LTD cross-section tests:
+
+| test | coverage | rich event-output comparison? | expanded-4D local UV CT? |
+| --- | --- | --- | --- |
+| `ltd_generated_forward_cross_section_threshold_inspects_match_cff` | Generated `GL0`, `GL2`, and `GL06` scalar forward-scattering graphs with threshold subtraction | yes | no |
+| `ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff` | Same generated graphs with threshold subtraction and UV subtraction through the expanded-4D local-UV path | yes | yes |
+| `ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade` | Generated `GL2` scalar forward-scattering graph with quartic numerator and an energy-conservation-equivalent traded numerator | yes | no |
+| `ltd_with_uv_subtraction_errors_cleanly` | Guard that LTD with UV subtraction rejects unsupported local-UV-from-3D-expansion mode | n/a | n/a |
+
+Remaining work from this plan:
+
+- Repeated-propagator scalar forward-scattering fixtures have not been added in
+  this pass. They should be explored with threshold subtraction disabled where
+  needed, while avoiding the existing disconnected-UV-union and raised-threshold
+  limitations.

@@ -841,9 +841,9 @@ fn assert_settings_file_contains_schema_paths<T: JsonSchema>(path: &Path) -> Res
 
     assert!(
         missing.is_empty(),
-        "{} is missing schema-backed default setting paths:\n{}",
+        "{} is missing schema-backed default setting paths:\n{}{omitted_message}",
         path.display(),
-        format!("{missing_preview}{omitted_message}")
+        missing_preview
     );
 
     Ok(())

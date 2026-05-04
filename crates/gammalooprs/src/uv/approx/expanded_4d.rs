@@ -140,80 +140,115 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
 
     let mut out: Option<Vec<Atom>> = None;
     for term in terms {
-        if term.denominators.is_empty() {
-            if cutset_has_residue_selector(cutset) {
-                continue;
-            }
-            let target = out.get_or_insert_with(|| vec![Atom::Zero]);
-            target[0] += denominatorless_term_for_explicit_sum(
-                term.numerator,
-                representation,
-                settings,
-                valid_orientations,
-            )?;
-            continue;
-        }
-
-        let source = build_expanded_4d_parsed_source(graph, &term.denominators, contract_subgraph)?;
-        let options = expression_options_for_expanded_term(
-            &source,
-            &term.numerator,
+        if let Some(generated) = project_expanded_4d_term_to_3d_parametric_integrands(
+            graph,
+            term,
+            cutset,
             representation,
             settings,
-            graph,
-        )?;
-        let raw_expression =
-            three_dimensional_reps::generate_3d_expression_from_parsed(&source.parsed, &options)
-                .map_err(|error| {
-                    eyre!(
-                        "generalized 3D expression generation failed for expanded 4D local UV term: {error}\n{}",
-                        expanded_source_summary(&source.parsed)
-                    )
-                })?
-                .remap_energy_edge_indices(&source.edge_map)
-                .fuse_compatible_variants();
-
-        let initial_state_cut_edges = graph
-            .iter_edges_of(&graph.initial_state_cut)
-            .map(|(_, edge_id, _)| edge_id)
-            .collect_vec();
-        let expression = graph.convert_generated_expression_surfaces(
-            raw_expression,
-            representation_mode(representation),
-            &graph.get_esurface_canonization(&graph.loop_momentum_basis),
-            &initial_state_cut_edges,
-        )?;
-
-        let residues = select_cut_residues(expression, cutset)?;
-        let generated = residues
-            .into_iter()
-            .map(|residue| {
-                let atom = expanded_expression_parametric_atom(
-                    graph,
-                    &residue,
-                    &term.numerator,
-                    &source,
-                    representation,
-                    settings,
-                )?;
-                Ok(atom)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let target = out.get_or_insert_with(|| vec![Atom::Zero; generated.len()]);
-        if target.len() != generated.len() {
-            return Err(eyre!(
-                "expanded 4D local UV term generated {} residue integrands, but previous terms generated {}",
-                generated.len(),
-                target.len()
-            ));
-        }
-        for (sum, term) in target.iter_mut().zip(generated) {
-            *sum += term;
+            valid_orientations,
+            contract_subgraph,
+        )? {
+            accumulate_expanded_4d_term(&mut out, generated)?;
         }
     }
 
     Ok(out.unwrap_or_else(|| vec![Atom::Zero]))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn project_expanded_4d_term_to_3d_parametric_integrands(
+    graph: &mut Graph,
+    term: ExpandedTerm,
+    cutset: &CutSet,
+    representation: ThreeDRepresentation,
+    settings: &GenerationSettings,
+    valid_orientations: &[EdgeVec<Orientation>],
+    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+) -> Result<Option<Vec<Atom>>> {
+    if term.denominators.is_empty() {
+        if cutset_has_residue_selector(cutset) {
+            return Ok(None);
+        }
+        return Ok(Some(vec![denominatorless_term_for_explicit_sum(
+            term.numerator,
+            representation,
+            settings,
+            valid_orientations,
+        )?]));
+    }
+
+    let source = build_expanded_4d_parsed_source(graph, &term.denominators, contract_subgraph)?;
+    let expression = generate_expanded_4d_source_expression(
+        graph,
+        &source,
+        &term.numerator,
+        representation,
+        settings,
+    )?;
+    let residues = select_cut_residues(expression, cutset)?;
+
+    residues
+        .into_iter()
+        .map(|residue| {
+            expanded_expression_parametric_atom(
+                graph,
+                &residue,
+                &term.numerator,
+                &source,
+                representation,
+                settings,
+            )
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(Some)
+}
+
+fn generate_expanded_4d_source_expression(
+    graph: &mut Graph,
+    source: &Expanded4DParsedSource,
+    numerator: &Atom,
+    representation: ThreeDRepresentation,
+    settings: &GenerationSettings,
+) -> Result<crate::cff::expression::ThreeDExpression<OrientationID>> {
+    let options =
+        expression_options_for_expanded_term(source, numerator, representation, settings, graph)?;
+    let raw_expression =
+        three_dimensional_reps::generate_3d_expression_from_parsed(&source.parsed, &options)
+            .map_err(|error| {
+                eyre!(
+                    "generalized 3D expression generation failed for expanded 4D local UV term: {error}\n{}",
+                    expanded_source_summary(&source.parsed)
+                )
+            })?
+            .remap_energy_edge_indices(&source.edge_map)
+            .fuse_compatible_variants();
+
+    let initial_state_cut_edges = graph
+        .iter_edges_of(&graph.initial_state_cut)
+        .map(|(_, edge_id, _)| edge_id)
+        .collect_vec();
+    graph.convert_generated_expression_surfaces(
+        raw_expression,
+        representation_mode(representation),
+        &graph.get_esurface_canonization(&graph.loop_momentum_basis),
+        &initial_state_cut_edges,
+    )
+}
+
+fn accumulate_expanded_4d_term(out: &mut Option<Vec<Atom>>, generated: Vec<Atom>) -> Result<()> {
+    let target = out.get_or_insert_with(|| vec![Atom::Zero; generated.len()]);
+    if target.len() != generated.len() {
+        return Err(eyre!(
+            "expanded 4D local UV term generated {} residue integrands, but previous terms generated {}",
+            generated.len(),
+            target.len()
+        ));
+    }
+    for (sum, term) in target.iter_mut().zip(generated) {
+        *sum += term;
+    }
+    Ok(())
 }
 
 fn cutset_has_residue_selector(cutset: &CutSet) -> bool {

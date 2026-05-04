@@ -3,17 +3,17 @@ use std::{
     ops::MulAssign,
 };
 
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
     representation::{LibraryRep, Minkowski},
 };
-use symbolica::atom::{Atom, AtomView, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use thiserror::Error;
 
 use crate::{
-    graph::Graph,
-    utils::{GS, symbolica_ext::LogPrint},
+    graph::{Graph, lmb::LMBext},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::UltravioletGraph,
 };
 
@@ -278,11 +278,22 @@ impl Graph {
             .filter_map(|(pair, edge, edge_data)| {
                 (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
             });
+        let momentum_replacements = self.normal_emr_replacement(
+            &self.full_filter(),
+            &self.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        let numerator = self
+            .full_numerator_atom()
+            .replace_multiple(&momentum_replacements)
+            .expand();
+
         EnergyPowerAnalyzer::with_internal_edges(
             self.loop_momentum_basis.loop_edges.iter().copied(),
             internal_edges,
         )
-        .analyze_view(self.full_numerator_atom().as_view(), mode)
+        .analyze_view(numerator.as_view(), mode)
     }
 
     pub fn automatic_numerator_energy_degree_bounds(

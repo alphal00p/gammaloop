@@ -148,7 +148,9 @@ impl Forest {
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
-        let use_expanded_4d_local_uv = settings.uv.local_uv_cts_from_expanded_4d_integrands;
+        let use_expanded_4d_local_uv = (settings.uv.subtract_uv
+            && settings.uv.local_uv_cts_from_expanded_4d_integrands)
+            || representation == ThreeDRepresentation::Ltd;
         let order = self.dag.compute_topological_order();
 
         for (i, n) in order.into_iter().enumerate() {

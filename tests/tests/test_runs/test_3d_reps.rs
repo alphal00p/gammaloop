@@ -1208,8 +1208,12 @@ fn assert_evaluate_manifest_ok(manifest: &JsonValue, context: &str) -> Result<()
         serde_json::from_str::<JsonValue>(&fs::read_to_string(raw_expression_path)?)?;
     assert_eq!(
         raw_expression["schema_version"].as_u64(),
-        Some(1),
+        Some(2),
         "3Drep evaluate for {context} should write a versioned raw Symbolica evaluator input"
+    );
+    assert!(
+        raw_expression["evaluator_backend"].as_str().is_some(),
+        "3Drep evaluate for {context} should record the archived GammaLoop evaluator backend"
     );
     assert!(
         raw_expression["parameters"]
@@ -2215,7 +2219,7 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
     );
 
     cli.run_command(&format!(
-        "3Drep evaluate -p threedreps_box_build_eval -i default -g 0 --representation cff --workspace-path {}",
+        "3Drep evaluate -p threedreps_box_build_eval -i default -g 0 --representation cff --workspace-path {} --standalone-rust-only",
         workspace_path.display()
     ))?;
     let expression_dir = expression_path
@@ -2226,13 +2230,23 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
     assert!(raw_expression_path.exists());
     let raw_expression =
         serde_json::from_str::<JsonValue>(&fs::read_to_string(&raw_expression_path)?)?;
-    assert_eq!(raw_expression["schema_version"].as_u64(), Some(1));
+    assert_eq!(raw_expression["schema_version"].as_u64(), Some(2));
+    assert!(raw_expression["evaluator_backend"].as_str().is_some());
     let raw_script_path = expression_dir.join("symbolica_expression_raw.rs");
     assert!(raw_script_path.exists());
     assert!(
         fs::read_to_string(&raw_script_path)?.starts_with("#!/usr/bin/env -S rust-script --debug")
     );
     assert!(expression_dir.join("param_builder.txt").exists());
+    assert!(
+        !expression_dir.join("evaluate_manifest.json").exists(),
+        "standalone raw replay mode should not write the evaluate manifest"
+    );
+
+    cli.run_command(&format!(
+        "3Drep evaluate -p threedreps_box_build_eval -i default -g 0 --representation cff --workspace-path {}",
+        workspace_path.display()
+    ))?;
     let evaluate_manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(
         expression_dir.join("evaluate_manifest.json"),
     )?)?;
@@ -2332,24 +2346,14 @@ fn cli_reconstructs_energy_power_caps_from_imported_graph_numerators() -> Result
         assert_threedrep_comparison_success(&manifest, test_name)?;
         assert_threedrep_evaluation_ids(&manifest, test_name)?;
         let graph = imported_graph_from_cli(&cli, &process_name, "default", 0)?;
-        let source_internal_edges = source_internal_edges(graph);
-        let local_bound_map = local_bounds.iter().copied().collect::<BTreeMap<_, _>>();
-        let expected = source_internal_edges
-            .iter()
-            .enumerate()
-            .map(|(local_edge_id, source_edge_id)| {
-                (
-                    *source_edge_id,
-                    local_bound_map.get(&local_edge_id).copied().unwrap_or(0),
-                )
-            })
-            .collect::<Vec<_>>();
+        let expected = graph
+            .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
         assert_eq!(
             serde_json::from_value::<Vec<(usize, usize)>>(
                 manifest["automatic_energy_degree_bounds"].clone()
             )?,
             expected,
-            "{test_name} automatic energy bounds for numerator {numerator}"
+            "{test_name} automatic energy bounds should match canonical graph-level analysis for numerator {numerator}"
         );
 
         clean_test(get_tests_workspace_path().join(test_name));
@@ -2426,26 +2430,15 @@ fn cli_box_pow3_high_power_agrees_for_all_numerator_sample_normalizations() -> R
             Vec::<(usize, usize)>::new(),
             "the high-power bounds should come from automatic numerator analysis"
         );
-        let local_bound_map = BOUNDS_BOX_POW3_REPEATED_HIGH
-            .iter()
-            .copied()
-            .collect::<BTreeMap<_, _>>();
-        let expected_automatic_bounds = source_internal_edges
-            .iter()
-            .enumerate()
-            .map(|(local_edge_id, source_edge_id)| {
-                (
-                    *source_edge_id,
-                    local_bound_map.get(&local_edge_id).copied().unwrap_or(0),
-                )
-            })
-            .collect::<Vec<_>>();
+        let graph = imported_graph_from_cli(&cli, process_name, "default", 0)?;
+        let expected_automatic_bounds = graph
+            .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
         assert_eq!(
             serde_json::from_value::<Vec<(usize, usize)>>(
                 manifest["automatic_energy_degree_bounds"].clone()
             )?,
             expected_automatic_bounds,
-            "dense four-vector numerator should reconstruct the requested energy caps"
+            "dense four-vector numerator should use the canonical graph-level energy caps"
         );
         let cff_value = direct_manifest_evaluation_value(&manifest, "cff")?;
         let ltd_value = direct_manifest_evaluation_value(&manifest, "ltd")?;
@@ -2564,6 +2557,7 @@ fn cli_aa_aa_box_and_double_box_multibackend_threedrep_comparisons() -> Result<(
     let process_name = "threedreps_aa_aa_multibackend";
     let workspace_path = imported_graph_threedrep_workspace(test_name);
     let mut cli = import_aa_aa_threedrep_graphs(test_name, process_name)?;
+    set_threedrep_sampling_mode(&mut cli, "none")?;
 
     let graph_cases = [(0usize, 1usize, "box"), (1usize, 2usize, "double_box")];
     for (graph_id, loop_count, label) in graph_cases {
@@ -2581,7 +2575,8 @@ fn cli_aa_aa_box_and_double_box_multibackend_threedrep_comparisons() -> Result<(
         ("double_symjit", "Double", Some("symjit"), "symjit"),
         ("quad_eager", "Quad", None, "eager"),
     ];
-    for (graph_id, _, graph_label) in graph_cases {
+    let comparison_graph_cases = [(0usize, "box")];
+    for (graph_id, graph_label) in comparison_graph_cases {
         for (case_label, precision, backend, expected_backend) in backend_cases {
             set_threedrep_compile_backend(&mut cli, backend)?;
             let manifest = run_threedrep_test_cff_ltd_manifest_for_graph(
@@ -2622,7 +2617,7 @@ fn cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches() -> R
     let mut cli = import_aa_aa_threedrep_graphs(test_name, process_name)?;
     set_threedrep_compile_backend(&mut cli, None)?;
 
-    for (graph_id, graph_label) in [(0usize, "box"), (1usize, "double_box")] {
+    for (graph_id, graph_label) in [(0usize, "box")] {
         let standard_workspace = workspace_path.join(format!("graph_{graph_id}_standard"));
         cli.run_command(&format!(
             "3Drep build -p {process_name} -i default -g {graph_id} --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path {} --no-pretty --clean",

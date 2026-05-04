@@ -281,6 +281,10 @@ pub struct Evaluate {
     #[arg(long, default_value_t = false)]
     pub no_show_parameters: bool,
 
+    /// Write the raw Symbolica evaluator replay artifacts without building or running the evaluator.
+    #[arg(long, default_value_t = false)]
+    pub standalone_rust_only: bool,
+
     #[arg(long, default_value_t = false)]
     pub clean: bool,
 }
@@ -549,11 +553,14 @@ struct EvaluateOutput {
     parameters: Vec<ParameterValueRecord>,
 }
 
+const SYMBOLICA_RAW_ARCHIVE_SCHEMA_VERSION: u32 = 2;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct SymbolicaEvaluatorInputArchive {
     schema_version: u32,
     description: String,
     evaluator_method: EvaluatorMethod,
+    evaluator_backend: String,
     evaluator_settings: SymbolicaEvaluatorSettingsRecord,
     optimization_settings: SymbolicaOptimizationSettingsRecord,
     parameters: Vec<String>,
@@ -1277,10 +1284,7 @@ impl Evaluate {
                 relative_display(&symbolica_expression_path)
             );
         }
-        if self.clean
-            || !symbolica_expression_raw_path.exists()
-            || !symbolica_expression_raw_script_path.exists()
-        {
+        if self.clean || !symbolica_raw_archive_cache_is_current(&symbolica_expression_raw_path) {
             let evaluator_settings = threedrep_evaluator_settings(
                 global_cli_settings,
                 &run_settings.evaluator_method,
@@ -1304,26 +1308,23 @@ impl Evaluate {
                 )?,
                 &evaluator_settings,
                 &run_settings.evaluator_method,
+                &run_settings.evaluator_backend,
             )?;
             write_path(
                 &symbolica_expression_raw_path,
                 &serde_json::to_string_pretty(&raw_archive)?,
             )?;
-            write_path(
-                &symbolica_expression_raw_script_path,
-                &symbolica_expression_raw_rust_script(),
-            )?;
-            make_script_executable(&symbolica_expression_raw_script_path)?;
         } else {
             println!(
                 "Reusing cached raw Symbolica evaluator input from {}",
                 relative_display(&symbolica_expression_raw_path)
             );
-            println!(
-                "Reusing cached raw Symbolica evaluator replay script from {}",
-                relative_display(&symbolica_expression_raw_script_path)
-            );
         }
+        write_path(
+            &symbolica_expression_raw_script_path,
+            &symbolica_expression_raw_rust_script(),
+        )?;
+        make_script_executable(&symbolica_expression_raw_script_path)?;
         if self.clean || !param_builder_path.exists() {
             write_path(
                 &param_builder_path,
@@ -1334,6 +1335,21 @@ impl Evaluate {
                 "Reusing cached parameter builder from {}",
                 relative_display(&param_builder_path)
             );
+        }
+
+        if self.standalone_rust_only {
+            println!(
+                "Saved raw Symbolica evaluator input to {}",
+                relative_display(&symbolica_expression_raw_path)
+            );
+            println!(
+                "Saved raw Symbolica evaluator replay script to {}",
+                relative_display(&symbolica_expression_raw_script_path)
+            );
+            println!(
+                "3Drep evaluate --standalone-rust-only selected; skipped evaluator build, evaluation, and manifest writing."
+            );
+            return Ok(());
         }
 
         let profile = self
@@ -4098,6 +4114,19 @@ fn atom_string(atom: &Atom) -> String {
     atom.to_canonical_string()
 }
 
+fn symbolica_raw_archive_cache_is_current(path: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return false;
+    };
+    value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|version| version == u64::from(SYMBOLICA_RAW_ARCHIVE_SCHEMA_VERSION))
+}
+
 fn function_map_entry_record(
     entry: &gammalooprs::integrands::process::param_builder::FnMapEntry,
 ) -> SymbolicaFunctionMapEntryRecord {
@@ -4180,6 +4209,7 @@ fn symbolica_evaluator_input_archive(
     orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     evaluator_settings: &EvaluatorSettings,
     evaluator_method: &EvaluatorMethod,
+    evaluator_backend: &str,
 ) -> Result<SymbolicaEvaluatorInputArchive> {
     let params = param_builder_params(param_builder)
         .into_iter()
@@ -4206,9 +4236,10 @@ fn symbolica_evaluator_input_archive(
     )?;
 
     Ok(SymbolicaEvaluatorInputArchive {
-        schema_version: 1,
+        schema_version: SYMBOLICA_RAW_ARCHIVE_SCHEMA_VERSION,
         description: "Inputs passed to Symbolica when building the 3Drep diagnostic evaluator after Spenso tensor-network processing.".to_string(),
         evaluator_method: evaluator_method.clone(),
+        evaluator_backend: evaluator_backend.to_string(),
         evaluator_settings: evaluator_settings_record(evaluator_settings),
         optimization_settings: optimization_settings_record(evaluator_settings),
         parameters: params,
@@ -4253,7 +4284,7 @@ fn symbolica_evaluator_call_record_for_method(
 ) -> Result<SymbolicaEvaluatorCallRecord> {
     match evaluator_method {
         EvaluatorMethod::SingleParametric => Ok(SymbolicaEvaluatorCallRecord {
-            label: "single_parametric".to_string(),
+            label: "3d_rep".to_string(),
             expressions: final_symbolica_call_expressions(
                 processed_atoms
                     .iter()
@@ -4455,6 +4486,8 @@ fn symbolica_expression_raw_rust_script() -> String {
 //! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
 //! ```
 
+#![allow(dead_code)]
+
 use std::{
     env,
     fs,
@@ -4483,6 +4516,10 @@ use symbolica::{
 struct Archive {
     schema_version: u32,
     evaluator_method: String,
+    #[serde(default)]
+    evaluator_backend: Option<String>,
+    #[serde(default)]
+    evaluator_settings: Option<EvaluatorSettingsRecord>,
     optimization_settings: OptimizationSettingsRecord,
     parameters: Vec<String>,
     function_map_entries: Vec<FunctionMapEntryRecord>,
@@ -4510,6 +4547,25 @@ struct FunctionMapEntryRecord {
 struct ComplexValueRecord {
     re: String,
     im: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EvaluatorSettingsRecord {
+    do_algebra: bool,
+    iterative_orientation_optimization: bool,
+    summed: bool,
+    summed_function_map: bool,
+    compile: bool,
+    store_atom: bool,
+    do_fn_map_replacements: bool,
+    horner_iterations: usize,
+    n_cores: usize,
+    cpe_iterations: Option<usize>,
+    abort_level: usize,
+    max_horner_scheme_variables: usize,
+    max_common_pair_cache_entries: usize,
+    max_common_pair_distance: usize,
+    verbose: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4562,8 +4618,9 @@ fn parse_fn_map_entries(entries: &[FunctionMapEntryRecord]) -> Result<Vec<Parsed
                 .iter()
                 .map(|arg| {
                     let atom = parse_atom(arg)?;
+                    let atom_display = atom.to_string();
                     atom.try_into().map_err(|_| {
-                        eyre!("Expected indeterminate function-map argument, got {atom}")
+                        eyre!("Expected indeterminate function-map argument, got {atom_display}")
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -4642,6 +4699,38 @@ fn optimization_settings(record: &OptimizationSettingsRecord) -> OptimizationSet
     }
 }
 
+fn print_replay_options(archive: &Archive) {
+    let archived_backend = archive.evaluator_backend.as_deref().unwrap_or_else(|| {
+        if archive
+            .evaluator_settings
+            .as_ref()
+            .is_some_and(|settings| settings.compile)
+        {
+            "compiled backend requested; exact backend not archived"
+        } else {
+            "eager"
+        }
+    });
+    println!("archived GammaLoop backend: {archived_backend}");
+    println!("standalone replay backend: eager Symbolica expression evaluator");
+    if let Some(settings) = &archive.evaluator_settings {
+        println!(
+            "archived evaluator options: compile={}, do_algebra={}, fn_map_replacements={}, store_atom={}",
+            settings.compile,
+            settings.do_algebra,
+            settings.do_fn_map_replacements,
+            settings.store_atom
+        );
+    }
+    println!(
+        "optimization options: horner_iterations={}, cpe_iterations={:?}, n_cores={}, max_horner_scheme_variables={}",
+        archive.optimization_settings.horner_iterations,
+        archive.optimization_settings.cpe_iterations,
+        archive.optimization_settings.n_cores,
+        archive.optimization_settings.max_horner_scheme_variables
+    );
+}
+
 fn build_evaluator(
     expressions: &[Atom],
     fn_map: &FunctionMap,
@@ -4674,9 +4763,9 @@ fn run(path: &Path) -> Result<()> {
             .with_context(|| format!("Could not read {}", path.display()))?,
     )
     .with_context(|| format!("Could not parse {}", path.display()))?;
-    if archive.schema_version != 1 {
+    if archive.schema_version != 1 && archive.schema_version != 2 {
         return Err(eyre!(
-            "Unsupported raw evaluator input schema {}; expected 1",
+            "Unsupported raw evaluator input schema {}; expected 1 or 2",
             archive.schema_version
         ));
     }
@@ -4692,7 +4781,7 @@ fn run(path: &Path) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
 
     println!("Loaded {}", path.display());
-    println!("evaluator method: {}", archive.evaluator_method);
+    print_replay_options(&archive);
     println!("parameter count: {}", params.len());
     println!("representative input length: {}", input.len());
 

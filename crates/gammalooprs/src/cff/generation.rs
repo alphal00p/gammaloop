@@ -107,10 +107,16 @@ impl Graph {
         representation: ThreeDRepresentation,
         settings: &GenerationSettings,
     ) -> Result<Generate3DExpressionOptions> {
-        self.three_d_expression_options(
+        let mut options = self.three_d_expression_options(
             representation_mode(representation),
             numerator_sampling_scale_mode(settings.uniform_numerator_sampling_scale),
-        )
+        )?;
+        if representation == ThreeDRepresentation::Cff
+            && settings.uniform_numerator_sampling_scale == UniformNumeratorSamplingScale::None
+        {
+            options.energy_degree_bounds.clear();
+        }
+        Ok(options)
     }
 
     pub fn three_d_expression_options(
