@@ -93,6 +93,34 @@ fn gamma_five_epsilon_trick() {
 }
 
 #[test]
+fn gamma_five_four_gamma_trace_is_epsilon() {
+    let r = TestReps::new();
+    let expr = trace!(
+        r.bis4.to_symbolic([]),
+        gamma5!(),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
+        gamma!(slot!(r.mink4, rho)),
+        gamma!(slot!(r.mink4, sigma)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))");
+}
+
+#[test]
+fn gamma_five_two_gamma_trace_vanishes() {
+    let r = TestReps::new();
+    let expr = trace!(
+        r.bis4.to_symbolic([]),
+        gamma5!(),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
+    );
+
+    assert!(expr.simplify_gamma().is_zero());
+}
+
+#[test]
 #[ignore = "pending gamma-five trace term-count stress support"]
 fn gamma_five_symmetric_12_term_count() {
     initialize();

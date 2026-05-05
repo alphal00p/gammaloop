@@ -115,6 +115,7 @@ const FOUR_DIM_CHISHOLM: DiracRuleDimension = DiracRuleDimension::FourDimensiona
 const FOUR_DIM_GAMMA5_ANTICOMMUTATION: DiracRuleDimension = DiracRuleDimension::FourDimensional;
 const FOUR_DIM_THREE_GAMMA_EPSILON: DiracRuleDimension = DiracRuleDimension::FourDimensional;
 const TRACE_GAMMA_RECURSION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
+const TRACE_GAMMA5_RECURSION: DiracRuleDimension = DiracRuleDimension::FourDimensional;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum DiracFactor {
@@ -313,6 +314,7 @@ fn simplify_chain_node(
 
     contract_adjacent_gamma_pair(start, end, factors, &parsed_factors)
         .or_else(|| contract_adjacent_special_dirac_pair(start, end, factors, &parsed_factors))
+        .or_else(|| conjugate_special_factor_by_gamma0(start, end, factors, &parsed_factors))
         .or_else(|| four_dim_chisholm_contraction(start, end, factors, &parsed_factors))
         .or_else(|| {
             expand_epsilon
@@ -388,6 +390,40 @@ fn contract_adjacent_special_dirac_pair(
         };
 
         return Some(chain!(start, end; chain_factors(factors, i, i + 1, replacement)));
+    }
+
+    None
+}
+
+fn conjugate_special_factor_by_gamma0(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_spin_endpoints(start, end) {
+        return None;
+    }
+
+    for i in 0..factors.len().saturating_sub(2) {
+        if parsed_factors[i] != DiracFactor::Gamma0 || parsed_factors[i + 2] != DiracFactor::Gamma0
+        {
+            continue;
+        }
+
+        let (sign, replacement) = match parsed_factors[i + 1] {
+            DiracFactor::Gamma5 => (-1, gamma5_factor()),
+            DiracFactor::ProjectorPlus => (1, endpoint_factor(AGS.projm)),
+            DiracFactor::ProjectorMinus => (1, endpoint_factor(AGS.projp)),
+            _ => continue,
+        };
+
+        let rewritten = chain!(start, end; chain_factors(factors, i, i + 2, [replacement]));
+        return Some(if sign == 1 {
+            rewritten
+        } else {
+            Atom::num(sign) * rewritten
+        });
     }
 
     None
@@ -833,6 +869,10 @@ fn has_four_dimensional_spin_endpoints(start: &Atom, end: &Atom) -> bool {
     start_dimension == end_dimension && is_four_dimension(&start_dimension)
 }
 
+fn has_four_dimensional_trace_rep(rep: &Atom) -> bool {
+    bispinor_dimension(rep.as_view()).is_some_and(|dimension| is_four_dimension(&dimension))
+}
+
 fn bispinor_dimension(atom: AtomView) -> Option<Atom> {
     let AtomView::Fun(f) = atom else {
         return None;
@@ -904,6 +944,15 @@ fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
         .iter()
         .map(|factor| DiracFactor::parse(factor.as_view()))
         .collect::<Vec<_>>();
+
+    if let Some(rewritten) = simplify_special_trace_pair(rep, factors, &parsed_factors) {
+        return Some(rewritten);
+    }
+
+    if let Some(rewritten) = simplify_gamma5_trace_node(rep, factors, &parsed_factors) {
+        return Some(rewritten);
+    }
+
     let trace_lorentz = gamma_lorentz_sequence_for(TRACE_GAMMA_RECURSION, &parsed_factors)?;
 
     if factors.len() % 2 == 1 {
@@ -939,6 +988,157 @@ fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
     }
 
     Some(sum)
+}
+
+fn simplify_special_trace_pair(
+    rep: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_trace_rep(rep) {
+        return None;
+    }
+
+    for i in 0..factors.len().saturating_sub(1) {
+        match (&parsed_factors[i], &parsed_factors[i + 1]) {
+            (DiracFactor::Gamma5, DiracFactor::Gamma5)
+            | (DiracFactor::Gamma0, DiracFactor::Gamma0) => {
+                let mut rest = Vec::with_capacity(factors.len() - 2);
+                rest.extend_from_slice(&factors[..i]);
+                rest.extend_from_slice(&factors[i + 2..]);
+                return Some(trace_or_terminal(rep, rest));
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+fn simplify_gamma5_trace_node(
+    rep: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_trace_rep(rep) {
+        return None;
+    }
+
+    let gamma5_positions = parsed_factors
+        .iter()
+        .enumerate()
+        .filter_map(|(i, factor)| (*factor == DiracFactor::Gamma5).then_some(i))
+        .collect::<Vec<_>>();
+
+    match gamma5_positions.len() {
+        0 => None,
+        1 => simplify_single_gamma5_trace(rep, factors, parsed_factors, gamma5_positions[0]),
+        _ => reduce_gamma5_trace_pair(rep, factors, parsed_factors, gamma5_positions[0]),
+    }
+}
+
+fn simplify_single_gamma5_trace(
+    rep: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+    gamma5_position: usize,
+) -> Option<Atom> {
+    let factors_after_gamma5 = cyclic_without_position(factors, gamma5_position);
+    let parsed_after_gamma5 = cyclic_without_position(parsed_factors, gamma5_position);
+    let lorentz = gamma_lorentz_sequence_for(TRACE_GAMMA5_RECURSION, &parsed_after_gamma5)?;
+
+    if lorentz.len() < 4 || lorentz.len() % 2 == 1 {
+        return Some(Atom::Zero);
+    }
+
+    if lorentz.len() == 4 {
+        return Some(Atom::num(4) * epsilon4(&lorentz[0], &lorentz[1], &lorentz[2], &lorentz[3]));
+    }
+
+    let first = lorentz[0].clone();
+    let mut sum = Atom::Zero;
+
+    for i in 1..factors_after_gamma5.len() {
+        let mut rest = Vec::with_capacity(factors_after_gamma5.len() - 1);
+        rest.push(gamma5_factor());
+        rest.extend_from_slice(&factors_after_gamma5[1..i]);
+        rest.extend_from_slice(&factors_after_gamma5[i + 1..]);
+
+        let term =
+            function!(ETS.metric, first.clone(), lorentz[i].clone()) * trace_or_terminal(rep, rest);
+
+        if i % 2 == 1 {
+            sum += term;
+        } else {
+            sum -= term;
+        }
+    }
+
+    Some(sum)
+}
+
+fn reduce_gamma5_trace_pair(
+    rep: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+    first_gamma5_position: usize,
+) -> Option<Atom> {
+    let factors = cyclic_from_position(factors, first_gamma5_position);
+    let parsed_factors = cyclic_from_position(parsed_factors, first_gamma5_position);
+    let second_gamma5_position = parsed_factors
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(i, factor)| (*factor == DiracFactor::Gamma5).then_some(i))?;
+
+    let crossing_count = parsed_factors[1..second_gamma5_position]
+        .iter()
+        .filter(|factor| factor_anticommutes_with_gamma5(factor))
+        .count();
+    if parsed_factors[1..second_gamma5_position]
+        .iter()
+        .any(|factor| !factor_anticommutes_with_gamma5(factor))
+    {
+        return None;
+    }
+
+    let mut rest = Vec::with_capacity(factors.len() - 2);
+    rest.extend_from_slice(&factors[1..second_gamma5_position]);
+    rest.extend_from_slice(&factors[second_gamma5_position + 1..]);
+
+    let reduced = trace_or_terminal(rep, rest);
+    Some(if crossing_count % 2 == 0 {
+        reduced
+    } else {
+        Atom::num(-1) * reduced
+    })
+}
+
+fn factor_anticommutes_with_gamma5(factor: &DiracFactor) -> bool {
+    matches!(factor, DiracFactor::Gamma { .. } | DiracFactor::Gamma0)
+}
+
+fn cyclic_without_position<T: Clone>(items: &[T], position: usize) -> Vec<T> {
+    let mut result = Vec::with_capacity(items.len().saturating_sub(1));
+    result.extend_from_slice(&items[position + 1..]);
+    result.extend_from_slice(&items[..position]);
+    result
+}
+
+fn cyclic_from_position<T: Clone>(items: &[T], position: usize) -> Vec<T> {
+    let mut result = Vec::with_capacity(items.len());
+    result.extend_from_slice(&items[position..]);
+    result.extend_from_slice(&items[..position]);
+    result
+}
+
+fn trace_or_terminal(rep: &Atom, factors: Vec<Atom>) -> Atom {
+    if factors.is_empty() {
+        let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
+        simplify_trace_terminal(terminal_trace.as_view()).unwrap_or(terminal_trace)
+    } else {
+        trace!(rep; factors)
+    }
 }
 
 fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
