@@ -2979,6 +2979,7 @@
       packages =
         {
           default = gammaloop-cli;
+          clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
@@ -3016,6 +3017,14 @@
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
           exePath = "/bin/gammaloop";
+        };
+        clinnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
+        linnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
         };
       };
 
