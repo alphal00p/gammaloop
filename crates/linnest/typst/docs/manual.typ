@@ -147,22 +147,23 @@ edge index:
 #draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
-The builder keeps `eval-source`, `eval-sink`, and `eval-label` as ordinary
-kebab-case edge metadata for downstream renderers or DOT export. They can be set
-as direct arguments on `graph.build`, `graph.builder`, or `graph.edge`, instead
-of being manually nested under `edge-statements` or per-edge `statements`:
+The builder keeps `source-style-eval`, `sink-style-eval`, and `label-eval` as
+ordinary kebab-case edge metadata for downstream renderers or DOT export. They
+can be set as direct arguments on `graph.build`, `graph.builder`, or
+`graph.edge`, instead of being manually nested under `edge-statements` or
+per-edge `statements`:
 
 ```typ
 #let b = graph.builder(
   name: "demo",
-  eval-source: "(stroke: red + 0.5pt)",
-  eval-sink: "(stroke: blue + 0.5pt)",
+  source-style-eval: "(stroke: red + 0.5pt)",
+  sink-style-eval: "(stroke: blue + 0.5pt)",
 )
 #let b = graph.edge(
   b,
   source: (node: a),
   sink: (node: c),
-  eval-label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+  label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
   statements: (color: "0055ff", label: "a-c"),
 )
 ```

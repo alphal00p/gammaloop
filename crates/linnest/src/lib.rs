@@ -203,9 +203,9 @@ pub struct TypstEdge {
     pos: Point2<f64>,
     label_pos: Option<Point2<f64>>,
     label_angle: Option<f64>,
-    eval_sink: Option<String>,
-    eval_source: Option<String>,
-    eval_label: Option<String>,
+    sink_style_eval: Option<String>,
+    source_style_eval: Option<String>,
+    label_eval: Option<String>,
     mom_eval: Option<String>,
     shift: Option<Vector2<f64>>,
     statements: BTreeMap<String, String>,
@@ -237,9 +237,9 @@ impl Default for TypstEdge {
             label_pos: None,
             label_angle: None,
             shift: None,
-            eval_label: None,
-            eval_sink: None,
-            eval_source: None,
+            label_eval: None,
+            sink_style_eval: None,
+            source_style_eval: None,
             mom_eval: None,
             statements: BTreeMap::new(),
             constraints: PointConstraint::default(),
@@ -268,10 +268,10 @@ impl TypstEdge {
                 cleaned.trim().parse::<f64>().ok()
             });
 
-            let mut eval_sink: Option<String> = d.get("eval-sink").transpose().unwrap();
+            let mut sink_style_eval: Option<String> = d.get("sink-style-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
-            eval_sink = eval_sink.map(|template| {
+            sink_style_eval = sink_style_eval.map(|template| {
                 let clean_template = template
                     .strip_prefix('"')
                     .unwrap_or(&template)
@@ -280,10 +280,11 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut eval_source: Option<String> = d.get("eval-source").transpose().unwrap();
+            let mut source_style_eval: Option<String> =
+                d.get("source-style-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
-            eval_source = eval_source.map(|template| {
+            source_style_eval = source_style_eval.map(|template| {
                 let clean_template = template
                     .strip_prefix('"')
                     .unwrap_or(&template)
@@ -292,10 +293,10 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut eval_label: Option<String> = d.get("eval-label").transpose().unwrap();
+            let mut label_eval: Option<String> = d.get("label-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
-            eval_label = eval_label.map(|template| {
+            label_eval = label_eval.map(|template| {
                 let clean_template = template
                     .strip_prefix('"')
                     .unwrap_or(&template)
@@ -346,9 +347,9 @@ impl TypstEdge {
                 constraints,
                 label_pos,
                 label_angle,
-                eval_label,
-                eval_sink,
-                eval_source,
+                label_eval,
+                sink_style_eval,
+                source_style_eval,
                 mom_eval,
                 shift,
                 statements: d.statements,
@@ -382,16 +383,16 @@ impl TypstEdge {
             statements.insert("label-angle".to_string(), format!("{a}rad"));
         }
 
-        if let Some(eval) = &self.eval_sink {
-            statements.insert("eval-sink".to_string(), eval.clone());
+        if let Some(eval) = &self.sink_style_eval {
+            statements.insert("sink-style-eval".to_string(), eval.clone());
         }
 
-        if let Some(eval) = &self.eval_source {
-            statements.insert("eval-source".to_string(), eval.clone());
+        if let Some(eval) = &self.source_style_eval {
+            statements.insert("source-style-eval".to_string(), eval.clone());
         }
 
-        if let Some(eval) = &self.eval_label {
-            statements.insert("eval-label".to_string(), eval.clone());
+        if let Some(eval) = &self.label_eval {
+            statements.insert("label-eval".to_string(), eval.clone());
         }
 
         if let Some(eval) = &self.mom_eval {

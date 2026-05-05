@@ -79,12 +79,12 @@ struct TestTemplatedGraphSpec {
     statements: BTreeMap<String, String>,
     #[serde(default)]
     edge_statements: BTreeMap<String, String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-source")]
-    eval_source: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-sink")]
-    eval_sink: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-label")]
-    eval_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_style_eval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sink_style_eval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label_eval: Option<String>,
     #[serde(default)]
     node_statements: BTreeMap<String, String>,
     nodes: Vec<TestNodeSpec>,
@@ -99,12 +99,12 @@ struct TestBuilderSpec {
     statements: BTreeMap<String, String>,
     #[serde(default)]
     edge_statements: BTreeMap<String, String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-source")]
-    eval_source: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-sink")]
-    eval_sink: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "eval-label")]
-    eval_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_style_eval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sink_style_eval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label_eval: Option<String>,
     #[serde(default)]
     node_statements: BTreeMap<String, String>,
 }
@@ -315,9 +315,9 @@ fn test_graph_spec_constructor_expands_default_statement_templates() {
         name: "templated".to_string(),
         statements: BTreeMap::new(),
         edge_statements: BTreeMap::new(),
-        eval_source: Some("(stroke: red + 0.5pt)".to_string()),
-        eval_sink: Some("(stroke: blue + 0.5pt)".to_string()),
-        eval_label: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
+        source_style_eval: Some("(stroke: red + 0.5pt)".to_string()),
+        sink_style_eval: Some("(stroke: blue + 0.5pt)".to_string()),
+        label_eval: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
         node_statements: BTreeMap::from([(
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
@@ -357,19 +357,19 @@ fn test_graph_spec_constructor_expands_default_statement_templates() {
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(
-        edges[0].eval_label.as_deref(),
+        edges[0].label_eval.as_deref(),
         Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
     );
     assert_eq!(
-        edges[0].eval_source.as_deref(),
+        edges[0].source_style_eval.as_deref(),
         Some("(stroke: red + 0.5pt)")
     );
     assert_eq!(
-        edges[0].eval_sink.as_deref(),
+        edges[0].sink_style_eval.as_deref(),
         Some("(stroke: blue + 0.5pt)")
     );
     assert_eq!(
-        edges[0].statements.get("eval-label").map(String::as_str),
+        edges[0].statements.get("label-eval").map(String::as_str),
         Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
     );
 }
@@ -450,9 +450,9 @@ fn test_builder_pattern_expands_default_statement_templates() {
         name: "builder".to_string(),
         statements: BTreeMap::new(),
         edge_statements: BTreeMap::new(),
-        eval_source: Some("(stroke: red + 0.5pt)".to_string()),
-        eval_sink: Some("(stroke: blue + 0.5pt)".to_string()),
-        eval_label: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
+        source_style_eval: Some("(stroke: red + 0.5pt)".to_string()),
+        sink_style_eval: Some("(stroke: blue + 0.5pt)".to_string()),
+        label_eval: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
         node_statements: BTreeMap::from([(
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
@@ -507,15 +507,15 @@ fn test_builder_pattern_expands_default_statement_templates() {
     assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#ff0000\"))"));
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(
-        edges[0].eval_label.as_deref(),
+        edges[0].label_eval.as_deref(),
         Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
     );
     assert_eq!(
-        edges[0].eval_source.as_deref(),
+        edges[0].source_style_eval.as_deref(),
         Some("(stroke: red + 0.5pt)")
     );
     assert_eq!(
-        edges[0].eval_sink.as_deref(),
+        edges[0].sink_style_eval.as_deref(),
         Some("(stroke: blue + 0.5pt)")
     );
 }
