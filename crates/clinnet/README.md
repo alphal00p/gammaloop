@@ -65,7 +65,7 @@ Import it from a directory that also contains the WASM plugin:
 #let b = graph.builder(
   name: "example",
   edge-statements: (
-    eval_label: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
   ),
 )
 #let (node: a, builder: b) = graph.node(b, name: "a")
@@ -82,7 +82,7 @@ Import it from a directory that also contains the WASM plugin:
 
 The wrapper exports:
 
-- `draw(graph, ...)`: draws a laid-out graph object through Fletcher.
+- `draw(graph, ...)`: draws a laid-out graph object through CeTZ.
 - `layout(graph, seed: 2, steps: 5, ...)`: lays out one graph object.
 - `graph`: namespace for graph construction, DOT parsing/printing, inspection, joins, and graph algorithms.
 - `subgraph`: namespace for subgraph object construction and inspection.
