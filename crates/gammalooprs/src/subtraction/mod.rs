@@ -27,7 +27,7 @@ use crate::{
     },
     utils::{
         self, F, FloatLike,
-        hyperdual_utils::{DualOrNot, new_constant, shape_for_t_derivatives},
+        hyperdual_utils::{DualOrNot, new_constant},
     },
 };
 
@@ -264,7 +264,8 @@ impl RstarTDependenceEvaluator {
             }
         }
 
-        HyperDual::from_values(shape_for_t_derivatives(dual_values.len() - 1), dual_values)
+        todo!("construct hyperdual with t derivatives and r_star componenents")
+        //       HyperDual::from_values(shape_for_t_derivatives(dual_values.len() - 1), dual_values)
     }
 }
 

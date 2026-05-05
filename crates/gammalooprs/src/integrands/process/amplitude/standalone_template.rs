@@ -44,7 +44,7 @@ use symbolica::{
     symbol, try_parse,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 3;
+const STANDALONE_EVALUATORS_VERSION: u32 = 4;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -85,7 +85,20 @@ struct StandaloneGraphTermArchive<A = Vec<u8>> {
     param_builder_params: Vec<A>,
     fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     original_integrand: StandaloneEvaluatorStackArchive<A>,
-    threshold_counterterms: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    threshold_counterterms: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize)]
+struct StandaloneCutCFFIndex {
+    left_threshold_order: Option<usize>,
+    right_threshold_order: Option<usize>,
+    lu_cut_order: Option<usize>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
+    cut_cff_index: StandaloneCutCFFIndex,
+    evaluator_stack: StandaloneEvaluatorStackArchive<A>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -687,6 +700,7 @@ impl<A> StandaloneGraphTermArchive<A> {
                 .threshold_counterterms
                 .get(*first)
                 .and_then(|orders| orders.get(*second))
+                .map(|entry| &entry.evaluator_stack)
                 .ok_or_else(|| {
                     eyre!(
                         "Threshold counterterm index {},{} is out of range for graph {}",

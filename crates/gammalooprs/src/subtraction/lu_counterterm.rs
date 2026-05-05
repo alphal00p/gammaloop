@@ -1,5 +1,5 @@
 use core::f64;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -8,7 +8,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::{
-    dual::HyperDual,
+    dual::{DualNumberStructure, HyperDual},
     float::{Real, RealLike},
 };
 use tracing::debug;
@@ -17,6 +17,7 @@ use typed_index_collections::TiVec;
 use crate::{
     GammaLoopContext,
     cff::{
+        CutCFFIndex,
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::OrientationID,
     },
@@ -51,7 +52,7 @@ use crate::{
         F, FloatLike,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            shape_for_t_derivatives,
+            shape_from_cut_cff_index, simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
@@ -61,7 +62,7 @@ fn zero_dual_or_not_complex<T: FloatLike>(order: usize, zero: &F<T>) -> DualOrNo
     if order == 0 {
         DualOrNot::NonDual(Complex::new_re(zero.clone()))
     } else {
-        DualOrNot::Dual(HyperDual::new(shape_for_t_derivatives(order)))
+        DualOrNot::Dual(HyperDual::new(simple_n_deriv_shape(order)))
     }
 }
 
@@ -93,8 +94,9 @@ fn multiply_dual_or_not_complex<T: FloatLike>(
 }
 
 fn real_dual_to_complex<T: FloatLike>(dual: HyperDual<F<T>>) -> HyperDual<Complex<F<T>>> {
+    let shape = dual.get_shape().iter().map(|v| v.to_vec()).collect();
     let values = dual.values.into_iter().map(Complex::new_re).collect_vec();
-    HyperDual::from_values(shape_for_t_derivatives(values.len() - 1), values)
+    HyperDual::from_values(shape, values)
 }
 
 fn dualize_external_momenta<T: FloatLike>(
@@ -280,9 +282,9 @@ fn compute_loop_part_subspace_dual<T: FloatLike>(
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermEvaluators {
-    pub left_thresholds_evaluator: TiVec<LeftThresholdId, Vec<EvaluatorStack>>,
-    pub right_thresholds_evaluator: TiVec<RightThresholdId, Vec<EvaluatorStack>>,
-    pub iterated_evaluator: IteratedCtCollection<Vec<EvaluatorStack>>,
+    pub left_thresholds_evaluator: TiVec<LeftThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub right_thresholds_evaluator: TiVec<RightThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub iterated_evaluator: IteratedCtCollection<BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub residue_from_e_surface_evaluators: Vec<GenericEvaluator>,
 }
 
@@ -291,19 +293,19 @@ impl LUCounterTermEvaluators {
         let left = self
             .left_thresholds_evaluator
             .iter()
-            .flat_map(|evaluators| evaluators.iter())
+            .flat_map(|evaluators| evaluators.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
         let right = self
             .right_thresholds_evaluator
             .iter()
-            .flat_map(|evaluators| evaluators.iter())
+            .flat_map(|evaluators| evaluators.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
         let iterated = self
             .iterated_evaluator
             .iter()
-            .flat_map(|evaluators| evaluators.iter())
+            .flat_map(|evaluators| evaluators.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
 
@@ -326,14 +328,8 @@ impl LUCounterTermEvaluators {
                 parametric_integrands
                     .integrands
                     .iter()
-                    .enumerate()
                     .map(|(i, atom)| {
-                        let num_esurface = i + 1;
-                        let dual_shape = if num_esurface > 1 {
-                            Some(shape_for_t_derivatives(num_esurface - 1))
-                        } else {
-                            None
-                        };
+                        let dual_shape = shape_from_cut_cff_index(i);
 
                         let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
                             std::slice::from_ref(atom),
@@ -344,7 +340,7 @@ impl LUCounterTermEvaluators {
                         )
                         .unwrap();
                         timings += evaluator_timings;
-                        evaluator
+                        (*i, evaluator)
                     })
                     .collect()
             })
@@ -357,14 +353,8 @@ impl LUCounterTermEvaluators {
                 parametric_integrands
                     .integrands
                     .iter()
-                    .enumerate()
                     .map(|(i, atom)| {
-                        let num_esurface = i + 1;
-                        let dual_shape = if num_esurface > 1 {
-                            Some(shape_for_t_derivatives(num_esurface - 1))
-                        } else {
-                            None
-                        };
+                        let dual_shape = shape_from_cut_cff_index(i);
 
                         let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
                             std::slice::from_ref(atom),
@@ -375,7 +365,7 @@ impl LUCounterTermEvaluators {
                         )
                         .unwrap();
                         timings += evaluator_timings;
-                        evaluator
+                        (*i, evaluator)
                     })
                     .collect()
             })
@@ -386,14 +376,8 @@ impl LUCounterTermEvaluators {
             parametric_integrands
                 .integrands
                 .iter()
-                .enumerate()
                 .map(|(i, atom)| {
-                    let num_esurface = i + 1;
-                    let dual_shape = if num_esurface > 1 {
-                        Some(shape_for_t_derivatives(num_esurface - 1))
-                    } else {
-                        None
-                    };
+                    let dual_shape = shape_from_cut_cff_index(i);
 
                     let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
                         std::slice::from_ref(atom),
@@ -406,7 +390,7 @@ impl LUCounterTermEvaluators {
                     let mut timings = iterated_timings.get();
                     timings += evaluator_timings;
                     iterated_timings.set(timings);
-                    evaluator
+                    (*i, evaluator)
                 })
                 .collect()
         });
@@ -474,30 +458,30 @@ impl LUCounterTermEvaluators {
         frozen_mode: &FrozenCompilationMode,
     ) -> color_eyre::Result<()> {
         for (threshold_id, evaluators) in self.left_thresholds_evaluator.iter_mut_enumerated() {
-            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_left_threshold_{}_{}",
-                    cut_id.0, threshold_id.0, num_esurface
+                    "cut_{}_left_threshold_{}_index_{}",
+                    cut_id.0, threshold_id.0, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
         }
 
         for (threshold_id, evaluators) in self.right_thresholds_evaluator.iter_mut_enumerated() {
-            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_right_threshold_{}_{}",
-                    cut_id.0, threshold_id.0, num_esurface
+                    "cut_{}_right_threshold_{}_index_{}",
+                    cut_id.0, threshold_id.0, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
         }
 
         for (iterated_index, evaluators) in self.iterated_evaluator.iter_mut().enumerate() {
-            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_iterated_{}_{}",
-                    cut_id.0, iterated_index, num_esurface
+                    "cut_{}_iterated_{}_index_{}",
+                    cut_id.0, iterated_index, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
@@ -525,17 +509,17 @@ impl LUCounterTermEvaluators {
         mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
     ) -> color_eyre::Result<()> {
         for evaluators in self.left_thresholds_evaluator.iter_mut() {
-            for evaluator in evaluators.iter_mut() {
+            for (_, evaluator) in evaluators.iter_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.right_thresholds_evaluator.iter_mut() {
-            for evaluator in evaluators.iter_mut() {
+            for (_, evaluator) in evaluators.iter_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.iterated_evaluator.iter_mut() {
-            for evaluator in evaluators.iter_mut() {
+            for (_, evaluator) in evaluators.iter_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
@@ -978,8 +962,16 @@ impl LUCounterTerm {
                         Some(&lu_cut_params),
                     );
 
+                    let cut_cff_index = CutCFFIndex {
+                        lu_cut_order: Some(order + 1),
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                    };
+
                     let result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
-                        [left_threshold_id][order]
+                        [left_threshold_id]
+                        .get_mut(&cut_cff_index)
+                        .unwrap()
                         .evaluate(
                             params,
                             orientations,
@@ -1022,8 +1014,15 @@ impl LUCounterTerm {
                         Some(&lu_cut_params),
                     );
 
+                    let cut_cff_index = CutCFFIndex {
+                        lu_cut_order: Some(order + 1),
+                        left_threshold_order: None,
+                        right_threshold_order: Some(1),
+                    };
                     let result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
-                        [right_threshold_id][order]
+                        [right_threshold_id]
+                        .get_mut(&cut_cff_index)
+                        .unwrap()
                         .evaluate(
                             params,
                             orientations,
@@ -1079,8 +1078,16 @@ impl LUCounterTerm {
                                 Some(&lu_cut_params),
                             );
 
+                            let cut_cff_index = CutCFFIndex {
+                                lu_cut_order: Some(order + 1),
+                                left_threshold_order: Some(1),
+                                right_threshold_order: Some(1),
+                            };
+
                             let result_of_this_ct = self.evaluators[cut_id].iterated_evaluator
-                                [iterated_index][order]
+                                [iterated_index]
+                                .get_mut(&cut_cff_index)
+                                .unwrap()
                                 .evaluate(
                                     params,
                                     orientations,
@@ -1396,7 +1403,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .as_ref()
             .expect("higher-order LU threshold evaluation requires cached r_star(t)");
         HyperDual::from_values(
-            shape_for_t_derivatives(order),
+            simple_n_deriv_shape(order),
             dual_solution.values[..=order].to_vec(),
         )
     }

@@ -1,6 +1,7 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
+        CutCFFIndex,
         esurface::Esurface,
         expression::{GraphOrientation, OrientationID},
         surface::HybridSurfaceID,
@@ -38,7 +39,7 @@ use crate::{
         F, FloatLike, Length, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            shape_for_t_derivatives,
+            simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
         serde_utils::SmartSerde,
@@ -50,7 +51,7 @@ use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     slice,
     time::{Duration, Instant},
 };
@@ -446,7 +447,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
-    pub integrand: TiVec<RaisedCutId, Vec<EvaluatorStack>>,
+    pub integrand: TiVec<RaisedCutId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
@@ -639,10 +640,9 @@ impl CrossSectionGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            let mut cut_integrands = Vec::with_capacity(integrand_for_cut.integrands.len());
-            for (num_derivatives, integrand_for_subset) in
-                integrand_for_cut.integrands.iter().enumerate()
-            {
+            let mut cut_integrands = BTreeMap::new();
+            for (cut_cff_index, integrand_for_subset) in integrand_for_cut.integrands.iter() {
+                let num_derivatives = cut_cff_index.lu_cut_order.unwrap_or(0);
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
@@ -670,7 +670,7 @@ impl CrossSectionGraphTerm {
                 }
                 stats.add_evaluator_build_timings(evaluator_timings);
                 stats.evaluator_count += evaluator_stack.generic_evaluator_count();
-                cut_integrands.push(evaluator_stack);
+                cut_integrands.insert(*cut_cff_index, evaluator_stack);
             }
             integrand.push(cut_integrands);
         }
@@ -813,7 +813,8 @@ impl CrossSectionGraphTerm {
         })?;
 
         for (raised_cut_id, integrands) in self.integrand.iter_mut().enumerate() {
-            for (n_derivatives, integrand) in integrands.iter_mut().enumerate() {
+            for (cut_cff_index, integrand) in integrands.iter_mut() {
+                let n_derivatives = cut_cff_index.lu_cut_order.unwrap_or(0);
                 integrand.compile(
                     format!(
                         "integrand_zen_cut_{}_deriv_{}",
@@ -848,7 +849,7 @@ impl CrossSectionGraphTerm {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for raised_cut_integrands in self.integrand.iter_mut() {
-            for evaluator_stack in raised_cut_integrands.iter_mut() {
+            for (_cut_cff_index, evaluator_stack) in raised_cut_integrands.iter_mut() {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
@@ -1255,7 +1256,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .rescale_with_hyper_dual(&dual_t_for_integrand, None);
 
                         let dual_shape_for_esurface =
-                            HyperDual::<F<T>>::new(shape_for_t_derivatives(num_esurfaces));
+                            HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
 
                         let dual_t_for_esurface =
                             dual_shape_for_esurface.variable(0, solution.solution.clone());
@@ -1363,7 +1364,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                     Some(&lu_params),
                 );
 
-                let result = self.integrand[raised_cut][num_esurfaces - 1]
+                let cut_index = CutCFFIndex {
+                    lu_cut_order: Some(num_esurfaces),
+                    left_threshold_order: None,
+                    right_threshold_order: None,
+                };
+
+                let result = self.integrand[raised_cut]
+                    .get_mut(&cut_index)
+                    .unwrap()
                     .evaluate(
                         params,
                         orientations,

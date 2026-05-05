@@ -1,4 +1,5 @@
 use crate::{
+    cff::CutCFFIndex,
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
@@ -13,7 +14,8 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
-use std::hash::Hash;
+use rand::seq::index;
+use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
 use spenso::network::library::TensorLibraryData;
@@ -137,7 +139,7 @@ impl SimpleApprox {
 pub struct Approximation {
     pub spinney: Spinney,
     pub local_3d: CFFapprox, //3d denoms
-    pub final_integrand: Option<Vec<Atom>>,
+    pub final_integrand: Option<BTreeMap<CutCFFIndex, Atom>>,
     pub integrated_4d: ApproxOp,
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
@@ -192,7 +194,7 @@ impl CutStructure {
 }
 
 impl CFFapprox {
-    pub(crate) fn expr(&self) -> Option<(Vec<Atom>, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
         match self {
             CFFapprox::NotComputed => None,
             CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrands.clone(), *sign)),
@@ -223,7 +225,10 @@ impl CFFapprox {
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
             t_arg: IntegrandExpr {
-                integrands: cff.iter().map(|a| a * &fourddenoms).collect(),
+                integrands: cff
+                    .iter()
+                    .map(|(index, a)| (*index, a * &fourddenoms))
+                    .collect(),
             },
         })
     }
@@ -280,7 +285,7 @@ fn localized_integrated_reduced_factor(
     let integrands = cff
         .terms
         .into_iter()
-        .map(|term| {
+        .map(|(index, term)| {
             let mut localized = Atom::Zero;
             for (expr, orientation) in term.expression.into_iter().zip(term.orientations) {
                 localized += localize_reduced_orientation_term(
@@ -290,9 +295,9 @@ fn localized_integrated_reduced_factor(
                     &internal_edges,
                 )?;
             }
-            Ok(localized * expr)
+            Ok((index, localized * expr))
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<BTreeMap<_, _>>>()?;
 
     Ok(IntegrandExpr { integrands })
 }
@@ -321,15 +326,15 @@ impl Approximation {
             });
     }
 
-    fn zero_terms(n_terms: usize) -> Vec<Atom> {
-        vec![Atom::Zero; n_terms]
+    fn zero_terms(allowed_keys: &[CutCFFIndex]) -> BTreeMap<CutCFFIndex, Atom> {
+        allowed_keys.iter().map(|&key| (key, Atom::Zero)).collect()
     }
 
-    fn set_zero_local_3d(&mut self, sign: Sign, n_terms: usize) {
+    fn set_zero_local_3d(&mut self, sign: Sign, allowed_keys: &[CutCFFIndex]) {
         self.local_3d = CFFapprox::Dependent {
             sign,
             t_arg: IntegrandExpr {
-                integrands: Self::zero_terms(n_terms),
+                integrands: Self::zero_terms(allowed_keys),
             },
         };
     }
@@ -359,7 +364,9 @@ impl Approximation {
                     .local_3d
                     .expr()
                     .expect("root local CFF should have been computed");
-                self.final_integrand = Some(Self::zero_terms(integrands.len()));
+                self.final_integrand = Some(Self::zero_terms(
+                    &cuts.residue_selector.generate_allowed_keys(),
+                ));
             } else {
                 self.final_integrand = Some(self.final_integrand(
                     graph,
@@ -399,7 +406,7 @@ impl Approximation {
         {
             self.integrated_4d = ApproxOp::Dependent {
                 t_arg: IntegrandExpr {
-                    integrands: vec![Atom::Zero],
+                    integrands: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
                 },
                 sign: Sign::Positive,
                 subgraph: unsafe {
@@ -425,8 +432,12 @@ impl Approximation {
 
         let integrands = current
             .iter()
-            .map(|a| Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a))
-            .collect::<Result<Vec<_>>>()?;
+            .map(|(index, a)| {
+                let integrated =
+                    Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a)?;
+                Ok((*index, integrated))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
 
         self.integrated_4d = ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrands },
@@ -452,18 +463,21 @@ impl Approximation {
             panic!("Should have computed the dependent cff");
         };
         let (mut t4, t4_sign) = if let ApproxOp::Root = dependent.integrated_4d {
-            (vec![Atom::Zero], Sign::Positive)
+            (
+                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
+                Sign::Positive,
+            )
         } else {
-            dependent
-                .integrated_4d
-                .expr()
-                .unwrap_or((vec![Atom::Zero], Sign::Positive))
+            dependent.integrated_4d.expr().unwrap_or((
+                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
+                Sign::Positive,
+            ))
         };
         if t4.len() != 1 {
             panic!("Should only have one t_arg for the 4d approximation");
         }
         let finite = t4
-            .pop()
+            .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
             .unwrap()
             .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
@@ -475,7 +489,7 @@ impl Approximation {
         debug_tags!(
             #uv;
             finite = %finite.log_print(Some(80)),
-            t4 = %t4.iter().enumerate().map(|(i, t4)| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
+            t4 = %t4.iter().enumerate().map(|(i, (index, t4))| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
             "Computing UV subtraction",
         );
 
@@ -491,7 +505,10 @@ impl Approximation {
         let ctx = UVCtx { graph, settings };
 
         if Self::filtered_integrated_uv_mode_is_active(settings) {
-            self.set_zero_local_3d(-sign, cff.len());
+            self.set_zero_local_3d(
+                -sign,
+                cuts.residue_selector.generate_allowed_keys().as_slice(),
+            );
             self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
                 self.final_integrand(
                     graph,
@@ -501,17 +518,26 @@ impl Approximation {
                     orientation_pattern,
                 )?
             } else {
-                Self::zero_terms(cff.len())
+                Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
             });
             return Ok(());
         }
 
-        let mut integrands = vec![];
-        for (local, integ) in cff.into_iter().zip(integrated_t.integrands) {
+        let mut integrands = BTreeMap::new();
+        for ((index_local, local), (index_integ, integ)) in
+            cff.into_iter().zip(integrated_t.integrands)
+        {
+            if index_local != index_integ {
+                return Err(eyre!(
+                    "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
+                    index_local,
+                    index_integ
+                ));
+            }
             let mut sum_3d = Atom::Zero;
             sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
             sum_3d -= Local3DApproximation {}.kernel(&ctx, &*self, dependent, &integ)?;
-            integrands.push(sum_3d);
+            integrands.insert(index_local, sum_3d);
         }
 
         self.local_3d = CFFapprox::Dependent {
@@ -537,24 +563,28 @@ impl Approximation {
         valid_orientations: &[EdgeVec<Orientation>],
         _settings: &UVgenerationSettings,
         orientation_pattern: &OrientationPattern,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
             .local_3d
             .expr()
             .ok_or(eyre!("Local3d not yet computed"))?;
         let (mut t4, t4_sign) = if let ApproxOp::Root = self.integrated_4d {
-            (vec![Atom::Zero], Sign::Positive)
+            (
+                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
+                Sign::Positive,
+            )
         } else {
-            self.integrated_4d
-                .expr()
-                .unwrap_or((vec![Atom::Zero], Sign::Positive))
+            self.integrated_4d.expr().unwrap_or((
+                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
+                Sign::Positive,
+            ))
         };
         if t4.len() != 1 {
             panic!("Should only have one t_arg for the 4d approximation");
         }
         let finite = t4
-            .pop()
+            .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
             .unwrap()
             .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
@@ -569,7 +599,7 @@ impl Approximation {
         debug_tags!(
             #uv,#final;
             finite = %finite.log_print(Some(80)),
-            t4 = %t4.iter().enumerate().map(|(i, t4)| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
+            t4 = %t4.iter().enumerate().map(|(i, (index, t4))| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
             "Computing Final integrand after uv subtraction",
         );
 
@@ -587,10 +617,20 @@ impl Approximation {
             .subtract(self.spinney.subgraph.included())
             .subtract(&graph.initial_state_cut);
 
-        let mut integrands = vec![];
+        let mut integrands = BTreeMap::new();
 
-        for (local, integ) in t.iter().zip(integrated_t.integrands.iter()) {
+        for ((local_index, local), (integrated_index, integ)) in
+            t.iter().zip(integrated_t.integrands.iter())
+        {
             let mut cff = s * (local - integ);
+
+            if local_index != integrated_index {
+                return Err(eyre!(
+                    "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
+                    local_index,
+                    integrated_index
+                ));
+            }
 
             for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
                 let eid = usize::from(eid) as i64;
@@ -659,7 +699,7 @@ impl Approximation {
                 debug_preview.log_print(None) // printer(LOGPRINTOPTS)
             );
 
-            integrands.push(resnum.replace_multiple(&reps))
+            integrands.insert(*local_index, resnum.replace_multiple(&reps));
         }
 
         // debug!("final_cff {res:>}");
@@ -678,7 +718,7 @@ impl Approximation {
 }
 
 impl ApproxOp {
-    pub(crate) fn expr(&self) -> Option<(Vec<Atom>, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { .. } => {
@@ -688,7 +728,10 @@ impl ApproxOp {
                 );
             }
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrands.clone(), *sign)),
-            ApproxOp::Root => Some((vec![Atom::num(1)], Sign::Positive)),
+            ApproxOp::Root => Some((
+                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::num(1))]),
+                Sign::Positive,
+            )),
         }
     }
 }

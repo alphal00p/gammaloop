@@ -1,3 +1,6 @@
+use std::{collections::BTreeMap, fmt::Display};
+
+use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetLike, SubSetOps},
@@ -36,15 +39,56 @@ impl CFFTerm {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Encode, Decode)]
+// This describes the combinations of residues that are selected.
+pub struct CutCFFIndex {
+    pub left_threshold_order: Option<usize>,
+    pub right_threshold_order: Option<usize>,
+    pub lu_cut_order: Option<usize>,
+}
+
+impl CutCFFIndex {
+    pub fn new_all_none() -> Self {
+        Self {
+            left_threshold_order: None,
+            right_threshold_order: None,
+            lu_cut_order: None,
+        }
+    }
+}
+
+impl Display for CutCFFIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut parts = vec![];
+        if let Some(order) = self.lu_cut_order {
+            parts.push(format!("lu_cut_{}", order));
+        }
+
+        if let Some(order) = self.left_threshold_order {
+            parts.push(format!("left_th_{}", order));
+        }
+
+        if let Some(order) = self.right_threshold_order {
+            parts.push(format!("right_th_{}", order));
+        }
+
+        if parts.is_empty() {
+            write!(f, "")
+        } else {
+            write!(f, "{}", parts.join("_"))
+        }
+    }
+}
+
 pub struct CutCFF {
-    pub terms: Vec<CFFTerm>, //index is the power of the esurface +1
+    pub terms: BTreeMap<CutCFFIndex, CFFTerm>,
 }
 
 impl CutCFF {
-    pub fn expression_with_selectors(&self) -> Vec<Atom> {
+    pub fn expression_with_selectors(&self) -> BTreeMap<CutCFFIndex, Atom> {
         self.terms
             .iter()
-            .map(|t| t.expression_with_selectors())
+            .map(|(index, term)| (*index, term.expression_with_selectors()))
             .collect()
     }
 }
@@ -65,27 +109,65 @@ impl Graph {
             }
         }
 
-        let cff = self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?;
-        let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-            cff.select_esurface_residue(right_threshold).pop().unwrap()
-        } else {
-            cff
-        };
+        let cff = [(
+            CutCFFIndex::new_all_none(),
+            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
+        )];
 
-        let residue = if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-            residue
-                .select_esurface_residue(left_threshold)
-                .pop()
-                .unwrap()
-        } else {
-            residue
-        };
+        let mut residues = BTreeMap::new();
 
-        let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-            residue.select_esurface_residue(lu_cut)
-        } else {
-            vec![residue]
-        };
+        cff.into_iter()
+            .flat_map(|(index, cff_expression)| {
+                if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+                    cff_expression
+                        .select_esurface_residue(right_threshold)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.right_threshold_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .flat_map(|(index, cff_expression)| {
+                if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+                    cff_expression
+                        .select_esurface_residue(left_threshold)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.left_threshold_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .flat_map(|(index, cff_expression)| {
+                if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+                    cff_expression
+                        .select_esurface_residue(lu_cut)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, residue)| {
+                            let mut new_index = index;
+                            new_index.lu_cut_order = Some(i + 1);
+                            (new_index, residue)
+                        })
+                        .collect()
+                } else {
+                    vec![(index, cff_expression)]
+                }
+            })
+            .for_each(|(index, residue)| {
+                residues.insert(index, residue);
+            });
 
         // println!("residue orders: {}", residue.len());
 
@@ -94,11 +176,12 @@ impl Graph {
             .full_filter()
             .subtract(&self.initial_state_cut.left)
             .subtract(&self.initial_state_cut.right);
-        let mut terms = vec![];
+
+        let mut terms = BTreeMap::new();
 
         let replacement_rules = self.surface_cache.get_all_replacements(&[]);
 
-        for expr in residue.into_iter() {
+        for (cut_cff_index, expr) in residues.into_iter() {
             let mut cff_term = CFFTerm {
                 expression: vec![],
                 orientations: vec![],
@@ -121,7 +204,7 @@ impl Graph {
                     .orientations
                     .push(orientation.data.orientation.clone());
             }
-            terms.push(cff_term);
+            terms.insert(cut_cff_index, cff_term);
         }
 
         let cut_cff = CutCFF { terms };

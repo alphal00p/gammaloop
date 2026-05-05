@@ -44,7 +44,7 @@ use crate::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
     },
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{GS, hyperdual_utils::shape_for_t_derivatives},
+    utils::{GS, hyperdual_utils::simple_n_deriv_shape},
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
 };
 use eyre::{Context, eyre};
@@ -1751,7 +1751,7 @@ impl RaisedCutData {
             });
 
         let dual_shapes = (1..global_max_occurence)
-            .map(shape_for_t_derivatives)
+            .map(simple_n_deriv_shape)
             .collect();
 
         let pass_two_evaluators = (1..=global_max_occurence)

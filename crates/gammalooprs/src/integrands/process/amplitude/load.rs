@@ -15,6 +15,7 @@
 
 #![allow(dead_code)]
 use std::{
+    collections::BTreeMap,
     fs,
     io::Cursor,
     ops::Neg,
@@ -45,8 +46,17 @@ use symbolica::{
 
 use crate::processes::StandaloneNumericTarget;
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 3;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 4;
 pub const STANDALONE_MODE_RUST: u8 = 0;
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
+)]
+pub struct StandaloneCutCFFIndex {
+    pub(crate) left_threshold_order: Option<usize>,
+    pub(crate) right_threshold_order: Option<usize>,
+    pub(crate) lu_cut_order: Option<usize>,
+}
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorArchive<S = Vec<u8>, T = Vec<u8>> {
@@ -178,54 +188,68 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 summed,
                 summed_fnmap,
             };
-            let mut threshold_counterterms = Vec::new();
-            for (ct_idx, ct_orders) in graph.threshold_counterterms.into_iter().enumerate() {
-                let mut loaded_orders = Vec::with_capacity(ct_orders.len());
+            let threshold_counterterms = graph
+                .threshold_counterterms
+                .into_iter()
+                .enumerate()
+                .map(|(ct_idx, ct_orders)| {
+                    ct_orders
+                        .into_iter()
+                        .enumerate()
+                        .map(|(slot_idx, ct)| {
+                            let StandaloneIndexedEvaluatorStackArchive {
+                                cut_cff_index,
+                                evaluator_stack: ct,
+                            } = ct;
 
-                for (order_idx, ct) in ct_orders.into_iter().enumerate() {
-                    let ct_parametric_label = format!("ct[{ct_idx}][{order_idx}].parametric");
-                    let parametric =
-                        timed_build(&ct_parametric_label, ct.single_parametric, false)?;
-                    let iterative = ct
-                        .iterative
-                        .map(|payload| {
-                            let label = format!("ct[{ct_idx}][{order_idx}].iterative");
-                            timed_build(&label, payload, true)
-                        })
-                        .transpose()?;
-                    let summed = ct
-                        .summed
-                        .map(|payload| {
-                            let label = format!("ct[{ct_idx}][{order_idx}].summed");
-                            timed_build(&label, payload, false)
-                        })
-                        .transpose()?;
-                    let summed_fnmap = ct
-                        .summed_function_map
-                        .map(|payload| {
-                            let label = format!("ct[{ct_idx}][{order_idx}].summed_fnmap");
-                            timed_build(&label, payload, false)
-                        })
-                        .transpose()?;
+                            let ct_parametric_label =
+                                format!("ct[{ct_idx}].slot[{slot_idx}].parametric");
+                            let parametric =
+                                timed_build(&ct_parametric_label, ct.single_parametric, false)?;
+                            let iterative = ct
+                                .iterative
+                                .map(|payload| {
+                                    let label = format!("ct[{ct_idx}].slot[{slot_idx}].iterative");
+                                    timed_build(&label, payload, true)
+                                })
+                                .transpose()?;
+                            let summed = ct
+                                .summed
+                                .map(|payload| {
+                                    let label = format!("ct[{ct_idx}].slot[{slot_idx}].summed");
+                                    timed_build(&label, payload, false)
+                                })
+                                .transpose()?;
+                            let summed_fnmap = ct
+                                .summed_function_map
+                                .map(|payload| {
+                                    let label =
+                                        format!("ct[{ct_idx}].slot[{slot_idx}].summed_fnmap");
+                                    timed_build(&label, payload, false)
+                                })
+                                .transpose()?;
 
-                    loaded_orders.push(LoadedStandaloneEvaluatorStack {
-                        orientation_start: ct.start,
-                        mult_offset: ct.mult_offset,
-                        representative_input: ct
-                            .representative_input
-                            .iter()
-                            .map(StandaloneComplexInput::to_f64)
-                            .collect::<Result<Vec<_>>>()?,
-                        override_pos: ct.override_pos,
-                        parametric,
-                        iterative,
-                        summed,
-                        summed_fnmap,
-                    });
-                }
-
-                threshold_counterterms.push(loaded_orders);
-            }
+                            Ok((
+                                cut_cff_index,
+                                LoadedStandaloneEvaluatorStack {
+                                    orientation_start: ct.start,
+                                    mult_offset: ct.mult_offset,
+                                    representative_input: ct
+                                        .representative_input
+                                        .iter()
+                                        .map(StandaloneComplexInput::to_f64)
+                                        .collect::<Result<Vec<_>>>()?,
+                                    override_pos: ct.override_pos,
+                                    parametric,
+                                    iterative,
+                                    summed,
+                                    summed_fnmap,
+                                },
+                            ))
+                        })
+                        .collect::<Result<BTreeMap<_, _>>>()
+                })
+                .collect::<Result<Vec<_>>>()?;
 
             println!("Loaded evaluators for graph {}", graph.graph_name);
             graph_terms.push(LoadedStandaloneGraphTerm {
@@ -265,7 +289,13 @@ pub struct StandaloneGraphTermArchive<A = Vec<u8>> {
     pub(crate) param_builder_params: Vec<A>,
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     pub(crate) original_integrand: StandaloneEvaluatorStackArchive<A>,
-    pub(crate) threshold_counterterms: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    pub(crate) threshold_counterterms: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
+    pub(crate) cut_cff_index: StandaloneCutCFFIndex,
+    pub(crate) evaluator_stack: StandaloneEvaluatorStackArchive<A>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -712,7 +742,8 @@ pub struct LoadedStandaloneGraphTerm {
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
     pub original_integrand: LoadedStandaloneEvaluatorStack,
-    pub threshold_counterterms: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
+    pub threshold_counterterms:
+        Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -806,18 +837,28 @@ impl LoadedStandaloneGraphTerm {
     ) -> Result<&mut LoadedStandaloneEvaluatorStack> {
         match selection {
             StandaloneStackSelection::Original => Ok(&mut self.original_integrand),
-            StandaloneStackSelection::ThresholdCounterterm((ct_idx, order_idx)) => self
-                .threshold_counterterms
-                .get_mut(*ct_idx)
-                .and_then(|orders| orders.get_mut(*order_idx))
-                .ok_or_else(|| {
-                    eyre!(
+            StandaloneStackSelection::ThresholdCounterterm((ct_idx, order_idx)) => {
+                let graph_name = self.graph_name.clone();
+                let Some(orders) = self.threshold_counterterms.get_mut(*ct_idx) else {
+                    return Err(eyre!(
                         "Threshold counterterm index {},{} is out of range for graph {}",
                         ct_idx,
                         order_idx,
-                        self.graph_name
+                        graph_name
+                    ));
+                };
+
+                let order_count = orders.len();
+                orders.values_mut().nth(*order_idx).ok_or_else(|| {
+                    eyre!(
+                        "Threshold counterterm index {},{} is out of range for graph {} ({} keyed stacks)",
+                        ct_idx,
+                        order_idx,
+                        graph_name,
+                        order_count
                     )
-                }),
+                })
+            }
         }
     }
 }
