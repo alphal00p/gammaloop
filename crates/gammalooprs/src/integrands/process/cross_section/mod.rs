@@ -39,7 +39,7 @@ use crate::{
         F, FloatLike, Length, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            simple_n_deriv_shape,
+            shape_from_cut_cff_index, simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
         serde_utils::SmartSerde,
@@ -642,15 +642,10 @@ impl CrossSectionGraphTerm {
             }
             let mut cut_integrands = BTreeMap::new();
             for (cut_cff_index, integrand_for_subset) in integrand_for_cut.integrands.iter() {
-                let num_derivatives = cut_cff_index.lu_cut_order.unwrap_or(0);
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
-                let dual_shape = if num_derivatives > 0 {
-                    Some(graph.derived_data.raised_data.dual_shapes[num_derivatives - 1].clone())
-                } else {
-                    None
-                };
+                let dual_shape = shape_from_cut_cff_index(cut_cff_index);
 
                 let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
                     slice::from_ref(integrand_for_subset),
