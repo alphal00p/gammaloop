@@ -217,16 +217,24 @@
   ratio: 0.5,
   stroke: none,
 ) = {
+  let arrow-stroke = if stroke == none {
+    (paint: black, thickness: 0.55pt, cap: "round")
+  } else {
+    stroke
+  }
   base + (
-    stroke: if stroke == none {
-      base.at("stroke", default: (paint: black, thickness: 0.45pt, cap: "round"))
-    } else {
-      stroke
-    },
-    mark: (end: ">"),
-    parallel-distance: distance,
-    parallel-length: length,
-    parallel-ratio: ratio,
+    parallel-mark: (
+      distance: distance,
+      length: length,
+      ratio: ratio,
+      stroke: arrow-stroke,
+      mark: (
+        end: "barbed",
+        stroke: arrow-stroke,
+        fill: black,
+        scale: 1.35,
+      ),
+    ),
   )
 }
 
@@ -262,9 +270,8 @@
 
 /// Style callback for the source half edge.
 ///
-/// `momentum-arrows: true` draws this half as a centered parallel segment with
-/// an arrowhead toward the edge layout point. The visible length is the shorter
-/// of `momentum-arrow-length` and `momentum-arrow-ratio` times the base length.
+/// `momentum-arrows: true` adds a centered black barbed-arrow decoration while
+/// the main edge remains drawn with its normal particle style.
 /// -> dictionary
 #let source-style(
   edge,
@@ -295,9 +302,9 @@
 
 /// Style callback for the sink half edge.
 ///
-/// `momentum-arrows: true` draws this half as a centered parallel segment with
-/// an arrowhead toward the sink node, so momentum arrows always flow from source
-/// to sink independently of `edge.orientation`.
+/// `momentum-arrows: true` adds a centered black barbed-arrow decoration toward
+/// the sink node, so momentum arrows always flow from source to sink
+/// independently of `edge.orientation`.
 /// -> dictionary
 #let sink-style(
   edge,
@@ -344,7 +351,7 @@
 
 /// Return the momentum field used by optional edge labels.
 /// -> none | any
-#let momentum-value(edge, fields: ("lmb_rep", "momentum", "mom", "q")) = _field-value(edge, fields)
+#let momentum-value(edge, fields: ("momentum", "mom", "q")) = _field-value(edge, fields)
 
 /// Return the edge index used by optional edge labels. The DOT `id` statement
 /// wins over the renderer-local `eid`.
@@ -402,7 +409,7 @@
   show-edge-index: false,
   show-half-edge-index: false,
   show-particle: false,
-  momentum-fields: ("lmb_rep", "momentum", "mom", "q"),
+  momentum-fields: ("momentum", "mom", "q"),
   edge-index-fields: ("id", "eid"),
   momentum-prefix: none,
   edge-index-prefix: [e],
@@ -459,7 +466,6 @@
 /// ```example
 /// #let callbacks = physics.style(
 ///   momentum-arrows: true,
-///   show-momentum: true,
 ///   show-edge-index: true,
 ///   show-particle: true,
 /// )
@@ -475,7 +481,7 @@
   show-edge-index: false,
   show-half-edge-index: false,
   show-particle: false,
-  momentum-fields: ("lmb_rep", "momentum", "mom", "q"),
+  momentum-fields: ("momentum", "mom", "q"),
   edge-index-fields: ("id", "eid"),
   momentum-prefix: none,
   edge-index-prefix: [e],
@@ -519,9 +525,9 @@
 ///   b,
 ///   source: (node: a),
 ///   sink: (node: b-node),
-///   statements: (particle: "g", lmb_rep: "q_1"),
+///   statements: (particle: "g", id: "7"),
 /// )
-/// #let callbacks = physics.style(momentum-arrows: true, show-momentum: true)
+/// #let callbacks = physics.style(momentum-arrows: true, show-edge-index: true)
 /// #draw(
 ///   layout(graph.finish(b)),
 ///   source-style: callbacks.source-style,
@@ -545,7 +551,7 @@
   show-edge-index: false,
   show-half-edge-index: false,
   show-particle: false,
-  momentum-fields: ("lmb_rep", "momentum", "mom", "q"),
+  momentum-fields: ("momentum", "mom", "q"),
   edge-index-fields: ("id", "eid"),
   momentum-prefix: none,
   edge-index-prefix: [e],
