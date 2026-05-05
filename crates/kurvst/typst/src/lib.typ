@@ -329,6 +329,64 @@
   )
 }
 
+/// Generate a parallel path for a cubic Bezier.
+///
+/// Positive `distance` offsets to the left normal of the cubic direction;
+/// negative values offset to the right. The result contains `points`, fitted
+/// cubic `curves`, straight `segments`, and `length`.
+///
+/// ```example
+/// #let parallel = kurvst.parallel-cubic(
+///   demo-segment.start,
+///   demo-segment.end,
+///   demo-segment.ctrl-a,
+///   demo-segment.ctrl-b,
+///   distance: 0.18,
+/// )
+/// #native-pattern-path(parallel, base: demo-segment)
+/// ```
+///
+/// -> dictionary
+#let parallel-cubic(
+  start,
+  end,
+  ctrl-a,
+  ctrl-b,
+  distance: 0,
+  accuracy: 0.001,
+  optimize: true,
+) = {
+  cbor(_plugin.curve_parallel_cubic(cbor.encode((
+    start: start,
+    end: end,
+    ctrl-a: ctrl-a,
+    ctrl-b: ctrl-b,
+    distance: distance,
+    accuracy: accuracy,
+    optimize: optimize,
+  ))))
+}
+
+/// Generate a parallel path for a cubic segment returned by this module.
+///
+/// ```example
+/// #let parallel = kurvst.parallel-segment(demo-segment, distance: -0.18)
+/// #native-pattern-path(parallel, base: demo-segment)
+/// ```
+///
+/// -> dictionary
+#let parallel-segment(segment, distance: 0, accuracy: 0.001, optimize: true) = {
+  parallel-cubic(
+    segment.start,
+    segment.end,
+    segment.ctrl-a,
+    segment.ctrl-b,
+    distance: distance,
+    accuracy: accuracy,
+    optimize: optimize,
+  )
+}
+
 /// Convert a cubic segment returned by @split-cubic or @split-through into
 /// positional arguments accepted by `cetz.draw.bezier`.
 ///
@@ -371,6 +429,28 @@
   }
 }
 
+/// Draw a path returned by @pattern-cubic, @pattern-segment, @parallel-cubic,
+/// or @parallel-segment.
+///
+/// ```example
+/// #let path = kurvst.parallel-segment(demo-segment, distance: 0.18)
+/// #cetz.canvas({
+///   kurvst.cetz-path(path, stroke: rgb("#355c9a") + 0.55pt)
+/// })
+/// ```
+///
+/// -> content
+#let cetz-path(path, unit: 1, ..style) = {
+  let style = style.named()
+  if path.keys().contains("curves") and path.curves.len() > 0 {
+    _draw-merged-curves(path.curves, unit: unit, ..style)
+  } else if path.points.len() > 1 {
+    cetz.draw.line(..path.points.map(point => _point(point, unit: unit)), ..style)
+  } else {
+    ()
+  }
+}
+
 /// Draw a sampled pattern returned by @pattern-cubic or @pattern-segment.
 ///
 /// ```example
@@ -386,16 +466,7 @@
 /// ```
 ///
 /// -> content
-#let cetz-pattern(path, unit: 1, ..style) = {
-  let style = style.named()
-  if path.keys().contains("curves") and path.curves.len() > 0 {
-    _draw-merged-curves(path.curves, unit: unit, ..style)
-  } else if path.points.len() > 1 {
-    cetz.draw.line(..path.points.map(point => _point(point, unit: unit)), ..style)
-  } else {
-    ()
-  }
-}
+#let cetz-pattern(path, unit: 1, ..style) = cetz-path(path, unit: unit, ..style)
 
 /// Split a laid-out graph edge into source and sink half-edge cubic segments.
 ///

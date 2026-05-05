@@ -1,4 +1,7 @@
-use kurbo::{CubicBez, ParamCurve, ParamCurveArclen, ParamCurveDeriv, Point, QuadBez, Vec2};
+use kurbo::{
+    CubicBez, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathSeg, Point, QuadBez, Vec2,
+    fit_to_bezpath, fit_to_bezpath_opt, offset::CubicOffset,
+};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{self, Visitor},
@@ -81,6 +84,22 @@ pub struct PatternCubicSpec {
     pub accuracy: f64,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct ParallelCubicSpec {
+    #[serde(flatten)]
+    pub curve: CubicBezierSpec,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub distance: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+    #[serde(default = "default_parallel_optimize")]
+    pub optimize: bool,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum PatternInput {
@@ -161,6 +180,14 @@ pub struct PatternPathOutput {
     pub segments: Vec<LineSegmentSpec>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CurvePathOutput {
+    pub length: f64,
+    pub points: Vec<CurvePoint>,
+    pub curves: Vec<CubicBezierSpec>,
+    pub segments: Vec<LineSegmentSpec>,
+}
+
 fn default_split_t() -> f64 {
     0.5
 }
@@ -202,6 +229,10 @@ fn default_coil_longitudinal_scale() -> f64 {
 }
 
 fn default_anchor_endpoint() -> bool {
+    true
+}
+
+fn default_parallel_optimize() -> bool {
     true
 }
 
@@ -330,6 +361,13 @@ pub fn curve_pattern_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: PatternCubicSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize cubic curve pattern spec: {err}"))?;
     let output = pattern_cubic(spec)?;
+    encode_cbor(&output)
+}
+
+pub fn curve_parallel_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: ParallelCubicSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize cubic parallel path spec: {err}"))?;
+    let output = parallel_cubic(spec)?;
     encode_cbor(&output)
 }
 
@@ -471,6 +509,29 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
         segments,
         points,
     })
+}
+
+fn parallel_cubic(spec: ParallelCubicSpec) -> Result<CurvePathOutput, String> {
+    let distance = validate_finite(spec.distance, "parallel path distance")?;
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let curve = CubicBez::from(spec.curve);
+    let source_length = curve.arclen(accuracy);
+    if source_length <= f64::EPSILON {
+        return Ok(CurvePathOutput {
+            length: 0.0,
+            points: vec![spec.curve.start],
+            curves: Vec::new(),
+            segments: Vec::new(),
+        });
+    }
+
+    let offset = CubicOffset::new_regularized(curve, distance, accuracy);
+    let path = if spec.optimize {
+        fit_to_bezpath_opt(&offset, accuracy)
+    } else {
+        fit_to_bezpath(&offset, accuracy)
+    };
+    curve_path_from_segments(path.segments(), accuracy)
 }
 
 #[derive(Debug, Clone)]
@@ -708,6 +769,42 @@ fn line_segments(points: &[CurvePoint]) -> Vec<LineSegmentSpec> {
             end: window[1],
         })
         .collect()
+}
+
+fn curve_path_from_segments(
+    segments: impl IntoIterator<Item = PathSeg>,
+    accuracy: f64,
+) -> Result<CurvePathOutput, String> {
+    let mut length = 0.0;
+    let mut points = Vec::new();
+    let mut curves = Vec::new();
+    let mut line_segments = Vec::new();
+
+    for segment in segments {
+        length += segment.arclen(accuracy);
+        if points.is_empty() {
+            points.push(segment.start().into());
+        }
+        points.push(segment.end().into());
+        match segment {
+            PathSeg::Line(line) => line_segments.push(LineSegmentSpec {
+                start: line.p0.into(),
+                end: line.p1.into(),
+            }),
+            PathSeg::Quad(_) | PathSeg::Cubic(_) => curves.push(segment.to_cubic().into()),
+        }
+    }
+
+    if points.is_empty() {
+        return Err("parallel path fitting produced no visible path".to_string());
+    }
+
+    Ok(CurvePathOutput {
+        length,
+        points,
+        curves,
+        segments: line_segments,
+    })
 }
 
 fn cubic_spline_through_points(points: &[CurvePoint]) -> Vec<CubicBezierSpec> {
@@ -971,6 +1068,43 @@ mod tests {
         assert_eq!(output.start.y, 0.0);
         assert!((output.end.x - 2.5).abs() < 1e-6);
         assert_eq!(output.end.y, 0.0);
+    }
+
+    #[test]
+    fn parallel_cubic_offsets_straight_curve_to_left_normal() {
+        let output = parallel_cubic(ParallelCubicSpec {
+            curve: CubicBezierSpec {
+                start: point(0.0, 0.0),
+                ctrl_a: point(1.0, 0.0),
+                ctrl_b: point(2.0, 0.0),
+                end: point(3.0, 0.0),
+            },
+            distance: 0.5,
+            accuracy: 1e-6,
+            optimize: true,
+        })
+        .unwrap();
+
+        assert!(output.points.len() >= 2);
+        assert!((output.points.first().unwrap().x - 0.0).abs() < 1e-6);
+        assert!((output.points.first().unwrap().y - 0.5).abs() < 1e-6);
+        assert!((output.points.last().unwrap().x - 3.0).abs() < 1e-6);
+        assert!((output.points.last().unwrap().y - 0.5).abs() < 1e-6);
+        assert!(!output.curves.is_empty() || !output.segments.is_empty());
+    }
+
+    #[test]
+    fn parallel_cubic_accepts_negative_distance() {
+        let output = parallel_cubic(ParallelCubicSpec {
+            curve: straight_curve(3.0),
+            distance: -0.25,
+            accuracy: 1e-6,
+            optimize: false,
+        })
+        .unwrap();
+
+        assert!((output.points.first().unwrap().y + 0.25).abs() < 1e-6);
+        assert!((output.points.last().unwrap().y + 0.25).abs() < 1e-6);
     }
 
     fn straight_curve(length: f64) -> CubicBezierSpec {
