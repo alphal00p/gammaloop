@@ -106,6 +106,34 @@ impl<'a, K, FK, Aind> NetworkOperationRef<'a, K, FK, Aind> {
         self.children.len()
     }
 }
+#[derive(Debug, Clone)]
+pub struct NetworkOperationBatchRef<'a, K, FK = i8, Aind = AbstractIndex> {
+    operations: Vec<NetworkOperationRef<'a, K, FK, Aind>>,
+    subgraph: SuBitGraph,
+}
+
+impl<'a, K, FK, Aind> NetworkOperationBatchRef<'a, K, FK, Aind> {
+    pub fn operations(&self) -> &[NetworkOperationRef<'a, K, FK, Aind>] {
+        &self.operations
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &NetworkOperationRef<'a, K, FK, Aind>> {
+        self.operations.iter()
+    }
+
+    pub fn subgraph(&self) -> &SuBitGraph {
+        &self.subgraph
+    }
+
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.operations.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NetworkOperationReadiness {
     pub node_count: usize,
@@ -820,6 +848,30 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         ready
     }
 
+    pub fn ready_operation_batch(&self) -> NetworkOperationBatchRef<'_, K, FK, Aind> {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.ready_operation_batch_ignoring(&hidden)
+    }
+
+    pub fn ready_operation_batch_ignoring<S>(
+        &self,
+        hidden: &S,
+    ) -> NetworkOperationBatchRef<'_, K, FK, Aind>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let operations = self.ready_operation_refs_ignoring(hidden);
+        let mut subgraph: SuBitGraph = self.graph.empty_subgraph();
+        for op_ref in &operations {
+            subgraph.union_with(op_ref.subgraph());
+        }
+
+        NetworkOperationBatchRef {
+            operations,
+            subgraph,
+        }
+    }
+
     fn ready_operation_parts_ignoring<'a, S>(
         &'a self,
         node: NodeIndex,
@@ -864,11 +916,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     .is_some()
             })
             .count();
-        let ready_batch = self.ready_operation_refs_ignoring(hidden);
-        let mut batched_subgraph: SuBitGraph = self.graph.empty_subgraph();
-        for op_ref in &ready_batch {
-            batched_subgraph.union_with(op_ref.subgraph());
-        }
+        let ready_batch = self.ready_operation_batch_ignoring(hidden);
 
         NetworkOperationReadiness {
             node_count: self.graph.n_nodes(),
@@ -877,7 +925,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             cached_expression_node_count: cached_expression_nodes.len(),
             ready_operation_count,
             batched_operation_count: ready_batch.len(),
-            batched_subgraph_hedge_count: batched_subgraph.n_included(),
+            batched_subgraph_hedge_count: ready_batch.subgraph().n_included(),
         }
     }
 
@@ -2385,5 +2433,44 @@ pub mod test {
         assert_eq!(op_ref.op(), &op);
         assert_eq!(op_ref.leaf_count(), extracted_leaf_count);
         assert_eq!(extracted.n_nodes(), op_ref.leaf_count() + 1);
+    }
+
+    #[test]
+    fn ready_operation_batch_carries_parallel_scheduler_subgraph() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let mut expr = (tensor_a + tensor_b) * (scalar + scalar_b);
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let batch = expr.ready_operation_batch();
+        assert_eq!(batch.len(), 2);
+        assert!(!batch.is_empty());
+        assert_eq!(batch.operations().len(), batch.len());
+
+        let mut union: SuBitGraph = expr.graph.empty_subgraph();
+        for op_ref in batch.iter() {
+            assert!(op_ref.subgraph().empty_intersection(&union));
+            union.union_with(op_ref.subgraph());
+        }
+
+        assert_eq!(batch.subgraph(), &union);
     }
 }
