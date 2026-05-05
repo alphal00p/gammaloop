@@ -27,11 +27,3 @@ impl TestReps {
         }
     }
 }
-
-macro_rules! assert_bare_snapshot {
-    ($expr:expr, @$snapshot:literal) => {
-        insta::assert_snapshot!($expr.to_bare_ordered_string(), @$snapshot)
-    };
-}
-
-pub(crate) use assert_bare_snapshot;
