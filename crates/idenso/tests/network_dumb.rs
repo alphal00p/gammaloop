@@ -240,6 +240,11 @@ fn cleanup_with_smallest_degree(mut result: Atom) -> Atom {
     result
 }
 
+fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
+    let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
+    print_three_vertex_method(name, out, &dummies);
+}
+
 #[test]
 fn min_product_terms_three_vertex_residual_mu9() {
     let (r, dummies) = substituted_three_vertex_reproducer();
@@ -250,6 +255,161 @@ fn min_product_terms_three_vertex_residual_mu9() {
     );
 
     assert_eq!(residual_dummy_names(&out, &dummies), ["mu9"]);
+}
+
+#[test]
+fn compare_two_slot_boundary_shapes() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
+
+    let mu1: Atom = mu1.into();
+    let mu9: Atom = mu9.into();
+    let settings = SchoonschipSettings::partial()
+        .with_expanded_contracted_sums()
+        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+
+    let cases = [
+        (
+            "sum side scalar metric terms times simple target sum",
+            parse!(
+                "(a * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+                   + b * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9)))
+                 * (spenso::g(k(2), spenso::mink(4,mu1))
+                   * spenso::g(k(3), spenso::mink(4,mu9))
+                   + spenso::g(k(4), spenso::mink(4,mu1))
+                   * spenso::g(k(5), spenso::mink(4,mu9)))"
+            ),
+        ),
+        (
+            "metric times simple vector product",
+            parse!(
+                "spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+                 * spenso::g(k(0), spenso::mink(4,mu1))
+                 * spenso::g(k(1), spenso::mink(4,mu9))"
+            ),
+        ),
+        (
+            "metric times vector product with summed momenta",
+            parse!(
+                "spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+                 * spenso::g(k(0)-k(1), spenso::mink(4,mu1))
+                 * spenso::g(k(1)-k(0), spenso::mink(4,mu9))"
+            ),
+        ),
+        (
+            "sum side metric term times simple target sum",
+            parse!(
+                "(spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+                   + spenso::g(k(0), spenso::mink(4,mu1))
+                     * spenso::g(k(1), spenso::mink(4,mu9)))
+                 * (spenso::g(k(2), spenso::mink(4,mu1))
+                   * spenso::g(k(3), spenso::mink(4,mu9))
+                   + spenso::g(k(4), spenso::mink(4,mu1))
+                   * spenso::g(k(5), spenso::mink(4,mu9)))"
+            ),
+        ),
+        (
+            "sum side metric term times summed-momentum target sum",
+            parse!(
+                "(spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+                   + spenso::g(k(0), spenso::mink(4,mu1))
+                     * spenso::g(k(1), spenso::mink(4,mu9)))
+                 * (spenso::g(k(2)-k(3), spenso::mink(4,mu1))
+                   * spenso::g(k(3)-k(2), spenso::mink(4,mu9))
+                   + spenso::g(k(4)-k(5), spenso::mink(4,mu1))
+                   * spenso::g(k(5)-k(4), spenso::mink(4,mu9)))"
+            ),
+        ),
+    ];
+
+    println!("\ntwo-slot contraction boundary shape comparison");
+    for (name, expr) in cases {
+        print_two_dummy_method(
+            &format!("{name} / normalize_dots"),
+            expr.normalize_dots(),
+            &mu1,
+            &mu9,
+        );
+        print_two_dummy_method(
+            &format!("{name} / network"),
+            expr.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &mu1,
+            &mu9,
+        );
+        print_two_dummy_method(
+            &format!("{name} / expanded-input network"),
+            expr.expand()
+                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &mu1,
+            &mu9,
+        );
+    }
+}
+
+#[test]
+fn metric_sum_boundary_leaves_residual_because_normalize_dots_is_too_weak() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
+
+    let mu1: Atom = mu1.into();
+    let mu9: Atom = mu9.into();
+    let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
+    let settings = SchoonschipSettings::partial()
+        .with_expanded_contracted_sums()
+        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+
+    let target_after_metric_identification = parse!(
+        "spenso::g(k(2), spenso::mink(4,mu9))
+         * spenso::g(k(3), spenso::mink(4,mu9))
+         + spenso::g(k(4), spenso::mink(4,mu9))
+         * spenso::g(k(5), spenso::mink(4,mu9))"
+    );
+    assert_eq!(
+        residual_dummy_names(
+            &target_after_metric_identification.normalize_dots(),
+            &dummies
+        ),
+        ["mu9"]
+    );
+    assert!(
+        residual_dummy_names(
+            &target_after_metric_identification
+                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &dummies
+        )
+        .is_empty()
+    );
+
+    let boundary_expression = parse!(
+        "(a * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+           + b * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9)))
+         * (spenso::g(k(2), spenso::mink(4,mu1))
+           * spenso::g(k(3), spenso::mink(4,mu9))
+           + spenso::g(k(4), spenso::mink(4,mu1))
+           * spenso::g(k(5), spenso::mink(4,mu9)))"
+    );
+    assert_eq!(
+        residual_dummy_names(
+            &boundary_expression.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &dummies
+        ),
+        ["mu9"]
+    );
+    assert!(
+        residual_dummy_names(
+            &boundary_expression
+                .expand()
+                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &dummies
+        )
+        .is_empty()
+    );
 }
 
 #[test]
