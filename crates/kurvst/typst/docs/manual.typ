@@ -148,6 +148,7 @@ Typst:
 - trimming cubic Beziers by arc length,
 - constructing smooth Hobby curves through a control point,
 - generating sampled path patterns,
+- fitting Kurbo offset/parallel paths for cubic Beziers,
 - converting returned geometry to CeTZ drawing commands.
 
 All points are dictionaries with numeric `x` and `y` fields:
@@ -238,6 +239,21 @@ visible points inside the turn near nodes.
   wavelength: 0.7,
 )
 #native-pattern-path(path, base: segment)
+```
+
+== Parallel Paths
+
+`parallel-cubic` and `parallel-segment` use Kurbo's cubic offset curve fitter
+to produce a path at a fixed normal distance from the source cubic. Positive
+distances follow the left normal of the cubic direction; negative distances
+follow the right normal. The output has the same drawable shape as pattern
+paths: `points`, fitted cubic `curves`, straight `segments`, and `length`.
+
+```typ
+#let left = kurvst.parallel-segment(segment, distance: 0.18)
+#let right = kurvst.parallel-segment(segment, distance: -0.18)
+#native-pattern-path(left, base: segment)
+#native-pattern-path(right, base: segment)
 ```
 
 == Native Drawing Primitives
