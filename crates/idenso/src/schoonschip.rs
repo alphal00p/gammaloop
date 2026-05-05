@@ -393,7 +393,7 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
             return None;
         }
 
-        sum += product_excluding(&factors, &consumed) * target.normalize_dots();
+        sum += (product_excluding(&factors, &consumed) * target).schoonschip();
     }
 
     Some(sum)
