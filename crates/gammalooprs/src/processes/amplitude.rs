@@ -1165,7 +1165,7 @@ impl AmplitudeGraph {
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            for (_index, integrand) in &counterterm_atom.parametric {
+            for integrand in counterterm_atom.parametric.values() {
                 debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
             }
 

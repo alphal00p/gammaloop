@@ -119,7 +119,7 @@ impl CutForests {
                 "Orientation Parametric integrand {i}",
             );
             if !settings.keep_sigma {
-                integrands.iter_mut().for_each(|(index, s)| {
+                integrands.values_mut().for_each(|s| {
                     *s = s
                         .replace(function!(GS.if_sigma, W_.a___))
                         .with(Atom::num(1))
@@ -334,13 +334,12 @@ impl Forest {
 
             let sum = sum.as_mut().unwrap();
 
-            for (i, (cut_index, integrand)) in n
+            for (cut_index, integrand) in n
                 .data
                 .final_integrand
                 .as_ref()
                 .ok_or(eyre!("Final integrand not computed"))?
                 .iter()
-                .enumerate()
             {
                 let a = if add_sigma {
                     debug_tags!(#generation, #uv, #graph, #orientation, #inspect;
@@ -384,12 +383,12 @@ impl Forest {
                 continue;
             }
 
-            for (index, s) in &mut sum {
+            for s in &mut sum.values_mut() {
                 *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
             }
         }
 
-        for (index, s) in &mut sum {
+        for s in &mut sum.values_mut() {
             *s = s.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_);
             // .collect_factors(); Really bad ! Turns
         }
