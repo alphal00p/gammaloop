@@ -1851,52 +1851,11 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let mut edge_style_content = String::new();
         edge_style_content.push_str(
-            r#"#import "@preview/mitex:0.2.6": *
+            r#"#import "physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, wave, coil, zigzag, default-edge, style
 
-#let massive = 1.0pt
-#let massless = 0.55pt
-#let dashed = (0.1em, 0.45em)
-#let dotted = "dotted"
-
-#let stroke-style(c: black, thickness: massless, dash: none) = {
-  let stroke = (paint: c, thickness: thickness, cap: "round")
-  if dash == none {
-    (stroke: stroke)
-  } else {
-    (stroke: stroke + (dash: dash))
-  }
-}
-
-#let source-stroke(c: black, thickness: massless, dash: none) = {
-  stroke-style(c: c, thickness: thickness, dash: dash)
-}
-
-#let sink-stroke(c: black, thickness: massless, dash: none) = {
-  stroke-style(c: c.lighten(45%), thickness: thickness, dash: dash)
-}
-
-#let wave = (
-  pattern: "wave",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
-)
-#let coil = (
-  pattern: "coil",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
-  pattern-coil-longitudinal-scale: 1.6,
-)
-#let zigzag = (
-  pattern: "zigzag",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
-)
-#let default-edge = (
-  source: source-stroke(),
-  sink: sink-stroke(),
-  label: none,
-)
-// Auto-generated particle styles from model (computed in Rust)
+// Auto-generated particle styles from model (computed in Rust). The reusable
+// physics drawing callbacks live in physics-edge-style.typ; this file only
+// supplies the model-specific particle map and GammaLoop-compatible wrappers.
 #let map = (
 "#,
         );
@@ -1914,122 +1873,19 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         edge_style_content.push_str(
             r#")
 
-#let particle-name(edge) = {
-  let particle = edge.at("particle", default: none)
-  if particle == none {
-    none
-  } else {
-    str(particle).trim("\"")
-  }
+#let source-style(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.source-style)(edge)
 }
 
-#let edge-entry(edge) = {
-  let particle = particle-name(edge)
-  if particle == none {
-    default-edge
-  } else {
-    map.at(particle, default: default-edge)
-  }
+#let sink-style(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.sink-style)(edge)
 }
 
-#let eval-scope = (
-  mi: mi,
-  massive: massive,
-  massless: massless,
-  dashed: dashed,
-  dotted: dotted,
-  stroke-style: stroke-style,
-  source-stroke: source-stroke,
-  sink-stroke: sink-stroke,
-  wave: wave,
-  coil: coil,
-  zigzag: zigzag,
-  default-edge: default-edge,
-  map: map,
-)
-
-#let text-value(value) = str(value).trim("\"")
-
-#let interpolate-template(template, edge) = {
-  if template == none {
-    none
-  } else {
-    let text = text-value(template)
-    text = text.replace("{{", "\u{e000}").replace("}}", "\u{e001}")
-    for key in edge.keys() {
-      let value = edge.at(key)
-      if value != none {
-        text = text.replace("{" + str(key) + "}", text-value(value))
-      }
-    }
-    text.replace("\u{e000}", "{").replace("\u{e001}", "}")
-  }
-}
-
-#let eval-template(template, edge) = eval(interpolate-template(template, edge), scope: eval-scope + edge)
-
-#let _assert-typst-fields-mode(mode) = {
-  if mode != "plain" and mode != "eval" {
-    panic("typst-fields must be \"plain\" or \"eval\"")
-  }
-}
-
-#let label-content(value, edge, mode: "plain") = {
-  _assert-typst-fields-mode(mode)
-  if value == none {
-    none
-  } else if type(value) == content {
-    value
-  } else {
-    let text = interpolate-template(value, edge)
-    if mode == "eval" {
-      eval(text, scope: eval-scope + edge)
-    } else {
-      [#text]
-    }
-  }
-}
-
-#let style-dict(value, edge, mode: "plain") = {
-  _assert-typst-fields-mode(mode)
-  if value == none {
-    (:)
-  } else if type(value) == dictionary {
-    value
-  } else if mode == "eval" {
-    eval-template(value, edge)
-  } else {
-    (:)
-  }
-}
-
-#let source-style(edge, typst-fields: "plain") = {
-  let style = edge-entry(edge).source
-  style = style + style-dict(edge.at("source-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("source-style-eval", default: none), edge, mode: "eval")
-}
-
-#let sink-style(edge, typst-fields: "plain") = {
-  let style = edge-entry(edge).sink
-  style = style + style-dict(edge.at("sink-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("sink-style-eval", default: none), edge, mode: "eval")
-}
-
-#let edge-label(edge, typst-fields: "plain") = {
-  let label-eval = edge.at("label-eval", default: none)
-  if label-eval != none {
-    label-content(label-eval, edge, mode: "eval")
-  } else {
-    let label-template = edge.at(
-      "display-label",
-      default: edge.at("label-template", default: edge.at("label", default: none)),
-    )
-    if label-template != none {
-      label-content(label-template, edge, mode: typst-fields)
-    } else {
-      label-content(edge-entry(edge).label, edge)
-    }
-  }
+#let edge-label(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.edge-label)(edge)
 }
 "#,
         );

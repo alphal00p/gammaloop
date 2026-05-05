@@ -1,6 +1,7 @@
 #import "graph.typ" as graph-module
 #import "subgraph.typ" as subgraph-module
 #import "curve.typ" as curve-module
+#import "physics-edge-style.typ" as physics-edge-style-module
 #import "draw.typ": draw
 
 #let _plugin = plugin("../linnest.wasm")
@@ -186,6 +187,12 @@
 /// Helpers for splitting and drawing Bezier edge geometry.
 /// -> module
 #let curve = curve-module
+
+/// Physics edge-style namespace.
+///
+/// Reusable particle-line styles and callbacks for diagrams drawn with `draw`.
+/// -> module
+#let physics = physics-edge-style-module
 
 /// Subgraph namespace.
 ///

@@ -132,6 +132,7 @@
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
           ./crates/clinnet/templates/linnest.typ
+          ./crates/clinnet/templates/physics-edge-style.typ
           ./crates/clinnet/templates/subgraph.typ
         ];
       };
