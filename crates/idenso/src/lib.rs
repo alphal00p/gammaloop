@@ -42,6 +42,7 @@ pub mod tensor;
 pub mod chain;
 pub mod color;
 pub mod dirac;
+pub mod epsilon;
 pub mod metric;
 pub mod parsing_ind;
 #[cfg(feature = "python")]
