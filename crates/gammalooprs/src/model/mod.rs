@@ -1932,6 +1932,22 @@ n_couplings = format!("{}", self.couplings.len()).green(),
   }
 }
 
+#let eval-scope = (
+  mi: mi,
+  massive: massive,
+  massless: massless,
+  dashed: dashed,
+  dotted: dotted,
+  stroke-style: stroke-style,
+  source-stroke: source-stroke,
+  sink-stroke: sink-stroke,
+  wave: wave,
+  coil: coil,
+  zigzag: zigzag,
+  default-edge: default-edge,
+  map: map,
+)
+
 #let text-value(value) = str(value).trim("\"")
 
 #let interpolate-template(template, edge) = {
@@ -1950,26 +1966,69 @@ n_couplings = format!("{}", self.couplings.len()).green(),
   }
 }
 
-#let label-content(value, edge) = {
+#let eval-template(template, edge) = eval(interpolate-template(template, edge), scope: eval-scope + edge)
+
+#let _assert-typst-fields-mode(mode) = {
+  if mode != "plain" and mode != "eval" {
+    panic("typst-fields must be \"plain\" or \"eval\"")
+  }
+}
+
+#let label-content(value, edge, mode: "plain") = {
+  _assert-typst-fields-mode(mode)
   if value == none {
     none
   } else if type(value) == content {
     value
   } else {
-    [#interpolate-template(value, edge)]
+    let text = interpolate-template(value, edge)
+    if mode == "eval" {
+      eval(text, scope: eval-scope + edge)
+    } else {
+      [#text]
+    }
   }
 }
 
-#let source-style(edge) = edge-entry(edge).source
-#let sink-style(edge) = edge-entry(edge).sink
-#let edge-label(edge) = {
-  let label-template = edge.at("display-label", default: edge.at("label-template", default: none))
-  if label-template != none {
-    label-content(label-template, edge)
-  } else if edge.at("label", default: none) != none {
-    label-content(edge.at("label"), edge)
+#let style-dict(value, edge, mode: "plain") = {
+  _assert-typst-fields-mode(mode)
+  if value == none {
+    (:)
+  } else if type(value) == dictionary {
+    value
+  } else if mode == "eval" {
+    eval-template(value, edge)
   } else {
-    label-content(edge-entry(edge).label, edge)
+    (:)
+  }
+}
+
+#let source-style(edge, typst-fields: "plain") = {
+  let style = edge-entry(edge).source
+  style = style + style-dict(edge.at("source-style", default: none), edge, mode: typst-fields)
+  style + style-dict(edge.at("eval-source", default: none), edge, mode: "eval")
+}
+
+#let sink-style(edge, typst-fields: "plain") = {
+  let style = edge-entry(edge).sink
+  style = style + style-dict(edge.at("sink-style", default: none), edge, mode: typst-fields)
+  style + style-dict(edge.at("eval-sink", default: none), edge, mode: "eval")
+}
+
+#let edge-label(edge, typst-fields: "plain") = {
+  let eval-label = edge.at("eval-label", default: none)
+  if eval-label != none {
+    label-content(eval-label, edge, mode: "eval")
+  } else {
+    let label-template = edge.at(
+      "display-label",
+      default: edge.at("label-template", default: edge.at("label", default: none)),
+    )
+    if label-template != none {
+      label-content(label-template, edge, mode: typst-fields)
+    } else {
+      label-content(edge-entry(edge).label, edge)
+    }
   }
 }
 "#,
