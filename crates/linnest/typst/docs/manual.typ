@@ -147,6 +147,15 @@ edge index:
 #draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
+Set `edge-parallel-distance` on `draw`, or `parallel-distance` in a
+`source-style`/`sink-style` dictionary, to draw a fitted parallel path. The
+parallel path is applied to the base edge geometry before patterns and other
+decorations; node outsets then trim the shifted path, so shifted paths still
+start and end outside fitted node circles. Add `edge-parallel-length` or
+`parallel-length` to center-trim the shifted path to a fixed arc length, and
+add `edge-parallel-ratio` or `parallel-ratio` to cap it by a fraction of the
+base edge length. When both are set, the shorter visible length wins.
+
 The builder keeps `source-style-eval`, `sink-style-eval`, and `label-eval` as
 ordinary kebab-case edge metadata for downstream renderers or DOT export. They
 can be set as direct arguments on `graph.build`, `graph.builder`, or
