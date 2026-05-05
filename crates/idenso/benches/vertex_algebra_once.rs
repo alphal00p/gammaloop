@@ -82,6 +82,12 @@ fn main() {
         report("bare_vertex_substitution_5", start, &result);
     }
 
+    if selected(&filter, "bare_vertex_substitution_6") {
+        let start = Instant::now();
+        let result = common::bare_vertex_substitution(common::bare_vertex_fixture_6());
+        report("bare_vertex_substitution_6", start, &result);
+    }
+
     if selected(&filter, "bare_vertex_substitution_8") {
         let start = Instant::now();
         let result = common::bare_vertex_substitution(common::bare_vertex_fixture_8());
@@ -104,15 +110,13 @@ fn main() {
                 )),
                 order,
             );
-            if vertex_count == 8 {
-                let residual = common::residual_network_internal_indices(&result, vertex_count);
-                if residual.is_empty() {
-                    println!("network_full_algebra_8 residual_internal_indices=[]");
-                } else {
-                    println!("network_full_algebra_8 residual_internal_indices={residual:?}");
-                    if assert_full_simplification {
-                        panic!("internal indices remained: {residual:?}");
-                    }
+            let residual = common::residual_network_internal_indices(&result, vertex_count);
+            if residual.is_empty() {
+                println!("{name} residual_internal_indices=[]");
+            } else {
+                println!("{name} residual_internal_indices={residual:?}");
+                if assert_full_simplification {
+                    panic!("internal indices remained: {residual:?}");
                 }
             }
             report(&format!("{name}_{}", order_name(order)), start, &result);

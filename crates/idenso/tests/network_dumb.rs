@@ -201,7 +201,7 @@ fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
 }
 
 #[test]
-fn min_product_terms_three_vertex_still_has_residual_after_boundary_cleanup() {
+fn min_product_terms_three_vertex_simplifies_after_boundary_cleanup() {
     initialize();
     let _ = TS.mu1;
     let (r, dummies) = substituted_three_vertex_reproducer();
@@ -212,7 +212,7 @@ fn min_product_terms_three_vertex_still_has_residual_after_boundary_cleanup() {
             .with_contraction_order(SchoonschipContractionOrder::MinProductTerms),
     );
 
-    assert_eq!(residual_dummy_names(&out, &dummies), ["mu9"]);
+    assert!(residual_dummy_names(&out, &dummies).is_empty());
 }
 
 #[test]
@@ -370,6 +370,125 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
         )
         .is_empty()
     );
+}
+
+#[test]
+#[ignore = "diagnostic repro for direct-boundary sum handling"]
+fn direct_boundary_cleanup_rewrites_target_sum_before_expanding() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
+
+    let mu1: Atom = mu1.into();
+    let mu9: Atom = mu9.into();
+    let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
+    let settings = SchoonschipSettings::partial()
+        .with_expanded_contracted_sums()
+        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+
+    let boundary_expression = parse!(
+        "(a * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+          + b * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+          + c * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9)))
+         * (spenso::g(k(2), spenso::mink(4,mu1))
+          * spenso::g(k(3), spenso::mink(4,mu9))
+          + spenso::g(k(4), spenso::mink(4,mu1))
+          * spenso::g(k(5), spenso::mink(4,mu9))
+          + spenso::g(k(6), spenso::mink(4,mu1))
+          * spenso::g(k(7), spenso::mink(4,mu9)))"
+    );
+    let compact_expected = parse!(
+        "(a + b + c)
+         * (spenso::g(k(2, spenso::mink(4)), k(3, spenso::mink(4)))
+          + spenso::g(k(4, spenso::mink(4)), k(5, spenso::mink(4)))
+          + spenso::g(k(6, spenso::mink(4)), k(7, spenso::mink(4))))"
+    );
+
+    let out = boundary_expression.schoonschip_with_net::<false, AbstractIndex>(&settings);
+    let expanded_expected = compact_expected.expand().schoonschip();
+
+    println!(
+        "direct-boundary term handling: compact_terms={} expanded_terms={} network_terms={} network_bytes={}",
+        compact_expected.nterms(),
+        expanded_expected.nterms(),
+        out.nterms(),
+        out.as_view().get_byte_size()
+    );
+
+    assert!(residual_dummy_names(&out, &dummies).is_empty());
+    assert_eq!(compact_expected.nterms(), 1);
+    assert_eq!(expanded_expected.nterms(), 9);
+    assert_eq!(out.nterms(), 3);
+    assert!(out.nterms() < expanded_expected.nterms());
+}
+
+#[test]
+#[ignore = "minimal repro for multi-slot direct-boundary cleanup"]
+fn multi_slot_boundary_mwe_needs_target_boundary_expansion() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (mu1, mu2, mu3) = symbol!("mu1", "mu2", "mu3"; tags=["spenso::index"]);
+    symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
+
+    let dummies = [
+        ("mu1", Atom::from(mu1)),
+        ("mu2", Atom::from(mu2)),
+        ("mu3", Atom::from(mu3)),
+    ];
+    let settings = SchoonschipSettings::partial()
+        .with_expanded_contracted_sums()
+        .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
+
+    let target_after_direct_replacements = parse!(
+        "(spenso::g(k(10), spenso::mink(4,mu2))
+          + spenso::g(k(11), spenso::mink(4,mu2)))
+         * (spenso::g(k(20), spenso::mink(4,mu2))
+          + spenso::g(k(21), spenso::mink(4,mu2)))
+         * (spenso::g(k(30), k(0, spenso::mink(4)))
+          + spenso::g(k(31), k(0, spenso::mink(4))))"
+    );
+    let compact_target_cleanup = target_after_direct_replacements.schoonschip();
+    let expanded_target_cleanup = target_after_direct_replacements.expand().schoonschip();
+
+    print_three_vertex_method(
+        "mwe target after direct replacements / compact cleanup",
+        compact_target_cleanup.clone(),
+        &dummies,
+    );
+    print_three_vertex_method(
+        "mwe target after direct replacements / expanded cleanup",
+        expanded_target_cleanup.clone(),
+        &dummies,
+    );
+
+    let boundary_expression = parse!(
+        "spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu2))
+         * spenso::g(k(0), spenso::mink(4,mu3))
+         * (spenso::g(k(10), spenso::mink(4,mu1))
+          + spenso::g(k(11), spenso::mink(4,mu1)))
+         * (spenso::g(k(20), spenso::mink(4,mu2))
+          + spenso::g(k(21), spenso::mink(4,mu2)))
+         * (spenso::g(k(30), spenso::mink(4,mu3))
+          + spenso::g(k(31), spenso::mink(4,mu3)))"
+    );
+    let network_cleanup =
+        boundary_expression.schoonschip_with_net::<false, AbstractIndex>(&settings);
+
+    print_three_vertex_method(
+        "mwe full boundary / network cleanup",
+        network_cleanup.clone(),
+        &dummies,
+    );
+
+    assert_eq!(
+        residual_dummy_names(&compact_target_cleanup, &dummies),
+        ["mu2"]
+    );
+    assert!(residual_dummy_names(&expanded_target_cleanup, &dummies).is_empty());
+    assert!(residual_dummy_names(&network_cleanup, &dummies).is_empty());
 }
 
 #[test]

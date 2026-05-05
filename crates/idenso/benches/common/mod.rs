@@ -176,6 +176,10 @@ pub fn bare_vertex_fixture_5() -> BareVertexFixture {
     bare_vertex_fixture(5)
 }
 
+pub fn bare_vertex_fixture_6() -> BareVertexFixture {
+    bare_vertex_fixture(6)
+}
+
 pub fn bare_vertex_fixture_8() -> BareVertexFixture {
     bare_vertex_fixture(8)
 }
@@ -195,6 +199,14 @@ fn bare_vertex_fixture(vertex_count: usize) -> BareVertexFixture {
             vx(3,-k2, k3, k2-k3, mu2, mu3, mu10)
             vx(4,-k3, k4, k3-k4, mu3, mu4, mu11)
             vx(5,-k4, k0, k4-k0, mu4, k20, mu5)"
+        ),
+        6 => parse!(
+            "vx(1,-k0, k0-k1, k1, k10, mu1, mu8)
+            vx(2,-k1, k2, k1-k2, mu1, mu2, mu9)
+            vx(3,-k2, k3, k2-k3, mu2, mu3, mu10)
+            vx(4,-k3, k4, k3-k4, mu3, mu4, mu11)
+            vx(5,-k4, k0, k4-k0, mu4, k20, mu5)
+            vx(6,-k4+k0, -k3+k4, k3-k0, mu5, mu11, mu6)"
         ),
         8 => parse!(
             "vx(1,-k0, k0-k1, k1, k10, mu1, mu8)
