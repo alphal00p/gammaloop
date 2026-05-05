@@ -50,8 +50,76 @@ impl SpensoTags {
         Self {
             chain_in: symbol!("in"),
             chain_out: symbol!("out"),
-            chain: symbol!("chain"),
-            trace: symbol!("trace"),
+            chain: symbol!(
+                "chain",
+                print = |a, opt| {
+                    match opt.custom_print_mode {
+                        Some(("spenso", i)) => {
+                            let SpensoPrintSettings { parens, .. } = SpensoPrintSettings::from(i);
+
+                            let AtomView::Fun(f) = a else {
+                                return None;
+                            };
+
+                            let mut args = f.iter();
+
+                            let in_index = args.next().unwrap();
+                            let out_index = args.next().unwrap();
+
+                            let mut s = String::new();
+                            in_index.format(&mut s, opt, PrintState::new()).unwrap();
+                            if parens {
+                                s.push('[');
+                            }
+                            for a in args {
+                                a.format(&mut s, opt, PrintState::new()).unwrap();
+                            }
+                            if parens {
+                                s.push(']');
+                            }
+                            out_index.format(&mut s, opt, PrintState::new()).unwrap();
+                            Some(s)
+                        }
+                        _ => None,
+                    }
+                }
+            ),
+            trace: symbol!(
+                "trace",
+                print = |a, opt| {
+                    match opt.custom_print_mode {
+                        Some(("spenso", i)) => {
+                            let SpensoPrintSettings {
+                                parens, with_dim, ..
+                            } = SpensoPrintSettings::from(i);
+
+                            let AtomView::Fun(f) = a else {
+                                return None;
+                            };
+
+                            let mut args = f.iter();
+
+                            let rep = args.next().unwrap();
+
+                            let mut s = String::from("Tr");
+                            if with_dim {
+                                rep.format(&mut s, opt, PrintState::new()).unwrap();
+                            }
+                            if parens {
+                                s.push('(');
+                            }
+                            for a in args {
+                                a.format(&mut s, opt, PrintState::new()).unwrap();
+                            }
+                            if parens {
+                                s.push(')');
+                            }
+                            Some(s)
+                        }
+                        _ => None,
+                    }
+                }
+            ),
             rank1_: symbol!("rank1_", tags = [&tensor, &rank1]),
             bracket: symbol!("bracket"),
             pure_scalar: symbol!("pure_scalar"),
