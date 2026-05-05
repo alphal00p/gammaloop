@@ -185,45 +185,26 @@ impl Local3DApproximation {
                 .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
         }
 
-        // (re-)expand OSEs from the subgraph only
+        // Canonicalize OSEs from the current subgraph so nested t operations can rescale them
+        // without keeping edge labels or momentum arguments that would block degenerate limits
         for (_, eid, _) in graph.iter_edges_of(current.subgraph()) {
             let eid = usize::from(eid) as i64;
-            // rescale the whole OSE so that the function itself has no poles during the expansion
             atomarg = atomarg
                 .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_))
-                .with(
-                    function!(
-                        GS.ose,
-                        eid,
-                        W_.mom_,
-                        GS.m_uv * GS.m_uv,
-                        (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
-                            - GS.m_uv * GS.m_uv)
-                            / GS.rescale
-                            / GS.rescale
-                    ) * GS.rescale
-                        * GS.rescale,
-                )
-                .replace(function!(GS.ose, eid, W_.mom_, W_.a___)) //rescale the momenta for the same reason
-                .with_map(move |m| {
-                    let mut f = FunctionBuilder::new(GS.ose);
-                    f = f.add_arg(eid);
-                    f = f.add_arg(
-                        (m.get(W_.mom_)
-                            .unwrap()
-                            .to_atom()
-                            .replace(GS.rescale)
-                            .with(Atom::num(1) / GS.rescale)
-                            * GS.rescale)
-                            .expand()
-                            .replace(GS.rescale)
-                            .with(Atom::Zero),
-                    );
-                    f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-
-                    f.finish()
-                });
+                .with(function!(GS.ose, W_.mass_, W_.prop_));
         }
+
+        // Rescale canonical OSEs so their arguments have a regular UV series
+        atomarg = atomarg.replace(function!(GS.ose, W_.mass_, W_.prop_)).with(
+            function!(
+                GS.ose,
+                GS.m_uv * GS.m_uv,
+                (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_ - GS.m_uv * GS.m_uv)
+                    / GS.rescale
+                    / GS.rescale
+            ) * GS.rescale
+                * GS.rescale,
+        );
 
         atomarg = (atomarg
             * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
@@ -235,7 +216,7 @@ impl Local3DApproximation {
 
         let mut a = a
             .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
+            .replace(parse!("der(0,1, OSE(y__))"))
             .with(Atom::num(1))
             .replace(parse!("der(x__, OSE(y__))"))
             .with(Atom::num(0));
