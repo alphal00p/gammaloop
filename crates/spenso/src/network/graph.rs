@@ -613,6 +613,47 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         None
     }
 
+    pub fn cache_expr_tree_roots(&mut self) -> usize {
+        let tt: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree().cast();
+        let head = self.head();
+        let root_node = self.graph.node_id(head);
+        let new_roots = tt
+            .iter_preorder_tree_nodes(&self.graph, root_node)
+            .map(|node| tt.root_hedge(node).into())
+            .collect::<Vec<_>>();
+
+        self.graph.node_store.reroot_many(new_roots)
+    }
+
+    pub fn cached_expr_children(&self, node: NodeIndex) -> Vec<NodeIndex> {
+        let mut children = self
+            .graph
+            .iter_crown(node)
+            .filter_map(|hedge| {
+                if self.graph[[&hedge]].is_slot() {
+                    return None;
+                }
+
+                let other = self.graph.inv(hedge);
+                if other == hedge {
+                    return None;
+                }
+
+                let other_node = self.graph.node_id(other);
+                if other_node == node {
+                    return None;
+                }
+
+                (self.graph.node_store.root_hedge_for_node(other_node) == other)
+                    .then_some(other_node)
+            })
+            .collect::<Vec<_>>();
+
+        children.sort();
+        children.dedup();
+        children
+    }
+
     pub fn sub_expression(&self, nid: NodeIndex) -> Result<SimpleTraversalTree, NetworkGraphError> {
         let include_hedge = self
             .graph
@@ -1759,6 +1800,8 @@ impl<K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Sub<NetworkGraph<K, FK, 
 #[cfg(test)]
 pub mod test {
 
+    use linnet::tree::child_vec::ChildVecStore;
+
     use crate::{
         network::graph::NetworkLeaf,
         structure::{
@@ -1823,6 +1866,44 @@ pub mod test {
         // expr.extract_next_ready_op();
         if let Some((a, _)) = expr.extract_next_ready_op() {
             println!("{}", a.dot());
+        }
+    }
+
+    #[test]
+    fn cached_expr_children_match_traversal_tree_after_root_alignment() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let sum = tensor_a + tensor_b;
+        let mut expr = (sum.clone() * scalar) + (sum * scalar_b);
+        expr.merge_ops();
+
+        expr.cache_expr_tree_roots();
+
+        let tt = expr.expr_tree().cast::<ChildVecStore<()>>();
+        let root_node = expr.graph.node_id(expr.head());
+        for node in tt.iter_preorder_tree_nodes(&expr.graph, root_node) {
+            let mut expected = tt.iter_children(node, &expr.graph).collect::<Vec<_>>();
+            expected.sort();
+            expected.dedup();
+
+            assert_eq!(expr.cached_expr_children(node), expected);
         }
     }
 }
