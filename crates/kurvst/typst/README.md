@@ -1,8 +1,9 @@
 # kurvst
 
 `kurvst` is a Typst package backed by a small Kurbo WebAssembly plugin. It
-provides Bezier splitting, arc-length trimming, Hobby-style edge curves, and
-one-dimensional path patterns that can be emitted as CeTZ drawing commands.
+provides Bezier splitting, arc-length trimming, Hobby-style edge curves,
+parallel paths, and one-dimensional path patterns that can be emitted as CeTZ
+drawing commands.
 
 ```typ
 #import "src/lib.typ" as kurvst
@@ -20,6 +21,8 @@ one-dimensional path patterns that can be emitted as CeTZ drawing commands.
   amplitude: 0.15,
   wavelength: 0.7,
 )
+
+#let parallel = kurvst.parallel-segment(segment, distance: 0.18)
 ```
 
 See `docs/manual.typ` for the full API manual.
