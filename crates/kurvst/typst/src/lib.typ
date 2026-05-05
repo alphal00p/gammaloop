@@ -15,6 +15,11 @@
 }
 
 /// A smooth sinusoidal path pattern.
+///
+/// ```example
+/// #native-pattern-object(kurvst.wave(samples-per-period: 24))
+/// ```
+///
 /// -> dictionary
 #let wave(samples-per-period: 16) = (
   kind: "points",
@@ -24,6 +29,11 @@
 )
 
 /// A straight-segment triangular path pattern.
+///
+/// ```example
+/// #native-pattern-object(kurvst.zigzag())
+/// ```
+///
 /// -> dictionary
 #let zigzag() = (
   kind: "points",
@@ -38,6 +48,11 @@
 )
 
 /// A smooth coil path pattern.
+///
+/// ```example
+/// #native-pattern-object(kurvst.coil(samples-per-period: 24, longitudinal-scale: 1.6))
+/// ```
+///
 /// -> dictionary
 #let coil(samples-per-period: 16, longitudinal-scale: 1.25) = (
   kind: "points",
@@ -68,6 +83,12 @@
 }
 
 /// Move `from` toward `toward` by `distance`, capped before `toward`.
+///
+/// ```example
+/// #let moved = kurvst.outset-point(demo-start, demo-end, distance: 0.65)
+/// #native-outset-demo(demo-start, demo-end, moved)
+/// ```
+///
 /// -> dictionary
 #let outset-point(from, toward, distance: 0) = {
   let dx = toward.x - from.x
@@ -88,6 +109,18 @@
 ///
 /// Returns a dictionary with `curve` and `segments`. Each segment has `start`,
 /// `ctrl-a`, `ctrl-b`, and `end` points.
+///
+/// ```example
+/// #let split = kurvst.split-cubic(
+///   demo-segment.start,
+///   demo-segment.end,
+///   demo-segment.ctrl-a,
+///   demo-segment.ctrl-b,
+///   t: 0.45,
+/// )
+/// #native-split-demo(split)
+/// ```
+///
 /// -> dictionary
 #let split-cubic(start, end, ctrl-a, ctrl-b, t: 0.5) = {
   cbor(_plugin.curve_split_cubic(cbor.encode((
@@ -102,6 +135,19 @@
 /// Trim a cubic Bezier by curve distance from either end.
 ///
 /// Returns the remaining cubic segment after splitting by arc length.
+///
+/// ```example
+/// #let trimmed = kurvst.trim-cubic(
+///   demo-segment.start,
+///   demo-segment.end,
+///   demo-segment.ctrl-a,
+///   demo-segment.ctrl-b,
+///   start-outset: 0.35,
+///   end-outset: 0.3,
+/// )
+/// #native-trim-demo(demo-segment, trimmed)
+/// ```
+///
 /// -> dictionary
 #let trim-cubic(start, end, ctrl-a, ctrl-b, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
   cbor(_plugin.curve_trim_cubic(cbor.encode((
@@ -117,6 +163,18 @@
 
 /// Trim a cubic segment returned by @split-cubic, @split-through, or
 /// @hobby-through by curve distance from either end.
+///
+/// ```example
+/// #let half = kurvst.split-cubic(
+///   demo-segment.start,
+///   demo-segment.end,
+///   demo-segment.ctrl-a,
+///   demo-segment.ctrl-b,
+/// ).segments.at(0)
+/// #let trimmed = kurvst.trim-segment(half, start-outset: 0.25, end-outset: 0.15)
+/// #native-trim-demo(half, trimmed)
+/// ```
+///
 /// -> dictionary
 #let trim-segment(segment, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
   trim-cubic(
@@ -135,6 +193,12 @@
 ///
 /// This is useful for graph edges whose layout point should lie on the smooth
 /// curve between source and sink.
+///
+/// ```example
+/// #let split = kurvst.split-through(demo-start, demo-through, demo-end)
+/// #native-split-demo(split)
+/// ```
+///
 /// -> dictionary
 #let split-through(start, through, end, t: 0.5) = {
   cbor(_plugin.curve_split_quadratic_through(cbor.encode((
@@ -148,6 +212,12 @@
 /// Build an open Hobby curve through `start`, `through`, and `end`.
 ///
 /// Returns a dictionary with two cubic Bezier `segments`, split at `through`.
+///
+/// ```example
+/// #let split = kurvst.hobby-through(demo-start, demo-through, demo-end, omega: 1.2)
+/// #native-split-demo(split)
+/// ```
+///
 /// -> dictionary
 #let hobby-through(start, through, end, omega: 1.0) = {
   cbor(_plugin.curve_hobby_through(cbor.encode((
@@ -165,6 +235,20 @@
 /// `(kind: "points", interpolation: "linear" or "smooth", points: ((at: 0, x: 0, y: 0), ...))`.
 /// The returned dictionary contains `points`, smooth `curves` for smooth
 /// patterns, and straight `segments` in graph coordinates.
+///
+/// ```example
+/// #let path = kurvst.pattern-cubic(
+///   demo-segment.start,
+///   demo-segment.end,
+///   demo-segment.ctrl-a,
+///   demo-segment.ctrl-b,
+///   pattern: kurvst.wave(samples-per-period: 24),
+///   amplitude: 0.14,
+///   wavelength: 0.55,
+/// )
+/// #native-pattern-path(path)
+/// ```
+///
 /// -> dictionary
 #let pattern-cubic(
   start,
@@ -204,6 +288,17 @@
 }
 
 /// Generate a sampled 1D pattern along a cubic segment returned by this module.
+///
+/// ```example
+/// #let path = kurvst.pattern-segment(
+///   demo-segment,
+///   pattern: kurvst.zigzag(),
+///   amplitude: 0.13,
+///   wavelength: 0.55,
+/// )
+/// #native-pattern-path(path)
+/// ```
+///
 /// -> dictionary
 #let pattern-segment(
   segment,
@@ -236,6 +331,13 @@
 
 /// Convert a cubic segment returned by @split-cubic or @split-through into
 /// positional arguments accepted by `cetz.draw.bezier`.
+///
+/// ```example
+/// #cetz.canvas({
+///   cetz.draw.bezier(..kurvst.cetz-args(demo-segment), stroke: black + 0.6pt)
+/// })
+/// ```
+///
 /// -> array
 #let cetz-args(segment, unit: 1) = (
   _point(segment.start, unit: unit),
@@ -245,6 +347,13 @@
 )
 
 /// Draw one cubic segment through CeTZ.
+///
+/// ```example
+/// #cetz.canvas({
+///   kurvst.cetz-bezier(demo-segment, stroke: rgb("#d72638") + 0.6pt)
+/// })
+/// ```
+///
 /// -> content
 #let cetz-bezier(segment, unit: 1, ..style) = {
   cetz.draw.bezier(..cetz-args(segment, unit: unit), ..style)
@@ -263,6 +372,19 @@
 }
 
 /// Draw a sampled pattern returned by @pattern-cubic or @pattern-segment.
+///
+/// ```example
+/// #let path = kurvst.pattern-segment(
+///   demo-segment,
+///   pattern: kurvst.coil(longitudinal-scale: 1.6),
+///   amplitude: 0.12,
+///   wavelength: 0.55,
+/// )
+/// #cetz.canvas({
+///   kurvst.cetz-pattern(path, stroke: rgb("#355c9a") + 0.55pt)
+/// })
+/// ```
+///
 /// -> content
 #let cetz-pattern(path, unit: 1, ..style) = {
   let style = style.named()
@@ -279,6 +401,17 @@
 ///
 /// The returned dictionary has `source`, `sink`, and `curve`. The split point is
 /// the edge layout point, so the two half-edges join smoothly there.
+///
+/// ```example
+/// #let halves = kurvst.edge-halves(
+///   demo-edge,
+///   demo-nodes,
+///   source-outset: 0.2,
+///   sink-outset: 0.2,
+/// )
+/// #native-edge-halves-demo(halves)
+/// ```
+///
 /// -> dictionary
 #let edge-halves(edge, nodes, omega: 1.0, source-outset: 0, sink-outset: 0, accuracy: 0.001) = {
   if edge.source == none or edge.sink == none {
@@ -302,6 +435,20 @@
 ///
 /// `source-style` applies from the source node to the edge layout point, and
 /// `sink-style` applies from the edge layout point to the sink node.
+///
+/// ```example
+/// #cetz.canvas({
+///   kurvst.cetz-edge-halves(
+///     demo-edge,
+///     demo-nodes,
+///     source-outset: 0.2,
+///     sink-outset: 0.2,
+///     source-style: (stroke: rgb("#d72638") + 0.6pt),
+///     sink-style: (stroke: rgb("#355c9a") + 0.6pt),
+///   )
+/// })
+/// ```
+///
 /// -> content
 #let cetz-edge-halves(
   edge,
