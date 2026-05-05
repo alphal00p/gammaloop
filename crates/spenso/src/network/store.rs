@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::profile::{self, Counter, Timer};
+
 pub trait TensorScalarStore: Default + TensorScalarStoreMapping {
     fn add_tensor(&mut self, tensor: Self::Tensor) -> usize;
     fn add_scalar(&mut self, scalar: Self::Scalar) -> usize;
@@ -146,6 +148,8 @@ impl<T, S> TensorScalarStore for NetworkStore<T, S> {
     }
 
     fn extend(&mut self, other: Self) {
+        let _span = profile::span(Timer::StoreExtend);
+        profile::bump(Counter::StoreExtend, 1);
         self.tensors.extend(other.tensors);
         self.scalar.extend(other.scalar);
     }

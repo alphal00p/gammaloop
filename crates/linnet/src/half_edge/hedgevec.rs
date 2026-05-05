@@ -1,4 +1,4 @@
-use std::ops::{Index, IndexMut, Neg};
+use std::ops::{Index, IndexMut, Neg, Range};
 
 use crate::{half_edge::subgraph::SuBitGraph, permutation::Permutation};
 
@@ -7,7 +7,7 @@ use super::{
         EdgeData, EdgeIndex, EdgeVec, EdgeVecIntoIter, EdgeVecIter, Flow, Hedge, HedgePair,
         Involution, InvolutionError, InvolutiveMapping, Orientation,
     },
-    subgraph::SubSetLike,
+    subgraph::{ModifySubSet, SubSetLike},
     swap::Swap,
     HedgeGraph, HedgeGraphError, NodeStorage,
 };
@@ -196,6 +196,19 @@ impl<T> SmartEdgeVec<T> {
             .iter()
             .filter(|(_, e)| e.is_identity())
             .count()
+    }
+
+    fn identity_filter(&self, range: Range<usize>) -> SuBitGraph {
+        let n_hedges: Hedge = self.len();
+        let mut filter = SuBitGraph::empty(n_hedges.0);
+
+        for hedge in range.map(Hedge) {
+            if self.involution.is_identity(hedge) {
+                filter.add(hedge);
+            }
+        }
+
+        filter
     }
 
     pub fn map<T2, F: Fn(HedgePair, EdgeData<&T>) -> EdgeData<T2>>(
@@ -547,6 +560,7 @@ impl<T> SmartEdgeVec<T> {
         merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
     ) -> Result<(), HedgeGraphError> {
         let nhedges: Hedge = self.len();
+        let full = self.identity_filter(0..nhedges.0);
 
         let g = self;
 
@@ -555,13 +569,13 @@ impl<T> SmartEdgeVec<T> {
         while found_match {
             let mut matching_ids = None;
 
-            for i in (0..nhedges.0).map(Hedge) {
+            for i in full.included_iter() {
                 if let InvolutiveMapping::Identity {
                     data: datas,
                     underlying: underlyings,
                 } = g.involution.hedge_data(i)
                 {
-                    for j in ((i.0 + 1)..nhedges.0).map(Hedge) {
+                    for j in full.included_iter().filter(|j| *j > i) {
                         if let InvolutiveMapping::Identity { data, underlying } =
                             &g.involution.inv[j]
                         {
@@ -761,16 +775,8 @@ impl<T> SmartEdgeVec<T> {
         merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
     ) -> Result<(), HedgeGraphError> {
         let self_n_h: Hedge = self.len();
-        let self_empty_filter = SuBitGraph::empty(self_n_h.0);
-        let mut full_self = !self_empty_filter.clone();
-
         let other_n_h: Hedge = other.len();
-        let other_empty_filter = SuBitGraph::empty(other_n_h.0);
-        let mut full_other = self_empty_filter.clone();
-        full_self.join_mut(other_empty_filter.clone());
-        full_other.join_mut(!other_empty_filter.clone());
-
-        let self_inv_shift: Hedge = self.len();
+        let self_inv_shift = self_n_h;
         let edge_data = &mut self.data;
         let edge_data_shift = edge_data.len();
         edge_data.extend(other.data);
@@ -801,6 +807,8 @@ impl<T> SmartEdgeVec<T> {
         let mut found_match = true;
 
         self.fix_hedge_pairs();
+        let full_self = self.identity_filter(0..self_n_h.0);
+        let full_other = self.identity_filter(self_inv_shift.0..(self_inv_shift.0 + other_n_h.0));
 
         while found_match {
             let mut matching_ids = None;
@@ -846,15 +854,8 @@ impl<T> SmartEdgeVec<T> {
         merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
     ) -> Result<Self, HedgeGraphError> {
         let self_n_h: Hedge = self.len();
-        let self_empty_filter = SuBitGraph::empty(self_n_h.0);
-        let mut full_self = !self_empty_filter.clone();
         let other_n_h: Hedge = other.len();
-        let other_empty_filter = SuBitGraph::empty(other_n_h.0);
-        let mut full_other = self_empty_filter.clone();
-        full_self.join_mut(other_empty_filter.clone());
-        full_other.join_mut(!other_empty_filter.clone());
-
-        let self_inv_shift: Hedge = self.len();
+        let self_inv_shift = self_n_h;
         let mut edge_data = self.data;
         let edge_data_shift = edge_data.len();
         edge_data.extend(other.data);
@@ -897,6 +898,8 @@ impl<T> SmartEdgeVec<T> {
         };
 
         g.fix_hedge_pairs();
+        let full_self = g.identity_filter(0..self_n_h.0);
+        let full_other = g.identity_filter(self_inv_shift.0..(self_inv_shift.0 + other_n_h.0));
 
         while found_match {
             let mut matching_ids = None;
