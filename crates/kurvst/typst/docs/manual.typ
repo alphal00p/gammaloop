@@ -248,9 +248,11 @@ to produce a path at a fixed normal distance from the source cubic. Positive
 distances follow the left normal of the cubic direction; negative distances
 follow the right normal. The output has the same drawable shape as pattern
 paths: `points`, fitted cubic `curves`, straight `segments`, and `length`.
+`start-outset` and `end-outset` trim the fitted path by arc length after the
+offset is computed.
 
 ```typ
-#let left = kurvst.parallel-segment(segment, distance: 0.18)
+#let left = kurvst.parallel-segment(segment, distance: 0.18, start-outset: 0.35, end-outset: 0.35)
 #let right = kurvst.parallel-segment(segment, distance: -0.18)
 #native-pattern-path(left, base: segment)
 #native-pattern-path(right, base: segment)

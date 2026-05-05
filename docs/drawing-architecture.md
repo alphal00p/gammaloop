@@ -398,6 +398,23 @@ special physics DOT field. A style dictionary may contain:
 - `pattern-coil-longitudinal-scale`
 - `pattern-accuracy`
 
+Style dictionaries may also contain path-geometry keys. These are consumed by
+`draw` and are not forwarded to CeTZ:
+
+- `parallel-distance`: normal offset for the half-edge path.
+- `parallel-length`: maximum visible arc length for a centered parallel path.
+- `parallel-ratio`: maximum visible fraction of the base edge length for a
+  centered parallel path.
+- `parallel-accuracy`: Kurbo fitting tolerance for the parallel path.
+- `parallel-optimize`: whether Kurbo should optimize the fitted path.
+
+`draw` also accepts `edge-parallel-distance`, `edge-parallel-length`,
+`edge-parallel-ratio`, `edge-parallel-accuracy`, and `edge-parallel-optimize` as
+defaults for both half edges. Parallel paths are computed on the base edge
+geometry before patterns and other decorations; node outsets then trim the
+shifted path, so it remains shortened at node boundaries. When both length and
+ratio limits are set, `draw` uses the shorter centered visible span.
+
 GammaLoop-generated particle styles produce these dictionaries directly. A user
 can also produce them through `source-style` or `sink-style` in eval mode:
 

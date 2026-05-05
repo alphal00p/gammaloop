@@ -342,6 +342,8 @@
 ///   demo-segment.ctrl-a,
 ///   demo-segment.ctrl-b,
 ///   distance: 0.18,
+///   start-outset: 0.35,
+///   end-outset: 0.35,
 /// )
 /// #native-pattern-path(parallel, base: demo-segment)
 /// ```
@@ -353,6 +355,8 @@
   ctrl-a,
   ctrl-b,
   distance: 0,
+  start-outset: 0,
+  end-outset: 0,
   accuracy: 0.001,
   optimize: true,
 ) = {
@@ -362,6 +366,8 @@
     ctrl-a: ctrl-a,
     ctrl-b: ctrl-b,
     distance: distance,
+    start-outset: start-outset,
+    end-outset: end-outset,
     accuracy: accuracy,
     optimize: optimize,
   ))))
@@ -375,13 +381,15 @@
 /// ```
 ///
 /// -> dictionary
-#let parallel-segment(segment, distance: 0, accuracy: 0.001, optimize: true) = {
+#let parallel-segment(segment, distance: 0, start-outset: 0, end-outset: 0, accuracy: 0.001, optimize: true) = {
   parallel-cubic(
     segment.start,
     segment.end,
     segment.ctrl-a,
     segment.ctrl-b,
     distance: distance,
+    start-outset: start-outset,
+    end-outset: end-outset,
     accuracy: accuracy,
     optimize: optimize,
   )

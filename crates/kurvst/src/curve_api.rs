@@ -91,6 +91,10 @@ pub struct ParallelCubicSpec {
     pub curve: CubicBezierSpec,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub distance: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub start_outset: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub end_outset: f64,
     #[serde(
         default = "default_arclen_accuracy",
         deserialize_with = "deserialize_f64"
@@ -514,6 +518,8 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
 fn parallel_cubic(spec: ParallelCubicSpec) -> Result<CurvePathOutput, String> {
     let distance = validate_finite(spec.distance, "parallel path distance")?;
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let start_outset = validate_outset(spec.start_outset, "start")?;
+    let end_outset = validate_outset(spec.end_outset, "end")?;
     let curve = CubicBez::from(spec.curve);
     let source_length = curve.arclen(accuracy);
     if source_length <= f64::EPSILON {
@@ -531,7 +537,8 @@ fn parallel_cubic(spec: ParallelCubicSpec) -> Result<CurvePathOutput, String> {
     } else {
         fit_to_bezpath(&offset, accuracy)
     };
-    curve_path_from_segments(path.segments(), accuracy)
+    let segments = trim_path_segments(path.segments(), start_outset, end_outset, accuracy)?;
+    curve_path_from_segments(segments, accuracy)
 }
 
 #[derive(Debug, Clone)]
@@ -807,6 +814,80 @@ fn curve_path_from_segments(
     })
 }
 
+fn trim_path_segments(
+    segments: impl IntoIterator<Item = PathSeg>,
+    start_outset: f64,
+    end_outset: f64,
+    accuracy: f64,
+) -> Result<Vec<PathSeg>, String> {
+    let segments: Vec<_> = segments.into_iter().collect();
+    if start_outset == 0.0 && end_outset == 0.0 {
+        return Ok(segments);
+    }
+
+    let lengths: Vec<_> = segments
+        .iter()
+        .map(|segment| segment.arclen(accuracy))
+        .collect();
+    let length: f64 = lengths.iter().sum();
+    if length <= f64::EPSILON {
+        return Ok(segments);
+    }
+
+    let (start_outset, end_outset) = fit_outsets_to_length(start_outset, end_outset, length);
+    let visible_start = start_outset;
+    let visible_end = length - end_outset;
+    if visible_end <= visible_start {
+        return Err("parallel path trim distances leave no visible path".to_string());
+    }
+
+    let mut cursor = 0.0;
+    let mut trimmed = Vec::new();
+    for (segment, segment_length) in segments.into_iter().zip(lengths) {
+        let segment_start = cursor;
+        let segment_end = cursor + segment_length;
+        cursor = segment_end;
+
+        let keep_start = visible_start.max(segment_start);
+        let keep_end = visible_end.min(segment_end);
+        if keep_end <= keep_start {
+            continue;
+        }
+
+        let local_start = keep_start - segment_start;
+        let local_end = keep_end - segment_start;
+        let t0 = if local_start <= f64::EPSILON {
+            0.0
+        } else {
+            segment.inv_arclen(local_start, accuracy)
+        };
+        let t1 = if segment_length - local_end <= f64::EPSILON {
+            1.0
+        } else {
+            segment.inv_arclen(local_end, accuracy)
+        };
+        if t1 > t0 {
+            trimmed.push(segment.subsegment(t0..t1));
+        }
+    }
+
+    if trimmed.is_empty() {
+        return Err("parallel path trimming produced no visible path".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn fit_outsets_to_length(start_outset: f64, end_outset: f64, length: f64) -> (f64, f64) {
+    let total = start_outset + end_outset;
+    let max_total = length * (1.0 - 1e-9);
+    if total > max_total && total > 0.0 {
+        let scale = max_total / total;
+        (start_outset * scale, end_outset * scale)
+    } else {
+        (start_outset, end_outset)
+    }
+}
+
 fn cubic_spline_through_points(points: &[CurvePoint]) -> Vec<CubicBezierSpec> {
     if points.len() < 2 {
         return Vec::new();
@@ -1080,6 +1161,8 @@ mod tests {
                 end: point(3.0, 0.0),
             },
             distance: 0.5,
+            start_outset: 0.0,
+            end_outset: 0.0,
             accuracy: 1e-6,
             optimize: true,
         })
@@ -1098,6 +1181,8 @@ mod tests {
         let output = parallel_cubic(ParallelCubicSpec {
             curve: straight_curve(3.0),
             distance: -0.25,
+            start_outset: 0.0,
+            end_outset: 0.0,
             accuracy: 1e-6,
             optimize: false,
         })
@@ -1105,6 +1190,25 @@ mod tests {
 
         assert!((output.points.first().unwrap().y + 0.25).abs() < 1e-6);
         assert!((output.points.last().unwrap().y + 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parallel_cubic_trims_offset_path_by_arclength() {
+        let output = parallel_cubic(ParallelCubicSpec {
+            curve: straight_curve(4.0),
+            distance: 0.25,
+            start_outset: 1.0,
+            end_outset: 1.0,
+            accuracy: 1e-6,
+            optimize: false,
+        })
+        .unwrap();
+
+        assert!((output.points.first().unwrap().x - 1.0).abs() < 1e-6);
+        assert!((output.points.first().unwrap().y - 0.25).abs() < 1e-6);
+        assert!((output.points.last().unwrap().x - 3.0).abs() < 1e-6);
+        assert!((output.points.last().unwrap().y - 0.25).abs() < 1e-6);
+        assert!((output.length - 2.0).abs() < 1e-6);
     }
 
     fn straight_curve(length: f64) -> CubicBezierSpec {
