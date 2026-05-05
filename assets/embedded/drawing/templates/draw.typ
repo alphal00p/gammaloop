@@ -156,6 +156,14 @@
   clean
 }
 
+#let _without-mark-style(style) = {
+  let clean = style
+  if clean.keys().contains("mark") {
+    let _ = clean.remove("mark")
+  }
+  clean
+}
+
 #let _style-value(style, key, default) = style.at(key, default: default)
 
 #let _parallel-mark-style(style) = {
@@ -435,9 +443,11 @@
       current-phase = current-phase + 2 * calc.pi * piece.length / wavelength
     }
   } else {
-    for segment in segments {
-      if _has-mark(style) {
+    for (index, segment) in segments.enumerate() {
+      if _has-mark(style) and index == segments.len() - 1 {
         elements.push(_bezier-element(segment, style))
+      } else if _has-mark(style) {
+        elements.push(_bezier-element(segment, _without-mark-style(style)))
       } else {
         elements.push(curve-api.cetz-path(curve-api.cubic-path(..segment), .._draw-style(style)))
       }
@@ -500,44 +510,26 @@
 }
 
 #let _parallel-mark-edge-elements(halves, source-style, sink-style, label-pos: none) = {
-  let elements = ()
   let source-mark = _parallel-mark-style(source-style)
   let sink-mark = _parallel-mark-style(sink-style)
-  let base-segments = halves.source + halves.sink
-
-  if source-mark != none {
+  let mark-style = if sink-mark != none { sink-mark } else { source-mark }
+  if mark-style == none {
+    ()
+  } else {
+    let base-segments = halves.source + halves.sink
     let center-outset = _parallel-center-outset(
-      _segments-length(base-segments, accuracy: _style-value(source-mark, "parallel-accuracy", 0.001)),
-      source-mark,
+      _segments-length(base-segments, accuracy: _style-value(mark-style, "parallel-accuracy", 0.001)),
+      mark-style,
     )
-    for element in _parallel-mark-half-elements(
-      halves.source,
-      source-mark,
+    _parallel-mark-half-elements(
+      base-segments,
+      mark-style,
       center-outset: center-outset,
       trim-start: true,
-      label-pos: label-pos,
-    ) {
-      elements.push(element)
-    }
-  }
-
-  if sink-mark != none {
-    let center-outset = _parallel-center-outset(
-      _segments-length(base-segments, accuracy: _style-value(sink-mark, "parallel-accuracy", 0.001)),
-      sink-mark,
-    )
-    for element in _parallel-mark-half-elements(
-      halves.sink,
-      sink-mark,
-      center-outset: center-outset,
       trim-end: true,
       label-pos: label-pos,
-    ) {
-      elements.push(element)
-    }
+    )
   }
-
-  elements
 }
 
 #let _pattern-line(start, end, style) = {
