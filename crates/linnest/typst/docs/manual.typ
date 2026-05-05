@@ -5,7 +5,7 @@
 #set page(margin: 22mm)
 #set text(size: 10pt)
 
-= Linnest Typst API
+= Linnest Typst APIs
 
 Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst
 API. Its drawing layer bundles `kurvst.wasm`; the standalone Kurvst package
@@ -186,12 +186,15 @@ callbacks for `draw`. The default source/sink strokes use darker/lighter halves
 to encode the graph source/sink split. Set `momentum-arrows: true` to draw
 centered parallel arrow decorations while the main edge remains connected to
 the nodes. The arrows flow from source to sink independently of the DOT
-`dir`/`orientation` value. The decoration defaults to a plain black `0.55pt`
+`dir`/`orientation` value; there is one momentum marker per edge, even though
+the base edge is internally styled as source and sink halves. The decoration defaults to a plain black `0.55pt`
 stroke and a scaled CeTZ `"barbed"` arrowhead, so it does not inherit the base
 particle stroke. The arrow length is capped by both `momentum-arrow-length` and
 `momentum-arrow-ratio`, so the shorter one wins. When the layout provides an
 edge-label position, the arrow offset is signed so the momentum marker is drawn
-on the same side of the edge as that label.
+on the same side of the edge as that label. Override `momentum-arrow-mark` with
+any CeTZ mark style, for example `(end: "stealth")` or `(end: "barbed",
+scale: 1.6)`.
 
 Optional labels can be built from edge metadata with `show-edge-index`,
 `show-half-edge-index`, `show-particle`, and, for explicit momentum fields,
@@ -364,36 +367,36 @@ Subgraph objects are opaque zero-copy values.
 #let tidy-style = dictionary(tidy.styles.default)
 #let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
 
-#let docs = tidy.parse-module(
-  read("../src/lib.typ"),
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
-)
-#tidy.show-module(docs, style: tidy-style)
-
-#let graph-docs = tidy.parse-module(
-  read("../src/graph.typ"),
-  name: "graph",
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
-)
-#tidy.show-module(graph-docs, style: tidy-style)
-
 #let draw-docs = tidy.parse-module(
   read("../src/draw.typ"),
   name: "draw",
   scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
-#tidy.show-module(draw-docs, style: tidy-style)
+#let docs = tidy.parse-module(
+  read("../src/lib.typ"),
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
+)
+#let graph-docs = tidy.parse-module(
+  read("../src/graph.typ"),
+  name: "graph",
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
+)
 
 #let physics-docs = tidy.parse-module(
   read("../src/physics-edge-style.typ"),
   name: "physics",
   scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
-#tidy.show-module(physics-docs, style: tidy-style)
-
 #let subgraph-docs = tidy.parse-module(
   read("../src/subgraph.typ"),
   name: "subgraph",
   scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
+
+
+
+#tidy.show-module(draw-docs, style: tidy-style)
+#tidy.show-module(docs, style: tidy-style)
+#tidy.show-module(graph-docs, style: tidy-style)
+#tidy.show-module(physics-docs, style: tidy-style)
 #tidy.show-module(subgraph-docs, style: tidy-style)

@@ -216,11 +216,31 @@
   length: 1.0,
   ratio: 0.5,
   stroke: none,
+  mark: none,
 ) = {
   let arrow-stroke = if stroke == none {
     (paint: black, thickness: 0.55pt, cap: "round")
   } else {
     stroke
+  }
+  let arrow-mark = if mark == none {
+    (
+      end: "barbed",
+      stroke: arrow-stroke,
+      fill: black,
+      scale: 1.35,
+    )
+  } else if type(mark) == dictionary {
+    (
+      stroke: arrow-stroke,
+      fill: black,
+    ) + mark
+  } else {
+    (
+      end: mark,
+      stroke: arrow-stroke,
+      fill: black,
+    )
   }
   base + (
     parallel-mark: (
@@ -228,12 +248,7 @@
       length: length,
       ratio: ratio,
       stroke: arrow-stroke,
-      mark: (
-        end: "barbed",
-        stroke: arrow-stroke,
-        fill: black,
-        scale: 1.35,
-      ),
+      mark: arrow-mark,
     ),
   )
 }
@@ -251,6 +266,7 @@
   momentum-arrow-length: 1.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
+  momentum-arrow-mark: none,
 ) = {
   let style = _base-half-style(edge, half, map: map, default: default, orientation-split: orientation-split)
   style = style + style-dict(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
@@ -262,6 +278,7 @@
       length: momentum-arrow-length,
       ratio: momentum-arrow-ratio,
       stroke: momentum-arrow-stroke,
+      mark: momentum-arrow-mark,
     )
   } else {
     style
@@ -270,7 +287,7 @@
 
 /// Style callback for the source half edge.
 ///
-/// `momentum-arrows: true` adds a centered black barbed-arrow decoration while
+/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration while
 /// the main edge remains drawn with its normal particle style.
 /// -> dictionary
 #let source-style(
@@ -285,6 +302,7 @@
   momentum-arrow-length: 1.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
+  momentum-arrow-mark: none,
 ) = _half-style(
   edge,
   "source",
@@ -298,11 +316,12 @@
   momentum-arrow-length: momentum-arrow-length,
   momentum-arrow-ratio: momentum-arrow-ratio,
   momentum-arrow-stroke: momentum-arrow-stroke,
+  momentum-arrow-mark: momentum-arrow-mark,
 )
 
 /// Style callback for the sink half edge.
 ///
-/// `momentum-arrows: true` adds a centered black barbed-arrow decoration toward
+/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration toward
 /// the sink node, so momentum arrows always flow from source to sink
 /// independently of `edge.orientation`.
 /// -> dictionary
@@ -318,6 +337,7 @@
   momentum-arrow-length: 1.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
+  momentum-arrow-mark: none,
 ) = _half-style(
   edge,
   "sink",
@@ -331,6 +351,7 @@
   momentum-arrow-length: momentum-arrow-length,
   momentum-arrow-ratio: momentum-arrow-ratio,
   momentum-arrow-stroke: momentum-arrow-stroke,
+  momentum-arrow-mark: momentum-arrow-mark,
 )
 
 #let _field-value(edge, fields) = {
@@ -547,6 +568,7 @@
   momentum-arrow-length: 1.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
+  momentum-arrow-mark: none,
   show-momentum: false,
   show-edge-index: false,
   show-half-edge-index: false,
@@ -573,6 +595,7 @@
     momentum-arrow-length: momentum-arrow-length,
     momentum-arrow-ratio: momentum-arrow-ratio,
     momentum-arrow-stroke: momentum-arrow-stroke,
+    momentum-arrow-mark: momentum-arrow-mark,
   ),
   sink-style: edge => sink-style(
     edge,
@@ -586,6 +609,7 @@
     momentum-arrow-length: momentum-arrow-length,
     momentum-arrow-ratio: momentum-arrow-ratio,
     momentum-arrow-stroke: momentum-arrow-stroke,
+    momentum-arrow-mark: momentum-arrow-mark,
   ),
   edge-label: edge => edge-label(
     edge,
