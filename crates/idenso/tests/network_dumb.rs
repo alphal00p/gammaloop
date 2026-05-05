@@ -9,7 +9,10 @@ use spenso::{
         representation::{Minkowski, RepName},
     },
 };
-use symbolica::{atom::AtomCore, parse, symbol};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse, symbol,
+};
 
 fn contains_index(result: &str, index: &str) -> bool {
     result.contains(&format!("{index})")) || result.contains(&format!("{index},"))
@@ -146,8 +149,7 @@ fn spenso_bare_symb_vertex_substitution() {
     }
 }
 
-#[test]
-fn min_product_terms_three_vertex_residual_mu9() {
+fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
@@ -192,13 +194,161 @@ fn min_product_terms_three_vertex_residual_mu9() {
             });
     }
 
+    (
+        r,
+        [
+            ("mu1", mu1.into()),
+            ("mu8", mu8.into()),
+            ("mu9", mu9.into()),
+        ],
+    )
+}
+
+fn residual_dummy_names<'a>(out: &Atom, dummies: &'a [(&'a str, Atom)]) -> Vec<&'a str> {
+    dummies
+        .iter()
+        .filter_map(|(name, dummy)| {
+            out.replace(dummy.clone())
+                .match_iter()
+                .next()
+                .map(|_| *name)
+        })
+        .collect()
+}
+
+fn print_three_vertex_method(name: &str, out: Atom, dummies: &[(&str, Atom)]) {
+    let residuals = residual_dummy_names(&out, dummies);
+    println!(
+        "{name:<56} ok={:<5} residual={residuals:?} terms={} bytes={}",
+        residuals.is_empty(),
+        out.nterms(),
+        out.as_view().get_byte_size()
+    );
+}
+
+fn cleanup_with_smallest_degree(mut result: Atom) -> Atom {
+    let cleanup_settings = SchoonschipSettings::partial()
+        .with_expanded_contracted_sums()
+        .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
+    for _ in 0..4 {
+        let next = result.schoonschip_with_net::<false, false, AbstractIndex>(&cleanup_settings);
+        if next == result {
+            break;
+        }
+        result = next;
+    }
+    result
+}
+
+#[test]
+fn min_product_terms_three_vertex_residual_mu9() {
+    let (r, dummies) = substituted_three_vertex_reproducer();
     let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
         &SchoonschipSettings::partial()
             .with_expanded_contracted_sums()
             .with_contraction_order(SchoonschipContractionOrder::MinProductTerms),
     );
 
-    assert!(out.replace(mu1).match_iter().next().is_none());
-    assert!(out.replace(mu8).match_iter().next().is_none());
-    assert!(out.replace(mu9).match_iter().next().is_some());
+    assert_eq!(residual_dummy_names(&out, &dummies), ["mu9"]);
+}
+
+#[test]
+fn compare_three_vertex_residual_methods() {
+    let (r, dummies) = substituted_three_vertex_reproducer();
+    let orders = [
+        (
+            "smallest_degree",
+            SchoonschipContractionOrder::SmallestDegree,
+        ),
+        ("largest_degree", SchoonschipContractionOrder::LargestDegree),
+        (
+            "min_largest_operand_bytes",
+            SchoonschipContractionOrder::MinLargestOperandBytes,
+        ),
+        (
+            "min_product_terms",
+            SchoonschipContractionOrder::MinProductTerms,
+        ),
+        (
+            "min_product_bytes",
+            SchoonschipContractionOrder::MinProductBytes,
+        ),
+        (
+            "smallest_degree_min_largest_operand_bytes",
+            SchoonschipContractionOrder::SmallestDegreeMinLargestOperandBytes,
+        ),
+        (
+            "smallest_degree_min_product_terms",
+            SchoonschipContractionOrder::SmallestDegreeMinProductTerms,
+        ),
+        (
+            "smallest_degree_min_product_bytes",
+            SchoonschipContractionOrder::SmallestDegreeMinProductBytes,
+        ),
+    ];
+
+    println!("\nthree-vertex residual contraction comparison");
+    print_three_vertex_method("normalize_dots", r.normalize_dots(), &dummies);
+    print_three_vertex_method("bare schoonschip", r.schoonschip(), &dummies);
+    print_three_vertex_method(
+        "expanded bare schoonschip",
+        r.expand().schoonschip(),
+        &dummies,
+    );
+
+    for (name, order) in orders {
+        let one_pass = r.schoonschip_with_net::<false, false, AbstractIndex>(
+            &SchoonschipSettings::partial()
+                .with_expanded_contracted_sums()
+                .with_contraction_order(order),
+        );
+        print_three_vertex_method(
+            &format!("net one-pass partial expanded {name}"),
+            one_pass.clone(),
+            &dummies,
+        );
+        print_three_vertex_method(
+            &format!("net one-pass + smallest cleanup {name}"),
+            cleanup_with_smallest_degree(one_pass),
+            &dummies,
+        );
+
+        let expanded_input = r
+            .expand()
+            .schoonschip_with_net::<false, false, AbstractIndex>(
+                &SchoonschipSettings::partial()
+                    .with_expanded_contracted_sums()
+                    .with_contraction_order(order),
+            );
+        print_three_vertex_method(
+            &format!("expanded-input net one-pass partial {name}"),
+            expanded_input,
+            &dummies,
+        );
+
+        let expanded_input_full = r
+            .expand()
+            .schoonschip_with_net::<false, true, AbstractIndex>(
+                &SchoonschipSettings::full()
+                    .with_expanded_contracted_sums()
+                    .with_contraction_order(order),
+            );
+        print_three_vertex_method(
+            &format!("expanded-input net full {name}"),
+            expanded_input_full,
+            &dummies,
+        );
+
+        let full = r.schoonschip_with_net::<false, true, AbstractIndex>(
+            &SchoonschipSettings::full()
+                .with_expanded_contracted_sums()
+                .with_contraction_order(order),
+        );
+        print_three_vertex_method(&format!("net full expanded {name}"), full.clone(), &dummies);
+        print_three_vertex_method(
+            &format!("net full + smallest cleanup {name}"),
+            cleanup_with_smallest_degree(full),
+            &dummies,
+        );
+    }
 }
