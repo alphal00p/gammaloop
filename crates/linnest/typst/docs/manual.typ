@@ -136,6 +136,37 @@ the per-edge `label` statement:
 )
 ```
 
+== Layout Pins
+
+`graph.pin` formats the `pin` statement consumed by layout. Numeric `x` and
+`y` values fix coordinates for nodes or edge control points:
+
+```typ
+#let (node: a, builder: b) = graph.node(b, name: "a", pin: graph.pin(x: -2, y: 0))
+#let (node: c, builder: b) = graph.node(b, name: "c", pin: graph.pin(x: 2, y: 0))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), pin: graph.pin(x: 0, y: 1.2))
+```
+
+`graph.pin-group` links one coordinate across several nodes or edge control
+points. A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it
+negative. GammaLoop external-edge columns use this to keep incoming and outgoing
+external legs on opposite sides while pairing rows by a shared `y` group:
+
+```typ
+#let b = graph.edge(
+  b,
+  source: (node: right-ext),
+  sink: (node: center),
+  pin: graph.pin(x: graph.pin-group("right", side: "+"), y: graph.pin-group("edgee0")),
+)
+#let b = graph.edge(
+  b,
+  source: (node: center),
+  sink: (node: left-ext),
+  pin: graph.pin(x: graph.pin-group("left", side: "-"), y: graph.pin-group("edgee0")),
+)
+```
+
 Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge
 callbacks receive the merged `scope`, edge statements, endpoint records, and the
 edge index:

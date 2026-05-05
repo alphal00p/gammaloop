@@ -193,6 +193,10 @@
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
       };
 
+      clinnetMeta = craneLib.crateNameFromCargoToml {
+        cargoToml = ./crates/clinnet/Cargo.toml;
+      };
+
       linnestMeta = wasmCraneLib.crateNameFromCargoToml {
         cargoToml = ./crates/linnest/Cargo.toml;
       };
@@ -342,6 +346,27 @@
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
+      clinnetArgs = commonArgs
+        // {
+          buildType = ciCargoProfile;
+          CARGO_PROFILE = ciCargoProfile;
+          doCheck = false;
+          pname = "clinnet";
+          inherit (clinnetMeta) version;
+          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
+          cargoExtraArgs = "--locked -p clinnet --bin linnet";
+        };
+
+      clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
+        // {
+          pname = "clinnet-deps";
+        });
+
+      clinnet-cli = craneLib.buildPackage (clinnetArgs
+        // {
+          cargoArtifacts = clinnetCargoArtifacts;
+        });
+
       impureCheckRunnerTargets = [
         {
           runnerAttr = "nix-ci-check-gammaloop-doctest";
@@ -439,8 +464,9 @@
       packages =
         {
           default = gammaloop-cli;
+          clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
-          inherit linnest-wasm linnestWasmCargoArtifacts;
+          inherit clinnetCargoArtifacts linnest-wasm linnestWasmCargoArtifacts;
           inherit cargoArtifacts;
         }
         // impureCheckRunnerPackages
@@ -459,6 +485,14 @@
         };
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
+        };
+        clinnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
+        linnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
         };
       };
 
@@ -519,15 +553,7 @@
           rust-analyzer
           maturin
           virtualenv
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "clinnet";
-            version = "0.1.8";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-            };
-            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-          })
+          clinnet-cli
           (pkgs.rustPlatform.buildRustPackage rec {
             pname = "rscls";
             version = "0.2.3";
