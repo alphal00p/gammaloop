@@ -19,20 +19,99 @@
   result
 }
 
+#let _statement-value(value) = if type(value) == str { value } else { str(value) }
+
+#let _statements-with-pin(statements, pin) = {
+  if pin == none {
+    statements
+  } else {
+    statements + (pin: _statement-value(pin))
+  }
+}
+
+#let _node-spec(node) = {
+  let statements = _statements-with-pin(
+    node.at("statements", default: (:)),
+    node.at("pin", default: none),
+  )
+  let clean = node
+  if clean.keys().contains("pin") {
+    let _ = clean.remove("pin")
+  }
+  clean + (statements: statements)
+}
+
 #let _edge-spec(edge) = {
   let statements = _edge-render-statements(
-    edge.at("statements", default: (:)),
+    _statements-with-pin(
+      edge.at("statements", default: (:)),
+      edge.at("pin", default: none),
+    ),
     source-style-eval: edge.at("source-style-eval", default: none),
     sink-style-eval: edge.at("sink-style-eval", default: none),
     label-eval: edge.at("label-eval", default: none),
   )
   let clean = edge
-  for key in ("source-style-eval", "sink-style-eval", "label-eval") {
+  for key in ("pin", "source-style-eval", "sink-style-eval", "label-eval") {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
   }
   clean + (statements: statements)
+}
+
+/// Format a layout pin statement.
+///
+/// Pins constrain node positions or edge control-point positions during
+/// layout. Numeric `x` and `y` values fix coordinates. Use @pin-group for
+/// grouped constraints such as shared external-edge columns.
+///
+/// ```example
+/// #graph.pin(x: -2, y: 0)
+/// ```
+/// -> string
+#let pin(x: none, y: none, group: none) = {
+  if group != none {
+    if x != none or y != none {
+      panic("graph.pin: group cannot be combined with x or y")
+    }
+    _statement-value(group)
+  } else {
+    let parts = ()
+    if x != none {
+      parts.push("x:" + _statement-value(x))
+    }
+    if y != none {
+      parts.push("y:" + _statement-value(y))
+    }
+    if parts.len() == 0 {
+      panic("graph.pin requires x, y, or group")
+    }
+    parts.join(",")
+  }
+}
+
+/// Format a grouped layout-pin reference.
+///
+/// `side: "+"` keeps the final coordinate non-negative and `side: "-"`
+/// keeps it non-positive. Omit `side` to link the coordinate without a sign
+/// constraint.
+///
+/// ```example
+/// #graph.pin(x: graph.pin-group("right", side: "+"), y: graph.pin-group("row-1"))
+/// ```
+/// -> string
+#let pin-group(name, side: none) = {
+  let prefix = if side == none {
+    "@"
+  } else if side == "+" or side == "positive" {
+    "@+"
+  } else if side == "-" or side == "negative" {
+    "@-"
+  } else {
+    panic("graph.pin-group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
+  }
+  prefix + _statement-value(name)
 }
 
 /// Parse one or more DOT digraphs into graph objects.
@@ -87,15 +166,15 @@
   /// Default DOT statements for nodes. -> dictionary
   node-statements: (:),
 
-  /// Node specifications. Each node may define `name`, `index`, and
-  /// `statements`. This matches the per-node `statements` parameter accepted by
-  /// @node. -> array
+  /// Node specifications. Each node may define `name`, `index`, `pin`, and
+  /// `statements`. This matches the per-node parameters accepted by @node.
+  /// -> array
   nodes: (),
 
   /// Edge specifications. Each edge may define `source`, `sink`,
-  /// `orientation`, `flow`, `id`, `statements`, `source-style-eval`, `sink-style-eval`,
-  /// and `label-eval`. The `source` and `sink` fields use the same endpoint
-  /// dictionaries accepted by @edge. -> array
+  /// `orientation`, `flow`, `id`, `pin`, `statements`, `source-style-eval`,
+  /// `sink-style-eval`, and `label-eval`. The `source` and `sink` fields use
+  /// the same endpoint dictionaries accepted by @edge. -> array
   edges: (),
 ) = {
   let edge-statements = _edge-render-statements(
@@ -109,7 +188,7 @@
     statements: statements,
     edge-statements: edge-statements,
     node-statements: node-statements,
-    nodes: nodes,
+    nodes: nodes.map(_node-spec),
     edges: edges.map(_edge-spec),
   )))
 }
@@ -170,10 +249,14 @@
 /// #repr((a, c))
 /// ```
 /// -> dictionary
-#let node(builder, name: none, index: none, statements: (:)) = {
+#let node(builder, name: none, index: none, pin: none, statements: (:)) = {
   cbor(_plugin.graph_builder_add_node(
     bytes(builder),
-    cbor.encode((name: name, index: index, statements: statements)),
+    cbor.encode((
+      name: name,
+      index: index,
+      statements: _statements-with-pin(statements, pin),
+    )),
   ))
 }
 
@@ -203,13 +286,14 @@
   orientation: "default",
   flow: none,
   id: none,
+  pin: none,
   statements: (:),
   source-style-eval: none,
   sink-style-eval: none,
   label-eval: none,
 ) = {
   let statements = _edge-render-statements(
-    statements,
+    _statements-with-pin(statements, pin),
     source-style-eval: source-style-eval,
     sink-style-eval: sink-style-eval,
     label-eval: label-eval,

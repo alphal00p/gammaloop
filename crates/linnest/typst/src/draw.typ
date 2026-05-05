@@ -405,7 +405,7 @@
 /// #let parallel-base-edge = 0
 /// #let parallel-edge = 1
 /// #let source-patterns = (
-///   none,
+///   "coil",
 ///   none,
 ///   "zigzag",
 ///   "coil",
@@ -416,7 +416,7 @@
 ///   "zigzag",
 /// )
 /// #let sink-patterns = (
-///   none,
+///   "coil",
 ///   none,
 ///   "zigzag",
 ///   "coil",
@@ -456,6 +456,7 @@
 /// ) + parallel-style(edge)
 /// #let sink-style(edge) = (
 ///   stroke: sink-stroke(edge),
+///   mark: if edge.eid == parallel-edge { (end: ">") } else { none },
 ///   pattern: sink-patterns.at(edge.eid),
 ///   pattern-amplitude: 0.18,
 ///   pattern-wavelength: 0.55,
@@ -487,14 +488,7 @@
 /// #let (node: pc, builder: p) = graph.node(p, name: "c", statements: (pin: "x:2,y:0"))
 /// #let p = graph.edge(p, source: (node: pa), sink: (node: pc), statements: (pin: "x:0,y:1.1"))
 /// #let p = graph.edge(p, source: (node: pa), sink: (node: pc), statements: (pin: "x:0,y:1.1"))
-/// #let parallel-edge-style(edge) = if edge.eid == parallel-edge {
-///   (
-///     parallel-distance: 0.18,
-///     parallel-length: 1.4,
-///     parallel-ratio: 0.5,
-///   )
-/// } else { (:) }
-/// #let focused-style(edge) = (
+/// #let focused-base-style(edge) = (
 ///   stroke: if edge.eid == parallel-edge {
 ///     (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round")
 ///   } else {
@@ -504,8 +498,19 @@
 ///   pattern-amplitude: 0.14,
 ///   pattern-wavelength: 0.45,
 ///   pattern-coil-longitudinal-scale: 1.5,
-/// ) + parallel-edge-style(edge)
-/// #draw(layout(graph.finish(p), steps: 1, epochs: 1, label-steps: 0), unit: 1.25, node-radius: 0.24, source-style: focused-style, sink-style: focused-style)
+/// )
+/// #let parallel-edge-style(edge) = if edge.eid == parallel-edge {
+///   (
+///     parallel-distance: 0.18,
+///     parallel-length: 1.4,
+///     parallel-ratio: 0.5,
+///   )
+/// } else { (:) }
+/// #let focused-source-style(edge) = focused-base-style(edge) + parallel-edge-style(edge)
+/// #let focused-sink-style(edge) = focused-base-style(edge) + parallel-edge-style(edge) + (
+///   mark: if edge.eid == parallel-edge { (end: ">") } else { none },
+/// )
+/// #draw(layout(graph.finish(p), steps: 1, epochs: 1, label-steps: 0), unit: 1.25, node-radius: 0.24, source-style: focused-source-style, sink-style: focused-sink-style)
 /// `,dir:ttb)
 /// -> content
 #let draw(

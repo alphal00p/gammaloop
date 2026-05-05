@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, fs};
 
 use figment::providers::Serialized;
 use figment::{Figment, Profile};
+use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
 use linnet::half_edge::swap::Swap;
 use linnet::{
@@ -19,7 +20,7 @@ use crate::{
     graph_nodes_of_bytes, graph_spanning_forests_bytes, graph_subgraph_bytes, layout_graph_bytes,
     layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes,
     subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph,
-    TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph,
+    PinConstraint, TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph,
 };
 
 fn test_figment() -> Figment {
@@ -51,6 +52,26 @@ fn decode_cbor<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> T {
 
 fn one_statement(key: &str, value: &str) -> BTreeMap<String, String> {
     BTreeMap::from([(key.to_string(), value.to_string())])
+}
+
+#[test]
+fn test_pin_direction_syntaxes_parse() {
+    assert!(matches!(
+        PinConstraint::parse("x:@+right"),
+        Some(PinConstraint::LinkX(group)) if group == "+right"
+    ));
+    assert!(matches!(
+        PinConstraint::parse("x:+@right"),
+        Some(PinConstraint::LinkX(group)) if group == "+right"
+    ));
+    assert!(matches!(
+        PinConstraint::parse("y:@-edge0"),
+        Some(PinConstraint::LinkY(group)) if group == "-edge0"
+    ));
+    assert!(matches!(
+        PinConstraint::parse("y:-@edge0"),
+        Some(PinConstraint::LinkY(group)) if group == "-edge0"
+    ));
 }
 
 #[test]
@@ -996,6 +1017,81 @@ fn test_directional_constraints() {
     if let (Some(pos_edge_x), Some(neg_edge_x)) = (edge_group_positive, edge_group_negative) {
         assert!(pos_edge_x > neg_edge_x);
     }
+
+    assert!(group1_positive.is_some());
+    assert!(group1_negative.is_some());
+    assert!(group2_positive.is_some());
+    assert!(group2_negative.is_some());
+    assert!(edge_group_positive.is_some());
+    assert!(edge_group_negative.is_some());
+}
+
+#[test]
+fn grouped_directional_constraints_enforce_pin_side_after_layout() {
+    let figment = test_figment();
+    let typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            a -> b [pin="x:@+right"]
+            b -> c [pin="x:@-left"]
+        })
+        .unwrap(),
+        &figment,
+    );
+    let (mut node_positions, mut edge_positions) =
+        typst_graph.new_positions(TreeInitCfg { dx: 1.0, dy: 1.0 });
+
+    edge_positions[EdgeIndex(0)].x = -2.0;
+    edge_positions[EdgeIndex(1)].x = 2.0;
+
+    typst_graph.apply_grouped_constraints(&mut node_positions, &mut edge_positions);
+
+    assert!(edge_positions[EdgeIndex(0)].x >= 0.0);
+    assert!(edge_positions[EdgeIndex(1)].x <= 0.0);
+}
+
+#[test]
+fn gammaloop_external_edge_pins_align_by_group_and_side() {
+    let figment = test_figment();
+    let mut typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            "layout-algo" = "force"
+            steps = 10
+            epochs = 2
+            ext_r0 [style=invis]
+            ext_r1 [style=invis]
+            ext_l0 [style=invis]
+            ext_l1 [style=invis]
+            a
+            b
+            ext_r0 -> a [id=0 pin="x:@+right,y:@edgee0"]
+            ext_r1 -> a [id=1 pin="x:@+right,y:@edgee1"]
+            b -> ext_l0 [id=2 pin="x:@-left,y:@edgee0"]
+            b -> ext_l1 [id=3 pin="x:@-left,y:@edgee1"]
+            a -> b
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    typst_graph.layout();
+
+    let mut edge_positions = BTreeMap::new();
+    for (_, edge_index, edge_data) in typst_graph.iter_edges() {
+        let edge = edge_data.data;
+        edge_positions.insert(edge_index.0, edge.pos);
+    }
+
+    let right0 = edge_positions.get(&0).unwrap();
+    let right1 = edge_positions.get(&1).unwrap();
+    let left0 = edge_positions.get(&2).unwrap();
+    let left1 = edge_positions.get(&3).unwrap();
+
+    assert!(right0.x > 0.0, "{right0:?}");
+    assert!(right1.x > 0.0, "{right1:?}");
+    assert!(left0.x < 0.0, "{left0:?}");
+    assert!(left1.x < 0.0, "{left1:?}");
+    assert!((right0.y - left0.y).abs() < 1e-9, "{right0:?} {left0:?}");
+    assert!((right1.y - left1.y).abs() < 1e-9, "{right1:?} {left1:?}");
 }
 
 #[test]

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -314,24 +314,8 @@ fn run() -> Result<()> {
             .with_context(|| format!("failed to create cache directory {}", parent.display()))?;
     }
 
-    let layout_asset = ensure_layout_asset(&build_dir)?;
-
-    let mut style_files = Vec::new();
-    for style in &draw_args.style {
-        let canonical = canonicalize_existing(style)
-            .with_context(|| format!("failed to read style file {}", style.display()))?;
-        style_files.push(canonical);
-    }
-    let layout_style = canonicalize_existing(&layout_asset).with_context(|| {
-        format!(
-            "failed to resolve layout template {}",
-            layout_asset.display()
-        )
-    })?;
-    style_files.push(layout_style);
-    style_files.sort();
-    style_files.dedup();
-
+    ensure_default_template_assets(&build_dir)?;
+    ensure_layout_asset(&build_dir)?;
     let figure_template =
         resolve_template(&requested_figure_template, TemplateKind::Figure, &build_dir)?;
     let grid_template = resolve_template(&requested_grid_template, TemplateKind::Grid, &build_dir)?;
@@ -346,6 +330,23 @@ fn run() -> Result<()> {
                 .join("fig-index.typ")
         });
     ensure_plugin_assets(&build_dir)?;
+
+    let mut style_files = Vec::new();
+    for style in &draw_args.style {
+        let canonical = canonicalize_existing(style)
+            .with_context(|| format!("failed to read style file {}", style.display()))?;
+        style_files.push(canonical);
+    }
+    style_files.extend(collect_template_dependency_files(
+        &build_dir.join(TEMPLATE_SUBDIR),
+        &[
+            figure_template.clone(),
+            grid_template.clone(),
+            fig_index_path.clone(),
+        ],
+    )?);
+    style_files.sort();
+    style_files.dedup();
 
     let dot_files = collect_dot_files(&root)?;
     if dot_files.is_empty() {
@@ -1046,6 +1047,27 @@ fn ensure_plugin_assets(build_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Ensure every embedded default template dependency exists under `build/templates`.
+fn ensure_default_template_assets(build_dir: &Path) -> Result<()> {
+    let template_dir = build_dir.join(TEMPLATE_SUBDIR);
+    for path in EmbeddedTemplates::iter() {
+        let target = template_dir.join(path.as_ref());
+        if target.exists() {
+            continue;
+        }
+        ensure_parent_dir(&target)?;
+        let contents = EmbeddedTemplates::get(path.as_ref())
+            .ok_or_else(|| eyre!("embedded template {} is missing", path))?;
+        fs::write(&target, contents.data.as_ref()).with_context(|| {
+            format!(
+                "failed to write embedded template dependency {}",
+                target.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
 /// Ensure the default layout template exists unless the user already created one.
 fn ensure_layout_asset(build_dir: &Path) -> Result<PathBuf> {
     let target = build_dir
@@ -1063,6 +1085,57 @@ fn ensure_layout_asset(build_dir: &Path) -> Result<PathBuf> {
         )
     })?;
     Ok(target)
+}
+
+fn collect_template_dependency_files(
+    template_dir: &Path,
+    roots: &[PathBuf],
+) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+
+    for path in roots {
+        if should_hash_template_dependency(path) && path.exists() {
+            push_dependency_file(&mut files, &mut seen, path)?;
+        }
+    }
+
+    if template_dir.exists() {
+        for entry in WalkDir::new(template_dir).into_iter() {
+            let entry = entry?;
+            if entry.file_type().is_file() && should_hash_template_dependency(entry.path()) {
+                push_dependency_file(&mut files, &mut seen, entry.path())?;
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+fn should_hash_template_dependency(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    if matches!(file_name, "grid.typ" | "fig-index.typ") {
+        return false;
+    }
+    matches!(
+        path.extension().and_then(OsStr::to_str),
+        Some("typ" | "wasm")
+    )
+}
+
+fn push_dependency_file(
+    files: &mut Vec<PathBuf>,
+    seen: &mut HashSet<PathBuf>,
+    path: &Path,
+) -> Result<()> {
+    let canonical = canonicalize_existing(path)
+        .with_context(|| format!("failed to resolve template dependency {}", path.display()))?;
+    if seen.insert(canonical.clone()) {
+        files.push(canonical);
+    }
+    Ok(())
 }
 
 fn folder_components(path: &Path) -> Vec<String> {

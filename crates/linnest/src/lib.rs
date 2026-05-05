@@ -1278,6 +1278,30 @@ impl TypstGraph {
                 }
             }
         }
+
+        for i in 0..node_len {
+            let idx = NodeIndex(i);
+            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_v[idx].x);
+            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_v[idx].y);
+        }
+
+        for i in 0..edge_len {
+            let idx = EdgeIndex(i);
+            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_e[idx].x);
+            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_e[idx].y);
+        }
+    }
+
+    fn apply_directional_constraint(constraint: &Constraint, value: &mut f64) {
+        match constraint {
+            Constraint::Grouped(_, ShiftDirection::PositiveOnly) if *value < 0.0 => {
+                *value = value.abs();
+            }
+            Constraint::Grouped(_, ShiftDirection::NegativeOnly) if *value > 0.0 => {
+                *value = -value.abs();
+            }
+            _ => {}
+        }
     }
 
     pub fn update_positions(&mut self, node: NodeVec<Point2<f64>>, edge: EdgeVec<Point2<f64>>) {
