@@ -783,6 +783,53 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         None
     }
 
+    pub fn ready_operation_refs(&self) -> Vec<NetworkOperationRef<'_, K, FK, Aind>> {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.ready_operation_refs_ignoring(&hidden)
+    }
+
+    pub fn ready_operation_refs_ignoring<S>(
+        &self,
+        hidden: &S,
+    ) -> Vec<NetworkOperationRef<'_, K, FK, Aind>>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let mut used: SuBitGraph = self.graph.empty_subgraph();
+        let mut ready = Vec::new();
+
+        for nid in self.cached_expr_preorder_nodes_ignoring(hidden) {
+            let NetworkNode::Op(op) = &self.graph[nid] else {
+                continue;
+            };
+
+            let children = self.cached_expr_children_ignoring(nid, hidden);
+            if children.is_empty()
+                || children
+                    .iter()
+                    .any(|child| !matches!(&self.graph[*child], NetworkNode::Leaf(_)))
+            {
+                continue;
+            }
+
+            let subgraph = self.operation_subgraph_ignoring(nid, &children, hidden);
+            if !subgraph.empty_intersection(&used) {
+                continue;
+            }
+
+            used.union_with(&subgraph);
+            ready.push(NetworkOperationRef {
+                graph: self,
+                op_node: nid,
+                op,
+                children,
+                subgraph,
+            });
+        }
+
+        ready
+    }
+
     pub fn operation_subgraph(&self, op_node: NodeIndex, children: &[NodeIndex]) -> SuBitGraph {
         let hidden: SuBitGraph = self.graph.empty_subgraph();
         self.operation_subgraph_ignoring(op_node, children, &hidden)
@@ -1995,7 +2042,7 @@ impl<K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Sub<NetworkGraph<K, FK, 
 pub mod test {
 
     use linnet::{
-        half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+        half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
         tree::child_vec::ChildVecStore,
     };
 
@@ -2008,7 +2055,7 @@ pub mod test {
         },
     };
 
-    use super::{NetworkGraph, NetworkNode};
+    use super::{NetworkGraph, NetworkNode, NetworkOp};
 
     #[test]
     fn addition() {
@@ -2197,5 +2244,47 @@ pub mod test {
         assert_eq!(op_ref.graph().n_nodes(), node_count);
         assert_eq!(expr.n_nodes(), node_count);
         assert_eq!(expr.graph.n_hedges(), hedge_count);
+    }
+
+    #[test]
+    fn ready_operation_refs_batch_non_overlapping_leaf_operations() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let mut expr = (tensor_a + tensor_b) * (scalar + scalar_b);
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let ready = expr.ready_operation_refs();
+        assert_eq!(ready.len(), 2);
+
+        let mut used: SuBitGraph = expr.graph.empty_subgraph();
+        for op_ref in &ready {
+            assert!(matches!(op_ref.op(), NetworkOp::Sum));
+            assert!(op_ref.subgraph().empty_intersection(&used));
+            used.union_with(op_ref.subgraph());
+            assert!(
+                op_ref
+                    .children()
+                    .iter()
+                    .all(|child| matches!(&expr.graph[*child], NetworkNode::Leaf(_)))
+            );
+        }
     }
 }
