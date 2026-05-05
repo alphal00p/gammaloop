@@ -156,6 +156,34 @@ fn gamma_chain_canonical_ordering_is_opt_in() {
 }
 
 #[test]
+fn gamma_chain_rules_do_not_treat_gamma5_as_gamma() {
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma!(slot!(r.mink4, mu)),
+        gamma5!(),
+        gamma!(slot!(r.mink4, mu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma5(in,out),gamma(in,out,mink(4,mu)))");
+}
+
+#[test]
+fn four_dimensional_chisholm_requires_four_dimensional_interior() {
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+        gamma!(slot!(r.mink4, mu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(d,nu)),gamma(in,out,mink(4,mu)))");
+}
+
+#[test]
 fn gamma_trace_evaluation_can_be_disabled() {
     initialize();
     let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
