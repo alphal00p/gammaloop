@@ -106,11 +106,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric: self
-                .parametric
-                .iter()
-                .map(|(k, _)| (*k, Atom::Zero))
-                .collect(),
+            parametric: self.parametric.keys().map(|k| (*k, Atom::Zero)).collect(),
         }
     }
 
@@ -291,7 +287,7 @@ impl AmplitudeCountertermData {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for evaluator in self.evaluators.iter_mut() {
-            for (_cut_index, evaluator_stack) in &mut evaluator.evaluator_stacks {
+            for evaluator_stack in evaluator.evaluator_stacks.values_mut() {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }

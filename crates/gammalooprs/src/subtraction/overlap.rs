@@ -1,5 +1,4 @@
 use crate::GammaLoopContext;
-use crate::cff::CutCFFIndex;
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;

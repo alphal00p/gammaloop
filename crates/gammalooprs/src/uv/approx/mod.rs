@@ -14,7 +14,6 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
-use rand::seq::index;
 use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
@@ -360,7 +359,7 @@ impl Approximation {
             self.integrated_4d = ApproxOp::Root;
             self.local_3d = CFFapprox::root(graph, cuts, settings, orientation_pattern)?;
             if Self::filtered_integrated_uv_mode_is_active(settings) {
-                let (integrands, _) = self
+                let (_, _) = self
                     .local_3d
                     .expr()
                     .expect("root local CFF should have been computed");
@@ -489,7 +488,7 @@ impl Approximation {
         debug_tags!(
             #uv;
             finite = %finite.log_print(Some(80)),
-            t4 = %t4.iter().enumerate().map(|(i, (index, t4))| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
+            t4 = %t4.iter().map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
             "Computing UV subtraction",
         );
 
@@ -599,7 +598,7 @@ impl Approximation {
         debug_tags!(
             #uv,#final;
             finite = %finite.log_print(Some(80)),
-            t4 = %t4.iter().enumerate().map(|(i, (index, t4))| format!("t4_{} = {}", i, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
+            t4 = %t4.iter().map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
             "Computing Final integrand after uv subtraction",
         );
 

@@ -4,7 +4,6 @@ use std::ops::AddAssign;
 use crate::cff::CutCFFIndex;
 use crate::utils::{F, FloatLike, PrecisionUpgradable};
 use itertools::iproduct;
-use rayon::result;
 use spenso::algebra::{algebraic_traits::RefZero, complex::Complex};
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 
@@ -32,23 +31,22 @@ pub(crate) fn shape_from_cut_cff_index(cut_cff_index: &CutCFFIndex) -> Option<Ve
     let max_derivative_shape = {
         let mut max_derivative_shape = Vec::new();
 
-        if let Some(lu_cut_order) = cut_cff_index.lu_cut_order {
-            if lu_cut_order > 1 {
-                max_derivative_shape.push(lu_cut_order - 1);
-            }
+        if let Some(lu_cut_order) = cut_cff_index.lu_cut_order
+            && lu_cut_order > 1
+        {
+            max_derivative_shape.push(lu_cut_order - 1);
         }
 
-        if let Some(left_th_order) = cut_cff_index.left_threshold_order {
-            if left_th_order > 1 {
-                max_derivative_shape.push(left_th_order - 1);
-            }
+        if let Some(left_th_order) = cut_cff_index.left_threshold_order
+            && left_th_order > 1
+        {
+            max_derivative_shape.push(left_th_order - 1);
         }
-
-        if let Some(right_th_order) = cut_cff_index.right_threshold_order {
-            if right_th_order > 1 {
-                max_derivative_shape.push(right_th_order - 1);
-            }
-        };
+        if let Some(right_th_order) = cut_cff_index.right_threshold_order
+            && right_th_order > 1
+        {
+            max_derivative_shape.push(right_th_order - 1);
+        }
 
         max_derivative_shape
     };
