@@ -1,7 +1,10 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    network::library::symbolic::{ETS, ExplicitKey},
+    network::{
+        library::symbolic::{ETS, ExplicitKey},
+        tags::SPENSO_TAG,
+    },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         dimension::Dimension,
@@ -195,15 +198,30 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
                     }
                     mu.format(&mut out, opt, PrintState::new()).unwrap();
 
-                    out.push(',');
-
-                    i.format(&mut out, opt, PrintState::new()).unwrap();
-                    if commas {
-                        out.push(',');
-                    } else {
-                        out.push(' ');
+                    let mut skip = false;
+                    if let (AtomView::Var(v), AtomView::Var(w)) = (i, j) {
+                        if v.get_symbol() == SPENSO_TAG.chain_in
+                            && w.get_symbol() == SPENSO_TAG.chain_out
+                        {
+                            skip = true;
+                        } else if v.get_symbol() == SPENSO_TAG.chain_out
+                            && w.get_symbol() == SPENSO_TAG.chain_in
+                        {
+                            skip = true;
+                            out.push('T');
+                        }
                     }
-                    j.format(&mut out, opt, PrintState::new()).unwrap();
+
+                    if !skip {
+                        out.push(',');
+                        i.format(&mut out, opt, PrintState::new()).unwrap();
+                        if commas {
+                            out.push(',');
+                        } else {
+                            out.push(' ');
+                        }
+                        j.format(&mut out, opt, PrintState::new()).unwrap();
+                    }
                     if parens {
                         out.push(')');
                     }

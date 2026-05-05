@@ -84,7 +84,11 @@ fn chain_test() {
     expr.typst_fmt(&mut out, &TypstSettings::lowering())
         .unwrap();
     println!("{}", out);
-    println!("Aft:{}", expr.simplify_gamma());
+    println!(
+        "Aft:{}",
+        expr.simplify_gamma()
+            .printer(SpensoPrintSettings::compact().nice_symbolica())
+    );
 }
 
 #[test]

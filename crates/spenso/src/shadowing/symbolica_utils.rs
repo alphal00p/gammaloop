@@ -88,7 +88,7 @@ impl SpensoPrintSettings {
     // x^-1*a^-1*b^-1 -> ((1/x)/a)/b
     pub fn compact() -> Self {
         Self {
-            parens: false,
+            parens: true,
             commas: false,
             with_dim: false,
             symbol_scripts: false,
