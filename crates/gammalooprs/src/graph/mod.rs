@@ -102,6 +102,35 @@ impl Graph {
             ParamBuilder::new(self, model, &loop_momentum_basis, additional_params);
     }
 
+    pub(crate) fn cff_global_sign_exponent_for_3d_expression(&self) -> usize {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        let source_to_local = self
+            .energy_edge_index_map(&parsed)
+            .expect("GammaLoop graph source should expose an energy-edge map")
+            .internal_to_local();
+        let preserved_edges = self
+            .external_tree_4d_denominator_edges()
+            .into_iter()
+            .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
+            .collect_vec();
+
+        let duplicate_signature_excess = three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .map(|group| {
+                group
+                    .edge_ids
+                    .into_iter()
+                    .filter(|edge_id| !preserved_edges.contains(edge_id))
+                    .count()
+                    .saturating_sub(1)
+            })
+            .sum::<usize>();
+
+        parsed.loop_names.len().saturating_sub(1) + duplicate_signature_excess
+    }
+
     pub fn split_repeated_masses_for_three_drep(
         &self,
         model: &Model,

@@ -16,7 +16,11 @@ use symbolica::{
 use three_dimensional_reps::{
     EnergyEdgeIndexMap, Generate3DExpressionOptions, GraphOrientation, MomentumSignature,
     NumeratorSamplingScaleMode, OrientationSelector, ParsedGraph, RepresentationMode,
-    graph_io::{ParsedGraphExternalEdge, ParsedGraphInternalEdge},
+    graph_io::{
+        ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
+        initial_state_cut_external_alias,
+    },
+    repeated_groups,
 };
 
 use crate::{
@@ -25,6 +29,7 @@ use crate::{
             GammaLoopCFFVariant, GammaLoopGraphOrientation, GammaLoopOrientationExpression,
             OrientationID,
         },
+        generation::generated_cff_expression_uses_variant_half_edges,
         surface::GammaLoopSurfaceCache,
     },
     graph::{FeynmanGraph, Graph, LoopMomentumBasis, cuts::CutSet},
@@ -130,7 +135,7 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
-    valid_orientations: &[EdgeVec<Orientation>],
+    _valid_orientations: &[EdgeVec<Orientation>],
     contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
 ) -> Result<Vec<Atom>> {
     let terms = extract_expanded_terms(atom)?;
@@ -146,7 +151,6 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
             cutset,
             representation,
             settings,
-            valid_orientations,
             contract_subgraph,
         )? {
             accumulate_expanded_4d_term(&mut out, generated)?;
@@ -163,19 +167,13 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
-    valid_orientations: &[EdgeVec<Orientation>],
     contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
 ) -> Result<Option<Vec<Atom>>> {
     if term.denominators.is_empty() {
         if cutset_has_residue_selector(cutset) {
             return Ok(None);
         }
-        return Ok(Some(vec![denominatorless_term_for_explicit_sum(
-            term.numerator,
-            representation,
-            settings,
-            valid_orientations,
-        )?]));
+        return Ok(Some(vec![term.numerator]));
     }
 
     let source = build_expanded_4d_parsed_source(graph, &term.denominators, contract_subgraph)?;
@@ -196,6 +194,7 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
                 &residue,
                 &term.numerator,
                 &source,
+                cutset,
                 representation,
                 settings,
             )
@@ -231,6 +230,7 @@ fn generate_expanded_4d_source_expression(
     graph.convert_generated_expression_surfaces(
         raw_expression,
         representation_mode(representation),
+        generated_cff_expression_uses_variant_half_edges(&options),
         &graph.get_esurface_canonization(&graph.loop_momentum_basis),
         &initial_state_cut_edges,
     )
@@ -255,24 +255,6 @@ fn cutset_has_residue_selector(cutset: &CutSet) -> bool {
     cutset.residue_selector.right_th_cut.is_some()
         || cutset.residue_selector.left_th_cut.is_some()
         || cutset.residue_selector.lu_cut.is_some()
-}
-
-fn denominatorless_term_for_explicit_sum(
-    term: Atom,
-    representation: ThreeDRepresentation,
-    settings: &GenerationSettings,
-    valid_orientations: &[EdgeVec<Orientation>],
-) -> Result<Atom> {
-    if representation != ThreeDRepresentation::Cff || !settings.explicit_orientation_sum_only {
-        return Ok(term);
-    }
-    let n_orientations = valid_orientations.len();
-    if n_orientations == 0 {
-        return Err(eyre!(
-            "cannot normalize denominatorless expanded 4D CFF term: no valid orientations"
-        ));
-    }
-    Ok(term / Atom::num(n_orientations as i64))
 }
 
 fn select_cut_residues(
@@ -322,17 +304,22 @@ fn expanded_expression_parametric_atom(
     expression: &crate::cff::expression::ThreeDExpression<OrientationID>,
     numerator: &Atom,
     source: &Expanded4DParsedSource,
+    cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
 ) -> Result<Atom> {
     let replacement_rules = expression.surfaces.get_all_replacements_gs(&[]);
     let ose_replacements = expanded_ose_replacements(source);
-    let inverse_energy_product = if representation == ThreeDRepresentation::Cff {
+    let residual_denominator_factor = residual_denominator_factor_for_expanded_source(source);
+    let inverse_energy_product = if representation == ThreeDRepresentation::Cff
+        && !crate::cff::cff_expression_uses_local_half_edges(expression)
+    {
         cff_inverse_energy_product_for_expanded_source(source)
     } else {
         Atom::num(1)
     };
-    let residual_denominator_factor = residual_denominator_factor_for_expanded_source(source);
+    let ltd_parity_correction =
+        ltd_cross_section_residue_parity_correction(graph, source, cutset, representation);
     let all_orientations = crate::settings::global::OrientationPattern::default();
     let pattern = if settings.explicit_orientation_sum_only {
         &all_orientations
@@ -353,17 +340,46 @@ fn expanded_expression_parametric_atom(
             .reduce(|acc, term| acc + term)
             .unwrap_or_else(Atom::new);
         atom = atom.replace_multiple(&replacement_rules);
-        atom *= orientation.orientation_thetas_gs();
+        if !settings.explicit_orientation_sum_only {
+            atom *= orientation.orientation_thetas_gs();
+        }
         sum += atom;
     }
 
-    Ok((sum * inverse_energy_product * residual_denominator_factor)
-        .replace_multiple(&ose_replacements)
-        .replace(GS.dim)
-        .with(4)
-        .simplify_color()
-        .expand_dots()?
-        .collect_factors())
+    Ok(
+        (sum * inverse_energy_product * residual_denominator_factor * ltd_parity_correction)
+            .replace_multiple(&ose_replacements)
+            .replace(GS.dim)
+            .with(4)
+            .simplify_color()
+            .expand_dots()?
+            .collect_factors(),
+    )
+}
+
+fn ltd_cross_section_residue_parity_correction(
+    graph: &Graph,
+    source: &Expanded4DParsedSource,
+    cutset: &CutSet,
+    representation: ThreeDRepresentation,
+) -> Atom {
+    if representation != ThreeDRepresentation::Ltd || cutset.residue_selector.lu_cut.is_none() {
+        return Atom::num(1);
+    }
+
+    // Cross-section LU residues are converted to GammaLoop's CFF production
+    // convention after the forest is assembled. Expanded-4D local UV terms are
+    // generated on reduced parsed sources, whose generalized-CFF global sign
+    // can differ from the full graph, especially for repeated denominators.
+    // Correct each reduced source to the full-graph convention before the
+    // outer cross-section parity factor is applied.
+    let full_exponent = graph.cff_global_sign_exponent_for_3d_expression();
+    let source_exponent = cff_global_sign_exponent_for_expanded_source(source);
+    if (full_exponent + source_exponent).is_multiple_of(2) {
+        Atom::num(1)
+    } else {
+        Atom::num(-1)
+    }
 }
 
 fn cff_inverse_energy_product_for_expanded_source(source: &Expanded4DParsedSource) -> Atom {
@@ -376,6 +392,26 @@ fn cff_inverse_energy_product_for_expanded_source(source: &Expanded4DParsedSourc
         })
         .reduce(|acc, factor| acc * factor)
         .unwrap_or_else(|| Atom::num(1))
+}
+
+fn cff_global_sign_exponent_for_expanded_source(source: &Expanded4DParsedSource) -> usize {
+    let preserved_edges = source
+        .denominator_edges
+        .iter()
+        .filter_map(|edge| edge.is_preserved_4d.then_some(edge.local_edge_id))
+        .collect::<BTreeSet<_>>();
+    let duplicate_signature_excess = repeated_groups(&source.parsed)
+        .into_iter()
+        .map(|group| {
+            group
+                .edge_ids
+                .into_iter()
+                .filter(|edge_id| !preserved_edges.contains(edge_id))
+                .count()
+                .saturating_sub(1)
+        })
+        .sum::<usize>();
+    source.parsed.loop_names.len().saturating_sub(1) + duplicate_signature_excess
 }
 
 fn residual_denominator_factor_for_expanded_source(source: &Expanded4DParsedSource) -> Atom {
@@ -448,6 +484,7 @@ fn expression_options_for_expanded_term(
         numerator_sampling_scale: numerator_sampling_scale_mode(
             settings.uniform_numerator_sampling_scale,
         ),
+        include_cff_duplicate_signature_excess_sign: true,
         preserve_internal_edges_as_four_d_denominators: source
             .denominator_edges
             .iter()
@@ -513,7 +550,61 @@ fn build_expanded_4d_parsed_source(
 
     let mut internal_edges = Vec::new();
     let mut denominator_edges = Vec::new();
+    let mut initial_state_cut_edges = Vec::new();
     let mut edge_map_internal = BTreeMap::new();
+    let denominator_source_edges = denominators
+        .iter()
+        .map(|denominator| denominator.source_edge)
+        .collect::<BTreeSet<_>>();
+
+    for (_, edge_index, _) in graph
+        .underlying
+        .iter_edges_of(&graph.initial_state_cut)
+        .sorted_by_key(|(_, edge_index, _)| *edge_index)
+    {
+        let edge_data = &graph.underlying[edge_index];
+        if edge_data.is_dummy || denominator_source_edges.contains(&edge_index) {
+            continue;
+        }
+        let (_, pair) = graph[&edge_index];
+        let HedgePair::Paired { source, sink } = pair else {
+            return Err(eyre!(
+                "expanded 4D initial-state cut edge {edge_index} is not a paired internal edge",
+            ));
+        };
+        let local_edge_id = internal_edges.len();
+        let source_node = *node_to_internal
+            .get(&graph.node_id(source))
+            .ok_or_else(|| eyre!("missing source-node mapping for edge {edge_index}"))?;
+        let sink_node = *node_to_internal
+            .get(&graph.node_id(sink))
+            .ok_or_else(|| eyre!("missing sink-node mapping for edge {edge_index}"))?;
+        let signature = &graph.loop_momentum_basis.edge_signatures[edge_index];
+        let momentum_signature = MomentumSignature {
+            loop_signature: active_loop_columns
+                .iter()
+                .map(|loop_index| sign_to_i32(signature.internal[LoopIndex::from(*loop_index)]))
+                .collect(),
+            external_signature: (&signature.external).into_iter().map(sign_to_i32).collect(),
+        };
+        let (external_id, external_sign) =
+            initial_state_cut_external_alias(usize::from(edge_index), &momentum_signature)?;
+        internal_edges.push(ParsedGraphInternalEdge {
+            edge_id: local_edge_id,
+            tail: source_node,
+            head: sink_node,
+            label: graph.underlying[edge_index].name.value.clone(),
+            mass_key: Some(edge_data.particle.mass_atom().to_canonical_string()),
+            signature: momentum_signature,
+            had_pow: false,
+        });
+        initial_state_cut_edges.push(ParsedGraphInitialStateCutEdge {
+            edge_id: local_edge_id,
+            external_id,
+            external_sign,
+        });
+        edge_map_internal.insert(local_edge_id, usize::from(edge_index));
+    }
 
     for denominator in denominators {
         let (_, pair) = graph[&denominator.source_edge];
@@ -595,7 +686,7 @@ fn build_expanded_4d_parsed_source(
     let parsed = ParsedGraph {
         internal_edges,
         external_edges,
-        initial_state_cut_edges: Vec::new(),
+        initial_state_cut_edges,
         loop_names,
         external_names,
         node_name_to_internal: root_to_internal

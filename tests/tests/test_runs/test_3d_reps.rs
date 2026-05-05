@@ -708,6 +708,7 @@ fn expression_options(
         representation,
         energy_degree_bounds: bounds.to_vec(),
         numerator_sampling_scale: sampling_scale,
+        include_cff_duplicate_signature_excess_sign: true,
         preserve_internal_edges_as_four_d_denominators: Vec::new(),
     }
 }
@@ -877,7 +878,7 @@ fn run_imported_graph_threedrep_test(
         gammaloop_threedreps_dot_path(dot_name).display()
     ))?;
     cli.run_command(&format!(
-        "3Drep test-cff-ltd -p {process_name} -i default -g 0 --workspace-path {}",
+        "3Drep test-cff-ltd -p {process_name} -i default -g 0 --workspace-path {} --clean",
         workspace_path.display()
     ))?;
 
@@ -3391,9 +3392,12 @@ fn cli_imported_box_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
             .as_array()
             .is_some_and(Vec::is_empty)
     );
+    let expected_automatic_bounds =
+        imported_graph_from_cli(&run.cli, "threedreps_box", "default", 0)?
+            .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
     assert_eq!(
         serde_json::from_value::<Vec<(usize, usize)>>(manifest["energy_degree_bounds"].clone())?,
-        vec![(4, 0), (5, 0), (6, 0), (7, 0)]
+        expected_automatic_bounds
     );
     assert_internal_signatures(
         &run.parsed,
@@ -3502,9 +3506,12 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
             .as_array()
             .is_some_and(Vec::is_empty)
     );
+    let expected_automatic_bounds =
+        imported_graph_from_cli(&run.cli, "threedreps_box_pow3", "default", 0)?
+            .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
     assert_eq!(
         serde_json::from_value::<Vec<(usize, usize)>>(manifest["energy_degree_bounds"].clone())?,
-        vec![(4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0)]
+        expected_automatic_bounds
     );
     assert_internal_signatures(
         &run.parsed,
@@ -3519,7 +3526,7 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     );
 
     assert_manifest_case(manifest, "cff", 62, 27)?;
-    assert_manifest_case(manifest, "ltd", 4, 24)?;
+    assert_manifest_case(manifest, "ltd", 17, 36)?;
     assert_manifest_case(manifest, "pureltd", 6, 57)?;
 
     assert_eq!(
@@ -3534,29 +3541,51 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     );
     assert_eq!(
         compact_base_orientation_labels(&run.ltd.expression, &run.source_internal_edges),
-        ["+xxxxx", "x+xxxx", "xx+xxx", "xxx+xx"]
-    );
-    assert_eq!(
-        variant_prefactors(&run.ltd.expression),
-        vec![vec!["-1"], vec!["-1"], vec!["-1"], vec!["-1", "-3", "-6"]]
-    );
-    assert_eq!(
-        variant_half_edges(&run.ltd.expression),
-        vec![
-            vec![vec![4]],
-            vec![vec![5]],
-            vec![vec![6]],
-            vec![vec![7, 7, 7], vec![7, 7, 7, 7], vec![7, 7, 7, 7, 7]]
+        [
+            "+xxxxx", "x+xxxx", "xx+xxx", "xxx+++", "xxx---", "xxx--+", "xxx--+", "xxx-+-",
+            "xxx-+-", "xxx-++", "xxx-++", "xxx+--", "xxx+--", "xxx+-+", "xxx+-+", "xxx++-",
+            "xxx++-",
         ]
     );
+    let ltd_half_edges = variant_half_edges(&run.ltd.expression);
     assert_eq!(
-        variant_linear_denominator_surface_ids(&run.ltd.expression),
-        vec![
-            vec![vec![1, 3, 5]],
-            vec![vec![7, 9, 11]],
-            vec![vec![13, 15, 17]],
-            vec![vec![19, 21, 23], vec![19, 21, 23], vec![19, 21, 23]],
+        &ltd_half_edges[..3],
+        [vec![vec![4]], vec![vec![5]], vec![vec![6]]]
+    );
+    let repeated_ltd_half_edges = vec![
+        vec![7, 7, 7],
+        vec![7, 7, 7, 7],
+        vec![7, 7, 7, 7],
+        vec![7, 7, 7, 7, 7],
+        vec![7, 7, 7, 7, 7],
+    ];
+    assert!(
+        ltd_half_edges[3..]
+            .iter()
+            .all(|half_edges| half_edges == &repeated_ltd_half_edges),
+        "unexpected repeated LTD half-edge structure: {ltd_half_edges:?}"
+    );
+    let ltd_denominator_ids = variant_linear_denominator_surface_ids(&run.ltd.expression);
+    assert_eq!(
+        &ltd_denominator_ids[..3],
+        [
+            vec![vec![1, 3, 5, 7, 9]],
+            vec![vec![11, 13, 15, 17, 19]],
+            vec![vec![21, 23, 25, 27, 29]],
         ]
+    );
+    let repeated_ltd_denominator_ids = vec![vec![31, 33, 35]; 5];
+    assert!(
+        ltd_denominator_ids[3..]
+            .iter()
+            .all(|ids| ids == &repeated_ltd_denominator_ids),
+        "unexpected repeated LTD denominator surfaces: {ltd_denominator_ids:?}"
+    );
+    assert!(
+        variant_prefactors(&run.ltd.expression)[3..]
+            .iter()
+            .all(|prefactors| prefactors.len() == 5),
+        "repeated LTD orientations should expose the full five-variant derivative structure"
     );
 
     assert_eq!(

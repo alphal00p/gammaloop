@@ -307,17 +307,10 @@ impl Graph {
         excluded_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
         let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
-        let mut bounds = self
-            .underlying
-            .iter_edges()
-            .filter_map(|(pair, edge, edge_data)| {
-                (pair.is_paired() && !edge_data.data.is_dummy && !excluded_edges.contains(&edge))
-                    .then_some((usize::from(edge), 0usize))
-            })
-            .collect::<BTreeMap<_, _>>();
+        let mut bounds = BTreeMap::new();
 
         for (edge, degree) in self.numerator_energy_power_upper_bounds()?.iter() {
-            if excluded_edges.contains(&edge) {
+            if excluded_edges.contains(&edge) || degree <= 1 {
                 continue;
             }
             bounds.insert(usize::from(edge), degree);

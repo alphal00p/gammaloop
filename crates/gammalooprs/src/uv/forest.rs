@@ -1,6 +1,6 @@
 use crate::{
     GammaLoopContext,
-    cff::expression::GammaLoopGraphOrientation,
+    cff::expression::{CFFExpression, GammaLoopGraphOrientation, OrientationID},
     graph::{Graph, cuts::CutSet},
     settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
@@ -70,6 +70,47 @@ pub(crate) fn explicit_orientation_sum_atom(
         .collect_factors()
 }
 
+/// Decide whether a forest term must be built from the 4D-expanded integrand
+/// before projecting to CFF/LTD. This includes the explicit user setting, LTD
+/// generation, and explicit-orientation-sum CFF cases where raised/repeated
+/// residues make a local expansion of the already-projected 3D expression
+/// representation-dependent.
+pub(crate) fn uses_expanded_4d_forest_path(
+    graph: &Graph,
+    cut_data: &CutSet,
+    settings: &GenerationSettings,
+    representation: ThreeDRepresentation,
+) -> bool {
+    let explicit_sum_cff_residue_needs_expanded_4d_local_uv = settings
+        .explicit_orientation_sum_only
+        && representation == ThreeDRepresentation::Cff
+        && (cut_data
+            .residue_selector
+            .lu_cut
+            .as_ref()
+            .is_some_and(|lu_cut| lu_cut.max_occurence > 1)
+            || graph
+                .get_raised_edge_groups()
+                .iter()
+                .any(|group| group.len() > 1));
+
+    (settings.uv.subtract_uv
+        && (settings.uv.local_uv_cts_from_expanded_4d_integrands
+            || explicit_sum_cff_residue_needs_expanded_4d_local_uv))
+        || representation == ThreeDRepresentation::Ltd
+}
+
+pub(crate) fn cff_explicit_sum_needs_outer_orientation_projection(
+    graph: &Graph,
+    cut_data: &CutSet,
+    settings: &GenerationSettings,
+    representation: ThreeDRepresentation,
+) -> bool {
+    settings.explicit_orientation_sum_only
+        && representation == ThreeDRepresentation::Cff
+        && !uses_expanded_4d_forest_path(graph, cut_data, settings, representation)
+}
+
 impl CutForests {
     pub(crate) fn compute(
         &mut self,
@@ -77,6 +118,7 @@ impl CutForests {
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
+        root_expression: Option<&CFFExpression<OrientationID>>,
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
@@ -92,6 +134,7 @@ impl CutForests {
                 cuts,
                 valid_orientations,
                 settings,
+                root_expression,
                 representation,
                 explicit_orientation_sum_only,
             )?;
@@ -145,12 +188,18 @@ impl Forest {
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
+        root_expression: Option<&CFFExpression<OrientationID>>,
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
-        let use_expanded_4d_local_uv = (settings.uv.subtract_uv
-            && settings.uv.local_uv_cts_from_expanded_4d_integrands)
-            || representation == ThreeDRepresentation::Ltd;
+        // Raised LU residues and repeated loop denominators differentiate the
+        // residue-selected 3D expression. The local-UV expansion of that
+        // already-differentiated CFF object does not commute with the 4D local
+        // forest in general. Use the expanded-4D bridge for these cases so CFF
+        // and LTD project the same local counterterm before
+        // representation-specific residue evaluation.
+        let use_expanded_4d_local_uv =
+            uses_expanded_4d_forest_path(graph, cut_data, settings, representation);
         let order = self.dag.compute_topological_order();
 
         for (i, n) in order.into_iter().enumerate() {
@@ -170,7 +219,8 @@ impl Forest {
                             graph,
                             cut_data,
                             valid_orientations,
-                            &settings.uv,
+                            settings,
+                            root_expression,
                         )?;
                     }
                 }

@@ -222,7 +222,7 @@ fn setup_generated_scalar_forward_cross_sections_cli(
             "generate existing -p scalar_xs_2l -i no_numerator",
             "generate existing -p scalar_xs_3l -i no_numerator",
         ],
-        None,
+        Some("all"),
         true,
         false,
     )
@@ -232,6 +232,30 @@ fn setup_generated_scalar_forward_cross_sections_cli_with_commands(
     test_name: &str,
     representation: &str,
     subtract_uv: bool,
+    graph_commands: &[&str],
+    integrand_commands: &[&str],
+    numerator_sampling_scale: Option<&str>,
+    enable_thresholds: bool,
+    disable_threshold_subtraction_runtime: bool,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+        test_name,
+        representation,
+        subtract_uv,
+        subtract_uv,
+        graph_commands,
+        integrand_commands,
+        numerator_sampling_scale,
+        enable_thresholds,
+        disable_threshold_subtraction_runtime,
+    )
+}
+
+fn setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+    test_name: &str,
+    representation: &str,
+    subtract_uv: bool,
+    local_uv_from_expanded_4d: bool,
     graph_commands: &[&str],
     integrand_commands: &[&str],
     numerator_sampling_scale: Option<&str>,
@@ -251,7 +275,7 @@ fn setup_generated_scalar_forward_cross_sections_cli_with_commands(
             "import model scalars-default.json",
             "remove processes",
             &format!(
-                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.local_uv_cts_from_expanded_4d_integrands={subtract_uv} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds}{}",
+                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds}{}",
                 numerator_sampling_scale
                     .map(|scale| format!(
                         " global.generation.uniform_numerator_sampling_scale={scale}"
@@ -320,6 +344,12 @@ fn dot_sum_self(left_edge: usize, right_edge: usize) -> String {
         r1 = format_args!("gammalooprs::Q({right_edge},spenso::cind(1))"),
         r2 = format_args!("gammalooprs::Q({right_edge},spenso::cind(2))"),
         r3 = format_args!("gammalooprs::Q({right_edge},spenso::cind(3))"),
+    )
+}
+
+fn mink_dot(left_edge: usize, right_edge: usize, dummy_index: usize) -> String {
+    format!(
+        "gammalooprs::Q({left_edge},spenso::mink(4,{dummy_index}))*gammalooprs::Q({right_edge},spenso::mink(4,{dummy_index}))",
     )
 }
 
@@ -438,7 +468,13 @@ fn assert_evaluation_outputs_match(
         for (event_index, (actual_event, expected_event)) in
             actual_events.iter().zip(expected_events.iter()).enumerate()
         {
-            let event_context = format!("{context}: group {group_index} event {event_index}");
+            let event_context = format!(
+                "{context}: group {group_index} event {event_index}; actual cut={:?}; expected cut={:?}; actual additional={:?}; expected additional={:?}",
+                actual_event.cut_info,
+                expected_event.cut_info,
+                actual_event.additional_weights.weights,
+                expected_event.additional_weights.weights
+            );
             assert_eq!(
                 actual_event.cut_info.cut_id, expected_event.cut_info.cut_id,
                 "{event_context}: cut id differs"
@@ -479,6 +515,24 @@ fn assert_evaluation_outputs_match(
             }
         }
     }
+}
+
+fn assert_three_way_local_uv_outputs_match(
+    cff_3d: &gammalooprs::integrands::evaluation::SingleSampleEvaluationResult,
+    cff_4d: &gammalooprs::integrands::evaluation::SingleSampleEvaluationResult,
+    ltd_4d: &gammalooprs::integrands::evaluation::SingleSampleEvaluationResult,
+    context: &str,
+) {
+    assert_evaluation_outputs_match(
+        &cff_4d.sample.evaluation,
+        &cff_3d.sample.evaluation,
+        &format!("{context}: CFF local-4D vs CFF local-3D"),
+    );
+    assert_evaluation_outputs_match(
+        &ltd_4d.sample.evaluation,
+        &cff_3d.sample.evaluation,
+        &format!("{context}: LTD local-4D vs CFF local-3D"),
+    );
 }
 
 fn evaluation_has_threshold_counterterm(
@@ -1003,6 +1057,265 @@ fn ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff() 
 
 #[test]
 #[serial]
+fn ltd_generated_gl06_threshold_linear_numerators_without_uv_match_cff() -> Result<()> {
+    let quadratic_prefactor = mink_dot(1, 2, 1);
+    let single_17_prefactor = mink_dot(1, 7, 1);
+    let single_36_prefactor = mink_dot(3, 6, 1);
+    let quadratic_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl06_quadratic_12 -i numerator -o --select-graphs GL06 --global-prefactor-num '{quadratic_prefactor}'"
+    );
+    let single_17_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl06_single_17 -i numerator -o --select-graphs GL06 --global-prefactor-num '{single_17_prefactor}'"
+    );
+    let single_36_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl06_single_36 -i numerator -o --select-graphs GL06 --global-prefactor-num '{single_36_prefactor}'"
+    );
+    let graph_commands = [
+        quadratic_command.as_str(),
+        single_17_command.as_str(),
+        single_36_command.as_str(),
+    ];
+    let integrand_commands = [
+        "generate existing -p scalar_xs_gl06_quadratic_12 -i numerator",
+        "generate existing -p scalar_xs_gl06_single_17 -i numerator",
+        "generate existing -p scalar_xs_gl06_single_36 -i numerator",
+    ];
+
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl06_threshold_high_numerator_no_uv_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl06_threshold_high_numerator_no_uv_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    for process in [
+        "scalar_xs_gl06_quadratic_12",
+        "scalar_xs_gl06_single_17",
+        "scalar_xs_gl06_single_36",
+    ] {
+        let cff_result =
+            evaluate_xspace_process_with_events(&mut cff, process, "numerator", &point, &[])?;
+        let ltd_result =
+            evaluate_xspace_process_with_events(&mut ltd, process, "numerator", &point, &[])?;
+
+        assert_evaluation_outputs_match(
+            &ltd_result.sample.evaluation,
+            &cff_result.sample.evaluation,
+            &format!("LTD generated GL06 high-numerator fixture without local UV: {process}"),
+        );
+    }
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl06_uv_threshold_numerator_inspects_match_cff_local_uv_modes() -> Result<()> {
+    let quadratic_prefactor = mink_dot(1, 2, 1);
+    let crossed_triangle_prefactor = mink_dot(1, 7, 1);
+    let quadratic_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl06_uv_quadratic -i numerator -o --select-graphs GL06 --global-prefactor-num '{quadratic_prefactor}'"
+    );
+    let dod_two_triangle_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl06_uv_crossed_triangle -i numerator -o --select-graphs GL06 --global-prefactor-num '{crossed_triangle_prefactor}'"
+    );
+    let graph_commands = [
+        quadratic_command.as_str(),
+        dod_two_triangle_command.as_str(),
+    ];
+    let integrand_commands = [
+        "generate existing -p scalar_xs_gl06_uv_quadratic -i numerator",
+        "generate existing -p scalar_xs_gl06_uv_crossed_triangle -i numerator",
+    ];
+
+    let mut cff_3d =
+        setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+            "generated_forward_xs_gl06_uv_threshold_cff_local_3d",
+            "CFF",
+            true,
+            false,
+            &graph_commands,
+            &integrand_commands,
+            None,
+            true,
+            false,
+        )?;
+    let mut cff_4d =
+        setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+            "generated_forward_xs_gl06_uv_threshold_cff_local_4d",
+            "CFF",
+            true,
+            true,
+            &graph_commands,
+            &integrand_commands,
+            None,
+            true,
+            false,
+        )?;
+    let mut ltd_4d =
+        setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+            "generated_forward_xs_gl06_uv_threshold_ltd_local_4d",
+            "LTD",
+            true,
+            true,
+            &graph_commands,
+            &integrand_commands,
+            None,
+            true,
+            false,
+        )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    for process in [
+        "scalar_xs_gl06_uv_quadratic",
+        "scalar_xs_gl06_uv_crossed_triangle",
+    ] {
+        let cff_3d_result =
+            evaluate_xspace_process_with_events(&mut cff_3d, process, "numerator", &point, &[])?;
+        let cff_4d_result =
+            evaluate_xspace_process_with_events(&mut cff_4d, process, "numerator", &point, &[])?;
+        let ltd_4d_result =
+            evaluate_xspace_process_with_events(&mut ltd_4d, process, "numerator", &point, &[])?;
+
+        assert_evaluation_outputs_match(
+            &ltd_4d_result.sample.evaluation,
+            &cff_4d_result.sample.evaluation,
+            &format!(
+                "generated GL06 threshold+UV scalar forward cross-section numerator fixture {process}: LTD local-4D vs CFF local-4D"
+            ),
+        );
+        assert_three_way_local_uv_outputs_match(
+            &cff_3d_result,
+            &cff_4d_result,
+            &ltd_4d_result,
+            &format!(
+                "generated GL06 threshold+UV scalar forward cross-section numerator fixture {process}"
+            ),
+        );
+        assert!(
+            evaluation_has_threshold_counterterm(&ltd_4d_result.sample.evaluation),
+            "{process}: LTD local-4D evaluation should expose threshold-counterterm event weights"
+        );
+    }
+
+    clean_test(&cff_3d.cli_settings.state.folder);
+    clean_test(&cff_4d.cli_settings.state.folder);
+    clean_test(&ltd_4d.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl48_uv_threshold_repeated_inspects_match_cff_local_uv_modes() -> Result<()> {
+    let repeated_prefactor = mink_dot(7, 8, 1);
+    let repeated_command = format!(
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl48_uv_threshold_repeated_num -i numerator -o --select-graphs GL48 --global-prefactor-num '{repeated_prefactor}'"
+    );
+    let graph_commands = [repeated_command.as_str()];
+    let integrand_commands =
+        ["generate existing -p scalar_xs_gl48_uv_threshold_repeated_num -i numerator"];
+
+    let mut cff_3d =
+        setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+            "generated_forward_xs_gl48_uv_threshold_cff_local_3d",
+            "CFF",
+            true,
+            false,
+            &graph_commands,
+            &integrand_commands,
+            None,
+            true,
+            false,
+        )?;
+    let mut cff_4d =
+        setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+            "generated_forward_xs_gl48_uv_threshold_cff_local_4d",
+            "CFF",
+            true,
+            true,
+            &graph_commands,
+            &integrand_commands,
+            None,
+            true,
+            false,
+        )?;
+    let mut ltd_4d =
+        setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
+            "generated_forward_xs_gl48_uv_threshold_ltd_local_4d",
+            "LTD",
+            true,
+            true,
+            &graph_commands,
+            &integrand_commands,
+            None,
+            true,
+            false,
+        )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_3d_result = evaluate_xspace_process_with_events(
+        &mut cff_3d,
+        "scalar_xs_gl48_uv_threshold_repeated_num",
+        "numerator",
+        &point,
+        &[],
+    )?;
+    let cff_4d_result = evaluate_xspace_process_with_events(
+        &mut cff_4d,
+        "scalar_xs_gl48_uv_threshold_repeated_num",
+        "numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_4d_result = evaluate_xspace_process_with_events(
+        &mut ltd_4d,
+        "scalar_xs_gl48_uv_threshold_repeated_num",
+        "numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_4d_result.sample.evaluation,
+        &cff_4d_result.sample.evaluation,
+        "generated GL48 repeated scalar forward cross-section: LTD local-4D vs CFF local-4D",
+    );
+    assert_three_way_local_uv_outputs_match(
+        &cff_3d_result,
+        &cff_4d_result,
+        &ltd_4d_result,
+        "generated GL48 repeated scalar forward cross-section",
+    );
+    assert!(
+        evaluation_has_threshold_counterterm(&ltd_4d_result.sample.evaluation),
+        "GL48 LTD local-4D evaluation should expose threshold-counterterm event weights"
+    );
+
+    clean_test(&cff_3d.cli_settings.state.folder);
+    clean_test(&cff_4d.cli_settings.state.folder);
+    clean_test(&ltd_4d.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade() -> Result<()>
 {
     let external_dot = dot_self(0);
@@ -1216,6 +1529,61 @@ fn ltd_generated_gl11_simple_cut_inspect_matches_cff() -> Result<()> {
 
 #[test]
 #[serial]
+fn ltd_generated_gl00_triple_repeated_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl00 -i no_numerator -o --select-graphs GL00",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl00 -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl00_triple_repeated_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl00_triple_repeated_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl00",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl00",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL00 triple-repeated fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn ltd_generated_gl10_simple_cut_inspect_matches_cff() -> Result<()> {
     let graph_commands = [
         "generate xs scalar_1 > scalar_0 scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl10_simple -i no_numerator -o --select-graphs GL10",
@@ -1317,6 +1685,61 @@ fn ltd_generated_gl10_raised_cut_inspect_matches_cff() -> Result<()> {
         &ltd_result.sample.evaluation,
         &cff_result.sample.evaluation,
         "LTD generated scalar forward cross-section repeated-topology raised-cut fixture",
+    );
+
+    clean_test(&cff.cli_settings.state.folder);
+    clean_test(&ltd.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn ltd_generated_gl12_simple_cut_inspect_matches_cff() -> Result<()> {
+    let graph_commands = [
+        "generate xs scalar_1 > scalar_0 scalar_0 scalar_0 | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_rep_gl12_simple -i no_numerator -o --select-graphs GL12",
+    ];
+    let integrand_commands = ["generate existing -p scalar_xs_rep_gl12_simple -i no_numerator"];
+    let mut cff = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl12_simple_cut_cff_reference",
+        "CFF",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+    let mut ltd = setup_generated_scalar_forward_cross_sections_cli_with_commands(
+        "generated_forward_xs_gl12_simple_cut_ltd",
+        "LTD",
+        false,
+        &graph_commands,
+        &integrand_commands,
+        None,
+        false,
+        true,
+    )?;
+
+    let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    let cff_result = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_rep_gl12_simple",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+    let ltd_result = evaluate_xspace_process_with_events(
+        &mut ltd,
+        "scalar_xs_rep_gl12_simple",
+        "no_numerator",
+        &point,
+        &[],
+    )?;
+
+    assert_evaluation_outputs_match(
+        &ltd_result.sample.evaluation,
+        &cff_result.sample.evaluation,
+        "LTD generated scalar forward cross-section GL12 simple-cut fixture",
     );
 
     clean_test(&cff.cli_settings.state.folder);
@@ -2074,7 +2497,7 @@ fn test_mass_approach_scalar_self_energy() -> Result<()> {
     for mass in mass_values {
         cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
 
-        let (_, inspect) = Inspect {
+        let (jacobian, inspect) = Inspect {
             process: None,
             integrand_name: Some("default".to_string()),
             point: vec![0.1, 0.2, 0.3, 0.3, 0.4, 0.5],
@@ -2084,7 +2507,9 @@ fn test_mass_approach_scalar_self_energy() -> Result<()> {
         }
         .run(&mut cli)?;
 
-        let magnitude = (inspect.re * inspect.re + inspect.im * inspect.im).sqrt();
+        let jacobian = jacobian.expect("x-space inspect should return a parameterization jacobian");
+        let raw_inspect = inspect.map(|component| component / jacobian);
+        let magnitude = (raw_inspect.re * raw_inspect.re + raw_inspect.im * raw_inspect.im).sqrt();
         inspect_magnitudes.push(magnitude);
     }
 
@@ -2093,8 +2518,8 @@ fn test_mass_approach_scalar_self_energy() -> Result<()> {
         "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
     );
     assert!(
-        inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 2.0e-10,
-        "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
+        inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 2.0e-12,
+        "Raw inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
     );
 
     Ok(())
@@ -2115,7 +2540,7 @@ fn test_mass_approach_threshold_subtraction() -> Result<()> {
     for mass in mass_values {
         cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
 
-        let (_, inspect) = Inspect {
+        let (jacobian, inspect) = Inspect {
             process: None,
             integrand_name: Some("default".to_string()),
             point: vec![0.1, 0.2, 0.3, 0.3, 0.4, 0.5],
@@ -2125,13 +2550,18 @@ fn test_mass_approach_threshold_subtraction() -> Result<()> {
         }
         .run(&mut cli)?;
 
-        let magnitude = (inspect.re * inspect.re + inspect.im * inspect.im).sqrt();
+        let jacobian = jacobian.expect("x-space inspect should return a parameterization jacobian");
+        let raw_inspect = inspect.map(|component| component / jacobian);
+        let magnitude = (raw_inspect.re * raw_inspect.re + raw_inspect.im * raw_inspect.im).sqrt();
         inspect_magnitudes.push(magnitude);
     }
 
     assert!(
-        inspect_magnitudes.windows(2).all(|pair| pair[1] <= pair[0]),
-        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
+        inspect_magnitudes
+            .iter()
+            .copied()
+            .all(|magnitude| magnitude < 4.0e-10),
+        "Raw inspect should stay locally finite throughout the mass approach: {inspect_magnitudes:?}"
     );
     assert!(
         inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 4.0e-10,

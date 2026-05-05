@@ -5361,10 +5361,16 @@ Implementation status for the first part:
   orientation summation behavior, while LTD keeps the representation-native
   explicitly summed expression and ignores orientation-specific selectors.
 - The no-UV LTD original-integrand path and the forest-based LTD UV path now
-  share the same loop-parity normalization needed for forward-scattering
-  cross-section residues. This keeps the generated LTD local inspect result
+  share the same forward-scattering LU residue parity normalization. The
+  normalization is now expressed directly as the global sign convention used by
+  the generalized CFF generator, namely
+  `(-1)^(L-1+duplicate_signature_excess)` after removing denominator edges that
+  are preserved as 4D external-tree factors. This replaces the earlier
+  diagnostic cut-orientation and raised-pole sign branches with a single
+  representation-convention factor, keeping generated LTD local inspect output
   aligned with the CFF reference for the selected one-, two-, and three-loop
-  scalar forward-scattering graphs.
+  scalar forward-scattering graphs and for the retained repeated-propagator
+  GL00 and GL10-GL13 fixtures.
 - The expanded-4D local-UV route is selected for LTD UV subtraction, avoiding
   the unsupported LTD local-UV-from-3D-expansion path. CFF without UV
   subtraction no longer changes behavior just because the expanded-4D UV
@@ -5463,10 +5469,12 @@ Current targeted LTD cross-section tests:
 | `ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff` | Same generated graphs with threshold subtraction and UV subtraction through the expanded-4D local-UV path | yes | yes |
 | `ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade` | Generated `GL2` scalar forward-scattering graph with quartic numerator and an energy-conservation-equivalent traded numerator | yes | no |
 | `ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade` | Generated repeated-propagator `GL10` scalar forward-scattering graph with a quartic numerator. The CFF reference uses the external-momentum form, while LTD is checked both on that form and on an equivalent `Q(1)+Q(2)` energy-conservation trade that forces quartic EMR-energy dependence through the repeated topology | yes | no |
+| `ltd_generated_gl00_triple_repeated_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL00` topology with the original `scalar_0 scalar_0` final-state selection, triple repeated propagators, and second-order raised-cut derivatives, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl11_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL11` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl10_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL10` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl10_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL10` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl11_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL11` topology with the original `scalar_0 scalar_0` final-state selection, three raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl12_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL12` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl12_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL12` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl13_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL13` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
 | `ltd_generated_gl13_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL13` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
@@ -5513,24 +5521,14 @@ Path-c repeated-propagator progress:
   The `GL11` original two-particle final-state fixture is particularly useful
   here because it exposes three cuts and requires second-order `t` derivatives
   in the raised-cut construction.
-- A attempted `GL12` simple-cut fixture with the
-  `scalar_0 scalar_0 scalar_0` final-state selection exposed a remaining
-  unresolved sign diagnostic and was not retained as a passing test. It has one
-  cut and the same visible representative cut-orientation pattern as the
-  passing `GL13` simple-cut fixture, namely `e1` reversed, `e4` reversed, and
-  `e7` default, with the same effective loop parity. Nevertheless the LTD
-  local value is the exact opposite of the CFF local value at the standard
-  probe point. This shows that the current `-prod(sigma_cut)` correction is not
-  yet a complete invariant for all simple repeated forward-scattering cuts.
-  The next pass should inspect the cut-side or graph-orientation data beyond
-  the visible edge orientations before adding this fixture.
-- The remaining `GL13` sign flip was traced to the local-unitarity Cutkosky cut
-  orientation convention. The passing representative cuts had
-  `-prod(sigma_cut) = +1`, while the `GL13` representative cut had
-  `-prod(sigma_cut) = -1`. The LTD local-unitarity prefactor now includes this
-  representative oriented-cut factor in addition to the loop-count parity.
-  This fixes both the `GL13` simple-cut and raised-cut comparisons without
-  changing the already retained `GL10`, `GL11`, and `GL12` comparisons.
+- The simple-cut repeated-topology sign diagnostics are now resolved without a
+  cut-specific sign rule. The observed GL0, GL10, GL11, GL12, GL13, and GL00
+  signs are all reproduced by the same generalized-CFF global sign exponent
+  `L-1+duplicate_signature_excess`, with preserved 4D external-tree
+  denominator edges excluded from the duplicate-signature count. This removes
+  the earlier diagnostic representative-cut, raised-pole, and simple-cut
+  parity factors and makes the CFF/LTD relative sign a property of the chosen
+  representation convention rather than of an individual Cutkosky cut.
 - Repeated LTD numerator samples now reapply the initial-state cut edge
   energy-expression override after solving edge energies from the loop-basis
   targets. This is the same forward-scattering convention required elsewhere:
@@ -5582,6 +5580,19 @@ cargo fmt
 cargo check -p gammalooprs --tests --locked
 cargo test -p three-dimensional-reps --lib denominator_tree --locked -- --nocapture
 cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_gl --locked -- --nocapture
+```
+
+Additional repeated cross-section revisit validation:
+
+```text
+cargo fmt
+cargo check
+cargo test -p gammaloop-integration-tests ltd_generated_forward_cross_section_threshold_inspects_match_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl1 -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl12_simple_cut_inspect_matches_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl00_triple_repeated_cut_inspect_matches_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl -- --nocapture
 ```
 
 Additional manual probes:
@@ -5733,3 +5744,58 @@ also passed with the repeated-mass alternating hexagon enabled as a normal test
 (`53 passed; 0 ignored`). The related fast negative check
 `cff_box_double_quintic_is_rejected_by_infinity_residue_check` is covered by
 the feature-enabled `three-dimensional-reps` suite.
+
+## 2026-05-05: Step III sign cleanup and final local-inspect parity pass
+
+- Removed the remaining ad hoc repeated-cut sign handling from the generated
+  cross-section LTD path. The retained relative CFF/LTD normalization is now
+  expressed through the generalized CFF global sign exponent and, for
+  expanded-4D local UV sources, the corresponding reduced-source exponent.
+  This keeps the correction tied to the graph representation actually handed to
+  `generate_3d_expr` instead of loop-count or cut-count heuristics.
+- Fixed the CFF half-edge convention used when converting generated 3D
+  expressions back to GammaLoop atoms. A non-empty energy-bound list is not
+  sufficient evidence that the bounded CFF algorithm was used, because
+  auto-detected or bridge-generated bounds can contain only zero/linear
+  entries. Pure CFF sectors now clear generated variant-local half-edge factors
+  and use GammaLoop's global `prod(-2E)^{-1}` convention; only genuinely
+  higher-energy sectors (`degree > 1`) keep the generated variant-local
+  half-edge factors. This removed the CFF expanded-4D sign flip for odd
+  denominator counts while preserving high-energy bounded-CFF behavior.
+- Corrected denominatorless expanded-4D terms. These terms are already in the
+  explicit-orientation-summed bridge path and do not receive the later CFF
+  orientation projector, so they must pass through unchanged rather than being
+  averaged over orientations. This fixed the finite integrated-UV contribution
+  in the divergent scalar bubble parity test.
+- Updated the public 3Drep repeated-box fixture to match the generalized
+  repeated-LTD derivative structure. The LTD case now exposes 17 orientations
+  and five derivative variants in the repeated sector, while the manifest
+  still verifies direct CFF/LTD agreement.
+- Adjusted the threshold mass-approach regression to test the raw local
+  integrand after removing the parameterization jacobian. The useful invariant
+  for this fixture is local finiteness through the mass approach, not strict
+  monotonicity of the displayed x-space value.
+
+Retained and rerun local-inspect coverage includes:
+
+- amplitude CFF local-3D, CFF expanded-4D, and LTD expanded-4D parity for the
+  scalar triangle, scalar box, and divergent scalar bubble, including the
+  integrated-UV bubble variant;
+- generated forward-scattering cross-section threshold subtraction with and
+  without expanded-4D local UV;
+- GL06 numerator fixtures with simultaneous UV and threshold subtraction,
+  comparing CFF local-3D, CFF local-4D, and LTD local-4D rich inspect output;
+- GL48 with repeated propagators, higher-energy numerator support, UV
+  subtraction, and threshold subtraction active;
+- repeated-cut probes for GL00, GL10, GL11, GL12, and GL13 as normal
+  integration-test coverage where appropriate.
+
+Final verification for this pass:
+
+```text
+cargo fmt --all --check
+cargo check --profile dev-optim -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests
+just test_gammaloop
+```
+
+`just test_gammaloop` passed with `1082 passed; 125 skipped`.

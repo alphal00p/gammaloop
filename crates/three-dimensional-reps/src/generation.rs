@@ -68,8 +68,14 @@ pub struct Generate3DExpressionOptions {
     pub representation: RepresentationMode,
     pub energy_degree_bounds: Vec<(usize, usize)>,
     pub numerator_sampling_scale: NumeratorSamplingScaleMode,
+    #[serde(default = "default_true")]
+    pub include_cff_duplicate_signature_excess_sign: bool,
     #[serde(default)]
     pub preserve_internal_edges_as_four_d_denominators: Vec<usize>,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 impl Default for Generate3DExpressionOptions {
@@ -78,6 +84,7 @@ impl Default for Generate3DExpressionOptions {
             representation: RepresentationMode::Cff,
             energy_degree_bounds: Vec::new(),
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
+            include_cff_duplicate_signature_excess_sign: true,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),
         }
     }
@@ -194,7 +201,10 @@ pub fn generate_3d_expression_from_parsed(
         RepresentationMode::Cff if has_higher_energy_power(options) => {
             BoundedCffBuilder::new(parsed, options)?.build()
         }
-        RepresentationMode::Cff => generate_pure_cff_expression_from_parsed(parsed),
+        RepresentationMode::Cff => generate_pure_cff_expression_from_parsed_with_duplicate_sign(
+            parsed,
+            options.include_cff_duplicate_signature_excess_sign,
+        ),
         #[cfg(any(feature = "diagnostics", feature = "test-support"))]
         RepresentationMode::PureLtd => generate_pure_ltd_expression_from_parsed(parsed),
         #[cfg(feature = "old_cff")]
@@ -3730,6 +3740,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
             for (edge_id, expr) in partial.edge_exprs {
                 edge_exprs[edge_id] = expr;
             }
+            apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_exprs);
             let mut half_edges = partial.half_edges;
             half_edges.sort_unstable();
             self.push_variant_for_maps(
@@ -3988,7 +3999,9 @@ impl<'a> LowerSectorCffBuilder<'a> {
             })
             .collect::<Vec<_>>();
         components.extend(rows.iter().enumerate().filter_map(|(edge_id, row)| {
-            (!row.iter().any(|value| *value != 0)).then_some(vec![edge_id])
+            (!self.parsed.is_initial_state_cut_edge(edge_id)
+                && !row.iter().any(|value| *value != 0))
+            .then_some(vec![edge_id])
         }));
         components.sort_by_key(|component| component[0]);
         components
@@ -6012,6 +6025,91 @@ mod ltd_tests {
         parsed
     }
 
+    fn gl06_like_forward_graph() -> ParsedGraph {
+        let internal_edges = [
+            (0, 0, 4, vec![1, 0, 0], vec![0], "m0"),
+            (1, 0, 5, vec![-1, 0, 0], vec![1], "m0"),
+            (2, 1, 2, vec![0, -1, 0], vec![-1], "m0"),
+            (3, 1, 3, vec![0, 1, 0], vec![0], "m0"),
+            (4, 2, 3, vec![0, -1, -1], vec![-1], "m0"),
+            (5, 2, 5, vec![0, 0, 1], vec![0], "m0"),
+            (6, 3, 4, vec![0, 0, -1], vec![-1], "m0"),
+            (7, 4, 5, vec![1, 0, -1], vec![-1], "m1"),
+        ]
+        .into_iter()
+        .map(
+            |(edge_id, tail, head, loop_signature, external_signature, mass_key)| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass_key.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature,
+                        external_signature,
+                    },
+                    had_pow: false,
+                }
+            },
+        )
+        .collect();
+
+        ParsedGraph {
+            internal_edges,
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k0".to_string(), "k1".to_string(), "k2".to_string()],
+            external_names: vec!["p0".to_string()],
+            node_name_to_internal: (0..6).map(|node| (format!("v{node}"), node)).collect(),
+        }
+    }
+
+    fn gl06_forward_graph_with_initial_state_cut() -> ParsedGraph {
+        let internal_edges = [
+            (0, 1, 0, vec![0, 0, 0], vec![1], "m0"),
+            (1, 0, 4, vec![1, 0, 0], vec![0], "m0"),
+            (2, 0, 5, vec![-1, 0, 0], vec![1], "m0"),
+            (3, 1, 2, vec![0, -1, 0], vec![-1], "m0"),
+            (4, 1, 3, vec![0, 1, 0], vec![0], "m0"),
+            (5, 2, 3, vec![0, -1, -1], vec![-1], "m0"),
+            (6, 2, 5, vec![0, 0, 1], vec![0], "m0"),
+            (7, 3, 4, vec![0, 0, -1], vec![-1], "m0"),
+            (8, 4, 5, vec![1, 0, -1], vec![-1], "m1"),
+        ]
+        .into_iter()
+        .map(
+            |(edge_id, tail, head, loop_signature, external_signature, mass_key)| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass_key.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature,
+                        external_signature,
+                    },
+                    had_pow: false,
+                }
+            },
+        )
+        .collect();
+
+        ParsedGraph {
+            internal_edges,
+            external_edges: Vec::new(),
+            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
+                edge_id: 0,
+                external_id: 0,
+                external_sign: 1,
+            }],
+            loop_names: vec!["k0".to_string(), "k1".to_string(), "k2".to_string()],
+            external_names: vec!["p0".to_string()],
+            node_name_to_internal: (0..6).map(|node| (format!("v{node}"), node)).collect(),
+        }
+    }
+
     #[test]
     fn ltd_generation_builds_normal_box_structure() {
         let parsed = parsed_fixture("box.dot");
@@ -6101,6 +6199,7 @@ mod ltd_tests {
                 representation: RepresentationMode::Ltd,
                 energy_degree_bounds: vec![(3, 4)],
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                include_cff_duplicate_signature_excess_sign: true,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )
@@ -6675,6 +6774,111 @@ mod ltd_tests {
 
     #[cfg(feature = "eval")]
     #[test]
+    fn ltd_gl06_like_forward_square_energy_numerator_matches_cff() {
+        use crate::eval::{ComparisonRequest, compare_cff_ltd};
+
+        let parsed = gl06_like_forward_graph();
+        assert!(crate::validator::validate_parsed_graph(&parsed).ok);
+        for numerator_expr in [
+            "edges[0][0]**2 * edges[6][0]**2",
+            "dot(edges[0], edges[6])**2",
+        ] {
+            let result = compare_cff_ltd(ComparisonRequest {
+                parsed: &parsed,
+                cff_options: &Generate3DExpressionOptions {
+                    representation: RepresentationMode::Cff,
+                    energy_degree_bounds: vec![(0, 2), (6, 2)],
+                    ..Default::default()
+                },
+                ltd_options: &Generate3DExpressionOptions {
+                    representation: RepresentationMode::Ltd,
+                    energy_degree_bounds: vec![(0, 2), (6, 2)],
+                    ..Default::default()
+                },
+                numerator_expr,
+                input: None,
+                seed: 17,
+                external_override: None,
+                loop_override: None,
+                mass_overrides: &BTreeMap::from([("m0".to_string(), 0.0), ("m1".to_string(), 1.0)]),
+            })
+            .unwrap();
+            assert!(
+                result.abs_cff_minus_ltd < 1.0e-10,
+                "GL06-like square numerator CFF/LTD mismatch for {numerator_expr}: {result:?}"
+            );
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn ltd_gl06_forward_with_initial_state_cut_square_energy_numerator_matches_cff() {
+        use crate::eval::{ComparisonRequest, compare_cff_ltd};
+
+        let parsed = gl06_forward_graph_with_initial_state_cut();
+        assert!(crate::validator::validate_parsed_graph(&parsed).ok);
+        for (numerator_expr, energy_degree_bounds, numerator_sampling_scale) in [
+            (
+                "dot(edges[1], edges[2])",
+                vec![
+                    (1, 1),
+                    (2, 1),
+                    (3, 0),
+                    (4, 0),
+                    (5, 0),
+                    (6, 0),
+                    (7, 0),
+                    (8, 0),
+                ],
+                NumeratorSamplingScaleMode::None,
+            ),
+            (
+                "dot(edges[1], edges[2])",
+                vec![(1, 1), (2, 1)],
+                NumeratorSamplingScaleMode::All,
+            ),
+            (
+                "edges[1][0]**2 * edges[7][0]**2",
+                vec![(1, 2), (7, 2)],
+                NumeratorSamplingScaleMode::All,
+            ),
+            (
+                "dot(edges[1], edges[7])**2",
+                vec![(1, 2), (7, 2)],
+                NumeratorSamplingScaleMode::All,
+            ),
+        ] {
+            let result = compare_cff_ltd(ComparisonRequest {
+                parsed: &parsed,
+                cff_options: &Generate3DExpressionOptions {
+                    representation: RepresentationMode::Cff,
+                    energy_degree_bounds: energy_degree_bounds.clone(),
+                    numerator_sampling_scale,
+                    ..Default::default()
+                },
+                ltd_options: &Generate3DExpressionOptions {
+                    representation: RepresentationMode::Ltd,
+                    energy_degree_bounds,
+                    numerator_sampling_scale,
+                    ..Default::default()
+                },
+                numerator_expr,
+                input: None,
+                seed: 17,
+                external_override: None,
+                loop_override: None,
+                mass_overrides: &BTreeMap::from([("m0".to_string(), 0.0), ("m1".to_string(), 1.0)]),
+            })
+            .unwrap();
+            assert!(
+                result.abs_cff_minus_ltd < 1.0e-10,
+                "GL06 initial-state-cut square numerator CFF/LTD mismatch for {numerator_expr}: {result:?}"
+            );
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
     fn ltd_multiloop_high_power_boundaries_match_cff() {
         use crate::{
             energy_bounds::auto_numerator_expr_for_bounds,
@@ -7032,6 +7236,7 @@ mod ltd_tests {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: vec![(0, 1), (1, 1), (3, 4)],
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+                include_cff_duplicate_signature_excess_sign: true,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )
@@ -7109,6 +7314,7 @@ mod ltd_tests {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: vec![(3, 2)],
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                include_cff_duplicate_signature_excess_sign: true,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )
@@ -7119,6 +7325,7 @@ mod ltd_tests {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: vec![(3, 2)],
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+                include_cff_duplicate_signature_excess_sign: true,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )

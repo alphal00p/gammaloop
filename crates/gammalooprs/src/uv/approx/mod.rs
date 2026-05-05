@@ -1,7 +1,9 @@
 use crate::{
-    graph::{Graph, LoopMomentumBasis, cuts::CutSet},
+    cff::expression::{CFFExpression, OrientationID},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
+    settings::global::GenerationSettings,
     utils::{
         GS, W_,
         symbolica_ext::{LOGPRINTOPTS, LogPrint},
@@ -29,8 +31,9 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, Symbol},
     function, parse_lit, symbol,
 };
+use three_dimensional_reps::RepresentationMode;
 
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
 use tracing::instrument;
@@ -247,8 +250,30 @@ fn localized_integrated_reduced_factor(
     to_contract: &SuBitGraph,
     cuts: &CutSet,
     valid_orientations: &[EdgeVec<Orientation>],
+    explicit_orientation_sum_only: bool,
 ) -> Result<IntegrandExpr> {
     let cff = graph.cff(to_contract, cuts)?;
+
+    if explicit_orientation_sum_only {
+        if valid_orientations.is_empty() {
+            return Err(eyre!(
+                "cannot embed explicitly summed reduced integrated-UV factor into an empty orientation projector"
+            ));
+        }
+        let normalization = Atom::num(valid_orientations.len() as i64);
+        let integrands = cff
+            .terms
+            .into_iter()
+            .map(|term| {
+                term.expression
+                    .into_iter()
+                    .fold(Atom::Zero, |acc, expr| acc + expr)
+                    / normalization.clone()
+            })
+            .collect();
+
+        return Ok(IntegrandExpr { integrands });
+    }
 
     let internal_edges = internal_paired_edges_of_subgraph(graph, to_contract);
 
@@ -326,28 +351,125 @@ impl Approximation {
         graph: &mut Graph,
         cuts: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
+        root_expression: Option<&CFFExpression<OrientationID>>,
     ) -> Result<()> {
-        self.initialize_filtered_integrated_uv_root(settings);
+        self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
-        if settings.only_integrated {
+        if settings.uv.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
-            self.local_3d = CFFapprox::root(graph, cuts, settings)?;
-            if Self::filtered_integrated_uv_mode_is_active(settings) {
+            self.local_3d = CFFapprox::root(graph, cuts, &settings.uv)?;
+            if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
                 let (integrands, _) = self
                     .local_3d
                     .expr()
                     .expect("root local CFF should have been computed");
                 self.final_integrand = Some(Self::zero_terms(integrands.len()));
+            } else if settings.explicit_orientation_sum_only {
+                let root_expression = root_expression.ok_or_else(|| {
+                    eyre!(
+                        "explicit orientation-summed local-3D UV generation requires the production root 3D expression"
+                    )
+                })?;
+                self.final_integrand = Some(self.final_integrand_from_root_expression(
+                    graph,
+                    cuts,
+                    root_expression,
+                    valid_orientations,
+                    settings,
+                )?);
             } else {
-                self.final_integrand =
-                    Some(self.final_integrand(graph, cuts, valid_orientations, settings)?);
+                self.final_integrand = Some(self.final_integrand(
+                    graph,
+                    cuts,
+                    valid_orientations,
+                    &settings.uv,
+                    false,
+                )?);
             }
         }
 
         Ok(())
+    }
+
+    fn final_integrand_from_root_expression(
+        &self,
+        graph: &Graph,
+        cutset: &CutSet,
+        expression: &CFFExpression<OrientationID>,
+        valid_orientations: &[EdgeVec<Orientation>],
+        settings: &GenerationSettings,
+    ) -> Result<Vec<Atom>> {
+        let reduced = graph.full_filter().subtract(&graph.initial_state_cut);
+        let numerator = graph
+            .numerator(&reduced, &graph.empty_subgraph())
+            .get_single_atom()
+            .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?
+            * graph.global_atom();
+        let momentum_replacements = graph.normal_emr_replacement(
+            &graph.full_filter(),
+            &graph.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        let numerator = numerator
+            .replace_multiple(&momentum_replacements)
+            .expand()
+            .collect_factors();
+
+        let mut residues = vec![expression.clone()];
+        if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+            residues = residues
+                .into_iter()
+                .flat_map(|expression| expression.select_esurface_residue(right_threshold))
+                .collect();
+        }
+        if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+            residues = residues
+                .into_iter()
+                .flat_map(|expression| expression.select_esurface_residue(left_threshold))
+                .collect();
+        }
+        if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+            residues = residues
+                .into_iter()
+                .flat_map(|expression| expression.select_esurface_residue(lu_cut))
+                .collect();
+        }
+
+        residues
+            .into_iter()
+            .map(|residue| {
+                let mut atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
+                    &residue,
+                    &numerator,
+                    RepresentationMode::Cff,
+                    true,
+                    &settings.orientation_pattern,
+                );
+                // The root term comes from the explicitly summed production
+                // expression, while CFF local-3D forests apply the orientation
+                // projector once to the whole forest after all local terms are
+                // assembled. Embed the root as a uniform orientation average
+                // so that this later projector acts as the identity on it.
+                if valid_orientations.is_empty() {
+                    return Err(eyre!(
+                        "cannot embed explicitly summed root 3D expression into an empty orientation projector"
+                    ));
+                }
+                atom /= Atom::num(valid_orientations.len() as i64);
+                Ok(atom
+                    .replace(GS.dim)
+                    .with(4)
+                    .simplify_color()
+                    .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                    .with(W_.d_)
+                    .expand_dots()?
+                    .collect_factors())
+            })
+            .collect()
     }
 
     pub(crate) fn root_expanded_4d(
@@ -454,7 +576,7 @@ impl Approximation {
         dependent: &Self,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
-        _explicit_orientation_sum_only: bool,
+        explicit_orientation_sum_only: bool,
     ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             return Err(eyre!("dependent local 3D approximation was not computed"));
@@ -470,6 +592,7 @@ impl Approximation {
             dependent.spinney.filter(),
             cuts,
             valid_orientations,
+            explicit_orientation_sum_only,
         )?;
 
         let ctx = UVCtx { graph, settings };
@@ -477,7 +600,13 @@ impl Approximation {
         if Self::filtered_integrated_uv_mode_is_active(settings) {
             self.set_zero_local_3d(-sign, cff.len());
             self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
-                self.final_integrand(graph, cuts, valid_orientations, settings)?
+                self.final_integrand(
+                    graph,
+                    cuts,
+                    valid_orientations,
+                    settings,
+                    explicit_orientation_sum_only,
+                )?
             } else {
                 Self::zero_terms(cff.len())
             });
@@ -506,8 +635,13 @@ impl Approximation {
             t_arg: IntegrandExpr { integrands },
         };
 
-        self.final_integrand =
-            Some(self.final_integrand(graph, cuts, valid_orientations, settings)?);
+        self.final_integrand = Some(self.final_integrand(
+            graph,
+            cuts,
+            valid_orientations,
+            settings,
+            explicit_orientation_sum_only,
+        )?);
         Ok(())
     }
 
@@ -573,6 +707,7 @@ impl Approximation {
         cutset: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         _settings: &UVgenerationSettings,
+        explicit_orientation_sum_only: bool,
     ) -> Result<Vec<Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
@@ -591,6 +726,7 @@ impl Approximation {
             self.spinney.filter(),
             cutset,
             valid_orientations,
+            explicit_orientation_sum_only,
         )?;
         if t.len() != t_arg.integrands.len() {
             return Err(eyre!(

@@ -87,6 +87,7 @@ fn scalar_bubble_root_integrand_reference(
             vakint,
             &valid_orientations,
             &reference_settings,
+            amplitude_graph.derived_data.cff_expression.as_ref(),
             crate::settings::global::ThreeDRepresentation::Cff,
             false,
         )

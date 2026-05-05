@@ -1057,6 +1057,7 @@ mod tests {
                 representation: RepresentationMode::Ltd,
                 energy_degree_bounds: vec![(3, 4)],
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                include_cff_duplicate_signature_excess_sign: true,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )

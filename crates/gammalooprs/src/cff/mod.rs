@@ -105,7 +105,9 @@ impl Graph {
         let atom =
             atom * self.residual_denominator_factor_gs(&expression.residual_denominators, true);
 
-        if representation == RepresentationMode::Cff {
+        if representation == RepresentationMode::Cff
+            && !cff_expression_uses_local_half_edges(expression)
+        {
             let graph_without_is_cut = self
                 .underlying
                 .full_filter()
@@ -186,14 +188,11 @@ impl Graph {
                 let eta_expr = orientation.to_atom_gs();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
                 ose_expr *= self.residual_denominator_factor_gs(&expr.residual_denominators, true);
-
-                let inverse_energies = get_cff_inverse_energy_product_impl(
+                ose_expr *= get_cff_inverse_energy_product_impl(
                     self,
                     &graph_without_is_cut,
                     &inverse_energy_excluded_edges,
                 );
-
-                ose_expr *= inverse_energies;
 
                 // println!("ose expr :{}", ose_expr);
                 cff_term.expression.push(ose_expr);
@@ -207,4 +206,15 @@ impl Graph {
         let cut_cff = CutCFF { terms };
         Ok(cut_cff)
     }
+}
+
+pub(crate) fn cff_expression_uses_local_half_edges(
+    expression: &ThreeDExpression<OrientationID>,
+) -> bool {
+    expression.orientations.iter().any(|orientation| {
+        orientation
+            .variants
+            .iter()
+            .any(|variant| !variant.half_edges.is_empty())
+    })
 }

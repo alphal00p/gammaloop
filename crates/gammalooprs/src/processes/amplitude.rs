@@ -732,11 +732,22 @@ impl AmplitudeGraph {
             .graph
             .full_filter()
             .subtract(&self.graph.initial_state_cut);
-        self.graph
+        let numerator = self
+            .graph
             .numerator(&reduced, &self.graph.empty_subgraph())
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * self.graph.global_atom()
+            * self.graph.global_atom();
+        let momentum_replacements = self.graph.normal_emr_replacement(
+            &self.graph.full_filter(),
+            &self.graph.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        numerator
+            .replace_multiple(&momentum_replacements)
+            .expand()
+            .collect_factors()
     }
 
     fn prepare_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
@@ -993,6 +1004,7 @@ impl AmplitudeGraph {
             vakint,
             &valid_orientations,
             settings,
+            self.derived_data.cff_expression.as_ref(),
             global_settings.three_d_representation,
             settings.explicit_orientation_sum_only,
         )?;
@@ -1003,6 +1015,7 @@ impl AmplitudeGraph {
             .map(|e| {
                 if settings.explicit_orientation_sum_only
                     && global_settings.three_d_representation == ThreeDRepresentation::Cff
+                    && !settings.uv.local_uv_cts_from_expanded_4d_integrands
                 {
                     e.sum_orientations_explicitly(&valid_orientations)
                 } else {
@@ -1145,6 +1158,7 @@ impl AmplitudeGraph {
             vakint,
             &valid_orientations,
             settings,
+            self.derived_data.cff_expression.as_ref(),
             representation,
             settings.explicit_orientation_sum_only,
         )?;
@@ -1153,7 +1167,10 @@ impl AmplitudeGraph {
             .orientation_parametric_exprs(&self.graph, false)?
             .into_iter()
             .map(|e| {
-                if settings.explicit_orientation_sum_only {
+                if settings.explicit_orientation_sum_only
+                    && representation == ThreeDRepresentation::Cff
+                    && !settings.uv.local_uv_cts_from_expanded_4d_integrands
+                {
                     e.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     e

@@ -88,8 +88,10 @@ impl Graph {
                             format!("failed to rebuild 3D source summary: {source_error}")
                         });
                     eyre::eyre!(
-                        "generalized 3D expression generation failed for graph `{}`: {error}\n{source_summary}",
-                        self.name
+                        "generalized 3D expression generation failed for graph `{}` with representation {:?} and energy-degree bounds {:?}: {error}\n{source_summary}",
+                        self.name,
+                        local_options.representation,
+                        local_options.energy_degree_bounds,
                     )
                 },
             )
@@ -98,6 +100,7 @@ impl Graph {
         self.convert_generated_expression_surfaces(
             expression,
             local_options.representation,
+            generated_cff_expression_uses_variant_half_edges(&local_options),
             canonize_esurface,
             &initial_state_cut_edges,
         )
@@ -112,9 +115,12 @@ impl Graph {
             representation_mode(representation),
             numerator_sampling_scale_mode(settings.uniform_numerator_sampling_scale),
         )?;
-        if representation == ThreeDRepresentation::Cff
-            && settings.uniform_numerator_sampling_scale == UniformNumeratorSamplingScale::None
-        {
+        if representation == ThreeDRepresentation::Cff && !settings.explicit_orientation_sum_only {
+            // The orientation-localized CFF forest path substitutes the
+            // numerator pointwise on each orientation and only needs the pure
+            // CFF denominator expression. The bounded high-energy CFF root is
+            // needed when production builds one explicitly summed 3D expression
+            // up front.
             options.energy_degree_bounds.clear();
         }
         Ok(options)
@@ -130,6 +136,7 @@ impl Graph {
             energy_degree_bounds: self
                 .automatic_numerator_energy_degree_bounds_for_3d_expression(representation)?,
             numerator_sampling_scale,
+            include_cff_duplicate_signature_excess_sign: true,
             preserve_internal_edges_as_four_d_denominators: self
                 .preserved_4d_denominator_edges_for_3d_expression(representation)
                 .into_iter()
@@ -194,6 +201,7 @@ impl Graph {
             representation: RepresentationMode::Cff,
             energy_degree_bounds: Vec::new(),
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
+            include_cff_duplicate_signature_excess_sign: false,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),
         }
     }
@@ -202,6 +210,7 @@ impl Graph {
         &mut self,
         mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
         representation: RepresentationMode,
+        use_generated_cff_half_edges: bool,
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
     ) -> Result<CFFExpression<OrientationID>> {
@@ -229,13 +238,14 @@ impl Graph {
                         variant.prefactor *= Atom::num(-1);
                     }
                 }
-                if representation == RepresentationMode::Cff {
-                    // GammaLoop production CFF keeps inverse on-shell-energy
-                    // factors outside the CFF denominator tree. The generalized
-                    // crate stores them per variant, so strip them here to
-                    // preserve the current production convention. LTD residue
-                    // half-edge factors are part of the generated formula and
-                    // must remain attached to their variants.
+                if representation == RepresentationMode::Cff && !use_generated_cff_half_edges {
+                    // GammaLoop's CFF evaluator convention keeps the
+                    // on-shell-energy factors as one global product
+                    // 1/prod(-2E_i) for the pure CFF denominator sector. The
+                    // bounded higher-energy CFF algorithm has variant-local
+                    // half-edge factors, so those must remain attached to the
+                    // variants. LTD half-edge factors are residue Jacobians and
+                    // always stay on their generated variants.
                     variant.half_edges.clear();
                 }
                 for (denominator_sign, denominator) in signed_denominators {
@@ -360,6 +370,16 @@ impl Graph {
         };
         Ok(SurfaceMapEntry { surface_id, sign })
     }
+}
+
+pub(crate) fn generated_cff_expression_uses_variant_half_edges(
+    options: &Generate3DExpressionOptions,
+) -> bool {
+    options.representation == RepresentationMode::Cff
+        && options
+            .energy_degree_bounds
+            .iter()
+            .any(|(_, degree)| *degree > 1)
 }
 
 fn three_d_source_summary(parsed: &three_dimensional_reps::ParsedGraph) -> String {
