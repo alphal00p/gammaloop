@@ -246,7 +246,7 @@ fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
 }
 
 #[test]
-fn min_product_terms_three_vertex_residual_mu9() {
+fn min_product_terms_three_vertex_still_has_residual_after_boundary_cleanup() {
     let (r, dummies) = substituted_three_vertex_reproducer();
     let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
         &SchoonschipSettings::partial()
@@ -350,7 +350,7 @@ fn compare_two_slot_boundary_shapes() {
 }
 
 #[test]
-fn metric_sum_boundary_leaves_residual_because_normalize_dots_is_too_weak() {
+fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
@@ -394,12 +394,12 @@ fn metric_sum_boundary_leaves_residual_because_normalize_dots_is_too_weak() {
            + spenso::g(k(4), spenso::mink(4,mu1))
            * spenso::g(k(5), spenso::mink(4,mu9)))"
     );
-    assert_eq!(
+    assert!(
         residual_dummy_names(
             &boundary_expression.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
             &dummies
-        ),
-        ["mu9"]
+        )
+        .is_empty()
     );
     assert!(
         residual_dummy_names(
