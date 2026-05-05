@@ -126,6 +126,13 @@ fn gamma5_macro_accepts_explicit_indices() {
 }
 
 #[test]
+fn gamma0_macro_builds_chain_factor() {
+    let expr = gamma0!();
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma0(in,out)");
+}
+
+#[test]
 fn gamma_macros_accept_pattern_indices() {
     let gamma = gamma!(RS.a__, RS.b__, RS.c__);
     let gamma5 = gamma5!(RS.b__, RS.c__);
@@ -156,7 +163,7 @@ fn gamma_chain_canonical_ordering_is_opt_in() {
 }
 
 #[test]
-fn gamma_chain_rules_do_not_treat_gamma5_as_gamma() {
+fn gamma5_anticommutes_with_four_dimensional_gamma() {
     let r = TestReps::new();
     let expr = chain!(
         slot!(r.bis4, a),
@@ -166,7 +173,52 @@ fn gamma_chain_rules_do_not_treat_gamma5_as_gamma() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma5(in,out),gamma(in,out,mink(4,mu)))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-4*chain(bis(4,a),bis(4,b),gamma5(in,out))");
+}
+
+#[test]
+fn gamma5_does_not_move_in_dimension_generic_chain() {
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.bis_d, a),
+        slot!(r.bis_d, b),
+        gamma5!(),
+        gamma!(slot!(r.mink_d, mu)),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma(in,out,mink(d,mu)))");
+}
+
+#[test]
+fn gamma0_square_collapses_inside_chain() {
+    let r = TestReps::new();
+    let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma0!(), gamma0!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma0_square_is_four_dimensional() {
+    let r = TestReps::new();
+    let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma0!(), gamma0!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma0(in,out),gamma0(in,out))");
+}
+
+#[test]
+fn gamma5_square_collapses_inside_chain() {
+    let r = TestReps::new();
+    let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma5!(), gamma5!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma5_square_is_four_dimensional() {
+    let r = TestReps::new();
+    let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma5!(), gamma5!(),);
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma5(in,out))");
 }
 
 #[test]

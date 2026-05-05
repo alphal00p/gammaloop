@@ -77,7 +77,6 @@ fn trace4gen_chisholm_two_interior_chain() {
 }
 
 #[test]
-#[ignore = "pending public chain-based gamma-five epsilon reduction"]
 fn gamma_five_epsilon_trick() {
     let r = TestReps::new();
     let expr = chain!(
@@ -88,7 +87,9 @@ fn gamma_five_epsilon_trick() {
         gamma!(slot!(r.mink4, rho)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma5(in,out),gamma(in,out,mink(4,sigma)))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))");
+    assert_snapshot!(expr
+        .simplify_gamma_with(GammaSimplifySettings::repeated_pairs().with_gamma5_epsilon_expansion())
+        .to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma5(in,out))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
