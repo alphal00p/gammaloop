@@ -63,6 +63,10 @@ fn trace_direct_sum_terms() -> bool {
     std::env::var_os("IDENSO_TRACE_DIRECT_SUM_TERMS").is_some()
 }
 
+fn trace_direct_sum_term_expressions() -> bool {
+    std::env::var_os("IDENSO_TRACE_DIRECT_SUM_TERM_EXPRESSIONS").is_some()
+}
+
 fn trace_schoonschip_patterns() -> bool {
     std::env::var_os("IDENSO_TRACE_SCHOONSCHIP_PATTERNS").is_some()
 }
@@ -353,6 +357,7 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
 
     let mut sum = Atom::Zero;
     let mut residual_term_count = 0usize;
+    let trace_term_expressions = trace_direct_sum_term_expressions();
     for (term_index, term) in terms.into_iter().enumerate() {
         let factors = multiplicative_factors(term.as_view());
         let parsed_factors: Vec<_> = factors.iter().map(parse_tensor_factor::<Aind>).collect();
@@ -432,6 +437,17 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
                     cleaned.as_view().get_byte_size(),
                     residual_slots
                 );
+                if trace_term_expressions {
+                    eprintln!(
+                        "direct_sum_term residual_expr term_index={}\nterm={}\nremaining={}\ntarget={}\nreconstructed={}\ncleaned={}",
+                        term_index,
+                        term.as_view().to_plain_string(),
+                        remaining.as_view().to_plain_string(),
+                        target.as_view().to_plain_string(),
+                        reconstructed.as_view().to_plain_string(),
+                        cleaned.as_view().to_plain_string()
+                    );
+                }
             }
         }
         sum += cleaned;

@@ -413,7 +413,7 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
 }
 
 #[test]
-fn summed_momentum_boundary_still_requires_input_expansion() {
+fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
@@ -433,10 +433,7 @@ fn summed_momentum_boundary_still_requires_input_expansion() {
          + spenso::g(k(4)-k(5), spenso::mink(4,mu9))
          * spenso::g(k(5)-k(4), spenso::mink(4,mu9))"
     );
-    assert_eq!(
-        residual_dummy_names(&metric_identified_target.schoonschip(), &dummies),
-        ["mu9"]
-    );
+    assert!(residual_dummy_names(&metric_identified_target.schoonschip(), &dummies).is_empty());
     assert!(
         residual_dummy_names(&metric_identified_target.expand().schoonschip(), &dummies).is_empty()
     );
@@ -451,18 +448,44 @@ fn summed_momentum_boundary_still_requires_input_expansion() {
            * spenso::g(k(5)-k(4), spenso::mink(4,mu9)))"
     );
 
-    assert_eq!(
+    assert!(
         residual_dummy_names(
             &boundary_expression.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
             &dummies
-        ),
-        ["mu9"]
+        )
+        .is_empty()
     );
     assert!(
         residual_dummy_names(
             &boundary_expression
                 .expand()
                 .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &dummies
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (_mu7, mu9) = symbol!("mu7", "mu9"; tags=["spenso::index"]);
+    symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
+
+    let mu9: Atom = mu9.into();
+    let dummies = [("mu9", mu9.clone())];
+    let settings = SchoonschipSettings::partial().with_expanded_contracted_sums();
+    let expr = parse!(
+        "spenso::g(spenso::mink(4,mu7), spenso::mink(4,mu9))
+         * spenso::g(k(0)-k(1), spenso::mink(4,mu9))"
+    );
+
+    assert!(residual_dummy_names(&expr.schoonschip(), &dummies).is_empty());
+    assert!(
+        residual_dummy_names(
+            &expr.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
