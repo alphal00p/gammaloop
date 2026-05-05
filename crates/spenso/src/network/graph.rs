@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{Debug, Display},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     time::Instant,
@@ -71,6 +71,41 @@ pub type ReadyNetworkOp<K, FK = i8, Aind = AbstractIndex> = (
     NetworkOp<FK>,
     Vec<NetworkLeaf<K, Aind>>,
 );
+
+#[derive(Debug, Clone)]
+pub struct NetworkOperationRef<'a, K, FK = i8, Aind = AbstractIndex> {
+    graph: &'a NetworkGraph<K, FK, Aind>,
+    op_node: NodeIndex,
+    op: &'a NetworkOp<FK>,
+    children: Vec<NodeIndex>,
+    subgraph: SuBitGraph,
+}
+
+impl<'a, K, FK, Aind> NetworkOperationRef<'a, K, FK, Aind> {
+    pub fn graph(&self) -> &'a NetworkGraph<K, FK, Aind> {
+        self.graph
+    }
+
+    pub fn op_node(&self) -> NodeIndex {
+        self.op_node
+    }
+
+    pub fn op(&self) -> &'a NetworkOp<FK> {
+        self.op
+    }
+
+    pub fn children(&self) -> &[NodeIndex] {
+        &self.children
+    }
+
+    pub fn subgraph(&self) -> &SuBitGraph {
+        &self.subgraph
+    }
+
+    pub fn leaf_count(&self) -> usize {
+        self.children.len()
+    }
+}
 #[derive(
     Debug,
     Clone,
@@ -676,6 +711,114 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         children.sort();
         children.dedup();
         children
+    }
+
+    pub fn cached_expr_preorder_nodes(&self) -> Vec<NodeIndex> {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.cached_expr_preorder_nodes_ignoring(&hidden)
+    }
+
+    pub fn cached_expr_preorder_nodes_ignoring<S>(&self, hidden: &S) -> Vec<NodeIndex>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let root_node = self.graph.node_id(self.head());
+        let mut stack = vec![root_node];
+        let mut seen = BTreeSet::new();
+        let mut nodes = Vec::new();
+
+        while let Some(node) = stack.pop() {
+            if !seen.insert(node) {
+                continue;
+            }
+
+            nodes.push(node);
+            let mut children = self.cached_expr_children_ignoring(node, hidden);
+            children.reverse();
+            stack.extend(children);
+        }
+
+        nodes
+    }
+
+    pub fn ready_operation_ref(&self) -> Option<NetworkOperationRef<'_, K, FK, Aind>> {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.ready_operation_ref_ignoring(&hidden)
+    }
+
+    pub fn ready_operation_ref_ignoring<S>(
+        &self,
+        hidden: &S,
+    ) -> Option<NetworkOperationRef<'_, K, FK, Aind>>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        for nid in self.cached_expr_preorder_nodes_ignoring(hidden) {
+            let NetworkNode::Op(op) = &self.graph[nid] else {
+                continue;
+            };
+
+            let children = self.cached_expr_children_ignoring(nid, hidden);
+            if children.is_empty() {
+                continue;
+            }
+
+            if children
+                .iter()
+                .any(|child| !matches!(&self.graph[*child], NetworkNode::Leaf(_)))
+            {
+                continue;
+            }
+
+            let subgraph = self.operation_subgraph_ignoring(nid, &children, hidden);
+            return Some(NetworkOperationRef {
+                graph: self,
+                op_node: nid,
+                op,
+                children,
+                subgraph,
+            });
+        }
+
+        None
+    }
+
+    pub fn operation_subgraph(&self, op_node: NodeIndex, children: &[NodeIndex]) -> SuBitGraph {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.operation_subgraph_ignoring(op_node, children, &hidden)
+    }
+
+    pub fn operation_subgraph_ignoring<S>(
+        &self,
+        op_node: NodeIndex,
+        children: &[NodeIndex],
+        hidden: &S,
+    ) -> SuBitGraph
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let mut subgraph: SuBitGraph = self.graph.empty_subgraph();
+        self.add_visible_crown_to_subgraph(op_node, hidden, &mut subgraph);
+        for child in children {
+            self.add_visible_crown_to_subgraph(*child, hidden, &mut subgraph);
+        }
+        subgraph
+    }
+
+    fn add_visible_crown_to_subgraph<S>(
+        &self,
+        node: NodeIndex,
+        hidden: &S,
+        subgraph: &mut SuBitGraph,
+    ) where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        for hedge in self.graph.iter_crown(node) {
+            let other = self.graph.inv(hedge);
+            if !hidden.includes(&hedge) && !hidden.includes(&other) {
+                subgraph.add(hedge);
+            }
+        }
     }
 
     pub fn sub_expression(&self, nid: NodeIndex) -> Result<SimpleTraversalTree, NetworkGraphError> {
@@ -1852,7 +1995,7 @@ impl<K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Sub<NetworkGraph<K, FK, 
 pub mod test {
 
     use linnet::{
-        half_edge::subgraph::{ModifySubSet, SuBitGraph},
+        half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
         tree::child_vec::ChildVecStore,
     };
 
@@ -1865,7 +2008,7 @@ pub mod test {
         },
     };
 
-    use super::NetworkGraph;
+    use super::{NetworkGraph, NetworkNode};
 
     #[test]
     fn addition() {
@@ -2008,5 +2151,51 @@ pub mod test {
 
         let children = expr.cached_expr_children_ignoring(parent, &hidden);
         assert!(!children.contains(&child));
+    }
+
+    #[test]
+    fn ready_operation_ref_describes_ready_leaf_subgraph_without_extracting() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let sum = tensor_a + tensor_b;
+        let mut expr = (sum.clone() * scalar) + (sum * scalar_b);
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let node_count = expr.n_nodes();
+        let hedge_count = expr.graph.n_hedges();
+        let op_ref = expr.ready_operation_ref().unwrap();
+
+        assert!(op_ref.leaf_count() > 0);
+        assert!(
+            op_ref
+                .children()
+                .iter()
+                .all(|child| matches!(&expr.graph[*child], NetworkNode::Leaf(_)))
+        );
+
+        let expected = expr.operation_subgraph(op_ref.op_node(), op_ref.children());
+        assert_eq!(op_ref.subgraph(), &expected);
+        assert!(op_ref.subgraph().n_included() >= op_ref.leaf_count());
+        assert_eq!(op_ref.graph().n_nodes(), node_count);
+        assert_eq!(expr.n_nodes(), node_count);
+        assert_eq!(expr.graph.n_hedges(), hedge_count);
     }
 }
