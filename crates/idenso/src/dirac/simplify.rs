@@ -81,6 +81,97 @@ impl GammaSimplifySettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DiracRuleDimension {
+    AnyDimension,
+    FourDimensional,
+}
+
+const ADJACENT_GAMMA_CONTRACTION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
+const GAMMA_ANTICOMMUTATION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
+const FOUR_DIM_CHISHOLM: DiracRuleDimension = DiracRuleDimension::FourDimensional;
+const TRACE_GAMMA_RECURSION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DiracFactor {
+    Gamma {
+        lorentz: Atom,
+        dimension: Option<Atom>,
+    },
+    Gamma5,
+    Gamma0,
+    ProjectorPlus,
+    ProjectorMinus,
+    Other(Atom),
+}
+
+impl DiracFactor {
+    fn parse(factor: AtomView) -> Self {
+        let AtomView::Fun(f) = factor else {
+            return Self::Other(factor.to_owned());
+        };
+
+        if f.get_symbol() == AGS.gamma && f.get_nargs() == 3 {
+            let args = f.iter().collect::<Vec<_>>();
+            if has_chain_endpoints(args[0], args[1]) {
+                let lorentz = args[2].to_owned();
+                let dimension = gamma_lorentz_dimension(lorentz.as_view());
+                return Self::Gamma { lorentz, dimension };
+            }
+        }
+
+        if f.get_nargs() == 2 {
+            let args = f.iter().collect::<Vec<_>>();
+            if has_chain_endpoints(args[0], args[1]) {
+                return match f.get_symbol() {
+                    symbol if symbol == AGS.gamma5 => Self::Gamma5,
+                    symbol if symbol == AGS.gamma0 => Self::Gamma0,
+                    symbol if symbol == AGS.projp => Self::ProjectorPlus,
+                    symbol if symbol == AGS.projm => Self::ProjectorMinus,
+                    _ => Self::Other(factor.to_owned()),
+                };
+            }
+        }
+
+        Self::Other(factor.to_owned())
+    }
+
+    fn gamma_lorentz(&self, rule_dimension: DiracRuleDimension) -> Option<&Atom> {
+        match self {
+            Self::Gamma { lorentz, dimension }
+                if rule_dimension.allows_gamma_dimension(dimension.as_ref()) =>
+            {
+                Some(lorentz)
+            }
+            Self::Other(atom) => {
+                let _ = atom;
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn gamma_dimension(&self) -> Option<&Atom> {
+        match self {
+            Self::Gamma { dimension, .. } => dimension.as_ref(),
+            Self::Other(atom) => {
+                let _ = atom;
+                None
+            }
+            _ => None,
+        }
+    }
+}
+
+impl DiracRuleDimension {
+    fn allows_gamma_dimension(self, dimension: Option<&Atom>) -> bool {
+        match self {
+            Self::AnyDimension => true,
+            Self::FourDimensional => dimension.is_some_and(is_four_dimension),
+        }
+    }
+}
+
 pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplifySettings) -> Atom {
     let rep = Bispinor {}.into();
     let mut expr = expr
@@ -165,22 +256,35 @@ fn simplify_chain_node(chain: AtomView, chain_ordering: GammaChainOrdering) -> O
         return Some(id_atom(start.clone(), end.clone()));
     }
 
-    contract_adjacent_gamma_pair(start, end, factors)
-        .or_else(|| four_dim_chisholm_contraction(start, end, factors))
+    let parsed_factors = factors
+        .iter()
+        .map(|factor| DiracFactor::parse(factor.as_view()))
+        .collect::<Vec<_>>();
+
+    contract_adjacent_gamma_pair(start, end, factors, &parsed_factors)
+        .or_else(|| four_dim_chisholm_contraction(start, end, factors, &parsed_factors))
         .or_else(|| match chain_ordering {
             GammaChainOrdering::RepeatedPairs => {
-                bubble_repeated_gamma_towards_contraction(start, end, factors)
+                bubble_repeated_gamma_towards_contraction(start, end, factors, &parsed_factors)
             }
-            GammaChainOrdering::Canonical => canonicalize_gamma_chain_order(start, end, factors),
+            GammaChainOrdering::Canonical => {
+                canonicalize_gamma_chain_order(start, end, factors, &parsed_factors)
+            }
         })
 }
 
-fn contract_adjacent_gamma_pair(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
+fn contract_adjacent_gamma_pair(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
     for i in 0..factors.len().saturating_sub(1) {
-        let Some(mu) = gamma_factor_lorentz(factors[i].as_view()) else {
-            continue;
-        };
-        let Some(nu) = gamma_factor_lorentz(factors[i + 1].as_view()) else {
+        let Some((mu, nu)) = gamma_pair_lorentz_for(
+            ADJACENT_GAMMA_CONTRACTION,
+            &parsed_factors[i],
+            &parsed_factors[i + 1],
+        ) else {
             continue;
         };
 
@@ -202,20 +306,28 @@ fn bubble_repeated_gamma_towards_contraction(
     start: &Atom,
     end: &Atom,
     factors: &[Atom],
+    parsed_factors: &[DiracFactor],
 ) -> Option<Atom> {
     // Repeated-pair mode only pays the anticommutation cost when it exposes a
     // contraction in the next fixed-point step.
-    let (_i, j) = shortest_repeated_gamma_pair(factors)?;
+    let (_i, j) = shortest_repeated_gamma_pair(parsed_factors)?;
     if j == 0 {
         return None;
     }
 
-    anticommute_adjacent_gamma_pair(start, end, factors, j - 1)
+    anticommute_adjacent_gamma_pair(start, end, factors, parsed_factors, j - 1)
 }
 
-fn four_dim_chisholm_contraction(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
-    let (left, right) = shortest_repeated_four_dim_gamma_pair(factors)?;
+fn four_dim_chisholm_contraction(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    let (left, right) = shortest_repeated_four_dim_gamma_pair(parsed_factors)?;
     let interior = &factors[left + 1..right];
+    let parsed_interior = &parsed_factors[left + 1..right];
+    let interior_lorentz = gamma_lorentz_sequence_for(FOUR_DIM_CHISHOLM, parsed_interior)?;
 
     // FORM and FeynCalc use direct 4D Chisholm identities for short interiors;
     // this avoids generating the larger anticommutation expansion first.
@@ -225,8 +337,8 @@ fn four_dim_chisholm_contraction(start: &Atom, end: &Atom, factors: &[Atom]) -> 
                 * chain!(start, end; chain_factors(factors, left, right, interior.iter().cloned())),
         ),
         2 => {
-            let mu = gamma_factor_lorentz(interior[0].as_view())?;
-            let nu = gamma_factor_lorentz(interior[1].as_view())?;
+            let mu = interior_lorentz[0].clone();
+            let nu = interior_lorentz[1].clone();
 
             Some(
                 Atom::num(4)
@@ -275,17 +387,23 @@ fn chain_factors(
     result
 }
 
-fn canonicalize_gamma_chain_order(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
+fn canonicalize_gamma_chain_order(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
     for i in 0..factors.len().saturating_sub(1) {
-        let Some(mu) = gamma_factor_lorentz(factors[i].as_view()) else {
-            continue;
-        };
-        let Some(nu) = gamma_factor_lorentz(factors[i + 1].as_view()) else {
+        let Some((mu, nu)) = gamma_pair_lorentz_for(
+            GAMMA_ANTICOMMUTATION,
+            &parsed_factors[i],
+            &parsed_factors[i + 1],
+        ) else {
             continue;
         };
 
         if mu > nu {
-            return anticommute_adjacent_gamma_pair(start, end, factors, i);
+            return anticommute_adjacent_gamma_pair(start, end, factors, parsed_factors, i);
         }
     }
 
@@ -296,10 +414,14 @@ fn anticommute_adjacent_gamma_pair(
     start: &Atom,
     end: &Atom,
     factors: &[Atom],
+    parsed_factors: &[DiracFactor],
     swap_at: usize,
 ) -> Option<Atom> {
-    let mu = gamma_factor_lorentz(factors[swap_at].as_view())?;
-    let nu = gamma_factor_lorentz(factors[swap_at + 1].as_view())?;
+    let (mu, nu) = gamma_pair_lorentz_for(
+        GAMMA_ANTICOMMUTATION,
+        &parsed_factors[swap_at],
+        &parsed_factors[swap_at + 1],
+    )?;
 
     let mut metric_rest = Vec::with_capacity(factors.len() - 2);
     metric_rest.extend_from_slice(&factors[..swap_at]);
@@ -328,16 +450,17 @@ fn generated_metric_chain_term(
         )
 }
 
-fn shortest_repeated_gamma_pair(factors: &[Atom]) -> Option<(usize, usize)> {
+fn shortest_repeated_gamma_pair(factors: &[DiracFactor]) -> Option<(usize, usize)> {
     let mut best = None;
 
     for i in 0..factors.len() {
-        let Some(mu) = gamma_factor_lorentz(factors[i].as_view()) else {
+        if factors[i].gamma_lorentz(GAMMA_ANTICOMMUTATION).is_none() {
             continue;
-        };
+        }
 
         for (j, factor) in factors.iter().enumerate().skip(i + 1) {
-            let Some(nu) = gamma_factor_lorentz(factor.as_view()) else {
+            let Some((mu, nu)) = gamma_pair_lorentz_for(GAMMA_ANTICOMMUTATION, &factors[i], factor)
+            else {
                 continue;
             };
 
@@ -350,20 +473,19 @@ fn shortest_repeated_gamma_pair(factors: &[Atom]) -> Option<(usize, usize)> {
     best
 }
 
-fn shortest_repeated_four_dim_gamma_pair(factors: &[Atom]) -> Option<(usize, usize)> {
+fn shortest_repeated_four_dim_gamma_pair(factors: &[DiracFactor]) -> Option<(usize, usize)> {
     let mut best = None;
 
     for i in 0..factors.len() {
-        let Some(mu) = gamma_factor_lorentz(factors[i].as_view()) else {
+        let Some(mu) = factors[i].gamma_lorentz(FOUR_DIM_CHISHOLM) else {
             continue;
         };
-
-        if !is_four_dim_minkowski_slot(&mu) {
+        if !is_minkowski_slot(mu) {
             continue;
         }
 
         for (j, factor) in factors.iter().enumerate().skip(i + 1) {
-            let Some(nu) = gamma_factor_lorentz(factor.as_view()) else {
+            let Some(nu) = factor.gamma_lorentz(FOUR_DIM_CHISHOLM) else {
                 continue;
             };
 
@@ -376,18 +498,101 @@ fn shortest_repeated_four_dim_gamma_pair(factors: &[Atom]) -> Option<(usize, usi
     best
 }
 
-fn is_four_dim_minkowski_slot(atom: &Atom) -> bool {
-    if !is_minkowski_slot(atom) {
-        return false;
+fn gamma_pair_lorentz_for(
+    rule_dimension: DiracRuleDimension,
+    left: &DiracFactor,
+    right: &DiracFactor,
+) -> Option<(Atom, Atom)> {
+    let left_lorentz = left.gamma_lorentz(rule_dimension)?;
+    let right_lorentz = right.gamma_lorentz(rule_dimension)?;
+    if !compatible_gamma_dimensions(rule_dimension, left, right) {
+        return None;
     }
 
-    let AtomView::Fun(f) = atom.as_view() else {
-        unreachable!("is_minkowski_slot only accepts function atoms")
+    Some((left_lorentz.clone(), right_lorentz.clone()))
+}
+
+fn gamma_lorentz_sequence_for(
+    rule_dimension: DiracRuleDimension,
+    factors: &[DiracFactor],
+) -> Option<Vec<Atom>> {
+    let mut known_dimension = None;
+    let mut lorentz = Vec::with_capacity(factors.len());
+
+    for factor in factors {
+        let gamma_lorentz = factor.gamma_lorentz(rule_dimension)?;
+        if !merge_known_gamma_dimension(
+            rule_dimension,
+            &mut known_dimension,
+            factor.gamma_dimension(),
+        ) {
+            return None;
+        }
+        lorentz.push(gamma_lorentz.clone());
+    }
+
+    Some(lorentz)
+}
+
+fn compatible_gamma_dimensions(
+    rule_dimension: DiracRuleDimension,
+    left: &DiracFactor,
+    right: &DiracFactor,
+) -> bool {
+    match rule_dimension {
+        DiracRuleDimension::AnyDimension => match (left.gamma_dimension(), right.gamma_dimension())
+        {
+            (Some(left), Some(right)) => left == right,
+            _ => true,
+        },
+        DiracRuleDimension::FourDimensional => true,
+    }
+}
+
+fn merge_known_gamma_dimension(
+    rule_dimension: DiracRuleDimension,
+    known_dimension: &mut Option<Atom>,
+    dimension: Option<&Atom>,
+) -> bool {
+    if rule_dimension == DiracRuleDimension::FourDimensional {
+        return true;
+    }
+
+    let Some(dimension) = dimension else {
+        return true;
     };
 
-    f.iter()
-        .next()
-        .is_some_and(|dimension| dimension == Atom::num(4).as_view())
+    match known_dimension {
+        Some(known_dimension) => known_dimension == dimension,
+        None => {
+            *known_dimension = Some(dimension.clone());
+            true
+        }
+    }
+}
+
+fn gamma_lorentz_dimension(lorentz: AtomView) -> Option<Atom> {
+    if let Some(dimension) = minkowski_dimension(lorentz) {
+        return Some(dimension);
+    }
+
+    let AtomView::Fun(f) = lorentz else {
+        return None;
+    };
+
+    f.iter().find_map(minkowski_dimension)
+}
+
+fn minkowski_dimension(atom: AtomView) -> Option<Atom> {
+    let AtomView::Fun(f) = atom else {
+        return None;
+    };
+
+    if f.get_symbol() != *MINKOWSKI_SYMBOL || f.get_nargs() == 0 {
+        return None;
+    }
+
+    f.iter().next().map(|dimension| dimension.to_owned())
 }
 
 fn is_minkowski_slot(atom: &Atom) -> bool {
@@ -395,11 +600,20 @@ fn is_minkowski_slot(atom: &Atom) -> bool {
         return false;
     };
 
-    if f.get_symbol() != *MINKOWSKI_SYMBOL || f.get_nargs() != 2 {
-        return false;
-    }
+    f.get_symbol() == *MINKOWSKI_SYMBOL && f.get_nargs() == 2
+}
 
-    true
+fn is_four_dimension(dimension: &Atom) -> bool {
+    *dimension == Atom::num(4)
+}
+
+fn has_chain_endpoints(left: AtomView, right: AtomView) -> bool {
+    is_chain_endpoint(left, T.chain_in) && is_chain_endpoint(right, T.chain_out)
+        || is_chain_endpoint(left, T.chain_out) && is_chain_endpoint(right, T.chain_in)
+}
+
+fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
+    matches!(arg, AtomView::Var(symbol) if symbol.get_symbol() == expected)
 }
 
 fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
@@ -416,24 +630,23 @@ fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
         return simplify_trace_terminal(trace);
     }
 
-    if factors
+    let parsed_factors = factors
         .iter()
-        .any(|factor| gamma_factor_lorentz(factor.as_view()).is_none())
-    {
-        return None;
-    }
+        .map(|factor| DiracFactor::parse(factor.as_view()))
+        .collect::<Vec<_>>();
+    let trace_lorentz = gamma_lorentz_sequence_for(TRACE_GAMMA_RECURSION, &parsed_factors)?;
 
     if factors.len() % 2 == 1 {
         return Some(Atom::Zero);
     }
 
-    let first = gamma_factor_lorentz(factors[0].as_view())?;
+    let first = trace_lorentz[0].clone();
     let mut sum = Atom::Zero;
 
     // Standard recursive even trace formula:
     // tr(g1...gn) = sum_i (-1)^i g(1,i) tr(g2...g_{i-1}g_{i+1}...gn).
     for i in 1..factors.len() {
-        let mu_i = gamma_factor_lorentz(factors[i].as_view())?;
+        let mu_i = trace_lorentz[i].clone();
         let sign = if i % 2 == 1 { 1 } else { -1 };
 
         let mut rest = Vec::with_capacity(factors.len() - 2);
@@ -456,31 +669,6 @@ fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
     }
 
     Some(sum)
-}
-
-fn gamma_factor_lorentz(factor: AtomView) -> Option<Atom> {
-    let AtomView::Fun(f) = factor else {
-        return None;
-    };
-
-    if f.get_symbol() != AGS.gamma || f.get_nargs() != 3 {
-        return None;
-    }
-
-    let args = f.iter().collect::<Vec<_>>();
-    if !(is_chain_gamma_endpoint(args[0], T.chain_in)
-        && is_chain_gamma_endpoint(args[1], T.chain_out)
-        || is_chain_gamma_endpoint(args[0], T.chain_out)
-            && is_chain_gamma_endpoint(args[1], T.chain_in))
-    {
-        return None;
-    }
-
-    Some(args[2].to_owned())
-}
-
-fn is_chain_gamma_endpoint(arg: AtomView, expected: Symbol) -> bool {
-    matches!(arg, AtomView::Var(symbol) if symbol.get_symbol() == expected)
 }
 
 fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
