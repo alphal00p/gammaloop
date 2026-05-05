@@ -106,6 +106,17 @@ impl<'a, K, FK, Aind> NetworkOperationRef<'a, K, FK, Aind> {
         self.children.len()
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NetworkOperationReadiness {
+    pub node_count: usize,
+    pub hedge_count: usize,
+    pub hidden_hedge_count: usize,
+    pub cached_expression_node_count: usize,
+    pub ready_operation_count: usize,
+    pub batched_operation_count: usize,
+    pub batched_subgraph_hedge_count: usize,
+}
+
 #[derive(
     Debug,
     Clone,
@@ -754,21 +765,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         S: SubSetLike<Base = SuBitGraph>,
     {
         for nid in self.cached_expr_preorder_nodes_ignoring(hidden) {
-            let NetworkNode::Op(op) = &self.graph[nid] else {
+            let Some((op, children)) = self.ready_operation_parts_ignoring(nid, hidden) else {
                 continue;
             };
-
-            let children = self.cached_expr_children_ignoring(nid, hidden);
-            if children.is_empty() {
-                continue;
-            }
-
-            if children
-                .iter()
-                .any(|child| !matches!(&self.graph[*child], NetworkNode::Leaf(_)))
-            {
-                continue;
-            }
 
             let subgraph = self.operation_subgraph_ignoring(nid, &children, hidden);
             return Some(NetworkOperationRef {
@@ -799,18 +798,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let mut ready = Vec::new();
 
         for nid in self.cached_expr_preorder_nodes_ignoring(hidden) {
-            let NetworkNode::Op(op) = &self.graph[nid] else {
+            let Some((op, children)) = self.ready_operation_parts_ignoring(nid, hidden) else {
                 continue;
             };
-
-            let children = self.cached_expr_children_ignoring(nid, hidden);
-            if children.is_empty()
-                || children
-                    .iter()
-                    .any(|child| !matches!(&self.graph[*child], NetworkNode::Leaf(_)))
-            {
-                continue;
-            }
 
             let subgraph = self.operation_subgraph_ignoring(nid, &children, hidden);
             if !subgraph.empty_intersection(&used) {
@@ -828,6 +818,67 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
 
         ready
+    }
+
+    fn ready_operation_parts_ignoring<'a, S>(
+        &'a self,
+        node: NodeIndex,
+        hidden: &S,
+    ) -> Option<(&'a NetworkOp<FK>, Vec<NodeIndex>)>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let NetworkNode::Op(op) = &self.graph[node] else {
+            return None;
+        };
+
+        let children = self.cached_expr_children_ignoring(node, hidden);
+        if children.is_empty()
+            || children
+                .iter()
+                .any(|child| !matches!(&self.graph[*child], NetworkNode::Leaf(_)))
+        {
+            return None;
+        }
+
+        Some((op, children))
+    }
+
+    pub fn operation_readiness_diagnostics(&self) -> NetworkOperationReadiness {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.operation_readiness_diagnostics_ignoring(&hidden)
+    }
+
+    pub fn operation_readiness_diagnostics_ignoring<S>(
+        &self,
+        hidden: &S,
+    ) -> NetworkOperationReadiness
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let cached_expression_nodes = self.cached_expr_preorder_nodes_ignoring(hidden);
+        let ready_operation_count = cached_expression_nodes
+            .iter()
+            .filter(|node| {
+                self.ready_operation_parts_ignoring(**node, hidden)
+                    .is_some()
+            })
+            .count();
+        let ready_batch = self.ready_operation_refs_ignoring(hidden);
+        let mut batched_subgraph: SuBitGraph = self.graph.empty_subgraph();
+        for op_ref in &ready_batch {
+            batched_subgraph.union_with(op_ref.subgraph());
+        }
+
+        NetworkOperationReadiness {
+            node_count: self.graph.n_nodes(),
+            hedge_count: self.graph.n_hedges(),
+            hidden_hedge_count: hidden.n_included(),
+            cached_expression_node_count: cached_expression_nodes.len(),
+            ready_operation_count,
+            batched_operation_count: ready_batch.len(),
+            batched_subgraph_hedge_count: batched_subgraph.n_included(),
+        }
     }
 
     pub fn operation_subgraph(&self, op_node: NodeIndex, children: &[NodeIndex]) -> SuBitGraph {
@@ -2286,5 +2337,53 @@ pub mod test {
                     .all(|child| matches!(&expr.graph[*child], NetworkNode::Leaf(_)))
             );
         }
+    }
+
+    #[test]
+    fn readiness_diagnostics_match_ready_extraction_boundary() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let mut expr = (tensor_a + tensor_b) * (scalar + scalar_b);
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let diagnostics = expr.operation_readiness_diagnostics();
+        assert_eq!(
+            diagnostics.cached_expression_node_count,
+            expr.cached_expr_preorder_nodes().len()
+        );
+        assert_eq!(diagnostics.ready_operation_count, 2);
+        assert_eq!(diagnostics.batched_operation_count, 2);
+        assert!(diagnostics.batched_subgraph_hedge_count > 0);
+
+        let op_ref = expr.ready_operation_ref().unwrap();
+        let mut extracted_expr = expr.clone();
+        let (extracted, op) = extracted_expr.extract_next_ready_op().unwrap();
+        let extracted_leaf_count = extracted
+            .graph
+            .iter_nodes()
+            .filter(|(_, _, node)| matches!(node, NetworkNode::Leaf(_)))
+            .count();
+
+        assert_eq!(op_ref.op(), &op);
+        assert_eq!(op_ref.leaf_count(), extracted_leaf_count);
+        assert_eq!(extracted.n_nodes(), op_ref.leaf_count() + 1);
     }
 }
