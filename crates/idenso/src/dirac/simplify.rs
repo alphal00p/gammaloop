@@ -16,6 +16,7 @@ use symbolica::{
 use crate::{
     W_,
     chain::Chain,
+    epsilon::{EpsilonSimplifier, epsilon4},
     metric::MetricSimplifier,
     representations::Bispinor,
     schoonschip::{Schoonschip, SchoonschipSettings},
@@ -41,7 +42,6 @@ static BISPINOR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
     f.get_symbol()
 });
 
-static EPSILON_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("epsilon"));
 static EPSILON_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("sigma"));
 
 /// Controls how open gamma chains are reordered during simplification.
@@ -203,10 +203,12 @@ pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplify
         .to_owned()
         .expand()
         .simplify_metrics()
+        .simplify_epsilon()
         .chainify(rep)
         .collect_chains(rep)
         .expand()
-        .simplify_metrics();
+        .simplify_metrics()
+        .simplify_epsilon();
 
     loop {
         let next = match (
@@ -241,8 +243,10 @@ pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplify
         }
         .expand()
         .simplify_metrics()
+        .simplify_epsilon()
         .normalize_chains()
-        .simplify_metrics();
+        .simplify_metrics()
+        .simplify_epsilon();
 
         if next == expr {
             return next;
@@ -906,15 +910,6 @@ fn gamma_factor(lorentz: Atom) -> Atom {
 
 fn epsilon_dummy_minkowski_slot() -> Atom {
     Minkowski {}.to_symbolic([Atom::num(4), Atom::var(*EPSILON_DUMMY_SYMBOL)])
-}
-
-fn epsilon4(mu: &Atom, nu: &Atom, rho: &Atom, sigma: &Atom) -> Atom {
-    FunctionBuilder::new(*EPSILON_SYMBOL)
-        .add_arg(mu.clone())
-        .add_arg(nu.clone())
-        .add_arg(rho.clone())
-        .add_arg(sigma.clone())
-        .finish()
 }
 
 fn has_chain_endpoints(left: AtomView, right: AtomView) -> bool {
