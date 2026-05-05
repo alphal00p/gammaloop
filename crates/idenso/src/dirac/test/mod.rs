@@ -7,7 +7,7 @@ use spenso::shadowing::symbolica_utils::TypstSettings;
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::symbolica_atom::IntoAtom;
-use spenso::{chain, s, slot};
+use spenso::{chain, s, slot, trace};
 
 use crate::{gamma, gamma0, gamma5};
 
@@ -198,6 +198,20 @@ fn gamma0_square_collapses_inside_chain() {
 }
 
 #[test]
+fn gamma0_conjugates_gamma5_inside_chain() {
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, b),
+        gamma0!(),
+        gamma5!(),
+        gamma0!(),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma5(in,out))");
+}
+
+#[test]
 fn gamma0_square_is_four_dimensional() {
     let r = TestReps::new();
     let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma0!(), gamma0!(),);
@@ -211,6 +225,28 @@ fn gamma5_square_collapses_inside_chain() {
     let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma5!(), gamma5!(),);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
+}
+
+#[test]
+fn gamma5_trace_pair_reduces_to_ordinary_trace() {
+    let r = TestReps::new();
+    let expr = trace!(
+        r.bis4.to_symbolic([]),
+        gamma5!(),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
+        gamma5!(),
+    );
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*g(mink(4,mu),mink(4,nu))");
+}
+
+#[test]
+fn gamma0_trace_pair_reduces_to_spin_dimension() {
+    let r = TestReps::new();
+    let expr = trace!(r.bis4.to_symbolic([]), gamma0!(), gamma0!());
+
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4");
 }
 
 #[test]
