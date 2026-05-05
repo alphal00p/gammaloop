@@ -14,6 +14,7 @@ use symbolica::{
 };
 
 use crate::{
+    W_,
     chain::Chain,
     metric::MetricSimplifier,
     representations::Bispinor,
@@ -412,7 +413,7 @@ fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
     };
 
     if factors.is_empty() {
-        return Some(Atom::num(4));
+        return simplify_trace_terminal(trace);
     }
 
     if factors
@@ -440,7 +441,8 @@ fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
         rest.extend_from_slice(&factors[i + 1..]);
 
         let rest_trace = if rest.is_empty() {
-            Atom::num(4)
+            let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
+            simplify_trace_terminal(terminal_trace.as_view())?
         } else {
             trace!(rep; rest)
         };
@@ -479,4 +481,12 @@ fn gamma_factor_lorentz(factor: AtomView) -> Option<Atom> {
 
 fn is_chain_gamma_endpoint(arg: AtomView, expected: Symbol) -> bool {
     matches!(arg, AtomView::Var(symbol) if symbol.get_symbol() == expected)
+}
+
+fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
+    let trace = trace.to_owned();
+    let simplified = trace
+        .replace(function!(T.trace, T.rep_::<0, _>([W_.d_])).to_pattern())
+        .with(Atom::var(W_.d_));
+    (simplified != trace).then_some(simplified)
 }

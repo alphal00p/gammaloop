@@ -198,9 +198,19 @@ fn dirac_simplify_id30_dirac_order_anticommutator() {
 #[test]
 fn dirac_simplify_id36_empty_trace_is_spin_dimension() {
     let r = TestReps::new();
-    let expr = trace!(r.bis4.to_symbolic([]); Vec::<Atom>::new());
+    let expr_4 = trace!(r.bis4.to_symbolic([]); Vec::<Atom>::new());
+    let expr_d = trace!(r.bis_d.to_symbolic([]); Vec::<Atom>::new());
+    let expr_color = trace!(r.cof_nc.to_symbolic([]); Vec::<Atom>::new());
+    let pair_d = trace!(
+        r.bis_d.to_symbolic([]),
+        gamma!(slot!(r.mink_d, a)),
+        gamma!(slot!(r.mink_d, b))
+    );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4");
+    assert_snapshot!(expr_4.simplify_gamma().to_bare_ordered_string(), @"4");
+    assert_snapshot!(expr_d.simplify_gamma().to_bare_ordered_string(), @"d");
+    assert_snapshot!(expr_color.simplify_gamma().to_bare_ordered_string(), @"Nc");
+    assert_snapshot!(pair_d.simplify_gamma().to_bare_ordered_string(), @"d*g(mink(d,a),mink(d,b))");
 }
 
 #[test]
