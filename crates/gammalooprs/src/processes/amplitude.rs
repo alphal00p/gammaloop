@@ -1161,7 +1161,7 @@ impl AmplitudeGraph {
             let counterterm_atom = AmplitudeCountertermAtom {
                 parametric: expr.integrands,
             };
-            let raised_group = expr.cuts.residue_selector.lu_cut.unwrap();
+            let raised_group = expr.cuts.residue_selector.left_th_cut.unwrap();
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
