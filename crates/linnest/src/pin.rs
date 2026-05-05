@@ -114,8 +114,8 @@ impl PinConstraint {
             .trim_matches('"')
             .trim_matches(|c| c == '(' || c == ')');
 
-        if let Some(stripped) = input.strip_prefix('@') {
-            return Some(PinConstraint::LinkBoth(stripped.to_string()));
+        if let Some(group) = Self::parse_link_group(input) {
+            return Some(PinConstraint::LinkBoth(group));
         }
 
         if input.contains(',') || input.split_whitespace().count() == 2 {
@@ -149,25 +149,33 @@ impl PinConstraint {
         let input = input.trim();
 
         if let Some(value) = input.strip_prefix("x:") {
-            if let Some(stripped) = value.strip_prefix('@') {
-                Some(PinConstraint::LinkX(stripped.to_string()))
+            if let Some(group) = Self::parse_link_group(value) {
+                Some(PinConstraint::LinkX(group))
             } else if let Ok(x) = value.parse::<f64>() {
                 Some(PinConstraint::FixX(x))
             } else {
                 None
             }
         } else if let Some(value) = input.strip_prefix("y:") {
-            if let Some(stripped) = value.strip_prefix('@') {
-                Some(PinConstraint::LinkY(stripped.to_string()))
+            if let Some(group) = Self::parse_link_group(value) {
+                Some(PinConstraint::LinkY(group))
             } else if let Ok(y) = value.parse::<f64>() {
                 Some(PinConstraint::FixY(y))
             } else {
                 None
             }
         } else {
-            input
-                .strip_prefix('@')
-                .map(|a| PinConstraint::LinkBoth(a.to_string()))
+            Self::parse_link_group(input).map(PinConstraint::LinkBoth)
+        }
+    }
+
+    fn parse_link_group(input: &str) -> Option<String> {
+        if let Some(group) = input.strip_prefix('@') {
+            Some(group.to_string())
+        } else if let Some(group) = input.strip_prefix("+@") {
+            Some(format!("+{group}"))
+        } else {
+            input.strip_prefix("-@").map(|group| format!("-{group}"))
         }
     }
 }
