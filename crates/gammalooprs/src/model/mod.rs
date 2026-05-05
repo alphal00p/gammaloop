@@ -2006,19 +2006,19 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 #let source-style(edge, typst-fields: "plain") = {
   let style = edge-entry(edge).source
   style = style + style-dict(edge.at("source-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("eval-source", default: none), edge, mode: "eval")
+  style + style-dict(edge.at("source-style-eval", default: none), edge, mode: "eval")
 }
 
 #let sink-style(edge, typst-fields: "plain") = {
   let style = edge-entry(edge).sink
   style = style + style-dict(edge.at("sink-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("eval-sink", default: none), edge, mode: "eval")
+  style + style-dict(edge.at("sink-style-eval", default: none), edge, mode: "eval")
 }
 
 #let edge-label(edge, typst-fields: "plain") = {
-  let eval-label = edge.at("eval-label", default: none)
-  if eval-label != none {
-    label-content(eval-label, edge, mode: "eval")
+  let label-eval = edge.at("label-eval", default: none)
+  if label-eval != none {
+    label-content(label-eval, edge, mode: "eval")
   } else {
     let label-template = edge.at(
       "display-label",

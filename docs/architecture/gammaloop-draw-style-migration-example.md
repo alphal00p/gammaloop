@@ -180,19 +180,19 @@ export regular Typst callbacks instead of strings that are later evaluated.
 #let source-style(edge, typst-fields: "plain") = {
   let style = edge-entry(edge).source
   style = style + style-dict(edge.at("source-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("eval-source", default: none), edge, mode: "eval")
+  style + style-dict(edge.at("source-style-eval", default: none), edge, mode: "eval")
 }
 
 #let sink-style(edge, typst-fields: "plain") = {
   let style = edge-entry(edge).sink
   style = style + style-dict(edge.at("sink-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("eval-sink", default: none), edge, mode: "eval")
+  style + style-dict(edge.at("sink-style-eval", default: none), edge, mode: "eval")
 }
 
 #let edge-label(edge, typst-fields: "plain") = {
-  let eval-label = edge.at("eval-label", default: none)
-  if eval-label != none {
-    label-content(eval-label, edge, mode: "eval")
+  let label-eval = edge.at("label-eval", default: none)
+  if label-eval != none {
+    label-content(label-eval, edge, mode: "eval")
   } else {
     let label-template = edge.at(
       "display-label",
@@ -214,16 +214,16 @@ DOT statements such as `particle`, plus fields like `eid`, `orientation`,
 
 Interpolation is still data-driven by default: DOT statements can provide
 `display-label` or `label-template` with `{field}` placeholders, for example
-`display-label="{particle} edge {id}"`. The callback replaces placeholders from
-the edge data without evaluating the string as Typst code. Literal braces can
-be written as `{{` and `}}`.
+`display-label="{particle} edge {eid}"`. The callback replaces placeholders
+from the edge data without evaluating the string as Typst code. Literal braces
+can be written as `{{` and `}}`.
 
 The embedded `layout` template also accepts `typst-fields: "plain" | "eval"`.
 In `"eval"` mode, known render fields are interpolated and then passed to
 Typst's `eval`. This applies to `label`, `display-label`, `label-template`,
-`source-style`, and `sink-style`. Explicit `eval-label`, `eval-source`, and
-`eval-sink` fields are always evaluated because their names are already an
-opt-in to executable Typst. Structural fields such as `particle`, `id`,
+`source-style`, and `sink-style`. Explicit `label-eval`,
+`source-style-eval`, and `sink-style-eval` fields are always evaluated because
+their names are already an opt-in to executable Typst. Structural fields such as `particle`, `id`,
 `source`, and `sink` remain raw data for lookup and layout.
 
 The default embedded figure template forwards `sys.inputs.typst-fields`, so the

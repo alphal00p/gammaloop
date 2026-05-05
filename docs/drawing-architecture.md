@@ -265,6 +265,10 @@ GammaLoop styles.
 
 ### Label Fields
 
+`label-eval`
+: Always interpolated and evaluated as Typst content for the edge label. If
+  present, it takes precedence over the other label fields.
+
 `label`
 : Plain label text by default. In the GammaLoop embedded template, this is used
   only if `display-label` and `label-template` are absent.
@@ -281,7 +285,9 @@ Label templates interpolate `{field}` placeholders from the edge callback data:
 a -> b [particle="a", id=7, display-label="{particle} edge {eid}"];
 ```
 
-Use `{{` and `}}` for literal braces.
+Use `{{` and `}}` for literal braces. Unknown placeholders are left unchanged.
+The DOT `id` field is consumed as Linnest's stable edge id; draw callbacks expose
+that value as `eid`.
 
 ### Style Fields
 
@@ -295,17 +301,49 @@ Use `{{` and `}}` for literal braces.
 : Drawing-only style fragment for the sink half-edge, with the same behavior as
   `source-style`.
 
-`eval-source`
-: Always evaluated as a Typst dictionary for the source half-edge.
+`source-style-eval`
+: Always interpolated and evaluated as a Typst dictionary for the source
+  half-edge.
 
-`eval-sink`
-: Always evaluated as a Typst dictionary for the sink half-edge.
+`sink-style-eval`
+: Always interpolated and evaluated as a Typst dictionary for the sink
+  half-edge.
 
-`eval-label`
-: Always evaluated as Typst content for the edge label.
+### Precedence
 
-The normal GammaLoop-generated path does not rely on `eval-*`. These fields are
+Source half-edge style is assembled in this order:
+
+1. the generated model style selected by `particle`;
+2. `source-style`, evaluated only when `typst-fields` is `"eval"`;
+3. `source-style-eval`, always evaluated.
+
+Sink half-edge style is analogous: generated model style, then `sink-style`,
+then `sink-style-eval`. Later dictionaries override earlier keys.
+
+Edge labels use the first available value in this order:
+
+1. `label-eval`, always evaluated;
+2. `display-label`;
+3. `label-template`;
+4. `label`;
+5. the generated model label.
+
+The normal GammaLoop-generated path does not rely on `*-eval`. These fields are
 an escape hatch for manually edited DOT files.
+
+### Interpolation And Templating
+
+String templates are converted to text, outer quotes are trimmed, and then
+`{field}` placeholders are replaced from the edge callback dictionary. Escaped
+`{{` and `}}` become literal braces. Unknown placeholders remain in the string,
+which makes misspelled fields visible in the rendered output or in Typst eval
+errors.
+
+Eval fields are interpolated first and evaluated afterward. Their eval scope is
+the generated style scope plus the edge callback dictionary, so expressions can
+refer to helpers such as `source-stroke`, `sink-stroke`, `wave`, `coil`,
+`zigzag`, and to edge fields such as `particle`, `label`, `eid`,
+`source-endpoint`, and `sink-endpoint`.
 
 ### Eval Mode
 
@@ -327,8 +365,9 @@ linnet draw graphs --input typst-fields=eval
 
 In eval mode, the known render fields `label`, `display-label`,
 `label-template`, `source-style`, and `sink-style` are interpolated and then
-passed to Typst `eval`. Explicit `eval-label`, `eval-source`, and `eval-sink`
-are evaluated in both modes because their names are already an opt-in.
+passed to Typst `eval`. Explicit `label-eval`, `source-style-eval`, and
+`sink-style-eval` fields are evaluated in both modes because their names are
+already an opt-in.
 
 Example:
 
@@ -393,7 +432,8 @@ For GammaLoop-generated diagrams:
 - Put physics data in canonical GammaLoop fields.
 - Let GammaLoop generate `edge-style.typ`.
 - Keep `typst-fields` at the default `plain`.
-- Do not use `eval-*` unless a human is deliberately customizing a drawing.
+- Do not use `*-eval` fields unless a human is deliberately customizing a
+  drawing.
 
 For manually edited drawing DOT:
 

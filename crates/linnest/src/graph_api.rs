@@ -68,12 +68,9 @@ pub struct TypstDotEdge {
     pub label_pos: Option<TypstPoint>,
     pub label_angle: Option<f64>,
     pub bend: Option<f64>,
-    #[serde(rename = "eval-sink")]
-    pub eval_sink: Option<String>,
-    #[serde(rename = "eval-source")]
-    pub eval_source: Option<String>,
-    #[serde(rename = "eval-label")]
-    pub eval_label: Option<String>,
+    pub sink_style_eval: Option<String>,
+    pub source_style_eval: Option<String>,
+    pub label_eval: Option<String>,
     #[serde(rename = "mom-eval")]
     pub mom_eval: Option<String>,
     pub statements: BTreeMap<String, String>,
@@ -88,12 +85,12 @@ pub struct TypstGraphSpec {
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
     pub edge_statements: BTreeMap<String, String>,
-    #[serde(default, rename = "eval-source")]
-    pub eval_source: Option<String>,
-    #[serde(default, rename = "eval-sink")]
-    pub eval_sink: Option<String>,
-    #[serde(default, rename = "eval-label")]
-    pub eval_label: Option<String>,
+    #[serde(default)]
+    pub source_style_eval: Option<String>,
+    #[serde(default)]
+    pub sink_style_eval: Option<String>,
+    #[serde(default)]
+    pub label_eval: Option<String>,
     #[serde(default)]
     pub node_statements: BTreeMap<String, String>,
     #[serde(default)]
@@ -127,12 +124,12 @@ pub struct TypstEdgeSpec {
     pub id: Option<usize>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
-    #[serde(default, rename = "eval-source")]
-    pub eval_source: Option<String>,
-    #[serde(default, rename = "eval-sink")]
-    pub eval_sink: Option<String>,
-    #[serde(default, rename = "eval-label")]
-    pub eval_label: Option<String>,
+    #[serde(default)]
+    pub source_style_eval: Option<String>,
+    #[serde(default)]
+    pub sink_style_eval: Option<String>,
+    #[serde(default)]
+    pub label_eval: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,12 +164,12 @@ pub struct TypstBuilderSpec {
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
     pub edge_statements: BTreeMap<String, String>,
-    #[serde(default, rename = "eval-source")]
-    pub eval_source: Option<String>,
-    #[serde(default, rename = "eval-sink")]
-    pub eval_sink: Option<String>,
-    #[serde(default, rename = "eval-label")]
-    pub eval_label: Option<String>,
+    #[serde(default)]
+    pub source_style_eval: Option<String>,
+    #[serde(default)]
+    pub sink_style_eval: Option<String>,
+    #[serde(default)]
+    pub label_eval: Option<String>,
     #[serde(default)]
     pub node_statements: BTreeMap<String, String>,
 }
@@ -232,11 +229,11 @@ pub fn builder_new_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
         decode_cbor(arg, "builder spec")?
     };
 
-    let edge_statements = edge_eval_statements(
+    let edge_statements = edge_render_statements(
         spec.edge_statements,
-        spec.eval_source,
-        spec.eval_sink,
-        spec.eval_label,
+        spec.source_style_eval,
+        spec.sink_style_eval,
+        spec.label_eval,
     );
 
     encode_builder(&TypstDotGraphBuilder {
@@ -533,11 +530,11 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
 fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, String> {
     let node_count = spec.nodes.len();
     let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
-    let edge_statements = edge_eval_statements(
+    let edge_statements = edge_render_statements(
         spec.edge_statements,
-        spec.eval_source,
-        spec.eval_sink,
-        spec.eval_label,
+        spec.source_style_eval,
+        spec.sink_style_eval,
+        spec.label_eval,
     );
     let global_data = global_data_from_parts(
         spec.name,
@@ -573,11 +570,11 @@ fn add_edge_to_builder(
         .map(parse_orientation)
         .transpose()?
         .unwrap_or(Orientation::Default);
-    let local_statements = edge_eval_statements(
+    let local_statements = edge_render_statements(
         edge.statements,
-        edge.eval_source,
-        edge.eval_sink,
-        edge.eval_label,
+        edge.source_style_eval,
+        edge.sink_style_eval,
+        edge.label_eval,
     );
     let edge_data = DotEdgeData {
         statements: merged_expanded_statements(&global_data.edge_statements, &local_statements),
@@ -631,20 +628,20 @@ fn global_data_from_parts(
     }
 }
 
-fn edge_eval_statements(
+fn edge_render_statements(
     mut statements: BTreeMap<String, String>,
-    eval_source: Option<String>,
-    eval_sink: Option<String>,
-    eval_label: Option<String>,
+    source_style_eval: Option<String>,
+    sink_style_eval: Option<String>,
+    label_eval: Option<String>,
 ) -> BTreeMap<String, String> {
-    if let Some(eval_source) = eval_source {
-        statements.insert("eval-source".to_string(), eval_source);
+    if let Some(source_style_eval) = source_style_eval {
+        statements.insert("source-style-eval".to_string(), source_style_eval);
     }
-    if let Some(eval_sink) = eval_sink {
-        statements.insert("eval-sink".to_string(), eval_sink);
+    if let Some(sink_style_eval) = sink_style_eval {
+        statements.insert("sink-style-eval".to_string(), sink_style_eval);
     }
-    if let Some(eval_label) = eval_label {
-        statements.insert("eval-label".to_string(), eval_label);
+    if let Some(label_eval) = label_eval {
+        statements.insert("label-eval".to_string(), label_eval);
     }
     statements
 }
@@ -789,9 +786,9 @@ fn edge_view_to_output(
         label_pos: parse_point(&statements, "label-pos"),
         label_angle: parse_rad(&statements, "label-angle"),
         bend: parse_rad(&statements, "bend"),
-        eval_sink: statements.get("eval-sink").cloned(),
-        eval_source: statements.get("eval-source").cloned(),
-        eval_label: statements.get("eval-label").cloned(),
+        sink_style_eval: statements.get("sink-style-eval").cloned(),
+        source_style_eval: statements.get("source-style-eval").cloned(),
+        label_eval: statements.get("label-eval").cloned(),
         mom_eval: statements.get("mom-eval").cloned(),
         statements,
     }
