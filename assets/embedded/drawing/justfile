@@ -12,6 +12,7 @@ draw *EXTRA_INPUTS:
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
 	  --style drawings/templates/curve.typ \
 	  --style drawings/templates/draw.typ \
+	  --style drawings/templates/physics-edge-style.typ \
 	  --style drawings/templates/edge-style.typ \
 	  --style drawings/templates/graph.typ \
 	  --style drawings/templates/layout.typ \

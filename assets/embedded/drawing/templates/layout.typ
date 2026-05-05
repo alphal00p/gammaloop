@@ -8,6 +8,7 @@
   columns: 1fr,
   unit: 1,
   typst-fields: "plain",
+  edge-style-options: (:),
   additional-data: (:),
 ) = {
   let graphs = graph.parse(input)
@@ -19,9 +20,9 @@
       scope: scope,
       unit: unit,
       title: auto,
-      source-style: edge => edge-style.source-style(edge, typst-fields: typst-fields),
-      sink-style: edge => edge-style.sink-style(edge, typst-fields: typst-fields),
-      edge-label: edge => edge-style.edge-label(edge, typst-fields: typst-fields),
+      source-style: edge => edge-style.source-style(edge, typst-fields: typst-fields, ..edge-style-options),
+      sink-style: edge => edge-style.sink-style(edge, typst-fields: typst-fields, ..edge-style-options),
+      edge-label: edge => edge-style.edge-label(edge, typst-fields: typst-fields, ..edge-style-options),
     ))
   }
   for d in diags {

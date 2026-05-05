@@ -87,69 +87,19 @@
   )
 }
 
-#let native-pattern-object(pattern, stroke: rgb("#1b7f4c") + 0.75pt) = {
-  let points = pattern.points.map(point => (
-    x: point.at * 3.1 + point.x * 0.18,
-    y: 1 + point.y * 0.32,
-  ))
-  native-scene({
-    native-polyline(((x: 0.0, y: 1.0), (x: 3.15, y: 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
-    native-polyline(points, stroke: stroke)
-  })
-}
-
-#let native-split-demo(split) = native-scene({
-  if split.keys().contains("curve") {
-    native-cubic(split.curve, stroke: rgb("#c8c8c8") + 0.45pt)
-  } else {
-    native-cubics(split.segments, stroke: rgb("#c8c8c8") + 0.45pt)
-  }
-  native-cubic(split.segments.at(0), stroke: rgb("#d72638") + 0.95pt)
-  native-cubic(split.segments.at(1), stroke: rgb("#355c9a") + 0.95pt)
-  native-dot(split.segments.at(0).end, fill: black)
-})
-
-#let native-trim-demo(original, trimmed) = native-scene({
-  native-cubic(original, stroke: rgb("#c8c8c8") + 0.45pt)
-  native-cubic(trimmed, stroke: rgb("#d72638") + 1pt)
-  native-dot(trimmed.start, fill: rgb("#d72638"))
-  native-dot(trimmed.end, fill: rgb("#d72638"))
-})
-
-#let native-pattern-path(path, base: demo-segment) = native-scene({
-  native-cubic(base, stroke: rgb("#c8c8c8") + 0.45pt)
-  if path.curves.len() > 0 {
-    native-cubics(path.curves, stroke: rgb("#1b7f4c") + 0.8pt)
-  } else {
-    native-polyline(path.points, stroke: rgb("#1b7f4c") + 0.8pt)
-  }
-})
-
-#let native-outset-demo(from, toward, moved) = native-scene({
-  native-polyline((from, toward), stroke: rgb("#c8c8c8") + 0.65pt)
-  native-dot(from, fill: rgb("#355c9a"))
-  native-dot(moved, fill: rgb("#d72638"))
-  native-dot(toward, fill: black)
-})
-
-#let native-edge-halves-demo(halves) = native-scene({
-  native-cubic(halves.source, stroke: rgb("#d72638") + 0.9pt)
-  native-cubic(halves.sink, stroke: rgb("#355c9a") + 0.9pt)
-  native-dot(demo-through, fill: black)
-})
-
 = kurvst Typst API
 
 `kurvst` is a Typst package backed by `kurvst.wasm`, a small Kurbo-based
-plugin. It exposes Bezier utilities that are awkward or unavailable in native
-Typst:
+plugin. Its public API is path-based: construct a path dictionary, pass that
+path into transforms, and draw the returned path.
 
-- splitting cubic Beziers,
-- trimming cubic Beziers by arc length,
-- constructing smooth Hobby curves through a control point,
+It exposes Bezier utilities that are awkward or unavailable in native Typst:
+
+- constructing cubic and Hobby paths,
+- trimming paths by arc length,
 - generating sampled path patterns,
-- fitting Kurbo offset/parallel paths for cubic Beziers,
-- converting returned geometry to CeTZ drawing commands.
+- fitting Kurbo offset/parallel paths,
+- converting returned path geometry to CeTZ drawing commands.
 
 All points are dictionaries with numeric `x` and `y` fields:
 
@@ -168,32 +118,76 @@ Cubic segments use `start`, `ctrl-a`, `ctrl-b`, and `end`:
 )
 ```
 
-== Splitting And Trimming
-
-`split-cubic` splits one cubic at a parameter `t`. `trim-cubic` and
-`trim-segment` trim by curve distance from the start and/or end. These helpers
-return cubic segment dictionaries, so the output can be passed back into
-`kurvst`, drawn with native Typst `curve`, or forwarded to CeTZ.
+Use `cubic-path(..segment)` once to turn that cubic dictionary into a path
+dictionary. Returned paths carry a serialized Kurbo `BezPath` in `path`, plus
+Typst-friendly `points`, cubic `curves`, line `segments`, and `length` fields
+for drawing or inspection.
 
 ```typ
-#let split = kurvst.split-cubic(
-  segment.start,
-  segment.end,
-  segment.ctrl-a,
-  segment.ctrl-b,
-  t: 0.5,
-)
-#let trimmed = kurvst.trim-segment(split.segments.at(0), start-outset: 0.15)
+#let path = kurvst.cubic-path(..segment)
+#let trimmed = kurvst.trim-path(path, start-outset: 0.2, end-outset: 0.1)
+#let shifted = kurvst.parallel-path(trimmed, distance: 0.15)
 ```
 
-`hobby-through(start, through, end)` builds a smooth open curve through all
-three points and returns two cubic halves split at `through`. `edge-halves`
-combines that with endpoint trimming for graph-edge style geometry.
+A typical chain keeps the returned dictionaries intact until the final drawing
+step:
+
+```typ
+#let base = kurvst.hobby-through(demo-start, demo-through, demo-end)
+#let trimmed = kurvst.trim-path(base, start-outset: 0.2, end-outset: 0.1)
+#let shifted = kurvst.parallel-path(trimmed, distance: 0.15)
+
+#cetz.canvas({
+  kurvst.cetz-path(base, stroke: rgb("#bbbbbb") + 0.4pt)
+  kurvst.cetz-path(trimmed, stroke: rgb("#d72638") + 0.6pt)
+  kurvst.cetz-path(shifted, stroke: rgb("#1b7f4c") + 0.6pt)
+})
+```
+
+== Paths And Trimming
+
+`cubic-path` constructs a path from one cubic Bezier. `trim-path` trims by curve
+distance from the start and/or end and returns another path dictionary.
+
+```typ
+#let path = kurvst.cubic-path(..segment)
+#let trimmed = kurvst.trim-path(path, start-outset: 0.15, end-outset: 0.1)
+```
+
+`hobby-through(start, through, end)` builds a smooth open curve through three
+points; its `curves` field contains the two cubic halves split at `through`.
+`hobby-spline(points)` does the same for any open point sequence with at least
+two points. Both return path dictionaries and can be passed directly to
+path-level helpers.
+
+```typ
+#let spline = kurvst.hobby-spline((
+  (x: 0.0, y: 0.0),
+  (x: 0.9, y: 0.8),
+  (x: 1.8, y: -0.3),
+  (x: 2.8, y: 0.4),
+))
+#let shifted = kurvst.parallel-path(spline, distance: 0.14)
+#let wiggle = kurvst.pattern-path(
+  spline,
+  pattern: kurvst.wave(samples-per-period: 24),
+  amplitude: 0.1,
+  wavelength: 0.55,
+)
+#cetz.canvas({
+  kurvst.cetz-path(spline, stroke: rgb("#bbbbbb") + 0.45pt)
+  kurvst.cetz-path(shifted, stroke: rgb("#1b7f4c") + 0.6pt)
+  kurvst.cetz-pattern(wiggle, stroke: rgb("#355c9a") + 0.55pt)
+})
+```
+
+`edge-halves` combines the three-point Hobby helper with endpoint trimming for
+graph-edge style geometry.
 
 == Path Patterns
 
-`pattern-cubic` and `pattern-segment` generate a one-dimensional pattern along a
-cubic path. Built-ins are regular Typst dictionaries:
+`pattern-path` generates a one-dimensional pattern along any path dictionary.
+Built-ins are regular Typst dictionaries:
 
 ```typ
 #let wave = kurvst.wave()
@@ -232,30 +226,38 @@ for coils, whose longitudinal offset would otherwise put the first and last
 visible points inside the turn near nodes.
 
 ```typ
-#let path = kurvst.pattern-segment(
-  segment,
+#let base = kurvst.cubic-path(..segment)
+#let path = kurvst.pattern-path(
+  base,
   pattern: hook,
   amplitude: 0.15,
   wavelength: 0.7,
 )
-#native-pattern-path(path, base: segment)
+#native-scene({
+  native-cubics(base.curves, stroke: rgb("#c8c8c8") + 0.45pt)
+  native-polyline(path.points, stroke: rgb("#1b7f4c") + 0.8pt)
+})
 ```
 
 == Parallel Paths
 
-`parallel-cubic` and `parallel-segment` use Kurbo's cubic offset curve fitter
-to produce a path at a fixed normal distance from the source cubic. Positive
-distances follow the left normal of the cubic direction; negative distances
-follow the right normal. The output has the same drawable shape as pattern
-paths: `points`, fitted cubic `curves`, straight `segments`, and `length`.
+`parallel-path` uses Kurbo's offset curve fitter to produce a path at a fixed
+normal distance from the source path. Positive distances follow the left normal
+of the path direction; negative distances follow the right normal. The output
+has the same drawable shape as pattern paths: `points`, fitted cubic `curves`,
+straight `segments`, and `length`.
 `start-outset` and `end-outset` trim the fitted path by arc length after the
 offset is computed.
 
 ```typ
-#let left = kurvst.parallel-segment(segment, distance: 0.18, start-outset: 0.35, end-outset: 0.35)
-#let right = kurvst.parallel-segment(segment, distance: -0.18)
-#native-pattern-path(left, base: segment)
-#native-pattern-path(right, base: segment)
+#let base = kurvst.cubic-path(..segment)
+#let left = kurvst.parallel-path(base, distance: 0.18, start-outset: 0.35, end-outset: 0.35)
+#let right = kurvst.parallel-path(base, distance: -0.18)
+#native-scene({
+  native-cubics(base.curves, stroke: rgb("#c8c8c8") + 0.45pt)
+  native-cubics(left.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+  native-cubics(right.curves, stroke: rgb("#355c9a") + 0.8pt)
+})
 ```
 
 == Native Drawing Primitives
@@ -267,20 +269,22 @@ components:
 #tidy.show-example.show-example(
   ```typ
   #let point(p) = (p.x * 36pt, p.y * 36pt)
-  #let draw-segment(segment) = curve(
+  #let draw-path(path) = curve(
     stroke: black + 0.7pt,
-    curve.move(point(segment.start)),
-    curve.cubic(point(segment.ctrl-a), point(segment.ctrl-b), point(segment.end)),
+    ..path.curves.map(segment => (
+      curve.move(point(segment.start)),
+      curve.cubic(point(segment.ctrl-a), point(segment.ctrl-b), point(segment.end)),
+    )).flatten(),
   )
 
-  #draw-segment(segment)
+  #draw-path(kurvst.cubic-path(..segment))
   ```,
-  scope: (segment: demo-segment),
+  scope: (kurvst: kurvst, segment: demo-segment),
 )
 
-The generated reference below uses the same idea for each core function: native
-`curve` for cubics and polylines, `circle` for point markers, and `place` inside
-a fixed-size `block` when several primitives need to be overlaid.
+The generated reference below keeps drawing code inline. It only uses the small
+common helpers above for coordinate scaling, native `curve` construction, point
+markers, and fixed-size preview blocks.
 
 == CeTZ Interoperability
 
@@ -291,10 +295,11 @@ CeTZ path merging and styling:
 #tidy.show-example.show-example(
   ```typ
   #cetz.canvas({
-    kurvst.cetz-bezier(segment, stroke: rgb("#d72638") + 0.6pt)
+    let base = kurvst.cubic-path(..segment)
+    kurvst.cetz-path(base, stroke: rgb("#d72638") + 0.6pt)
 
-    let path = kurvst.pattern-segment(
-      segment,
+    let path = kurvst.pattern-path(
+      base,
       pattern: kurvst.coil(longitudinal-scale: 1.6),
       amplitude: 0.12,
       wavelength: 0.55,
@@ -322,12 +327,11 @@ CeTZ path merging and styling:
     demo-end: demo-end,
     demo-nodes: demo-nodes,
     demo-edge: demo-edge,
-    native-pattern-object: native-pattern-object,
-    native-split-demo: native-split-demo,
-    native-trim-demo: native-trim-demo,
-    native-pattern-path: native-pattern-path,
-    native-outset-demo: native-outset-demo,
-    native-edge-halves-demo: native-edge-halves-demo,
+    native-scene: native-scene,
+    native-cubic: native-cubic,
+    native-cubics: native-cubics,
+    native-polyline: native-polyline,
+    native-dot: native-dot,
   ),
 )
 #tidy.show-module(docs, style: tidy-style)

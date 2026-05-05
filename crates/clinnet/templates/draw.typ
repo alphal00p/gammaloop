@@ -125,18 +125,34 @@
   let same = _has-pattern(source-style)
   same = same and _pattern-name(source-style) == _pattern-name(sink-style)
   same = same and _same-parallel-geometry(source-style, sink-style)
-  same = same and _style-value(source-style, "pattern-amplitude", 0.1) == _style-value(sink-style, "pattern-amplitude", 0.1)
-  same = same and _style-value(source-style, "pattern-wavelength", 1.0) == _style-value(sink-style, "pattern-wavelength", 1.0)
+  same = (
+    same and _style-value(source-style, "pattern-amplitude", 0.1) == _style-value(sink-style, "pattern-amplitude", 0.1)
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-wavelength", 1.0) == _style-value(sink-style, "pattern-wavelength", 1.0)
+  )
   same = same and _style-value(source-style, "pattern-phase", 0) == _style-value(sink-style, "pattern-phase", 0)
-  same = same and _style-value(source-style, "pattern-samples-per-period", 16) == _style-value(sink-style, "pattern-samples-per-period", 16)
-  same = same and _style-value(source-style, "pattern-coil-longitudinal-scale", 1.25) == _style-value(sink-style, "pattern-coil-longitudinal-scale", 1.25)
-  same = same and _style-value(source-style, "pattern-accuracy", 0.001) == _style-value(sink-style, "pattern-accuracy", 0.001)
+  same = (
+    same
+      and _style-value(source-style, "pattern-samples-per-period", 16)
+        == _style-value(sink-style, "pattern-samples-per-period", 16)
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-coil-longitudinal-scale", 1.25)
+        == _style-value(sink-style, "pattern-coil-longitudinal-scale", 1.25)
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-accuracy", 0.001) == _style-value(sink-style, "pattern-accuracy", 0.001)
+  )
   same
 }
 
 #let _parallel-path(segment, style, start-outset: 0, end-outset: 0) = {
-  curve-api.parallel-segment(
-    segment,
+  curve-api.parallel-path(
+    curve-api.cubic-path(..segment, accuracy: _style-value(style, "parallel-accuracy", 0.001)),
     distance: _style-value(style, "parallel-distance", 0),
     start-outset: start-outset,
     end-outset: end-outset,
@@ -146,7 +162,7 @@
 }
 
 #let _segment-length(segment, accuracy: 0.001) = {
-  curve-api.parallel-segment(segment, accuracy: accuracy, optimize: false).length
+  curve-api.cubic-path(..segment, accuracy: accuracy).length
 }
 
 #let _segments-length(segments, accuracy: 0.001) = {
@@ -186,6 +202,10 @@
     for segment in path.curves {
       segments.push(segment)
     }
+  } else if path.keys().contains("segments") and path.segments.len() > 0 {
+    for segment in path.segments {
+      segments.push(_line-segment(segment.start, segment.end))
+    }
   } else if path.keys().contains("points") and path.points.len() > 1 {
     for i in range(0, path.points.len() - 1) {
       segments.push(_line-segment(path.points.at(i), path.points.at(i + 1)))
@@ -194,15 +214,15 @@
   segments
 }
 
-#let _trim-segments(segments, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+#let _trim-path-curves(segments, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
   let trimmed = ()
   for (index, segment) in segments.enumerate() {
     let piece = segment
     if index == 0 and start-outset != 0 {
-      piece = curve-api.trim-segment(piece, start-outset: start-outset, accuracy: accuracy)
+      piece = curve-api.trim-path(curve-api.cubic-path(..piece, accuracy: accuracy), start-outset: start-outset, accuracy: accuracy).curves.at(0)
     }
     if index == segments.len() - 1 and end-outset != 0 {
-      piece = curve-api.trim-segment(piece, end-outset: end-outset, accuracy: accuracy)
+      piece = curve-api.trim-path(curve-api.cubic-path(..piece, accuracy: accuracy), end-outset: end-outset, accuracy: accuracy).curves.at(0)
     }
     trimmed.push(piece)
   }
@@ -213,24 +233,24 @@
   if _has-parallel(style) {
     _path-segments(_parallel-path(segment, style, start-outset: start-outset, end-outset: end-outset))
   } else {
-    _trim-segments((segment,), start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+    _trim-path-curves((segment,), start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
   }
 }
 
 #let _edge-geometry-halves(edge, nodes, source-style, sink-style, omega: 1.0, source-outset: 0, sink-outset: 0, accuracy: 0.001) = {
   if _has-parallel(source-style) or _has-parallel(sink-style) {
     let base = curve-api.edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
-    let base-length = _segments-length(base.curve.segments, accuracy: accuracy)
+    let base-length = _segments-length(base.curve.curves, accuracy: accuracy)
     let source-center-outset = _parallel-center-outset(base-length, source-style, source-outset: source-outset, sink-outset: sink-outset)
     let source-geometry = _geometry-segments(
-      base.curve.segments.at(0),
+      base.curve.curves.at(0),
       source-style,
       start-outset: source-outset + source-center-outset,
       accuracy: accuracy,
     )
     let sink-geometry = if _same-parallel-geometry(source-style, sink-style) {
       _geometry-segments(
-        base.curve.segments.at(1),
+        base.curve.curves.at(1),
         source-style,
         end-outset: sink-outset + source-center-outset,
         accuracy: accuracy,
@@ -238,7 +258,7 @@
     } else {
       let sink-center-outset = _parallel-center-outset(base-length, sink-style, source-outset: source-outset, sink-outset: sink-outset)
       _geometry-segments(
-        base.curve.segments.at(1),
+        base.curve.curves.at(1),
         sink-style,
         end-outset: sink-outset + sink-center-outset,
         accuracy: accuracy,
@@ -259,16 +279,16 @@
       accuracy: accuracy,
     )
     (
-      source: (trimmed.source,),
-      sink: (trimmed.sink,),
+      source: _path-segments(trimmed.source),
+      sink: _path-segments(trimmed.sink),
       curve: trimmed.curve,
     )
   }
 }
 
 #let _pattern-path(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
-  curve-api.pattern-segment(
-    segment,
+  curve-api.pattern-path(
+    curve-api.cubic-path(..segment, accuracy: _style-value(style, "pattern-accuracy", 0.001)),
     pattern: _pattern-name(style),
     amplitude: _style-value(style, "pattern-amplitude", 0.1),
     wavelength: _style-value(style, "pattern-wavelength", 1.0),
@@ -301,7 +321,7 @@
     }
   } else {
     for segment in segments {
-      elements.push(curve-api.cetz-bezier(segment, .._draw-style(style)))
+      elements.push(curve-api.cetz-path(curve-api.cubic-path(..segment), .._draw-style(style)))
     }
   }
   (elements: elements, length: length)
@@ -384,133 +404,202 @@
 /// The graph must already have positions, so call `layout` first. Node and edge
 /// Typst style dictionaries or callbacks are evaluated and forwarded to CeTZ.
 ///
-/// ```example
+/// #example(`
 /// #let b = graph.builder(name: "demo")
-/// #let (node: a, builder: b) = graph.node(b, name: "a")
+/// #let parallel-base-edge = 0
+/// #let parallel-edge = 1
+/// #let source-patterns = (
+///   "coil",
+///   none,
+///   "zigzag",
+///   "coil",
+///   "wave",
+///   "zigzag",
+///   "coil",
+///   "wave",
+///   "zigzag",
+/// )
+/// #let sink-patterns = (
+///   "coil",
+///   none,
+///   "zigzag",
+///   "coil",
+///   "zigzag",
+///   "coil",
+///   "wave",
+///   "coil",
+///   "wave",
+/// )
+/// #let parallel-style(edge) = if edge.eid == parallel-edge {
+///   (
+///     parallel-distance: 0.16,
+///     parallel-length: 1.1,
+///     parallel-ratio: 0.5,
+///   )
+/// } else { (:) }
+/// #let source-stroke(edge) = if edge.eid == parallel-base-edge {
+///   (paint: gray, thickness: 0.75pt, cap: "round")
+/// } else if edge.eid == parallel-edge {
+///   (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round")
+/// } else {
+///   (paint: red, thickness: 1.2pt, cap: "round")
+/// }
+/// #let sink-stroke(edge) = if edge.eid == parallel-base-edge {
+///   (paint: gray, thickness: 0.75pt, cap: "round")
+/// } else if edge.eid == parallel-edge {
+///   (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round")
+/// } else {
+///   (paint: blue, thickness: 1.2pt, cap: "round", dash: "dotted")
+/// }
+/// #let source-style(edge) = (
+///   stroke: source-stroke(edge),
+///   pattern: source-patterns.at(edge.eid),
+///   pattern-amplitude: 0.18,
+///   pattern-wavelength: 0.55,
+///   pattern-coil-longitudinal-scale: 1.6,
+/// ) + parallel-style(edge)
+/// #let sink-style(edge) = (
+///   stroke: sink-stroke(edge),
+///   mark: if edge.eid == parallel-edge { (end: ">") } else { none },
+///   pattern: sink-patterns.at(edge.eid),
+///   pattern-amplitude: 0.18,
+///   pattern-wavelength: 0.55,
+///   pattern-coil-longitudinal-scale: 1.6,
+/// ) + parallel-style(edge)
+/// #let (node: a, builder: b) = graph.node(b, name: "a hi")
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
-/// #let b = graph.edge(b, source: (node: a), sink: (node: c))
-/// #draw(layout(graph.finish(b)), source-style: (stroke: red + 0.5pt), sink-style: (stroke: blue + 0.5pt))
-/// ```
+/// #let (node: d, builder: b) = graph.node(b, name: "d")
+/// #let (node: e, builder: b) = graph.node(b, name: "e")
+/// #let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (pin: "x:0,y:0.75"))
+/// #let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (pin: "x:0,y:0.75"))
+/// #let b = graph.edge(b, source: (node: c), sink: (node: a, compass: "e"))
+/// #let b = graph.edge(b, source: (node: c), sink: (node: d, compass: "e"))
+/// #let b = graph.edge(b, source: (node: e), sink: (node: d, compass: "e"))
+/// #let b = graph.edge(b, source: (node: e), sink: (node: a, compass: "e"))
+/// #let b = graph.edge(b, source: (node: d), sink: none)
+/// #let b = graph.edge(b, source: (node: e, compass: "e"), sink: none)
+/// #let b = graph.edge(b, source: (node: a), sink: none)
+/// #let layed-out = layout(graph.finish(b))
+/// #let east = subgraph.compass(layed-out, "e")
+/// #draw(layed-out, subgraph: east, source-style: source-style, sink-style: sink-style)
+/// `,dir:ttb)
+///
+/// #example(`
+/// #let p = graph.builder(name: "parallel demo")
+/// #let main-line-edge = 0
+/// #let parallel-edge = 1
+/// #let (node: pa, builder: p) = graph.node(p, name: "a", statements: (pin: "x:-2,y:0"))
+/// #let (node: pc, builder: p) = graph.node(p, name: "c", statements: (pin: "x:2,y:0"))
+/// #let p = graph.edge(p, source: (node: pa), sink: (node: pc), statements: (pin: "x:0,y:1.1"))
+/// #let p = graph.edge(p, source: (node: pa), sink: (node: pc), statements: (pin: "x:0,y:1.1"))
+/// #let focused-base-style(edge) = (
+///   stroke: if edge.eid == parallel-edge {
+///     (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round")
+///   } else {
+///     (paint: gray, thickness: 0.7pt, cap: "round")
+///   },
+///   pattern: if edge.eid == main-line-edge { "coil" } else { none },
+///   pattern-amplitude: 0.14,
+///   pattern-wavelength: 0.45,
+///   pattern-coil-longitudinal-scale: 1.5,
+/// )
+/// #let parallel-edge-style(edge) = if edge.eid == parallel-edge {
+///   (
+///     parallel-distance: 0.18,
+///     parallel-length: 1.4,
+///     parallel-ratio: 0.5,
+///   )
+/// } else { (:) }
+/// #let focused-source-style(edge) = focused-base-style(edge) + parallel-edge-style(edge)
+/// #let focused-sink-style(edge) = focused-base-style(edge) + parallel-edge-style(edge) + (
+///   mark: if edge.eid == parallel-edge { (end: ">") } else { none },
+/// )
+/// #draw(layout(graph.finish(p), steps: 1, epochs: 1, label-steps: 0), unit: 1.25, node-radius: 0.24, source-style: focused-source-style, sink-style: focused-sink-style)
+/// `,dir:ttb)
 /// -> content
 #let draw(
   /// Laid-out graph object returned by `layout`. -> bytes
   graph,
-
   /// Additional values merged into node and edge callback dictionaries.
   /// -> dictionary
   scope: (:),
-
   /// Coordinate length for one graph-layout unit. Numbers are interpreted as em.
   /// -> int | float | length | ratio
   unit: 1,
-
   /// Optional title displayed above the diagram. Use `auto` for the graph name.
   /// -> none | auto | content | string
   title: none,
-
   /// Optional subgraph whose half-edges are shaded. -> none | bytes
   subgraph: none,
-
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
   debug: false,
-
-  /// Default CeTZ node radius. Use `auto` to fit the node label.
-  /// -> auto | int | float | array
+  /// Default CeTZ node radius. Use `auto` to fit the node label. -> auto | int | float | array
   node-radius: auto,
-
   /// Minimum radius used when `node-radius` is `auto`. -> int | float
   node-min-radius: 0.16,
-
   /// Extra canvas-unit padding around labels when `node-radius` is `auto`.
   /// -> int | float
   node-label-padding: 0.08,
-
   /// Default CeTZ node fill. -> any
   node-fill: white,
-
   /// Default CeTZ node stroke. -> any
   node-stroke: black,
-
   /// Edge clearance from node centers. `auto` uses each node circle radius.
   /// Increase this when labels extend beyond the circle. -> auto | int | float
   node-outset: auto,
-
   /// Default node-label style forwarded to `cetz.draw.content`. -> dictionary
   node-label-style: (:),
-
-  /// Node style dictionary or callback. A callback receives node data.
-  /// -> dictionary | function | none
+  /// Node style dictionary or callback. A callback receives node data. -> dictionary | function | none
   node-style: (:),
-
-  /// Node label content or callback. `auto` uses the node name.
-  /// -> auto | content | string | function | none
+  /// Node label content or callback. `auto` uses the node name. -> auto | content | string | function | none
   node-label: auto,
-
   /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
-
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
   edge-parallel-distance: 0,
-
   /// Maximum visible arc length for centered parallel edge paths. `none` keeps
   /// the full shifted path. -> none | int | float
   edge-parallel-length: none,
-
   /// Maximum visible fraction of the base edge length for centered parallel edge
   /// paths. Combined with `edge-parallel-length` by taking the shorter length.
   /// -> none | int | float
   edge-parallel-ratio: none,
-
   /// Arc-length accuracy for fitted parallel edge paths. -> float
   edge-parallel-accuracy: 0.001,
-
   /// Let Kurbo optimize the fitted parallel path. -> bool
   edge-parallel-optimize: true,
-
   /// Source half-edge style dictionary or callback. A callback receives edge data.
   /// -> dictionary | function | none
   source-style: (:),
-
   /// Sink half-edge style dictionary or callback. A callback receives edge data.
   /// -> dictionary | function | none
   sink-style: (:),
-
   /// Edge label content or callback. A callback receives edge data.
   /// -> content | string | function | none
   edge-label: none,
-
   /// Hobby curl used at the endpoints of paired edge curves. -> float
   edge-omega: 1.0,
-
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
   edge-trim-accuracy: 0.001,
-
   /// CeTZ canvas padding. -> none | int | float | array | dictionary
   padding: 0.4,
-
   /// Radius for edge-position markers shown at `debug >= 2`. -> int | float
   debug-edge-radius: 0.08,
-
   /// Fill for edge-position markers shown at `debug >= 2`. -> any
   debug-edge-fill: rgb("#ff9f1c"),
-
   /// Stroke for edge-position markers shown at `debug >= 2`. -> any
   debug-edge-stroke: rgb("#d72638") + 0.35pt,
-
   /// Label fill for edge-position markers shown at `debug >= 2`. -> any
   debug-edge-label-fill: rgb("#7a1020"),
-
   /// CeTZ style used to shade half-edges included in `subgraph`. -> dictionary
-  subgraph-edge-style: (stroke: rgb("#ffd166") + 0.35em),
-
+  subgraph-edge-style: (stroke: rgb("#ffd166") + 4.5pt),
   /// Draw subgraph shading below the normal half-edge style. -> bool
   subgraph-edge-underlay: true,
 ) = {
   let info = graph-api.info(graph)
   let debug-level = _debug-level(debug)
-
   let diagram-content = cetz.canvas(
     length: _canvas-length(unit),
     debug: debug-level >= 1,
@@ -522,6 +611,7 @@
         let elements = ()
         let node-elements = ()
         let node-outsets = ()
+        let debug-level = _debug-level(debug)
         let subgraph-hedges = if subgraph == none { none } else { subgraph-api.hedges(subgraph) }
 
         for (i, v) in nodes.enumerate() {
@@ -534,12 +624,18 @@
           let default-label = if v.name == none { none } else { [#v.name] }
           let label = _content(node-label, node-data, default: default-label)
           let node-style-value = (
-            radius: node-radius,
-            fill: node-fill,
-            stroke: node-stroke,
-          ) + _style(node-style, node-data)
-          let node-style = node-style-value + (
-            radius: _node-radius(ctx, label, node-style-value, node-min-radius, node-label-padding),
+            (
+              radius: node-radius,
+              fill: node-fill,
+              stroke: node-stroke,
+            )
+              + _style(node-style, node-data)
+          )
+          let node-style = (
+            node-style-value
+              + (
+                radius: _node-radius(ctx, label, node-style-value, node-min-radius, node-label-padding),
+              )
           )
           node-elements.push(cetz.draw.circle(_point(pos), name: "n" + str(i), ..node-style))
           node-outsets.push(_node-outset(node-style, node-outset))
@@ -685,6 +781,11 @@
     diagram-content
   } else {
     let shown-title = if title == auto { info.name } else { title }
-    grid(align: center + top, gutter: 1em, [#shown-title], diagram-content)
+    grid(
+      align: center + top,
+      gutter: 1em,
+      [#shown-title],
+      diagram-content,
+    )
   }
 }

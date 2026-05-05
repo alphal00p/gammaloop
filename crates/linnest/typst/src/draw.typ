@@ -151,8 +151,8 @@
 }
 
 #let _parallel-path(segment, style, start-outset: 0, end-outset: 0) = {
-  curve-api.parallel-segment(
-    segment,
+  curve-api.parallel-path(
+    curve-api.cubic-path(..segment, accuracy: _style-value(style, "parallel-accuracy", 0.001)),
     distance: _style-value(style, "parallel-distance", 0),
     start-outset: start-outset,
     end-outset: end-outset,
@@ -162,7 +162,7 @@
 }
 
 #let _segment-length(segment, accuracy: 0.001) = {
-  curve-api.parallel-segment(segment, accuracy: accuracy, optimize: false).length
+  curve-api.cubic-path(..segment, accuracy: accuracy).length
 }
 
 #let _segments-length(segments, accuracy: 0.001) = {
@@ -202,6 +202,10 @@
     for segment in path.curves {
       segments.push(segment)
     }
+  } else if path.keys().contains("segments") and path.segments.len() > 0 {
+    for segment in path.segments {
+      segments.push(_line-segment(segment.start, segment.end))
+    }
   } else if path.keys().contains("points") and path.points.len() > 1 {
     for i in range(0, path.points.len() - 1) {
       segments.push(_line-segment(path.points.at(i), path.points.at(i + 1)))
@@ -210,15 +214,15 @@
   segments
 }
 
-#let _trim-segments(segments, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+#let _trim-path-curves(segments, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
   let trimmed = ()
   for (index, segment) in segments.enumerate() {
     let piece = segment
     if index == 0 and start-outset != 0 {
-      piece = curve-api.trim-segment(piece, start-outset: start-outset, accuracy: accuracy)
+      piece = curve-api.trim-path(curve-api.cubic-path(..piece, accuracy: accuracy), start-outset: start-outset, accuracy: accuracy).curves.at(0)
     }
     if index == segments.len() - 1 and end-outset != 0 {
-      piece = curve-api.trim-segment(piece, end-outset: end-outset, accuracy: accuracy)
+      piece = curve-api.trim-path(curve-api.cubic-path(..piece, accuracy: accuracy), end-outset: end-outset, accuracy: accuracy).curves.at(0)
     }
     trimmed.push(piece)
   }
@@ -229,24 +233,24 @@
   if _has-parallel(style) {
     _path-segments(_parallel-path(segment, style, start-outset: start-outset, end-outset: end-outset))
   } else {
-    _trim-segments((segment,), start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+    _trim-path-curves((segment,), start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
   }
 }
 
 #let _edge-geometry-halves(edge, nodes, source-style, sink-style, omega: 1.0, source-outset: 0, sink-outset: 0, accuracy: 0.001) = {
   if _has-parallel(source-style) or _has-parallel(sink-style) {
     let base = curve-api.edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
-    let base-length = _segments-length(base.curve.segments, accuracy: accuracy)
+    let base-length = _segments-length(base.curve.curves, accuracy: accuracy)
     let source-center-outset = _parallel-center-outset(base-length, source-style, source-outset: source-outset, sink-outset: sink-outset)
     let source-geometry = _geometry-segments(
-      base.curve.segments.at(0),
+      base.curve.curves.at(0),
       source-style,
       start-outset: source-outset + source-center-outset,
       accuracy: accuracy,
     )
     let sink-geometry = if _same-parallel-geometry(source-style, sink-style) {
       _geometry-segments(
-        base.curve.segments.at(1),
+        base.curve.curves.at(1),
         source-style,
         end-outset: sink-outset + source-center-outset,
         accuracy: accuracy,
@@ -254,7 +258,7 @@
     } else {
       let sink-center-outset = _parallel-center-outset(base-length, sink-style, source-outset: source-outset, sink-outset: sink-outset)
       _geometry-segments(
-        base.curve.segments.at(1),
+        base.curve.curves.at(1),
         sink-style,
         end-outset: sink-outset + sink-center-outset,
         accuracy: accuracy,
@@ -275,16 +279,16 @@
       accuracy: accuracy,
     )
     (
-      source: (trimmed.source,),
-      sink: (trimmed.sink,),
+      source: _path-segments(trimmed.source),
+      sink: _path-segments(trimmed.sink),
       curve: trimmed.curve,
     )
   }
 }
 
 #let _pattern-path(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
-  curve-api.pattern-segment(
-    segment,
+  curve-api.pattern-path(
+    curve-api.cubic-path(..segment, accuracy: _style-value(style, "pattern-accuracy", 0.001)),
     pattern: _pattern-name(style),
     amplitude: _style-value(style, "pattern-amplitude", 0.1),
     wavelength: _style-value(style, "pattern-wavelength", 1.0),
@@ -317,7 +321,7 @@
     }
   } else {
     for segment in segments {
-      elements.push(curve-api.cetz-bezier(segment, .._draw-style(style)))
+      elements.push(curve-api.cetz-path(curve-api.cubic-path(..segment), .._draw-style(style)))
     }
   }
   (elements: elements, length: length)

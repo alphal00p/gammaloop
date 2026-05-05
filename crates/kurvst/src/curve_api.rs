@@ -1,5 +1,5 @@
 use kurbo::{
-    CubicBez, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathSeg, Point, QuadBez, Vec2,
+    BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathSeg, Point, Vec2,
     fit_to_bezpath, fit_to_bezpath_opt, offset::CubicOffset,
 };
 use serde::{
@@ -24,18 +24,21 @@ pub struct CubicBezierSpec {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub struct SplitCubicSpec {
+#[serde(rename_all = "kebab-case")]
+pub struct CubicPathSpec {
     #[serde(flatten)]
     pub curve: CubicBezierSpec,
-    #[serde(default = "default_split_t")]
-    pub t: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct TrimCubicSpec {
-    #[serde(flatten)]
-    pub curve: CubicBezierSpec,
+pub struct TrimPathSpec {
+    pub path: BezPath,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub start_outset: f64,
     #[serde(default, deserialize_with = "deserialize_f64")]
@@ -49,9 +52,8 @@ pub struct TrimCubicSpec {
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct PatternCubicSpec {
-    #[serde(flatten)]
-    pub curve: CubicBezierSpec,
+pub struct PatternPathSpec {
+    pub path: BezPath,
     #[serde(default = "default_pattern")]
     pub pattern: PatternInput,
     #[serde(
@@ -84,11 +86,10 @@ pub struct PatternCubicSpec {
     pub accuracy: f64,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct ParallelCubicSpec {
-    #[serde(flatten)]
-    pub curve: CubicBezierSpec,
+pub struct ParallelPathSpec {
+    pub path: BezPath,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub distance: f64,
     #[serde(default, deserialize_with = "deserialize_f64")]
@@ -141,32 +142,29 @@ pub struct PatternPointInput {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub struct QuadraticThroughSpec {
-    pub start: CurvePoint,
-    pub through: CurvePoint,
-    pub end: CurvePoint,
-    #[serde(default = "default_split_t")]
-    pub t: f64,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct HobbyThroughSpec {
     pub start: CurvePoint,
     pub through: CurvePoint,
     pub end: CurvePoint,
     #[serde(default = "default_hobby_omega")]
     pub omega: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SplitCurveOutput {
-    pub curve: CubicBezierSpec,
-    pub segments: [CubicBezierSpec; 2],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CubicSplineOutput {
-    pub segments: Vec<CubicBezierSpec>,
+pub struct HobbySplineSpec {
+    pub points: Vec<CurvePoint>,
+    #[serde(default = "default_hobby_omega")]
+    pub omega: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -177,6 +175,7 @@ pub struct LineSegmentSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PatternPathOutput {
+    pub path: BezPath,
     pub pattern: String,
     pub length: f64,
     pub points: Vec<CurvePoint>,
@@ -186,14 +185,11 @@ pub struct PatternPathOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CurvePathOutput {
+    pub path: BezPath,
     pub length: f64,
     pub points: Vec<CurvePoint>,
     pub curves: Vec<CubicBezierSpec>,
     pub segments: Vec<LineSegmentSpec>,
-}
-
-fn default_split_t() -> f64 {
-    0.5
 }
 
 fn default_hobby_omega() -> f64 {
@@ -333,24 +329,35 @@ impl From<CubicBez> for CubicBezierSpec {
     }
 }
 
-pub fn curve_split_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: SplitCubicSpec = ciborium::de::from_reader(arg)
-        .map_err(|err| format!("Failed to deserialize cubic curve spec: {err}"))?;
-    let output = split_cubic(spec)?;
+impl From<CubicBezierSpec> for PathSeg {
+    fn from(value: CubicBezierSpec) -> Self {
+        PathSeg::Cubic(value.into())
+    }
+}
+
+impl From<LineSegmentSpec> for Line {
+    fn from(value: LineSegmentSpec) -> Self {
+        Line::new(value.start, value.end)
+    }
+}
+
+impl From<LineSegmentSpec> for PathSeg {
+    fn from(value: LineSegmentSpec) -> Self {
+        PathSeg::Line(value.into())
+    }
+}
+
+pub fn curve_cubic_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: CubicPathSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize cubic path spec: {err}"))?;
+    let output = cubic_path(spec)?;
     encode_cbor(&output)
 }
 
-pub fn curve_split_quadratic_through_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: QuadraticThroughSpec = ciborium::de::from_reader(arg)
-        .map_err(|err| format!("Failed to deserialize quadratic-through curve spec: {err}"))?;
-    let curve = quadratic_through_to_cubic(spec)?;
-    split_cubic(SplitCubicSpec { curve, t: spec.t }).and_then(|output| encode_cbor(&output))
-}
-
-pub fn curve_trim_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: TrimCubicSpec = ciborium::de::from_reader(arg)
-        .map_err(|err| format!("Failed to deserialize cubic curve trim spec: {err}"))?;
-    let output = trim_cubic(spec)?;
+pub fn curve_trim_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: TrimPathSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path trim spec: {err}"))?;
+    let output = trim_path(spec)?;
     encode_cbor(&output)
 }
 
@@ -361,72 +368,38 @@ pub fn curve_hobby_through_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
-pub fn curve_pattern_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: PatternCubicSpec = ciborium::de::from_reader(arg)
-        .map_err(|err| format!("Failed to deserialize cubic curve pattern spec: {err}"))?;
-    let output = pattern_cubic(spec)?;
+pub fn curve_hobby_spline_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: HobbySplineSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize Hobby spline spec: {err}"))?;
+    let output = hobby_spline(spec)?;
     encode_cbor(&output)
 }
 
-pub fn curve_parallel_cubic_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: ParallelCubicSpec = ciborium::de::from_reader(arg)
-        .map_err(|err| format!("Failed to deserialize cubic parallel path spec: {err}"))?;
-    let output = parallel_cubic(spec)?;
+pub fn curve_pattern_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PatternPathSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path pattern spec: {err}"))?;
+    let output = pattern_path(spec)?;
     encode_cbor(&output)
 }
 
-fn split_cubic(spec: SplitCubicSpec) -> Result<SplitCurveOutput, String> {
-    let t = validate_t(spec.t)?;
-    let curve = CubicBez::from(spec.curve);
-    let first = curve.subsegment(0.0..t);
-    let second = curve.subsegment(t..1.0);
-
-    Ok(SplitCurveOutput {
-        curve: spec.curve,
-        segments: [first.into(), second.into()],
-    })
+pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: ParallelPathSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize parallel path spec: {err}"))?;
+    let output = parallel_path(spec)?;
+    encode_cbor(&output)
 }
 
-fn trim_cubic(spec: TrimCubicSpec) -> Result<CubicBezierSpec, String> {
-    let curve = CubicBez::from(spec.curve);
+fn cubic_path(spec: CubicPathSpec) -> Result<CurvePathOutput, String> {
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
-    let length = curve.arclen(accuracy);
-    if length <= f64::EPSILON {
-        return Ok(spec.curve);
-    }
+    curve_path_from_segments(std::iter::once(PathSeg::Cubic(spec.curve.into())), accuracy)
+}
 
+fn trim_path(spec: TrimPathSpec) -> Result<CurvePathOutput, String> {
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
     let start_outset = validate_outset(spec.start_outset, "start")?;
     let end_outset = validate_outset(spec.end_outset, "end")?;
-    let max_outset = length * 0.45;
-    let start_outset = start_outset.min(max_outset);
-    let end_outset = end_outset.min(max_outset);
-
-    let t0 = curve.inv_arclen(start_outset, accuracy);
-    let t1 = curve.inv_arclen(length - end_outset, accuracy);
-    if t1 <= t0 {
-        return Err("cubic trim distances leave no visible curve segment".to_string());
-    }
-
-    Ok(curve.subsegment(t0..t1).into())
-}
-
-fn quadratic_through_to_cubic(spec: QuadraticThroughSpec) -> Result<CubicBezierSpec, String> {
-    let t = validate_t(spec.t)?;
-    let denom = 2.0 * t * (1.0 - t);
-    if denom <= f64::EPSILON {
-        return Err(
-            "quadratic-through split parameter must be strictly between 0 and 1".to_string(),
-        );
-    }
-
-    let start = Point::from(spec.start);
-    let through = Point::from(spec.through);
-    let end = Point::from(spec.end);
-    let ctrl =
-        (through.to_vec2() - start.to_vec2() * (1.0 - t).powi(2) - end.to_vec2() * t.powi(2))
-            / denom;
-
-    Ok(QuadBez::new(start, ctrl.to_point(), end).raise().into())
+    let segments = trim_path_segments(spec.path.segments(), start_outset, end_outset, accuracy)?;
+    curve_path_from_segments(segments, accuracy)
 }
 
 fn validate_positive_accuracy(value: f64) -> Result<f64, String> {
@@ -447,7 +420,7 @@ fn validate_outset(value: f64, end: &str) -> Result<f64, String> {
     }
 }
 
-fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
+fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
     let amplitude = validate_finite(spec.amplitude, "pattern amplitude")?;
     let wavelength = validate_positive(spec.wavelength, "pattern wavelength")?;
     let phase = validate_finite(spec.phase, "pattern phase")?;
@@ -458,25 +431,39 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
     }
     let pattern = PointPattern::from_input(spec.pattern)?;
 
-    let curve = CubicBez::from(spec.curve);
-    let length = curve.arclen(accuracy);
+    let path_segments = spec.path.segments().collect::<Vec<_>>();
+    let segment_lengths = path_segments
+        .iter()
+        .map(|segment| segment.arclen(accuracy))
+        .collect::<Vec<_>>();
+    let length: f64 = segment_lengths.iter().sum();
     if length <= f64::EPSILON {
+        let point = path_segments
+            .first()
+            .map(PathSeg::start)
+            .unwrap_or(Point::new(0.0, 0.0));
         return Ok(PatternPathOutput {
+            path: spec.path,
             pattern: pattern.name.clone(),
             length,
-            points: vec![spec.curve.start],
+            points: vec![point.into()],
             curves: Vec::new(),
             segments: Vec::new(),
         });
     }
 
     let distances = pattern.distances(length, wavelength, spec.samples_per_period);
-    let deriv = curve.deriv();
     let mut points = Vec::with_capacity(distances.len());
     for distance in distances {
-        let t = curve.inv_arclen(distance, accuracy);
-        let base = curve.eval(t);
-        let tangent = normalized_tangent(deriv.eval(t).to_vec2(), spec.curve);
+        let (segment, segment_distance) =
+            path_segment_at_distance(&path_segments, &segment_lengths, distance);
+        let t = segment.inv_arclen(segment_distance, accuracy);
+        let base = segment.eval(t);
+        let tangent = normalized_tangent_between(
+            path_seg_tangent(segment, t),
+            segment.start(),
+            segment.end(),
+        );
         let normal = Vec2::new(-tangent.y, tangent.x);
         let pattern_point = pattern.evaluate(distance / wavelength + phase / std::f64::consts::TAU);
         let tapered_amplitude = amplitude
@@ -493,11 +480,19 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
         points.push((base + tangent * longitudinal + normal * lateral).into());
     }
     if !pattern.endpoint_ramp && spec.anchor_start {
-        points[0] = spec.curve.start;
+        points[0] = path_segments
+            .first()
+            .map(PathSeg::start)
+            .unwrap_or(Point::new(0.0, 0.0))
+            .into();
     }
     if !pattern.endpoint_ramp && spec.anchor_end {
         let last_index = points.len() - 1;
-        points[last_index] = spec.curve.end;
+        points[last_index] = path_segments
+            .last()
+            .map(PathSeg::end)
+            .unwrap_or(Point::new(0.0, 0.0))
+            .into();
     }
 
     let segments = line_segments(&points);
@@ -505,8 +500,14 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
         PatternInterpolation::Linear => Vec::new(),
         PatternInterpolation::Smooth => cubic_spline_through_points(&points),
     };
+    let path = if curves.is_empty() {
+        BezPath::from_path_segments(segments.iter().copied().map(Into::into))
+    } else {
+        BezPath::from_path_segments(curves.iter().copied().map(Into::into))
+    };
 
     Ok(PatternPathOutput {
+        path,
         pattern: pattern.name,
         length,
         curves,
@@ -515,29 +516,46 @@ fn pattern_cubic(spec: PatternCubicSpec) -> Result<PatternPathOutput, String> {
     })
 }
 
-fn parallel_cubic(spec: ParallelCubicSpec) -> Result<CurvePathOutput, String> {
+fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
     let distance = validate_finite(spec.distance, "parallel path distance")?;
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     let start_outset = validate_outset(spec.start_outset, "start")?;
     let end_outset = validate_outset(spec.end_outset, "end")?;
-    let curve = CubicBez::from(spec.curve);
-    let source_length = curve.arclen(accuracy);
+    let source_length: f64 = spec
+        .path
+        .segments()
+        .map(|segment| segment.arclen(accuracy))
+        .sum();
     if source_length <= f64::EPSILON {
+        let point = spec
+            .path
+            .segments()
+            .next()
+            .map(|segment| segment.start().into())
+            .unwrap_or(CurvePoint { x: 0.0, y: 0.0 });
         return Ok(CurvePathOutput {
+            path: spec.path,
             length: 0.0,
-            points: vec![spec.curve.start],
+            points: vec![point],
             curves: Vec::new(),
             segments: Vec::new(),
         });
     }
 
-    let offset = CubicOffset::new_regularized(curve, distance, accuracy);
-    let path = if spec.optimize {
-        fit_to_bezpath_opt(&offset, accuracy)
-    } else {
-        fit_to_bezpath(&offset, accuracy)
-    };
-    let segments = trim_path_segments(path.segments(), start_outset, end_outset, accuracy)?;
+    let offset_segments = spec
+        .path
+        .segments()
+        .flat_map(|segment| {
+            let offset = CubicOffset::new_regularized(segment.to_cubic(), distance, accuracy);
+            let path = if spec.optimize {
+                fit_to_bezpath_opt(&offset, accuracy)
+            } else {
+                fit_to_bezpath(&offset, accuracy)
+            };
+            path.segments().collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let segments = trim_path_segments(offset_segments, start_outset, end_outset, accuracy)?;
     curve_path_from_segments(segments, accuracy)
 }
 
@@ -755,16 +773,42 @@ fn smoothstep(t: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
-fn normalized_tangent(tangent: Vec2, curve: CubicBezierSpec) -> Vec2 {
+fn normalized_tangent_between(tangent: Vec2, start: Point, end: Point) -> Vec2 {
     if tangent.hypot2() > f64::EPSILON {
         tangent.normalize()
     } else {
-        let chord = Point::from(curve.end) - Point::from(curve.start);
+        let chord = end - start;
         if chord.hypot2() > f64::EPSILON {
             chord.normalize()
         } else {
             Vec2::new(1.0, 0.0)
         }
+    }
+}
+
+fn path_segment_at_distance<'a>(
+    segments: &'a [PathSeg],
+    lengths: &[f64],
+    distance: f64,
+) -> (&'a PathSeg, f64) {
+    let mut cursor = 0.0;
+    for (index, (segment, segment_length)) in segments.iter().zip(lengths).enumerate() {
+        if distance <= cursor + segment_length || index + 1 == segments.len() {
+            return (segment, (distance - cursor).clamp(0.0, *segment_length));
+        }
+        cursor += segment_length;
+    }
+    let last = segments
+        .last()
+        .expect("path_segment_at_distance requires a non-empty segment list");
+    (last, 0.0)
+}
+
+fn path_seg_tangent(segment: &PathSeg, t: f64) -> Vec2 {
+    match *segment {
+        PathSeg::Line(line) => line.p1 - line.p0,
+        PathSeg::Quad(quad) => quad.deriv().eval(t).to_vec2(),
+        PathSeg::Cubic(cubic) => cubic.deriv().eval(t).to_vec2(),
     }
 }
 
@@ -782,12 +826,13 @@ fn curve_path_from_segments(
     segments: impl IntoIterator<Item = PathSeg>,
     accuracy: f64,
 ) -> Result<CurvePathOutput, String> {
+    let path = BezPath::from_path_segments(segments.into_iter());
     let mut length = 0.0;
     let mut points = Vec::new();
     let mut curves = Vec::new();
     let mut line_segments = Vec::new();
 
-    for segment in segments {
+    for segment in path.segments() {
         length += segment.arclen(accuracy);
         if points.is_empty() {
             points.push(segment.start().into());
@@ -803,10 +848,11 @@ fn curve_path_from_segments(
     }
 
     if points.is_empty() {
-        return Err("parallel path fitting produced no visible path".to_string());
+        return Err("path fitting produced no visible path".to_string());
     }
 
     Ok(CurvePathOutput {
+        path,
         length,
         points,
         curves,
@@ -838,7 +884,7 @@ fn trim_path_segments(
     let visible_start = start_outset;
     let visible_end = length - end_outset;
     if visible_end <= visible_start {
-        return Err("parallel path trim distances leave no visible path".to_string());
+        return Err("path trim distances leave no visible path".to_string());
     }
 
     let mut cursor = 0.0;
@@ -872,7 +918,7 @@ fn trim_path_segments(
     }
 
     if trimmed.is_empty() {
-        return Err("parallel path trimming produced no visible path".to_string());
+        return Err("path trimming produced no visible path".to_string());
     }
     Ok(trimmed)
 }
@@ -937,14 +983,24 @@ fn validate_positive(value: f64, name: &str) -> Result<f64, String> {
     }
 }
 
-fn hobby_through(spec: HobbyThroughSpec) -> Result<CubicSplineOutput, String> {
+fn hobby_through(spec: HobbyThroughSpec) -> Result<CurvePathOutput, String> {
     hobby_to_cubic_open(
         &[spec.start.into(), spec.through.into(), spec.end.into()],
         spec.omega,
     )
-    .map(|segments| CubicSplineOutput {
-        segments: segments.into_iter().map(Into::into).collect(),
-    })
+    .and_then(|segments| cubic_spline_output(segments, spec.accuracy))
+}
+
+fn hobby_spline(spec: HobbySplineSpec) -> Result<CurvePathOutput, String> {
+    let accuracy = spec.accuracy;
+    let points = spec.points.into_iter().map(Into::into).collect::<Vec<_>>();
+    hobby_to_cubic_open(&points, spec.omega)
+        .and_then(|segments| cubic_spline_output(segments, accuracy))
+}
+
+fn cubic_spline_output(segments: Vec<CubicBez>, accuracy: f64) -> Result<CurvePathOutput, String> {
+    let accuracy = validate_positive_accuracy(accuracy)?;
+    curve_path_from_segments(segments.into_iter().map(PathSeg::Cubic), accuracy)
 }
 
 fn hobby_to_cubic_open(points: &[Point], omega: f64) -> Result<Vec<CubicBez>, String> {
@@ -1078,16 +1134,6 @@ fn solve_tridiagonal(
     Ok(solution)
 }
 
-fn validate_t(t: f64) -> Result<f64, String> {
-    if !t.is_finite() {
-        return Err("curve split parameter must be finite".to_string());
-    }
-    if !(0.0..=1.0).contains(&t) {
-        return Err(format!("curve split parameter must be in [0, 1], got {t}"));
-    }
-    Ok(t)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1097,69 +1143,39 @@ mod tests {
     }
 
     #[test]
-    fn splits_cubic_at_requested_parameter() {
-        let output = split_cubic(SplitCubicSpec {
-            curve: CubicBezierSpec {
-                start: point(0.0, 0.0),
-                ctrl_a: point(1.0, 0.0),
-                ctrl_b: point(2.0, 0.0),
-                end: point(3.0, 0.0),
-            },
-            t: 0.5,
+    fn cubic_path_returns_path_dictionary() {
+        let output = cubic_path(CubicPathSpec {
+            curve: straight_curve(3.0),
+            accuracy: 1e-6,
         })
         .unwrap();
 
-        assert_eq!(output.segments[0].start, point(0.0, 0.0));
-        assert_eq!(output.segments[0].end, point(1.5, 0.0));
-        assert_eq!(output.segments[1].start, point(1.5, 0.0));
-        assert_eq!(output.segments[1].end, point(3.0, 0.0));
+        assert!((output.length - 3.0).abs() < 1e-6);
+        assert_eq!(output.points.first().copied(), Some(point(0.0, 0.0)));
+        assert_eq!(output.points.last().copied(), Some(point(3.0, 0.0)));
+        assert_eq!(output.curves.len(), 1);
     }
 
     #[test]
-    fn quadratic_through_curve_passes_through_split_point() {
-        let curve = quadratic_through_to_cubic(QuadraticThroughSpec {
-            start: point(0.0, 0.0),
-            through: point(1.0, 1.0),
-            end: point(2.0, 0.0),
-            t: 0.5,
-        })
-        .unwrap();
-        let output = split_cubic(SplitCubicSpec { curve, t: 0.5 }).unwrap();
-
-        assert_eq!(output.segments[0].end, point(1.0, 1.0));
-        assert_eq!(output.segments[1].start, point(1.0, 1.0));
-    }
-
-    #[test]
-    fn trims_cubic_by_curve_arclength() {
-        let output = trim_cubic(TrimCubicSpec {
-            curve: CubicBezierSpec {
-                start: point(0.0, 0.0),
-                ctrl_a: point(1.0, 0.0),
-                ctrl_b: point(2.0, 0.0),
-                end: point(3.0, 0.0),
-            },
+    fn trim_path_trims_by_curve_arclength() {
+        let output = trim_path(TrimPathSpec {
+            path: straight_path(3.0),
             start_outset: 0.25,
             end_outset: 0.5,
             accuracy: 1e-6,
         })
         .unwrap();
 
-        assert!((output.start.x - 0.25).abs() < 1e-6);
-        assert_eq!(output.start.y, 0.0);
-        assert!((output.end.x - 2.5).abs() < 1e-6);
-        assert_eq!(output.end.y, 0.0);
+        assert!((output.points.first().unwrap().x - 0.25).abs() < 1e-6);
+        assert_eq!(output.points.first().unwrap().y, 0.0);
+        assert!((output.points.last().unwrap().x - 2.5).abs() < 1e-6);
+        assert_eq!(output.points.last().unwrap().y, 0.0);
     }
 
     #[test]
-    fn parallel_cubic_offsets_straight_curve_to_left_normal() {
-        let output = parallel_cubic(ParallelCubicSpec {
-            curve: CubicBezierSpec {
-                start: point(0.0, 0.0),
-                ctrl_a: point(1.0, 0.0),
-                ctrl_b: point(2.0, 0.0),
-                end: point(3.0, 0.0),
-            },
+    fn parallel_path_offsets_straight_curve_to_left_normal() {
+        let output = parallel_path(ParallelPathSpec {
+            path: straight_path(3.0),
             distance: 0.5,
             start_outset: 0.0,
             end_outset: 0.0,
@@ -1177,9 +1193,9 @@ mod tests {
     }
 
     #[test]
-    fn parallel_cubic_accepts_negative_distance() {
-        let output = parallel_cubic(ParallelCubicSpec {
-            curve: straight_curve(3.0),
+    fn parallel_path_accepts_negative_distance() {
+        let output = parallel_path(ParallelPathSpec {
+            path: straight_path(3.0),
             distance: -0.25,
             start_outset: 0.0,
             end_outset: 0.0,
@@ -1193,9 +1209,9 @@ mod tests {
     }
 
     #[test]
-    fn parallel_cubic_trims_offset_path_by_arclength() {
-        let output = parallel_cubic(ParallelCubicSpec {
-            curve: straight_curve(4.0),
+    fn parallel_path_trims_offset_path_by_arclength() {
+        let output = parallel_path(ParallelPathSpec {
+            path: straight_path(4.0),
             distance: 0.25,
             start_outset: 1.0,
             end_outset: 1.0,
@@ -1218,6 +1234,12 @@ mod tests {
             ctrl_b: point(2.0 * length / 3.0, 0.0),
             end: point(length, 0.0),
         }
+    }
+
+    fn straight_path(length: f64) -> BezPath {
+        BezPath::from_path_segments(std::iter::once(PathSeg::Cubic(
+            straight_curve(length).into(),
+        )))
     }
 
     fn nearest_x(points: &[CurvePoint], x: f64) -> CurvePoint {
@@ -1308,8 +1330,8 @@ mod tests {
 
     #[test]
     fn wave_pattern_offsets_along_curve_normal() {
-        let output = pattern_cubic(PatternCubicSpec {
-            curve: straight_curve(4.0),
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(4.0),
             pattern: wave_pattern(4),
             amplitude: 0.5,
             wavelength: 4.0,
@@ -1334,8 +1356,8 @@ mod tests {
 
     #[test]
     fn zigzag_pattern_samples_corners() {
-        let output = pattern_cubic(PatternCubicSpec {
-            curve: straight_curve(4.0),
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(4.0),
             pattern: zigzag_pattern(),
             amplitude: 1.0,
             wavelength: 4.0,
@@ -1357,8 +1379,8 @@ mod tests {
 
     #[test]
     fn point_pattern_interpolates_declared_points() {
-        let output = pattern_cubic(PatternCubicSpec {
-            curve: straight_curve(4.0),
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(4.0),
             pattern: PatternInput::Points(PointPatternInput {
                 kind: "points".to_string(),
                 name: None,
@@ -1400,8 +1422,8 @@ mod tests {
 
     #[test]
     fn coil_pattern_adds_longitudinal_and_lateral_offsets() {
-        let output = pattern_cubic(PatternCubicSpec {
-            curve: straight_curve(4.0),
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(4.0),
             pattern: coil_pattern(4, 0.5),
             amplitude: 0.5,
             wavelength: 4.0,
@@ -1424,8 +1446,8 @@ mod tests {
 
     #[test]
     fn coil_default_turns_back_over_the_baseline() {
-        let output = pattern_cubic(PatternCubicSpec {
-            curve: straight_curve(2.0),
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(2.0),
             pattern: coil_pattern(16, default_coil_longitudinal_scale()),
             amplitude: 0.08,
             wavelength: 0.55,
@@ -1449,8 +1471,8 @@ mod tests {
     #[test]
     fn coil_pattern_anchors_requested_endpoints() {
         let curve = straight_curve(2.0);
-        let output = pattern_cubic(PatternCubicSpec {
-            curve,
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(2.0),
             pattern: coil_pattern(16, default_coil_longitudinal_scale()),
             amplitude: 0.08,
             wavelength: 0.55,
@@ -1475,37 +1497,66 @@ mod tests {
             through: point(1.0, 1.0),
             end: point(2.0, 0.0),
             omega: 1.0,
+            accuracy: 1e-6,
         })
         .unwrap();
 
-        assert_eq!(output.segments.len(), 2);
-        assert_eq!(output.segments[0].start, point(0.0, 0.0));
-        assert_eq!(output.segments[0].end, point(1.0, 1.0));
-        assert_eq!(output.segments[1].start, point(1.0, 1.0));
-        assert_eq!(output.segments[1].end, point(2.0, 0.0));
+        assert_eq!(output.curves.len(), 2);
+        assert_eq!(output.curves[0].start, point(0.0, 0.0));
+        assert_eq!(output.curves[0].end, point(1.0, 1.0));
+        assert_eq!(output.curves[1].start, point(1.0, 1.0));
+        assert_eq!(output.curves[1].end, point(2.0, 0.0));
 
-        let incoming = Point::from(output.segments[0].end) - Point::from(output.segments[0].ctrl_b);
-        let outgoing =
-            Point::from(output.segments[1].ctrl_a) - Point::from(output.segments[1].start);
+        let incoming = Point::from(output.curves[0].end) - Point::from(output.curves[0].ctrl_b);
+        let outgoing = Point::from(output.curves[1].ctrl_a) - Point::from(output.curves[1].start);
         assert!(signed_angle(incoming, outgoing).abs() < 1e-12);
     }
 
     #[test]
-    fn cbor_api_returns_smooth_halves() {
-        let input = QuadraticThroughSpec {
+    fn hobby_spline_returns_smooth_cubic_segments_through_all_points() {
+        let points = vec![
+            point(0.0, 0.0),
+            point(1.0, 1.0),
+            point(2.0, -0.4),
+            point(3.0, 0.2),
+        ];
+        let output = hobby_spline(HobbySplineSpec {
+            points: points.clone(),
+            omega: 1.0,
+            accuracy: 1e-3,
+        })
+        .unwrap();
+
+        assert_eq!(output.curves.len(), points.len() - 1);
+        for (index, segment) in output.curves.iter().enumerate() {
+            assert_eq!(segment.start, points[index]);
+            assert_eq!(segment.end, points[index + 1]);
+        }
+
+        for pair in output.curves.windows(2) {
+            let incoming = Point::from(pair[0].end) - Point::from(pair[0].ctrl_b);
+            let outgoing = Point::from(pair[1].ctrl_a) - Point::from(pair[1].start);
+            assert!(signed_angle(incoming, outgoing).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn cbor_api_returns_serialized_bezpath() {
+        let input = HobbyThroughSpec {
             start: point(0.0, 0.0),
             through: point(1.0, 1.0),
             end: point(2.0, 0.0),
-            t: 0.5,
+            omega: 1.0,
+            accuracy: 1e-6,
         };
         let bytes = encode_cbor(&input).unwrap();
-        let output: SplitCurveOutput =
-            ciborium::de::from_reader(&curve_split_quadratic_through_bytes(&bytes).unwrap()[..])
-                .unwrap();
+        let output: CurvePathOutput =
+            ciborium::de::from_reader(&curve_hobby_through_bytes(&bytes).unwrap()[..]).unwrap();
 
-        assert_eq!(output.segments[0].start, point(0.0, 0.0));
-        assert_eq!(output.segments[0].end, point(1.0, 1.0));
-        assert_eq!(output.segments[1].start, point(1.0, 1.0));
-        assert_eq!(output.segments[1].end, point(2.0, 0.0));
+        assert_eq!(output.curves[0].start, point(0.0, 0.0));
+        assert_eq!(output.curves[0].end, point(1.0, 1.0));
+        assert_eq!(output.curves[1].start, point(1.0, 1.0));
+        assert_eq!(output.curves[1].end, point(2.0, 0.0));
+        assert_eq!(output.path.segments().count(), 2);
     }
 }

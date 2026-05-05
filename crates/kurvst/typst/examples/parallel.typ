@@ -10,11 +10,12 @@
   end: (x: 3.3, y: 0),
 )
 
-#let left = kurvst.parallel-segment(segment, distance: 0.18)
-#let right = kurvst.parallel-segment(segment, distance: -0.18)
+#let path = kurvst.cubic-path(..segment)
+#let left = kurvst.parallel-path(path, distance: 0.18)
+#let right = kurvst.parallel-path(path, distance: -0.18)
 
 #cetz.canvas({
-  kurvst.cetz-bezier(segment, stroke: gray + 0.35pt)
+  kurvst.cetz-path(path, stroke: gray + 0.35pt)
   kurvst.cetz-path(left, stroke: red + 0.7pt)
   kurvst.cetz-path(right, stroke: blue + 0.7pt)
 })

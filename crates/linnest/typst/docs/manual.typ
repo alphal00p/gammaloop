@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, physics, subgraph
 
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
@@ -16,6 +16,7 @@ The public surface is intentionally narrow:
 - `subgraph` for subgraph object construction and inspection.
 - `layout` for the separate layout pass.
 - `draw` for rendering a laid-out graph object with CeTZ.
+- `physics` for reusable particle-line edge styles.
 
 == Minimal Builder Example
 
@@ -178,6 +179,45 @@ edge index:
 #draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
+== Physics Edge Styles
+
+`physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
+callbacks for `draw`. The default source/sink strokes use darker/lighter halves
+to encode the graph source/sink split. Set `momentum-arrows: true` to draw
+centered parallel arrow segments that flow from source to sink independently of
+the DOT `dir`/`orientation` value. The arrow segment length is capped by both
+`momentum-arrow-length` and `momentum-arrow-ratio`, so the shorter one wins.
+
+Optional labels can be built from edge metadata with `show-momentum`,
+`show-edge-index`, `show-half-edge-index`, and `show-particle`.
+`show-half-edge-index` only emits a value for dangling half edges.
+
+```typ
+#import "../src/lib.typ": draw, graph, layout, physics
+
+#let b = graph.builder(name: "physics")
+#let (node: a, builder: b) = graph.node(b, name: "a")
+#let (node: c, builder: b) = graph.node(b, name: "c")
+#let b = graph.edge(
+  b,
+  source: (node: a),
+  sink: (node: c),
+  statements: (particle: "g", lmb_rep: "q_1", id: 7),
+)
+#let callbacks = physics.style(
+  momentum-arrows: true,
+  show-momentum: true,
+  show-edge-index: true,
+  show-particle: true,
+)
+#draw(
+  layout(graph.finish(b)),
+  source-style: callbacks.source-style,
+  sink-style: callbacks.sink-style,
+  edge-label: callbacks.edge-label,
+)
+```
+
 Set `edge-parallel-distance` on `draw`, or `parallel-distance` in a
 `source-style`/`sink-style` dictionary, to draw a fitted parallel path. The
 parallel path is applied to the base edge geometry before patterns and other
@@ -321,27 +361,34 @@ Subgraph objects are opaque zero-copy values.
 
 #let docs = tidy.parse-module(
   read("../src/lib.typ"),
-  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
 #tidy.show-module(docs, style: tidy-style)
 
 #let graph-docs = tidy.parse-module(
   read("../src/graph.typ"),
   name: "graph",
-  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
 #tidy.show-module(graph-docs, style: tidy-style)
 
 #let draw-docs = tidy.parse-module(
   read("../src/draw.typ"),
   name: "draw",
-  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
 #tidy.show-module(draw-docs, style: tidy-style)
+
+#let physics-docs = tidy.parse-module(
+  read("../src/physics-edge-style.typ"),
+  name: "physics",
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
+)
+#tidy.show-module(physics-docs, style: tidy-style)
 
 #let subgraph-docs = tidy.parse-module(
   read("../src/subgraph.typ"),
   name: "subgraph",
-  scope: (draw: draw, graph: graph, layout: layout, subgraph: subgraph),
+  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
 )
 #tidy.show-module(subgraph-docs, style: tidy-style)
