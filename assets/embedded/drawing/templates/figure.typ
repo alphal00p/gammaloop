@@ -7,6 +7,7 @@
 
 #let title = sys.inputs.at("title", default: "A")
 #let data-path = sys.inputs.at("data-path", default: none)
+#let typst-fields = sys.inputs.at("typst-fields", default: "plain")
 
 #if data-path == none {
   text(fill: gray)[No data path provided.]
@@ -18,7 +19,7 @@
 // TODO: import and visualize the DOT data here.
 
 #show raw: it => if it.at("lang") == "dot" {
-  layout(it.at("text"), columns: 1)
+  layout(it.at("text"), columns: 1, typst-fields: typst-fields)
 } else {
   it
 }
