@@ -38,6 +38,79 @@
   )
 }
 
+#let _lerp(a, b, t) = a + (b - a) * t
+
+#let _bezier-point(segment, t) = {
+  let ab = (
+    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
+    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
+  )
+  let bc = (
+    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
+    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
+  )
+  let cd = (
+    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
+    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
+  )
+  let abc = (
+    x: _lerp(ab.x, bc.x, t),
+    y: _lerp(ab.y, bc.y, t),
+  )
+  let bcd = (
+    x: _lerp(bc.x, cd.x, t),
+    y: _lerp(bc.y, cd.y, t),
+  )
+  (
+    x: _lerp(abc.x, bcd.x, t),
+    y: _lerp(abc.y, bcd.y, t),
+  )
+}
+
+#let _bezier-tangent(segment, t) = {
+  let ab = (
+    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
+    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
+  )
+  let bc = (
+    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
+    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
+  )
+  let cd = (
+    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
+    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
+  )
+  let abc = (
+    x: _lerp(ab.x, bc.x, t),
+    y: _lerp(ab.y, bc.y, t),
+  )
+  let bcd = (
+    x: _lerp(bc.x, cd.x, t),
+    y: _lerp(bc.y, cd.y, t),
+  )
+  (
+    x: bcd.x - abc.x,
+    y: bcd.y - abc.y,
+  )
+}
+
+#let _parallel-distance-on-label-side(style, segment, label-pos) = {
+  let distance = style.at("parallel-distance", default: 0)
+  if label-pos == none or distance == none or distance == 0 {
+    distance
+  } else {
+    let mid = _bezier-point(segment, 0.5)
+    let tangent = _bezier-tangent(segment, 0.5)
+    let cross = tangent.x * (label-pos.y - mid.y) - tangent.y * (label-pos.x - mid.x)
+    let sign = if cross < 0 { -1 } else { 1 }
+    sign * calc.abs(distance)
+  }
+}
+
+#let _mark-style-on-label-side(style, segment, label-pos) = {
+  style + (parallel-distance: _parallel-distance-on-label-side(style, segment, label-pos))
+}
+
 #let _pattern-style-keys = (
   "pattern",
   "pattern-amplitude",
@@ -56,6 +129,8 @@
   "parallel-optimize",
 )
 
+#let _decoration-style-keys = ("parallel-mark",)
+
 #let _without-pattern-style(style) = {
   let clean = style
   for key in _pattern-style-keys {
@@ -73,10 +148,38 @@
       let _ = clean.remove(key)
     }
   }
+  for key in _decoration-style-keys {
+    if clean.keys().contains(key) {
+      let _ = clean.remove(key)
+    }
+  }
   clean
 }
 
 #let _style-value(style, key, default) = style.at(key, default: default)
+
+#let _parallel-mark-style(style) = {
+  let mark = _style-value(style, "parallel-mark", none)
+  if mark == none {
+    none
+  } else {
+    (
+      stroke: mark.at("stroke", default: style.at("stroke", default: (paint: black, thickness: 0.45pt, cap: "round"))),
+      mark: mark.at("mark", default: (end: ">")),
+      parallel-distance: mark.at("distance", default: mark.at("parallel-distance", default: 0)),
+      parallel-length: mark.at("length", default: mark.at("parallel-length", default: none)),
+      parallel-ratio: mark.at("ratio", default: mark.at("parallel-ratio", default: none)),
+      parallel-accuracy: mark.at(
+        "accuracy",
+        default: mark.at("parallel-accuracy", default: _style-value(style, "parallel-accuracy", 0.001)),
+      ),
+      parallel-optimize: mark.at(
+        "optimize",
+        default: mark.at("parallel-optimize", default: _style-value(style, "parallel-optimize", true)),
+      ),
+    )
+  }
+}
 
 #let _call(value, data) = {
   if type(value) == function {
@@ -111,6 +214,8 @@
   let distance = _style-value(style, "parallel-distance", 0)
   distance != none and distance != 0
 }
+
+#let _has-mark(style) = _style-value(style, "mark", none) != none
 
 #let _same-parallel-geometry(source-style, sink-style) = {
   let same = _style-value(source-style, "parallel-distance", 0) == _style-value(sink-style, "parallel-distance", 0)
@@ -301,6 +406,16 @@
   )
 }
 
+#let _bezier-element(segment, style) = {
+  cetz.draw.bezier(
+    _point(segment.start),
+    _point(segment.end),
+    _point(segment.ctrl-a),
+    _point(segment.ctrl-b),
+    .._draw-style(style),
+  )
+}
+
 #let _segments-elements(segments, style, phase: auto, anchor-start: true, anchor-end: true) = {
   let elements = ()
   let length = 0
@@ -321,7 +436,11 @@
     }
   } else {
     for segment in segments {
-      elements.push(curve-api.cetz-path(curve-api.cubic-path(..segment), .._draw-style(style)))
+      if _has-mark(style) {
+        elements.push(_bezier-element(segment, style))
+      } else {
+        elements.push(curve-api.cetz-path(curve-api.cubic-path(..segment), .._draw-style(style)))
+      }
     }
   }
   (elements: elements, length: length)
@@ -355,8 +474,96 @@
   elements
 }
 
+#let _parallel-mark-half-elements(segments, style, center-outset: 0, trim-start: false, trim-end: false, label-pos: none) = {
+  let elements = ()
+  if style != none and segments.len() > 0 {
+    let geometry = ()
+    for (index, segment) in segments.enumerate() {
+      let start-outset = if trim-start and index == 0 { center-outset } else { 0 }
+      let end-outset = if trim-end and index == segments.len() - 1 { center-outset } else { 0 }
+      let piece-style = _mark-style-on-label-side(style, segment, label-pos)
+      for piece in _geometry-segments(
+        segment,
+        piece-style,
+        start-outset: start-outset,
+        end-outset: end-outset,
+        accuracy: _style-value(piece-style, "parallel-accuracy", 0.001),
+      ) {
+        geometry.push(piece)
+      }
+    }
+    for element in _segments-elements(geometry, style).elements {
+      elements.push(element)
+    }
+  }
+  elements
+}
+
+#let _parallel-mark-edge-elements(halves, source-style, sink-style, label-pos: none) = {
+  let elements = ()
+  let source-mark = _parallel-mark-style(source-style)
+  let sink-mark = _parallel-mark-style(sink-style)
+  let base-segments = halves.source + halves.sink
+
+  if source-mark != none {
+    let center-outset = _parallel-center-outset(
+      _segments-length(base-segments, accuracy: _style-value(source-mark, "parallel-accuracy", 0.001)),
+      source-mark,
+    )
+    for element in _parallel-mark-half-elements(
+      halves.source,
+      source-mark,
+      center-outset: center-outset,
+      trim-start: true,
+      label-pos: label-pos,
+    ) {
+      elements.push(element)
+    }
+  }
+
+  if sink-mark != none {
+    let center-outset = _parallel-center-outset(
+      _segments-length(base-segments, accuracy: _style-value(sink-mark, "parallel-accuracy", 0.001)),
+      sink-mark,
+    )
+    for element in _parallel-mark-half-elements(
+      halves.sink,
+      sink-mark,
+      center-outset: center-outset,
+      trim-end: true,
+      label-pos: label-pos,
+    ) {
+      elements.push(element)
+    }
+  }
+
+  elements
+}
+
 #let _pattern-line(start, end, style) = {
   _segment-elements(_line-segment(start, end), style).elements
+}
+
+#let _parallel-mark-line-elements(start, end, style, label-pos: none) = {
+  let mark-style = _parallel-mark-style(style)
+  if mark-style == none {
+    ()
+  } else {
+    let segment = _line-segment(start, end)
+    let mark-style = _mark-style-on-label-side(mark-style, segment, label-pos)
+    let center-outset = _parallel-center-outset(
+      _segment-length(segment, accuracy: _style-value(mark-style, "parallel-accuracy", 0.001)),
+      mark-style,
+    )
+    let geometry = _geometry-segments(
+      segment,
+      mark-style,
+      start-outset: center-outset,
+      end-outset: center-outset,
+      accuracy: _style-value(mark-style, "parallel-accuracy", 0.001),
+    )
+    _segments-elements(geometry, mark-style).elements
+  }
 }
 
 #let _node-outset(style, node-outset) = {
@@ -691,6 +898,7 @@
             sink-style-value
           }
           let ev-label = _content(edge-label, edge-data, default: none)
+          let label-pos = if e.label-pos == none { e.pos } else { e.label-pos }
 
           if start != none and end != none {
             let halves = _edge-geometry-halves(
@@ -716,6 +924,9 @@
             for element in _pattern-edge-halves(halves, source-draw-style, sink-draw-style) {
               elements.push(element)
             }
+            for element in _parallel-mark-edge-elements(halves, source-style-value, sink-style-value, label-pos: label-pos) {
+              elements.push(element)
+            }
           } else if start != none {
             let line-start = curve-api.outset-point(
               nodes.at(start.node).pos,
@@ -728,6 +939,9 @@
               }
             }
             for element in _pattern-line(line-start, e.pos, source-draw-style) {
+              elements.push(element)
+            }
+            for element in _parallel-mark-line-elements(line-start, e.pos, source-style-value, label-pos: label-pos) {
               elements.push(element)
             }
           } else if end != none {
@@ -744,10 +958,12 @@
             for element in _pattern-line(e.pos, line-end, sink-draw-style) {
               elements.push(element)
             }
+            for element in _parallel-mark-line-elements(e.pos, line-end, sink-style-value, label-pos: label-pos) {
+              elements.push(element)
+            }
           }
 
           if ev-label != none {
-            let label-pos = if e.label-pos == none { e.pos } else { e.label-pos }
             elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0))
           }
 

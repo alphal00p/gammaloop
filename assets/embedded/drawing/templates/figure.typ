@@ -20,10 +20,6 @@
   if momentum-arrows != none {
     options = options + (momentum-arrows: bool-input(momentum-arrows))
   }
-  let show-momentum = sys.inputs.at("show-momentum", default: none)
-  if show-momentum != none {
-    options = options + (show-momentum: bool-input(show-momentum))
-  }
   let show-edge-index = sys.inputs.at("show-edge-index", default: none)
   if show-edge-index != none {
     options = options + (show-edge-index: bool-input(show-edge-index))

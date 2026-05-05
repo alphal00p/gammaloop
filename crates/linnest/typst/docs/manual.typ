@@ -184,12 +184,18 @@ edge index:
 `physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
 callbacks for `draw`. The default source/sink strokes use darker/lighter halves
 to encode the graph source/sink split. Set `momentum-arrows: true` to draw
-centered parallel arrow segments that flow from source to sink independently of
-the DOT `dir`/`orientation` value. The arrow segment length is capped by both
-`momentum-arrow-length` and `momentum-arrow-ratio`, so the shorter one wins.
+centered parallel arrow decorations while the main edge remains connected to
+the nodes. The arrows flow from source to sink independently of the DOT
+`dir`/`orientation` value. The decoration defaults to a plain black `0.55pt`
+stroke and a scaled CeTZ `"barbed"` arrowhead, so it does not inherit the base
+particle stroke. The arrow length is capped by both `momentum-arrow-length` and
+`momentum-arrow-ratio`, so the shorter one wins. When the layout provides an
+edge-label position, the arrow offset is signed so the momentum marker is drawn
+on the same side of the edge as that label.
 
-Optional labels can be built from edge metadata with `show-momentum`,
-`show-edge-index`, `show-half-edge-index`, and `show-particle`.
+Optional labels can be built from edge metadata with `show-edge-index`,
+`show-half-edge-index`, `show-particle`, and, for explicit momentum fields,
+`show-momentum`.
 `show-half-edge-index` only emits a value for dangling half edges.
 
 ```typ
@@ -202,11 +208,10 @@ Optional labels can be built from edge metadata with `show-momentum`,
   b,
   source: (node: a),
   sink: (node: c),
-  statements: (particle: "g", lmb_rep: "q_1", id: 7),
+  statements: (particle: "g", id: "7"),
 )
 #let callbacks = physics.style(
   momentum-arrows: true,
-  show-momentum: true,
   show-edge-index: true,
   show-particle: true,
 )
