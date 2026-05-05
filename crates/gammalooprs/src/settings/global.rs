@@ -71,6 +71,8 @@ pub struct ThresholdSubtractionSettings {
     pub skip_thresholds_that_are_cuts: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_integrated_ct: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub assume_positive_external_energies: bool,
 }
 
 impl Default for ThresholdSubtractionSettings {
@@ -80,6 +82,7 @@ impl Default for ThresholdSubtractionSettings {
             check_esurface_at_generation: false,
             skip_thresholds_that_are_cuts: true,
             disable_integrated_ct: false,
+            assume_positive_external_energies: true,
         }
     }
 }

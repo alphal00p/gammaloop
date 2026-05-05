@@ -449,7 +449,9 @@ impl LUCounterTermEvaluators {
 
         let symbolica_started = std::time::Instant::now();
         let pass_two_evaluator = (1..=max_raised_cut_occurrence)
-            .map(|order| build_derivative_structure(order as u8, &settings.generation.evaluator))
+            .map(|order| {
+                build_derivative_structure(order as u8, -1, &settings.generation.evaluator)
+            })
             .collect();
 
         timings.symbolica_time += symbolica_started.elapsed();

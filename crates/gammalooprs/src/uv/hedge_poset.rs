@@ -26,6 +26,7 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
+    settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
@@ -672,6 +673,7 @@ impl Forests {
         &mut self,
         graph: &mut Graph,
         settings: &UVgenerationSettings,
+        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
         for (cut_compatible_forest_subset, cuts) in &self.cuts {
             let mut first = true;
@@ -686,7 +688,7 @@ impl Forests {
                 debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
                 let integrands = if first {
                     first = false;
-                    Local3DApproximation::root(graph, cuts)
+                    Local3DApproximation::root(graph, cuts, orientation_pattern)
                 } else {
                     self.graph[*nidx].local(
                         graph,

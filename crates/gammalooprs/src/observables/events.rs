@@ -59,7 +59,13 @@ impl<T: FloatLike> GenericDerivedEventData<T> {
 pub enum AdditionalWeightKey {
     FullMultiplicativeFactor,
     Original,
-    ThresholdCounterterm { subset_index: usize },
+    ThresholdCounterterm {
+        subset_index: usize,
+    },
+    AmplitudeThresholdCounterterm {
+        esurface_id: usize,
+        overlap_group: usize,
+    },
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -479,6 +485,12 @@ impl fmt::Display for AdditionalWeightKey {
             AdditionalWeightKey::Original => write!(f, "original"),
             AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
                 write!(f, "threshold_counterterm:{subset_index}")
+            }
+            AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                esurface_id,
+                overlap_group,
+            } => {
+                write!(f, "threshold_counterterm:{esurface_id}:{overlap_group}")
             }
         }
     }

@@ -1,6 +1,7 @@
 use crate::{
     GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
+    settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
@@ -62,6 +63,7 @@ impl CutForests {
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
+        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
@@ -75,6 +77,7 @@ impl CutForests {
                 cuts,
                 valid_orientations,
                 settings,
+                orientation_pattern,
             )?;
         }
         Ok(())
@@ -134,6 +137,7 @@ impl Forest {
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
+        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
 
@@ -141,9 +145,13 @@ impl Forest {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.topo_order = i;
-                    self.dag.nodes[n]
-                        .data
-                        .root(graph, cut_data, valid_orientations, settings)?;
+                    self.dag.nodes[n].data.root(
+                        graph,
+                        cut_data,
+                        valid_orientations,
+                        settings,
+                        orientation_pattern,
+                    )?;
                 }
                 1 => {
                     // debug!("")
@@ -180,6 +188,7 @@ impl Forest {
                         &parent.data,
                         valid_orientations,
                         settings,
+                        orientation_pattern,
                     )?;
                 }
                 _ => {

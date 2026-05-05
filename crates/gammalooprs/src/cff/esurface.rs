@@ -838,9 +838,9 @@ pub struct EsurfaceID(pub usize);
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
 pub type ExistingThresholds = TiVec<ExistingEsurfaceId, EsurfaceID>;
 
-pub(crate) fn get_representative(
-    esurface_map: &TiVec<GraphGroupPosition, Option<EsurfaceID>>,
-) -> Result<(GraphGroupPosition, EsurfaceID)> {
+pub(crate) fn get_representative<T: Copy>(
+    esurface_map: &TiVec<GraphGroupPosition, Option<T>>,
+) -> Result<(GraphGroupPosition, T)> {
     for (group_pos, esurface_option) in esurface_map.iter_enumerated() {
         if let Some(esurface_id) = esurface_option {
             return Ok((group_pos, *esurface_id));

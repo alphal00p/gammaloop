@@ -86,6 +86,37 @@ fn export_generic_evaluator<T: ExportAtomTo>(
     })
 }
 
+fn export_evaluator_stack<T: ExportAtomTo>(
+    evaluator_stack: &crate::integrands::process::evaluators::EvaluatorStack,
+    start: usize,
+    override_pos: usize,
+    mult_offset: usize,
+    representative_input: Vec<StandaloneComplexInput>,
+) -> Result<StandaloneEvaluatorStackArchive<T>> {
+    Ok(StandaloneEvaluatorStackArchive {
+        start,
+        override_pos,
+        mult_offset,
+        representative_input,
+        single_parametric: export_generic_evaluator(&evaluator_stack.single_parametric)?,
+        iterative: evaluator_stack
+            .iterative
+            .as_ref()
+            .map(|(eval, _)| export_generic_evaluator(eval))
+            .transpose()?,
+        summed_function_map: evaluator_stack
+            .summed_function_map
+            .as_ref()
+            .map(export_generic_evaluator)
+            .transpose()?,
+        summed: evaluator_stack
+            .summed
+            .as_ref()
+            .map(export_generic_evaluator)
+            .transpose()?,
+    })
+}
+
 fn standalone_rust_script() -> String {
     include_str!("standalone_template.rs").to_string()
 }
@@ -219,31 +250,19 @@ impl AmplitudeIntegrand {
                         .evaluators
                         .iter()
                         .map(|counterterm| {
-                            let evaluator_stack = counterterm.evaluator_stack.borrow();
-                            Ok(StandaloneEvaluatorStackArchive {
-                                start,
-                                override_pos,
-                                mult_offset,
-                                representative_input: representative_input.clone(),
-                                single_parametric: export_generic_evaluator(
-                                    &evaluator_stack.single_parametric,
-                                )?,
-                                iterative: evaluator_stack
-                                    .iterative
-                                    .as_ref()
-                                    .map(|(eval, _)| export_generic_evaluator(eval))
-                                    .transpose()?,
-                                summed_function_map: evaluator_stack
-                                    .summed_function_map
-                                    .as_ref()
-                                    .map(export_generic_evaluator)
-                                    .transpose()?,
-                                summed: evaluator_stack
-                                    .summed
-                                    .as_ref()
-                                    .map(export_generic_evaluator)
-                                    .transpose()?,
-                            })
+                            counterterm
+                                .evaluator_stacks
+                                .iter()
+                                .map(|evaluator_stack| {
+                                    export_evaluator_stack(
+                                        evaluator_stack,
+                                        start,
+                                        override_pos,
+                                        mult_offset,
+                                        representative_input.clone(),
+                                    )
+                                })
+                                .collect::<Result<Vec<_>>>()
                         })
                         .collect::<Result<Vec<_>>>()?;
 

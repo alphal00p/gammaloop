@@ -1664,6 +1664,35 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         table.build()
     }
+
+    pub fn table_with_value_index(&self, value_index: usize) -> Table {
+        let mut table = tabled::builder::Builder::new();
+
+        let multiplicative_offset = value_index + 1;
+
+        for FnMapEntry { lhs, rhs, .. } in &self.reps {
+            table.push_record(vec![
+                lhs.printer(LOGPRINTOPTS).to_string(),
+                rhs.printer(LOGPRINTOPTS).to_string(),
+            ]);
+        }
+
+        for i in &self.pairs {
+            for (p, v) in i.params.iter().zip(i.value_range.clone()) {
+                table.push_record(vec![
+                    p.printer(LOGPRINTOPTS).to_string().to_string(),
+                    format!(
+                        "{:?}",
+                        &self.values[value_index]
+                            [v * multiplicative_offset..(v + 1) * multiplicative_offset]
+                    ),
+                    format!("{}", v),
+                ]);
+            }
+        }
+
+        table.build()
+    }
 }
 
 impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {

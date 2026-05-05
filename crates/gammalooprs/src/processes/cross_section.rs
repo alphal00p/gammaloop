@@ -768,9 +768,11 @@ impl CrossSectionGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let global_cff = self
-            .graph
-            .generate_cff(&contract_edges, &canonize_esurface)?;
+        let global_cff = self.graph.generate_cff(
+            &contract_edges,
+            &canonize_esurface,
+            &settings.orientation_pattern,
+        )?;
 
         let cut_esurface_map = self
             .cut_esurface
@@ -962,7 +964,13 @@ impl CrossSectionGraph {
         let lu_prefactor = self.lu_prefactor_helper();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            &settings.orientation_pattern,
+        )?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
@@ -1467,7 +1475,13 @@ impl CrossSectionGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
+        cut_forests.compute(
+            &mut self.graph,
+            vakint,
+            &valid_orientations,
+            &settings.uv,
+            &settings.orientation_pattern,
+        )?;
 
         let mut threshold_counterterms = cut_forests
             .orientation_parametric_exprs(&self.graph, &settings.uv)?
@@ -1743,7 +1757,7 @@ impl RaisedCutData {
         let pass_two_evaluators = (1..=global_max_occurence)
             .map(|i| {
                 let evaluator_started = std::time::Instant::now();
-                let evaluator = build_derivative_structure(i as u8, evaluator_settings);
+                let evaluator = build_derivative_structure(i as u8, -1, evaluator_settings);
                 stats.evaluator_symbolica_time += evaluator_started.elapsed();
                 stats.evaluator_count += 1;
                 evaluator
@@ -1776,11 +1790,26 @@ impl CrossSectionDerivedData {
     }
 }
 
-pub(crate) fn build_derivative_structure(
-    order: u8,
-    evaluator_settings: &EvaluatorSettings,
-) -> GenericEvaluator {
-    let order = order as i32;
+pub(crate) fn build_derivative_structure_atom(
+    singularity_order: u8,
+    laurent_coefficient: i8,
+) -> Atom {
+    assert!(
+        laurent_coefficient <= -1,
+        "only laurent coefficients up to -1 are supported"
+    );
+
+    assert!(
+        singularity_order >= 1,
+        "eta order must be at least 1, got {singularity_order}"
+    );
+    assert!(
+        singularity_order >= -laurent_coefficient as u8,
+        "eta order must be at least the negative of the laurent coefficient, got {singularity_order} for laurent coefficient {laurent_coefficient}"
+    );
+
+    let order = singularity_order as i32;
+    let laurent_coefficient = laurent_coefficient as i32;
     let f = symbol!("f");
 
     let expansion = parse!("η(t)")
@@ -1800,7 +1829,7 @@ pub(crate) fn build_derivative_structure(
         * expansion.pow(-order)
         * (GS.rescale - GS.rescale_star).pow(order);
 
-    for _ in 1..order {
+    for _ in 1..=(order + laurent_coefficient) {
         expression_to_derive = expression_to_derive.derivative(GS.rescale);
     }
 
@@ -1812,15 +1841,26 @@ pub(crate) fn build_derivative_structure(
         .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
         .unwrap();
 
-    let factorial_prefactor = (2..order).product::<i32>();
-
+    let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();
+    debug!("factorial prefactor: {}", factorial_prefactor);
     let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
 
     expression_to_derive = expression_to_derive
         .replace(GS.rescale)
         .with(GS.rescale_star);
 
-    let params = params_for_derivative_order(order as u8);
+    expression_to_derive
+}
+
+pub(crate) fn build_derivative_structure(
+    singularity_order: u8,
+    laurent_coefficient: i8,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    let expression_to_derive =
+        build_derivative_structure_atom(singularity_order, laurent_coefficient);
+
+    let params = params_for_derivative_order(singularity_order);
 
     GenericEvaluator::new_from_raw_params(
         [expression_to_derive],
@@ -1835,7 +1875,7 @@ pub(crate) fn build_derivative_structure(
     .into_eager_only()
 }
 
-fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
+pub(crate) fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     let f = symbol!("f");
     let eta = symbol!("η");
 

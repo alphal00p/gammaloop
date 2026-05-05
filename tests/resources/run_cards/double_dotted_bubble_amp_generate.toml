@@ -1,0 +1,42 @@
+commands = [
+    "import model ./assets/models/json/scalars/scalars_2p_3p.json",
+    "import graphs ./tests/resources/graphs/double_dotted_bubble_amp.dot ",
+    "generate",
+    "profile bulk",
+    "quit -n",
+]
+
+
+[default_runtime_settings.general]
+integral_unit = "none"
+disable_flux_factor = true
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[4.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [1]
+
+[default_runtime_settings.integrator]
+n_max = 1_000_0000
+n_start = 1_000_000
+n_increase = 0
+continuous_dim_learning_rate = 1.5
+
+[default_runtime_settings.sampling]
+graphs = "summed"
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+compile = false
+iterative_orientation_optimization = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false

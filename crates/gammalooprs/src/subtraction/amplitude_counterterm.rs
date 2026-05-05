@@ -1,7 +1,6 @@
-use std::{cell::RefCell, path::Path};
+use std::{path::Path, slice};
 
 use bincode_trait_derive::{Decode, Encode};
-use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::atom::Atom;
@@ -15,7 +14,7 @@ use crate::{
     cff::{
         esurface::{
             Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
-            GroupEsurfaceId,
+            GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId,
         },
         expression::OrientationID,
     },
@@ -23,13 +22,16 @@ use crate::{
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            ParamBuilder, ThresholdParams,
-            evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
+            GenericEvaluator, ParamBuilder, ThresholdParams,
+            evaluators::{
+                EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator,
+                evaluate_evaluator_single,
+            },
         },
     },
     model::Model,
     momentum::{
-        Rotation,
+        Energy, FourMomentum, Rotation,
         sample::{LoopMomenta, MomentumSample},
     },
     processes::EvaluatorBuildTimings,
@@ -40,48 +42,70 @@ use crate::{
     },
     utils::{
         F, FloatLike,
-        hyperdual_utils::DualOrNot,
+        hyperdual_utils::{
+            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
+            shape_for_t_derivatives,
+        },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
+use symbolica::domains::dual::HyperDual;
 
 const MAX_ITERATIONS: usize = 40;
 const TOLERANCE: f64 = 1.0;
+
+fn multiply_dual_or_not_complex<T: FloatLike>(
+    lhs: DualOrNot<Complex<F<T>>>,
+    rhs: &DualOrNot<Complex<F<T>>>,
+) -> DualOrNot<Complex<F<T>>> {
+    match (lhs, rhs) {
+        (DualOrNot::NonDual(lhs), DualOrNot::NonDual(rhs)) => DualOrNot::NonDual(lhs * rhs),
+        (DualOrNot::Dual(lhs), DualOrNot::Dual(rhs)) => DualOrNot::Dual(lhs * rhs.clone()),
+        (DualOrNot::Dual(lhs), DualOrNot::NonDual(rhs)) => {
+            let rhs_dual = new_constant(&lhs, rhs);
+            DualOrNot::Dual(lhs * rhs_dual)
+        }
+        (DualOrNot::NonDual(lhs), DualOrNot::Dual(rhs)) => {
+            let lhs_dual = new_constant(rhs, &lhs);
+            DualOrNot::Dual(lhs_dual * rhs.clone())
+        }
+    }
+}
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
-    pub evaluators: TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+    pub evaluators: TiVec<RaisedEsurfaceId, AmplitudeCountertermEvaluator>,
+    pub helper_evaluators: Vec<GenericEvaluator>,
     // `generated_mask` tracks whether a threshold slot actually has symbolic content.
     // This is independent of any orientation filtering and reflects the underlying
     // threshold-generation logic itself.
-    pub generated_mask: TiVec<EsurfaceID, bool>,
+    pub generated_mask: TiVec<RaisedEsurfaceId, bool>,
     // `active_mask` is an additional generation-time gate coming from the selected
     // orientation subset. A slot can be generated in principle but inactive for the
     // current generated evaluator set, in which case we keep its index but compile it
     // to a zero/dummy evaluator and hard-fail if runtime ever reaches it.
-    pub active_mask: TiVec<EsurfaceID, bool>,
-    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+    pub active_mask: TiVec<RaisedEsurfaceId, bool>,
+    pub raised_data: RaisedEsurfaceData,
+    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
     pub own_group_position: GraphGroupPosition,
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermAtom {
-    pub parametric_local: Atom,
-    pub parametric_integrated: Atom,
+    pub parametric: Vec<Atom>,
 }
 
 impl AmplitudeCountertermAtom {
     pub(crate) fn is_generated(&self) -> bool {
-        self.parametric_local != Atom::new() || self.parametric_integrated != Atom::new()
+        !self.parametric.is_empty()
     }
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric_local: Atom::Zero,
-            parametric_integrated: Atom::Zero,
+            parametric: vec![Atom::Zero; self.parametric.len()],
         }
     }
 
@@ -95,27 +119,29 @@ impl AmplitudeCountertermAtom {
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
-        let (evaluator_stack, timings) = EvaluatorStack::new_with_timings(
-            &[&self.parametric_local, &self.parametric_integrated],
-            param_builder,
-            orientations.as_slice().as_ref(),
-            None,
-            &global_settings.generation.evaluator,
-        )
-        .unwrap();
+        let mut evaluator_stacks = Vec::with_capacity(self.parametric.len());
+        let mut timings = EvaluatorBuildTimings::default();
 
-        (
-            AmplitudeCountertermEvaluator {
-                evaluator_stack: RefCell::new(evaluator_stack),
-            },
-            timings,
-        )
+        for (order_index, integrand) in self.parametric.iter().enumerate() {
+            let dual_shape = (order_index > 0).then(|| shape_for_t_derivatives(order_index));
+            let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
+                slice::from_ref(integrand),
+                param_builder,
+                orientations.as_slice().as_ref(),
+                dual_shape,
+                &global_settings.generation.evaluator,
+            )
+            .unwrap();
+            timings += evaluator_timings;
+            evaluator_stacks.push(evaluator_stack);
+        }
+
+        (AmplitudeCountertermEvaluator { evaluator_stacks }, timings)
     }
 
     pub(crate) fn new() -> Self {
         Self {
-            parametric_local: Atom::new(),
-            parametric_integrated: Atom::new(),
+            parametric: Vec::new(),
         }
     }
 }
@@ -123,13 +149,29 @@ impl AmplitudeCountertermAtom {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
-    pub evaluator_stack: RefCell<EvaluatorStack>,
+    pub evaluator_stacks: Vec<EvaluatorStack>,
+}
+
+impl AmplitudeCountertermEvaluator {
+    pub(crate) fn generic_evaluator_count(&self) -> usize {
+        self.evaluator_stacks
+            .iter()
+            .map(EvaluatorStack::generic_evaluator_count)
+            .sum()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AmplitudeLocalCountertermEvaluation<T: FloatLike> {
+    pub esurface_id: RaisedEsurfaceId,
+    pub overlap_group: usize,
+    pub value: Complex<F<T>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AmplitudeCountertermEvaluation<T: FloatLike> {
     pub total: Complex<F<T>>,
-    pub local_counterterms: Vec<Complex<F<T>>>,
+    pub local_counterterms: Vec<AmplitudeLocalCountertermEvaluation<T>>,
 }
 
 impl AmplitudeCountertermData {
@@ -137,36 +179,47 @@ impl AmplitudeCountertermData {
         let stack_count = self
             .evaluators
             .iter()
-            .map(|evaluator| evaluator.evaluator_stack.borrow().generic_evaluator_count())
+            .map(AmplitudeCountertermEvaluator::generic_evaluator_count)
             .sum::<usize>();
         let overlap_count = self
             .overlap
             .overlap_groups
             .iter()
-            .filter(|group| group.prefactor_evaluator.is_some())
-            .count();
-        stack_count + overlap_count
+            .map(|group| {
+                group
+                    .prefactor_evaluator
+                    .as_ref()
+                    .map(|evaluators| evaluators.len())
+                    .unwrap_or(0)
+            })
+            .sum::<usize>();
+        stack_count + overlap_count + self.helper_evaluators.len()
     }
 
     pub fn new_empty(own_group_position: GraphGroupPosition) -> Self {
         Self {
             overlap: OverlapStructure::new_empty(),
             evaluators: TiVec::new(),
+            helper_evaluators: vec![],
             generated_mask: TiVec::new(),
             active_mask: TiVec::new(),
+            raised_data: RaisedEsurfaceData {
+                raised_groups: TiVec::new(),
+                pass_two_evaluator: None,
+            },
             esurface_map: TiVec::new(),
             own_group_position,
         }
     }
 
-    fn ensure_active_esurface(&self, esurface_id: EsurfaceID) -> Result<()> {
-        if self.active_mask[esurface_id] {
+    fn ensure_active_raised_esurface(&self, raised_esurface_id: RaisedEsurfaceId) -> Result<()> {
+        if self.active_mask[raised_esurface_id] {
             return Ok(());
         }
 
         Err(color_eyre::eyre::eyre!(
             "Amplitude threshold evaluator {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
-            esurface_id.0
+            raised_esurface_id.0
         ))
     }
 
@@ -177,23 +230,51 @@ impl AmplitudeCountertermData {
         frozen_mode: &crate::settings::global::FrozenCompilationMode,
     ) -> Result<()> {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
-            let mut evaluator_stack = e.evaluator_stack.borrow_mut();
-            evaluator_stack.compile(format!("esurface_{}", i.0), path.as_ref(), frozen_mode)?;
-        }
-
-        for (group_index, group) in self.overlap.overlap_groups.iter_mut().enumerate() {
-            if let Some(prefactor_evaluator) = group.prefactor_evaluator.as_mut() {
-                prefactor_evaluator.borrow_mut().compile_external(
-                    path.as_ref()
-                        .join(format!("overlap_prefactor_{group_index}"))
-                        .with_extension("cpp"),
-                    format!("overlap_prefactor_{group_index}"),
-                    path.as_ref()
-                        .join(format!("overlap_prefactor_{group_index}"))
-                        .with_extension("so"),
+            for (order_index, evaluator_stack) in e.evaluator_stacks.iter_mut().enumerate() {
+                evaluator_stack.compile(
+                    format!("esurface_{}_order_{}", i.0, order_index + 1),
+                    path.as_ref(),
                     frozen_mode,
                 )?;
             }
+        }
+
+        for (group_index, group) in self.overlap.overlap_groups.iter_mut().enumerate() {
+            if let Some(prefactor_evaluators) = group.prefactor_evaluator.as_mut() {
+                for (order_index, prefactor_evaluator) in
+                    prefactor_evaluators.iter_mut().enumerate()
+                {
+                    prefactor_evaluator.borrow_mut().compile_external(
+                        path.as_ref()
+                            .join(format!(
+                                "overlap_prefactor_{group_index}_order_{}",
+                                order_index + 1
+                            ))
+                            .with_extension("cpp"),
+                        format!("overlap_prefactor_{group_index}_order_{}", order_index + 1),
+                        path.as_ref()
+                            .join(format!(
+                                "overlap_prefactor_{group_index}_order_{}",
+                                order_index + 1
+                            ))
+                            .with_extension("so"),
+                        frozen_mode,
+                    )?;
+                }
+            }
+        }
+
+        for (order_index, evaluator) in self.helper_evaluators.iter_mut().enumerate() {
+            evaluator.compile_external(
+                path.as_ref()
+                    .join(format!("threshold_helper_{order_index}"))
+                    .with_extension("cpp"),
+                format!("threshold_helper_{order_index}"),
+                path.as_ref()
+                    .join(format!("threshold_helper_{order_index}"))
+                    .with_extension("so"),
+                frozen_mode,
+            )?;
         }
         Ok(())
     }
@@ -203,16 +284,21 @@ impl AmplitudeCountertermData {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for evaluator in self.evaluators.iter_mut() {
-            evaluator
-                .evaluator_stack
-                .get_mut()
-                .for_each_generic_evaluator_mut(&mut f)?;
+            for evaluator_stack in &mut evaluator.evaluator_stacks {
+                evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
+            }
         }
 
         for group in &mut self.overlap.overlap_groups {
-            if let Some(prefactor_evaluator) = group.prefactor_evaluator.as_mut() {
-                f(prefactor_evaluator.get_mut())?;
+            if let Some(prefactor_evaluators) = group.prefactor_evaluator.as_mut() {
+                for prefactor_evaluator in prefactor_evaluators.iter_mut() {
+                    f(prefactor_evaluator.get_mut())?;
+                }
             }
+        }
+
+        for evaluator in &mut self.helper_evaluators {
+            f(evaluator)?;
         }
 
         Ok(())
@@ -250,7 +336,7 @@ impl AmplitudeCountertermData {
             esurfaces,
             momentum_sample,
             &self.overlap,
-            &self.evaluators,
+            &self.raised_data,
             self.own_group_position,
             &self.esurface_map,
         );
@@ -258,36 +344,43 @@ impl AmplitudeCountertermData {
         let mut result = Complex::new_re(momentum_sample.zero());
         let mut local_counterterms = Vec::new();
 
-        for group in self.overlap.overlap_groups.iter() {
+        for (overlap_group, group) in self.overlap.overlap_groups.iter().enumerate() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             for existing_esurface_id in group.existing_esurfaces.iter() {
-                let single_result = if let Some(esurface_builder) =
+                let Some(esurface_builder) =
                     overlap_builder.new_esurface_builder(*existing_esurface_id)
-                {
-                    self.ensure_active_esurface(esurface_builder.esurface_id)?;
-                    esurface_builder.solve_rstar().rstar_samples().evaluate(
-                        param_builder,
-                        orientation,
-                        evaluation_metadata,
-                        record_primary_timing,
-                    )?
-                } else {
-                    Complex::new_re(momentum_sample.zero())
+                else {
+                    continue;
                 };
 
+                let raised_esurface_id = esurface_builder.raised_esurface_id;
+                self.ensure_active_raised_esurface(raised_esurface_id)?;
+                let single_result = esurface_builder.solve_rstar().rstar_samples().evaluate(
+                    param_builder,
+                    orientation,
+                    evaluation_metadata,
+                    record_primary_timing,
+                    &mut self.evaluators[raised_esurface_id],
+                    &mut self.helper_evaluators,
+                )?;
+
                 if !single_result.is_zero() {
-                    debug!(
-                        "Param Builder for {}:\n{}",
-                        existing_esurface_id, param_builder
-                    );
+                    //    debug!(
+                    //        "Param Builder for {}:\n{}",
+                    //        existing_esurface_id, param_builder
+                    //    );
                     debug!(
                         "Counterterm for esurface {}: {:+16e}",
                         existing_esurface_id, single_result
                     );
                 }
 
-                local_counterterms.push(single_result.clone());
+                local_counterterms.push(AmplitudeLocalCountertermEvaluation {
+                    esurface_id: raised_esurface_id,
+                    overlap_group,
+                    value: single_result.clone(),
+                });
                 result += single_result;
             }
         }
@@ -315,7 +408,7 @@ impl AmplitudeCountertermData {
             esurfaces,
             momentum_sample,
             &self.overlap,
-            &self.evaluators,
+            &self.raised_data,
             self.own_group_position,
             &self.esurface_map,
         );
@@ -334,7 +427,7 @@ impl AmplitudeCountertermData {
                 let single_result = overlap_builder
                     .new_esurface_builder(*existing_esurface_id)
                     .map(|esurface_builder| -> Result<_> {
-                        self.ensure_active_esurface(esurface_builder.esurface_id)?;
+                        self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
                         let rstar_sample = esurface_builder.solve_rstar().rstar_samples();
                         Result::Ok(rstar_sample.rstar_sample)
                     })
@@ -367,9 +460,9 @@ pub struct OverlapStructureWithKinematics<T: FloatLike> {
 
 struct CounterTermBuilder<'a, T: FloatLike> {
     overlap_structure: &'a OverlapStructure,
-    evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+    raised_data: &'a RaisedEsurfaceData,
     own_group_position: GraphGroupPosition,
-    esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+    esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
     real_mass_vector: EdgeVec<F<T>>,
     e_cm: F<T>,
     graph: &'a Graph,
@@ -389,9 +482,12 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         esurface_collection: &'a EsurfaceCollection,
         sample: &'a MomentumSample<T>,
         overlap_structure: &'a OverlapStructure,
-        evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+        raised_data: &'a RaisedEsurfaceData,
         own_group_position: GraphGroupPosition,
-        esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: &'a TiVec<
+            GroupEsurfaceId,
+            TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>,
+        >,
     ) -> Self {
         let real_mass_vector = graph.get_real_mass_vector(model);
         let e_cm = F::from_f64(settings.kinematics.e_cm);
@@ -404,8 +500,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             settings,
             esurface_collection,
             overlap_structure,
+            raised_data,
             sample,
-            evaluators,
             own_group_position,
             esurface_map,
         }
@@ -453,14 +549,21 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
             .overlap_structure
             .existing_esurfaces[existing_esurface_id];
 
-        let esurface_id = self.counterterm_builder.esurface_map[group_esurface_id]
+        let raised_esurface_id = self.counterterm_builder.esurface_map[group_esurface_id]
             [self.counterterm_builder.own_group_position];
 
-        esurface_id.map(|esurface_id| EsurfaceCTBuilder {
-            overlap_builder: self,
-            _existing_esurface_id: existing_esurface_id,
-            esurface: &self.counterterm_builder.esurface_collection[esurface_id],
-            esurface_id,
+        raised_esurface_id.map(|raised_esurface_id| {
+            let esurface_id = self.counterterm_builder.raised_data.raised_groups
+                [raised_esurface_id]
+                .esurface_ids[0];
+
+            EsurfaceCTBuilder {
+                overlap_builder: self,
+                _existing_esurface_id: existing_esurface_id,
+                esurface: &self.counterterm_builder.esurface_collection[esurface_id],
+                esurface_id,
+                raised_esurface_id,
+            }
         })
     }
 }
@@ -470,6 +573,7 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
     _existing_esurface_id: ExistingEsurfaceId,
     esurface: &'a Esurface,
     esurface_id: EsurfaceID,
+    raised_esurface_id: RaisedEsurfaceId,
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
@@ -562,6 +666,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         orientations: SingleOrAllOrientations<'a, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
+        ct_evaluator: &mut AmplitudeCountertermEvaluator,
+        helper_evaluators: &mut [GenericEvaluator],
     ) -> Result<Complex<F<T>>> {
         let esurface_ct_builder = &self.rstar_solution.esurface_ct_builder;
         let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
@@ -574,13 +680,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
             .collect::<Vec<_>>();
 
-        let prefactor = self.evaluate_multichanneling_prefactor(
-            &self.rstar_sample,
-            model_params,
-            evaluation_metadata,
-            record_primary_timing,
-        );
-
         let radius = self
             .rstar_solution
             .esurface_ct_builder
@@ -588,7 +687,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .radius
             .clone();
 
-        let radius_star = self.rstar_solution.solution.solution;
+        let radius_star = self.rstar_solution.solution.solution.clone();
         let e_cm = &ct_builder.e_cm;
         let settings = &ct_builder
             .settings
@@ -609,121 +708,334 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let h_function =
             evaluate_integrated_ct_normalisation(&radius, &radius_star, e_cm, integrated_settings);
 
-        let threshold_params = ThresholdParams {
-            radius: DualOrNot::NonDual(radius),
-            radius_star: DualOrNot::NonDual(radius_star),
-            esurface_derivative: DualOrNot::NonDual(
-                self.rstar_solution.solution.derivative_at_solution,
-            ),
-            uv_damp_plus: DualOrNot::NonDual(uv_damp_plus),
-            uv_damp_minus: DualOrNot::NonDual(uv_damp_minus),
-            h_function: DualOrNot::NonDual(h_function),
-        };
+        let mut total_ct = Complex::new_re(self.rstar_sample.zero());
 
-        let params = T::get_parameters(
-            param_builder,
-            (false, false),
-            ct_builder.graph,
-            &self.rstar_sample,
-            ct_builder.settings.kinematics.externals.get_helicities(),
-            &ct_builder.settings.additional_params(),
-            Some(&threshold_params),
-            None,
-            None,
-        );
+        for (order_index, evaluator_stack) in ct_evaluator.evaluator_stacks.iter_mut().enumerate() {
+            let (sample_for_order, threshold_params) = if order_index == 0 {
+                debug!(
+                    "rescaled loop momenta at rstar:\n{}",
+                    self.rstar_sample.loop_moms()
+                );
+                (
+                    self.rstar_sample.clone(),
+                    ThresholdParams {
+                        radius: DualOrNot::NonDual(radius.clone()),
+                        radius_star: DualOrNot::NonDual(radius_star.clone()),
+                        esurface_derivative: DualOrNot::NonDual(
+                            self.rstar_solution.solution.derivative_at_solution.clone(),
+                        ),
+                        uv_damp_plus: DualOrNot::NonDual(uv_damp_plus.clone()),
+                        uv_damp_minus: DualOrNot::NonDual(uv_damp_minus.clone()),
+                        h_function: DualOrNot::NonDual(h_function.clone()),
+                    },
+                )
+            } else {
+                let dual_shape = HyperDual::<F<T>>::new(shape_for_t_derivatives(order_index));
+                let dual_radius_star = dual_shape.variable(0, radius_star.clone());
 
-        let results = ct_builder.evaluators[esurface_id]
-            .evaluator_stack
-            .borrow_mut()
-            .evaluate(
-                params,
-                orientations,
-                ct_builder.settings,
+                let dualized_center = self
+                    .rstar_solution
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .rotated_center
+                    .iter()
+                    .map(|momentum| {
+                        momentum.map_ref(&|value| new_constant(&dual_radius_star, value))
+                    })
+                    .collect::<LoopMomenta<_>>();
+                let dual_loop_momenta = self
+                    .rstar_solution
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .unit_shifted_momenta
+                    .rescale_with_hyper_dual(&dual_radius_star, None)
+                    .iter()
+                    .zip(dualized_center.iter())
+                    .map(|(momentum, center)| momentum.clone() + center.clone())
+                    .collect::<LoopMomenta<_>>();
+                debug!("rescaled loop momenta at rstar:\n{}", dual_loop_momenta);
+                let mut sample_with_duals = self.rstar_sample.clone();
+                sample_with_duals.sample.dual_loop_moms = Some(dual_loop_momenta);
+
+                (
+                    sample_with_duals,
+                    ThresholdParams {
+                        radius: DualOrNot::Dual(new_constant(&dual_radius_star, &radius)),
+                        radius_star: DualOrNot::Dual(dual_radius_star.clone()),
+                        esurface_derivative: DualOrNot::Dual(new_constant(
+                            &dual_radius_star,
+                            &self.rstar_solution.solution.derivative_at_solution.clone(),
+                        )),
+                        uv_damp_plus: DualOrNot::Dual(new_constant(
+                            &dual_radius_star,
+                            &uv_damp_plus,
+                        )),
+                        uv_damp_minus: DualOrNot::Dual(new_constant(
+                            &dual_radius_star,
+                            &uv_damp_minus,
+                        )),
+                        h_function: DualOrNot::Dual(new_constant(&dual_radius_star, &h_function)),
+                    },
+                )
+            };
+
+            let esurface_derivatives = if order_index == 0 {
+                DualOrNot::NonDual(self.rstar_solution.solution.derivative_at_solution.clone())
+            } else {
+                let dual_shape_for_esurface =
+                    HyperDual::<F<T>>::new(shape_for_t_derivatives(order_index + 1));
+                let dual_radius_star_for_esurface =
+                    dual_shape_for_esurface.variable(0, radius_star.clone());
+                let dualized_center_for_esurface = self
+                    .rstar_solution
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .rotated_center
+                    .iter()
+                    .map(|momentum| {
+                        momentum
+                            .map_ref(&|value| new_constant(&dual_radius_star_for_esurface, value))
+                    })
+                    .collect::<LoopMomenta<_>>();
+                let dual_loop_momenta_for_esurface = self
+                    .rstar_solution
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .unit_shifted_momenta
+                    .rescale_with_hyper_dual(&dual_radius_star_for_esurface, None)
+                    .iter()
+                    .zip(dualized_center_for_esurface.iter())
+                    .map(|(momentum, center)| momentum.clone() + center.clone())
+                    .collect::<LoopMomenta<_>>();
+
+                let dualized_externals = self
+                    .rstar_sample
+                    .external_moms()
+                    .iter()
+                    .map(|momentum| FourMomentum {
+                        temporal: Energy {
+                            value: new_constant(
+                                &dual_radius_star_for_esurface,
+                                &momentum.temporal.value,
+                            ),
+                        },
+                        spatial: momentum
+                            .spatial
+                            .map_ref(&|value| new_constant(&dual_radius_star_for_esurface, value)),
+                    })
+                    .collect();
+
+                DualOrNot::Dual(
+                    self.rstar_solution
+                        .esurface_ct_builder
+                        .esurface
+                        .compute_from_dual_momenta(
+                            &ct_builder.graph.loop_momentum_basis,
+                            &ct_builder.real_mass_vector,
+                            &dual_loop_momenta_for_esurface,
+                            &dualized_externals,
+                        ),
+                )
+            };
+
+            let params = T::get_parameters(
+                param_builder,
+                (false, false),
+                ct_builder.graph,
+                &sample_for_order,
+                ct_builder.settings.kinematics.externals.get_helicities(),
+                &ct_builder.settings.additional_params(),
+                Some(&threshold_params),
+                None,
+                None,
+            );
+
+            let pass_one_result = evaluator_stack
+                .evaluate(
+                    params,
+                    orientations,
+                    ct_builder.settings,
+                    evaluation_metadata,
+                    record_primary_timing,
+                )
+                .expect("Amplitude counterterm evaluator stack failed")
+                .pop()
+                .unwrap();
+
+            let prefactor = self.evaluate_multichanneling_prefactor(
+                &sample_for_order,
+                &model_params,
                 evaluation_metadata,
                 record_primary_timing,
-            )
-            .expect("Amplitude counterterm evaluator stack failed")
-            .into_iter()
-            .map(DualOrNot::unwrap_real)
-            .collect_vec();
-
-        let final_result = if results.len() >= 2 {
-            debug!(
-                "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
-                results[0], results[1], prefactor
+                order_index,
             );
-            (&results[0] + &results[1]) * prefactor
-        } else {
-            let mut total_ct = Complex::new_re(self.rstar_sample.zero());
-            for value in results.iter() {
-                total_ct += value;
+
+            let pass_one_result = multiply_dual_or_not_complex(pass_one_result, &prefactor);
+
+            debug!(
+                "Pass one result for esurface {} order {}: {}",
+                esurface_id.0,
+                order_index + 1,
+                pass_one_result
+            );
+
+            let mut params_for_pass_two = vec![];
+            match pass_one_result {
+                DualOrNot::Dual(dual_result) => {
+                    params_for_pass_two
+                        .extend_from_slice(&extract_t_derivatives_complex(dual_result));
+                }
+                DualOrNot::NonDual(non_dual_result) => {
+                    params_for_pass_two.push(non_dual_result);
+                }
             }
-            total_ct * prefactor
-        };
+
+            match esurface_derivatives {
+                DualOrNot::Dual(dual_e_surface) => {
+                    extract_t_derivatives(dual_e_surface)[1..]
+                        .iter()
+                        .for_each(|value| params_for_pass_two.push(Complex::new_re(value.clone())));
+                }
+                DualOrNot::NonDual(non_dual_e_surface) => {
+                    params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                }
+            }
+
+            params_for_pass_two.push(Complex::new_re(radius.clone()));
+            params_for_pass_two.push(Complex::new_re(radius_star.clone()));
+            params_for_pass_two.push(Complex::new_re(uv_damp_plus.clone()));
+            params_for_pass_two.push(Complex::new_re(uv_damp_minus.clone()));
+            params_for_pass_two.push(Complex::new_re(h_function.clone()));
+
+            let pass_two_result = evaluate_evaluator_single(
+                &mut helper_evaluators[order_index],
+                &params_for_pass_two,
+                evaluation_metadata,
+                record_primary_timing,
+            );
+
+            debug!(
+                "Pass two result for esurface {} order {}: {}",
+                esurface_id.0,
+                order_index + 1,
+                pass_two_result
+            );
+
+            total_ct += pass_two_result;
+        }
 
         debug!(
-            ct_eval = format!("{:+16e}", final_result),
+            ct_eval = format!("{:+16e}", total_ct),
             "esurface {}", esurface_id.0
         );
 
-        Ok(final_result)
+        Ok(total_ct)
     }
 
     fn evaluate_multichanneling_prefactor(
         &self,
         momentum_sample: &MomentumSample<T>,
-        model_params: Vec<Complex<F<T>>>,
+        model_params: &[Complex<F<T>>],
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Complex<F<T>> {
+        order_index: usize,
+    ) -> DualOrNot<Complex<F<T>>> {
         let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
         let overlap = overlap_builder.counterterm_builder.overlap_structure;
 
         if overlap.overlap_groups.len() < 2 {
-            return Complex::new_re(momentum_sample.one());
+            return DualOrNot::NonDual(Complex::new_re(momentum_sample.one()));
         }
 
-        let params = momentum_sample
-            .loop_moms()
-            .iter()
-            .flat_map(|x| x.into_iter().cloned().map(Complex::new_re))
-            .chain(
-                momentum_sample
-                    .external_moms()
-                    .iter()
-                    .flat_map(|x| x.into_iter().cloned().map(Complex::new_re)),
-            )
-            .chain(model_params)
-            .collect::<Vec<_>>();
+        let multiplicative_offset = momentum_sample
+            .sample
+            .dual_loop_moms
+            .as_ref()
+            .map(|dual_loop_moms| dual_loop_moms.first().unwrap().px.values.len())
+            .unwrap_or(1);
+        let zero = Complex::new_re(momentum_sample.zero());
+        let mut params = if let Some(dual_loop_moms) = &momentum_sample.sample.dual_loop_moms {
+            dual_loop_moms
+                .iter()
+                .flat_map(|mom| {
+                    [
+                        mom.px.values.clone(),
+                        mom.py.values.clone(),
+                        mom.pz.values.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .map(Complex::new_re)
+                    .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        } else {
+            momentum_sample
+                .loop_moms()
+                .iter()
+                .flat_map(|momentum| {
+                    [
+                        momentum.px.clone(),
+                        momentum.py.clone(),
+                        momentum.pz.clone(),
+                    ]
+                    .into_iter()
+                    .map(Complex::new_re)
+                    .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+
+        params.extend(momentum_sample.external_moms().iter().flat_map(|momentum| {
+            [
+                momentum.temporal.value.clone(),
+                momentum.spatial.px.clone(),
+                momentum.spatial.py.clone(),
+                momentum.spatial.pz.clone(),
+            ]
+            .into_iter()
+            .flat_map(|value| {
+                std::iter::once(Complex::new_re(value))
+                    .chain((1..multiplicative_offset).map(|_| zero.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+        }));
+        params.extend(model_params.iter().cloned().flat_map(|value| {
+            std::iter::once(value)
+                .chain((1..multiplicative_offset).map(|_| zero.clone()))
+                .collect::<Vec<_>>()
+        }));
 
         let evaluator = overlap_builder
             .overlap_group
             .prefactor_evaluator
             .as_ref()
-            .unwrap();
+            .unwrap()
+            .get(order_index)
+            .expect("missing overlap prefactor evaluator for amplitude threshold order");
 
-        evaluate_evaluator_single(
+        evaluate_evaluator(
             &mut evaluator.borrow_mut(),
             &params,
             evaluation_metadata,
             record_primary_timing,
         )
+        .pop()
+        .expect("overlap prefactor evaluator should return exactly one value")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
-    use crate::{cff::esurface::EsurfaceID, graph::GraphGroupPosition};
+    use crate::{cff::esurface::RaisedEsurfaceId, graph::GraphGroupPosition};
     use symbolica::{atom::Atom, symbol};
     use typed_index_collections::ti_vec;
 
     #[test]
     fn empty_amplitude_counterterm_atom_is_not_generated() {
-        let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::new(),
-            parametric_integrated: Atom::new(),
-        };
+        let atom = AmplitudeCountertermAtom { parametric: vec![] };
 
         assert!(!atom.is_generated());
     }
@@ -731,8 +1043,7 @@ mod tests {
     #[test]
     fn non_empty_amplitude_counterterm_atom_is_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::var(symbol!("x")),
-            parametric_integrated: Atom::new(),
+            parametric: vec![Atom::var(symbol!("x"))],
         };
 
         assert!(atom.is_generated());
@@ -741,14 +1052,12 @@ mod tests {
     #[test]
     fn zero_like_amplitude_counterterm_atom_is_zero() {
         let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::var(symbol!("x")),
-            parametric_integrated: Atom::var(symbol!("y")),
+            parametric: vec![Atom::var(symbol!("x"))],
         };
 
         let zeroed = atom.zero_like();
 
-        assert_eq!(zeroed.parametric_local, Atom::Zero);
-        assert_eq!(zeroed.parametric_integrated, Atom::Zero);
+        assert_eq!(zeroed.parametric, vec![Atom::Zero]);
     }
 
     #[test]
@@ -756,7 +1065,9 @@ mod tests {
         let mut data = AmplitudeCountertermData::new_empty(GraphGroupPosition(0));
         data.active_mask = ti_vec![false];
 
-        let error = data.ensure_active_esurface(EsurfaceID(0)).unwrap_err();
+        let error = data
+            .ensure_active_raised_esurface(RaisedEsurfaceId(0))
+            .unwrap_err();
         assert!(error.to_string().contains("generation marked it inactive"));
     }
 }

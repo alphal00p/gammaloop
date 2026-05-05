@@ -54,33 +54,46 @@ fn amplitude_events_surface_threshold_counterterms_and_reproduce_weight() -> Res
             .get(&gammalooprs::observables::events::AdditionalWeightKey::FullMultiplicativeFactor)
             .expect("amplitude events should record the full multiplicative factor"),
     );
-    let threshold_counterterms = weights
+    let amplitude_threshold_counterterms = weights
         .iter()
-        .filter_map(|(key, value)| match key {
-            gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm {
-                subset_index,
-            } => Some((*subset_index, to_ff64(value))),
+        .filter_map(|(key, value)| {
+            match key {
+            gammalooprs::observables::events::AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                esurface_id,
+                overlap_group,
+            } => Some(((*esurface_id, *overlap_group), to_ff64(value))),
             _ => None,
+        }
         })
-        .sorted_by_key(|(subset_index, _)| *subset_index)
+        .sorted_by_key(|((esurface_id, overlap_group), _)| (*esurface_id, *overlap_group))
         .collect_vec();
     assert!(
-        !threshold_counterterms.is_empty(),
+        !amplitude_threshold_counterterms.is_empty(),
         "physical gg->hhh amplitude events should expose threshold-counterterm entries",
     );
-    for (expected_index, (subset_index, _)) in threshold_counterterms.iter().enumerate() {
-        assert_eq!(*subset_index, expected_index);
-    }
+    let threshold_counterterm_labels = amplitude_threshold_counterterms
+        .iter()
+        .map(|((esurface_id, overlap_group), _)| (*esurface_id, *overlap_group))
+        .collect_vec();
+    assert_eq!(
+        threshold_counterterm_labels.len(),
+        threshold_counterterm_labels
+            .iter()
+            .copied()
+            .unique()
+            .count(),
+        "amplitude threshold-counterterm weights should have unique (raised esurface id, overlap group) labels",
+    );
 
     let zero = Complex::new(0.0, 0.0);
-    let threshold_sum = threshold_counterterms
+    let threshold_sum = amplitude_threshold_counterterms
         .iter()
         .fold(zero, |acc, (_, value)| acc + *value);
     let reconstructed_event_weight = (original + threshold_sum) * full_factor;
     let event_weight = to_ff64(&event.weight);
     assert!(
         complex_distance(event_weight, reconstructed_event_weight) < 1.0e-11,
-        "event weight should match Original + sum(ThresholdCounterterm) times FullMultiplicativeFactor: {} vs {}",
+        "event weight should match Original + sum(AmplitudeThresholdCounterterm) times FullMultiplicativeFactor: {} vs {}",
         event_weight,
         reconstructed_event_weight,
     );
