@@ -23,11 +23,12 @@
   ),
 )
 
+#let path = kurvst.cubic-path(..segment)
 #let paths = (
-  kurvst.pattern-segment(segment, pattern: kurvst.wave(), amplitude: 0.14, wavelength: 0.7),
-  kurvst.pattern-segment(segment, pattern: kurvst.zigzag(), amplitude: 0.14, wavelength: 0.7),
-  kurvst.pattern-segment(segment, pattern: kurvst.coil(longitudinal-scale: 1.6), amplitude: 0.14, wavelength: 0.7),
-  kurvst.pattern-segment(segment, pattern: custom, amplitude: 0.14, wavelength: 0.7),
+  kurvst.pattern-path(path, pattern: kurvst.wave(), amplitude: 0.14, wavelength: 0.7),
+  kurvst.pattern-path(path, pattern: kurvst.zigzag(), amplitude: 0.14, wavelength: 0.7),
+  kurvst.pattern-path(path, pattern: kurvst.coil(longitudinal-scale: 1.6), amplitude: 0.14, wavelength: 0.7),
+  kurvst.pattern-path(path, pattern: custom, amplitude: 0.14, wavelength: 0.7),
 )
 
 #cetz.canvas({
