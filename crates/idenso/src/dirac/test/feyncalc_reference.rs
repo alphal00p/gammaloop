@@ -91,7 +91,6 @@ fn dirac_simplify_id4_slash_sandwich() {
 }
 
 #[test]
-#[ignore = "requires gamma5/projector ordering in chain simplification"]
 fn dirac_simplify_id5_gamma5_anticommutes_left() {
     let r = TestReps::new();
     let expr = chain!(

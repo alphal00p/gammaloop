@@ -135,7 +135,12 @@ macro_rules! gamma {
     };
 }
 
-/// Builds a gamma-zero tensor between two spinor endpoints.
+/// Builds a gamma-zero factor or tensor.
+///
+/// With no arguments, this builds a chain factor using the placeholder indices
+/// `in` and `out`; use this form only as a factor inside `chain!` or `trace!`.
+/// With two arguments, this builds the ordinary gamma-zero tensor between
+/// explicit spinor endpoints.
 ///
 /// Endpoints can be typed slots, atoms, atom views, default four-dimensional
 /// bispinor identifiers/literals, pattern variables such as `RS.i__`, or
@@ -146,12 +151,19 @@ macro_rules! gamma {
 /// ```ignore
 /// use idenso::gamma0;
 ///
+/// let factor = gamma0!();
 /// let default_tensor = gamma0!(i, j);
 /// let pattern_tensor = gamma0!(RS.i__, RS.j__);
 /// let dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);
 /// ```
 #[macro_export]
 macro_rules! gamma0 {
+    () => {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma0)
+            .add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in))
+            .add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out))
+            .finish()
+    };
     ($base:ident . $i:ident, $($rest:tt)*) => {
         $crate::gamma0!(@tensor spenso::structure::representation::RepName::to_symbolic(
             &$crate::representations::Bispinor {},
