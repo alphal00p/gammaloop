@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use eyre::eyre;
 use linnet::half_edge::{
     involution::HedgePair,
@@ -12,6 +14,7 @@ use symbolica::{
 use tracing::instrument;
 
 use crate::{
+    cff::CutCFFIndex,
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
     settings::global::OrientationPattern,
@@ -35,7 +38,7 @@ impl Local3DApproximation {
         to_contract: &SuBitGraph,
         cuts: &CutSet,
         orientation_pattern: &OrientationPattern,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let cff = graph
             .cff(
                 &to_contract
@@ -50,14 +53,17 @@ impl Local3DApproximation {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
-        Ok(cff.iter().map(|a| a * &fourddenoms).collect())
+        Ok(cff
+            .iter()
+            .map(|(index, a)| (*index, a * &fourddenoms))
+            .collect())
     }
 
     pub(crate) fn root(
         graph: &mut Graph,
         cuts: &CutSet,
         orientation_pattern: &OrientationPattern,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         Self::dependent(
             graph,
             &graph.empty_subgraph::<SuBitGraph>(),

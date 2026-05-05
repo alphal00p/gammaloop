@@ -1001,7 +1001,16 @@ impl AmplitudeGraph {
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .collect();
 
-        self.derived_data.all_mighty_integrand = exprs[0].integrands[0].clone();
+        self.derived_data.all_mighty_integrand = exprs
+            .into_iter()
+            .next()
+            .unwrap()
+            .integrands
+            .into_iter()
+            .next()
+            .unwrap()
+            .1; // should be exactly one expression
+
         Ok(())
     }
 
@@ -1120,8 +1129,8 @@ impl AmplitudeGraph {
 
             let cutset = CutSet {
                 residue_selector: ResidueSelector {
-                    lu_cut: Some(raised_data.clone()),
-                    left_th_cut: None,
+                    lu_cut: None,
+                    left_th_cut: Some(raised_data.clone()),
                     right_th_cut: None,
                 },
                 union: cut_union,
@@ -1156,7 +1165,7 @@ impl AmplitudeGraph {
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            for integrand in &counterterm_atom.parametric {
+            for (_index, integrand) in &counterterm_atom.parametric {
                 debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
             }
 

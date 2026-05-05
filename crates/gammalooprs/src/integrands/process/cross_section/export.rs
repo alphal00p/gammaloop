@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{collections::BTreeMap, fs, path::Path};
 
 use color_eyre::Result;
 use eyre::{Context, eyre};
@@ -9,11 +9,13 @@ use super::{
     CrossSectionIntegrand,
     load::{
         STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive, StandaloneCrossSectionArchive,
-        StandaloneCrossSectionGraphTermArchive, StandaloneEvaluatorStackArchive,
-        StandaloneGenericEvaluatorArchive, StandaloneIteratedCollectionArchive,
+        StandaloneCrossSectionGraphTermArchive, StandaloneCutCFFIndex,
+        StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
+        StandaloneIndexedEvaluatorStackArchive, StandaloneIteratedCollectionArchive,
     },
 };
 use crate::{
+    cff::CutCFFIndex,
     integrands::process::{GenericEvaluator, amplitude::export::ExportAtomTo},
     processes::{
         IteratedCtCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
@@ -93,6 +95,28 @@ fn export_evaluator_stack<T: ExportAtomTo>(
     })
 }
 
+fn export_cut_cff_index(index: &CutCFFIndex) -> StandaloneCutCFFIndex {
+    StandaloneCutCFFIndex {
+        left_threshold_order: index.left_threshold_order,
+        right_threshold_order: index.right_threshold_order,
+        lu_cut_order: index.lu_cut_order,
+    }
+}
+
+fn export_evaluator_map<T: ExportAtomTo>(
+    stacks: &BTreeMap<CutCFFIndex, crate::integrands::process::evaluators::EvaluatorStack>,
+) -> Result<Vec<StandaloneIndexedEvaluatorStackArchive<T>>> {
+    stacks
+        .iter()
+        .map(|(cut_cff_index, stack)| {
+            Ok(StandaloneIndexedEvaluatorStackArchive {
+                cut_cff_index: export_cut_cff_index(cut_cff_index),
+                evaluator_stack: export_evaluator_stack(stack)?,
+            })
+        })
+        .collect()
+}
+
 fn export_iterated_collection<U, V, F>(
     collection: &IteratedCtCollection<U>,
     export_item: F,
@@ -116,29 +140,17 @@ fn export_counterterm<T: ExportAtomTo>(
         left_thresholds_evaluator: evaluators
             .left_thresholds_evaluator
             .iter()
-            .map(|stacks| {
-                stacks
-                    .iter()
-                    .map(export_evaluator_stack)
-                    .collect::<Result<Vec<_>>>()
-            })
+            .map(export_evaluator_map)
             .collect::<Result<Vec<_>>>()?,
         right_thresholds_evaluator: evaluators
             .right_thresholds_evaluator
             .iter()
-            .map(|stacks| {
-                stacks
-                    .iter()
-                    .map(export_evaluator_stack)
-                    .collect::<Result<Vec<_>>>()
-            })
+            .map(export_evaluator_map)
             .collect::<Result<Vec<_>>>()?,
-        iterated_evaluator: export_iterated_collection(&evaluators.iterated_evaluator, |stacks| {
-            stacks
-                .iter()
-                .map(export_evaluator_stack)
-                .collect::<Result<Vec<_>>>()
-        })?,
+        iterated_evaluator: export_iterated_collection(
+            &evaluators.iterated_evaluator,
+            export_evaluator_map,
+        )?,
         pass_two_evaluator: evaluators
             .residue_from_e_surface_evaluators
             .iter()
@@ -259,12 +271,7 @@ impl CrossSectionIntegrand {
                 let raised_cut_integrands = term
                     .integrand
                     .iter()
-                    .map(|integrands| {
-                        integrands
-                            .iter()
-                            .map(export_evaluator_stack)
-                            .collect::<Result<Vec<_>>>()
-                    })
+                    .map(export_evaluator_map)
                     .collect::<Result<Vec<_>>>()?;
 
                 let counterterms = term

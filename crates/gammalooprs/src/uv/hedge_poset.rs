@@ -25,6 +25,7 @@ use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
+    cff::CutCFFIndex,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
@@ -490,7 +491,7 @@ impl OperationNode {
         compute_store: &mut ComputeStore,
         wood: &Wood,
         settings: &UVgenerationSettings,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let mut acc = None;
         let _local = Local3DApproximation {};
         let _uvctx = UVCtx { graph, settings };
@@ -527,7 +528,7 @@ impl OperationNode {
             // acc = mul
         }
 
-        Ok(vec![])
+        Ok(BTreeMap::new())
         // Ok(acc)
     }
 }
@@ -538,7 +539,7 @@ pub enum Integrand {
 }
 pub enum Integrands {
     NotComputed,
-    Multiple(Vec<Atom>),
+    Multiple(BTreeMap<CutCFFIndex, Atom>),
 }
 
 pub struct ComputeNode {

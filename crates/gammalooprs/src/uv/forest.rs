@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+
 use crate::{
-    GammaLoopContext, debug_tags,
+    GammaLoopContext,
+    cff::CutCFFIndex,
+    debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
     settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
@@ -36,21 +40,29 @@ pub struct CutForests {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParametricIntegrands {
-    pub integrands: Vec<Atom>,
+    pub integrands: BTreeMap<CutCFFIndex, Atom>,
     pub cuts: CutSet,
 }
 
 impl ParametricIntegrands {
-    pub fn map<F: FnMut(Atom) -> Atom>(self, map: F) -> Self {
+    pub fn map<F: FnMut(Atom) -> Atom>(self, mut map: F) -> Self {
         Self {
-            integrands: self.integrands.into_iter().map(map).collect(),
+            integrands: self
+                .integrands
+                .into_iter()
+                .map(|(index, atom)| (index, map(atom)))
+                .collect(),
             cuts: self.cuts,
         }
     }
 
     pub fn zero_like(&self) -> Self {
         Self {
-            integrands: vec![Atom::Zero; self.integrands.len()],
+            integrands: self
+                .integrands
+                .keys()
+                .map(|index| (*index, Atom::Zero))
+                .collect(),
             cuts: self.cuts.clone(),
         }
     }
@@ -102,12 +114,12 @@ impl CutForests {
                 n_terms =%forest.n_terms(),
                 graph = %graph.dot(&cuts.union),
                 name = %graph.name,
-                integrands=%integrands.iter().enumerate().map(|(i, s)| format!("{}: {}", i, s.log_print(Some(100)))).join("\n"),
-                file.integrands = %integrands.iter().map(|s| s.to_canonical_string()).join(";"),
+                integrands=%integrands.iter().enumerate().map(|(i, s)| format!("{}: {}", i, s.1.log_print(Some(100)))).join("\n"),
+                file.integrands = %integrands.iter().map(|s| s.1.to_canonical_string()).join(";"),
                 "Orientation Parametric integrand {i}",
             );
             if !settings.keep_sigma {
-                integrands.iter_mut().for_each(|s| {
+                integrands.iter_mut().for_each(|(index, s)| {
                     *s = s
                         .replace(function!(GS.if_sigma, W_.a___))
                         .with(Atom::num(1))
@@ -221,7 +233,7 @@ impl Forest {
                 graph.name
             ))?;
 
-            let mut atom = atom[0].clone();
+            let mut atom = atom[&CutCFFIndex::new_all_none()].clone();
 
             atom = sign * atom;
 
@@ -297,7 +309,7 @@ impl Forest {
         &self,
         graph: &Graph,
         add_sigma: bool,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
@@ -317,12 +329,12 @@ impl Forest {
 
             if sum.is_none() {
                 first = true;
-                sum = Some(vec![]);
+                sum = Some(BTreeMap::new());
             }
 
             let sum = sum.as_mut().unwrap();
 
-            for (i, integrand) in n
+            for (i, (cut_index, integrand)) in n
                 .data
                 .final_integrand
                 .as_ref()
@@ -353,9 +365,9 @@ impl Forest {
                     integrand.clone()
                 };
                 if first {
-                    sum.push(a);
+                    sum.insert(*cut_index, a);
                 } else {
-                    sum[i] += a;
+                    *sum.get_mut(cut_index).unwrap() += a;
                 }
             }
         }
@@ -372,12 +384,12 @@ impl Forest {
                 continue;
             }
 
-            for s in &mut sum {
+            for (index, s) in &mut sum {
                 *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
             }
         }
 
-        for s in &mut sum {
+        for (index, s) in &mut sum {
             *s = s.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_);
             // .collect_factors(); Really bad ! Turns
         }
@@ -409,20 +421,45 @@ impl Forest {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::ParametricIntegrands;
-    use crate::graph::cuts::CutSet;
+    use crate::{cff::CutCFFIndex, graph::cuts::CutSet};
     use symbolica::{atom::Atom, symbol};
 
     #[test]
     fn zero_like_preserves_shape_and_cuts() {
         let integrands = ParametricIntegrands {
-            integrands: vec![Atom::var(symbol!("x")), Atom::num(7)],
+            integrands: BTreeMap::from([
+                (CutCFFIndex::new_all_none(), Atom::var(symbol!("x"))),
+                (
+                    CutCFFIndex {
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: None,
+                    },
+                    Atom::num(7),
+                ),
+            ]),
             cuts: CutSet::empty(3),
         };
 
         let zeroed = integrands.zero_like();
 
-        assert_eq!(zeroed.integrands, vec![Atom::Zero, Atom::Zero]);
+        assert_eq!(
+            zeroed.integrands,
+            BTreeMap::from([
+                (CutCFFIndex::new_all_none(), Atom::Zero),
+                (
+                    CutCFFIndex {
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: None,
+                    },
+                    Atom::Zero,
+                ),
+            ]),
+        );
         assert_eq!(zeroed.cuts, CutSet::empty(3));
     }
 }

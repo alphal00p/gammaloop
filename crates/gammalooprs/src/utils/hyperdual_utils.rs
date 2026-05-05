@@ -1,7 +1,10 @@
 use std::fmt::{Display, LowerExp};
 use std::ops::AddAssign;
 
+use crate::cff::CutCFFIndex;
 use crate::utils::{F, FloatLike, PrecisionUpgradable};
+use itertools::iproduct;
+use rayon::result;
 use spenso::algebra::{algebraic_traits::RefZero, complex::Complex};
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 
@@ -21,8 +24,62 @@ pub(crate) fn new_from_values<T: Clone>(shape: &HyperDual<T>, values: &[T]) -> H
     new
 }
 
-pub(crate) fn shape_for_t_derivatives(num_derivatives: usize) -> Vec<Vec<usize>> {
+pub(crate) fn simple_n_deriv_shape(num_derivatives: usize) -> Vec<Vec<usize>> {
     (0..=num_derivatives).map(|order| vec![order]).collect()
+}
+
+pub(crate) fn shape_from_cut_cff_index(cut_cff_index: &CutCFFIndex) -> Option<Vec<Vec<usize>>> {
+    let max_derivative_shape = {
+        let mut max_derivative_shape = Vec::new();
+
+        if let Some(lu_cut_order) = cut_cff_index.lu_cut_order {
+            if lu_cut_order > 1 {
+                max_derivative_shape.push(lu_cut_order - 1);
+            }
+        }
+
+        if let Some(left_th_order) = cut_cff_index.left_threshold_order {
+            if left_th_order > 1 {
+                max_derivative_shape.push(left_th_order - 1);
+            }
+        }
+
+        if let Some(right_th_order) = cut_cff_index.right_threshold_order {
+            if right_th_order > 1 {
+                max_derivative_shape.push(right_th_order - 1);
+            }
+        };
+
+        max_derivative_shape
+    };
+
+    if max_derivative_shape.is_empty() {
+        None
+    } else if max_derivative_shape.len() == 1 {
+        Some(
+            (0..=max_derivative_shape[0])
+                .map(|order| vec![order])
+                .collect(),
+        )
+    } else if max_derivative_shape.len() == 2 {
+        Some(
+            iproduct!(0..=max_derivative_shape[0], 0..=max_derivative_shape[1])
+                .map(|(order1, order2)| vec![order1, order2])
+                .collect(),
+        )
+    } else if max_derivative_shape.len() == 3 {
+        Some(
+            iproduct!(
+                0..=max_derivative_shape[0],
+                0..=max_derivative_shape[1],
+                0..=max_derivative_shape[2]
+            )
+            .map(|(order1, order2, order3)| vec![order1, order2, order3])
+            .collect(),
+        )
+    } else {
+        unreachable!("shape_from_cut_cff_index only supports up to 3 derivative orders")
+    }
 }
 
 impl<T> PrecisionUpgradable for HyperDual<T>

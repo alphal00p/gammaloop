@@ -1,4 +1,4 @@
-use std::{path::Path, slice};
+use std::{collections::BTreeMap, path::Path, slice};
 
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
@@ -12,6 +12,7 @@ use typed_index_collections::{TiVec, ti_vec};
 use crate::{
     GammaLoopContext,
     cff::{
+        CutCFFIndex,
         esurface::{
             Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
             GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId,
@@ -44,7 +45,7 @@ use crate::{
         F, FloatLike,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            shape_for_t_derivatives,
+            shape_from_cut_cff_index, simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
@@ -95,7 +96,7 @@ pub struct AmplitudeCountertermData {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermAtom {
-    pub parametric: Vec<Atom>,
+    pub parametric: BTreeMap<CutCFFIndex, Atom>,
 }
 
 impl AmplitudeCountertermAtom {
@@ -105,7 +106,11 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric: vec![Atom::Zero; self.parametric.len()],
+            parametric: self
+                .parametric
+                .iter()
+                .map(|(k, _)| (*k, Atom::Zero))
+                .collect(),
         }
     }
 
@@ -119,11 +124,12 @@ impl AmplitudeCountertermAtom {
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
-        let mut evaluator_stacks = Vec::with_capacity(self.parametric.len());
+        let mut evaluator_stacks = BTreeMap::new();
         let mut timings = EvaluatorBuildTimings::default();
 
-        for (order_index, integrand) in self.parametric.iter().enumerate() {
-            let dual_shape = (order_index > 0).then(|| shape_for_t_derivatives(order_index));
+        for (index, integrand) in self.parametric.iter() {
+            let dual_shape = shape_from_cut_cff_index(index);
+
             let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
                 slice::from_ref(integrand),
                 param_builder,
@@ -133,7 +139,7 @@ impl AmplitudeCountertermAtom {
             )
             .unwrap();
             timings += evaluator_timings;
-            evaluator_stacks.push(evaluator_stack);
+            evaluator_stacks.insert(*index, evaluator_stack);
         }
 
         (AmplitudeCountertermEvaluator { evaluator_stacks }, timings)
@@ -141,7 +147,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn new() -> Self {
         Self {
-            parametric: Vec::new(),
+            parametric: BTreeMap::new(),
         }
     }
 }
@@ -149,13 +155,13 @@ impl AmplitudeCountertermAtom {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
-    pub evaluator_stacks: Vec<EvaluatorStack>,
+    pub evaluator_stacks: BTreeMap<CutCFFIndex, EvaluatorStack>,
 }
 
 impl AmplitudeCountertermEvaluator {
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         self.evaluator_stacks
-            .iter()
+            .values()
             .map(EvaluatorStack::generic_evaluator_count)
             .sum()
     }
@@ -230,7 +236,8 @@ impl AmplitudeCountertermData {
         frozen_mode: &crate::settings::global::FrozenCompilationMode,
     ) -> Result<()> {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
-            for (order_index, evaluator_stack) in e.evaluator_stacks.iter_mut().enumerate() {
+            for (cff_index, evaluator_stack) in e.evaluator_stacks.iter_mut() {
+                let order_index = cff_index.left_threshold_order.unwrap() - 1;
                 evaluator_stack.compile(
                     format!("esurface_{}_order_{}", i.0, order_index + 1),
                     path.as_ref(),
@@ -284,7 +291,7 @@ impl AmplitudeCountertermData {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for evaluator in self.evaluators.iter_mut() {
-            for evaluator_stack in &mut evaluator.evaluator_stacks {
+            for (_cut_index, evaluator_stack) in &mut evaluator.evaluator_stacks {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
@@ -710,7 +717,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let mut total_ct = Complex::new_re(self.rstar_sample.zero());
 
-        for (order_index, evaluator_stack) in ct_evaluator.evaluator_stacks.iter_mut().enumerate() {
+        for (cut_cff_index, evaluator_stack) in ct_evaluator.evaluator_stacks.iter_mut() {
+            let order_index = cut_cff_index.left_threshold_order.unwrap() - 1;
             let (sample_for_order, threshold_params) = if order_index == 0 {
                 debug!(
                     "rescaled loop momenta at rstar:\n{}",
@@ -730,7 +738,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     },
                 )
             } else {
-                let dual_shape = HyperDual::<F<T>>::new(shape_for_t_derivatives(order_index));
+                let dual_shape = HyperDual::<F<T>>::new(simple_n_deriv_shape(order_index));
                 let dual_radius_star = dual_shape.variable(0, radius_star.clone());
 
                 let dualized_center = self
@@ -783,7 +791,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 DualOrNot::NonDual(self.rstar_solution.solution.derivative_at_solution.clone())
             } else {
                 let dual_shape_for_esurface =
-                    HyperDual::<F<T>>::new(shape_for_t_derivatives(order_index + 1));
+                    HyperDual::<F<T>>::new(simple_n_deriv_shape(order_index + 1));
                 let dual_radius_star_for_esurface =
                     dual_shape_for_esurface.variable(0, radius_star.clone());
                 let dualized_center_for_esurface = self
@@ -1028,14 +1036,21 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
-    use crate::{cff::esurface::RaisedEsurfaceId, graph::GraphGroupPosition};
+    use crate::{
+        cff::{CutCFFIndex, esurface::RaisedEsurfaceId},
+        graph::GraphGroupPosition,
+    };
     use symbolica::{atom::Atom, symbol};
     use typed_index_collections::ti_vec;
 
     #[test]
     fn empty_amplitude_counterterm_atom_is_not_generated() {
-        let atom = AmplitudeCountertermAtom { parametric: vec![] };
+        let atom = AmplitudeCountertermAtom {
+            parametric: BTreeMap::new(),
+        };
 
         assert!(!atom.is_generated());
     }
@@ -1043,7 +1058,7 @@ mod tests {
     #[test]
     fn non_empty_amplitude_counterterm_atom_is_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric: vec![Atom::var(symbol!("x"))],
+            parametric: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::var(symbol!("x")))]),
         };
 
         assert!(atom.is_generated());
@@ -1052,12 +1067,15 @@ mod tests {
     #[test]
     fn zero_like_amplitude_counterterm_atom_is_zero() {
         let atom = AmplitudeCountertermAtom {
-            parametric: vec![Atom::var(symbol!("x"))],
+            parametric: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::var(symbol!("x")))]),
         };
 
         let zeroed = atom.zero_like();
 
-        assert_eq!(zeroed.parametric, vec![Atom::Zero]);
+        assert_eq!(
+            zeroed.parametric,
+            BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)])
+        );
     }
 
     #[test]
