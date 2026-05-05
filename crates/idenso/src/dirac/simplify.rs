@@ -7,7 +7,7 @@ use spenso::{
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
     id::Context,
     utils::Settable,
@@ -32,6 +32,18 @@ static MINKOWSKI_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
     f.get_symbol()
 });
 
+static BISPINOR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
+    let bispinor = Bispinor {}.to_symbolic(std::iter::empty::<Atom>());
+    let AtomView::Fun(f) = bispinor.as_view() else {
+        unreachable!("Bispinor representations are symbolic functions")
+    };
+
+    f.get_symbol()
+});
+
+static EPSILON_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("epsilon"));
+static EPSILON_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("sigma"));
+
 /// Controls how open gamma chains are reordered during simplification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GammaChainOrdering {
@@ -49,6 +61,8 @@ pub struct GammaSimplifySettings {
     pub chain_ordering: GammaChainOrdering,
     /// Whether closed chains should be evaluated as traces.
     pub evaluate_traces: bool,
+    /// Whether three 4D gammas may be expanded into the gamma5-epsilon basis.
+    pub expand_three_gamma_epsilon: bool,
 }
 
 impl Default for GammaSimplifySettings {
@@ -56,6 +70,7 @@ impl Default for GammaSimplifySettings {
         Self {
             chain_ordering: GammaChainOrdering::RepeatedPairs,
             evaluate_traces: true,
+            expand_three_gamma_epsilon: false,
         }
     }
 }
@@ -79,6 +94,13 @@ impl GammaSimplifySettings {
         self.evaluate_traces = false;
         self
     }
+
+    /// Enables the four-dimensional identity that rewrites three gammas into
+    /// metric terms plus a gamma5-epsilon term.
+    pub fn with_gamma5_epsilon_expansion(mut self) -> Self {
+        self.expand_three_gamma_epsilon = true;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +112,8 @@ enum DiracRuleDimension {
 const ADJACENT_GAMMA_CONTRACTION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
 const GAMMA_ANTICOMMUTATION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
 const FOUR_DIM_CHISHOLM: DiracRuleDimension = DiracRuleDimension::FourDimensional;
+const FOUR_DIM_GAMMA5_ANTICOMMUTATION: DiracRuleDimension = DiracRuleDimension::FourDimensional;
+const FOUR_DIM_THREE_GAMMA_EPSILON: DiracRuleDimension = DiracRuleDimension::FourDimensional;
 const TRACE_GAMMA_RECURSION: DiracRuleDimension = DiracRuleDimension::AnyDimension;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,18 +208,34 @@ pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplify
         .simplify_metrics();
 
     loop {
-        let next = match (settings.chain_ordering, settings.evaluate_traces) {
-            (GammaChainOrdering::RepeatedPairs, true) => {
-                expr.replace_map(&dirac_chain_rewrite::<false, true>)
+        let next = match (
+            settings.chain_ordering,
+            settings.evaluate_traces,
+            settings.expand_three_gamma_epsilon,
+        ) {
+            (GammaChainOrdering::RepeatedPairs, true, false) => {
+                expr.replace_map(&dirac_chain_rewrite::<false, true, false>)
             }
-            (GammaChainOrdering::RepeatedPairs, false) => {
-                expr.replace_map(&dirac_chain_rewrite::<false, false>)
+            (GammaChainOrdering::RepeatedPairs, true, true) => {
+                expr.replace_map(&dirac_chain_rewrite::<false, true, true>)
             }
-            (GammaChainOrdering::Canonical, true) => {
-                expr.replace_map(&dirac_chain_rewrite::<true, true>)
+            (GammaChainOrdering::RepeatedPairs, false, false) => {
+                expr.replace_map(&dirac_chain_rewrite::<false, false, false>)
             }
-            (GammaChainOrdering::Canonical, false) => {
-                expr.replace_map(&dirac_chain_rewrite::<true, false>)
+            (GammaChainOrdering::RepeatedPairs, false, true) => {
+                expr.replace_map(&dirac_chain_rewrite::<false, false, true>)
+            }
+            (GammaChainOrdering::Canonical, true, false) => {
+                expr.replace_map(&dirac_chain_rewrite::<true, true, false>)
+            }
+            (GammaChainOrdering::Canonical, true, true) => {
+                expr.replace_map(&dirac_chain_rewrite::<true, true, true>)
+            }
+            (GammaChainOrdering::Canonical, false, false) => {
+                expr.replace_map(&dirac_chain_rewrite::<true, false, false>)
+            }
+            (GammaChainOrdering::Canonical, false, true) => {
+                expr.replace_map(&dirac_chain_rewrite::<true, false, true>)
             }
         }
         .expand()
@@ -213,7 +253,11 @@ pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplify
 
 // `replace_map` needs a function item with sufficiently general lifetimes.
 // Const generics keep the settings static without four handwritten wrappers.
-fn dirac_chain_rewrite<const CANONICAL: bool, const EVALUATE_TRACES: bool>(
+fn dirac_chain_rewrite<
+    const CANONICAL: bool,
+    const EVALUATE_TRACES: bool,
+    const EXPAND_EPSILON: bool,
+>(
     arg: AtomView,
     _context: &Context,
     out: &mut Settable<'_, Atom>,
@@ -223,7 +267,9 @@ fn dirac_chain_rewrite<const CANONICAL: bool, const EVALUATE_TRACES: bool>(
     };
 
     if f.get_symbol() == T.chain {
-        if let Some(rewritten) = simplify_chain_node(arg, chain_ordering::<CANONICAL>()) {
+        if let Some(rewritten) =
+            simplify_chain_node(arg, chain_ordering::<CANONICAL>(), EXPAND_EPSILON)
+        {
             **out = rewritten;
         }
     } else if EVALUATE_TRACES
@@ -242,7 +288,11 @@ fn chain_ordering<const CANONICAL: bool>() -> GammaChainOrdering {
     }
 }
 
-fn simplify_chain_node(chain: AtomView, chain_ordering: GammaChainOrdering) -> Option<Atom> {
+fn simplify_chain_node(
+    chain: AtomView,
+    chain_ordering: GammaChainOrdering,
+    expand_epsilon: bool,
+) -> Option<Atom> {
     let AtomView::Fun(f) = chain else {
         return None;
     };
@@ -262,7 +312,17 @@ fn simplify_chain_node(chain: AtomView, chain_ordering: GammaChainOrdering) -> O
         .collect::<Vec<_>>();
 
     contract_adjacent_gamma_pair(start, end, factors, &parsed_factors)
+        .or_else(|| contract_adjacent_special_dirac_pair(start, end, factors, &parsed_factors))
         .or_else(|| four_dim_chisholm_contraction(start, end, factors, &parsed_factors))
+        .or_else(|| {
+            expand_epsilon
+                .then(|| {
+                    four_dim_three_gamma_epsilon_expansion(start, end, factors, &parsed_factors)
+                })
+                .flatten()
+        })
+        .or_else(|| move_gamma5_right_of_gamma(start, end, factors, &parsed_factors))
+        .or_else(|| move_projector_right_of_gamma(start, end, factors, &parsed_factors))
         .or_else(|| match chain_ordering {
             GammaChainOrdering::RepeatedPairs => {
                 bubble_repeated_gamma_towards_contraction(start, end, factors, &parsed_factors)
@@ -297,6 +357,37 @@ fn contract_adjacent_gamma_pair(
         rest.extend_from_slice(&factors[i + 2..]);
 
         return Some(function!(ETS.metric, mu, nu) * chain!(start, end; rest));
+    }
+
+    None
+}
+
+fn contract_adjacent_special_dirac_pair(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_spin_endpoints(start, end) {
+        return None;
+    }
+
+    for i in 0..factors.len().saturating_sub(1) {
+        let replacement = match (&parsed_factors[i], &parsed_factors[i + 1]) {
+            (DiracFactor::Gamma5, DiracFactor::Gamma5)
+            | (DiracFactor::Gamma0, DiracFactor::Gamma0) => Vec::new(),
+            (DiracFactor::ProjectorPlus, DiracFactor::ProjectorPlus) => {
+                vec![endpoint_factor(AGS.projp)]
+            }
+            (DiracFactor::ProjectorMinus, DiracFactor::ProjectorMinus) => {
+                vec![endpoint_factor(AGS.projm)]
+            }
+            (DiracFactor::ProjectorPlus, DiracFactor::ProjectorMinus)
+            | (DiracFactor::ProjectorMinus, DiracFactor::ProjectorPlus) => return Some(Atom::Zero),
+            _ => continue,
+        };
+
+        return Some(chain!(start, end; chain_factors(factors, i, i + 1, replacement)));
     }
 
     None
@@ -374,6 +465,69 @@ fn four_dim_chisholm_contraction(
     }
 }
 
+fn four_dim_three_gamma_epsilon_expansion(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_spin_endpoints(start, end) {
+        return None;
+    }
+
+    for i in 0..factors.len().saturating_sub(2) {
+        let Some(lorentz) =
+            gamma_lorentz_sequence_for(FOUR_DIM_THREE_GAMMA_EPSILON, &parsed_factors[i..i + 3])
+        else {
+            continue;
+        };
+        if !lorentz.iter().all(is_minkowski_slot) {
+            continue;
+        }
+
+        let [mu, nu, rho] = lorentz.as_slice() else {
+            unreachable!("the window always contains three gamma factors")
+        };
+        let sigma = epsilon_dummy_minkowski_slot();
+
+        // The chain normal form keeps gamma5 to the right of ordinary gammas.
+        let epsilon_term = Atom::num(-1)
+            * chain!(start, end; chain_factors(
+                factors,
+                i,
+                i + 2,
+                [gamma_factor(sigma.clone()), gamma5_factor()],
+            ))
+            * epsilon4(mu, nu, rho, &sigma);
+
+        let metric_mu_nu = generated_metric_chain_term(
+            start,
+            end,
+            mu,
+            nu,
+            chain_factors(factors, i, i + 2, [factors[i + 2].clone()]),
+        );
+        let metric_mu_rho = generated_metric_chain_term(
+            start,
+            end,
+            mu,
+            rho,
+            chain_factors(factors, i, i + 2, [factors[i + 1].clone()]),
+        );
+        let metric_nu_rho = generated_metric_chain_term(
+            start,
+            end,
+            nu,
+            rho,
+            chain_factors(factors, i, i + 2, [factors[i].clone()]),
+        );
+
+        return Some(epsilon_term + metric_mu_nu - metric_mu_rho + metric_nu_rho);
+    }
+
+    None
+}
+
 fn chain_factors(
     factors: &[Atom],
     left: usize,
@@ -405,6 +559,67 @@ fn canonicalize_gamma_chain_order(
         if mu > nu {
             return anticommute_adjacent_gamma_pair(start, end, factors, parsed_factors, i);
         }
+    }
+
+    None
+}
+
+fn move_gamma5_right_of_gamma(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_spin_endpoints(start, end) {
+        return None;
+    }
+
+    for i in 0..factors.len().saturating_sub(1) {
+        let DiracFactor::Gamma5 = parsed_factors[i] else {
+            continue;
+        };
+        if parsed_factors[i + 1]
+            .gamma_lorentz(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
+            .is_none()
+        {
+            continue;
+        }
+
+        let mut swapped = factors.to_vec();
+        swapped.swap(i, i + 1);
+        return Some(Atom::num(-1) * chain!(start, end; swapped));
+    }
+
+    None
+}
+
+fn move_projector_right_of_gamma(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    parsed_factors: &[DiracFactor],
+) -> Option<Atom> {
+    if !has_four_dimensional_spin_endpoints(start, end) {
+        return None;
+    }
+
+    for i in 0..factors.len().saturating_sub(1) {
+        let opposite_projector = match parsed_factors[i] {
+            DiracFactor::ProjectorPlus => endpoint_factor(AGS.projm),
+            DiracFactor::ProjectorMinus => endpoint_factor(AGS.projp),
+            _ => continue,
+        };
+        if parsed_factors[i + 1]
+            .gamma_lorentz(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
+            .is_none()
+        {
+            continue;
+        }
+
+        let mut moved = factors.to_vec();
+        moved[i] = factors[i + 1].clone();
+        moved[i + 1] = opposite_projector;
+        return Some(chain!(start, end; moved));
     }
 
     None
@@ -605,6 +820,61 @@ fn is_minkowski_slot(atom: &Atom) -> bool {
 
 fn is_four_dimension(dimension: &Atom) -> bool {
     *dimension == Atom::num(4)
+}
+
+fn has_four_dimensional_spin_endpoints(start: &Atom, end: &Atom) -> bool {
+    let Some(start_dimension) = bispinor_dimension(start.as_view()) else {
+        return false;
+    };
+    let Some(end_dimension) = bispinor_dimension(end.as_view()) else {
+        return false;
+    };
+
+    start_dimension == end_dimension && is_four_dimension(&start_dimension)
+}
+
+fn bispinor_dimension(atom: AtomView) -> Option<Atom> {
+    let AtomView::Fun(f) = atom else {
+        return None;
+    };
+
+    if f.get_symbol() != *BISPINOR_SYMBOL || f.get_nargs() == 0 {
+        return None;
+    }
+
+    f.iter().next().map(|dimension| dimension.to_owned())
+}
+
+fn endpoint_factor(symbol: Symbol) -> Atom {
+    FunctionBuilder::new(symbol)
+        .add_arg(Atom::var(T.chain_in))
+        .add_arg(Atom::var(T.chain_out))
+        .finish()
+}
+
+fn gamma5_factor() -> Atom {
+    endpoint_factor(AGS.gamma5)
+}
+
+fn gamma_factor(lorentz: Atom) -> Atom {
+    FunctionBuilder::new(AGS.gamma)
+        .add_arg(Atom::var(T.chain_in))
+        .add_arg(Atom::var(T.chain_out))
+        .add_arg(lorentz)
+        .finish()
+}
+
+fn epsilon_dummy_minkowski_slot() -> Atom {
+    Minkowski {}.to_symbolic([Atom::num(4), Atom::var(*EPSILON_DUMMY_SYMBOL)])
+}
+
+fn epsilon4(mu: &Atom, nu: &Atom, rho: &Atom, sigma: &Atom) -> Atom {
+    FunctionBuilder::new(*EPSILON_SYMBOL)
+        .add_arg(mu.clone())
+        .add_arg(nu.clone())
+        .add_arg(rho.clone())
+        .add_arg(sigma.clone())
+        .finish()
 }
 
 fn has_chain_endpoints(left: AtomView, right: AtomView) -> bool {
