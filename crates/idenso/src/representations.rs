@@ -142,6 +142,7 @@ pub fn initialize() {
     let _ = RS.a_;
     let _ = MS.dummy;
     let _ = AGS.gamma;
+    let _ = *crate::epsilon::EPSILON_SYMBOL;
     let _ = ETS.metric;
     let _ = CS.f;
     let _ = SPENSO_TAG.bracket;
