@@ -1,5 +1,6 @@
 use graph::{NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp};
 use linnet::half_edge::NodeIndex;
+use profile::{Counter, Timer};
 use serde::{Deserialize, Serialize};
 
 use library::{Library, LibraryError};
@@ -149,6 +150,8 @@ impl AddAssign for NetworkState {
 
 pub mod graph;
 pub mod library;
+#[doc(hidden)]
+pub mod profile;
 pub mod set;
 pub mod store;
 
@@ -308,10 +311,13 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Default for Networ
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NMul for Network<S, K, FK, Aind> {
     type Output = Self;
     fn n_mul<I: IntoIterator<Item = Self>>(self, iter: I) -> Self::Output {
+        let _span = profile::span(Timer::NetworkNMul);
+        profile::bump(Counter::NetworkNMul, 1);
         let mut store = self.store;
         let mut state = self.state;
 
         let items = iter.into_iter().map(|mut a| {
+            let _span = profile::span(Timer::NetworkNMulStorePrep);
             a.graph.shift_scalars(store.n_scalars());
             a.graph.shift_tensors(store.n_tensors());
             store.extend(a.store);
@@ -320,9 +326,13 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NMul for Network<S
             a.graph
         });
 
-        let graph = self.graph.n_mul(items);
+        let graph = {
+            let _span = profile::span(Timer::NetworkNMulGraph);
+            self.graph.n_mul(items)
+        };
 
         if state.is_tensor() {
+            let _span = profile::span(Timer::NetworkNMulDangling);
             state = graph.state();
         }
 
@@ -471,11 +481,14 @@ where
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NAdd for Network<S, K, FK, Aind> {
     type Output = Self;
     fn n_add<I: IntoIterator<Item = Self>>(self, iter: I) -> Self::Output {
+        let _span = profile::span(Timer::NetworkNAdd);
+        profile::bump(Counter::NetworkNAdd, 1);
         let mut store = self.store;
 
         let mut state = self.state;
 
         let items = iter.into_iter().map(|mut a| {
+            let _span = profile::span(Timer::NetworkNAddStorePrep);
             a.graph.shift_scalars(store.n_scalars());
             a.graph.shift_tensors(store.n_tensors());
             store.extend(a.store);
@@ -485,7 +498,10 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NAdd for Network<S
         });
 
         Network {
-            graph: self.graph.n_add(items),
+            graph: {
+                let _span = profile::span(Timer::NetworkNAddGraph);
+                self.graph.n_add(items)
+            },
             store,
             state,
         }
@@ -567,6 +583,8 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
     }
 
     pub fn from_scalar(scalar: S::Scalar) -> Self {
+        let _span = profile::span(Timer::FromScalar);
+        profile::bump(Counter::FromScalar, 1);
         let mut store = S::default();
         let id = store.add_scalar(scalar);
         Network {
@@ -589,6 +607,8 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
         S::Tensor: TensorStructure,
         <S::Tensor as TensorStructure>::Slot: IsAbstractSlot<Aind = Aind>,
     {
+        let _span = profile::span(Timer::FromTensor);
+        profile::bump(Counter::FromTensor, 1);
         let mut store = S::default();
 
         let id = store.add_tensor(tensor);
@@ -607,6 +627,8 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
         T: TensorStructure,
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
+        let _span = profile::span(Timer::LibraryTensor);
+        profile::bump(Counter::LibraryTensor, 1);
         let indices = tensor.external_indices_iter().collect();
         let graph = NetworkGraph::tensor(tensor, NetworkLeaf::LibraryKey { key, indices });
         let state = graph.state();
@@ -1140,14 +1162,22 @@ where
         while {
             if executor.execute_self_loop_traces(graph, lib)? {
                 true
-            // find the *one* ready op
-            } else if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
-                // execute + splice
-                let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
-                graph.splice_descendents_of(replacement);
-                true
             } else {
-                false
+                // find the *one* ready op
+                profile::bump(Counter::ExecuteIteration, 1);
+                let ready = {
+                    let _span = profile::span(Timer::ExecuteFindReady);
+                    graph.extract_next_ready_op()
+                };
+                if let Some((extracted_graph, op)) = ready {
+                    profile::bump(Counter::ExecuteFound, 1);
+                    // execute + splice
+                    let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
+                    graph.splice_descendents_of(replacement);
+                    true
+                } else {
+                    false
+                }
             }
         } {}
 
@@ -1243,7 +1273,11 @@ where
         LT: LibraryTensor<WithIndices = Store::Tensor>,
         Store: ExecuteOp<FL, L, K, FK, Aind>,
     {
-        self.merge_ops();
+        {
+            let _span = profile::span(Timer::MergeOps);
+            profile::bump(Counter::MergeOps, 1);
+            self.merge_ops();
+        }
         self.store.execute_self_loop_traces(&mut self.graph, lib)?;
         Strat::execute_all::<C>(&mut self.store, &mut self.graph, lib, fn_lib)?;
         self.state = self.graph.state();
@@ -1359,6 +1393,30 @@ where
         fn_lib: &FL,
         op: NetworkOp<FK>,
     ) -> Result<NetworkGraph<K, FK, Aind>, TensorNetworkError<K, FK>> {
+        let _execute_span = profile::span(Timer::ExecuteOp);
+        let op_timer = match &op {
+            NetworkOp::Neg => {
+                profile::bump(Counter::ExecuteNeg, 1);
+                Timer::ExecuteNeg
+            }
+            NetworkOp::Product => {
+                profile::bump(Counter::ExecuteProduct, 1);
+                Timer::ExecuteProduct
+            }
+            NetworkOp::Sum => {
+                profile::bump(Counter::ExecuteSum, 1);
+                Timer::ExecuteSum
+            }
+            NetworkOp::Function(_) => {
+                profile::bump(Counter::ExecuteFunction, 1);
+                Timer::ExecuteFunction
+            }
+            NetworkOp::Power(_) => {
+                profile::bump(Counter::ExecutePower, 1);
+                Timer::ExecutePower
+            }
+        };
+        let _op_span = profile::span(op_timer);
         graph.sync_order();
         match op {
             NetworkOp::Neg => {

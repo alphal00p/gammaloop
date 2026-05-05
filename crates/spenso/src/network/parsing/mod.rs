@@ -5,6 +5,7 @@ use super::*;
 use crate::network::library::DummyLibrary;
 use crate::network::library::FunctionLibrary;
 use crate::network::library::panicing::ErroringLibrary;
+use crate::network::profile::{self, Counter, Timer};
 use crate::network::tags::SPENSO_TAG;
 
 use crate::shadowing::Concretize;
@@ -374,11 +375,24 @@ where
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        profile::bump(Counter::ParseView, 1);
         match value {
-            AtomView::Mul(m) => Self::try_from_mul(m, state, library, function_library, settings),
-            AtomView::Fun(f) => Self::try_from_fun(f, state, library, function_library, settings),
-            AtomView::Add(a) => Self::try_from_add(a, state, library, function_library, settings),
-            AtomView::Pow(p) => Self::try_from_pow(p, state, library, function_library, settings),
+            AtomView::Mul(m) => {
+                profile::bump(Counter::ParseMul, 1);
+                Self::try_from_mul(m, state, library, function_library, settings)
+            }
+            AtomView::Fun(f) => {
+                profile::bump(Counter::ParseFun, 1);
+                Self::try_from_fun(f, state, library, function_library, settings)
+            }
+            AtomView::Add(a) => {
+                profile::bump(Counter::ParseAdd, 1);
+                Self::try_from_add(a, state, library, function_library, settings)
+            }
+            AtomView::Pow(p) => {
+                profile::bump(Counter::ParsePow, 1);
+                Self::try_from_pow(p, state, library, function_library, settings)
+            }
             a => Ok(Network::from_scalar(a.try_into()?)),
         }
     }
@@ -431,12 +445,25 @@ where
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
-        let structure = match S::structure_from_atom(value, mode) {
-            Ok(structure) => structure,
+        profile::bump(Counter::ParseStructureAttempt, 1);
+        let structure = {
+            let _span = profile::span(Timer::ParseStructure);
+            S::structure_from_atom(value, mode)
+        };
+
+        let structure = match structure {
+            Ok(structure) => {
+                profile::bump(Counter::ParseStructureOk, 1);
+                structure
+            }
             Err(StructureError::EmptyStructure(_)) => {
+                profile::bump(Counter::ParseStructureErr, 1);
                 PermutedStructure::identity(S::scalar_structure())
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                profile::bump(Counter::ParseStructureErr, 1);
+                return Err(err.into());
+            }
         };
 
         Ok(Self::from_tensor(T::tensor_from_expression(
@@ -465,6 +492,7 @@ where
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        let _span = profile::span(Timer::ParseMul);
         // println!("Mul");
         if let Some(a) = settings.depth_limit
             && a <= state.depth
@@ -482,6 +510,7 @@ where
         // println!("{} for mul {}", state.depth, value.as_view());
         let mut iter = value.iter();
         let first_atom = iter.next().unwrap();
+        profile::bump(Counter::MulFactor, 1);
         let first = Self::try_from_view_impl(
             first_atom,
             state.clone(),
@@ -505,7 +534,10 @@ where
                         settings,
                     ) {
                         Ok(n) => {
+                            profile::bump(Counter::MulFactor, 1);
                             if let NetworkState::PureScalar = n.state {
+                                let _span = profile::span(Timer::ScalarMulAccum);
+                                profile::bump(Counter::ScalarMulAccum, 1);
                                 scalars *= a;
                                 None
                             } else {
@@ -520,6 +552,8 @@ where
             let mut res = rest?;
 
             if let NetworkState::PureScalar = first.state {
+                let _span = profile::span(Timer::ScalarMulAccum);
+                profile::bump(Counter::ScalarMulAccum, 1);
                 scalars *= first_atom;
             } else {
                 res.push((first_atom.to_owned(), first));
@@ -539,6 +573,7 @@ where
         } else {
             let rest: Result<Vec<_>, _> = iter
                 .map(|a| {
+                    profile::bump(Counter::MulFactor, 1);
                     Self::try_from_view_impl(a, state.clone(), library, function_library, settings)
                 })
                 .collect();
@@ -565,6 +600,7 @@ where
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
         // <PermutedStructure<S>>::Error: Debug,
     {
+        let _span = profile::span(Timer::ParseFun);
         let symbol = value.get_symbol();
 
         if symbol == SPENSO_TAG.dot && value.get_nargs() != 2 {
@@ -706,12 +742,25 @@ where
         T::Slot: IsAbstractSlot<Aind = Aind>,
         Lib: TensorLibraryFor<S, T, Key = K>,
     {
-        let structure = match S::parse(value.as_view()) {
-            Ok(structure) => structure,
+        profile::bump(Counter::ParseStructureAttempt, 1);
+        let structure = {
+            let _span = profile::span(Timer::ParseStructure);
+            S::parse(value.as_view())
+        };
+
+        let structure = match structure {
+            Ok(structure) => {
+                profile::bump(Counter::ParseStructureOk, 1);
+                structure
+            }
             Err(StructureError::EmptyStructure(_)) => {
+                profile::bump(Counter::ParseStructureErr, 1);
                 return Ok(Self::from_scalar(value.as_view().try_into()?));
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                profile::bump(Counter::ParseStructureErr, 1);
+                return Err(err.into());
+            }
         };
 
         match library.key_for_structure(&structure) {
@@ -749,6 +798,7 @@ where
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        let _span = profile::span(Timer::ParsePow);
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
@@ -822,6 +872,7 @@ where
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        let _span = profile::span(Timer::ParseAdd);
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
@@ -839,6 +890,7 @@ where
         let mut iter = value.iter();
 
         let first_atom = iter.next().unwrap();
+        profile::bump(Counter::AddTerm, 1);
 
         let first = Self::try_from_view_impl(
             first_atom,
@@ -862,8 +914,11 @@ where
                         settings,
                     ) {
                         Ok(n) => {
+                            profile::bump(Counter::AddTerm, 1);
                             if n.state.is_compatible(&first.state) {
                                 if let NetworkState::PureScalar = n.state {
+                                    let _span = profile::span(Timer::ScalarAddAccum);
+                                    profile::bump(Counter::ScalarAddAccum, 1);
                                     scalars += a;
                                     None
                                 } else {
@@ -884,6 +939,8 @@ where
             let mut res = rest?;
 
             if let NetworkState::PureScalar = first.state {
+                let _span = profile::span(Timer::ScalarAddAccum);
+                profile::bump(Counter::ScalarAddAccum, 1);
                 scalars += first_atom;
             } else {
                 res.push(first);
@@ -910,6 +967,7 @@ where
                         settings,
                     ) {
                         Ok(n) => {
+                            profile::bump(Counter::AddTerm, 1);
                             if n.state.is_compatible(&first.state) {
                                 Ok(n)
                             } else {

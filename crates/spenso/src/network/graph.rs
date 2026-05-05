@@ -2,12 +2,13 @@ use std::{
     collections::BTreeMap,
     fmt::{Debug, Display},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    time::Instant,
 };
 
 use bincode::{Decode, Encode};
 use linnet::{
     half_edge::{
-        HedgeGraph, HedgeGraphError, NodeIndex,
+        HedgeGraph, HedgeGraphError, NoData, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{EdgeData, Flow, Hedge},
         nodestore::NodeStorageOps,
@@ -15,7 +16,7 @@ use linnet::{
         tree::SimpleTraversalTree,
     },
     permutation::Permutation,
-    tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore},
+    tree::{Forest, child_pointer::ParentChildStore, child_vec::ChildVecStore},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -34,6 +35,7 @@ use crate::{
 use super::{
     TensorNetworkError,
     library::{Library, LibraryTensor},
+    profile::{self, Counter, Timer},
 };
 
 #[derive(
@@ -51,7 +53,7 @@ use super::{
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
-    pub graph: HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>, //, Forest<NetworkNode<K>, ChildVecStore<()>>>,
+    pub graph: NetworkHedgeGraph<K, FK, Aind>,
     pub slot_order: Vec<u8>,
     // #[bincode(with_serde)]
     // uncontracted: SuBitGraph,
@@ -60,12 +62,15 @@ pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
 type NetworkGraphBuilder<K, FK, Aind> =
     HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
 
+pub type NetworkNodeStore<K, FK, Aind> = Forest<NetworkNode<K, FK, Aind>, ParentChildStore<()>>;
+pub type NetworkHedgeGraph<K, FK, Aind> =
+    HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>, NoData, NetworkNodeStore<K, FK, Aind>>;
+
 pub type ReadyNetworkOp<K, FK = i8, Aind = AbstractIndex> = (
     NetworkGraph<K, FK, Aind>,
     NetworkOp<FK>,
     Vec<NetworkLeaf<K, Aind>>,
 );
-
 #[derive(
     Debug,
     Clone,
@@ -217,7 +222,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd>
     for NetworkGraph<K, FK, Aind>
 {
     fn from(builder: HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>) -> Self {
-        let graph: HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>> = builder.build();
+        let _span = profile::span(Timer::BuildGraph);
+        let graph: NetworkHedgeGraph<K, FK, Aind> = builder.build();
         let slot_order = vec![0; graph.n_hedges()];
         let mut g = Self {
             slot_order,
@@ -338,6 +344,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn sync_order(&mut self) {
+        let _span = profile::span(Timer::SyncOrder);
         for (_, n, _) in self.graph.iter_nodes() {
             let slot_hedges = n
                 .clone()
@@ -416,6 +423,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     where
         K: Clone + Debug,
     {
+        let _span = profile::span(Timer::Splice);
+        profile::bump(Counter::Splice, 1);
         // println!(
         //     "Joining \n{} with\n {}",
         //     self.dot_simple(),
@@ -449,6 +458,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         K: Clone + Display,
         FK: Clone + Display,
     {
+        let _span = profile::span(Timer::GraphExtract);
         let mut left = Hedge(0);
         let mut extracted = Hedge(self.graph.n_hedges());
         while left < extracted {
@@ -628,6 +638,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn shift_scalars(&mut self, shift: usize) {
+        let _span = profile::span(Timer::ShiftScalars);
+        profile::bump(Counter::ShiftScalars, 1);
         self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
             if let NetworkNode::Leaf(NetworkLeaf::Scalar(s)) = d {
                 *s += shift;
@@ -636,6 +648,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn shift_tensors(&mut self, shift: usize) {
+        let _span = profile::span(Timer::ShiftTensors);
+        profile::bump(Counter::ShiftTensors, 1);
         self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
             if let NetworkNode::Leaf(NetworkLeaf::LocalTensor(s)) = d {
                 *s += shift;
@@ -668,6 +682,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         nodes: &[NodeIndex],
         node_data: NetworkNode<K, FK, Aind>,
     ) -> NodeIndex {
+        let _span = profile::span(Timer::IdentifyNodes);
         let (n, sub) = self
             .graph
             .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
@@ -1032,6 +1047,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn dangling_indices(&self) -> Vec<LibrarySlot<Aind>> {
+        let _span = profile::span(Timer::DanglingScan);
+        profile::bump(Counter::DanglingScan, 1);
         let exts: SuBitGraph = self.graph.external_filter();
         exts.included_iter()
             .filter_map(|i| {
@@ -1045,6 +1062,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn n_dangling(&self) -> usize {
+        let _span = profile::span(Timer::DanglingScan);
+        profile::bump(Counter::DanglingScan, 1);
         self.graph
             .external_filter::<SuBitGraph>()
             .included_iter()
@@ -1106,6 +1125,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn expr_tree(&self) -> SimpleTraversalTree {
+        let _span = profile::span(Timer::ExprTree);
         let headgraph: SuBitGraph = self
             .graph
             .from_filter(|a| !matches!(a, NetworkEdge::Slot(_)));
@@ -1120,65 +1140,129 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     where
         K: Clone + Debug,
     {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum MergeOp {
+            Sum,
+            Product,
+        }
+
+        fn find(parents: &mut [usize], index: usize) -> usize {
+            let parent = parents[index];
+            if parent == index {
+                index
+            } else {
+                let root = find(parents, parent);
+                parents[index] = root;
+                root
+            }
+        }
+
+        fn union(parents: &mut [usize], left: usize, right: usize) {
+            let left_root = find(parents, left);
+            let right_root = find(parents, right);
+            if left_root != right_root {
+                parents[right_root] = left_root;
+            }
+        }
+
+        if profile::enabled() {
+            eprintln!(
+                "spenso_profile merge_ops.start nodes={} hedges={}",
+                self.graph.n_nodes(),
+                self.graph.n_hedges()
+            );
+        }
         // build a traversal over *all* internal edges
         let tt: SimpleTraversalTree<ParentChildStore<()>> = self.expr_tree().cast();
+        if profile::enabled() {
+            eprintln!("spenso_profile merge_ops.after_expr_tree");
+        }
         let head = self.head();
         let root_node = self.graph.node_id(head);
 
-        let mut sums: SuBitGraph = self.graph.empty_subgraph();
-        let mut prods: SuBitGraph = self.graph.empty_subgraph();
+        let mut op_nodes = Vec::new();
+        let mut op_index = BTreeMap::new();
 
         // look for repeated ops nodes along a chain
         for nid in tt.iter_preorder_tree_nodes(&self.graph, root_node) {
             if let NetworkNode::Op(op) = &self.graph[nid] {
-                match op {
-                    NetworkOp::Product => {
-                        for h in self.graph.iter_crown(nid) {
-                            if self.graph[[&h]].is_head() {
-                                prods.add(h);
-                            }
-                        }
-                    }
-                    NetworkOp::Sum => {
-                        for h in self.graph.iter_crown(nid) {
-                            if self.graph[[&h]].is_head() {
-                                sums.add(h);
-                            }
-                        }
-                    }
-                    _ => {}
+                let merge_op = match op {
+                    NetworkOp::Sum => Some(MergeOp::Sum),
+                    NetworkOp::Product => Some(MergeOp::Product),
+                    _ => None,
+                };
+
+                if let Some(merge_op) = merge_op {
+                    op_index.insert(nid, op_nodes.len());
+                    op_nodes.push((nid, merge_op));
+                }
+            }
+        }
+        let mut parents = (0..op_nodes.len()).collect::<Vec<_>>();
+
+        for index in 0..op_nodes.len() {
+            let (node, merge_op) = op_nodes[index];
+            for child in tt.iter_children(node, &self.graph) {
+                if let Some(child_index) = op_index.get(&child)
+                    && op_nodes[*child_index].1 == merge_op
+                {
+                    union(&mut parents, index, *child_index);
                 }
             }
         }
 
+        if profile::enabled() {
+            let sums = op_nodes
+                .iter()
+                .filter(|(_, op)| *op == MergeOp::Sum)
+                .count();
+            let prods = op_nodes
+                .iter()
+                .filter(|(_, op)| *op == MergeOp::Product)
+                .count();
+            eprintln!("spenso_profile merge_ops.after_scan sums={sums} prods={prods}");
+        }
+
         let mut to_del: SuBitGraph = self.graph.empty_subgraph();
+        let mut groups: BTreeMap<usize, Vec<NodeIndex>> = BTreeMap::new();
+        for (index, (node, _)) in op_nodes.iter().enumerate() {
+            let root = find(&mut parents, index);
+            groups.entry(root).or_default().push(*node);
+        }
 
-        for sum in self.graph.connected_components(&sums) {
-            let nodes: Vec<_> = self.graph.iter_nodes_of(&sum).map(|(a, _, _)| a).collect();
-
+        for (root, nodes) in groups {
             if nodes.len() > 1 {
-                let (_, sub) = self.graph.identify_nodes_without_self_edges::<SuBitGraph>(
-                    &nodes,
-                    NetworkNode::Op(NetworkOp::Sum),
-                );
+                let op = match op_nodes[root].1 {
+                    MergeOp::Sum => NetworkOp::Sum,
+                    MergeOp::Product => NetworkOp::Product,
+                };
+                let (_, sub) = self
+                    .graph
+                    .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, NetworkNode::Op(op));
                 to_del.union_with(&sub);
             }
         }
-        for prod in self.graph.connected_components(&prods) {
-            let nodes: Vec<_> = self.graph.iter_nodes_of(&prod).map(|(a, _, _)| a).collect();
-            if nodes.len() > 1 {
-                let (_, sub) = self.graph.identify_nodes_without_self_edges::<SuBitGraph>(
-                    &nodes,
-                    NetworkNode::Op(NetworkOp::Product),
-                );
-                to_del.union_with(&sub);
-            };
+        if profile::enabled() {
+            eprintln!(
+                "spenso_profile merge_ops.after_components to_del={}",
+                to_del.n_included()
+            );
         }
 
         // println!("{}", self.graph.dot(&to_del));
 
         self.graph.forget_identification_history();
+        if profile::enabled() {
+            eprintln!("spenso_profile merge_ops.after_forget");
+        }
         self.graph.delete_hedges(&to_del);
+        if profile::enabled() {
+            eprintln!(
+                "spenso_profile merge_ops.end nodes={} hedges={}",
+                self.graph.n_nodes(),
+                self.graph.n_hedges()
+            );
+        }
     }
     pub fn simplify_identity_ops(&mut self) {}
 
@@ -1198,7 +1282,28 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             EdgeData<NetworkEdge<Aind>>,
         ) -> (Flow, EdgeData<NetworkEdge<Aind>>),
     ) -> Result<(), HedgeGraphError> {
+        let _span = profile::span(Timer::GraphJoin);
+        profile::bump(Counter::GraphJoin, 1);
+        let join_profile = profile::enabled().then(|| {
+            (
+                Instant::now(),
+                self.graph.n_nodes(),
+                self.graph.n_hedges(),
+                other.graph.n_nodes(),
+                other.graph.n_hedges(),
+            )
+        });
         self.graph.join_mut(other.graph, matching_fn, merge_fn)?;
+        if let Some((start, self_nodes, self_hedges, other_nodes, other_hedges)) = join_profile {
+            let elapsed = start.elapsed();
+            if elapsed.as_millis() >= 50 {
+                eprintln!(
+                    "spenso_profile slow graph.join elapsed={elapsed:.3?} self_nodes={self_nodes} self_hedges={self_hedges} other_nodes={other_nodes} other_hedges={other_hedges} out_nodes={} out_hedges={}",
+                    self.graph.n_nodes(),
+                    self.graph.n_hedges(),
+                );
+            }
+        }
         self.slot_order.extend(other.slot_order);
         // self.uncontracted.join_mut(other.uncontracted);
         Ok(())
@@ -1241,7 +1346,17 @@ pub trait NMul<Rhs = Self> {
 impl<K: Debug, FK: Debug, Aind: AbsInd> NMul for NetworkGraph<K, FK, Aind> {
     type Output = NetworkGraph<K, FK, Aind>;
     fn n_mul<I: IntoIterator<Item = Self>>(self, iter: I) -> Self::Output {
+        let _span = profile::span(Timer::GraphNMul);
+        profile::bump(Counter::GraphNMul, 1);
         let all = iter.into_iter().collect::<Vec<_>>();
+        if profile::enabled() && (all.len() > 100 || self.graph.n_nodes() > 100) {
+            eprintln!(
+                "spenso_profile graph.n_mul.start inputs={} self_nodes={} self_hedges={}",
+                all.len() + 1,
+                self.graph.n_nodes(),
+                self.graph.n_hedges(),
+            );
+        }
         let mut mul = Self::mul_graph(all.len() + 1);
 
         mul.join_mut(
@@ -1281,8 +1396,19 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NAdd for NetworkGraph<K, FK, Aind> {
     type Output = NetworkGraph<K, FK, Aind>;
 
     fn n_add<I: IntoIterator<Item = Self>>(self, iter: I) -> Self::Output {
+        let _span = profile::span(Timer::GraphNAdd);
+        profile::bump(Counter::GraphNAdd, 1);
         let all = iter.into_iter().collect::<Vec<_>>();
         let slots = self.dangling_indices();
+        if profile::enabled() && (all.len() > 100 || self.graph.n_nodes() > 100) {
+            eprintln!(
+                "spenso_profile graph.n_add.start inputs={} slots={} self_nodes={} self_hedges={}",
+                all.len() + 1,
+                slots.len(),
+                self.graph.n_nodes(),
+                self.graph.n_hedges(),
+            );
+        }
 
         let mut add = Self::add_graph(all.len() + 1, &slots);
 
