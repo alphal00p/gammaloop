@@ -6,6 +6,138 @@
 #set page(margin: 22mm)
 #set text(size: 10pt)
 
+#let demo-scale = 36pt
+#let demo-segment = (
+  start: (x: 0.0, y: 1.0),
+  ctrl-a: (x: 0.85, y: 0.1),
+  ctrl-b: (x: 2.15, y: 1.9),
+  end: (x: 3.0, y: 1.0),
+)
+#let demo-start = (x: 0.0, y: 1.2)
+#let demo-through = (x: 1.5, y: 0.2)
+#let demo-end = (x: 3.0, y: 1.2)
+#let demo-nodes = (
+  (pos: demo-start),
+  (pos: demo-end),
+)
+#let demo-edge = (
+  source: (node: 0),
+  sink: (node: 1),
+  pos: demo-through,
+)
+
+#let native-point(point, dx: 0, dy: 0) = (
+  (point.x + dx) * demo-scale,
+  (point.y + dy) * demo-scale,
+)
+
+#let native-cubic-items(segment, dx: 0, dy: 0) = (
+  curve.move(native-point(segment.start, dx: dx, dy: dy)),
+  curve.cubic(
+    native-point(segment.ctrl-a, dx: dx, dy: dy),
+    native-point(segment.ctrl-b, dx: dx, dy: dy),
+    native-point(segment.end, dx: dx, dy: dy),
+  ),
+)
+
+#let native-scene(body, width: 128pt, height: 82pt) = block(
+  width: width,
+  height: height,
+  inset: 0pt,
+  body,
+)
+
+#let native-cubic(segment, stroke: black + 0.6pt, dx: 0, dy: 0) = place(
+  dx: 0pt,
+  dy: 0pt,
+  curve(stroke: stroke, ..native-cubic-items(segment, dx: dx, dy: dy)),
+)
+
+#let native-cubics(segments, stroke: black + 0.6pt, dx: 0, dy: 0) = place(
+  dx: 0pt,
+  dy: 0pt,
+  curve(
+    stroke: stroke,
+    ..segments.map(segment => native-cubic-items(segment, dx: dx, dy: dy)).flatten(),
+  ),
+)
+
+#let native-polyline(points, stroke: black + 0.6pt, dx: 0, dy: 0) = {
+  if points.len() < 2 {
+    ()
+  } else {
+    place(
+      dx: 0pt,
+      dy: 0pt,
+      curve(
+        stroke: stroke,
+        curve.move(native-point(points.at(0), dx: dx, dy: dy)),
+        ..points.slice(1).map(point => curve.line(native-point(point, dx: dx, dy: dy))),
+      ),
+    )
+  }
+}
+
+#let native-dot(point, fill: black, radius: 2.2pt, dx: 0, dy: 0) = {
+  let pos = native-point(point, dx: dx, dy: dy)
+  place(
+    dx: pos.at(0) - radius,
+    dy: pos.at(1) - radius,
+    circle(radius: radius, fill: fill),
+  )
+}
+
+#let native-pattern-object(pattern, stroke: rgb("#1b7f4c") + 0.75pt) = {
+  let points = pattern.points.map(point => (
+    x: point.at * 3.1 + point.x * 0.18,
+    y: 1 + point.y * 0.32,
+  ))
+  native-scene({
+    native-polyline(((x: 0.0, y: 1.0), (x: 3.15, y: 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
+    native-polyline(points, stroke: stroke)
+  })
+}
+
+#let native-split-demo(split) = native-scene({
+  if split.keys().contains("curve") {
+    native-cubic(split.curve, stroke: rgb("#c8c8c8") + 0.45pt)
+  } else {
+    native-cubics(split.segments, stroke: rgb("#c8c8c8") + 0.45pt)
+  }
+  native-cubic(split.segments.at(0), stroke: rgb("#d72638") + 0.95pt)
+  native-cubic(split.segments.at(1), stroke: rgb("#355c9a") + 0.95pt)
+  native-dot(split.segments.at(0).end, fill: black)
+})
+
+#let native-trim-demo(original, trimmed) = native-scene({
+  native-cubic(original, stroke: rgb("#c8c8c8") + 0.45pt)
+  native-cubic(trimmed, stroke: rgb("#d72638") + 1pt)
+  native-dot(trimmed.start, fill: rgb("#d72638"))
+  native-dot(trimmed.end, fill: rgb("#d72638"))
+})
+
+#let native-pattern-path(path, base: demo-segment) = native-scene({
+  native-cubic(base, stroke: rgb("#c8c8c8") + 0.45pt)
+  if path.curves.len() > 0 {
+    native-cubics(path.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+  } else {
+    native-polyline(path.points, stroke: rgb("#1b7f4c") + 0.8pt)
+  }
+})
+
+#let native-outset-demo(from, toward, moved) = native-scene({
+  native-polyline((from, toward), stroke: rgb("#c8c8c8") + 0.65pt)
+  native-dot(from, fill: rgb("#355c9a"))
+  native-dot(moved, fill: rgb("#d72638"))
+  native-dot(toward, fill: black)
+})
+
+#let native-edge-halves-demo(halves) = native-scene({
+  native-cubic(halves.source, stroke: rgb("#d72638") + 0.9pt)
+  native-cubic(halves.sink, stroke: rgb("#355c9a") + 0.9pt)
+  native-dot(demo-through, fill: black)
+})
+
 = kurvst Typst API
 
 `kurvst` is a Typst package backed by `kurvst.wasm`, a small Kurbo-based
@@ -40,7 +172,7 @@ Cubic segments use `start`, `ctrl-a`, `ctrl-b`, and `end`:
 `split-cubic` splits one cubic at a parameter `t`. `trim-cubic` and
 `trim-segment` trim by curve distance from the start and/or end. These helpers
 return cubic segment dictionaries, so the output can be passed back into
-`kurvst` or drawn with CeTZ.
+`kurvst`, drawn with native Typst `curve`, or forwarded to CeTZ.
 
 ```typ
 #let split = kurvst.split-cubic(
@@ -105,10 +237,55 @@ visible points inside the turn near nodes.
   amplitude: 0.15,
   wavelength: 0.7,
 )
-#cetz.canvas({
-  kurvst.cetz-pattern(path, stroke: black + 0.5pt)
-})
+#native-pattern-path(path, base: segment)
 ```
+
+== Native Drawing Primitives
+
+Kurvst returns dictionaries and arrays. The core geometry can be drawn without
+CeTZ by mapping points to Typst lengths and feeding them to native `curve`
+components:
+
+#tidy.show-example.show-example(
+  ```typ
+  #let point(p) = (p.x * 36pt, p.y * 36pt)
+  #let draw-segment(segment) = curve(
+    stroke: black + 0.7pt,
+    curve.move(point(segment.start)),
+    curve.cubic(point(segment.ctrl-a), point(segment.ctrl-b), point(segment.end)),
+  )
+
+  #draw-segment(segment)
+  ```,
+  scope: (segment: demo-segment),
+)
+
+The generated reference below uses the same idea for each core function: native
+`curve` for cubics and polylines, `circle` for point markers, and `place` inside
+a fixed-size `block` when several primitives need to be overlaid.
+
+== CeTZ Interoperability
+
+The CeTZ helpers are thin adapters over the same returned geometry. Use them
+when the surrounding document already lives in a CeTZ canvas, or when you want
+CeTZ path merging and styling:
+
+#tidy.show-example.show-example(
+  ```typ
+  #cetz.canvas({
+    kurvst.cetz-bezier(segment, stroke: rgb("#d72638") + 0.6pt)
+
+    let path = kurvst.pattern-segment(
+      segment,
+      pattern: kurvst.coil(longitudinal-scale: 1.6),
+      amplitude: 0.12,
+      wavelength: 0.55,
+    )
+    kurvst.cetz-pattern(path, stroke: rgb("#355c9a") + 0.55pt)
+  })
+  ```,
+  scope: (kurvst: kurvst, cetz: cetz, segment: demo-segment),
+)
 
 == Generated Reference
 
@@ -118,6 +295,21 @@ visible points inside the turn near nodes.
 #let docs = tidy.parse-module(
   read("../src/lib.typ"),
   name: "kurvst",
-  scope: (cetz: cetz, kurvst: kurvst),
+  scope: (
+    cetz: cetz,
+    kurvst: kurvst,
+    demo-segment: demo-segment,
+    demo-start: demo-start,
+    demo-through: demo-through,
+    demo-end: demo-end,
+    demo-nodes: demo-nodes,
+    demo-edge: demo-edge,
+    native-pattern-object: native-pattern-object,
+    native-split-demo: native-split-demo,
+    native-trim-demo: native-trim-demo,
+    native-pattern-path: native-pattern-path,
+    native-outset-demo: native-outset-demo,
+    native-edge-halves-demo: native-edge-halves-demo,
+  ),
 )
 #tidy.show-module(docs, style: tidy-style)
