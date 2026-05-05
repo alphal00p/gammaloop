@@ -122,7 +122,7 @@ fn test_color_simplification() {
     );
     let simplified = atom.simplify_color();
 
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"-1*ca+Nc^2*ca");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"-1*CA+CA*Nc^2");
 }
 
 mod form_reference;

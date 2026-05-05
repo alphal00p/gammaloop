@@ -37,7 +37,6 @@ fn fierz_generator_contraction() {
 }
 
 #[test]
-#[ignore = "pending separated generator Casimir shortcut"]
 fn separated_generator_casimir_shortcut() {
     initialize();
     let expr = parse_lit!(
@@ -51,7 +50,6 @@ fn separated_generator_casimir_shortcut() {
 }
 
 #[test]
-#[ignore = "pending public chain-based color trace simplification"]
 fn chain_one_generator_trace_vanishes() {
     let r = TestReps::new();
     let expr = chain!(
@@ -64,7 +62,6 @@ fn chain_one_generator_trace_vanishes() {
 }
 
 #[test]
-#[ignore = "pending public chain-based color trace simplification"]
 fn chain_two_generator_trace_normalizes() {
     let r = TestReps::new();
     let expr = chain!(
@@ -78,7 +75,6 @@ fn chain_two_generator_trace_normalizes() {
 }
 
 #[test]
-#[ignore = "pending public chain-based three-generator color trace terminal"]
 fn three_generator_trace_terminal() {
     let r = TestReps::new();
     let expr = chain!(
@@ -89,11 +85,10 @@ fn three_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"dR(coad(NA,a),coad(NA,b),coad(NA,c))+1/2*1𝑖*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))+dR(coad(NA,a),coad(NA,b),coad(NA,c))");
 }
 
 #[test]
-#[ignore = "pending public chain-based adjacent color Casimir reduction"]
 fn adjacent_generator_casimir_chain() {
     let r = TestReps::new();
     let expr = chain!(
@@ -107,7 +102,6 @@ fn adjacent_generator_casimir_chain() {
 }
 
 #[test]
-#[ignore = "pending public trace-based separated color Casimir reduction"]
 fn separated_generator_casimir_trace() {
     let r = TestReps::new();
     let expr = trace!(
@@ -118,11 +112,10 @@ fn separated_generator_casimir_trace() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(CF+-1/2*CA)*trace(cof(Nc),t(coad(NA,b),in,out),t(coad(NA,c),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*CA*TR*g(coad(NA,b),coad(NA,c))+CF*TR*g(coad(NA,b),coad(NA,c))");
 }
 
 #[test]
-#[ignore = "pending structure-constant loop contraction"]
 fn two_f_loop_contracts_to_ca_metric() {
     initialize();
     let expr = parse_lit!(
@@ -134,7 +127,6 @@ fn two_f_loop_contracts_to_ca_metric() {
 }
 
 #[test]
-#[ignore = "pending structure-constant loop contraction"]
 fn three_f_loop_contracts_to_ca_f() {
     initialize();
     let expr = parse_lit!(
@@ -148,7 +140,6 @@ fn three_f_loop_contracts_to_ca_f() {
 }
 
 #[test]
-#[ignore = "pending public trace-f shortcut"]
 fn mixed_trace_structure_contraction() {
     let r = TestReps::new();
     let expr = trace!(
@@ -156,16 +147,16 @@ fn mixed_trace_structure_contraction() {
         color_t!(slot!(r.coad_na, a)),
         color_t!(slot!(r.coad_na, b)),
         color_t!(slot!(r.coad_na, d)),
-    ) * parse_lit!(
-        f(coad(NA, a), coad(NA, b), coad(NA, c)),
-        default_namespace = "spenso"
+    ) * color_f!(
+        slot!(r.coad_na, a),
+        slot!(r.coad_na, b),
+        slot!(r.coad_na, c),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*1𝑖*CA*trace(cof(Nc),t(coad(NA,c),in,out),t(coad(NA,d),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*CA*TR*g(coad(NA,c),coad(NA,d))");
 }
 
 #[test]
-#[ignore = "pending symmetric invariant contraction"]
 fn symmetric_invariant_d33_partial_contraction() {
     initialize();
     let expr = parse_lit!(
@@ -178,7 +169,6 @@ fn symmetric_invariant_d33_partial_contraction() {
 }
 
 #[test]
-#[ignore = "pending four-generator color trace terminal"]
 fn four_generator_trace_terminal() {
     let r = TestReps::new();
     let expr = trace!(
@@ -189,7 +179,7 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"dR(coad(NA,a),coad(NA,b),coad(NA,c),coad(NA,d))+1/2*1𝑖*dR(coad(NA,a),coad(NA,b),coad(NA,x))*f(coad(NA,c),coad(NA,d),coad(NA,x))+1/2*1𝑖*dR(coad(NA,c),coad(NA,d),coad(NA,x))*f(coad(NA,a),coad(NA,b),coad(NA,x))+-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))+1𝑖/2*dR(coad(NA,a),coad(NA,b),coad(NA,x))*f(coad(NA,c),coad(NA,d),coad(NA,x))+1𝑖/2*dR(coad(NA,c),coad(NA,d),coad(NA,x))*f(coad(NA,a),coad(NA,b),coad(NA,x))+dR(coad(NA,a),coad(NA,b),coad(NA,c),coad(NA,d))");
 }
 
 #[test]
