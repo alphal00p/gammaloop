@@ -17,7 +17,7 @@ use spenso::{
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         OrderedStructure, SlotIndex, StructureContract, TensorStructure,
-        abstract_index::AbstractIndex,
+        abstract_index::AIND_SYMBOLS,
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
@@ -189,7 +189,22 @@ fn metric_args(metric: AtomView<'_>) -> Option<(Atom, Atom)> {
 }
 
 fn is_slot(atom: &Atom) -> bool {
-    LibrarySlot::<AbstractIndex>::try_from(atom.as_view()).is_ok()
+    is_slot_view(atom.as_view())
+}
+
+fn is_slot_view(atom: AtomView<'_>) -> bool {
+    let AtomView::Fun(f) = atom else {
+        return false;
+    };
+
+    if f.get_symbol().has_tag(&T.representation) {
+        return f.get_nargs() == 2;
+    }
+
+    // Downstairs indices wrap the actual slot as `dind(slot)`.
+    f.get_symbol() == AIND_SYMBOLS.dind
+        && f.get_nargs() == 1
+        && f.iter().next().is_some_and(is_slot_view)
 }
 
 fn replace_first_in_chain_like(chain_like: AtomView<'_>, old: &Atom, new: &Atom) -> Option<Atom> {
@@ -1917,6 +1932,7 @@ mod tests {
         shadowing::symbolica_utils::AtomCoreExt,
         slot,
         structure::{
+            abstract_index::AbstractIndex,
             representation::{Minkowski, RepName, Representation},
             slot::IsAbstractSlot,
         },
@@ -2028,6 +2044,23 @@ mod tests {
         let dualizable = ETS.metric(slot!(cof, i).to_atom(), slot!(coaf, j).to_atom())
             * function!(f, symbol!("x"), slot!(cof, j).to_atom(), symbol!("y"));
         assert_snapshot!(dualizable.schoonschip().to_bare_ordered_string(), @"F(x,cof(N,i),y)");
+    }
+
+    #[test]
+    fn slot_detection_uses_representation_tags() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let cof: Representation<_> = ColorFundamental {}.new_rep(symbol!("N"));
+        let coaf = cof.dual();
+        let p = T.rank_one_tensor_symbol("P");
+
+        assert!(is_slot(&slot!(mink, mu).to_atom()));
+        assert!(is_slot(&slot!(coaf, j).to_atom()));
+        assert!(is_slot(&function!(
+            AIND_SYMBOLS.dind,
+            slot!(cof, j).to_atom()
+        )));
+        assert!(!is_slot(&mink.to_symbolic([])));
+        assert!(!is_slot(&function!(p, 1, mink.to_symbolic([]))));
     }
 
     #[test]
