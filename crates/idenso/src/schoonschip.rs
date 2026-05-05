@@ -17,13 +17,14 @@ use spenso::{
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         OrderedStructure, SlotIndex, StructureContract, TensorStructure,
+        abstract_index::AbstractIndex,
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     function,
     id::MatchStack,
 };
@@ -114,6 +115,146 @@ fn product_excluding(factors: &[Atom], excluded: &[bool]) -> Atom {
         .enumerate()
         .filter(|(index, _)| !excluded[*index])
         .fold(Atom::num(1), |product, (_, factor)| product * factor)
+}
+
+fn simplify_chain_like_metric_products(expr: AtomView<'_>) -> Atom {
+    let mut current = expr.to_owned();
+
+    loop {
+        let next = current.replace_map(|term, _context, out| {
+            if let Some(rewritten) = simplify_chain_like_metric_product(term) {
+                **out = rewritten;
+            }
+        });
+
+        if next == current {
+            return next;
+        }
+
+        current = next;
+    }
+}
+
+fn simplify_chain_like_metric_product(expr: AtomView<'_>) -> Option<Atom> {
+    let factors = multiplicative_factors(expr);
+    if factors.len() < 2 {
+        return None;
+    }
+
+    for (metric_index, metric) in factors.iter().enumerate() {
+        let Some((left, right)) = metric_args(metric.as_view()) else {
+            continue;
+        };
+
+        for (old, new) in [(&left, &right), (&right, &left)] {
+            if !is_slot(old) {
+                continue;
+            }
+
+            for (target_index, target) in factors.iter().enumerate() {
+                if target_index == metric_index {
+                    continue;
+                }
+
+                let Some(rewritten_target) =
+                    replace_first_in_chain_like(target.as_view(), old, new)
+                else {
+                    continue;
+                };
+
+                return Some(product_with_replaced_factor(
+                    &factors,
+                    metric_index,
+                    target_index,
+                    rewritten_target,
+                ));
+            }
+        }
+    }
+
+    None
+}
+
+fn metric_args(metric: AtomView<'_>) -> Option<(Atom, Atom)> {
+    let AtomView::Fun(f) = metric else {
+        return None;
+    };
+
+    if f.get_symbol() != ETS.metric || f.get_nargs() != 2 {
+        return None;
+    }
+
+    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+    Some((args[0].clone(), args[1].clone()))
+}
+
+fn is_slot(atom: &Atom) -> bool {
+    LibrarySlot::<AbstractIndex>::try_from(atom.as_view()).is_ok()
+}
+
+fn replace_first_in_chain_like(chain_like: AtomView<'_>, old: &Atom, new: &Atom) -> Option<Atom> {
+    let AtomView::Fun(f) = chain_like else {
+        return None;
+    };
+
+    if f.get_symbol() != T.chain && f.get_symbol() != T.trace {
+        return None;
+    }
+
+    let mut replaced = false;
+    let mut builder = FunctionBuilder::new(f.get_symbol());
+    for arg in f.iter() {
+        if !replaced && let Some(new_arg) = replace_first_exact_atom(arg, old, new) {
+            builder = builder.add_arg(new_arg);
+            replaced = true;
+        } else {
+            builder = builder.add_arg(arg);
+        }
+    }
+
+    replaced.then(|| builder.finish())
+}
+
+fn replace_first_exact_atom(expr: AtomView<'_>, old: &Atom, new: &Atom) -> Option<Atom> {
+    if expr == old.as_view() {
+        return Some(new.clone());
+    }
+
+    let AtomView::Fun(f) = expr else {
+        return None;
+    };
+
+    let mut replaced = false;
+    let mut builder = FunctionBuilder::new(f.get_symbol());
+    for arg in f.iter() {
+        if !replaced && let Some(new_arg) = replace_first_exact_atom(arg, old, new) {
+            builder = builder.add_arg(new_arg);
+            replaced = true;
+        } else {
+            builder = builder.add_arg(arg);
+        }
+    }
+
+    replaced.then(|| builder.finish())
+}
+
+fn product_with_replaced_factor(
+    factors: &[Atom],
+    removed_index: usize,
+    replaced_index: usize,
+    replacement: Atom,
+) -> Atom {
+    factors
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != removed_index)
+        .fold(Atom::num(1), |product, (index, factor)| {
+            if index == replaced_index {
+                product * &replacement
+            } else {
+                product * factor
+            }
+        })
 }
 
 fn tensor_slot_pos<Aind: AbsInd + ParseableAind>(
@@ -1108,6 +1249,7 @@ pub struct SchoonschipSettings {
     mode: SchoonschipMode,
     parse_inner_products: bool,
     expand_contracted_sums: bool,
+    simplify_chain_like_functions: bool,
     contraction_order: SchoonschipContractionOrder,
 }
 
@@ -1153,6 +1295,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
             parse_inner_products: true,
             expand_contracted_sums: false,
+            simplify_chain_like_functions: false,
             contraction_order: SchoonschipContractionOrder::default(),
         }
     }
@@ -1163,6 +1306,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
             parse_inner_products: true,
             expand_contracted_sums: false,
+            simplify_chain_like_functions: false,
             contraction_order: SchoonschipContractionOrder::default(),
         }
     }
@@ -1173,6 +1317,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::SinglePass,
             parse_inner_products: true,
             expand_contracted_sums: false,
+            simplify_chain_like_functions: false,
             contraction_order: SchoonschipContractionOrder::default(),
         }
     }
@@ -1198,6 +1343,16 @@ impl SchoonschipSettings {
         self
     }
 
+    pub fn with_chain_like_functions(mut self) -> Self {
+        self.simplify_chain_like_functions = true;
+        self
+    }
+
+    pub fn without_chain_like_functions(mut self) -> Self {
+        self.simplify_chain_like_functions = false;
+        self
+    }
+
     pub fn with_contraction_order(mut self, order: SchoonschipContractionOrder) -> Self {
         self.contraction_order = order;
         self
@@ -1211,6 +1366,8 @@ impl SchoonschipSettings {
 
 pub trait Schoonschip {
     fn schoonschip(&self) -> Atom;
+
+    fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom;
 
     fn normalize_dots(&self) -> Atom;
     fn schoonschip_once_with_net<
@@ -1236,6 +1393,10 @@ pub trait Schoonschip {
 impl Schoonschip for Atom {
     fn schoonschip(&self) -> Atom {
         self.as_view().schoonschip()
+    }
+
+    fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
+        self.as_view().schoonschip_with_settings(settings)
     }
 
     fn normalize_dots(&self) -> Atom {
@@ -1426,6 +1587,10 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn schoonschip(&self) -> Atom {
+        self.schoonschip_with_settings(&SchoonschipSettings::default())
+    }
+
+    fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
         let index_cond = T.index_fiter(W_.i_);
         let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
         let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
@@ -1433,11 +1598,41 @@ impl Schoonschip for AtomView<'_> {
         let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
         let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
 
-        // `schoonschip()` is the broad bare-symbolic pass. It may use product
+        let metric_self_dual = function!(ETS.metric, W_.c_, &self_dual);
+        let metric_self_dual_reversed = function!(ETS.metric, &self_dual, W_.c_);
+        let function_with_self_dual = function!(W_.a_, W_.a___, &self_dual, W_.b___);
+        let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
+        let metric_dualizable = function!(ETS.metric, W_.c_, &dualizable);
+        let metric_dualizable_reversed = function!(ETS.metric, &dualizable, W_.c_);
+        let metric_dualizable_dual = function!(ETS.metric, W_.c_, &dualizable_dual);
+        let metric_dualizable_dual_reversed = function!(ETS.metric, &dualizable_dual, W_.c_);
+        let function_with_dualizable = function!(W_.a_, W_.a___, &dualizable, W_.b___);
+        let function_with_dualizable_dual = function!(W_.a_, W_.a___, &dualizable_dual, W_.b___);
+
+        // The broad bare-symbolic pass may use product
         // patterns over plain functions; the network path deliberately calls
         // `normalize_dots()` instead so these broad patterns do not pre-empt
         // network-backed contractions.
-        self.replace(function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual))
+        let simplified = self
+            .replace(metric_self_dual * function_with_self_dual.clone())
+            .repeat()
+            .with(function_with_replacement.clone())
+            .replace(metric_self_dual_reversed * function_with_self_dual)
+            .repeat()
+            .with(function_with_replacement.clone())
+            .replace(metric_dualizable * function_with_dualizable_dual.clone())
+            .repeat()
+            .with(function_with_replacement.clone())
+            .replace(metric_dualizable_reversed * function_with_dualizable_dual)
+            .repeat()
+            .with(function_with_replacement.clone())
+            .replace(metric_dualizable_dual * function_with_dualizable.clone())
+            .repeat()
+            .with(function_with_replacement.clone())
+            .replace(metric_dualizable_dual_reversed * function_with_dualizable)
+            .repeat()
+            .with(function_with_replacement)
+            .replace(function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual))
             .when(index_cond.clone() & not_slot(W_.a___) & not_slot(W_.b___))
             .with(ETS.metric(
                 function!(W_.f_, W_.a___, &self_dual_stripped),
@@ -1513,8 +1708,15 @@ impl Schoonschip for AtomView<'_> {
                 W_.a___,
                 T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
                 W_.b___
-            ))
-            .normalize_dots()
+            ));
+
+        let simplified = if settings.simplify_chain_like_functions {
+            simplify_chain_like_metric_products(simplified.as_view())
+        } else {
+            simplified
+        };
+
+        simplified.normalize_dots()
     }
 
     fn schoonschip_once_with_net<
@@ -1711,16 +1913,28 @@ impl Schoonschip for AtomView<'_> {
 mod tests {
     use insta::assert_snapshot;
     use spenso::{
+        chain,
         shadowing::symbolica_utils::AtomCoreExt,
+        slot,
         structure::{
-            abstract_index::AbstractIndex,
             representation::{Minkowski, RepName, Representation},
             slot::IsAbstractSlot,
         },
+        trace,
     };
     use symbolica::symbol;
 
+    use crate::representations::{Bispinor, ColorFundamental};
+
     use super::*;
+
+    fn chain_in() -> Atom {
+        Atom::var(T.chain_in)
+    }
+
+    fn chain_out() -> Atom {
+        Atom::var(T.chain_out)
+    }
 
     #[test]
     fn simple_dot() {
@@ -1728,28 +1942,18 @@ mod tests {
         let p = T.rank_one_tensor_symbol("P");
         let q = T.rank_one_tensor_symbol("Q");
 
-        let p1 = function!(p, 1, mink.slot::<AbstractIndex, _>(1).to_atom());
-        let p2 = function!(p, 2, mink.slot::<AbstractIndex, _>(1).to_atom());
-        let p1_2 = function!(p, 1, mink.slot::<AbstractIndex, _>(2).to_atom());
-        let p2_2 = function!(p, 2, mink.slot::<AbstractIndex, _>(2).to_atom());
+        let p1 = function!(p, 1, slot!(mink, 1).to_atom());
+        let p2 = function!(p, 2, slot!(mink, 1).to_atom());
+        let p1_2 = function!(p, 1, slot!(mink, 2).to_atom());
+        let p2_2 = function!(p, 2, slot!(mink, 2).to_atom());
         let p1_stripped = function!(p, 1, mink.to_symbolic([]));
         let p2_stripped = function!(p, 2, mink.to_symbolic([]));
 
-        let q2 = function!(
-            q,
-            2,
-            symbol!("bla"),
-            mink.slot::<AbstractIndex, _>(1).to_atom()
-        );
-        let q2_2 = function!(
-            q,
-            2,
-            symbol!("bla"),
-            mink.slot::<AbstractIndex, _>(2).to_atom()
-        );
+        let q2 = function!(q, 2, symbol!("bla"), slot!(mink, 1).to_atom());
+        let q2_2 = function!(q, 2, symbol!("bla"), slot!(mink, 2).to_atom());
 
-        let q3 = function!(q, 3, mink.slot::<AbstractIndex, _>(1).to_atom());
-        let q3_2 = function!(q, 3, mink.slot::<AbstractIndex, _>(2).to_atom());
+        let q3 = function!(q, 3, slot!(mink, 1).to_atom());
+        let q3_2 = function!(q, 3, slot!(mink, 2).to_atom());
 
         let result = (&p1 * &q2)
             .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
@@ -1762,7 +1966,7 @@ mod tests {
         assert_snapshot!(result.to_bare_ordered_string(), @"g(P(1,mink(D)),P(2,mink(D)))");
 
         let result = ETS
-            .metric(mink.slot::<AbstractIndex, _>(1).to_atom(), &p1_stripped)
+            .metric(slot!(mink, 1).to_atom(), &p1_stripped)
             .normalize_dots();
         assert_snapshot!(result.to_bare_ordered_string(), @"P(1,mink(D,1))");
 
@@ -1772,10 +1976,7 @@ mod tests {
         let result = p1.clone().pow(Atom::num(3)).normalize_dots();
         assert_snapshot!(result.to_bare_ordered_string(), @"P(1,mink(D,1))*g(P(1,mink(D)),P(1,mink(D)))");
 
-        let metric = ETS.metric(
-            mink.slot::<AbstractIndex, _>(1).to_atom(),
-            mink.slot::<AbstractIndex, _>(2).to_atom(),
-        );
+        let metric = ETS.metric(slot!(mink, 1).to_atom(), slot!(mink, 2).to_atom());
         let result = metric.clone().pow(Atom::num(4)).normalize_dots();
         assert_snapshot!(result.to_bare_ordered_string(), @"D^2");
 
@@ -1812,28 +2013,138 @@ mod tests {
     }
 
     #[test]
+    fn schoonschip_settings_substitutes_metric_slots_in_plain_functions() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let cof: Representation<_> = ColorFundamental {}.new_rep(symbol!("N"));
+        let coaf = cof.dual();
+        let p = T.rank_one_tensor_symbol("P");
+        let f = symbol!("F");
+        let p_stripped = function!(p, 1, mink.to_symbolic([]));
+
+        let self_dual = ETS.metric(&p_stripped, slot!(mink, mu).to_atom())
+            * function!(f, symbol!("x"), slot!(mink, mu).to_atom(), symbol!("y"));
+        assert_snapshot!(self_dual.schoonschip().to_bare_ordered_string(), @"F(x,P(1,mink(D)),y)");
+
+        let dualizable = ETS.metric(slot!(cof, i).to_atom(), slot!(coaf, j).to_atom())
+            * function!(f, symbol!("x"), slot!(cof, j).to_atom(), symbol!("y"));
+        assert_snapshot!(dualizable.schoonschip().to_bare_ordered_string(), @"F(x,cof(N,i),y)");
+    }
+
+    #[test]
+    fn chain_like_metric_simplification_is_opt_in() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+        let p = T.rank_one_tensor_symbol("P");
+        let f = symbol!("F");
+        let i = slot!(bis, 1).to_atom();
+        let j = slot!(bis, 2).to_atom();
+        let nu = slot!(mink, 2).to_atom();
+        let p_stripped = function!(p, 1, mink.to_symbolic([]));
+        let expr = ETS.metric(&nu, &p_stripped)
+            * chain!(&i, &j, function!(f, chain_in(), chain_out(), &nu));
+
+        assert_snapshot!(expr.schoonschip().to_bare_ordered_string(), @"P(1,mink(D,2))*chain(bis(D,1),bis(D,2),F(in,out,mink(D,2)))");
+
+        let result = expr.schoonschip_with_settings(
+            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+        );
+        assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,1),bis(D,2),F(in,out,P(1,mink(D))))");
+    }
+
+    #[test]
+    fn chain_like_metric_simplification_handles_generic_nested_arguments() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+        let p = T.rank_one_tensor_symbol("P");
+        let f = symbol!("F");
+        let h = symbol!("H");
+        let mu = slot!(mink, 1).to_atom();
+        let i = slot!(bis, i).to_atom();
+        let j = slot!(bis, j).to_atom();
+        let p_stripped = function!(p, 1, mink.to_symbolic([]));
+
+        let expr = ETS.metric(&mu, &p_stripped)
+            * chain!(
+                &i,
+                &j,
+                function!(f, chain_in(), chain_out(), symbol!("x"), function!(h, &mu))
+            );
+        let result = expr.schoonschip_with_settings(
+            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+        );
+        assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,i),bis(D,j),F(in,out,x,H(P(1,mink(D)))))");
+    }
+
+    #[test]
+    fn chain_like_metric_simplification_keeps_compact_scalar_products() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+        let p = T.rank_one_tensor_symbol("P");
+        let q = T.rank_one_tensor_symbol("Q");
+        let f = symbol!("F");
+        let i = slot!(bis, i).to_atom();
+        let j = slot!(bis, j).to_atom();
+        let p_stripped = function!(p, 1, mink.to_symbolic([]));
+        let q_stripped = function!(q, 1, mink.to_symbolic([]));
+
+        let expr = ETS.metric(&p_stripped, &q_stripped)
+            * chain!(&i, &j, function!(f, chain_in(), chain_out(), &p_stripped));
+        let result = expr.schoonschip_with_settings(
+            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+        );
+        assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,i),bis(D,j),F(in,out,P(1,mink(D))))*g(P(1,mink(D)),Q(1,mink(D)))");
+    }
+
+    #[test]
+    fn chain_like_metric_simplification_handles_traces() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+        let p = T.rank_one_tensor_symbol("P");
+        let f = symbol!("F");
+        let mu = slot!(mink, 1).to_atom();
+        let p_stripped = function!(p, 1, mink.to_symbolic([]));
+
+        let expr = ETS.metric(&mu, &p_stripped)
+            * trace!(
+                bis.to_symbolic([]),
+                function!(f, chain_in(), chain_out(), &mu)
+            );
+        let result = expr.schoonschip_with_settings(
+            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+        );
+        assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),F(in,out,P(1,mink(D))))");
+    }
+
+    #[test]
+    fn chain_like_metric_simplification_handles_chain_endpoints() {
+        let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+        let p = T.rank_one_tensor_symbol("P");
+        let f = symbol!("F");
+        let mu = slot!(mink, 1).to_atom();
+        let nu = slot!(mink, 2).to_atom();
+        let p_stripped = function!(p, 1, mink.to_symbolic([]));
+
+        let expr =
+            ETS.metric(&mu, &p_stripped) * chain!(&mu, &nu, function!(f, chain_in(), chain_out()));
+        let result = expr.schoonschip_with_settings(
+            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+        );
+        assert_snapshot!(result.to_bare_ordered_string(), @"chain(P(1,mink(D)),mink(D,2),F(in,out))");
+    }
+
+    #[test]
     fn benchmark_modes_output() {
         let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
         let p = T.rank_one_tensor_symbol("P");
         let q = T.rank_one_tensor_symbol("Q");
 
-        let p1 = function!(p, 1, mink.slot::<AbstractIndex, _>(1).to_atom());
-        let p2 = function!(p, 2, mink.slot::<AbstractIndex, _>(1).to_atom());
-        let p2_2 = function!(p, 2, mink.slot::<AbstractIndex, _>(2).to_atom());
+        let p1 = function!(p, 1, slot!(mink, 1).to_atom());
+        let p2 = function!(p, 2, slot!(mink, 1).to_atom());
+        let p2_2 = function!(p, 2, slot!(mink, 2).to_atom());
 
-        let q2 = function!(
-            q,
-            2,
-            symbol!("bla"),
-            mink.slot::<AbstractIndex, _>(1).to_atom()
-        );
-        let q2_2 = function!(
-            q,
-            2,
-            symbol!("bla"),
-            mink.slot::<AbstractIndex, _>(2).to_atom()
-        );
-        let q3_2 = function!(q, 3, mink.slot::<AbstractIndex, _>(2).to_atom());
+        let q2 = function!(q, 2, symbol!("bla"), slot!(mink, 1).to_atom());
+        let q2_2 = function!(q, 2, symbol!("bla"), slot!(mink, 2).to_atom());
+        let q3_2 = function!(q, 3, slot!(mink, 2).to_atom());
 
         let expr = &p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2));
 

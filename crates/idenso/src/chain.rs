@@ -121,12 +121,13 @@ impl<'a> Chain for AtomView<'a> {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_snapshot;
     use spenso::{chain, shadowing::symbolica_utils::AtomCoreExt, slot};
     use symbolica::parse_lit;
 
     use crate::gamma;
     use crate::representations::{Bispinor, initialize};
-    use crate::test_support::{TestReps, assert_bare_snapshot};
+    use crate::test_support::TestReps;
 
     use super::*;
 
@@ -143,10 +144,7 @@ mod tests {
         let normalized = gammas.chainify(rep).chainify(rep);
         let collected = normalized.collect_chains(rep);
 
-        assert_bare_snapshot!(
-            collected,
-            @"trace(bis(4),gamma(in,out,p(2,mink(4))),gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))))"
-        );
+        assert_snapshot!(collected.to_bare_ordered_string(), @"trace(bis(4),gamma(in,out,p(2,mink(4))),gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))))");
     }
 
     #[test]
@@ -164,10 +162,7 @@ mod tests {
         );
         let rep = Bispinor {}.into();
 
-        assert_bare_snapshot!(
-            chains.collect_chains(rep),
-            @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))"
-        );
+        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
     }
 
     #[test]
@@ -186,9 +181,6 @@ mod tests {
         );
         let rep = Bispinor {}.into();
 
-        assert_bare_snapshot!(
-            chains.collect_chains(rep),
-            @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(out,in,p(1,mink(4))),gamma(out,in,mink(4,nu)))"
-        );
+        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(out,in,p(1,mink(4))),gamma(out,in,mink(4,nu)))");
     }
 }

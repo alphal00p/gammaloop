@@ -1,19 +1,35 @@
+use std::sync::LazyLock;
+
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    structure::representation::LibraryRep,
+    structure::representation::{Minkowski, RepName},
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     function,
     id::Context,
     utils::Settable,
 };
 
-use crate::{chain::Chain, metric::MetricSimplifier, representations::Bispinor};
+use crate::{
+    chain::Chain,
+    metric::MetricSimplifier,
+    representations::Bispinor,
+    schoonschip::{Schoonschip, SchoonschipSettings},
+};
 
 use super::{AGS, id_atom};
+
+static MINKOWSKI_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
+    let minkowski = Minkowski {}.to_symbolic(std::iter::empty::<Atom>());
+    let AtomView::Fun(f) = minkowski.as_view() else {
+        unreachable!("Minkowski representations are symbolic functions")
+    };
+
+    f.get_symbol()
+});
 
 /// Controls how open gamma chains are reordered during simplification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +82,11 @@ impl GammaSimplifySettings {
 
 pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplifySettings) -> Atom {
     let rep = Bispinor {}.into();
-    let mut expr = chainify_fixpoint(expr.to_owned().expand().simplify_metrics(), rep)
+    let mut expr = expr
+        .to_owned()
+        .expand()
+        .simplify_metrics()
+        .chainify(rep)
         .collect_chains(rep)
         .expand()
         .simplify_metrics();
@@ -95,16 +115,6 @@ pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplify
             return next;
         }
 
-        expr = next;
-    }
-}
-
-fn chainify_fixpoint(mut expr: Atom, rep: LibraryRep) -> Atom {
-    loop {
-        let next = expr.chainify(rep);
-        if next == expr {
-            return next;
-        }
         expr = next;
     }
 }
@@ -154,12 +164,14 @@ fn simplify_chain_node(chain: AtomView, chain_ordering: GammaChainOrdering) -> O
         return Some(id_atom(start.clone(), end.clone()));
     }
 
-    contract_adjacent_gamma_pair(start, end, factors).or_else(|| match chain_ordering {
-        GammaChainOrdering::RepeatedPairs => {
-            bubble_repeated_gamma_towards_contraction(start, end, factors)
-        }
-        GammaChainOrdering::Canonical => canonicalize_gamma_chain_order(start, end, factors),
-    })
+    contract_adjacent_gamma_pair(start, end, factors)
+        .or_else(|| four_dim_chisholm_contraction(start, end, factors))
+        .or_else(|| match chain_ordering {
+            GammaChainOrdering::RepeatedPairs => {
+                bubble_repeated_gamma_towards_contraction(start, end, factors)
+            }
+            GammaChainOrdering::Canonical => canonicalize_gamma_chain_order(start, end, factors),
+        })
 }
 
 fn contract_adjacent_gamma_pair(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
@@ -200,6 +212,68 @@ fn bubble_repeated_gamma_towards_contraction(
     anticommute_adjacent_gamma_pair(start, end, factors, j - 1)
 }
 
+fn four_dim_chisholm_contraction(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
+    let (left, right) = shortest_repeated_four_dim_gamma_pair(factors)?;
+    let interior = &factors[left + 1..right];
+
+    // FORM and FeynCalc use direct 4D Chisholm identities for short interiors;
+    // this avoids generating the larger anticommutation expansion first.
+    match interior.len() {
+        1 => Some(
+            Atom::num(-2)
+                * chain!(start, end; chain_factors(factors, left, right, interior.iter().cloned())),
+        ),
+        2 => {
+            let mu = gamma_factor_lorentz(interior[0].as_view())?;
+            let nu = gamma_factor_lorentz(interior[1].as_view())?;
+
+            Some(
+                Atom::num(4)
+                    * function!(ETS.metric, mu, nu)
+                    * chain!(start, end; chain_factors(factors, left, right, [])),
+            )
+        }
+        3 => {
+            let reversed = interior.iter().rev().cloned().collect::<Vec<_>>();
+            Some(Atom::num(-2) * chain!(start, end; chain_factors(factors, left, right, reversed)))
+        }
+        4 => {
+            let term_1 = [
+                interior[2].clone(),
+                interior[1].clone(),
+                interior[0].clone(),
+                interior[3].clone(),
+            ];
+            let term_2 = [
+                interior[3].clone(),
+                interior[0].clone(),
+                interior[1].clone(),
+                interior[2].clone(),
+            ];
+
+            Some(
+                Atom::num(2) * chain!(start, end; chain_factors(factors, left, right, term_1))
+                    + Atom::num(2)
+                        * chain!(start, end; chain_factors(factors, left, right, term_2)),
+            )
+        }
+        _ => None,
+    }
+}
+
+fn chain_factors(
+    factors: &[Atom],
+    left: usize,
+    right: usize,
+    middle: impl IntoIterator<Item = Atom>,
+) -> Vec<Atom> {
+    let mut result = Vec::with_capacity(factors.len() - 2);
+    result.extend_from_slice(&factors[..left]);
+    result.extend(middle);
+    result.extend_from_slice(&factors[right + 1..]);
+    result
+}
+
 fn canonicalize_gamma_chain_order(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
     for i in 0..factors.len().saturating_sub(1) {
         let Some(mu) = gamma_factor_lorentz(factors[i].as_view()) else {
@@ -209,7 +283,7 @@ fn canonicalize_gamma_chain_order(start: &Atom, end: &Atom, factors: &[Atom]) ->
             continue;
         };
 
-        if gamma_order_key(&mu) > gamma_order_key(&nu) {
+        if mu > nu {
             return anticommute_adjacent_gamma_pair(start, end, factors, i);
         }
     }
@@ -230,18 +304,14 @@ fn anticommute_adjacent_gamma_pair(
     metric_rest.extend_from_slice(&factors[..swap_at]);
     metric_rest.extend_from_slice(&factors[swap_at + 2..]);
 
-    // Try to consume the generated metric immediately by rewriting another
-    // gamma factor. This keeps intermediate expressions smaller.
+    // Run the local metric term through chain-aware Schoonschip before it can
+    // swell the Clifford expansion.
     let metric_term = Atom::num(2) * generated_metric_chain_term(start, end, &mu, &nu, metric_rest);
 
     let mut swapped = factors.to_vec();
     swapped.swap(swap_at, swap_at + 1);
 
     Some(metric_term - chain!(start, end; swapped))
-}
-
-fn gamma_order_key(mu: &Atom) -> String {
-    mu.to_canonical_string()
 }
 
 fn generated_metric_chain_term(
@@ -251,50 +321,10 @@ fn generated_metric_chain_term(
     nu: &Atom,
     factors: Vec<Atom>,
 ) -> Atom {
-    let mut contracted = factors.clone();
-    if replace_first_gamma_lorentz(&mut contracted, mu, nu)
-        || replace_first_gamma_lorentz(&mut contracted, nu, mu)
-    {
-        chain!(start, end; contracted)
-    } else {
-        function!(ETS.metric, mu.clone(), nu.clone()) * chain!(start, end; factors)
-    }
-}
-
-fn replace_first_gamma_lorentz(factors: &mut [Atom], old: &Atom, new: &Atom) -> bool {
-    for factor in factors {
-        let Some(replaced) = replace_gamma_lorentz(factor.as_view(), old, new) else {
-            continue;
-        };
-
-        *factor = replaced;
-        return true;
-    }
-
-    false
-}
-
-fn replace_gamma_lorentz(factor: AtomView, old: &Atom, new: &Atom) -> Option<Atom> {
-    let AtomView::Fun(f) = factor else {
-        return None;
-    };
-
-    if f.get_symbol() != AGS.gamma || f.get_nargs() != 3 {
-        return None;
-    }
-
-    let args = f.iter().collect::<Vec<_>>();
-    if args[2] != old.as_view() {
-        return None;
-    }
-
-    Some(
-        FunctionBuilder::new(AGS.gamma)
-            .add_arg(args[0])
-            .add_arg(args[1])
-            .add_arg(new.as_view())
-            .finish(),
-    )
+    (function!(ETS.metric, mu.clone(), nu.clone()) * chain!(start, end; factors))
+        .schoonschip_with_settings(
+            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+        )
 }
 
 fn shortest_repeated_gamma_pair(factors: &[Atom]) -> Option<(usize, usize)> {
@@ -317,6 +347,58 @@ fn shortest_repeated_gamma_pair(factors: &[Atom]) -> Option<(usize, usize)> {
     }
 
     best
+}
+
+fn shortest_repeated_four_dim_gamma_pair(factors: &[Atom]) -> Option<(usize, usize)> {
+    let mut best = None;
+
+    for i in 0..factors.len() {
+        let Some(mu) = gamma_factor_lorentz(factors[i].as_view()) else {
+            continue;
+        };
+
+        if !is_four_dim_minkowski_slot(&mu) {
+            continue;
+        }
+
+        for (j, factor) in factors.iter().enumerate().skip(i + 1) {
+            let Some(nu) = gamma_factor_lorentz(factor.as_view()) else {
+                continue;
+            };
+
+            if mu == nu && best.is_none_or(|(a, b)| j - i < b - a) {
+                best = Some((i, j));
+            }
+        }
+    }
+
+    best
+}
+
+fn is_four_dim_minkowski_slot(atom: &Atom) -> bool {
+    if !is_minkowski_slot(atom) {
+        return false;
+    }
+
+    let AtomView::Fun(f) = atom.as_view() else {
+        unreachable!("is_minkowski_slot only accepts function atoms")
+    };
+
+    f.iter()
+        .next()
+        .is_some_and(|dimension| dimension == Atom::num(4).as_view())
+}
+
+fn is_minkowski_slot(atom: &Atom) -> bool {
+    let AtomView::Fun(f) = atom.as_view() else {
+        return false;
+    };
+
+    if f.get_symbol() != *MINKOWSKI_SYMBOL || f.get_nargs() != 2 {
+        return false;
+    }
+
+    true
 }
 
 fn simplify_trace_node(trace: AtomView) -> Option<Atom> {

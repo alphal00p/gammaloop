@@ -1,3 +1,4 @@
+use insta::assert_snapshot;
 use spenso::network::StructureLessDisplay;
 use spenso::network::parsing::ParseSettings;
 use spenso::network::store::TensorScalarStore;
@@ -35,11 +36,7 @@ use symbolica::{
 };
 
 use crate::representations::initialize;
-use crate::test_support::{TestReps, assert_bare_snapshot};
-
-fn assert_gamma_zero(expr: Atom) {
-    assert!(expr.simplify_gamma().is_zero());
-}
+use crate::test_support::TestReps;
 
 #[test]
 fn gamma_construct() {
@@ -101,19 +98,11 @@ fn normalise_g() {
 }
 
 #[test]
-fn form_two_gamma_trace() {
-    initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
-
-    assert_bare_snapshot!(expr.simplify_gamma(),@"4*g(mink(4,mu),mink(4,nu))");
-}
-
-#[test]
 fn gamma_macro_accepts_integer_indices() {
     initialize();
     let expr = gamma!(1, 2, 3);
 
-    assert_bare_snapshot!(expr, @"gamma(bis(4,2),bis(4,3),mink(4,1))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,2),bis(4,3),mink(4,1))");
 }
 
 #[test]
@@ -121,7 +110,7 @@ fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
     let r = TestReps::new();
     let expr = gamma!(mu, slot!(r.bis_d, a), 1);
 
-    assert_bare_snapshot!(expr, @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
 }
 
 #[test]
@@ -129,7 +118,7 @@ fn gamma5_macro_accepts_explicit_indices() {
     let r = TestReps::new();
     let expr = gamma5!(slot!(r.bis4, a), slot!(r.bis4, b));
 
-    assert_bare_snapshot!(expr, @"gamma5(bis(4,a),bis(4,b))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma5(bis(4,a),bis(4,b))");
 }
 
 #[test]
@@ -140,49 +129,11 @@ fn gamma_macros_accept_pattern_indices() {
     let dimensioned_gamma = gamma!(RS.a__, [RS.d_, RS.b_], [RS.d_, RS.c_]);
     let dimensioned_gamma0 = gamma0!([RS.d_, RS.b_], [RS.d_, RS.c_]);
 
-    assert_bare_snapshot!(gamma, @"gamma(bis(b__),bis(c__),mink(a__))");
-    assert_bare_snapshot!(gamma5, @"gamma5(bis(b__),bis(c__))");
-    assert_bare_snapshot!(gamma0, @"gamma0(bis(b__),bis(c__))");
-    assert_bare_snapshot!(dimensioned_gamma, @"gamma(bis(d_,b_),bis(d_,c_),mink(a__))");
-    assert_bare_snapshot!(dimensioned_gamma0, @"gamma0(bis(d_,b_),bis(d_,c_))");
-}
-
-#[test]
-fn form_odd_gamma_trace_vanishes() {
-    initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, a);
-
-    assert_gamma_zero(expr);
-}
-
-#[test]
-fn form_four_gamma_trace_recurses() {
-    initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, d) * gamma!(sigma, d, a);
-
-    assert_bare_snapshot!(expr.simplify_gamma().expand(),@"-4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))"
-    );
-}
-
-#[test]
-fn form_repeated_lorentz_gamma_chain_contracts_to_dimension() {
-    initialize();
-    let expr = gamma!(mu, a, b) * gamma!(mu, b, c);
-
-    assert_bare_snapshot!(expr.simplify_gamma(),@"4*g(bis(4,a),bis(4,c))");
-}
-
-#[test]
-fn form_adjacent_chain_lorentz_contraction() {
-    let r = TestReps::new();
-    let expr = chain!(
-        slot!(r.bis_d, a),
-        slot!(r.bis_d, b),
-        gamma!(slot!(r.mink_d, mu)),
-        gamma!(slot!(r.mink_d, mu)),
-    );
-
-    assert_bare_snapshot!(expr.simplify_gamma(), @"d*g(bis(d,a),bis(d,b))");
+    assert_snapshot!(gamma.to_bare_ordered_string(), @"gamma(bis(b__),bis(c__),mink(a__))");
+    assert_snapshot!(gamma5.to_bare_ordered_string(), @"gamma5(bis(b__),bis(c__))");
+    assert_snapshot!(gamma0.to_bare_ordered_string(), @"gamma0(bis(b__),bis(c__))");
+    assert_snapshot!(dimensioned_gamma.to_bare_ordered_string(), @"gamma(bis(d_,b_),bis(d_,c_),mink(a__))");
+    assert_snapshot!(dimensioned_gamma0.to_bare_ordered_string(), @"gamma0(bis(d_,b_),bis(d_,c_))");
 }
 
 #[test]
@@ -195,15 +146,9 @@ fn gamma_chain_canonical_ordering_is_opt_in() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_bare_snapshot!(
-        expr.simplify_gamma(),
-        @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))"
-    );
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))");
 
-    assert_bare_snapshot!(
-        expr.simplify_gamma_with(GammaSimplifySettings::canonical()),
-        @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))"
-    );
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
@@ -211,80 +156,12 @@ fn gamma_trace_evaluation_can_be_disabled() {
     initialize();
     let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
 
-    assert_bare_snapshot!(
-        expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()),
-        @"trace(bis(4),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))"
-    );
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))");
 }
 
-#[test]
-#[ignore = "pending public chain-based Chisholm reduction"]
-fn form_chisholm_odd_interior_chain() {
-    let r = TestReps::new();
-    let expr = chain!(
-        slot!(r.bis4, a),
-        slot!(r.bis4, b),
-        gamma!(slot!(r.mink4, mu)),
-        gamma!(slot!(r.mink4, nu1)),
-        gamma!(slot!(r.mink4, nu2)),
-        gamma!(slot!(r.mink4, nu3)),
-        gamma!(slot!(r.mink4, mu)),
-    );
+mod form_reference;
 
-    assert_bare_snapshot!(expr.simplify_gamma(),@"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu3)),gamma(in,out,mink(4,nu2)),gamma(in,out,mink(4,nu1)))"
-    );
-}
-
-#[test]
-#[ignore = "pending public chain-based Chisholm reduction"]
-fn form_chisholm_two_interior_chain() {
-    let r = TestReps::new();
-    let expr = chain!(
-        slot!(r.bis4, a),
-        slot!(r.bis4, b),
-        gamma!(slot!(r.mink4, mu)),
-        gamma!(slot!(r.mink4, nu)),
-        gamma!(slot!(r.mink4, rho)),
-        gamma!(slot!(r.mink4, mu)),
-    );
-
-    assert_bare_snapshot!(expr.simplify_gamma(),@"4*g(bis(4,a),bis(4,b))*g(mink(4,nu),mink(4,rho))"
-    );
-}
-
-#[test]
-#[ignore = "pending public chain-based gamma-five epsilon reduction"]
-fn form_gamma_five_epsilon_trick() {
-    let r = TestReps::new();
-    let expr = chain!(
-        slot!(r.bis4, a),
-        slot!(r.bis4, b),
-        gamma!(slot!(r.mink4, mu)),
-        gamma!(slot!(r.mink4, nu)),
-        gamma!(slot!(r.mink4, rho)),
-    );
-
-    assert_bare_snapshot!(expr.simplify_gamma(),@"chain(bis(4,a),bis(4,b),gamma5(in,out),gamma(in,out,mink(4,sigma)))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))"
-    );
-}
-
-#[test]
-#[ignore = "pending gamma-five trace term-count stress support"]
-fn form_gamma_five_symmetric_12_term_count() {
-    initialize();
-    let term_count = 0usize;
-
-    insta::assert_snapshot!(term_count.to_string(), @"51975");
-}
-
-#[test]
-#[ignore = "pending gamma-five trace4 term-count stress support"]
-fn form_gamma_five_regular_12_term_count() {
-    initialize();
-    let term_count = 0usize;
-
-    insta::assert_snapshot!(term_count.to_string(), @"1029");
-}
+mod feyncalc_reference;
 
 #[test]
 fn collect_expand_chain() {
@@ -542,7 +419,7 @@ mod failing {
 
         let expr = (gamma!(0, 1, 3) * gamma!(0, 3, 2)).simplify_gamma();
 
-        assert_bare_snapshot!(expr, @"4*g(bis(4,1),bis(4,2))");
+        assert_snapshot!(expr.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,2))");
 
         let expr = (p(slot!(mink4, nu1))
             * (p(slot!(mink4, nu3)) + q(slot!(mink4, nu3)))
@@ -557,7 +434,7 @@ mod failing {
         .replace(s!(nu1))
         .with(s!(dummy));
 
-        assert_bare_snapshot!(expr, @"(p(mink(4,dummy)))^2*-4*g(mink(4,mu),mink(4,nu))+-4*g(mink(4,mu),mink(4,nu))*p(mink(4,dummy))*q(mink(4,dummy))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
+        assert_snapshot!(expr.to_bare_ordered_string(), @"(p(mink(4,dummy)))^2*-4*g(mink(4,mu),mink(4,nu))+-4*g(mink(4,mu),mink(4,nu))*p(mink(4,dummy))*q(mink(4,dummy))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
 
         let expr = (mink_dim.g(5, 6)
             * (mink_dim.g(1, 2) * mink_dim.g(3, 4) * mink_dim.g(5, 6)
@@ -565,7 +442,7 @@ mod failing {
             * (mink_dim.g(1, 2) * mink_dim.g(3, 4) - mink_dim.g(1, 3) * mink_dim.g(2, 4)))
         .simplify_gamma();
 
-        assert_bare_snapshot!(expr, @"-1*d+d^3");
+        assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d+d^3");
 
         let expr = (p(slot!(mink4, nu1))
             * (p(slot!(mink4, nu3)) + q(slot!(mink4, nu3)))
@@ -579,7 +456,7 @@ mod failing {
         .replace(s!(nu1))
         .with(s!(dummy));
 
-        assert_bare_snapshot!(expr, @"(p(mink(4,dummy)))^2*4*g(mink(4,mu),mink(4,nu))+-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*p(mink(4,dummy))*q(mink(4,dummy))+4*p(mink(4,mu))*q(mink(4,nu))");
+        assert_snapshot!(expr.to_bare_ordered_string(), @"(p(mink(4,dummy)))^2*4*g(mink(4,mu),mink(4,nu))+-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*p(mink(4,dummy))*q(mink(4,dummy))+4*p(mink(4,mu))*q(mink(4,nu))");
 
         let expr = (p(slot!(mink_dim, nu1))
             * (p(slot!(mink_dim, nu3)) + q(slot!(mink_dim, nu3)))
@@ -591,10 +468,7 @@ mod failing {
         .replace(s!(nu1))
         .with(s!(nu3));
 
-        assert_bare_snapshot!(
-            expr.expand().canonize(AbstractIndex::Dummy),
-            @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))"
-        );
+        assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
 
         let expr = (p(slot!(mink_dim, nu1))
             * (p(slot!(mink_dim, nu3)) + q(slot!(mink_dim, nu3)))
@@ -604,10 +478,7 @@ mod failing {
             * gamma!(slot!(mink_dim, nu), slot!(bis_dim, 5), slot!(bis_dim, 1)))
         .simplify_gamma();
 
-        assert_bare_snapshot!(
-            expr.expand().canonize(AbstractIndex::Dummy),
-            @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))"
-        );
+        assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
 
         let expr = (p(slot!(mink_dim, nu1))
             * q(slot!(mink_dim, nu2))
@@ -620,10 +491,7 @@ mod failing {
         .simplify_gamma()
         .to_dots();
 
-        assert_bare_snapshot!(
-            expr,
-            @"(g(mink(d),p,q))^2*8+-4*g(mink(d),p,p)*g(mink(d),q,q)+4*g(mink(d),p,q)*g(mink(d),q,q)"
-        );
+        assert_snapshot!(expr.to_bare_ordered_string(), @"(g(mink(d),p,q))^2*8+-4*g(mink(d),p,p)*g(mink(d),q,q)+4*g(mink(d),p,q)*g(mink(d),q,q)");
 
         let expr = (gamma!(slot!(mink_dim, mu), 1, 3)
             * gamma!(slot!(mink_dim, nu), 3, 4)
@@ -632,7 +500,7 @@ mod failing {
         .simplify_gamma()
         .to_dots();
 
-        assert_bare_snapshot!(expr, @"-1*d^2*g(bis(4,1),bis(4,2))+2*d*g(bis(4,1),bis(4,2))");
+        assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d^2*g(bis(4,1),bis(4,2))+2*d*g(bis(4,1),bis(4,2))");
     }
 
     #[test]
