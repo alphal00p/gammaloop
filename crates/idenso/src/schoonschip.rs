@@ -59,6 +59,18 @@ fn trace_contraction_ordering() -> bool {
     std::env::var_os("IDENSO_TRACE_CONTRACTION_ORDERING").is_some()
 }
 
+fn trace_direct_sum_terms() -> bool {
+    std::env::var_os("IDENSO_TRACE_DIRECT_SUM_TERMS").is_some()
+}
+
+fn trace_schoonschip_patterns() -> bool {
+    std::env::var_os("IDENSO_TRACE_SCHOONSCHIP_PATTERNS").is_some()
+}
+
+fn trace_schoonschip_pattern_misses() -> bool {
+    std::env::var_os("IDENSO_TRACE_SCHOONSCHIP_PATTERN_MISSES").is_some()
+}
+
 fn expression_order_metric_name<const METRIC: u8>() -> &'static str {
     match METRIC {
         ORDER_MIN_LARGEST_OPERAND_BYTES => "min_largest_operand_bytes",
@@ -332,13 +344,16 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
     target_expr: &Atom,
     slot_pairs: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
 ) -> Option<Atom> {
+    let trace_terms = trace_direct_sum_terms();
     let terms: Vec<_> = match expanded_sum_side.as_view() {
         AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
         _ => vec![expanded_sum_side.clone()],
     };
+    let input_term_count = terms.len();
 
     let mut sum = Atom::Zero;
-    for term in terms {
+    let mut residual_term_count = 0usize;
+    for (term_index, term) in terms.into_iter().enumerate() {
         let factors = multiplicative_factors(term.as_view());
         let parsed_factors: Vec<_> = factors.iter().map(parse_tensor_factor::<Aind>).collect();
         let mut consumed = vec![false; factors.len()];
@@ -393,7 +408,49 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
             return None;
         }
 
-        sum += (product_excluding(&factors, &consumed) * target).schoonschip();
+        let remaining = product_excluding(&factors, &consumed);
+        let reconstructed = &remaining * &target;
+        let cleaned = reconstructed.schoonschip();
+        if trace_terms {
+            let residual_slots: Vec<_> = slot_pairs
+                .iter()
+                .flat_map(|(sum_slot, target_slot)| [sum_slot.to_atom(), target_slot.to_atom()])
+                .filter(|slot| cleaned.replace(slot.clone()).match_iter().next().is_some())
+                .map(|slot| slot.to_string())
+                .collect();
+            if !residual_slots.is_empty() {
+                residual_term_count += 1;
+                eprintln!(
+                    "direct_sum_term residual term_index={} factors={} consumed={:?} consumed_pairs={:?} term_bytes={} remaining_bytes={} target_bytes={} cleaned_bytes={} residual_slots={:?}",
+                    term_index,
+                    factors.len(),
+                    consumed,
+                    consumed_pairs,
+                    term.as_view().get_byte_size(),
+                    remaining.as_view().get_byte_size(),
+                    target.as_view().get_byte_size(),
+                    cleaned.as_view().get_byte_size(),
+                    residual_slots
+                );
+            }
+        }
+        sum += cleaned;
+    }
+
+    if trace_terms {
+        let residual_slots: Vec<_> = slot_pairs
+            .iter()
+            .flat_map(|(sum_slot, target_slot)| [sum_slot.to_atom(), target_slot.to_atom()])
+            .filter(|slot| sum.replace(slot.clone()).match_iter().next().is_some())
+            .map(|slot| slot.to_string())
+            .collect();
+        eprintln!(
+            "direct_sum_terms summary terms={} residual_term_count={} sum_terms={} residual_slots={:?}",
+            input_term_count,
+            residual_term_count,
+            sum.nterms(),
+            residual_slots
+        );
     }
 
     Some(sum)
@@ -1628,7 +1685,7 @@ impl Schoonschip for AtomView<'_> {
         // patterns over plain functions; the network path deliberately calls
         // `normalize_dots()` instead so these broad patterns do not pre-empt
         // network-backed contractions.
-        let simplified = self
+        let metric_simplified = self
             .replace(metric_self_dual * function_with_self_dual.clone())
             .repeat()
             .with(function_with_replacement.clone())
@@ -1646,19 +1703,58 @@ impl Schoonschip for AtomView<'_> {
             .with(function_with_replacement.clone())
             .replace(metric_dualizable_dual_reversed * function_with_dualizable)
             .repeat()
-            .with(function_with_replacement)
-            .replace(function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual))
+            .with(function_with_replacement);
+
+        let broad_self_dual_product_pattern =
+            function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual);
+        let broad_self_dual_product_replacement = ETS.metric(
+            function!(W_.f_, W_.a___, &self_dual_stripped),
+            function!(W_.g_, W_.b___, &self_dual_stripped),
+        );
+        let after_broad_self_dual_product = metric_simplified
+            .replace(broad_self_dual_product_pattern.clone())
             .when(index_cond.clone() & not_slot(W_.a___) & not_slot(W_.b___))
-            .with(ETS.metric(
-                function!(W_.f_, W_.a___, &self_dual_stripped),
-                function!(W_.g_, W_.b___, &self_dual_stripped),
-            ))
-            .replace(function!(W_.f_, W_.a___, &self_dual).pow(Atom::num(2)))
+            .with(broad_self_dual_product_replacement.clone());
+
+        let trace_patterns = trace_schoonschip_patterns();
+        let trace_pattern_misses = trace_schoonschip_pattern_misses();
+        if trace_patterns
+            && (after_broad_self_dual_product != metric_simplified || trace_pattern_misses)
+        {
+            eprintln!(
+                "schoonschip pattern=broad_self_dual_product changed={} pattern={} replacement={} before={} after={}",
+                after_broad_self_dual_product != metric_simplified,
+                broad_self_dual_product_pattern,
+                broad_self_dual_product_replacement,
+                metric_simplified,
+                after_broad_self_dual_product
+            );
+        }
+
+        let self_dual_power_pattern = function!(W_.f_, W_.a___, &self_dual).pow(Atom::num(2));
+        let self_dual_power_replacement = ETS.metric(
+            function!(W_.f_, W_.a___, &self_dual_stripped),
+            function!(W_.f_, W_.a___, &self_dual_stripped),
+        );
+        let after_self_dual_power = after_broad_self_dual_product
+            .replace(self_dual_power_pattern.clone())
             .when(index_cond.clone() & not_slot(W_.a___))
-            .with(ETS.metric(
-                function!(W_.f_, W_.a___, &self_dual_stripped),
-                function!(W_.f_, W_.a___, &self_dual_stripped),
-            ))
+            .with(self_dual_power_replacement.clone());
+
+        if trace_patterns
+            && (after_self_dual_power != after_broad_self_dual_product || trace_pattern_misses)
+        {
+            eprintln!(
+                "schoonschip pattern=self_dual_power changed={} pattern={} replacement={} before={} after={}",
+                after_self_dual_power != after_broad_self_dual_product,
+                self_dual_power_pattern,
+                self_dual_power_replacement,
+                after_broad_self_dual_product,
+                after_self_dual_power
+            );
+        }
+
+        let simplified = after_self_dual_power
             .replace(
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
                     * T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual]),

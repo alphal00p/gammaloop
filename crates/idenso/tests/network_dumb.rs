@@ -413,6 +413,63 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
 }
 
 #[test]
+fn summed_momentum_boundary_still_requires_input_expansion() {
+    initialize();
+    let _mink = Minkowski {}.new_rep(4);
+
+    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
+
+    let mu1: Atom = mu1.into();
+    let mu9: Atom = mu9.into();
+    let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
+    let settings = SchoonschipSettings::partial()
+        .with_expanded_contracted_sums()
+        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+
+    let metric_identified_target = parse!(
+        "spenso::g(k(2)-k(3), spenso::mink(4,mu9))
+         * spenso::g(k(3)-k(2), spenso::mink(4,mu9))
+         + spenso::g(k(4)-k(5), spenso::mink(4,mu9))
+         * spenso::g(k(5)-k(4), spenso::mink(4,mu9))"
+    );
+    assert_eq!(
+        residual_dummy_names(&metric_identified_target.schoonschip(), &dummies),
+        ["mu9"]
+    );
+    assert!(
+        residual_dummy_names(&metric_identified_target.expand().schoonschip(), &dummies).is_empty()
+    );
+
+    let boundary_expression = parse!(
+        "(spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
+           + spenso::g(k(0), spenso::mink(4,mu1))
+             * spenso::g(k(1), spenso::mink(4,mu9)))
+         * (spenso::g(k(2)-k(3), spenso::mink(4,mu1))
+           * spenso::g(k(3)-k(2), spenso::mink(4,mu9))
+           + spenso::g(k(4)-k(5), spenso::mink(4,mu1))
+           * spenso::g(k(5)-k(4), spenso::mink(4,mu9)))"
+    );
+
+    assert_eq!(
+        residual_dummy_names(
+            &boundary_expression.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &dummies
+        ),
+        ["mu9"]
+    );
+    assert!(
+        residual_dummy_names(
+            &boundary_expression
+                .expand()
+                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &dummies
+        )
+        .is_empty()
+    );
+}
+
+#[test]
 fn compare_three_vertex_residual_methods() {
     let (r, dummies) = substituted_three_vertex_reproducer();
     let orders = [
