@@ -614,7 +614,15 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn cache_expr_tree_roots(&mut self) -> usize {
-        let tt: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree().cast();
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.cache_expr_tree_roots_ignoring(&hidden)
+    }
+
+    pub fn cache_expr_tree_roots_ignoring<S>(&mut self, hidden: &S) -> usize
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let tt: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree_ignoring(hidden).cast();
         let head = self.head();
         let root_node = self.graph.node_id(head);
         let new_roots = tt
@@ -626,15 +634,31 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn cached_expr_children(&self, node: NodeIndex) -> Vec<NodeIndex> {
+        let hidden: SuBitGraph = self.graph.empty_subgraph();
+        self.cached_expr_children_ignoring(node, &hidden)
+    }
+
+    pub fn cached_expr_children_ignoring<S>(&self, node: NodeIndex, hidden: &S) -> Vec<NodeIndex>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
         let mut children = self
             .graph
             .iter_crown(node)
             .filter_map(|hedge| {
+                if hidden.includes(&hedge) {
+                    return None;
+                }
+
                 if self.graph[[&hedge]].is_slot() {
                     return None;
                 }
 
                 let other = self.graph.inv(hedge);
+                if hidden.includes(&other) {
+                    return None;
+                }
+
                 if other == hedge {
                     return None;
                 }
@@ -1167,9 +1191,36 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
     pub fn expr_tree(&self) -> SimpleTraversalTree {
         let _span = profile::span(Timer::ExprTree);
-        let headgraph: SuBitGraph = self
-            .graph
-            .from_filter(|a| !matches!(a, NetworkEdge::Slot(_)));
+        let headgraph = self.expression_subgraph();
+
+        let head = self.head();
+        let root_node = self.graph.node_id(head);
+        SimpleTraversalTree::depth_first_traverse(&self.graph, &headgraph, &root_node, None)
+            .unwrap()
+    }
+
+    pub fn expression_subgraph(&self) -> SuBitGraph {
+        self.graph
+            .from_filter(|a| !matches!(a, NetworkEdge::Slot(_)))
+    }
+
+    pub fn expression_subgraph_ignoring<S>(&self, hidden: &S) -> SuBitGraph
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let mut expression = self.expression_subgraph();
+        for hedge in hidden.included_iter() {
+            expression.sub(hedge);
+        }
+        expression
+    }
+
+    pub fn expr_tree_ignoring<S>(&self, hidden: &S) -> SimpleTraversalTree
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let _span = profile::span(Timer::ExprTree);
+        let headgraph = self.expression_subgraph_ignoring(hidden);
 
         let head = self.head();
         let root_node = self.graph.node_id(head);
@@ -1800,7 +1851,10 @@ impl<K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Sub<NetworkGraph<K, FK, 
 #[cfg(test)]
 pub mod test {
 
-    use linnet::tree::child_vec::ChildVecStore;
+    use linnet::{
+        half_edge::subgraph::{ModifySubSet, SuBitGraph},
+        tree::child_vec::ChildVecStore,
+    };
 
     use crate::{
         network::graph::NetworkLeaf,
@@ -1905,5 +1959,54 @@ pub mod test {
 
             assert_eq!(expr.cached_expr_children(node), expected);
         }
+    }
+
+    #[test]
+    fn hidden_expression_edges_are_ignored_by_cached_children() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let sum = tensor_a + tensor_b;
+        let mut expr = (sum.clone() * scalar) + (sum * scalar_b);
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let tt = expr.expr_tree().cast::<ChildVecStore<()>>();
+        let root_node = expr.graph.node_id(expr.head());
+        let (parent, child) = tt
+            .iter_preorder_tree_nodes(&expr.graph, root_node)
+            .find_map(|node| {
+                tt.iter_children(node, &expr.graph)
+                    .next()
+                    .map(|child| (node, child))
+            })
+            .unwrap();
+        let child_root = tt.root_hedge(child);
+        let parent_side = expr.graph.inv(child_root);
+
+        let mut hidden: SuBitGraph = expr.graph.empty_subgraph();
+        hidden.add(child_root);
+        hidden.add(parent_side);
+
+        expr.cache_expr_tree_roots_ignoring(&hidden);
+
+        let children = expr.cached_expr_children_ignoring(parent, &hidden);
+        assert!(!children.contains(&child));
     }
 }
