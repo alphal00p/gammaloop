@@ -1,6 +1,7 @@
 use ahash::{HashMap, HashMapExt};
 use idenso::{
     color::CS,
+    epsilon::EPSILON_SYMBOL,
     reference_cases::{ReferenceCase, ReferenceDomain, ReferenceValidation, reference_cases},
 };
 use spenso::{
@@ -10,7 +11,7 @@ use spenso::{
     shadowing::Concretize,
     structure::{
         TensorStructure,
-        abstract_index::AbstractIndex,
+        abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::{Minkowski, RepName},
     },
     symbolica_atom::ProjectorExpander,
@@ -23,6 +24,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     coefficient::CoefficientView,
     domains::float::RealLike,
+    evaluate::EvaluationFn,
 };
 
 use crate::common::{HepAtomExt, NetExt, test_initialize};
@@ -211,7 +213,75 @@ fn evaluate(
         panic!("failed to execute validation expression `{expression}`: {err}")
     });
 
-    let function_map = HashMap::new();
+    let function_map = validation_functions();
     result.evaluate_complex(|c| c.into(), constants, &function_map);
     result.to_dense()
 }
+
+fn validation_functions() -> HashMap<Symbol, EvaluationFn<Atom, Complex64>> {
+    let mut functions = HashMap::new();
+    functions.insert(
+        AIND_SYMBOLS.cind,
+        EvaluationFn::new(Box::new(|args, _, _, _| {
+            Complex64::new(encode_cind(args) as f64, 0.)
+        })),
+    );
+    functions.insert(
+        *EPSILON_SYMBOL,
+        EvaluationFn::new(Box::new(|args, _, _, _| {
+            Complex64::new(0., -levi_civita(args))
+        })),
+    );
+    functions
+}
+
+fn levi_civita(args: &[Complex64]) -> f64 {
+    let indices = if args.len() == 1 {
+        decode_cind(args[0].re.round() as usize)
+    } else {
+        args.iter()
+            .map(|arg| arg.re.round() as usize)
+            .collect::<Vec<_>>()
+    };
+
+    if indices
+        .iter()
+        .enumerate()
+        .any(|(position, index)| indices[position + 1..].contains(index))
+    {
+        return 0.;
+    }
+
+    let inversions = indices
+        .iter()
+        .enumerate()
+        .map(|(i, left)| {
+            indices[i + 1..]
+                .iter()
+                .filter(|right| left > *right)
+                .count()
+        })
+        .sum::<usize>();
+
+    if inversions % 2 == 0 { 1. } else { -1. }
+}
+
+fn encode_cind(args: &[Complex64]) -> usize {
+    args.iter()
+        .map(|arg| arg.re.round() as usize + 1)
+        .fold((0, 1), |(encoded, place), index| {
+            (encoded + index * place, place * CIND_BASE)
+        })
+        .0
+}
+
+fn decode_cind(mut encoded: usize) -> Vec<usize> {
+    let mut indices = Vec::new();
+    while encoded != 0 {
+        indices.push(encoded % CIND_BASE - 1);
+        encoded /= CIND_BASE;
+    }
+    indices
+}
+
+const CIND_BASE: usize = 32;
