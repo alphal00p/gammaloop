@@ -125,9 +125,10 @@ where
 /// `trace(...)`.
 ///
 /// The projectors are interpreted as normalized sums over permutations of the
-/// factor list. They are not expanded when they appear outside a chain-like
-/// container, because the ordering only has a noncommutative meaning in that
-/// context.
+/// factor list. Trace projectors are grouped by cyclic rotations before being
+/// emitted, which keeps the expanded form compact while preserving trace
+/// cyclicity. Projectors are not expanded outside chain-like containers because
+/// the ordering only has a noncommutative meaning in that context.
 pub trait ProjectorExpander {
     fn expand_projectors(&self) -> Atom;
 }
@@ -187,9 +188,11 @@ fn expand_chain_like_projector(arg: AtomView) -> Option<Atom> {
         };
 
         let mut sum = Atom::Zero;
-        for (coefficient, expanded_factors) in
-            projector_expansion_terms(&projector_factors, projector_symbol == *ANTISYM)?
-        {
+        for (coefficient, expanded_factors) in projector_expansion_terms(
+            &projector_factors,
+            projector_symbol == *ANTISYM,
+            f.get_symbol() == SPENSO_TAG.trace,
+        )? {
             let new_factors = factors[..position]
                 .iter()
                 .cloned()
@@ -246,6 +249,7 @@ fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
 fn projector_expansion_terms(
     factors: &[Atom],
     antisymmetric: bool,
+    cyclic: bool,
 ) -> Option<Vec<(Atom, Vec<Atom>)>> {
     let denominator = Atom::num(factorial_i64(factors.len())?);
     let mut permutation = (0..factors.len()).collect::<Vec<_>>();
@@ -259,7 +263,44 @@ fn projector_expansion_terms(
         &denominator,
         &mut terms,
     );
-    Some(terms)
+    Some(if cyclic {
+        collect_cyclic_projector_terms(terms)
+    } else {
+        terms
+    })
+}
+
+fn collect_cyclic_projector_terms(terms: Vec<(Atom, Vec<Atom>)>) -> Vec<(Atom, Vec<Atom>)> {
+    let mut grouped = Vec::<(Atom, Vec<Atom>)>::new();
+    for (coefficient, factors) in terms {
+        if let Some((group_coefficient, _)) = grouped
+            .iter_mut()
+            .find(|(_, group_factors)| same_cyclic_factors(group_factors, &factors))
+        {
+            *group_coefficient = (group_coefficient.clone() + coefficient).expand();
+        } else {
+            grouped.push((coefficient, factors));
+        }
+    }
+
+    grouped
+        .into_iter()
+        .filter(|(coefficient, _)| !coefficient.is_zero())
+        .collect()
+}
+
+fn same_cyclic_factors(left: &[Atom], right: &[Atom]) -> bool {
+    if left.is_empty() || right.is_empty() {
+        return left.is_empty() && right.is_empty();
+    }
+
+    left.len() == right.len()
+        && (0..left.len()).any(|shift| {
+            left.iter()
+                .zip(right.iter().cycle().skip(shift))
+                .take(left.len())
+                .all(|(left, right)| left == right)
+        })
 }
 
 fn collect_projector_terms(
@@ -592,16 +633,32 @@ mod tests {
     }
 
     #[test]
-    fn expand_antisym_in_trace_preserves_sign() {
+    fn expand_antisym_in_trace_uses_cyclicity() {
         let rep = Atom::var(symbol!("rep"));
         let first = Atom::var(symbol!("first"));
         let second = Atom::var(symbol!("second"));
 
         let expanded = crate::trace!(rep.clone(), crate::antisym!(first.clone(), second.clone()))
             .expand_projectors();
+
+        assert_eq!(expanded, Atom::Zero);
+    }
+
+    #[test]
+    fn expand_sym_in_trace_groups_cyclic_rotations() {
+        let rep = Atom::var(symbol!("rep"));
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+        let third = Atom::var(symbol!("third"));
+
+        let expanded = crate::trace!(
+            rep.clone(),
+            crate::sym!(first.clone(), second.clone(), third.clone())
+        )
+        .expand_projectors();
         let expected = Atom::num(1) / Atom::num(2)
-            * crate::trace!(rep.clone(), first.clone(), second.clone())
-            - Atom::num(1) / Atom::num(2) * crate::trace!(rep, second, first);
+            * crate::trace!(rep.clone(), first.clone(), second.clone(), third.clone())
+            + Atom::num(1) / Atom::num(2) * crate::trace!(rep, first, third, second);
 
         assert_eq!(expanded, expected);
     }

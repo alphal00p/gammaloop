@@ -113,6 +113,34 @@ fn su3_structure_constants_have_adjoint_casimir() {
 }
 
 #[test]
+fn su3_generators_satisfy_structure_commutator() {
+    let t = color_t();
+    let f = color_f();
+
+    for a in 0..8 {
+        for b in 0..8 {
+            for i in 0..3 {
+                for j in 0..3 {
+                    let mut commutator = Complex::new(0., 0.);
+                    for k in 0..3 {
+                        commutator += t_component(&t, a, i, k) * t_component(&t, b, k, j)
+                            - t_component(&t, b, i, k) * t_component(&t, a, k, j);
+                    }
+
+                    let mut expected = Complex::new(0., 0.);
+                    for c in 0..8 {
+                        expected +=
+                            Complex::new(0., f_component(&f, a, b, c)) * t_component(&t, c, i, j);
+                    }
+
+                    assert_complex_close(commutator, expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn su3_generators_have_fundamental_casimir() {
     let t = color_t();
 

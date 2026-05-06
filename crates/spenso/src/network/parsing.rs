@@ -570,10 +570,32 @@ fn replace_chain_placeholders(value: AtomView<'_>, chain_in: &Atom, chain_out: &
     }
 }
 
-fn parser_product(factors: impl IntoIterator<Item = Atom>) -> Atom {
-    factors
-        .into_iter()
-        .fold(Atom::num(1), |product, factor| product * factor)
+fn scale_first_chain_like_factor(value: AtomView<'_>, scalar: &Atom) -> Option<Atom> {
+    let AtomView::Fun(fun) = value else {
+        return None;
+    };
+
+    let offset = if fun.get_symbol() == SPENSO_TAG.chain {
+        2
+    } else if fun.get_symbol() == SPENSO_TAG.trace {
+        1
+    } else {
+        return None;
+    };
+
+    if fun.get_nargs() <= offset {
+        return None;
+    }
+
+    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+    for (position, arg) in fun.iter().enumerate() {
+        if position == offset {
+            rebuilt = rebuilt.add_arg(scalar.clone() * arg.to_owned());
+        } else {
+            rebuilt = rebuilt.add_arg(arg);
+        }
+    }
+    Some(rebuilt.finish())
 }
 
 impl<
@@ -692,7 +714,7 @@ where
                                 scalars *= a;
                                 None
                             } else {
-                                Some(Ok(n))
+                                Some(Ok((a.to_owned(), n)))
                             }
                         }
                         Err(e) => Some(Err(e)),
@@ -705,19 +727,24 @@ where
             if let NetworkState::PureScalar = first.state {
                 scalars *= first_atom;
             } else {
-                res.push(first);
+                res.push((first_atom.to_owned(), first));
             }
 
             if res.is_empty() {
                 Ok(Self::from_scalar(value.as_view().try_into()?))
+            } else if scalars != Atom::num(1)
+                && res.len() == 1
+                && let Some(scaled) = scale_first_chain_like_factor(res[0].0.as_view(), &scalars)
+            {
+                Self::try_from_view_impl(scaled.as_view(), state, library, settings)
             } else {
                 let s = if scalars != Atom::num(1) {
                     Self::from_scalar(scalars.as_view().try_into()?)
                 } else {
-                    res.pop().unwrap()
+                    res.pop().unwrap().1
                 };
 
-                Ok(s.n_mul(res))
+                Ok(s.n_mul(res.into_iter().map(|(_, net)| net)))
             }
         } else {
             let rest: Result<Vec<_>, _> = iter
@@ -862,8 +889,13 @@ where
             }
         }
 
-        let expression = parser_product(materialized_factors);
-        Self::try_from_view_impl(expression.as_view(), state, library, settings)
+        let mut factor_networks = Vec::new();
+        for factor in materialized_factors {
+            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib>(
+                factor, state, library, settings,
+            )?);
+        }
+        Ok(Self::chain_like_network_product(factor_networks))
     }
 
     #[allow(clippy::result_large_err)]
@@ -899,8 +931,6 @@ where
             );
         }
 
-        // A trace is parsed as a closed chain over fresh slots of the declared
-        // representation, so the factors themselves can stay endpoint-free.
         let mut dummies = ParserDummies::new();
         if let [factor] = factors {
             let left = dummies.slot(&rep);
@@ -927,7 +957,10 @@ where
             return Ok(factor_net.n_mul([right_net, left_net]));
         }
 
-        let links = (0..factors.len())
+        // Build an open chain and close it with one metric factor. This keeps
+        // trace materialization in graph form while avoiding direct self-joins
+        // between the first and last tensor factors.
+        let links = (0..=factors.len())
             .map(|_| dummies.slot(&rep))
             .collect::<Vec<_>>();
 
@@ -936,14 +969,86 @@ where
             .enumerate()
             .map(|(position, factor)| {
                 let left = links[position].to_atom();
-                let right = links[(position + 1) % links.len()].dual().to_atom();
+                let right = links[position + 1].dual().to_atom();
                 let factor = replace_chain_placeholders(*factor, &left, &right);
                 materialize_schoonschip(factor.as_view()).unwrap_or(factor)
             })
             .collect::<Vec<_>>();
 
-        let expression = parser_product(materialized_factors);
-        Self::try_from_view_impl(expression.as_view(), state, library, settings)
+        let mut factor_networks = Vec::new();
+        for factor in materialized_factors {
+            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib>(
+                factor, state, library, settings,
+            )?);
+        }
+        let closure = FunctionBuilder::new(ETS.metric)
+            .add_arg(links[factors.len()].to_atom())
+            .add_arg(links[0].dual().to_atom())
+            .finish();
+        factor_networks.push(Self::try_from_view_impl(
+            closure.as_view(),
+            state,
+            library,
+            settings,
+        )?);
+        Ok(Self::chain_like_network_product(factor_networks))
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_chain_like_factor_networks<S, Lib: Library<S, Key = K>>(
+        factor: Atom,
+        state: ParseState,
+        library: &Lib,
+        settings: &ParseSettings,
+    ) -> Result<Vec<Self>, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + Clone + Parse,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+    {
+        let AtomView::Mul(product) = factor.as_view() else {
+            return Ok(vec![Self::try_from_view_impl(
+                factor.as_view(),
+                state,
+                library,
+                settings,
+            )?]);
+        };
+
+        let mut scalars = Vec::new();
+        let mut tensors = Vec::new();
+        for arg in product.iter() {
+            let network = Self::try_from_view_impl(arg, state, library, settings)?;
+            if network.state == NetworkState::PureScalar {
+                scalars.push(network);
+            } else {
+                tensors.push(network);
+            }
+        }
+
+        if scalars.is_empty() || tensors.len() != 1 {
+            return Ok(vec![Self::try_from_view_impl(
+                factor.as_view(),
+                state,
+                library,
+                settings,
+            )?]);
+        }
+
+        scalars.extend(tensors);
+        Ok(scalars)
+    }
+
+    fn chain_like_network_product(networks: Vec<Self>) -> Self {
+        let mut networks = networks.into_iter();
+        let first = networks.next().unwrap();
+        let rest = networks.collect::<Vec<_>>();
+        if rest.is_empty() {
+            first
+        } else {
+            first.n_mul(rest)
+        }
     }
 
     #[allow(clippy::result_large_err)]
@@ -1164,6 +1269,14 @@ mod tests {
             .finish()
     }
 
+    fn chain_factor_with_external(name: Symbol, external: Atom) -> Atom {
+        FunctionBuilder::new(name)
+            .add_arg(external)
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .finish()
+    }
+
     #[test]
     fn parse_chain_materializes_placeholder_links() {
         let rep = mink4();
@@ -1193,6 +1306,25 @@ mod tests {
 
         assert!(parsed.state.is_scalar());
         assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_trace_closes_links_and_keeps_external_indices() {
+        let trace_rep = Lorentz {}.new_rep(4);
+        let external_rep = mink4();
+        let expr = trace!(
+            &trace_rep,
+            chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
+            chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
+            chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
+        );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+        assert_eq!(parsed.graph.dangling_indices().len(), 3);
     }
 
     #[test]
