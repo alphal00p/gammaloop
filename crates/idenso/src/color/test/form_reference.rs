@@ -1,6 +1,22 @@
 use super::*;
 use insta::assert_snapshot;
 
+macro_rules! fco {
+    ($r:ident, $a:tt, $b:tt, $c:tt) => {
+        color_f!(
+            slot!($r.coad_na, $a),
+            slot!($r.coad_na, $b),
+            slot!($r.coad_na, $c),
+        )
+    };
+}
+
+macro_rules! tco {
+    ($r:ident, $a:tt) => {
+        color_t!(slot!($r.coad_na, $a))
+    };
+}
+
 #[test]
 fn one_generator_trace_vanishes() {
     initialize();
@@ -85,7 +101,7 @@ fn three_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))+dR(coad(NA,a),coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out)))");
 }
 
 #[test]
@@ -179,7 +195,135 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))+1𝑖/2*dR(coad(NA,a),coad(NA,b),coad(NA,x))*f(coad(NA,c),coad(NA,d),coad(NA,x))+1𝑖/2*dR(coad(NA,c),coad(NA,d),coad(NA,x))*f(coad(NA,a),coad(NA,b),coad(NA,x))+dR(coad(NA,a),coad(NA,b),coad(NA,c),coad(NA,d))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))+1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,c),in,out),t(coad(NA,d),in,out),t(coad(NA,x),in,out)))+1𝑖/2*f(coad(NA,c),coad(NA,d),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,x),in,out)))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out),t(coad(NA,d),in,out)))");
+}
+
+// FORM's repository includes a valgrind-oriented size-5 port of color.h's
+// tloop.frm check:
+// https://github.com/form-dev/form/blob/fdf6af0ce520f7da2dfe0b0b61bf4cef396770be/check/extra/color.frm
+//
+// These ignored tests keep the upstream expressions and expected invariant
+// families close to the implementation. They require higher symmetric
+// invariant reductions than the current chain/trace simplifier provides.
+
+fn form_color_tloop_q10(r: &TestReps) -> Atom {
+    trace!(
+        &r.cof_nc,
+        tco!(r, j1),
+        tco!(r, j2),
+        tco!(r, j3),
+        tco!(r, j4),
+        tco!(r, j5),
+        tco!(r, j1),
+        tco!(r, j2),
+        tco!(r, j3),
+        tco!(r, j4),
+        tco!(r, j5),
+    )
+}
+
+fn form_color_tloop_g10(r: &TestReps) -> Atom {
+    fco!(r, i1, i2, j1)
+        * fco!(r, i2, i3, j2)
+        * fco!(r, i3, i4, j3)
+        * fco!(r, i4, i5, j4)
+        * fco!(r, i5, i6, j5)
+        * fco!(r, i6, i7, j1)
+        * fco!(r, i7, i8, j2)
+        * fco!(r, i8, i9, j3)
+        * fco!(r, i9, i10, j4)
+        * fco!(r, i10, i1, j5)
+}
+
+fn form_color_tloop_qq5(r: &TestReps) -> Atom {
+    trace!(
+        &r.cof_nc,
+        tco!(r, j1),
+        tco!(r, j2),
+        tco!(r, j3),
+        tco!(r, j4),
+        tco!(r, j5),
+    ) * trace!(
+        &r.cof_nc,
+        tco!(r, j1),
+        tco!(r, j2),
+        tco!(r, j3),
+        tco!(r, j4),
+        tco!(r, j5),
+    )
+}
+
+fn form_color_tloop_qg5(r: &TestReps) -> Atom {
+    trace!(
+        &r.cof_nc,
+        tco!(r, j1),
+        tco!(r, j2),
+        tco!(r, j3),
+        tco!(r, j4),
+        tco!(r, j5),
+    ) * fco!(r, k1, k2, j1)
+        * fco!(r, k2, k3, j2)
+        * fco!(r, k3, k4, j3)
+        * fco!(r, k4, k5, j4)
+        * fco!(r, k5, k1, j5)
+}
+
+fn form_color_tloop_gg5(r: &TestReps) -> Atom {
+    fco!(r, i1, i2, j1)
+        * fco!(r, i2, i3, j2)
+        * fco!(r, i3, i4, j3)
+        * fco!(r, i4, i5, j4)
+        * fco!(r, i5, i1, j5)
+        * fco!(r, k1, k2, j1)
+        * fco!(r, k2, k3, j2)
+        * fco!(r, k3, k4, j3)
+        * fco!(r, k4, k5, j4)
+        * fco!(r, k5, k1, j5)
+}
+
+#[test]
+#[ignore = "pending FORM color.frm size-5 Q10 invariant-family reduction"]
+fn form_github_color_tloop_q10_size_5() {
+    let r = TestReps::new();
+    let expr = form_color_tloop_q10(&r);
+
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"125/72*CA^4*NA*TR+-155/24*CA^3*CF*NA*TR+35/4*CA^2*CF^2*NA*TR+-5*CA*CF^3*NA*TR+-6*CA*d44(cOlpR1,cOlpA1)+1/3*TR*d44(cOlpA1,cOlpA2)+CF^4*NA*TR+5*CF*d44(cOlpR1,cOlpA1)");
+}
+
+#[test]
+#[ignore = "pending FORM color.frm size-5 G10 invariant-family reduction"]
+fn form_github_color_tloop_g10_size_5() {
+    let r = TestReps::new();
+    let expr = form_color_tloop_g10(&r);
+
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-1/36*CA^5*NA+2/3*CA*d44(cOlpA1,cOlpA2)");
+}
+
+#[test]
+#[ignore = "pending FORM color.frm size-5 QQ5 invariant-family reduction"]
+fn form_github_color_tloop_qq5_size_5() {
+    let r = TestReps::new();
+    let expr = form_color_tloop_qq5(&r);
+
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-5/144*CA^3*NA*TR^2+11/48*CA^2*d33(cOlpR1,cOlpR2)+1/6*TR*d44(cOlpR1,cOlpA1)+-5/6*CA*d44(cOlpR1,cOlpR2)+d55(cOlpR1,cOlpR2)");
+}
+
+#[test]
+#[ignore = "pending FORM color.frm size-5 QG5 invariant-family reduction"]
+fn form_github_color_tloop_qg5_size_5() {
+    let r = TestReps::new();
+    let expr = form_color_tloop_qg5(&r);
+
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-5𝑖/144*CA^4*NA*TR+-3𝑖/4*CA*d44(cOlpR1,cOlpA1)+1𝑖/12*TR*d44(cOlpA1,cOlpA2)");
+}
+
+#[test]
+#[ignore = "pending FORM color.frm size-5 GG5 invariant-family reduction"]
+fn form_github_color_tloop_gg5_size_5() {
+    let r = TestReps::new();
+    let expr = form_color_tloop_gg5(&r);
+
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"5/144*CA^5*NA+2/3*CA*d44(cOlpA1,cOlpA2)");
 }
 
 #[test]
