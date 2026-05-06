@@ -13,6 +13,8 @@ use library::{Library, LibraryError};
 
 use crate::algebra::algebraic_traits::RefOne;
 use crate::contraction::{Contract, Trace};
+#[cfg(feature = "shadowing")]
+use crate::iterators::IteratableTensor;
 use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::permuted::PermuteTensor;
@@ -30,11 +32,18 @@ use store::{
 use thiserror::Error;
 // use log::trace;
 
+#[cfg(feature = "shadowing")]
+use crate::algebra::complex::RealOrComplexRef;
+#[cfg(feature = "shadowing")]
+use crate::tensors::parametric::AtomViewOrConcrete;
 use crate::{
     contraction::ContractionError,
     structure::{CastStructure, HasStructure, ScalarTensor, TensorStructure},
 };
 use eyre::eyre;
+
+#[cfg(feature = "shadowing")]
+use symbolica::atom::{Atom, AtomView};
 
 #[cfg(feature = "shadowing")]
 pub mod tags;
@@ -1159,6 +1168,265 @@ fn log_sum_add(
     }
 }
 
+#[cfg(feature = "shadowing")]
+#[derive(Clone, Copy, Debug, Default)]
+struct AtomSumShapeStats {
+    logical_entries: usize,
+    entries: usize,
+    zero_entries: usize,
+    top_level_sum_entries: usize,
+    total_terms: usize,
+    max_terms: usize,
+    total_bytes: usize,
+    max_bytes: usize,
+}
+
+#[cfg(feature = "shadowing")]
+impl AtomSumShapeStats {
+    fn observe_atom(&mut self, atom: AtomView<'_>, include_bytes: bool) {
+        let terms = atom.nterms();
+        self.entries += 1;
+        self.zero_entries += usize::from(atom.is_zero());
+        self.top_level_sum_entries += usize::from(matches!(atom, AtomView::Add(_)));
+        self.total_terms += terms;
+        self.max_terms = self.max_terms.max(terms);
+        if include_bytes {
+            let bytes = atom.get_byte_size();
+            self.total_bytes += bytes;
+            self.max_bytes = self.max_bytes.max(bytes);
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+trait AtomEntryShape {
+    fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool);
+}
+
+#[cfg(feature = "shadowing")]
+impl AtomEntryShape for AtomView<'_> {
+    fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool) {
+        stats.observe_atom(self, include_bytes);
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<T> AtomEntryShape for AtomViewOrConcrete<'_, T> {
+    fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool) {
+        if let AtomViewOrConcrete::Atom(atom) = self {
+            stats.observe_atom(atom, include_bytes);
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<T> AtomEntryShape for &T {
+    fn observe_atom_shape(self, _stats: &mut AtomSumShapeStats, _include_bytes: bool) {}
+}
+
+#[cfg(feature = "shadowing")]
+impl<T> AtomEntryShape for RealOrComplexRef<'_, T> {
+    fn observe_atom_shape(self, _stats: &mut AtomSumShapeStats, _include_bytes: bool) {}
+}
+
+#[cfg(feature = "shadowing")]
+trait AtomSumShapeDiagnostics {
+    fn atom_sum_shape_stats(&self, include_bytes: bool) -> AtomSumShapeStats;
+}
+
+#[cfg(not(feature = "shadowing"))]
+trait AtomSumShapeDiagnostics {}
+
+#[cfg(not(feature = "shadowing"))]
+impl<T> AtomSumShapeDiagnostics for T {}
+
+#[cfg(feature = "shadowing")]
+impl<T> AtomSumShapeDiagnostics for T
+where
+    T: HasStructure + IteratableTensor,
+    for<'a> T::Data<'a>: AtomEntryShape,
+{
+    fn atom_sum_shape_stats(&self, include_bytes: bool) -> AtomSumShapeStats {
+        let mut stats = AtomSumShapeStats {
+            logical_entries: self.structure().size().unwrap_or(0),
+            ..Default::default()
+        };
+        for (_, entry) in self.iter_flat() {
+            entry.observe_atom_shape(&mut stats, include_bytes);
+        }
+        stats
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn scalar_atom_sum_shape_stats<S: 'static>(
+    scalar: &S,
+    include_bytes: bool,
+) -> Option<AtomSumShapeStats> {
+    let atom = (scalar as &dyn std::any::Any).downcast_ref::<Atom>()?;
+    let mut stats = AtomSumShapeStats {
+        logical_entries: 1,
+        ..Default::default()
+    };
+    stats.observe_atom(atom.as_view(), include_bytes);
+    Some(stats)
+}
+
+#[cfg(feature = "shadowing")]
+fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
+    store: &Store,
+    graph: &NetworkGraph<K, FK, Aind>,
+    targets: &[(NodeIndex, &NetworkLeaf<K>)],
+    lib: &L,
+) where
+    Store: NetworkStoreAccess,
+    Store::Scalar: 'static,
+    Store::Tensor: AtomSumShapeDiagnostics + From<LT::WithIndices> + HasStructure,
+    LT: LibraryTensor + Clone,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    K: Display + Debug,
+    FK: Debug,
+    Aind: AbsInd,
+    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+        IsAbstractSlot<Aind = Aind>,
+{
+    let include_bytes = profile::atom_bytes();
+    let mut leaf_stats = Vec::new();
+    for (offset, (node_id, leaf)) in targets.iter().enumerate() {
+        let (kind, stats) = match leaf {
+            NetworkLeaf::Scalar(index) => (
+                "scalar",
+                scalar_atom_sum_shape_stats(store.scalar(*index), include_bytes)
+                    .unwrap_or_default(),
+            ),
+            NetworkLeaf::LocalTensor(index) => (
+                "tensor",
+                store.tensor(*index).atom_sum_shape_stats(include_bytes),
+            ),
+            NetworkLeaf::LibraryKey(_) => {
+                let tensor = Store::Tensor::from(
+                    graph
+                        .get_lib_data::<_, LT, L>(lib, *node_id)
+                        .expect("library target leaf should resolve to library data"),
+                );
+                ("library", tensor.atom_sum_shape_stats(include_bytes))
+            }
+        };
+        leaf_stats.push((offset, kind, stats));
+    }
+
+    let inspected_atom_leaves = leaf_stats
+        .iter()
+        .filter(|(_, _, stats)| stats.entries > 0)
+        .count();
+    let leaves_with_top_level_sums = leaf_stats
+        .iter()
+        .filter(|(_, _, stats)| stats.top_level_sum_entries > 0)
+        .count();
+    let atom_entries = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.entries)
+        .sum::<usize>();
+    let logical_entries = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.logical_entries)
+        .sum::<usize>();
+    let zero_entries = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.zero_entries)
+        .sum::<usize>();
+    let structural_zero_entries = logical_entries.saturating_sub(atom_entries);
+    let nonzero_entries = atom_entries.saturating_sub(zero_entries);
+    let nonzero_density = if logical_entries == 0 {
+        0.0
+    } else {
+        nonzero_entries as f64 / logical_entries as f64
+    };
+    let top_level_sum_entries = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.top_level_sum_entries)
+        .sum::<usize>();
+    let total_terms = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.total_terms)
+        .sum::<usize>();
+    let max_terms = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.max_terms)
+        .max()
+        .unwrap_or(0);
+    let total_bytes = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.total_bytes)
+        .sum::<usize>();
+    let max_bytes = leaf_stats
+        .iter()
+        .map(|(_, _, stats)| stats.max_bytes)
+        .max()
+        .unwrap_or(0);
+
+    eprintln!(
+        "spenso_profile execute.sum_atom_leaves leaves={} inspected_atom_leaves={} leaves_with_top_level_sums={} logical_entries={} atom_entries={} zero_entries={} structural_zero_entries={} nonzero_entries={} nonzero_density={:.6} top_level_sum_entries={} total_terms={} max_terms={} bytes_enabled={} total_bytes={} max_bytes={}",
+        targets.len(),
+        inspected_atom_leaves,
+        leaves_with_top_level_sums,
+        logical_entries,
+        atom_entries,
+        zero_entries,
+        structural_zero_entries,
+        nonzero_entries,
+        nonzero_density,
+        top_level_sum_entries,
+        total_terms,
+        max_terms,
+        include_bytes,
+        total_bytes,
+        max_bytes,
+    );
+
+    leaf_stats.sort_by_key(|(_, _, stats)| {
+        std::cmp::Reverse((
+            stats.total_bytes,
+            stats.total_terms,
+            stats.entries.saturating_sub(stats.zero_entries),
+            stats.top_level_sum_entries,
+        ))
+    });
+    for (rank, (offset, kind, stats)) in leaf_stats
+        .into_iter()
+        .filter(|(_, _, stats)| stats.entries > 0)
+        .take(8)
+        .enumerate()
+    {
+        let structural_zero_entries = stats.logical_entries.saturating_sub(stats.entries);
+        let nonzero_entries = stats.entries.saturating_sub(stats.zero_entries);
+        let nonzero_density = if stats.logical_entries == 0 {
+            0.0
+        } else {
+            nonzero_entries as f64 / stats.logical_entries as f64
+        };
+        eprintln!(
+            "spenso_profile execute.sum_atom_leaf rank={} leaf={} kind={} logical_entries={} atom_entries={} zero_entries={} structural_zero_entries={} nonzero_entries={} nonzero_density={:.6} top_level_sum_entries={} total_terms={} max_terms={} bytes_enabled={} total_bytes={} max_bytes={}",
+            rank,
+            offset,
+            kind,
+            stats.logical_entries,
+            stats.entries,
+            stats.zero_entries,
+            structural_zero_entries,
+            nonzero_entries,
+            nonzero_density,
+            stats.top_level_sum_entries,
+            stats.total_terms,
+            stats.max_terms,
+            include_bytes,
+            stats.total_bytes,
+            stats.max_bytes,
+        );
+    }
+}
+
 fn balanced_ref_sum<T>(mut terms: Vec<T>, sum_start: Option<std::time::Instant>) -> T
 where
     T: Ref + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
@@ -1976,7 +2244,8 @@ where
         + Contract<LCM = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
         + for<'a> AddAssign<LT::WithIndices>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + AtomSumShapeDiagnostics,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
     Store::Scalar: Neg<Output = Store::Scalar>
         + RefOne
@@ -2079,7 +2348,8 @@ where
                 C::contract(self, graph, operation, lib)
             }
             NetworkOp::Sum => {
-                let profile_sum = profile::enabled() && operation.leaf_count() > 32;
+                let profile_sum =
+                    profile::enabled() && (operation.leaf_count() > 32 || profile::verbose());
                 let sum_start = profile_sum.then(std::time::Instant::now);
                 if profile_sum {
                     eprintln!(
@@ -2113,6 +2383,12 @@ where
                         tensor_targets,
                         library_targets,
                         target_start.elapsed().as_secs_f64() * 1000.0,
+                    );
+                }
+                #[cfg(feature = "shadowing")]
+                if profile_sum {
+                    log_sum_leaf_atom_shapes::<K, FK, Aind, Self, LT, L>(
+                        self, graph, &targets, lib,
                     );
                 }
 

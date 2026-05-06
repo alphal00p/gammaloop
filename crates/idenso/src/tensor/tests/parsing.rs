@@ -9,8 +9,8 @@ use symbolica::atom::{Atom, AtomCore, Symbol};
 
 use symbolica::symbol;
 
-use spenso::network::library::DummyLibrary;
 use spenso::network::library::panicing::ErroringLibrary;
+use spenso::network::library::DummyLibrary;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::abstract_index::AbstractIndex;
 

@@ -225,11 +225,13 @@ fn report_concrete_net_stats(label: &str, net: &ConcreteParsingNet) {
 
 fn execute_actual_net(label: &str, mut net: ParsingNet) -> Atom {
     let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
     let start = Instant::now();
     net.execute::<Sequential, SmallestDegree, _, _, _>(&*lib, &*FUN_LIB)
         .unwrap_or_else(|error| panic!("{label} actual execution failed: {error}"));
     report(&format!("{label} actual_execute"), start);
     report_actual_net_stats(&format!("{label} after_execute"), &net);
+    spenso::network::profile::report(&format!("{label} after_actual_execute"));
 
     let result = net
         .result_scalar()
@@ -249,11 +251,13 @@ fn execute_actual_net(label: &str, mut net: ParsingNet) -> Atom {
 
 fn execute_actual_net_min_result_rank(label: &str, mut net: ParsingNet) -> Atom {
     let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
     let start = Instant::now();
     net.execute::<Sequential, MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
         .unwrap_or_else(|error| panic!("{label} min-result-rank actual execution failed: {error}"));
     report(&format!("{label} min_result_rank_actual_execute"), start);
     report_actual_net_stats(&format!("{label} min_result_rank_after_execute"), &net);
+    spenso::network::profile::report(&format!("{label} after_min_result_rank_actual_execute"));
 
     let result = net
         .result_scalar()
@@ -273,6 +277,7 @@ fn execute_actual_net_min_result_rank(label: &str, mut net: ParsingNet) -> Atom 
 
 fn execute_actual_net_min_result_rank_parallel(label: &str, mut net: ParsingNet) -> Atom {
     let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
     let start = Instant::now();
     net.execute_parallel::<MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
         .unwrap_or_else(|error| {
@@ -286,6 +291,9 @@ fn execute_actual_net_min_result_rank_parallel(label: &str, mut net: ParsingNet)
         &format!("{label} parallel_min_result_rank_after_execute"),
         &net,
     );
+    spenso::network::profile::report(&format!(
+        "{label} after_parallel_min_result_rank_actual_execute"
+    ));
 
     let result = net.result_scalar().unwrap_or_else(|error| {
         panic!("{label} parallel min-result-rank scalar result failed: {error}")
@@ -393,6 +401,37 @@ fn gamma_ladder_order_mwe_expr() -> Atom {
     )
 }
 
+fn scalar_poly(seed: usize, terms: usize) -> String {
+    (0..terms)
+        .map(|term| format!("x{seed}_{term}*y{seed}_{term}"))
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
+fn late_tensor_sum_mwe_expr(leaves: usize, scalar_terms: usize) -> Atom {
+    let tensor = "spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*Q(0,spenso::mink(4,mu))";
+    let expanded_sum = (0..leaves)
+        .map(|leaf| format!("({})*({tensor})", scalar_poly(leaf, scalar_terms)))
+        .collect::<Vec<_>>()
+        .join("+");
+
+    parse_inline_expression(&format!("({expanded_sum})*Q(99,spenso::mink(4,nu))"))
+}
+
+fn factored_tensor_sum_mwe_expr(leaves: usize, scalar_terms: usize) -> Atom {
+    let scalar_sum = (0..leaves)
+        .map(|leaf| format!("({})", scalar_poly(leaf, scalar_terms)))
+        .collect::<Vec<_>>()
+        .join("+");
+
+    parse_inline_expression(&format!(
+        "(({scalar_sum})
+          *spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))
+          *Q(0,spenso::mink(4,mu)))
+         *Q(99,spenso::mink(4,nu))"
+    ))
+}
+
 #[test]
 #[ignore = "diagnostic timing for GammaLoop's concrete/mixed tensor evaluator path"]
 fn symbolica_expression_input_actual_network_execute() {
@@ -418,6 +457,48 @@ fn symbolica_expression_input_actual_network_parallel_min_result_rank_execute() 
     let expr = parse_root_input("symbolica_expression.txt");
     let net = parse_actual_net("raw_parallel_min_result_rank", &expr);
     let _ = execute_actual_net_min_result_rank_parallel("raw_parallel_min_result_rank", net);
+}
+
+#[test]
+#[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt parse path"]
+fn spenso_eval_input_0_actual_network_parse() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let _net = parse_actual_net("spenso_eval_input_0", &expr);
+}
+
+#[test]
+#[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt parallel MinResultRank path"]
+fn spenso_eval_input_0_actual_network_parallel_min_result_rank_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let net = parse_actual_net("spenso_eval_input_0_parallel_min_result_rank", &expr);
+    let _ = execute_actual_net_min_result_rank_parallel(
+        "spenso_eval_input_0_parallel_min_result_rank",
+        net,
+    );
+}
+
+#[test]
+#[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt after Hornering"]
+fn spenso_eval_input_0_horner_actual_network_parse() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let expr = collect_horner(&expr);
+    let _net = parse_actual_net("spenso_eval_input_0_horner", &expr);
+}
+
+#[test]
+#[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt after Hornering and parallel MinResultRank"]
+fn spenso_eval_input_0_horner_actual_network_parallel_min_result_rank_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let expr = collect_horner(&expr);
+    let net = parse_actual_net("spenso_eval_input_0_horner_parallel_min_result_rank", &expr);
+    let _ = execute_actual_net_min_result_rank_parallel(
+        "spenso_eval_input_0_horner_parallel_min_result_rank",
+        net,
+    );
 }
 
 #[test]
@@ -497,5 +578,45 @@ fn gamma_ladder_mwe_order_results_match_after_expand() {
         diff.is_zero(),
         "contraction orders produced different scalar values: {}",
         diff
+    );
+}
+
+#[test]
+#[ignore = "diagnostic MWE for a late tensor-valued sum that should be factored before execution"]
+fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expanded = late_tensor_sum_mwe_expr(12, 12);
+    let factored = factored_tensor_sum_mwe_expr(12, 12);
+    let hornered = collect_horner(&expanded);
+
+    let expanded_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_expanded",
+        parse_actual_net("late_tensor_sum_mwe_expanded", &expanded),
+    );
+    let factored_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_factored",
+        parse_actual_net("late_tensor_sum_mwe_factored", &factored),
+    );
+    let hornered_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_hornered",
+        parse_actual_net("late_tensor_sum_mwe_hornered", &hornered),
+    );
+
+    let start = Instant::now();
+    let expanded_factored_diff = (expanded_result.clone() - factored_result).expand();
+    report("late_tensor_sum_mwe_expanded_factored_diff_expand", start);
+    assert!(
+        expanded_factored_diff.is_zero(),
+        "expanded and factored MWE forms produced different scalar values: {}",
+        expanded_factored_diff
+    );
+
+    let start = Instant::now();
+    let expanded_hornered_diff = (expanded_result - hornered_result).expand();
+    report("late_tensor_sum_mwe_expanded_hornered_diff_expand", start);
+    assert!(
+        expanded_hornered_diff.is_zero(),
+        "expanded and Hornered MWE forms produced different scalar values: {}",
+        expanded_hornered_diff
     );
 }

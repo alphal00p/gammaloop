@@ -4,41 +4,43 @@ use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
 use spenso::{
     algebra::ScalarMul,
     contraction::{Contract, ContractionError, Trace},
+    iterators::IteratableTensor,
     network::{
-        ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
-        TensorOrScalarOrKey,
         library::{
-            DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError, TensorLibraryData,
             function_lib::Wrap,
-            symbolic::{ETS, ExplicitKey, TensorLibrary},
+            symbolic::{ExplicitKey, TensorLibrary, ETS},
+            DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError, TensorLibraryData,
         },
         parsing::{
             ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom,
             StructureInferenceMode, TensorFromExpression, TensorLibraryFor,
         },
         store::NetworkStore,
+        ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
+        TensorOrScalarOrKey,
     },
     shadowing::{
-        Concretize,
         symbolica_utils::{AtomCoreExt, IntoArgs, IntoSymbol, SpensoPrintSettings},
+        Concretize,
     },
     structure::{
-        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorShell, TensorStructure,
-        ToSymbolic,
         abstract_index::AIND_SYMBOLS,
+        concrete_index::{ExpandedIndex, FlatIndex},
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
+        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
+        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorShell, TensorStructure,
+        ToSymbolic,
     },
     tensors::parametric::MixedTensor,
 };
 
 use delegate::delegate;
-use spenso::structure::StructureError;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::dimension::Dimension;
 use spenso::structure::representation::Representation;
+use spenso::structure::StructureError;
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -334,6 +336,26 @@ impl<Aind: AbsInd> HasStructure for SymbolicTensor<Aind> {
         } else {
             None
         }
+    }
+}
+
+impl<Aind: AbsInd> IteratableTensor for SymbolicTensor<Aind> {
+    type Data<'a>
+        = AtomView<'a>
+    where
+        Self: 'a;
+
+    fn iter_flat(&self) -> impl Iterator<Item = (FlatIndex, Self::Data<'_>)> {
+        std::iter::once((FlatIndex::from(0usize), self.expression.as_view()))
+    }
+
+    fn iter_expanded(&self) -> impl Iterator<Item = (ExpandedIndex, Self::Data<'_>)> {
+        std::iter::once((
+            ExpandedIndex {
+                indices: Vec::new(),
+            },
+            self.expression.as_view(),
+        ))
     }
 }
 
