@@ -94,21 +94,21 @@
   )
 }
 
-#let _parallel-distance-on-label-side(style, segment, label-pos) = {
-  let distance = style.at("parallel-distance", default: 0)
-  if label-pos == none or distance == none or distance == 0 {
-    distance
+#let _parallel-offset-on-label-side(style, segment, label-pos) = {
+  let offset = style.at("parallel-offset", default: 0)
+  if label-pos == none or offset == none or offset == 0 {
+    offset
   } else {
     let mid = _bezier-point(segment, 0.5)
     let tangent = _bezier-tangent(segment, 0.5)
     let cross = tangent.x * (label-pos.y - mid.y) - tangent.y * (label-pos.x - mid.x)
     let sign = if cross < 0 { -1 } else { 1 }
-    sign * calc.abs(distance)
+    sign * calc.abs(offset)
   }
 }
 
 #let _mark-style-on-label-side(style, segment, label-pos) = {
-  style + (parallel-distance: _parallel-distance-on-label-side(style, segment, label-pos))
+  style + (parallel-offset: _parallel-offset-on-label-side(style, segment, label-pos))
 }
 
 #let _pattern-style-keys = (
@@ -122,9 +122,10 @@
 )
 
 #let _parallel-style-keys = (
-  "parallel-distance",
+  "parallel-offset",
   "parallel-length",
   "parallel-ratio",
+  "parallel-resolve",
   "parallel-accuracy",
   "parallel-optimize",
 )
@@ -166,25 +167,48 @@
 
 #let _style-value(style, key, default) = style.at(key, default: default)
 
+#let _parallel-offset(style) = {
+  style.at("parallel-offset", default: 0)
+}
+
+#let _parallel-resolve-method(style) = {
+  style.at("parallel-resolve", default: "min")
+}
+
+#let _resolve-parallel-target(base-length, fixed, relative, method) = {
+  if type(method) == function {
+    method((base-length: base-length, length: fixed, ratio: relative))
+  } else if fixed == none {
+    relative
+  } else if relative == none {
+    fixed
+  } else if method in ("max", "longer") {
+    calc.max(fixed, relative)
+  } else if method in ("length", "fixed") {
+    fixed
+  } else if method in ("ratio", "relative") {
+    relative
+  } else if method in ("none", "full") {
+    none
+  } else {
+    calc.min(fixed, relative)
+  }
+}
+
 #let _parallel-mark-style(style) = {
-  let mark = _style-value(style, "parallel-mark", none)
+  let mark = if style == none { none } else { _style-value(style, "parallel-mark", none) }
   if mark == none {
     none
   } else {
     (
       stroke: mark.at("stroke", default: style.at("stroke", default: (paint: black, thickness: 0.45pt, cap: "round"))),
       mark: mark.at("mark", default: (end: ">")),
-      parallel-distance: mark.at("distance", default: mark.at("parallel-distance", default: 0)),
-      parallel-length: mark.at("length", default: mark.at("parallel-length", default: none)),
-      parallel-ratio: mark.at("ratio", default: mark.at("parallel-ratio", default: none)),
-      parallel-accuracy: mark.at(
-        "accuracy",
-        default: mark.at("parallel-accuracy", default: _style-value(style, "parallel-accuracy", 0.001)),
-      ),
-      parallel-optimize: mark.at(
-        "optimize",
-        default: mark.at("parallel-optimize", default: _style-value(style, "parallel-optimize", true)),
-      ),
+      parallel-offset: mark.at("offset", default: 0),
+      parallel-length: mark.at("length", default: none),
+      parallel-ratio: mark.at("ratio", default: none),
+      parallel-resolve: mark.at("resolve", default: _parallel-resolve-method(style)),
+      parallel-accuracy: mark.at("accuracy", default: _style-value(style, "parallel-accuracy", 0.001)),
+      parallel-optimize: mark.at("optimize", default: _style-value(style, "parallel-optimize", true)),
     )
   }
 }
@@ -200,6 +224,25 @@
 #let _style(value, data) = {
   let value = _call(value, data)
   if value == none { (:) } else { value }
+}
+
+#let _style-layers(value, data) = {
+  let value = _call(value, data)
+  if value == none {
+    ((:),)
+  } else if type(value) == array {
+    value
+  } else {
+    (value,)
+  }
+}
+
+#let _style-layer(layers, index) = {
+  if index < layers.len() {
+    layers.at(index)
+  } else {
+    none
+  }
 }
 
 #let _content(value, data, default: none) = {
@@ -219,18 +262,19 @@
 }
 
 #let _has-parallel(style) = {
-  let distance = _style-value(style, "parallel-distance", 0)
-  distance != none and distance != 0
+  let offset = _parallel-offset(style)
+  offset != none and offset != 0
 }
 
 #let _has-mark(style) = _style-value(style, "mark", none) != none
 
 #let _same-parallel-geometry(source-style, sink-style) = {
-  let same = _style-value(source-style, "parallel-distance", 0) == _style-value(sink-style, "parallel-distance", 0)
+  let same = _parallel-offset(source-style) == _parallel-offset(sink-style)
   same = (
     same and _style-value(source-style, "parallel-length", none) == _style-value(sink-style, "parallel-length", none)
   )
   same = same and _style-value(source-style, "parallel-ratio", none) == _style-value(sink-style, "parallel-ratio", none)
+  same = same and _parallel-resolve-method(source-style) == _parallel-resolve-method(sink-style)
   same = (
     same
       and _style-value(source-style, "parallel-accuracy", 0.001) == _style-value(sink-style, "parallel-accuracy", 0.001)
@@ -274,7 +318,7 @@
 #let _parallel-path(segment, style, start-outset: 0, end-outset: 0) = {
   curve-api.parallel-path(
     curve-api.cubic-path(..segment, accuracy: _style-value(style, "parallel-accuracy", 0.001)),
-    distance: _style-value(style, "parallel-distance", 0),
+    distance: _parallel-offset(style),
     start-outset: start-outset,
     end-outset: end-outset,
     accuracy: _style-value(style, "parallel-accuracy", 0.001),
@@ -295,16 +339,11 @@
 }
 
 #let _parallel-target-length(base-length, style) = {
-  let limits = ()
   let length = _style-value(style, "parallel-length", none)
-  if length != none and length > 0 {
-    limits.push(length)
-  }
   let ratio = _style-value(style, "parallel-ratio", none)
-  if ratio != none and ratio > 0 {
-    limits.push(base-length * ratio)
-  }
-  if limits.len() == 0 { none } else { calc.min(..limits) }
+  let fixed = if length != none and length > 0 { length } else { none }
+  let relative = if ratio != none and ratio > 0 { base-length * ratio } else { none }
+  _resolve-parallel-target(base-length, fixed, relative, _parallel-resolve-method(style))
 }
 
 #let _parallel-center-outset(base-length, style, source-outset: 0, sink-outset: 0) = {
@@ -652,10 +691,8 @@
 /// #example(`
 /// #let b = graph.builder(name: "demo")
 /// #let parallel-base-edge = 0
-/// #let parallel-edge = 1
 /// #let source-patterns = (
 ///   "coil",
-///   none,
 ///   "zigzag",
 ///   "coil",
 ///   "wave",
@@ -666,7 +703,6 @@
 /// )
 /// #let sink-patterns = (
 ///   "coil",
-///   none,
 ///   "zigzag",
 ///   "coil",
 ///   "zigzag",
@@ -675,47 +711,51 @@
 ///   "coil",
 ///   "wave",
 /// )
-/// #let parallel-style(edge) = if edge.eid == parallel-edge {
+/// #let parallel-layer(edge, mark: none) = if edge.eid == parallel-base-edge {
 ///   (
-///     parallel-distance: 0.5,
-///     parallel-length: 4.5,
+///     parallel-offset: -0.5,
+///     parallel-length: 1.5,
 ///     parallel-ratio: 0.5,
+///     parallel-resolve: "min",
+///     stroke: (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round"),
+///     mark: mark,
 ///   )
-/// } else { (:) }
+/// } else { none }
+/// #let stack(base, layer) = if layer == none { base } else { (base, layer) }
 /// #let source-stroke(edge) = if edge.eid == parallel-base-edge {
 ///   (paint: gray, thickness: 0.75pt, cap: "round")
-/// } else if edge.eid == parallel-edge {
-///   (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round")
 /// } else {
 ///   (paint: red, thickness: 1.2pt, cap: "round")
 /// }
 /// #let sink-stroke(edge) = if edge.eid == parallel-base-edge {
 ///   (paint: gray, thickness: 0.75pt, cap: "round")
-/// } else if edge.eid == parallel-edge {
-///   (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round")
 /// } else {
 ///   (paint: blue, thickness: 1.2pt, cap: "round", dash: "dotted")
 /// }
-/// #let source-style(edge) = (
-///   stroke: source-stroke(edge),
-///   pattern: source-patterns.at(edge.eid),
-///   pattern-amplitude: 0.18,
-///   pattern-wavelength: 0.55,
-///   pattern-coil-longitudinal-scale: 1.6,
-/// ) + parallel-style(edge)
-/// #let sink-style(edge) = (
-///   stroke: sink-stroke(edge),
-///   mark: if edge.eid == parallel-edge { (end: (symbol:"straight"),scale: 0.75) } else { none },
-///   pattern: sink-patterns.at(edge.eid),
-///   pattern-amplitude: 0.18,
-///   pattern-wavelength: 0.55,
-///   pattern-coil-longitudinal-scale: 1.6,
-/// ) + parallel-style(edge)
+/// #let source-style(edge) = {
+///   let base = (
+///     stroke: source-stroke(edge),
+///     pattern: source-patterns.at(edge.eid),
+///     pattern-amplitude: 0.18,
+///     pattern-wavelength: 0.55,
+///     pattern-coil-longitudinal-scale: 1.6,
+///   )
+///   stack(base, parallel-layer(edge))
+/// }
+/// #let sink-style(edge) = {
+///   let base = (
+///     stroke: sink-stroke(edge),
+///     pattern: sink-patterns.at(edge.eid),
+///     pattern-amplitude: 0.18,
+///     pattern-wavelength: 0.55,
+///     pattern-coil-longitudinal-scale: 1.6,
+///   )
+///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
+/// }
 /// #let (node: a, builder: b) = graph.node(b, name: "a hi")
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
 /// #let (node: d, builder: b) = graph.node(b, name: "d")
 /// #let (node: e, builder: b) = graph.node(b, name: "e")
-/// #let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (pin: "x:0,y:0.75"))
 /// #let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (pin: "x:0,y:0.75"))
 /// #let b = graph.edge(b, source: (node: c), sink: (node: a, compass: "e"))
 /// #let b = graph.edge(b, source: (node: c), sink: (node: d, compass: "e"))
@@ -735,9 +775,10 @@
 /// #let (node: pc, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
 /// #let p = graph.edge(p, source: (node: pa), sink: (node: pc))
 /// #let parallel-edge-style(edge) = (
-///     parallel-distance: 0.18,
+///     parallel-offset: 0.18,
 ///     parallel-length: 1.4,
 ///     parallel-ratio: 0.5,
+///     parallel-resolve: "min",
 ///     stroke: (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round"),
 ///   )
 ///
@@ -748,11 +789,10 @@
 ///   pattern-wavelength: 0.45,
 ///   pattern-coil-longitudinal-scale: 1.5,
 /// )
-/// + parallel-style(edge)
-/// #let focused-source-style(edge) = focused-base-style(edge) + parallel-edge-style(edge)
-/// #let focused-sink-style(edge) = focused-base-style(edge) + parallel-edge-style(edge) + (
+/// #let focused-source-style(edge) = (focused-base-style(edge), parallel-edge-style(edge))
+/// #let focused-sink-style(edge) = (focused-base-style(edge), parallel-edge-style(edge) + (
 ///   mark: (end: ">"),
-/// )
+/// ))
 /// #draw(layout(graph.finish(p),  label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
 /// `,dir:ttb)
 /// -> content
@@ -797,23 +837,28 @@
   edge-stroke: 0.1em,
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
-  edge-parallel-distance: 0,
+  edge-parallel-offset: 0,
   /// Maximum visible arc length for centered parallel edge paths. `none` keeps
   /// the full shifted path. -> none | int | float
   edge-parallel-length: none,
   /// Maximum visible fraction of the base edge length for centered parallel edge
-  /// paths. Combined with `edge-parallel-length` by taking the shorter length.
-  /// -> none | int | float
+  /// paths. Combined with `edge-parallel-length` according to
+  /// `edge-parallel-resolve`. -> none | int | float
   edge-parallel-ratio: none,
+  /// Resolve `edge-parallel-length` and `edge-parallel-ratio`. Accepted string
+  /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
+  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
+  /// `(base-length, length, ratio)`. -> string | function
+  edge-parallel-resolve: "min",
   /// Arc-length accuracy for fitted parallel edge paths. -> float
   edge-parallel-accuracy: 0.001,
   /// Let Kurbo optimize the fitted parallel path. -> bool
   edge-parallel-optimize: true,
-  /// Source half-edge style dictionary or callback. A callback receives edge data.
-  /// -> dictionary | function | none
+  /// Source half-edge style dictionary, array of layer dictionaries, or
+  /// callback. A callback receives edge data. -> dictionary | array | function | none
   source-style: (:),
-  /// Sink half-edge style dictionary or callback. A callback receives edge data.
-  /// -> dictionary | function | none
+  /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
+  /// A callback receives edge data. -> dictionary | array | function | none
   sink-style: (:),
   /// Edge label content or callback. A callback receives edge data.
   /// -> content | string | function | none
@@ -919,107 +964,154 @@
           let sink-in-subgraph = _in-subgraph(subgraph-hedges, end)
 
           let geometry-style = (
-            parallel-distance: edge-parallel-distance,
+            parallel-offset: edge-parallel-offset,
             parallel-length: edge-parallel-length,
             parallel-ratio: edge-parallel-ratio,
+            parallel-resolve: edge-parallel-resolve,
             parallel-accuracy: edge-parallel-accuracy,
             parallel-optimize: edge-parallel-optimize,
           )
-          let source-style-value = (stroke: edge-stroke) + geometry-style + _style(source-style, edge-data)
-          let sink-style-value = (stroke: edge-stroke) + geometry-style + _style(sink-style, edge-data)
-          let source-draw-style = if source-in-subgraph and not subgraph-edge-underlay {
-            source-style-value + subgraph-edge-style
-          } else {
-            source-style-value
-          }
-          let sink-draw-style = if sink-in-subgraph and not subgraph-edge-underlay {
-            sink-style-value + subgraph-edge-style
-          } else {
-            sink-style-value
-          }
+          let source-style-layers = _style-layers(source-style, edge-data)
+          let sink-style-layers = _style-layers(sink-style, edge-data)
+          let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
           let ev-label = _content(edge-label, edge-data, default: none)
           let label-pos = if e.label-pos == none { e.pos } else { e.label-pos }
 
-          if start != none and end != none {
-            let halves = _edge-geometry-halves(
-              e,
-              nodes,
-              source-style-value,
-              sink-style-value,
-              omega: edge-omega,
-              source-outset: node-outsets.at(start.node),
-              sink-outset: node-outsets.at(end.node),
-              accuracy: edge-trim-accuracy,
-            )
-            if source-in-subgraph and subgraph-edge-underlay {
-              for element in (
-                _segments-elements(
-                  halves.source,
+          for layer-index in range(0, layer-count) {
+            let source-layer = _style-layer(source-style-layers, layer-index)
+            let sink-layer = _style-layer(sink-style-layers, layer-index)
+            let source-style-value = if source-layer == none {
+              none
+            } else {
+              (stroke: edge-stroke) + geometry-style + source-layer
+            }
+            let sink-style-value = if sink-layer == none {
+              none
+            } else {
+              (stroke: edge-stroke) + geometry-style + sink-layer
+            }
+            let source-draw-style = if source-style-value == none {
+              none
+            } else if source-in-subgraph and not subgraph-edge-underlay {
+              source-style-value + subgraph-edge-style
+            } else {
+              source-style-value
+            }
+            let sink-draw-style = if sink-style-value == none {
+              none
+            } else if sink-in-subgraph and not subgraph-edge-underlay {
+              sink-style-value + subgraph-edge-style
+            } else {
+              sink-style-value
+            }
+
+            if source-style-value == none and sink-style-value == none {
+              ()
+            } else if start != none and end != none {
+              let source-geometry-style = if source-style-value == none { sink-style-value } else { source-style-value }
+              let sink-geometry-style = if sink-style-value == none { source-style-value } else { sink-style-value }
+              let halves = _edge-geometry-halves(
+                e,
+                nodes,
+                source-geometry-style,
+                sink-geometry-style,
+                omega: edge-omega,
+                source-outset: node-outsets.at(start.node),
+                sink-outset: node-outsets.at(end.node),
+                accuracy: edge-trim-accuracy,
+              )
+              if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
+                for element in (
+                  _segments-elements(
+                    halves.source,
+                    _without-pattern-style(source-style-value) + subgraph-edge-style,
+                  ).elements
+                ) {
+                  elements.push(element)
+                }
+              }
+              if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
+                for element in (
+                  _segments-elements(
+                    halves.sink,
+                    _without-pattern-style(sink-style-value) + subgraph-edge-style,
+                  ).elements
+                ) {
+                  elements.push(element)
+                }
+              }
+              if source-style-value != none and sink-style-value != none {
+                for element in _pattern-edge-halves(halves, source-draw-style, sink-draw-style) {
+                  elements.push(element)
+                }
+              } else if source-style-value != none {
+                for element in _segments-elements(halves.source, source-draw-style).elements {
+                  elements.push(element)
+                }
+              } else if sink-style-value != none {
+                for element in _segments-elements(halves.sink, sink-draw-style).elements {
+                  elements.push(element)
+                }
+              }
+              for element in _parallel-mark-edge-elements(
+                halves,
+                source-style-value,
+                sink-style-value,
+                label-pos: label-pos,
+              ) {
+                elements.push(element)
+              }
+            } else if start != none {
+              let line-start = curve-api.outset-point(
+                nodes.at(start.node).pos,
+                e.pos,
+                distance: node-outsets.at(start.node),
+              )
+              if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
+                for element in _pattern-line(
+                  line-start,
+                  e.pos,
                   _without-pattern-style(source-style-value) + subgraph-edge-style,
-                ).elements
-              ) {
-                elements.push(element)
+                ) {
+                  elements.push(element)
+                }
               }
-            }
-            if sink-in-subgraph and subgraph-edge-underlay {
-              for element in (
-                _segments-elements(halves.sink, _without-pattern-style(sink-style-value) + subgraph-edge-style).elements
-              ) {
-                elements.push(element)
+              if source-style-value != none {
+                for element in _pattern-line(line-start, e.pos, source-draw-style) {
+                  elements.push(element)
+                }
+                for element in _parallel-mark-line-elements(
+                  line-start,
+                  e.pos,
+                  source-style-value,
+                  label-pos: label-pos,
+                ) {
+                  elements.push(element)
+                }
               }
-            }
-            for element in _pattern-edge-halves(halves, source-draw-style, sink-draw-style) {
-              elements.push(element)
-            }
-            for element in _parallel-mark-edge-elements(
-              halves,
-              source-style-value,
-              sink-style-value,
-              label-pos: label-pos,
-            ) {
-              elements.push(element)
-            }
-          } else if start != none {
-            let line-start = curve-api.outset-point(
-              nodes.at(start.node).pos,
-              e.pos,
-              distance: node-outsets.at(start.node),
-            )
-            if source-in-subgraph and subgraph-edge-underlay {
-              for element in _pattern-line(
-                line-start,
+            } else if end != none {
+              let line-end = curve-api.outset-point(
+                nodes.at(end.node).pos,
                 e.pos,
-                _without-pattern-style(source-style-value) + subgraph-edge-style,
-              ) {
-                elements.push(element)
+                distance: node-outsets.at(end.node),
+              )
+              if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
+                for element in _pattern-line(
+                  e.pos,
+                  line-end,
+                  _without-pattern-style(sink-style-value) + subgraph-edge-style,
+                ) {
+                  elements.push(element)
+                }
               }
-            }
-            for element in _pattern-line(line-start, e.pos, source-draw-style) {
-              elements.push(element)
-            }
-            for element in _parallel-mark-line-elements(line-start, e.pos, source-style-value, label-pos: label-pos) {
-              elements.push(element)
-            }
-          } else if end != none {
-            let line-end = curve-api.outset-point(
-              nodes.at(end.node).pos,
-              e.pos,
-              distance: node-outsets.at(end.node),
-            )
-            if sink-in-subgraph and subgraph-edge-underlay {
-              for element in _pattern-line(
-                e.pos,
-                line-end,
-                _without-pattern-style(sink-style-value) + subgraph-edge-style,
-              ) {
-                elements.push(element)
+              if sink-style-value != none {
+                for element in _pattern-line(e.pos, line-end, sink-draw-style) {
+                  elements.push(element)
+                }
+                for element in _parallel-mark-line-elements(e.pos, line-end, sink-style-value, label-pos: label-pos) {
+                  elements.push(element)
+                }
               }
-            }
-            for element in _pattern-line(e.pos, line-end, sink-draw-style) {
-              elements.push(element)
-            }
-            for element in _parallel-mark-line-elements(e.pos, line-end, sink-style-value, label-pos: label-pos) {
-              elements.push(element)
             }
           }
 

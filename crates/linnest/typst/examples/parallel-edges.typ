@@ -18,11 +18,11 @@
 }
 #let source-style(edge) = (
   stroke: (paint: colors.at(edge.eid), thickness: 0.75pt, cap: "round"),
-  parallel-distance: offsets.at(edge.eid),
+  parallel-offset: offsets.at(edge.eid),
 ) + parallel-limits(edge)
 #let sink-style(edge) = (
   stroke: (paint: colors.at(edge.eid), thickness: 0.75pt, cap: "round"),
-  parallel-distance: offsets.at(edge.eid),
+  parallel-offset: offsets.at(edge.eid),
 ) + parallel-limits(edge)
 
 #draw(
