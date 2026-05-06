@@ -195,3 +195,49 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package idenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
+
+### Concrete Tensor Parse/Execution Diagnostics
+
+Trace commit: `mlnonqyu`.
+
+What this adds:
+
+- Adds ignored GammaLoop diagnostics for parsing and executing
+  `symbolica_expression.txt` through the evaluator `ParsingNet` path.
+- Adds a Hornered variant of the same diagnostic to compare raw and pre-Hornered
+  input execution.
+- Adds a small concrete HEP tensor probe that executes a gamma-trace expression
+  with non-symbolic `hep_lib` data.
+- Adds profile-only logging around sequential ready-operation batches and slow
+  product-pair contractions.
+
+How it works:
+
+- The new `large_spenso_actual` diagnostics initialize GammaLoop, strip
+  Symbolica tags from the large text input, parse the expression, and build a
+  `ParsingNet` using GammaLoop's tensor library.
+- The diagnostics now express the old `parse_inner_products = false` intent via
+  the current parser API, using opaque shorthand parsing with fast structure
+  inference.
+- Network statistics count concrete tensors, parametric tensors, scalar count,
+  logical entries, stored entries, tensor order distribution, and the most
+  common tensor names.
+- Step diagnostics execute `Steps<1>` repeatedly and emit profile reports after
+  each step, isolating which ready-operation batch becomes expensive.
+- The concrete HEP probe builds a `ConcreteParsingNet` against
+  `spenso_hep_lib::hep_lib(...)` to confirm that library tensors can
+  materialize as concrete data tensors on a small case.
+- Sequential execution logs batch starts, slow operations, batch progress, and
+  batch completion when `SPENSO_NETWORK_PROFILE` is enabled.
+- Product contraction logs selected operand pairs and reports slow pair
+  contractions around `ProductContraction::contract_pair(...)`.
+- The pair-contraction instrumentation is rebased onto the current
+  `ProductContraction<K, Aind>` API, where `Aind` is carried by the impl and
+  the method call only needs the worker `Store` generic.
+
+Validation run:
+
+- `cargo fmt`
+- `cargo check --package spenso --tests --profile dev-optim`
+- `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
+- `cargo check --package gammalooprs --tests --profile dev-optim`

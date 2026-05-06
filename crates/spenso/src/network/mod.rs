@@ -1362,6 +1362,7 @@ where
         FK: Display,
     {
         let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
+        let mut batch_index = 0usize;
 
         loop {
             if executor.execute_self_loop_traces(graph, lib)? {
@@ -1377,8 +1378,63 @@ where
 
             profile::bump(Counter::ExecuteFound, planned.len() as u64);
             let mut replacements = Vec::with_capacity(planned.len());
-            for planned_op in &planned {
+            let profile_batch = profile::enabled();
+            let batch_start = if profile_batch {
+                Some(std::time::Instant::now())
+            } else {
+                None
+            };
+            for (op_index, planned_op) in planned.iter().enumerate() {
+                let op_start = if profile_batch {
+                    if planned.len() <= 1024 && (op_index < 16 || op_index % 64 == 0) {
+                        eprintln!(
+                            "spenso_profile execute.batch_op_start batch={} op_index={} total={} op={} leaves={} subgraph_hedges={}",
+                            batch_index,
+                            op_index,
+                            planned.len(),
+                            planned_op.op().display_with(|fun| fun.to_string()),
+                            planned_op.leaf_count(),
+                            planned_op.subgraph().n_included(),
+                        );
+                    }
+                    Some(std::time::Instant::now())
+                } else {
+                    None
+                };
                 replacements.push(executor.execute::<C>(graph, planned_op, lib, fnlib)?);
+                if let Some(op_start) = op_start {
+                    let elapsed = op_start.elapsed();
+                    if elapsed.as_millis() >= 10 {
+                        eprintln!(
+                            "spenso_profile execute.slow_op batch={} op_index={} elapsed_ms={:.3} op={} leaves={} subgraph_hedges={}",
+                            batch_index,
+                            op_index,
+                            elapsed.as_secs_f64() * 1000.0,
+                            planned_op.op().display_with(|fun| fun.to_string()),
+                            planned_op.leaf_count(),
+                            planned_op.subgraph().n_included(),
+                        );
+                    }
+                    if planned.len() <= 1024 && (op_index + 1) % 64 == 0 {
+                        eprintln!(
+                            "spenso_profile execute.batch_progress batch={} done={} total={} elapsed_ms={:.3}",
+                            batch_index,
+                            op_index + 1,
+                            planned.len(),
+                            batch_start
+                                .map(|start| start.elapsed().as_secs_f64() * 1000.0)
+                                .unwrap_or_default(),
+                        );
+                    }
+                }
+            }
+            if let Some(batch_start) = batch_start {
+                eprintln!(
+                    "spenso_profile execute.batch_done batch={} ops={} elapsed_ms={:.3}",
+                    batch_index,
+                    planned.len(),
+                    batch_start.elapsed().as_secs_f64() * 1000.0,
+                );
             }
 
             for (planned_op, replacement) in planned.into_iter().zip(replacements) {
@@ -1395,6 +1451,7 @@ where
                     })?;
             }
             graph.finish_deferred_node_identifications();
+            batch_index += 1;
         }
 
         if !ignored.is_empty() {
