@@ -14,54 +14,80 @@ sync-drawing-assets:
     root="{{ justfile_directory() }}"
     cd "$root"
 
-    copy_typst_templates() {
+    install_asset() {
+      local src="$1"
+      local dest="$2"
+      rm -f "$dest"
+      install -m 0644 "$src" "$dest"
+    }
+
+    install_assets() {
+      local target="$1"
+      shift
+      local src
+      for src in "$@"; do
+        install_asset "$src" "$target/$(basename "$src")"
+      done
+    }
+
+    copy_gammaloop_templates() {
       local target="$1"
       mkdir -p "$target"
+      install_assets "$target" assets/embedded/drawing/templates/*.typ
+    }
 
-      cp crates/kurvst/typst/src/lib.typ "$target/curve.typ"
-      perl -0pi -e 's#plugin\("\.\./kurvst\.wasm"\)#plugin("kurvst.wasm")#' "$target/curve.typ"
+    clean_old_flat_bundle() {
+      local target="$1"
+      rm -f \
+        "$target/curve.typ" \
+        "$target/draw.typ" \
+        "$target/graph.typ" \
+        "$target/linnest.typ" \
+        "$target/physics-edge-style.typ" \
+        "$target/subgraph.typ" \
+        "$target/kurvst.wasm" \
+        "$target/linnest.wasm" \
+        "$target/crates/linnest/typst/kurvst.wasm"
+    }
 
-      cp crates/linnest/typst/src/draw.typ "$target/draw.typ"
-      cp crates/linnest/typst/src/physics-edge-style.typ "$target/physics-edge-style.typ"
-
-      cp crates/linnest/typst/src/lib.typ "$target/linnest.typ"
-      cp crates/linnest/typst/src/graph.typ "$target/graph.typ"
-      cp crates/linnest/typst/src/subgraph.typ "$target/subgraph.typ"
-      perl -0pi -e 's#plugin\("\.\./linnest\.wasm"\)#plugin("./linnest.wasm")#' \
-        "$target/linnest.typ" "$target/graph.typ" "$target/subgraph.typ"
+    copy_package_sources() {
+      local target="$1"
+      mkdir -p \
+        "$target/crates/linnest/typst/src" \
+        "$target/crates/kurvst/typst/src"
+      install_asset crates/linnest/typst/typst.toml "$target/crates/linnest/typst/typst.toml"
+      install_assets "$target/crates/linnest/typst/src" crates/linnest/typst/src/*.typ
+      install_asset crates/kurvst/typst/typst.toml "$target/crates/kurvst/typst/typst.toml"
+      install_assets "$target/crates/kurvst/typst/src" crates/kurvst/typst/src/*.typ
     }
 
     copy_wasm_bundles() {
       local target="$1"
-      mkdir -p "$target"
-      cp result/kurvst.wasm "$target/kurvst.wasm"
-      cp result/linnest.wasm "$target/linnest.wasm"
+      mkdir -p \
+        "$target/crates/linnest/typst" \
+        "$target/crates/kurvst/typst"
+      install_asset result/linnest.wasm "$target/crates/linnest/typst/linnest.wasm"
+      install_asset result/kurvst.wasm "$target/crates/kurvst/typst/kurvst.wasm"
     }
 
-    copy_typst_templates assets/embedded/drawing/templates
-    copy_typst_templates crates/clinnet/templates
     if [ -d gammaloop_state/drawings/templates ]; then
-      copy_typst_templates gammaloop_state/drawings/templates
-      cp assets/embedded/drawing/templates/figure.typ gammaloop_state/drawings/templates/figure.typ
-      cp assets/embedded/drawing/justfile gammaloop_state/justfile
+      clean_old_flat_bundle gammaloop_state/drawings/templates
+      copy_gammaloop_templates gammaloop_state/drawings/templates
+      install_asset assets/embedded/drawing/justfile gammaloop_state/justfile
     fi
 
     nix build .#linnest-wasm --print-build-logs
 
-    copy_wasm_bundles assets/embedded/drawing/templates
-    copy_wasm_bundles crates/clinnet/templates
+    install_asset result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+    install_asset result/linnest.wasm crates/linnest/typst/linnest.wasm
+
     if [ -d gammaloop_state/drawings/templates ]; then
+      copy_package_sources gammaloop_state/drawings/templates
       copy_wasm_bundles gammaloop_state/drawings/templates
     fi
 
-    cp result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
-    cp result/kurvst.wasm crates/linnest/typst/kurvst.wasm
-    cp result/linnest.wasm crates/linnest/typst/linnest.wasm
-
-    cmp result/kurvst.wasm assets/embedded/drawing/templates/kurvst.wasm
-    cmp result/linnest.wasm assets/embedded/drawing/templates/linnest.wasm
-    cmp result/kurvst.wasm crates/clinnet/templates/kurvst.wasm
-    cmp result/linnest.wasm crates/clinnet/templates/linnest.wasm
+    cmp result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+    cmp result/linnest.wasm crates/linnest/typst/linnest.wasm
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:

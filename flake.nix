@@ -87,6 +87,12 @@
         ./.config
         ./assets
         ./crates/clinnet/templates
+        ./crates/kurvst/typst/kurvst.wasm
+        ./crates/kurvst/typst/src
+        ./crates/kurvst/typst/typst.toml
+        ./crates/linnest/typst/linnest.wasm
+        ./crates/linnest/typst/src
+        ./crates/linnest/typst/typst.toml
         ./crates/vakint/form_src
         ./crates/vakint/templates
       ];
@@ -125,15 +131,13 @@
         root = workspaceRoot;
         fileset = lib.fileset.unions [
           cargoSources
-          ./crates/clinnet/templates/curve.typ
-          ./crates/clinnet/templates/draw.typ
           ./crates/clinnet/templates/figure.typ
-          ./crates/clinnet/templates/graph.typ
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
-          ./crates/clinnet/templates/linnest.typ
-          ./crates/clinnet/templates/physics-edge-style.typ
-          ./crates/clinnet/templates/subgraph.typ
+          ./crates/kurvst/typst/src
+          ./crates/kurvst/typst/typst.toml
+          ./crates/linnest/typst/src
+          ./crates/linnest/typst/typst.toml
         ];
       };
 
@@ -327,12 +331,19 @@
           cargoArtifacts = linnestWasmCargoArtifacts;
           cargoBuildCommand = "cargo build --release";
           installPhaseCommand = ''
-            mkdir -p "$out/templates"
+            mkdir -p \
+              "$out/templates" \
+              "$out/templates/crates/linnest/typst" \
+              "$out/templates/crates/kurvst/typst"
             cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
             cp "target/${wasmTarget}/release/kurvst.wasm" "$out/kurvst.wasm"
             cp crates/clinnet/templates/*.typ "$out/templates/"
-            cp "$out/linnest.wasm" "$out/templates/linnest.wasm"
-            cp "$out/kurvst.wasm" "$out/templates/kurvst.wasm"
+            cp -R crates/linnest/typst/src "$out/templates/crates/linnest/typst/"
+            cp crates/linnest/typst/typst.toml "$out/templates/crates/linnest/typst/typst.toml"
+            cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
+            cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
+            cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
+            cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
           '';
         });
 
@@ -435,13 +446,16 @@
           } ''
             test -s ${linnest-wasm}/linnest.wasm
             test -s ${linnest-wasm}/kurvst.wasm
-            test -s ${linnest-wasm}/templates/linnest.wasm
-            test -s ${linnest-wasm}/templates/kurvst.wasm
-            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
-            cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/kurvst.wasm
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+            test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
+            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+            cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
             wasm-tools validate ${linnest-wasm}/linnest.wasm
             wasm-tools validate ${linnest-wasm}/kurvst.wasm
             test -s ${linnest-wasm}/templates/layout.typ
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/src/curve.typ
+            test -s ${linnest-wasm}/templates/crates/kurvst/typst/src/lib.typ
             mkdir -p "$out"
           '';
         }

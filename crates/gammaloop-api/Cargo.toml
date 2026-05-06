@@ -55,7 +55,7 @@ ratatui = { workspace = true, features = ["crossterm_0_28"] }
 rayon = { workspace = true }
 reedline = "0.42.0"
 regex = { workspace = true }
-rust-embed = { version = "8.11.0", features = ["interpolate-folder-path"] }
+rust-embed = { version = "8.11.0", features = ["include-exclude", "interpolate-folder-path"] }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

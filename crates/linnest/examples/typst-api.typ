@@ -1,4 +1,4 @@
-#import "../../clinnet/templates/linnest.typ": draw, graph, layout, subgraph
+#import "../typst/src/lib.typ": draw, graph, layout, subgraph
 
 #let b = graph.builder(
   name: "constructed",
@@ -57,7 +57,7 @@
 
 = Linnest Typst API Example
 
-This example imports the local `linnest.typ` wrapper, builds a graph object through the builder object API, lays it out, and queries it through subgraph objects.
+This example imports the canonical Linnest Typst package source, builds a graph object through the builder object API, lays it out, and queries it through subgraph objects.
 
 #let node-style(node) = (fill: rgb("#" + node.fill-color))
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
