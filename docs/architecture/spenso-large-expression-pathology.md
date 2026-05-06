@@ -121,6 +121,61 @@ to choose cut indices from the generated graph or network. Blind text-level
 renaming is not enough, because the raw expression contains many occurrences of
 the same hedge and edge labels and only some of them are on a useful boundary.
 
+## Graph-Derived Boundary Selection
+
+The current diagnostic path finds staged-disconnection candidates from the
+parsed network itself:
+
+1. Walk Product expression nodes.
+2. For each immediate Product child, collect its expression subtree.
+3. Scan paired slot half-edges.
+4. Keep the slot edges whose endpoints land in different Product child
+   subtrees.
+5. Score the boundary by large-side pressure and small-side cost. The current
+   pressure heuristic combines maximum sum fanout, tensor logical entries, and
+   scalar byte size.
+
+This selects the same useful MWE boundary without text rewriting:
+
+```text
+late_tensor_sum_mwe_graph_selected boundary_candidates total=13
+chosen slot=mink4|nu
+direct execution: about 28 ms
+disconnected stage: about 1 ms
+reconnect metric stage: about 0.12 ms
+expanded scalar difference from direct result is zero
+```
+
+The graph-side transformation has two parts. Splitting the half-edge pair is not
+enough by itself, because the tensor store still carries the original slot
+labels. The selected cheap-side expression subtree must also have all local
+tensor structures reindexed from the original slot to a fresh dummy slot. After
+that, execution produces a tensor-valued intermediate, and the final scalar is
+obtained by multiplying it by the reconnecting metric
+`g(original_slot, fresh_slot)`.
+
+On `spenso_eval_input_0.txt`, the parse-only graph diagnostic now finds a small
+number of strong top-level candidates in seconds:
+
+```text
+symbolica_parse: about 3.2 s
+actual_network_parse: about 2.3 s
+boundary_candidates total=15
+top candidates: six edges crossing from a huge sum-heavy subtree
+  left_nodes=23700
+  left_sums=3393
+  left_max_sum_children=46
+  left_tensor_entries=49852
+  left_scalar_bytes=38892668
+to single tensor leaves with 16 or 64 tensor entries
+```
+
+That is the key distinction from blind renaming. The candidate is a specific
+paired slot edge at a specific Product boundary, not a global textual label.
+This should let staged execution choose only the boundary that separates the
+large repeated subtree from a small external tensor, while leaving other equal
+labels inside the large subtree untouched.
+
 ## Current Diagnosis
 
 The pathological ingredients are:

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -9,14 +9,20 @@ use gammalooprs::{
     numerator::{ParsingNet, aind::Aind},
     utils::{F, FUN_LIB, TENSORLIB},
 };
+use linnet::half_edge::{
+    NodeIndex,
+    involution::{EdgeData, Hedge, HedgePair, Orientation},
+};
 use spenso::{
     iterators::IteratableTensor,
-    network::library::symbolic::ExplicitKey,
+    network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
+    network::library::symbolic::{ETS, ExplicitKey},
     network::{
         ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree, Steps,
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
         store::NetworkStore,
     },
+    structure::slot::{DummyAind, IsAbstractSlot},
     structure::{HasName, HasStructure, TensorStructure},
     tensors::{
         data::DataTensor,
@@ -43,6 +49,45 @@ type ConcreteParsingNet = Network<
 >;
 
 type ActualTensor = MixedTensor<F<f64>, ShadowedStructure<Aind>>;
+
+#[derive(Clone, Debug)]
+struct BoundarySideSummary {
+    nodes: usize,
+    leaves: usize,
+    sums: usize,
+    products: usize,
+    max_sum_children: usize,
+    tensor_leaves: usize,
+    scalar_leaves: usize,
+    tensor_logical_entries: usize,
+    tensor_flat_entries: usize,
+    scalar_bytes: usize,
+}
+
+impl BoundarySideSummary {
+    fn pressure(&self) -> usize {
+        let sum_factor = self.max_sum_children.max(self.sums);
+        sum_factor
+            .saturating_mul(self.tensor_logical_entries.max(1))
+            .saturating_add(self.scalar_bytes)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ProductBoundaryCandidate {
+    product: NodeIndex,
+    left_child: NodeIndex,
+    right_child: NodeIndex,
+    left: BoundarySideSummary,
+    right: BoundarySideSummary,
+    slot: spenso::structure::representation::LibrarySlot<Aind>,
+    source: Hedge,
+    sink: Hedge,
+    rename_hedge: Hedge,
+    rename_child: NodeIndex,
+    orientation: Orientation,
+    score: usize,
+}
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -226,6 +271,315 @@ fn report_concrete_net_stats(label: &str, net: &ConcreteParsingNet) {
         order_counts,
         top_names,
     );
+}
+
+fn collect_expr_subtree_nodes(net: &ParsingNet, root: NodeIndex) -> BTreeSet<NodeIndex> {
+    let mut seen = BTreeSet::new();
+    let mut stack = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if !seen.insert(node) {
+            continue;
+        }
+        stack.extend(net.graph.cached_expr_children(node));
+    }
+
+    seen
+}
+
+fn summarize_expr_subtree(net: &ParsingNet, root: NodeIndex) -> BoundarySideSummary {
+    let nodes = collect_expr_subtree_nodes(net, root);
+    let mut summary = BoundarySideSummary {
+        nodes: nodes.len(),
+        leaves: 0,
+        sums: 0,
+        products: 0,
+        max_sum_children: 0,
+        tensor_leaves: 0,
+        scalar_leaves: 0,
+        tensor_logical_entries: 0,
+        tensor_flat_entries: 0,
+        scalar_bytes: 0,
+    };
+
+    for node in nodes {
+        match &net.graph.graph[node] {
+            NetworkNode::Leaf(leaf) => {
+                summary.leaves += 1;
+                match leaf {
+                    NetworkLeaf::LocalTensor(index) => {
+                        summary.tensor_leaves += 1;
+                        let tensor = &net.store.tensors[*index];
+                        summary.tensor_logical_entries += tensor.structure().size().unwrap_or(0);
+                        summary.tensor_flat_entries += tensor.iter_flat().count();
+                    }
+                    NetworkLeaf::TensorSum(indices) => {
+                        summary.tensor_leaves += indices.len();
+                        for index in indices {
+                            let tensor = &net.store.tensors[*index];
+                            summary.tensor_logical_entries +=
+                                tensor.structure().size().unwrap_or(0);
+                            summary.tensor_flat_entries += tensor.iter_flat().count();
+                        }
+                    }
+                    NetworkLeaf::LibraryKey(key) => {
+                        summary.tensor_leaves += 1;
+                        summary.tensor_logical_entries += key.structure.size().unwrap_or(0);
+                    }
+                    NetworkLeaf::Scalar(index) => {
+                        summary.scalar_leaves += 1;
+                        summary.scalar_bytes += net.store.scalar[*index].as_view().get_byte_size();
+                    }
+                }
+            }
+            NetworkNode::Op(op) => match op {
+                NetworkOp::Sum => {
+                    summary.sums += 1;
+                    summary.max_sum_children = summary
+                        .max_sum_children
+                        .max(net.graph.cached_expr_children(node).len());
+                }
+                NetworkOp::Product => summary.products += 1,
+                NetworkOp::Neg | NetworkOp::Power(_) | NetworkOp::Function(_) => {}
+            },
+        }
+    }
+
+    summary
+}
+
+fn graph_product_boundary_candidates(net: &ParsingNet) -> Vec<ProductBoundaryCandidate> {
+    let mut candidates = Vec::new();
+
+    for product in net.graph.cached_expr_preorder_nodes() {
+        if !matches!(
+            &net.graph.graph[product],
+            NetworkNode::Op(NetworkOp::Product)
+        ) {
+            continue;
+        }
+
+        let children = net.graph.cached_expr_children(product);
+        if children.len() < 2 {
+            continue;
+        }
+
+        let child_nodes = children
+            .iter()
+            .map(|child| (*child, collect_expr_subtree_nodes(net, *child)))
+            .collect::<Vec<_>>();
+        let summaries = children
+            .iter()
+            .map(|child| (*child, summarize_expr_subtree(net, *child)))
+            .collect::<BTreeMap<_, _>>();
+        let mut node_to_child = BTreeMap::new();
+        for (child_index, (_child, nodes)) in child_nodes.iter().enumerate() {
+            for node in nodes {
+                node_to_child.insert(*node, child_index);
+            }
+        }
+
+        for (pair, _edge_index, edge_data) in net.graph.graph.iter_edges() {
+            let HedgePair::Paired { source, sink } = pair else {
+                continue;
+            };
+            let NetworkEdge::Slot(slot) = edge_data.data else {
+                continue;
+            };
+
+            let source_node = net.graph.graph.node_id(source);
+            let sink_node = net.graph.graph.node_id(sink);
+            let (Some(source_child), Some(sink_child)) = (
+                node_to_child.get(&source_node).copied(),
+                node_to_child.get(&sink_node).copied(),
+            ) else {
+                continue;
+            };
+            if source_child == sink_child {
+                continue;
+            }
+
+            let left_child = children[source_child];
+            let right_child = children[sink_child];
+            let left = summaries[&left_child].clone();
+            let right = summaries[&right_child].clone();
+
+            let (rename_hedge, rename_child) = if left.pressure() <= right.pressure() {
+                (source, left_child)
+            } else {
+                (sink, right_child)
+            };
+            let expensive_pressure = left.pressure().max(right.pressure());
+            let cheap_nodes = left.nodes.min(right.nodes).max(1);
+            let score = expensive_pressure / cheap_nodes
+                + left.max_sum_children.max(right.max_sum_children) * 1_000
+                + left
+                    .tensor_logical_entries
+                    .max(right.tensor_logical_entries);
+
+            candidates.push(ProductBoundaryCandidate {
+                product,
+                left_child,
+                right_child,
+                left,
+                right,
+                slot: *slot,
+                source,
+                sink,
+                rename_hedge,
+                rename_child,
+                orientation: edge_data.orientation,
+                score,
+            });
+        }
+    }
+
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.product.cmp(&right.product))
+            .then_with(|| left.source.cmp(&right.source))
+    });
+    candidates
+}
+
+fn log_product_boundary_candidates(label: &str, net: &ParsingNet, limit: usize) {
+    let candidates = graph_product_boundary_candidates(net);
+    eprintln!("{label} boundary_candidates total={}", candidates.len());
+    for (rank, candidate) in candidates.iter().take(limit).enumerate() {
+        eprintln!(
+            "{label} boundary_candidate rank={rank} score={} product={} slot={} edge=({}->{}) rename_child={} rename_hedge={} left_child={} left_nodes={} left_leaves={} left_sums={} left_max_sum_children={} left_tensor_entries={} left_scalar_bytes={} right_child={} right_nodes={} right_leaves={} right_sums={} right_max_sum_children={} right_tensor_entries={} right_scalar_bytes={}",
+            candidate.score,
+            candidate.product,
+            candidate.slot,
+            candidate.source,
+            candidate.sink,
+            candidate.rename_child,
+            candidate.rename_hedge,
+            candidate.left_child,
+            candidate.left.nodes,
+            candidate.left.leaves,
+            candidate.left.sums,
+            candidate.left.max_sum_children,
+            candidate.left.tensor_logical_entries,
+            candidate.left.scalar_bytes,
+            candidate.right_child,
+            candidate.right.nodes,
+            candidate.right.leaves,
+            candidate.right.sums,
+            candidate.right.max_sum_children,
+            candidate.right.tensor_logical_entries,
+            candidate.right.scalar_bytes,
+        );
+    }
+}
+
+fn reindex_structure_slot(
+    structure: ShadowedStructure<Aind>,
+    original: spenso::structure::representation::LibrarySlot<Aind>,
+    fresh: Aind,
+) -> ShadowedStructure<Aind> {
+    let indices = structure
+        .external_structure_iter()
+        .map(|slot| {
+            if slot.to_lib() == original {
+                fresh
+            } else {
+                slot.aind()
+            }
+        })
+        .collect::<Vec<_>>();
+
+    structure
+        .reindex(&indices)
+        .expect("graph-derived staged reindex should preserve arity")
+        .structure
+}
+
+fn apply_graph_boundary_disconnect(
+    net: &mut ParsingNet,
+    candidate: &ProductBoundaryCandidate,
+) -> (
+    spenso::structure::representation::LibrarySlot<Aind>,
+    spenso::structure::representation::LibrarySlot<Aind>,
+) {
+    let original = candidate.slot;
+    let mut fresh = original;
+    fresh.set_aind(Aind::new_dummy());
+    let fresh_aind = fresh.aind();
+    let rename_nodes = collect_expr_subtree_nodes(net, candidate.rename_child);
+
+    let mut changed_tensors = BTreeSet::new();
+    for node in &rename_nodes {
+        let NetworkNode::Leaf(leaf) = &net.graph.graph[*node] else {
+            continue;
+        };
+
+        match leaf {
+            NetworkLeaf::LocalTensor(index) => {
+                changed_tensors.insert(*index);
+            }
+            NetworkLeaf::TensorSum(indices) => {
+                changed_tensors.extend(indices.iter().copied());
+            }
+            NetworkLeaf::LibraryKey(_) | NetworkLeaf::Scalar(_) => {}
+        }
+    }
+
+    for index in changed_tensors {
+        let tensor = net.store.tensors[index].clone();
+        net.store.tensors[index] = tensor.map_same_structure(|structure| {
+            reindex_structure_slot(structure, original, fresh_aind)
+        });
+    }
+
+    let edge_updates = net
+        .graph
+        .graph
+        .iter_edges()
+        .filter_map(|(pair, edge_index, edge_data)| {
+            let NetworkEdge::Slot(slot) = edge_data.data else {
+                return None;
+            };
+            if *slot != original {
+                return None;
+            }
+
+            let touches_rename_side = match pair {
+                HedgePair::Paired { source, sink } => {
+                    rename_nodes.contains(&net.graph.graph.node_id(source))
+                        && rename_nodes.contains(&net.graph.graph.node_id(sink))
+                }
+                HedgePair::Unpaired { hedge, .. } => {
+                    rename_nodes.contains(&net.graph.graph.node_id(hedge))
+                }
+                HedgePair::Split { .. } => false,
+            };
+            touches_rename_side.then_some(edge_index)
+        })
+        .collect::<Vec<_>>();
+
+    for edge_index in edge_updates {
+        net.graph.graph[edge_index] = NetworkEdge::Slot(fresh);
+    }
+
+    net.graph
+        .graph
+        .split_edge(
+            candidate.rename_hedge,
+            EdgeData::new(NetworkEdge::Slot(fresh), candidate.orientation),
+        )
+        .expect("selected product boundary slot edge should be paired");
+
+    (original, fresh)
+}
+
+fn reconnect_metric_expr(
+    original: spenso::structure::representation::LibrarySlot<Aind>,
+    fresh: spenso::structure::representation::LibrarySlot<Aind>,
+) -> Atom {
+    ETS.metric(original.to_atom(), fresh.to_atom())
 }
 
 fn execute_actual_net(label: &str, mut net: ParsingNet) -> Atom {
@@ -567,6 +921,15 @@ fn spenso_eval_input_0_boundary_factor_actual_network_parallel_min_result_rank_e
 }
 
 #[test]
+#[ignore = "diagnostic product-boundary candidate selection for the larger spenso_eval_input_0.txt"]
+fn spenso_eval_input_0_graph_boundary_candidate_diagnostics() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let net = parse_actual_net("spenso_eval_input_0_boundary_candidates", &expr);
+    log_product_boundary_candidates("spenso_eval_input_0_boundary_candidates", &net, 24);
+}
+
+#[test]
 #[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt after Hornering"]
 fn spenso_eval_input_0_horner_actual_network_parse() {
     test_initialise().expect("GammaLoop initialization should succeed");
@@ -761,6 +1124,75 @@ fn late_tensor_sum_mwe_staged_disconnect_reconnect_metric() {
     assert!(
         diff.is_zero(),
         "direct and staged MWE forms produced different scalar values: {}",
+        diff
+    );
+}
+
+#[test]
+#[ignore = "diagnostic graph-derived staged orchestration for a late tensor-valued sum"]
+fn late_tensor_sum_mwe_graph_selected_disconnect_reconnect_metric() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let direct = late_tensor_sum_mwe_expr(12, 12);
+
+    let direct_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_graph_selected_direct",
+        parse_actual_net("late_tensor_sum_mwe_graph_selected_direct", &direct),
+    );
+
+    let mut staged_net = parse_actual_net("late_tensor_sum_mwe_graph_selected_staged", &direct);
+    log_product_boundary_candidates("late_tensor_sum_mwe_graph_selected", &staged_net, 8);
+    let candidates = graph_product_boundary_candidates(&staged_net);
+    let candidate = candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .left
+                .max_sum_children
+                .max(candidate.right.max_sum_children)
+                >= 12
+                && candidate.left.leaves.min(candidate.right.leaves) == 1
+        })
+        .unwrap_or_else(|| {
+            candidates
+                .first()
+                .expect("MWE should expose at least one product-boundary slot candidate")
+        })
+        .clone();
+    eprintln!(
+        "late_tensor_sum_mwe_graph_selected chosen score={} product={} slot={} rename_child={} rename_hedge={}",
+        candidate.score,
+        candidate.product,
+        candidate.slot,
+        candidate.rename_child,
+        candidate.rename_hedge,
+    );
+    let (original, fresh) = apply_graph_boundary_disconnect(&mut staged_net, &candidate);
+    let intermediate = execute_actual_net_min_result_rank_parallel_tensor(
+        "late_tensor_sum_mwe_graph_selected_disconnected",
+        staged_net,
+    );
+    let intermediate_net: ParsingNet = Network::from_tensor(intermediate);
+    let reconnect_metric = reconnect_metric_expr(original, fresh);
+    let reconnect_net = parse_actual_net(
+        "late_tensor_sum_mwe_graph_selected_reconnect_metric",
+        &reconnect_metric,
+    );
+    let staged_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_graph_selected_reconnected",
+        intermediate_net * reconnect_net,
+    );
+
+    let start = Instant::now();
+    let diff = (direct_result - staged_result).expand();
+    report("late_tensor_sum_mwe_graph_selected_diff_expand", start);
+    eprintln!(
+        "late_tensor_sum_mwe_graph_selected_diff stats: terms={} bytes={}",
+        diff.nterms(),
+        diff.as_view().get_byte_size()
+    );
+    assert!(
+        diff.is_zero(),
+        "direct and graph-selected staged MWE forms produced different scalar values: {}",
         diff
     );
 }
