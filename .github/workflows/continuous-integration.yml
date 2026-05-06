@@ -117,7 +117,7 @@ jobs:
           python3 --version
 
       - name: Run tests
-        run: just test-ci
+        run: just --unstable test-ci
 
       - name: Upload nextest JUnit
         if: always()
@@ -165,15 +165,15 @@ jobs:
 
       - name: Run clippy
         if: matrix.check == 'clippy'
-        run: just clippy -- -D warnings
+        run: just --unstable clippy -- -D warnings
 
       - name: Run fmt
         if: matrix.check == 'fmt'
-        run: just fmt -- --check
+        run: just --unstable fmt -- --check
 
       - name: Run doc
         if: matrix.check == 'doc'
-        run: just doc
+        run: just --unstable doc
 
   checks:
     name: Checks

@@ -1294,13 +1294,23 @@ impl TypstGraph {
 
     fn apply_directional_constraint(constraint: &Constraint, value: &mut f64) {
         match constraint {
-            Constraint::Grouped(_, ShiftDirection::PositiveOnly) if *value < 0.0 => {
-                *value = value.abs();
+            Constraint::Grouped(_, ShiftDirection::PositiveOnly) if *value <= 0.0 => {
+                *value = value.abs().max(f64::EPSILON);
             }
-            Constraint::Grouped(_, ShiftDirection::NegativeOnly) if *value > 0.0 => {
-                *value = -value.abs();
+            Constraint::Grouped(_, ShiftDirection::NegativeOnly) if *value >= 0.0 => {
+                *value = -value.abs().max(f64::EPSILON);
             }
             _ => {}
+        }
+    }
+
+    fn directional_target(value: f64, direction: ShiftDirection, fallback: f64) -> f64 {
+        match direction {
+            ShiftDirection::Any => value,
+            ShiftDirection::PositiveOnly if value > 0.0 => value,
+            ShiftDirection::PositiveOnly => fallback.abs().max(f64::EPSILON),
+            ShiftDirection::NegativeOnly if value < 0.0 => value,
+            ShiftDirection::NegativeOnly => -fallback.abs().max(f64::EPSILON),
         }
     }
 
@@ -1503,8 +1513,8 @@ impl TypstGraph {
     /// 2. Only applies tree positions to coordinates that are free to move
     /// 3. Respects Fixed and Grouped constraints by leaving them unchanged
     /// 4. For directional constraints (+/-), ensures absolute positioning:
-    ///    - `+@group` constraints result in non-negative positions
-    ///    - `-@group` constraints result in non-positive positions
+    ///    - `+@group` constraints result in positive positions
+    ///    - `-@group` constraints result in negative positions
     ///    - This overrides tree layout if necessary to maintain directional requirements
     pub fn new_positions(&self, cfg: TreeInitCfg) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let mut pos_v = self.new_nodevec(|_, _, n| n.pos);
@@ -1602,24 +1612,9 @@ impl TypstGraph {
                         // For grouped x with direction, ensure absolute position respects direction
                         pos_v[i].y = tree_position.y;
                         match x_dir {
-                            ShiftDirection::PositiveOnly => {
-                                // Ensure x position is positive
-                                let target_x = if tree_position.x >= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    cfg.dx.abs()
-                                };
-                                self[i]
-                                    .constraints
-                                    .shift((target_x, 0.0).into(), i, &mut pos_v);
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                // Ensure x position is negative
-                                let target_x = if tree_position.x <= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    -cfg.dx.abs()
-                                };
+                            ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                let target_x =
+                                    Self::directional_target(tree_position.x, *x_dir, cfg.dx);
                                 self[i]
                                     .constraints
                                     .shift((target_x, 0.0).into(), i, &mut pos_v);
@@ -1637,24 +1632,9 @@ impl TypstGraph {
                         // For grouped y with direction, ensure absolute position respects direction
                         pos_v[i].x = tree_position.x;
                         match y_dir {
-                            ShiftDirection::PositiveOnly => {
-                                // Ensure y position is positive
-                                let target_y = if tree_position.y >= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    cfg.dy.abs()
-                                };
-                                self[i]
-                                    .constraints
-                                    .shift((0.0, target_y).into(), i, &mut pos_v);
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                // Ensure y position is negative
-                                let target_y = if tree_position.y <= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    -cfg.dy.abs()
-                                };
+                            ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                let target_y =
+                                    Self::directional_target(tree_position.y, *y_dir, cfg.dy);
                                 self[i]
                                     .constraints
                                     .shift((0.0, target_y).into(), i, &mut pos_v);
@@ -1670,84 +1650,20 @@ impl TypstGraph {
                     }
                     (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
                         // For both coordinates grouped with direction
-                        let target_x = match x_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.x >= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.x <= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    -cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.x,
-                        };
-                        let target_y = match y_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.y >= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.y <= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    -cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.y,
-                        };
+                        let target_x = Self::directional_target(tree_position.x, *x_dir, cfg.dx);
+                        let target_y = Self::directional_target(tree_position.y, *y_dir, cfg.dy);
                         self[i]
                             .constraints
                             .shift((target_x, target_y).into(), i, &mut pos_v);
                     }
                     (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                        let target_y = match y_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.y >= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.y <= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    -cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.y,
-                        };
+                        let target_y = Self::directional_target(tree_position.y, *y_dir, cfg.dy);
                         self[i]
                             .constraints
                             .shift((0.0, target_y).into(), i, &mut pos_v);
                     }
                     (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                        let target_x = match x_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.x >= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.x <= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    -cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.x,
-                        };
+                        let target_x = Self::directional_target(tree_position.x, *x_dir, cfg.dx);
                         self[i]
                             .constraints
                             .shift((target_x, 0.0).into(), i, &mut pos_v);
@@ -1784,26 +1700,9 @@ impl TypstGraph {
                         (Constraint::Grouped(_, x_dir), Constraint::Free) => {
                             pos_e[eid].y = mid.y;
                             match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure x position is positive
-                                    let target_x = if mid.x >= 0.0 {
-                                        mid.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (target_x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure x position is negative
-                                    let target_x = if mid.x <= 0.0 {
-                                        mid.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    };
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_x =
+                                        Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
                                     self[eid].constraints.shift(
                                         (target_x, 0.0).into(),
                                         eid,
@@ -1822,26 +1721,9 @@ impl TypstGraph {
                         (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
                             pos_e[eid].x = mid.x;
                             match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure y position is positive
-                                    let target_y = if mid.y >= 0.0 {
-                                        mid.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (0.0, target_y).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure y position is negative
-                                    let target_y = if mid.y <= 0.0 {
-                                        mid.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    };
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_y =
+                                        Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
                                     self[eid].constraints.shift(
                                         (0.0, target_y).into(),
                                         eid,
@@ -1858,40 +1740,8 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.x >= 0.0 {
-                                        mid.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.x <= 0.0 {
-                                        mid.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.x,
-                            };
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.y >= 0.0 {
-                                        mid.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.y <= 0.0 {
-                                        mid.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.y,
-                            };
+                            let target_x = Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
+                            let target_y = Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
                             self[eid].constraints.shift(
                                 (target_x, target_y).into(),
                                 eid,
@@ -1899,45 +1749,13 @@ impl TypstGraph {
                             );
                         }
                         (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.y >= 0.0 {
-                                        mid.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.y <= 0.0 {
-                                        mid.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.y,
-                            };
+                            let target_y = Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((0.0, target_y).into(), eid, &mut pos_e);
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.x >= 0.0 {
-                                        mid.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.x <= 0.0 {
-                                        mid.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.x,
-                            };
+                            let target_x = Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((target_x, 0.0).into(), eid, &mut pos_e);
@@ -1965,26 +1783,12 @@ impl TypstGraph {
                         (Constraint::Grouped(_, x_dir), Constraint::Free) => {
                             pos_e[eid].y = default_pos.y;
                             match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure x position is positive
-                                    let target_x = if default_pos.x >= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (target_x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_x = Self::directional_target(
+                                        default_pos.x,
+                                        *x_dir,
+                                        cfg.dx * 0.5,
                                     );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure x position is negative
-                                    let target_x = if default_pos.x <= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    };
                                     self[eid].constraints.shift(
                                         (target_x, 0.0).into(),
                                         eid,
@@ -2003,26 +1807,12 @@ impl TypstGraph {
                         (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
                             pos_e[eid].x = default_pos.x;
                             match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure y position is positive
-                                    let target_y = if default_pos.y >= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (0.0, target_y).into(),
-                                        eid,
-                                        &mut pos_e,
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_y = Self::directional_target(
+                                        default_pos.y,
+                                        *y_dir,
+                                        cfg.dy * 0.5,
                                     );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure y position is negative
-                                    let target_y = if default_pos.y <= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    };
                                     self[eid].constraints.shift(
                                         (0.0, target_y).into(),
                                         eid,
@@ -2039,40 +1829,10 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.x >= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.x <= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.x,
-                            };
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.y >= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.y <= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.y,
-                            };
+                            let target_x =
+                                Self::directional_target(default_pos.x, *x_dir, cfg.dx * 0.5);
+                            let target_y =
+                                Self::directional_target(default_pos.y, *y_dir, cfg.dy * 0.5);
                             self[eid].constraints.shift(
                                 (target_x, target_y).into(),
                                 eid,
@@ -2080,45 +1840,15 @@ impl TypstGraph {
                             );
                         }
                         (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.y >= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.y <= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.y,
-                            };
+                            let target_y =
+                                Self::directional_target(default_pos.y, *y_dir, cfg.dy * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((0.0, target_y).into(), eid, &mut pos_e);
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.x >= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.x <= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.x,
-                            };
+                            let target_x =
+                                Self::directional_target(default_pos.x, *x_dir, cfg.dx * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((target_x, 0.0).into(), eid, &mut pos_e);
