@@ -239,6 +239,7 @@ impl Drop for Span {
 
 static ENABLED: OnceLock<bool> = OnceLock::new();
 static VERBOSE: OnceLock<bool> = OnceLock::new();
+static ATOM_BYTES: OnceLock<bool> = OnceLock::new();
 static PROFILE: OnceLock<Profile> = OnceLock::new();
 
 fn profile() -> &'static Profile {
@@ -251,6 +252,10 @@ pub fn enabled() -> bool {
 
 pub fn verbose() -> bool {
     *VERBOSE.get_or_init(|| env::var_os("SPENSO_NETWORK_PROFILE_VERBOSE").is_some())
+}
+
+pub fn atom_bytes() -> bool {
+    *ATOM_BYTES.get_or_init(|| env::var_os("SPENSO_NETWORK_PROFILE_ATOM_BYTES").is_some())
 }
 
 pub fn reset() {
