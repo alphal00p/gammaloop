@@ -241,3 +241,43 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
+
+### Contraction Order MWE And MinResultRank Diagnostic
+
+Trace commit: `nlzmnxqt`.
+
+What this adds:
+
+- Adds `MinResultRank`, a diagnostic contraction strategy that chooses the next
+  pair by minimizing the rank/order of the intermediate contraction result.
+- Adds ignored gamma-ladder MWE diagnostics comparing the existing
+  `SmallestDegree` order to `MinResultRank`.
+- Adds an equivalence check that expands the scalar difference between the two
+  contraction orders and asserts it is zero.
+
+How it works:
+
+- `ProductContraction::best_result_rank_pair(...)` scores candidate tensor
+  pairs by `left.order + right.order - 2 * matching_degree`.
+- Candidate pairs with no matching slots are treated as bad choices.
+- Ties prefer higher matching degree, so the strategy still avoids weak
+  contractions when multiple pairs produce the same result rank.
+- `contract_one_by_result_rank(...)` materializes library operands, selects the
+  best result-rank pair, logs profile information, contracts the pair, and
+  folds scalars after each pair.
+- The gamma-ladder diagnostics parse a deliberately awkward chain of metrics,
+  gammas, epsilons, and epsilon bars through the same actual `ParsingNet` path
+  as the large input diagnostics.
+- The strategy is rebased onto the current `ProductContraction<K, Aind>` API:
+  `Aind` stays generic at the impl/strategy level, product helper calls add
+  only the worker `Store` method generic, and `MinResultRank` returns
+  `NetworkLeaf<K, Aind>`.
+- The MWE diagnostics keep the current parser imports for opaque shorthand
+  parsing while adding `MinResultRank`.
+
+Validation run:
+
+- `cargo fmt`
+- `cargo check --package spenso --tests --profile dev-optim`
+- `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
+- `cargo check --package gammalooprs --tests --profile dev-optim`
