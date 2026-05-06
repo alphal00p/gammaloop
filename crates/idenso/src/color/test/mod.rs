@@ -125,6 +125,26 @@ fn test_color_simplification() {
     assert_snapshot!(simplified.to_bare_ordered_string(), @"-1*CA+CA*Nc^2");
 }
 
+#[test]
+fn color_casimir_basis_rewrites_dimensions() {
+    initialize();
+    let expr = parse_lit!(Nc ^ -1 + Nc ^ 2 - 1 + NA, default_namespace = "spenso");
+
+    assert_snapshot!(expr.to_color_casimir().to_bare_ordered_string(), @"-2*CF+4*CA*CF+CA");
+}
+
+#[test]
+fn color_casimir_basis_keeps_trace_normalization_symbolic_by_default() {
+    initialize();
+    let expr = parse_lit!(TR, default_namespace = "spenso");
+
+    assert_snapshot!(expr.to_color_casimir().to_bare_ordered_string(), @"TR");
+    assert_snapshot!(expr
+        .to_color_casimir_with(ColorCasimirSettings::default().with_trace_normalization())
+        .to_bare_ordered_string(), @"1/2");
+}
+
+mod feyncalc_reference;
 mod form_reference;
 
 fn colored_matrix_element() -> (Atom, Atom) {
