@@ -254,6 +254,8 @@ center-trim the shifted path to a fixed arc length, and add `edge-ratio` or
 / `resolve-length` decides how to combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
 `"length"`/`"fixed"`, `"ratio"`/`"relative"`, `"none"`/`"full"`, or a function
 receiving `(base-length, length, ratio)`.
+Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
+so the layer is drawn on the same side of the curve as the edge label.
 
 The builder keeps `source-style-eval`, `sink-style-eval`, and `label-eval` as
 ordinary kebab-case edge metadata for downstream renderers or DOT export. They
