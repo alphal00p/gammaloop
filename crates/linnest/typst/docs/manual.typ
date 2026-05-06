@@ -179,14 +179,30 @@ records, and the edge index:
 #draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
+Marks can follow graph orientation as a first-class draw option. Put the same
+mark layer on both halves and set `mark-orientation: "edge"`; default-oriented
+edges mark the source half, reversed edges mark the sink half with the marker
+flipped, and undirected edges suppress the mark.
+
+```typ
+#let oriented-arrow = (
+  stroke: black + 0.7pt,
+  mark: (end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto), scale: 0.75),
+  mark-position: "center-if-dangling",
+  mark-orientation: "edge",
+)
+#draw(layout(graph.finish(b)), source-style: oriented-arrow, sink-style: oriented-arrow)
+```
+
 == Physics Edge Styles
 
 `physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
 callbacks for `draw`. The default source/sink strokes use darker/lighter halves
 to encode the graph source/sink split. Fermion map entries marked with
-`fermion-flow` receive one particle-flow arrow on the main edge; paired edges
-place it at the source half's end, and dangling half edges place it in the
-middle of the visible half edge. This is independent of momentum arrows.
+`fermion-flow` receive one particle-flow arrow on the main edge using
+`mark-orientation: "edge"`; paired edges follow `edge.orientation`, dangling
+half edges place the arrow in the middle of the visible half edge, and
+undirected edges omit the arrow. This is independent of momentum arrows.
 
 Set `momentum-arrows: true` to draw centered parallel arrow decorations while
 the main edge remains connected to the nodes. The arrows flow from source to

@@ -55,8 +55,9 @@
   scale: 0.75,
 )
 
-/// Mark an edge-map entry as a fermion so the main edge receives one centered
-/// particle-flow arrow. This is separate from optional momentum arrows.
+/// Mark an edge-map entry as a fermion so the main edge receives one
+/// particle-flow arrow that follows `edge.orientation`. This is separate from
+/// optional momentum arrows.
 /// -> dictionary
 #let fermion-flow = (
   fermion-arrow: true,
@@ -272,12 +273,13 @@
   let needs-arrow = entry.at("fermion-arrow", default: false)
   let arrow-half = needs-arrow and (
     (half == "source" and has-source)
-      or (half == "sink" and not has-source and has-sink)
+      or (half == "sink" and has-sink)
   )
   if arrow-half {
     base + (
       mark: entry.at("fermion-arrow-mark", default: fermion-arrow-mark),
       mark-position: "center-if-dangling",
+      mark-orientation: "edge",
     )
   } else {
     base
