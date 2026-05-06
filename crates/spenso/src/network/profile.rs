@@ -240,6 +240,7 @@ impl Drop for Span {
 static ENABLED: OnceLock<bool> = OnceLock::new();
 static VERBOSE: OnceLock<bool> = OnceLock::new();
 static ATOM_BYTES: OnceLock<bool> = OnceLock::new();
+static LAZY_TENSOR_SUMS: OnceLock<bool> = OnceLock::new();
 static PROFILE: OnceLock<Profile> = OnceLock::new();
 
 fn profile() -> &'static Profile {
@@ -256,6 +257,10 @@ pub fn verbose() -> bool {
 
 pub fn atom_bytes() -> bool {
     *ATOM_BYTES.get_or_init(|| env::var_os("SPENSO_NETWORK_PROFILE_ATOM_BYTES").is_some())
+}
+
+pub fn lazy_tensor_sums() -> bool {
+    *LAZY_TENSOR_SUMS.get_or_init(|| env::var_os("SPENSO_NETWORK_LAZY_TENSOR_SUMS").is_some())
 }
 
 pub fn reset() {

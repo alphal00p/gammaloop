@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    ops::MulAssign,
+    ops::{AddAssign, MulAssign},
 };
 
 use eyre::eyre;
@@ -24,6 +24,8 @@ use super::{
     profile,
     store::NetworkStoreAccess,
 };
+
+const MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS: usize = 96;
 
 pub struct SmallestDegree<CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
@@ -150,6 +152,24 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     pub fn local_tensor_index(&self, operand: usize) -> Option<usize> {
         match self.operands.get(operand)?.leaf {
             NetworkLeaf::LocalTensor(index) => Some(index),
+            NetworkLeaf::TensorSum(_) | NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {
+                None
+            }
+        }
+    }
+
+    pub fn tensor_structure<'a, Store>(
+        &self,
+        executor: &'a Store,
+        operand: usize,
+    ) -> Option<&'a <Store::Tensor as HasStructure>::Structure>
+    where
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure,
+    {
+        match &self.operands.get(operand)?.leaf {
+            NetworkLeaf::LocalTensor(index) => Some(executor.tensor(*index).structure()),
+            NetworkLeaf::TensorSum(indices) => Some(executor.tensor(*indices.first()?).structure()),
             NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => None,
         }
     }
@@ -163,8 +183,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Store: NetworkStoreAccess,
         Store::Tensor: HasStructure,
     {
-        self.local_tensor_index(operand)
-            .map(|index| executor.tensor(index).structure())
+        self.tensor_structure(executor, operand)
     }
 
     #[allow(clippy::result_large_err)]
@@ -255,7 +274,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                         false
                     }
                 }
-                NetworkLeaf::LibraryKey { .. } => false,
+                NetworkLeaf::TensorSum(_) | NetworkLeaf::LibraryKey { .. } => false,
             };
 
             if is_scalar {
@@ -345,6 +364,17 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 .tensor(*index)
                 .scalar_mul(&scalar)
                 .ok_or(TensorNetworkError::FailedScalarMul)?,
+            NetworkLeaf::TensorSum(indices) => {
+                let mut scaled = Vec::with_capacity(indices.len());
+                for index in indices {
+                    let tensor = executor
+                        .tensor(*index)
+                        .scalar_mul(&scalar)
+                        .ok_or(TensorNetworkError::FailedScalarMul)?;
+                    scaled.push(executor.push_tensor(tensor));
+                }
+                return Ok(NetworkLeaf::TensorSum(scaled));
+            }
             NetworkLeaf::LibraryKey { .. } => {
                 let source = self.operands[operand].source.ok_or_else(|| {
                     TensorNetworkError::Other(eyre!("library product operand lost source node"))
@@ -365,6 +395,61 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(NetworkLeaf::LocalTensor(index))
     }
 
+    fn tensor_term_indices(&self, operand: usize) -> Option<Vec<usize>> {
+        match &self.operands.get(operand)?.leaf {
+            NetworkLeaf::LocalTensor(index) => Some(vec![*index]),
+            NetworkLeaf::TensorSum(indices) => Some(indices.clone()),
+            NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => None,
+        }
+    }
+
+    fn tensor_sum_leaf<T, Store>(executor: &mut Store, indices: Vec<usize>) -> NetworkLeaf<K, Aind>
+    where
+        Store: NetworkStoreAccess<Tensor = T>,
+        T: HasStructure + Clone + Ref + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+    {
+        debug_assert!(!indices.is_empty());
+
+        if indices.len() == 1 {
+            return NetworkLeaf::LocalTensor(indices[0]);
+        }
+
+        if indices
+            .iter()
+            .all(|index| executor.tensor(*index).scalar_ref().is_some())
+        {
+            let mut iter = indices.into_iter();
+            let first = iter
+                .next()
+                .expect("tensor sum with at least one term has first term");
+            let mut materialized = executor.tensor(first).clone();
+            for index in iter {
+                materialized += executor.tensor(index).refer();
+            }
+            NetworkLeaf::LocalTensor(executor.push_tensor(materialized))
+        } else {
+            NetworkLeaf::TensorSum(indices)
+        }
+    }
+
+    fn materialize_tensor_sum<T, Store>(executor: &mut Store, indices: &[usize]) -> usize
+    where
+        Store: NetworkStoreAccess<Tensor = T>,
+        T: Clone + Ref + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+    {
+        debug_assert!(!indices.is_empty());
+
+        let mut iter = indices.iter();
+        let first = *iter
+            .next()
+            .expect("tensor sum with at least one term has first term");
+        let mut materialized = executor.tensor(first).clone();
+        for index in iter {
+            materialized += executor.tensor(*index).refer();
+        }
+        executor.push_tensor(materialized)
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn contract_pair<LT, T, L, Sc, CStrat, FK, Store>(
         &mut self,
@@ -380,7 +465,12 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         FK: Debug + Display,
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
-        T: HasStructure + From<LT::WithIndices> + Contract<T, CStrat, LCM = T>,
+        T: HasStructure
+            + From<LT::WithIndices>
+            + Contract<T, CStrat, LCM = T>
+            + Clone
+            + Ref
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -388,26 +478,57 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     {
         self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
 
-        let left_tensor = self
-            .local_tensor_index(left)
+        let mut left_terms = self
+            .tensor_term_indices(left)
             .ok_or(TensorNetworkError::SlotEdgeToScalarNode)?;
-        let right_tensor = self
-            .local_tensor_index(right)
+        let mut right_terms = self
+            .tensor_term_indices(right)
             .ok_or(TensorNetworkError::SlotEdgeToScalarNode)?;
-        let contracted = executor
-            .tensor(left_tensor)
-            .contract(executor.tensor(right_tensor))?;
-        let index = executor.push_tensor(contracted);
+        let distributed_terms = left_terms.len() * right_terms.len();
+
+        if left_terms.len() > 1
+            && right_terms.len() > 1
+            && distributed_terms > MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS
+        {
+            if profile::enabled() {
+                eprintln!(
+                    "spenso_profile product.lazy_tensor_sum_materialize left_terms={} right_terms={} distributed_terms={} max_distributed_terms={}",
+                    left_terms.len(),
+                    right_terms.len(),
+                    distributed_terms,
+                    MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS,
+                );
+            }
+            if left_terms.len() > 1 {
+                left_terms = vec![Self::materialize_tensor_sum(executor, &left_terms)];
+            }
+            if right_terms.len() > 1 {
+                right_terms = vec![Self::materialize_tensor_sum(executor, &right_terms)];
+            }
+        }
+
+        if profile::enabled() && (left_terms.len() > 1 || right_terms.len() > 1) {
+            eprintln!(
+                "spenso_profile product.lazy_tensor_sum left_terms={} right_terms={} distributed_terms={}",
+                left_terms.len(),
+                right_terms.len(),
+                left_terms.len() * right_terms.len(),
+            );
+        }
+        let mut contracted_indices = Vec::with_capacity(left_terms.len() * right_terms.len());
+        for left_tensor in &left_terms {
+            for right_tensor in &right_terms {
+                let contracted = executor
+                    .tensor(*left_tensor)
+                    .contract(executor.tensor(*right_tensor))?;
+                contracted_indices.push(executor.push_tensor(contracted));
+            }
+        }
+        let leaf = Self::tensor_sum_leaf(executor, contracted_indices);
 
         let mut positions = [left, right];
         positions.sort_unstable();
-        self.replace_operands(
-            &positions,
-            ProductOperand {
-                leaf: NetworkLeaf::LocalTensor(index),
-                source: None,
-            },
-        );
+        self.replace_operands(&positions, ProductOperand { leaf, source: None });
         Ok(())
     }
 
@@ -434,7 +555,12 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         FK: Debug + Display,
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
-        T: HasStructure + From<LT::WithIndices> + Contract<T, CStrat, LCM = T>,
+        T: HasStructure
+            + From<LT::WithIndices>
+            + Contract<T, CStrat, LCM = T>
+            + Clone
+            + Ref
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
@@ -447,28 +573,24 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         };
 
         if DEBUG {
-            let left_tensor = self.local_tensor_index(left).unwrap();
-            let right_tensor = self.local_tensor_index(right).unwrap();
             println!(
                 "Contracting {} with {}",
-                executor.tensor(left_tensor).structure(),
-                executor.tensor(right_tensor).structure()
+                self.tensor_structure(executor, left).unwrap(),
+                self.tensor_structure(executor, right).unwrap()
             );
         }
         let profile_pair = profile::enabled();
         let log_pair = profile::verbose() && (self.operands.len() > 4 || _degree > 1);
         let pair_start = if profile_pair {
             if log_pair {
-                let left_tensor = self.local_tensor_index(left).unwrap();
-                let right_tensor = self.local_tensor_index(right).unwrap();
                 eprintln!(
                     "spenso_profile product.pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
                     self.operands.len(),
                     left,
                     right,
                     _degree,
-                    executor.tensor(left_tensor).structure(),
-                    executor.tensor(right_tensor).structure(),
+                    self.tensor_structure(executor, left).unwrap(),
+                    self.tensor_structure(executor, right).unwrap(),
                 );
             }
             Some(std::time::Instant::now())
@@ -487,8 +609,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             }
         }
 
-        if DEBUG && let NetworkLeaf::LocalTensor(index) = self.operands[left.min(right)].leaf {
-            println!("Obtained {}", executor.tensor(index).structure());
+        if DEBUG && let Some(structure) = self.tensor_structure(executor, left.min(right)) {
+            println!("Obtained {structure}");
         }
 
         Ok(true)
@@ -502,7 +624,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Store: NetworkStoreAccess,
         Store::Tensor: HasStructure,
     {
-        self.best_tensor_pair_by::<Store, _, LARGEST>(executor, |_, _, degree, _, _| {
+        self.best_tensor_pair_structure_by::<Store, _, LARGEST>(executor, |_, _, degree, _, _| {
             if degree == 0 { u32::MAX } else { degree }
         })
         .map(|(left, right, degree, _)| (left, right, degree))
@@ -513,16 +635,18 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Store: NetworkStoreAccess,
         Store::Tensor: HasStructure,
     {
-        self.best_tensor_pair_by::<Store, _, false>(executor, |_, _, degree, left, right| {
-            if degree == 0 {
-                return (u32::MAX, u32::MAX);
-            }
+        self.best_tensor_pair_structure_by::<Store, _, false>(
+            executor,
+            |_, _, degree, left, right| {
+                if degree == 0 {
+                    return (u32::MAX, u32::MAX);
+                }
 
-            let result_rank =
-                left.structure().order() + right.structure().order() - 2 * degree as usize;
+                let result_rank = left.order() + right.order() - 2 * degree as usize;
 
-            (result_rank as u32, u32::MAX - degree)
-        })
+                (result_rank as u32, u32::MAX - degree)
+            },
+        )
         .map(|(left, right, degree, _)| (left, right, degree))
     }
 
@@ -539,7 +663,12 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         FK: Debug + Display,
         Aind: AbsInd,
         LT: LibraryTensor + Clone,
-        T: HasStructure + From<LT::WithIndices> + Contract<T, CStrat, LCM = T>,
+        T: HasStructure
+            + From<LT::WithIndices>
+            + Contract<T, CStrat, LCM = T>
+            + Clone
+            + Ref
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
@@ -554,8 +683,6 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         let profile_pair = profile::enabled();
         let log_pair = profile::verbose() && (self.operands.len() > 4 || degree > 1);
         let pair_start = if profile_pair {
-            let left_tensor = self.local_tensor_index(left).unwrap();
-            let right_tensor = self.local_tensor_index(right).unwrap();
             if log_pair {
                 eprintln!(
                     "spenso_profile product.result_rank_pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
@@ -563,8 +690,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     left,
                     right,
                     degree,
-                    executor.tensor(left_tensor).structure(),
-                    executor.tensor(right_tensor).structure(),
+                    self.tensor_structure(executor, left).unwrap(),
+                    self.tensor_structure(executor, right).unwrap(),
                 );
             }
             Some(std::time::Instant::now())
@@ -612,6 +739,57 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 let left = executor.tensor(*left_tensor);
                 let right = executor.tensor(*right_tensor);
                 let degree = matching_degree(left.structure(), right.structure());
+                let candidate_score = score(*left_operand, *right_operand, degree, left, right);
+
+                let replace = match &best {
+                    None => true,
+                    Some((_, _, _, best_score)) => {
+                        if LARGEST {
+                            candidate_score > *best_score
+                        } else {
+                            candidate_score < *best_score
+                        }
+                    }
+                };
+
+                if replace {
+                    best = Some((*left_operand, *right_operand, degree, candidate_score));
+                }
+            }
+        }
+
+        best
+    }
+
+    pub fn best_tensor_pair_structure_by<Store, Score: Ord, const LARGEST: bool>(
+        &self,
+        executor: &Store,
+        mut score: impl FnMut(
+            usize,
+            usize,
+            u32,
+            &<Store::Tensor as HasStructure>::Structure,
+            &<Store::Tensor as HasStructure>::Structure,
+        ) -> Score,
+    ) -> Option<(usize, usize, u32, Score)>
+    where
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure,
+    {
+        let tensors = self
+            .operands
+            .iter()
+            .enumerate()
+            .filter_map(|(operand, _)| {
+                self.tensor_structure(executor, operand)
+                    .map(|structure| (operand, structure))
+            })
+            .collect::<Vec<_>>();
+
+        let mut best = None;
+        for (left_position, (left_operand, left)) in tensors.iter().enumerate() {
+            for (right_operand, right) in &tensors[left_position + 1..] {
+                let degree = matching_degree(*left, *right);
                 let candidate_score = score(*left_operand, *right_operand, degree, left, right);
 
                 let replace = match &best {
@@ -698,7 +876,9 @@ impl<
         + Contract<T, CStrat, LCM = T>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + Ref
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
@@ -742,7 +922,9 @@ impl<
         + Contract<T, CStrat, LCM = T>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + Ref
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
@@ -793,7 +975,9 @@ impl<
         + Contract<T, CStrat, LCM = T>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + Ref
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
@@ -848,7 +1032,9 @@ impl<
         + Contract<T, CStrat, LCM = T>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + Ref
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
@@ -899,7 +1085,9 @@ impl<
         + Contract<T, CStrat, LCM = T>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + Ref
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
@@ -949,7 +1137,9 @@ impl<
         + Contract<T, CStrat, LCM = T>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>,
+        + From<LT::WithIndices>
+        + Ref
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
         + Clone
