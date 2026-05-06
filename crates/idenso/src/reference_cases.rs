@@ -421,9 +421,7 @@ pub static REFERENCE_CASES: &[ReferenceCase] = &[
         domain: ReferenceDomain::ColorSu3,
         expression: color_feyncalc_open_chain_separated_casimir_id2,
         simplification: ReferenceSimplification::ColorDefault,
-        validation: ReferenceValidation::Blocked(
-            "hep-lib parser cannot yet materialize repeated open color-chain adjoint contractions",
-        ),
+        validation: ReferenceValidation::Enabled,
     },
     ReferenceCase {
         name: "color_feyncalc_structure_loop_to_adjoint_delta_id3",
