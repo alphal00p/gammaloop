@@ -202,6 +202,12 @@ fn time_symbolic_network_parse_and_execute(label: &str, expr: &Atom, settings: &
         result.nterms(),
         result.as_view().get_byte_size()
     );
+    let same_as_input = result == *expr;
+    eprintln!("{label} symbolic_execute same_as_input={same_as_input}");
+    assert!(
+        same_as_input,
+        "{label} symbolic execution changed the input"
+    );
     report(&format!("{label} symbolic_execute"), start);
     spenso::network::profile::report(&format!("{label} after_symbolic_execute"));
 }

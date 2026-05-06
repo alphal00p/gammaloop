@@ -610,59 +610,6 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
-    pub fn clone_subgraph<S>(&self, subgraph: &S) -> Self
-    where
-        S: SubSetLike<Base = SuBitGraph>,
-        K: Clone,
-        FK: Clone,
-    {
-        let mut builder = HedgeGraphBuilder::new();
-        let mut node_map = BTreeMap::new();
-        for node in self.graph.nodes(subgraph) {
-            let copied = builder.add_node(self.graph[node].clone());
-            node_map.insert(node, copied);
-        }
-
-        let mut slot_order = Vec::new();
-        for hedge in subgraph.included_iter() {
-            let inverse = self.graph.inv(hedge);
-            if inverse != hedge && subgraph.includes(&inverse) {
-                if inverse < hedge {
-                    continue;
-                }
-
-                let (source, sink) = if matches!(self.graph.flow(hedge), Flow::Source) {
-                    (hedge, inverse)
-                } else {
-                    (inverse, hedge)
-                };
-                let edge_data = self.graph.get_edge_data_full(source);
-                builder.add_edge(
-                    node_map[&self.graph.node_id(source)],
-                    node_map[&self.graph.node_id(sink)],
-                    *edge_data.data,
-                    edge_data.orientation,
-                );
-                slot_order.push(self.slot_order[source.0]);
-                slot_order.push(self.slot_order[sink.0]);
-            } else {
-                let edge_data = self.graph.get_edge_data_full(hedge);
-                builder.add_external_edge(
-                    node_map[&self.graph.node_id(hedge)],
-                    *edge_data.data,
-                    edge_data.orientation,
-                    self.graph.flow(hedge),
-                );
-                slot_order.push(self.slot_order[hedge.0]);
-            }
-        }
-
-        Self {
-            graph: builder.build(),
-            slot_order,
-        }
-    }
-
     pub fn find_all_ready_ops(&mut self) -> Vec<ReadyNetworkOp<K, FK, Aind>>
     where
         K: Clone + Display,
@@ -2647,47 +2594,6 @@ pub mod test {
         }
 
         assert_eq!(batch.subgraph(), &union);
-    }
-
-    #[test]
-    fn cloned_ready_subgraph_matches_extracted_boundary() {
-        let scalar = NetworkGraph::<i8>::scalar(2);
-        let scalar_b = NetworkGraph::<i8>::scalar(3);
-        let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
-                Minkowski {}.new_slot(1, 2),
-                Minkowski {}.new_slot(2, 2),
-            ])
-            .structure,
-            NetworkLeaf::LocalTensor(1),
-        );
-        let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
-                Minkowski {}.new_slot(1, 2),
-                Minkowski {}.new_slot(2, 2),
-            ])
-            .structure,
-            NetworkLeaf::LocalTensor(2),
-        );
-
-        let mut expr = (tensor_a + tensor_b) * (scalar + scalar_b);
-        expr.merge_ops();
-        expr.cache_expr_tree_roots();
-        let op_ref = expr.ready_operation_ref().unwrap();
-
-        let mut extracted_expr = expr.clone();
-        let extracted = extracted_expr.extract(op_ref.subgraph());
-        let cloned = expr.clone_subgraph(op_ref.subgraph());
-
-        assert_eq!(extracted.n_nodes(), cloned.n_nodes());
-        assert_eq!(extracted.graph.n_hedges(), cloned.graph.n_hedges());
-        assert_eq!(extracted.n_dangling(), cloned.n_dangling());
-
-        let mut extracted_dangling = extracted.dangling_indices();
-        let mut cloned_dangling = cloned.dangling_indices();
-        extracted_dangling.sort();
-        cloned_dangling.sort();
-        assert_eq!(extracted_dangling, cloned_dangling);
     }
 
     #[test]

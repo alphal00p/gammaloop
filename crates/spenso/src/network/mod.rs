@@ -1032,7 +1032,8 @@ pub mod parsing;
 // use log::trace;
 pub mod contract;
 pub use contract::{
-    ContractScalars, ContractionStrategy, SingleSmallestDegree, SmallestDegree, SmallestDegreeIter,
+    ContractScalars, ContractionStrategy, ProductContraction, SingleSmallestDegree, SmallestDegree,
+    SmallestDegreeIter,
 };
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where
@@ -1049,24 +1050,6 @@ where
     where
         K: Display,
         FK: Display;
-}
-
-#[allow(clippy::result_large_err)]
-fn replacement_leaf<K, FK, Aind>(
-    replacement: &NetworkGraph<K, FK, Aind>,
-) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
-where
-    K: Clone + Debug + Display,
-    FK: Debug + Display,
-    Aind: AbsInd,
-{
-    let (node, _, _) = replacement.result()?;
-    match node {
-        NetworkNode::Leaf(leaf) => Ok(leaf.clone()),
-        NetworkNode::Op(op) => Err(TensorNetworkError::Other(eyre!(
-            "operation replacement did not collapse to a leaf: {op}"
-        ))),
-    }
 }
 
 fn first_executable_operation<K, FK, Aind>(
@@ -1649,9 +1632,7 @@ where
             }
             NetworkOp::Product => {
                 // println!("Doing Product");
-                let operation_graph = graph.clone_subgraph(operation.subgraph());
-                let (graph, _) = C::contract(self, operation_graph, lib)?;
-                replacement_leaf(&graph)
+                C::contract(self, graph, operation, lib)
             }
             NetworkOp::Sum => {
                 // let mut op = None;
