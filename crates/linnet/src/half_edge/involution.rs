@@ -10,10 +10,12 @@ pub use crate::num_traits::{Pow, Sign, SignError, SignOrZero};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use thiserror::Error;
 
+#[cfg(feature = "rkyv")]
+use super::subgraph::Inclusion;
 use super::{
     builder::HedgeData,
     nodestore::{NodeStorage, NodeStorageOps},
-    subgraph::{Inclusion, SubSetLike},
+    subgraph::SubSetLike,
     swap::Swap,
     GVEdgeAttrs, HedgeGraph, NodeIndex,
 };

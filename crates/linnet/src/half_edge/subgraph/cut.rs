@@ -636,7 +636,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> CutGraph<E, V, H, N> {
     pub fn cut(&self) -> OrientedCut {
         let mut cut = OrientedCut::empty(self.n_hedges());
         for (h, _, d) in self.iter_edges() {
-            match d.data.flow {
+            match d.data.orientation {
                 Orientation::Default => cut.set(h, Flow::Source),
                 Orientation::Reversed => cut.set(h, Flow::Sink),
                 Orientation::Undirected => {}
@@ -656,7 +656,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> CutGraph<E, V, H, N> {
         )
     }
 
-    /// glues_back a cut graph. only matches edges with the same cut data, reversed cut flow, and compatible orientation and flow.
+    /// glues_back a cut graph. only matches edges with the same cut data, reversed cut orientation, and compatible orientation and flow.
     pub fn glue_back_strict(&mut self) {
         self.sew(
             |lf, ld, rf, rd| {
@@ -671,8 +671,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> CutGraph<E, V, H, N> {
                 }
             },
             |lf, ld, rf, rd| {
-                let lo: Flow = ld.data.flow.try_into().unwrap();
-                let ro: Flow = rd.data.flow.try_into().unwrap();
+                let lo: Flow = ld.data.orientation.try_into().unwrap();
+                let ro: Flow = rd.data.orientation.try_into().unwrap();
                 // println!("lf{lf:?},lo{lo:?},rf{rf:?},ro{ro:?}");
                 debug_assert_eq!(lo, -ro);
                 debug_assert_eq!(lf, -rf);
@@ -715,7 +715,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> CutGraph<E, V, H, N> {
         .unwrap()
     }
 
-    /// glues_back a cut graph. only matches edges with the same cut data, reversed cut flow, and compatible orientation and without flow matching.
+    /// glues_back a cut graph. only matches edges with the same cut data, reversed cut orientation, and compatible orientation and without flow matching.
     pub fn glue_back_lenient(&mut self) {
         self.sew(
             |lf, ld, rf, rd| {
@@ -732,8 +732,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> CutGraph<E, V, H, N> {
                 }
             },
             |lf, ld, _, rd| {
-                let lo: Flow = ld.data.flow.try_into().unwrap();
-                let ro: Flow = rd.data.flow.try_into().unwrap();
+                let lo: Flow = ld.data.orientation.try_into().unwrap();
+                let ro: Flow = rd.data.orientation.try_into().unwrap();
                 debug_assert_eq!(lo, -ro);
                 // debug_assert_eq!(lf, -rf);
 
@@ -795,9 +795,9 @@ pub struct PossiblyCutEdge<E> {
     data: Option<E>,
     /// The orientation of this edge relative to a cut.
     /// - [`Orientation::Undirected`]: The edge is not part of the cut.
-    /// - [`Orientation::Default`]: The edge crosses the cut in one direction (e.g., "left to right", or "source side").
-    /// - [`Orientation::Reversed`]: The edge crosses the cut in the opposite direction (e.g., "right to left", or "sink side").
-    flow: Orientation,
+    /// - [`Orientation::Default`]: The edge is aligned with the oriented cut.
+    /// - [`Orientation::Reversed`]: The edge is opposite to the oriented cut.
+    orientation: Orientation,
     /// The original [`EdgeIndex`] of this edge in the graph before any cut operations.
     /// This helps in identifying the edge across different graph representations or
     /// after operations like splitting and gluing.
@@ -816,7 +816,7 @@ where
 
         statements.add_statement(
             "cut_flow",
-            match value.flow {
+            match value.orientation {
                 Orientation::Default => "aligned",
                 Orientation::Reversed => "reversed",
                 Orientation::Undirected => "uncut",
@@ -833,12 +833,12 @@ where
 impl<E: TryFrom<DotEdgeData>> TryFrom<DotEdgeData> for PossiblyCutEdge<E> {
     type Error = String;
     fn try_from(dot_edge_data: DotEdgeData) -> Result<Self, Self::Error> {
-        let flow = dot_edge_data
+        let orientation = dot_edge_data
             .statements
             .get("cut_flow")
             .ok_or("Missing 'cut_flow' attribute")?;
 
-        let flow = match flow.as_str() {
+        let orientation = match orientation.as_str() {
             "aligned" => Orientation::Default,
             "reversed" => Orientation::Reversed,
             "uncut" => Orientation::Undirected,
@@ -857,7 +857,7 @@ impl<E: TryFrom<DotEdgeData>> TryFrom<DotEdgeData> for PossiblyCutEdge<E> {
 
         Ok(PossiblyCutEdge {
             data,
-            flow,
+            orientation,
             index: edge_id.into(),
         })
     }
@@ -865,25 +865,25 @@ impl<E: TryFrom<DotEdgeData>> TryFrom<DotEdgeData> for PossiblyCutEdge<E> {
 
 impl<E: Hash> Hash for PossiblyCutEdge<E> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        (&self.data, self.flow).hash(state);
+        (&self.data, self.orientation).hash(state);
     }
 }
 
 impl<E: PartialOrd> PartialOrd for PossiblyCutEdge<E> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        (&self.data, self.flow).partial_cmp(&(&other.data, other.flow))
+        (&self.data, self.orientation).partial_cmp(&(&other.data, other.orientation))
     }
 }
 
 impl<E: Ord> Ord for PossiblyCutEdge<E> {
     fn cmp(&self, other: &Self) -> Ordering {
-        (&self.data, self.flow).cmp(&(&other.data, other.flow))
+        (&self.data, self.orientation).cmp(&(&other.data, other.orientation))
     }
 }
 
 impl<E: PartialEq> PartialEq for PossiblyCutEdge<E> {
     fn eq(&self, other: &Self) -> bool {
-        (&self.data, self.flow).eq(&(&other.data, other.flow))
+        (&self.data, self.orientation).eq(&(&other.data, other.orientation))
     }
 }
 
@@ -902,7 +902,7 @@ impl<E> PossiblyCutEdge<E> {
     {
         PossiblyCutEdge {
             data: self.data.map(f),
-            flow: self.flow,
+            orientation: self.orientation,
             index: self.index,
         }
     }
@@ -910,7 +910,7 @@ impl<E> PossiblyCutEdge<E> {
     pub fn as_ref(&self) -> PossiblyCutEdge<&E> {
         PossiblyCutEdge {
             data: self.data.as_ref(),
-            flow: self.flow,
+            orientation: self.orientation,
             index: self.index,
         }
     }
@@ -918,32 +918,32 @@ impl<E> PossiblyCutEdge<E> {
     pub fn duplicate_without_data(&self) -> Self {
         Self {
             data: None,
-            flow: self.flow,
+            orientation: self.orientation,
             index: self.index,
         }
     }
 
     pub fn reverse_mut(&mut self) {
-        self.flow = self.flow.reverse();
+        self.orientation = self.orientation.reverse();
     }
 
     pub fn reverse(self) -> Self {
         Self {
             data: self.data,
-            flow: self.flow.reverse(),
+            orientation: self.orientation.reverse(),
             index: self.index,
         }
     }
 
     pub fn matches(&self, other: &Self) -> bool {
-        self.flow == other.flow.reverse() && self.index == other.index
+        self.orientation == other.orientation.reverse() && self.index == other.index
     }
 
     pub fn merge(self, other: Self) -> Option<Self> {
         if self.matches(&other) {
             Some(Self {
                 data: Some(self.data.or(other.data)?),
-                flow: self.flow,
+                orientation: self.orientation,
                 index: self.index,
             })
         } else {
@@ -951,18 +951,18 @@ impl<E> PossiblyCutEdge<E> {
         }
     }
 
-    pub fn flow(&self) -> Option<Flow> {
-        self.flow.try_into().ok()
+    pub fn orientation(&self) -> Orientation {
+        self.orientation
     }
 
     pub fn is_cut(&self) -> bool {
-        !matches!(self.flow, Orientation::Undirected)
+        !matches!(self.orientation, Orientation::Undirected)
     }
 
     pub fn label(&self) -> String {
         let mut label = format!("{}", self.index);
 
-        match self.flow {
+        match self.orientation {
             Orientation::Default => label.push_str("(left)"),
             Orientation::Reversed => label.push_str("(right)"),
             _ => {}
@@ -973,13 +973,13 @@ impl<E> PossiblyCutEdge<E> {
     pub fn uncut(data: E, index: EdgeIndex) -> Self {
         Self {
             data: Some(data),
-            flow: Orientation::Undirected,
+            orientation: Orientation::Undirected,
             index,
         }
     }
 
     pub fn cut(&mut self, flow: Flow) {
-        self.flow = flow.into();
+        self.orientation = flow.into();
     }
 }
 
@@ -1069,7 +1069,7 @@ mod tests {
 
             data.add_statement(
                 "cut_flow",
-                match e.flow {
+                match e.orientation {
                     Orientation::Default => "aligned",
                     Orientation::Reversed => "reversed",
                     Orientation::Undirected => "uncut",
