@@ -325,13 +325,26 @@ fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
 }
 
 fn parse_actual_net(label: &str, expr: &Atom) -> ParsingNet {
-    spenso::network::profile::reset();
-    let settings = ParseSettings {
+    parse_actual_net_with_settings(label, expr, actual_parse_settings())
+}
+
+fn parse_actual_net_with_boundary_factor(label: &str, expr: &Atom) -> ParsingNet {
+    let mut settings = actual_parse_settings();
+    settings.factor_add_boundaries = true;
+    parse_actual_net_with_settings(label, expr, settings)
+}
+
+fn actual_parse_settings() -> ParseSettings {
+    ParseSettings {
         shorthand_parsing: ShorthandParsing::Opaque {
             inference: StructureInferenceMode::Fast,
         },
         ..Default::default()
-    };
+    }
+}
+
+fn parse_actual_net_with_settings(label: &str, expr: &Atom, settings: ParseSettings) -> ParsingNet {
+    spenso::network::profile::reset();
     let lib = TENSORLIB.read().unwrap();
     let start = Instant::now();
     let net = ParsingNet::try_from_view(expr.as_view(), &*lib, &settings)
@@ -480,6 +493,21 @@ fn spenso_eval_input_0_actual_network_parallel_min_result_rank_execute() {
 }
 
 #[test]
+#[ignore = "diagnostic timing for boundary-factored spenso_eval_input_0.txt parallel MinResultRank"]
+fn spenso_eval_input_0_boundary_factor_actual_network_parallel_min_result_rank_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let net = parse_actual_net_with_boundary_factor(
+        "spenso_eval_input_0_boundary_factor_parallel_min_result_rank",
+        &expr,
+    );
+    let _ = execute_actual_net_min_result_rank_parallel(
+        "spenso_eval_input_0_boundary_factor_parallel_min_result_rank",
+        net,
+    );
+}
+
+#[test]
 #[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt after Hornering"]
 fn spenso_eval_input_0_horner_actual_network_parse() {
     test_initialise().expect("GammaLoop initialization should succeed");
@@ -593,6 +621,10 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
         "late_tensor_sum_mwe_expanded",
         parse_actual_net("late_tensor_sum_mwe_expanded", &expanded),
     );
+    let boundary_factor_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_boundary_factor",
+        parse_actual_net_with_boundary_factor("late_tensor_sum_mwe_boundary_factor", &expanded),
+    );
     let factored_result = execute_actual_net_min_result_rank_parallel(
         "late_tensor_sum_mwe_factored",
         parse_actual_net("late_tensor_sum_mwe_factored", &factored),
@@ -609,6 +641,18 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
         expanded_factored_diff.is_zero(),
         "expanded and factored MWE forms produced different scalar values: {}",
         expanded_factored_diff
+    );
+
+    let start = Instant::now();
+    let expanded_boundary_factor_diff = (expanded_result.clone() - boundary_factor_result).expand();
+    report(
+        "late_tensor_sum_mwe_expanded_boundary_factor_diff_expand",
+        start,
+    );
+    assert!(
+        expanded_boundary_factor_diff.is_zero(),
+        "expanded and boundary-factored MWE forms produced different scalar values: {}",
+        expanded_boundary_factor_diff
     );
 
     let start = Instant::now();
