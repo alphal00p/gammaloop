@@ -236,7 +236,7 @@
 
 #let _momentum-arrow-layer(
   offset: 0.16,
-  length: 1.0,
+  length: 5.0,
   ratio: 0.5,
   stroke: none,
   mark: none,
@@ -249,7 +249,7 @@
   }
   let arrow-mark = if mark == none {
     (
-      end: "barbed",
+      end: "straight",
       stroke: arrow-stroke,
       fill: black,
       scale: 1.35,
@@ -294,7 +294,7 @@
   orientation-split: true,
   momentum-arrows: false,
   momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
+  momentum-arrow-length: 5.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
   momentum-arrow-mark: none,
@@ -370,7 +370,7 @@
   orientation-split: true,
   momentum-arrows: false,
   momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
+  momentum-arrow-length: 5.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
   momentum-arrow-mark: none,
@@ -606,7 +606,7 @@
   orientation-split: true,
   momentum-arrows: false,
   momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
+  momentum-arrow-length: 5.0,
   momentum-arrow-ratio: 0.5,
   momentum-arrow-stroke: none,
   momentum-arrow-mark: none,
