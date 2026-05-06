@@ -149,7 +149,7 @@ mod tests {
     use idenso::IndexTooling;
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::{
-        network::parsing::SPENSO_TAG,
+        network::tags::SPENSO_TAG,
         structure::{
             representation::{Minkowski, RepName},
             slot::{DummyAind, IsAbstractSlot, Slot},

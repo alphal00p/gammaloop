@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
-    network::{library::TensorLibraryData, parsing::SPENSO_TAG},
+    network::{library::TensorLibraryData, tags::SPENSO_TAG},
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         abstract_index::AIND_SYMBOLS,

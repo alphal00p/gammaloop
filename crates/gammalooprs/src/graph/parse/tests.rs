@@ -1,3 +1,4 @@
+use idenso::tensor::SymbolicTensor;
 use insta::assert_snapshot;
 use linnet::half_edge::{
     NodeIndex,
@@ -7,12 +8,11 @@ use spenso::{
     network::{
         Network,
         library::DummyLibrary,
-        parsing::{ParseSettings, ShadowedStructure},
+        parsing::{Parse, ParseSettings, ShadowedStructure},
         store::NetworkStore,
     },
     shadowing::symbolica_utils::AtomCoreExt,
-    structure::{HasName, PermutedStructure},
-    tensors::symbolic::SymbolicTensor,
+    structure::HasName,
 };
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 use tracing::info;
@@ -188,9 +188,10 @@ fn parse() {
             ToString::to_string,
             |_| None,
             |a| {
-                if let Ok(a) =
-                    PermutedStructure::<ShadowedStructure<Aind>>::try_from(a.expression.as_view())
-                {
+                if let Ok(a) = ShadowedStructure::<Aind>::parse_with_settings(
+                    a.expression.as_view(),
+                    &ParseSettings::default(),
+                ) {
                     a.structure
                         .name()
                         .map(|s| {
@@ -1475,8 +1476,9 @@ mod failing {
                 ToString::to_string,
                 |_| None,
                 |a| {
-                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+                    if let Ok(a) = ShadowedStructure::<Aind>::parse_with_settings(
                         a.expression.as_view(),
+                        &ParseSettings::default(),
                     ) {
                         a.structure
                             .name()
@@ -1598,8 +1600,9 @@ mod failing {
                 ToString::to_string,
                 |_| None,
                 |a| {
-                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+                    if let Ok(a) = ShadowedStructure::<Aind>::parse_with_settings(
                         a.expression.as_view(),
+                        &ParseSettings::default(),
                     ) {
                         a.structure
                             .name()

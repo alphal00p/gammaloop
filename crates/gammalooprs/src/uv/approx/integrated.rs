@@ -9,7 +9,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
@@ -848,11 +848,10 @@ pub(crate) fn to_vakint_integrand<
             .with(function!(vakint::symbols::S.p, W_.x___))
             .replace(function!(
                 SPENSO_TAG.dot,
-                Minkowski {}.new_rep(GS.dim).to_symbolic([]),
-                W_.a_,
-                W_.b_
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
             ))
-            .with(vakint::symbols::S.dot(W_.a_, W_.b_))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
             .replace(function!(
                 ETS.metric,
                 Minkowski {}.to_symbolic([W_.a__]),
