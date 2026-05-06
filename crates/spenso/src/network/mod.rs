@@ -1139,6 +1139,73 @@ where
     planned
 }
 
+#[cfg(feature = "shadowing")]
+fn try_stream_atom_scalar_sum<K, Store>(
+    store: &mut Store,
+    targets: &[(NodeIndex, &NetworkLeaf<K>)],
+) -> Option<NetworkLeaf<K>>
+where
+    Store: NetworkStoreAccess,
+    Store::Scalar: 'static,
+{
+    use std::{
+        any::{Any, TypeId},
+        fs::File,
+        io::BufWriter,
+    };
+
+    use symbolica::{
+        atom::Atom,
+        streaming::{TermStreamer, TermStreamerConfig},
+    };
+
+    const MIN_STREAMED_SUM_LEAVES: usize = 32;
+    if targets.len() < MIN_STREAMED_SUM_LEAVES {
+        return None;
+    }
+
+    if TypeId::of::<Store::Scalar>() != TypeId::of::<Atom>() {
+        return None;
+    }
+
+    let start = profile::enabled().then(std::time::Instant::now);
+    if profile::enabled() {
+        eprintln!(
+            "spenso_profile execute.sum_term_stream_start leaves={}",
+            targets.len(),
+        );
+    }
+
+    let mut stream = TermStreamer::<BufWriter<File>>::new(TermStreamerConfig {
+        path: std::env::temp_dir().to_string_lossy().into_owned(),
+        max_mem_bytes: 4 * 1024 * 1024 * 1024,
+        ..Default::default()
+    });
+
+    for (_, leaf) in targets {
+        let NetworkLeaf::Scalar(index) = leaf else {
+            return None;
+        };
+        let atom = (store.scalar(*index) as &dyn Any).downcast_ref::<Atom>()?;
+        stream.push(atom.clone());
+    }
+
+    let result = stream.to_expression();
+    if let Some(start) = start {
+        eprintln!(
+            "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
+            targets.len(),
+            result.nterms(),
+            result.as_view().get_byte_size(),
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+    }
+
+    let boxed: Box<dyn Any> = Box::new(result);
+    let scalar = *boxed.downcast::<Store::Scalar>().ok()?;
+    Some(NetworkLeaf::Scalar(store.push_scalar(scalar)))
+}
+
 pub struct Sequential;
 pub struct Parallel;
 pub struct SequentialRef;
@@ -1766,7 +1833,8 @@ where
         + for<'a> AddAssign<<Store::Tensor as HasStructure>::ScalarRef<'a>>
         + From<<Store::Tensor as HasStructure>::Scalar>
         + Ref
-        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + 'static,
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     FL: FunctionLibrary<Store::Tensor, Store::Scalar, Key = FK>,
@@ -1912,6 +1980,18 @@ where
                 };
 
                 let (nf, first) = &targets[0];
+
+                #[cfg(feature = "shadowing")]
+                if let Some(new_node) = try_stream_atom_scalar_sum(self, &targets) {
+                    if let Some(sum_start) = sum_start {
+                        eprintln!(
+                            "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
+                            targets.len(),
+                            sum_start.elapsed().as_secs_f64() * 1000.0,
+                        );
+                    }
+                    return Ok(new_node);
+                }
 
                 let new_node = match first {
                     NetworkLeaf::Scalar(s) => {
