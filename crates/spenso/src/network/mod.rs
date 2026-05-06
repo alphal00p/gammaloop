@@ -1404,7 +1404,7 @@ where
                 replacements.push(executor.execute::<C>(graph, planned_op, lib, fnlib)?);
                 if let Some(op_start) = op_start {
                     let elapsed = op_start.elapsed();
-                    if elapsed.as_millis() >= 10 {
+                    if profile::verbose() || elapsed.as_millis() >= 100 {
                         eprintln!(
                             "spenso_profile execute.slow_op batch={} op_index={} elapsed_ms={:.3} op={} leaves={} subgraph_hedges={}",
                             batch_index,
@@ -1858,13 +1858,58 @@ where
                 C::contract(self, graph, operation, lib)
             }
             NetworkOp::Sum => {
-                // let mut op = None;
+                let profile_sum = profile::enabled() && operation.leaf_count() > 32;
+                let sum_start = profile_sum.then(std::time::Instant::now);
+                if profile_sum {
+                    eprintln!(
+                        "spenso_profile execute.sum_start leaves={} children={} subgraph_hedges={}",
+                        operation.leaf_count(),
+                        operation.children().len(),
+                        operation.subgraph().n_included(),
+                    );
+                }
+
+                let target_start = profile_sum.then(std::time::Instant::now);
                 let mut targets = Vec::new();
+                let mut scalar_targets = 0usize;
+                let mut tensor_targets = 0usize;
+                let mut library_targets = 0usize;
                 for node in operation.children() {
                     if let NetworkNode::Leaf(l) = &graph.graph[*node] {
+                        match l {
+                            NetworkLeaf::Scalar(_) => scalar_targets += 1,
+                            NetworkLeaf::LocalTensor(_) => tensor_targets += 1,
+                            NetworkLeaf::LibraryKey(_) => library_targets += 1,
+                        }
                         targets.push((*node, l));
                     }
                 }
+                if let Some(target_start) = target_start {
+                    eprintln!(
+                        "spenso_profile execute.sum_targets leaves={} scalar_targets={} tensor_targets={} library_targets={} elapsed_ms={:.3}",
+                        targets.len(),
+                        scalar_targets,
+                        tensor_targets,
+                        library_targets,
+                        target_start.elapsed().as_secs_f64() * 1000.0,
+                    );
+                }
+
+                let log_sum_add = |done: usize, total: usize, add_start: std::time::Instant| {
+                    if let Some(sum_start) = sum_start {
+                        let add_elapsed = add_start.elapsed();
+                        if add_elapsed.as_millis() >= 1_000 || done <= 8 || done.is_multiple_of(16)
+                        {
+                            eprintln!(
+                                "spenso_profile execute.sum_progress done={} total={} add_ms={:.3} elapsed_ms={:.3}",
+                                done,
+                                total,
+                                add_elapsed.as_secs_f64() * 1000.0,
+                                sum_start.elapsed().as_secs_f64() * 1000.0,
+                            );
+                        }
+                    }
+                };
 
                 let (nf, first) = &targets[0];
 
@@ -1872,7 +1917,8 @@ where
                     NetworkLeaf::Scalar(s) => {
                         let mut accumulator = self.scalar(*s).clone();
 
-                        for (_, t) in &targets[1..] {
+                        for (offset, (_, t)) in targets[1..].iter().enumerate() {
+                            let add_start = std::time::Instant::now();
                             match t {
                                 NetworkLeaf::Scalar(s) => {
                                     accumulator += self.scalar(*s).refer();
@@ -1890,6 +1936,7 @@ where
                                     return Err(TensorNetworkError::ScalarLibSum("".to_string()));
                                 }
                             }
+                            log_sum_add(offset + 2, targets.len(), add_start);
                         }
 
                         let pos = self.push_scalar(accumulator);
@@ -1901,7 +1948,8 @@ where
                             let mut accumulator =
                                 Store::Scalar::from(accumulator.scalar().unwrap());
 
-                            for (_, t) in &targets[1..] {
+                            for (offset, (_, t)) in targets[1..].iter().enumerate() {
+                                let add_start = std::time::Instant::now();
                                 match t {
                                     NetworkLeaf::Scalar(s) => {
                                         accumulator += self.scalar(*s).refer();
@@ -1921,12 +1969,14 @@ where
                                         ));
                                     }
                                 }
+                                log_sum_add(offset + 2, targets.len(), add_start);
                             }
 
                             let pos = self.push_scalar(accumulator);
                             NetworkLeaf::Scalar(pos)
                         } else {
-                            for (nid, t) in &targets[1..] {
+                            for (offset, (nid, t)) in targets[1..].iter().enumerate() {
+                                let add_start = std::time::Instant::now();
                                 match t {
                                     NetworkLeaf::Scalar(_) => {
                                         return Err(TensorNetworkError::SumScalarTensor(
@@ -1942,6 +1992,7 @@ where
                                         accumulator += with_index;
                                     }
                                 }
+                                log_sum_add(offset + 2, targets.len(), add_start);
                             }
 
                             let pos = self.push_tensor(accumulator);
@@ -1952,7 +2003,8 @@ where
                     NetworkLeaf::LibraryKey { .. } => {
                         let inds = graph.get_lib_data(lib, *nf).unwrap();
                         let mut accumulator = Store::Tensor::from(inds);
-                        for (nid, t) in &targets[1..] {
+                        for (offset, (nid, t)) in targets[1..].iter().enumerate() {
+                            let add_start = std::time::Instant::now();
                             match t {
                                 NetworkLeaf::Scalar(_) => {
                                     return Err(TensorNetworkError::SumScalarTensor(
@@ -1967,6 +2019,7 @@ where
                                     accumulator += with;
                                 }
                             }
+                            log_sum_add(offset + 2, targets.len(), add_start);
                         }
 
                         let pos = self.push_tensor(accumulator);
@@ -1974,6 +2027,13 @@ where
                         NetworkLeaf::LocalTensor(pos)
                     }
                 };
+                if let Some(sum_start) = sum_start {
+                    eprintln!(
+                        "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
+                        targets.len(),
+                        sum_start.elapsed().as_secs_f64() * 1000.0,
+                    );
+                }
 
                 Ok(new_node)
             }

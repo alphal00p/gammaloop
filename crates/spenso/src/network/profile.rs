@@ -238,6 +238,7 @@ impl Drop for Span {
 }
 
 static ENABLED: OnceLock<bool> = OnceLock::new();
+static VERBOSE: OnceLock<bool> = OnceLock::new();
 static PROFILE: OnceLock<Profile> = OnceLock::new();
 
 fn profile() -> &'static Profile {
@@ -246,6 +247,10 @@ fn profile() -> &'static Profile {
 
 pub fn enabled() -> bool {
     *ENABLED.get_or_init(|| env::var_os("SPENSO_NETWORK_PROFILE").is_some())
+}
+
+pub fn verbose() -> bool {
+    *VERBOSE.get_or_init(|| env::var_os("SPENSO_NETWORK_PROFILE_VERBOSE").is_some())
 }
 
 pub fn reset() {
