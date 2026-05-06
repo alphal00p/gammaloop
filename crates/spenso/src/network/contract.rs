@@ -21,6 +21,7 @@ use super::{
     Ref, TensorNetworkError,
     graph::NetworkGraph,
     library::{Library, LibraryTensor},
+    profile,
     store::NetworkStoreAccess,
 };
 
@@ -442,8 +443,37 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 executor.tensor(right_tensor).structure()
             );
         }
+        let profile_pair = profile::enabled();
+        let log_pair = profile_pair && (self.operands.len() > 4 || _degree > 1);
+        let pair_start = if profile_pair {
+            if log_pair {
+                let left_tensor = self.local_tensor_index(left).unwrap();
+                let right_tensor = self.local_tensor_index(right).unwrap();
+                eprintln!(
+                    "spenso_profile product.pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
+                    self.operands.len(),
+                    left,
+                    right,
+                    _degree,
+                    executor.tensor(left_tensor).structure(),
+                    executor.tensor(right_tensor).structure(),
+                );
+            }
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
 
         self.contract_pair::<LT, T, L, Sc, CStrat, FK, Store>(left, right, executor, graph, lib)?;
+        if let Some(pair_start) = pair_start {
+            let elapsed = pair_start.elapsed();
+            if elapsed.as_millis() >= 10 {
+                eprintln!(
+                    "spenso_profile product.slow_pair elapsed_ms={:.3}",
+                    elapsed.as_secs_f64() * 1000.0,
+                );
+            }
+        }
 
         if DEBUG && let NetworkLeaf::LocalTensor(index) = self.operands[left.min(right)].leaf {
             println!("Obtained {}", executor.tensor(index).structure());
