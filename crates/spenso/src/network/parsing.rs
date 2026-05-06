@@ -20,7 +20,7 @@ use crate::structure::{
 };
 use crate::tensors::parametric::ParamTensor;
 
-use std::fmt::Display;
+use std::{cell::Cell, fmt::Display, rc::Rc};
 
 use store::TensorScalarStore;
 // use log::trace;
@@ -130,7 +130,7 @@ impl<Aind: ParseableAind + AbsInd> OrderedStructure<LibraryRep, Aind> {
                                 is_structure = None;
                                 slots.push(slot);
                             }
-                            Err(e) => {
+                            Err(_) => {
                                 if let AtomView::Fun(f) = arg
                                     && f.get_symbol() == AIND_SYMBOLS.aind
                                 {
@@ -269,16 +269,32 @@ impl Default for ParseSettings {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug)]
 pub struct ParseState {
     depth: usize,
+    next_dummy: Rc<Cell<usize>>,
     // func_depth: usize,
 }
 
 #[allow(clippy::derivable_impls)]
 impl Default for ParseState {
     fn default() -> Self {
-        Self { depth: 0 }
+        Self {
+            depth: 0,
+            next_dummy: Rc::new(Cell::new(1_000_000)),
+        }
+    }
+}
+
+impl ParseState {
+    fn next(&self) -> AbstractIndex {
+        let index = self.next_dummy.get();
+        self.next_dummy.set(index + 1);
+        AbstractIndex::new_dummy_at(index)
+    }
+
+    fn slot(&self, rep: &Representation<LibraryRep>) -> Slot<LibraryRep, AbstractIndex> {
+        rep.slot(self.next())
     }
 }
 
@@ -290,26 +306,6 @@ pub trait Parse: Sized {
         _settings: &ParseSettings,
     ) -> Result<PermutedStructure<Self>, StructureError> {
         Self::parse(view)
-    }
-}
-
-struct ParserDummies {
-    next: usize,
-}
-
-impl ParserDummies {
-    fn new() -> Self {
-        Self { next: 1_000_000 }
-    }
-
-    fn next(&mut self) -> AbstractIndex {
-        let index = self.next;
-        self.next += 1;
-        AbstractIndex::new_dummy_at(index)
-    }
-
-    fn slot(&mut self, rep: &Representation<LibraryRep>) -> Slot<LibraryRep, AbstractIndex> {
-        rep.slot(self.next())
     }
 }
 
@@ -410,7 +406,7 @@ fn materialize_compact_vector_with_slot(
 
 fn compact_scalar_product(
     value: FunView<'_>,
-    dummies: &mut ParserDummies,
+    state: &ParseState,
 ) -> Option<SchoonschipMaterialization> {
     if value.get_symbol() != ETS.metric && value.get_symbol() != SPENSO_TAG.dot {
         return None;
@@ -426,7 +422,7 @@ fn compact_scalar_product(
         return None;
     }
 
-    let slot = dummies.slot(&rep).to_atom();
+    let slot = state.slot(&rep).to_atom();
     let lhs = materialize_compact_vector_with_slot(*lhs, &rep, &slot)?;
     let rhs = materialize_compact_vector_with_slot(*rhs, &rep, &slot)?;
 
@@ -437,16 +433,45 @@ fn compact_scalar_product(
     })
 }
 
+fn materialize_compact_vector_product(value: MulView<'_>, state: &ParseState) -> Option<Atom> {
+    let args = value.iter().collect::<Vec<_>>();
+    let compact_positions = args
+        .iter()
+        .enumerate()
+        .filter_map(|(position, arg)| compact_vector_rep(*arg).map(|rep| (position, rep)))
+        .collect::<Vec<_>>();
+    let [(left_position, rep), (right_position, right_rep)] = compact_positions.as_slice() else {
+        return None;
+    };
+
+    if rep != right_rep || !rep.rep.is_self_dual() {
+        return None;
+    }
+
+    let slot = state.slot(rep).to_atom();
+    let mut materialized = Atom::num(1);
+    for (position, arg) in args.into_iter().enumerate() {
+        let factor = if position == *left_position || position == *right_position {
+            materialize_compact_vector_with_slot(arg, rep, &slot)?
+        } else {
+            arg.to_owned()
+        };
+        materialized *= factor;
+    }
+
+    Some(materialized)
+}
+
 /// Turns compact Schoonschip notation such as `p(mink(4))` into an indexed
 /// tensor factor and returns the fresh slot that should replace it in context.
 fn compact_schoonschip_tensor(
     value: FunView<'_>,
-    dummies: &mut ParserDummies,
+    state: &ParseState,
 ) -> Option<SchoonschipMaterialization> {
     let (position, rep) = compact_tensor_rep_arg(value)?;
     let args = value.iter().collect::<Vec<_>>();
 
-    let slot = dummies.slot(&rep);
+    let slot = state.slot(&rep);
     let slot_atom = slot.to_atom();
     let mut tensor = FunctionBuilder::new(value.get_symbol());
     for (arg_position, arg) in args.into_iter().enumerate() {
@@ -491,17 +516,17 @@ fn compact_dot_as_metric(value: AtomView<'_>) -> Option<Atom> {
 
 fn materialize_schoonschip_arg(
     value: AtomView<'_>,
-    dummies: &mut ParserDummies,
+    state: &ParseState,
 ) -> Option<SchoonschipMaterialization> {
     let AtomView::Fun(fun) = value else {
         return None;
     };
 
-    if let Some(materialized) = compact_scalar_product(fun, dummies) {
+    if let Some(materialized) = compact_scalar_product(fun, state) {
         return Some(materialized);
     }
 
-    if let Some(materialized) = compact_schoonschip_tensor(fun, dummies) {
+    if let Some(materialized) = compact_schoonschip_tensor(fun, state) {
         return Some(materialized);
     }
 
@@ -510,7 +535,7 @@ fn materialize_schoonschip_arg(
     let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
 
     for arg in fun.iter() {
-        if let Some(materialized) = materialize_schoonschip_arg(arg, dummies) {
+        if let Some(materialized) = materialize_schoonschip_arg(arg, state) {
             changed = true;
             rebuilt = rebuilt.add_arg(&materialized.replacement);
             factors.extend(materialized.factors);
@@ -529,9 +554,8 @@ fn materialize_schoonschip_arg(
     })
 }
 
-fn materialize_schoonschip(value: AtomView<'_>) -> Option<Atom> {
-    let mut dummies = ParserDummies::new();
-    let materialized = materialize_schoonschip_arg(value, &mut dummies)?;
+fn materialize_schoonschip(value: AtomView<'_>, state: &ParseState) -> Option<Atom> {
+    let materialized = materialize_schoonschip_arg(value, state)?;
     let mut expression = if materialized.compact_self {
         Atom::num(1)
     } else {
@@ -695,11 +719,15 @@ where
             return Self::as_leaf::<S>(value.as_view(), settings);
         }
 
+        if let Some(materialized) = materialize_compact_vector_product(value, &state) {
+            return Self::try_from_view_impl(materialized.as_view(), state, library, settings);
+        }
+
         state.depth += 1;
         // println!("{} for mul {}", state.depth, value.as_view());
         let mut iter = value.iter();
         let first_atom = iter.next().unwrap();
-        let first = Self::try_from_view_impl(first_atom, state, library, settings)?;
+        let first = Self::try_from_view_impl(first_atom, state.clone(), library, settings)?;
 
         // state
 
@@ -707,8 +735,8 @@ where
             let mut scalars = Atom::num(1);
 
             let rest: Result<Vec<_>, _> = iter
-                .filter_map(
-                    |a| match Self::try_from_view_impl(a, state, library, settings) {
+                .filter_map(|a| {
+                    match Self::try_from_view_impl(a, state.clone(), library, settings) {
                         Ok(n) => {
                             if let NetworkState::PureScalar = n.state {
                                 scalars *= a;
@@ -718,8 +746,8 @@ where
                             }
                         }
                         Err(e) => Some(Err(e)),
-                    },
-                )
+                    }
+                })
                 .collect();
 
             let mut res = rest?;
@@ -736,7 +764,7 @@ where
                 && res.len() == 1
                 && let Some(scaled) = scale_first_chain_like_factor(res[0].0.as_view(), &scalars)
             {
-                Self::try_from_view_impl(scaled.as_view(), state, library, settings)
+                Self::try_from_view_impl(scaled.as_view(), state.clone(), library, settings)
             } else {
                 let s = if scalars != Atom::num(1) {
                     Self::from_scalar(scalars.as_view().try_into()?)
@@ -748,7 +776,7 @@ where
             }
         } else {
             let rest: Result<Vec<_>, _> = iter
-                .map(|a| Self::try_from_view_impl(a, state, library, settings))
+                .map(|a| Self::try_from_view_impl(a, state.clone(), library, settings))
                 .collect();
 
             Ok(first.n_mul(rest?))
@@ -774,7 +802,7 @@ where
         if symbol == SPENSO_TAG.bracket {
             let mut n_muls = value
                 .iter()
-                .map(|a| Self::try_from_view_impl(a, state, library, settings))
+                .map(|a| Self::try_from_view_impl(a, state.clone(), library, settings))
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(n_muls.pop().unwrap().n_mul(n_muls))
@@ -790,7 +818,7 @@ where
             }
 
             Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?))
-        } else if let Some(materialized) = materialize_schoonschip(value.as_view()) {
+        } else if let Some(materialized) = materialize_schoonschip(value.as_view(), &state) {
             Self::try_from_view_impl(materialized.as_view(), state, library, settings)
         } else if symbol.has_tag(&SPENSO_TAG.tag) {
             if value.get_nargs() != 1 {
@@ -871,19 +899,19 @@ where
 
         // The chain head is inert at expression level; parsing materializes it
         // into ordinary indexed tensor factors with fresh contracted links.
-        let mut dummies = ParserDummies::new();
         let mut left = start;
         let mut materialized_factors = Vec::with_capacity(factors.len());
         for (position, factor) in factors.iter().enumerate() {
             let (right, next_left) = if position + 1 == factors.len() {
                 (end.clone(), None)
             } else {
-                let link = start_slot.reindex(dummies.next());
+                let link = start_slot.reindex(state.next());
                 (link.dual().to_atom(), Some(link.to_atom()))
             };
 
             let factor = replace_chain_placeholders(*factor, &left, &right);
-            materialized_factors.push(materialize_schoonschip(factor.as_view()).unwrap_or(factor));
+            materialized_factors
+                .push(materialize_schoonschip(factor.as_view(), &state).unwrap_or(factor));
             if let Some(next_left) = next_left {
                 left = next_left;
             }
@@ -892,7 +920,10 @@ where
         let mut factor_networks = Vec::new();
         for factor in materialized_factors {
             factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib>(
-                factor, state, library, settings,
+                factor,
+                state.clone(),
+                library,
+                settings,
             )?);
         }
         Ok(Self::chain_like_network_product(factor_networks))
@@ -931,15 +962,15 @@ where
             );
         }
 
-        let mut dummies = ParserDummies::new();
         if let [factor] = factors {
-            let left = dummies.slot(&rep);
-            let right = dummies.slot(&rep);
-            let bridge = dummies.slot(&rep);
+            let left = state.slot(&rep);
+            let right = state.slot(&rep);
+            let bridge = state.slot(&rep);
             let materialized_factor =
                 replace_chain_placeholders(*factor, &left.to_atom(), &right.dual().to_atom());
-            let materialized_factor = materialize_schoonschip(materialized_factor.as_view())
-                .unwrap_or(materialized_factor);
+            let materialized_factor =
+                materialize_schoonschip(materialized_factor.as_view(), &state)
+                    .unwrap_or(materialized_factor);
             let left_closure = FunctionBuilder::new(ETS.metric)
                 .add_arg(bridge.to_atom())
                 .add_arg(left.dual().to_atom())
@@ -948,20 +979,28 @@ where
                 .add_arg(right.to_atom())
                 .add_arg(bridge.dual().to_atom())
                 .finish();
-            let factor_net =
-                Self::try_from_view_impl(materialized_factor.as_view(), state, library, settings)?;
+            let factor_net = Self::try_from_view_impl(
+                materialized_factor.as_view(),
+                state.clone(),
+                library,
+                settings,
+            )?;
             let left_net =
-                Self::try_from_view_impl(left_closure.as_view(), state, library, settings)?;
-            let right_net =
-                Self::try_from_view_impl(right_closure.as_view(), state, library, settings)?;
+                Self::try_from_view_impl(left_closure.as_view(), state.clone(), library, settings)?;
+            let right_net = Self::try_from_view_impl(
+                right_closure.as_view(),
+                state.clone(),
+                library,
+                settings,
+            )?;
             return Ok(factor_net.n_mul([right_net, left_net]));
         }
 
-        // Build an open chain and close it with one metric factor. This keeps
-        // trace materialization in graph form while avoiding direct self-joins
-        // between the first and last tensor factors.
-        let links = (0..=factors.len())
-            .map(|_| dummies.slot(&rep))
+        // Multi-factor traces close directly through cyclic links. The
+        // single-factor case above keeps using a bridge to avoid self-joining
+        // one tensor through both endpoints.
+        let links = (0..factors.len())
+            .map(|_| state.slot(&rep))
             .collect::<Vec<_>>();
 
         let materialized_factors = factors
@@ -969,28 +1008,21 @@ where
             .enumerate()
             .map(|(position, factor)| {
                 let left = links[position].to_atom();
-                let right = links[position + 1].dual().to_atom();
+                let right = links[(position + 1) % factors.len()].dual().to_atom();
                 let factor = replace_chain_placeholders(*factor, &left, &right);
-                materialize_schoonschip(factor.as_view()).unwrap_or(factor)
+                materialize_schoonschip(factor.as_view(), &state).unwrap_or(factor)
             })
             .collect::<Vec<_>>();
 
         let mut factor_networks = Vec::new();
         for factor in materialized_factors {
             factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib>(
-                factor, state, library, settings,
+                factor,
+                state.clone(),
+                library,
+                settings,
             )?);
         }
-        let closure = FunctionBuilder::new(ETS.metric)
-            .add_arg(links[factors.len()].to_atom())
-            .add_arg(links[0].dual().to_atom())
-            .finish();
-        factor_networks.push(Self::try_from_view_impl(
-            closure.as_view(),
-            state,
-            library,
-            settings,
-        )?);
         Ok(Self::chain_like_network_product(factor_networks))
     }
 
@@ -1010,7 +1042,7 @@ where
         let AtomView::Mul(product) = factor.as_view() else {
             return Ok(vec![Self::try_from_view_impl(
                 factor.as_view(),
-                state,
+                state.clone(),
                 library,
                 settings,
             )?]);
@@ -1019,7 +1051,7 @@ where
         let mut scalars = Vec::new();
         let mut tensors = Vec::new();
         for arg in product.iter() {
-            let network = Self::try_from_view_impl(arg, state, library, settings)?;
+            let network = Self::try_from_view_impl(arg, state.clone(), library, settings)?;
             if network.state == NetworkState::PureScalar {
                 scalars.push(network);
             } else {
@@ -1030,7 +1062,7 @@ where
         if scalars.is_empty() || tensors.len() != 1 {
             return Ok(vec![Self::try_from_view_impl(
                 factor.as_view(),
-                state,
+                state.clone(),
                 library,
                 settings,
             )?]);
@@ -1141,15 +1173,15 @@ where
 
         let first_atom = iter.next().unwrap();
 
-        let first = Self::try_from_view_impl(first_atom, state, library, settings)?;
+        let first = Self::try_from_view_impl(first_atom, state.clone(), library, settings)?;
         if settings.take_first_term_from_sum {
             Ok(first)
         } else if settings.precontract_scalars {
             let mut scalars = Atom::Zero;
 
             let rest: Result<Vec<_>, _> = iter
-                .filter_map(
-                    |a| match Self::try_from_view_impl(a, state, library, settings) {
+                .filter_map(|a| {
+                    match Self::try_from_view_impl(a, state.clone(), library, settings) {
                         Ok(n) => {
                             if n.state.is_compatible(&first.state) {
                                 if let NetworkState::PureScalar = n.state {
@@ -1166,8 +1198,8 @@ where
                             }
                         }
                         Err(e) => Some(Err(e)),
-                    },
-                )
+                    }
+                })
                 .collect();
 
             let mut res = rest?;
@@ -1191,7 +1223,7 @@ where
         } else {
             let rest: Result<Vec<_>, _> = iter
                 .map(
-                    |a| match Self::try_from_view_impl(a, state, library, settings) {
+                    |a| match Self::try_from_view_impl(a, state.clone(), library, settings) {
                         Ok(n) => {
                             if n.state.is_compatible(&first.state) {
                                 Ok(n)
@@ -1304,7 +1336,12 @@ mod tests {
             .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
             .unwrap();
 
-        assert!(parsed.state.is_scalar());
+        assert!(
+            parsed.state.is_scalar(),
+            "expected compact Schoonschip vector product `{expr}` to parse as a scalar; got state {:?} with dangling indices {:?}",
+            parsed.state,
+            parsed.graph.dangling_indices()
+        );
         assert!(parsed.graph.dangling_indices().is_empty());
     }
 
@@ -1325,6 +1362,26 @@ mod tests {
 
         assert_eq!(parsed.state, NetworkState::SelfDualTensor);
         assert_eq!(parsed.graph.dangling_indices().len(), 3);
+    }
+
+    #[test]
+    fn parse_four_factor_trace_closes_links_and_keeps_external_indices() {
+        let trace_rep = Lorentz {}.new_rep(4);
+        let external_rep = mink4();
+        let expr = trace!(
+            &trace_rep,
+            chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
+            chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
+            chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
+            chain_factor_with_external(symbol!("q"), slot!(external_rep, d).to_atom()),
+        );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+        assert_eq!(parsed.graph.dangling_indices().len(), 4);
     }
 
     #[test]
@@ -1374,7 +1431,8 @@ mod tests {
             panic!("expected function");
         };
 
-        let materialized = compact_schoonschip_tensor(fun, &mut ParserDummies::new()).unwrap();
+        let state = ParseState::default();
+        let materialized = compact_schoonschip_tensor(fun, &state).unwrap();
 
         assert!(
             Slot::<LibraryRep, AbstractIndex>::try_from(materialized.replacement.as_view()).is_ok()
@@ -1393,7 +1451,8 @@ mod tests {
             panic!("expected function");
         };
 
-        assert!(compact_schoonschip_tensor(fun, &mut ParserDummies::new()).is_none());
+        let state = ParseState::default();
+        assert!(compact_schoonschip_tensor(fun, &state).is_none());
     }
 
     #[test]

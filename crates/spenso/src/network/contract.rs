@@ -143,7 +143,7 @@ where
                             false
                         }
                     }
-                    NetworkLeaf::LibraryKey(_) => false,
+                    NetworkLeaf::LibraryKey { .. } => false,
                 };
 
                 if is_scalar {
@@ -188,7 +188,7 @@ where
                             executor.tensors.push(a);
                             NetworkLeaf::LocalTensor(pos)
                         }
-                        NetworkLeaf::LibraryKey(_) => {
+                        NetworkLeaf::LibraryKey { .. } => {
                             let inds = graph.get_lib_data(lib, other).unwrap();
                             let a = inds.scalar_mul(&acc).unwrap();
 
@@ -470,7 +470,7 @@ where
 
                         NetworkLeaf::LocalTensor(pos)
                     }
-                    (NetworkLeaf::LibraryKey(_), NetworkLeaf::LocalTensor(l2)) => {
+                    (NetworkLeaf::LibraryKey { .. }, NetworkLeaf::LocalTensor(l2)) => {
                         let l1 = graph.get_lib_data(lib, nid1).unwrap();
                         if D {
                             let st1 = l1.structure();
@@ -487,7 +487,7 @@ where
                         NetworkLeaf::LocalTensor(pos)
                     }
 
-                    (NetworkLeaf::LocalTensor(l2), NetworkLeaf::LibraryKey(_)) => {
+                    (NetworkLeaf::LocalTensor(l2), NetworkLeaf::LibraryKey { .. }) => {
                         let l1 = graph.get_lib_data(lib, nid2).unwrap();
                         if D {
                             let st1 = l1.structure();
@@ -504,7 +504,7 @@ where
 
                         NetworkLeaf::LocalTensor(pos)
                     }
-                    (NetworkLeaf::LibraryKey(_), NetworkLeaf::LibraryKey(_)) => {
+                    (NetworkLeaf::LibraryKey { .. }, NetworkLeaf::LibraryKey { .. }) => {
                         let l1 = graph.get_lib_data(lib, nid1).unwrap();
 
                         let l2 = graph.get_lib_data(lib, nid2).unwrap();
@@ -526,8 +526,8 @@ where
                 },
                 (a, b) => {
                     return Err(TensorNetworkError::CannotContractEdgeBetween(
-                        a.clone(),
-                        b.clone(),
+                        a.to_string(),
+                        b.to_string(),
                     ));
                 }
             };
@@ -654,7 +654,7 @@ where
 
                         NetworkLeaf::LocalTensor(pos)
                     }
-                    (NetworkLeaf::LibraryKey(_), NetworkLeaf::LocalTensor(l2)) => {
+                    (NetworkLeaf::LibraryKey { .. }, NetworkLeaf::LocalTensor(l2)) => {
                         let l1 = graph.get_lib_data(lib, nid1).unwrap();
                         if D {
                             let st1 = l1.structure();
@@ -671,7 +671,7 @@ where
                         NetworkLeaf::LocalTensor(pos)
                     }
 
-                    (NetworkLeaf::LocalTensor(l2), NetworkLeaf::LibraryKey(_)) => {
+                    (NetworkLeaf::LocalTensor(l2), NetworkLeaf::LibraryKey { .. }) => {
                         let l1 = graph.get_lib_data(lib, nid2).unwrap();
                         if D {
                             let st1 = l1.structure();
@@ -688,7 +688,7 @@ where
 
                         NetworkLeaf::LocalTensor(pos)
                     }
-                    (NetworkLeaf::LibraryKey(_), NetworkLeaf::LibraryKey(_)) => {
+                    (NetworkLeaf::LibraryKey { .. }, NetworkLeaf::LibraryKey { .. }) => {
                         let l1 = graph.get_lib_data(lib, nid1).unwrap();
 
                         let l2 = graph.get_lib_data(lib, nid2).unwrap();
@@ -710,8 +710,8 @@ where
                 },
                 (a, b) => {
                     return Err(TensorNetworkError::CannotContractEdgeBetween(
-                        a.clone(),
-                        b.clone(),
+                        a.to_string(),
+                        b.to_string(),
                     ));
                 }
             };

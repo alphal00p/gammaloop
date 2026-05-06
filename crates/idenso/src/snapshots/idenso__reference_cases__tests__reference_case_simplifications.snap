@@ -62,5 +62,5 @@ color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, enab
 color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, enabled]
 -4*CA*TR+8*CF*TR
 
-color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize higher color traces reliably]
+color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, enabled]
 -1/6*TR*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))+1/3*TR*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))+1𝑖/2*f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))+1𝑖/2*f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))
