@@ -302,6 +302,7 @@ impl<FunKey: Display> Display for NetworkOp<FunKey> {
 )]
 pub enum NetworkLeaf<K, Aind = AbstractIndex> {
     LocalTensor(usize),
+    TensorSum(Vec<usize>),
     LibraryKey {
         key: PermutedStructure<K>,
         indices: Vec<Aind>,
@@ -320,6 +321,7 @@ impl<K: Display, Aind> Display for NetworkLeaf<K, Aind> {
         match self {
             NetworkLeaf::LibraryKey { key, .. } => write!(f, "Key:{key}"),
             NetworkLeaf::LocalTensor(l) => write!(f, "Tensor:{l}"),
+            NetworkLeaf::TensorSum(terms) => write!(f, "TensorSum:{}", terms.len()),
             NetworkLeaf::Scalar(s) => write!(f, "Scalar:{s}"),
         }
     }
@@ -1350,6 +1352,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 NetworkNode::Leaf(l) => match l {
                     NetworkLeaf::LibraryKey { key, .. } => Some(format!("label= \"L{key}\"")),
                     NetworkLeaf::LocalTensor(l) => Some(format!("label = \"T{l}\"")),
+                    NetworkLeaf::TensorSum(terms) => Some(format!("label = \"TS{}\"", terms.len())),
                     NetworkLeaf::Scalar(s) => Some(format!("label = \"S{s}\"")),
                 },
                 NetworkNode::Op(o) => Some(format!("label = \"{o}\"")),
@@ -1399,6 +1402,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     NetworkLeaf::LocalTensor(l) => {
                         Some(format!("label = \"T:{}\"", tensor_disp(*l)))
                     }
+                    NetworkLeaf::TensorSum(terms) => {
+                        Some(format!("label = \"TS:{}\"", terms.len()))
+                    }
                     NetworkLeaf::Scalar(s) => Some(format!("label = \"S:{}\"", scalar_disp(*s))),
                 },
                 NetworkNode::Op(o) => {
@@ -1436,6 +1442,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     }
                     NetworkLeaf::LocalTensor(l) => {
                         Some(format!("label = \"T:{}\"", tensor_disp(*l)))
+                    }
+                    NetworkLeaf::TensorSum(terms) => {
+                        Some(format!("label = \"TS:{}\"", terms.len()))
                     }
                     NetworkLeaf::Scalar(s) => Some(format!("label = \"S:{}\"", scalar_disp(*s))),
                 },

@@ -107,6 +107,7 @@ Validation run:
 
 - `cargo fmt`
 - `cargo check --package spenso --tests --profile dev-optim`
+- `cargo check --package gammalooprs --tests --profile dev-optim`
 - `cargo check --package idenso --tests --profile dev-optim`
 
 ### Product Contraction Without Graph Cloning
@@ -281,3 +282,46 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
+
+### Opt-In Lazy Tensor Sums
+
+Trace commit: `womukytz`.
+
+What this adds:
+
+- Adds `NetworkLeaf::TensorSum(Vec<usize>)` as an internal leaf for
+  tensor-valued sums whose terms should remain separate for diagnostic
+  execution.
+- Keeps lazy tensor sums opt-in behind `SPENSO_NETWORK_LAZY_TENSOR_SUMS`; the
+  default sum execution path still materializes tensor sums.
+- Allows one-sided contractions such as `(T1 + ... + Tn) * U` to distribute
+  through the lazy sum by contracting each term with `U` and keeping the
+  resulting terms as a lazy sum when appropriate.
+- Adds profiling for lazy tensor-sum creation, materialization, and distributed
+  product contractions.
+
+How it works:
+
+- Sum execution first tries existing scalar and balanced tensor-sum fast paths.
+  When lazy sums are enabled, the sum is tensor-valued, non-scalar, and has at
+  least `MIN_LAZY_TENSOR_SUM_TERMS`, the executor returns
+  `NetworkLeaf::TensorSum(terms)` instead of adding all tensor entries
+  immediately.
+- `ProductContraction` treats `TensorSum` as tensor-like. It can read its
+  representative structure from the first term, scale all terms when a scalar
+  multiplies the sum, and expand the term list for pair contraction.
+- Product pair contraction distributes over lazy tensor sums. If both sides are
+  lazy and the Cartesian product would exceed
+  `MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS`, the larger lazy operands are
+  materialized before contraction to cap diagnostic blow-up.
+- Negation maps over the term list. Function application and powers materialize
+  tensor sums before applying the operation.
+- Final result extraction rejects an unmaterialized `TensorSum` result instead
+  of returning a partially executed object.
+- The rebase keeps the current `LibraryKey { key, indices }` representation and
+  carries `Aind` through lazy-sum helper signatures as `NetworkLeaf<K, Aind>`.
+
+Validation run:
+
+- `cargo fmt`
+- `cargo check --package spenso --tests --profile dev-optim`
