@@ -1139,8 +1139,126 @@ where
     planned
 }
 
+fn log_sum_add(
+    sum_start: Option<std::time::Instant>,
+    done: usize,
+    total: usize,
+    add_start: std::time::Instant,
+) {
+    if let Some(sum_start) = sum_start {
+        let add_elapsed = add_start.elapsed();
+        if add_elapsed.as_millis() >= 1_000 || done <= 8 || done.is_multiple_of(16) {
+            eprintln!(
+                "spenso_profile execute.sum_progress done={} total={} add_ms={:.3} elapsed_ms={:.3}",
+                done,
+                total,
+                add_elapsed.as_secs_f64() * 1000.0,
+                sum_start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+    }
+}
+
+fn balanced_ref_sum<T>(mut terms: Vec<T>, sum_start: Option<std::time::Instant>) -> T
+where
+    T: Ref + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+{
+    debug_assert!(!terms.is_empty());
+
+    let total = terms.len();
+    let mut done = 1usize;
+    while terms.len() > 1 {
+        let mut next = Vec::with_capacity(terms.len().div_ceil(2));
+        let mut iter = terms.into_iter();
+
+        while let Some(mut lhs) = iter.next() {
+            if let Some(rhs) = iter.next() {
+                let add_start = std::time::Instant::now();
+                lhs += rhs.refer();
+                done += 1;
+                log_sum_add(sum_start, done, total, add_start);
+            }
+            next.push(lhs);
+        }
+
+        terms = next;
+    }
+
+    terms.pop().expect("balanced sum has at least one term")
+}
+
+fn try_balanced_scalar_sum<K, Store>(
+    store: &mut Store,
+    targets: &[(NodeIndex, &NetworkLeaf<K>)],
+    sum_start: Option<std::time::Instant>,
+) -> Option<NetworkLeaf<K>>
+where
+    Store: NetworkStoreAccess,
+    Store::Scalar: Clone + Ref + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
+{
+    let mut terms = Vec::with_capacity(targets.len());
+    for (_, leaf) in targets {
+        let NetworkLeaf::Scalar(index) = leaf else {
+            return None;
+        };
+        terms.push(store.scalar(*index).clone());
+    }
+
+    let result = balanced_ref_sum(terms, sum_start);
+    Some(NetworkLeaf::Scalar(store.push_scalar(result)))
+}
+
+fn try_balanced_tensor_sum<K, FK, Aind, Store, LT, L>(
+    store: &mut Store,
+    graph: &NetworkGraph<K, FK, Aind>,
+    targets: &[(NodeIndex, &NetworkLeaf<K>)],
+    lib: &L,
+    sum_start: Option<std::time::Instant>,
+) -> Option<NetworkLeaf<K>>
+where
+    Store: NetworkStoreAccess,
+    Store::Tensor: HasStructure
+        + TensorStructure
+        + Clone
+        + Ref
+        + From<LT::WithIndices>
+        + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
+    LT: LibraryTensor + Clone,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    K: Display + Debug,
+    FK: Debug,
+    Aind: AbsInd,
+    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+        IsAbstractSlot<Aind = Aind>,
+{
+    let mut terms = Vec::with_capacity(targets.len());
+    for (node_id, leaf) in targets {
+        match leaf {
+            NetworkLeaf::Scalar(_) => return None,
+            NetworkLeaf::LocalTensor(index) => {
+                let tensor = store.tensor(*index);
+                if tensor.is_scalar() {
+                    return None;
+                }
+                terms.push(tensor.clone());
+            }
+            NetworkLeaf::LibraryKey(_) => {
+                let tensor = Store::Tensor::from(graph.get_lib_data::<_, LT, L>(lib, *node_id)?);
+                if tensor.is_scalar() {
+                    return None;
+                }
+                terms.push(tensor);
+            }
+        }
+    }
+
+    let result = balanced_ref_sum(terms, sum_start);
+    Some(NetworkLeaf::LocalTensor(store.push_tensor(result)))
+}
+
 #[cfg(feature = "shadowing")]
-fn try_stream_atom_scalar_sum<K, Store>(
+fn try_atom_scalar_sum<K, Store>(
     store: &mut Store,
     targets: &[(NodeIndex, &NetworkLeaf<K>)],
 ) -> Option<NetworkLeaf<K>>
@@ -1159,47 +1277,82 @@ where
         streaming::{TermStreamer, TermStreamerConfig},
     };
 
-    const MIN_STREAMED_SUM_LEAVES: usize = 32;
-    if targets.len() < MIN_STREAMED_SUM_LEAVES {
-        return None;
-    }
-
     if TypeId::of::<Store::Scalar>() != TypeId::of::<Atom>() {
         return None;
     }
 
+    const MIN_ATOM_ADD_MANY_LEAVES: usize = 4;
+    const MIN_STREAMED_SUM_LEAVES: usize = 32;
+    if targets.len() < MIN_ATOM_ADD_MANY_LEAVES {
+        return None;
+    }
+
     let start = profile::enabled().then(std::time::Instant::now);
-    if profile::enabled() {
-        eprintln!(
-            "spenso_profile execute.sum_term_stream_start leaves={}",
-            targets.len(),
-        );
-    }
 
-    let mut stream = TermStreamer::<BufWriter<File>>::new(TermStreamerConfig {
-        path: std::env::temp_dir().to_string_lossy().into_owned(),
-        max_mem_bytes: 4 * 1024 * 1024 * 1024,
-        ..Default::default()
-    });
+    let result = if targets.len() >= MIN_STREAMED_SUM_LEAVES {
+        if profile::enabled() {
+            eprintln!(
+                "spenso_profile execute.sum_term_stream_start leaves={}",
+                targets.len(),
+            );
+        }
 
-    for (_, leaf) in targets {
-        let NetworkLeaf::Scalar(index) = leaf else {
-            return None;
-        };
-        let atom = (store.scalar(*index) as &dyn Any).downcast_ref::<Atom>()?;
-        stream.push(atom.clone());
-    }
+        let mut stream = TermStreamer::<BufWriter<File>>::new(TermStreamerConfig {
+            path: std::env::temp_dir().to_string_lossy().into_owned(),
+            max_mem_bytes: 4 * 1024 * 1024 * 1024,
+            ..Default::default()
+        });
 
-    let result = stream.to_expression();
-    if let Some(start) = start {
-        eprintln!(
-            "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
-            targets.len(),
-            result.nterms(),
-            result.as_view().get_byte_size(),
-            start.elapsed().as_secs_f64() * 1000.0,
-        );
-    }
+        for (_, leaf) in targets {
+            let NetworkLeaf::Scalar(index) = leaf else {
+                return None;
+            };
+            let atom = (store.scalar(*index) as &dyn Any).downcast_ref::<Atom>()?;
+            stream.push(atom.clone());
+        }
+
+        let result = stream.to_expression();
+        if let Some(start) = start {
+            eprintln!(
+                "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
+                targets.len(),
+                result.nterms(),
+                result.as_view().get_byte_size(),
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+        result
+    } else {
+        if profile::verbose() {
+            eprintln!(
+                "spenso_profile execute.sum_atom_add_many_start leaves={}",
+                targets.len(),
+            );
+        }
+
+        let mut atoms = Vec::with_capacity(targets.len());
+        for (_, leaf) in targets {
+            let NetworkLeaf::Scalar(index) = leaf else {
+                return None;
+            };
+            let atom = (store.scalar(*index) as &dyn Any).downcast_ref::<Atom>()?;
+            atoms.push(atom.clone());
+        }
+
+        let result = Atom::add_many(&atoms);
+        if profile::verbose()
+            && let Some(start) = start
+        {
+            eprintln!(
+                "spenso_profile execute.sum_atom_add_many_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
+                targets.len(),
+                result.nterms(),
+                result.as_view().get_byte_size(),
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+        result
+    };
 
     let boxed: Box<dyn Any> = Box::new(result);
     let scalar = *boxed.downcast::<Store::Scalar>().ok()?;
@@ -1963,26 +2116,34 @@ where
                     );
                 }
 
-                let log_sum_add = |done: usize, total: usize, add_start: std::time::Instant| {
-                    if let Some(sum_start) = sum_start {
-                        let add_elapsed = add_start.elapsed();
-                        if add_elapsed.as_millis() >= 1_000 || done <= 8 || done.is_multiple_of(16)
-                        {
-                            eprintln!(
-                                "spenso_profile execute.sum_progress done={} total={} add_ms={:.3} elapsed_ms={:.3}",
-                                done,
-                                total,
-                                add_elapsed.as_secs_f64() * 1000.0,
-                                sum_start.elapsed().as_secs_f64() * 1000.0,
-                            );
-                        }
-                    }
-                };
-
                 let (nf, first) = &targets[0];
 
                 #[cfg(feature = "shadowing")]
-                if let Some(new_node) = try_stream_atom_scalar_sum(self, &targets) {
+                if let Some(new_node) = try_atom_scalar_sum(self, &targets) {
+                    if let Some(sum_start) = sum_start {
+                        eprintln!(
+                            "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
+                            targets.len(),
+                            sum_start.elapsed().as_secs_f64() * 1000.0,
+                        );
+                    }
+                    return Ok(new_node);
+                }
+
+                if let Some(new_node) = try_balanced_scalar_sum(self, &targets, sum_start) {
+                    if let Some(sum_start) = sum_start {
+                        eprintln!(
+                            "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
+                            targets.len(),
+                            sum_start.elapsed().as_secs_f64() * 1000.0,
+                        );
+                    }
+                    return Ok(new_node);
+                }
+
+                if let Some(new_node) = try_balanced_tensor_sum::<K, FK, Aind, Self, LT, L>(
+                    self, graph, &targets, lib, sum_start,
+                ) {
                     if let Some(sum_start) = sum_start {
                         eprintln!(
                             "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
@@ -2016,7 +2177,7 @@ where
                                     return Err(TensorNetworkError::ScalarLibSum("".to_string()));
                                 }
                             }
-                            log_sum_add(offset + 2, targets.len(), add_start);
+                            log_sum_add(sum_start, offset + 2, targets.len(), add_start);
                         }
 
                         let pos = self.push_scalar(accumulator);
@@ -2049,7 +2210,7 @@ where
                                         ));
                                     }
                                 }
-                                log_sum_add(offset + 2, targets.len(), add_start);
+                                log_sum_add(sum_start, offset + 2, targets.len(), add_start);
                             }
 
                             let pos = self.push_scalar(accumulator);
@@ -2072,7 +2233,7 @@ where
                                         accumulator += with_index;
                                     }
                                 }
-                                log_sum_add(offset + 2, targets.len(), add_start);
+                                log_sum_add(sum_start, offset + 2, targets.len(), add_start);
                             }
 
                             let pos = self.push_tensor(accumulator);
@@ -2099,7 +2260,7 @@ where
                                     accumulator += with;
                                 }
                             }
-                            log_sum_add(offset + 2, targets.len(), add_start);
+                            log_sum_add(sum_start, offset + 2, targets.len(), add_start);
                         }
 
                         let pos = self.push_tensor(accumulator);
