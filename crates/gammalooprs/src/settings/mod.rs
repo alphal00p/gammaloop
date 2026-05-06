@@ -1,5 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
-use global::{GenerationSettings, Parallelisation};
+use eyre::{Result as EyreResult, eyre};
+use global::{GenerationSettings, Parallelisation, ThreeDRepresentation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,11 @@ pub struct GlobalSettings {
     pub generation: GenerationSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub n_cores: Parallelisation,
+    #[serde(
+        rename = "3d_representation",
+        skip_serializing_if = "IsDefault::is_default"
+    )]
+    pub three_d_representation: ThreeDRepresentation,
 }
 
 #[cfg_attr(
@@ -121,7 +127,31 @@ impl Default for GlobalSettings {
             log_style: LogStyle::default(),
             generation: GenerationSettings::default(),
             n_cores: Parallelisation::default(),
+            three_d_representation: ThreeDRepresentation::default(),
         }
+    }
+}
+
+impl GlobalSettings {
+    pub fn ensure_step_iii_pending_options_are_supported(&self) -> EyreResult<()> {
+        if self.three_d_representation == ThreeDRepresentation::Ltd
+            && !self.generation.explicit_orientation_sum_only
+        {
+            return Err(eyre!(
+                "`global.3d_representation = LTD` requires `global.generation.explicit_orientation_sum_only = true`; individual-orientation LTD generation is not supported"
+            ));
+        }
+
+        if self.generation.explicit_orientation_sum_only
+            && self.generation.orientation_pattern.pat.is_some()
+        {
+            return Err(eyre!(
+                "`global.generation.explicit_orientation_sum_only = true` requires summing all generated orientations; `global.generation.orientation_pattern` must be unset"
+            ));
+        }
+
+        self.generation
+            .ensure_step_iii_pending_options_are_supported()
     }
 }
 
@@ -140,7 +170,7 @@ mod tests {
         momentum::{Dep, ExternalMomenta, Helicity},
         settings::{
             GlobalSettings, RuntimeSettings, SamplingSettings,
-            global::{GammaloopCompileOptions, GenerationSettings},
+            global::{GammaloopCompileOptions, GenerationSettings, ThreeDRepresentation},
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
                 GammaloopTropicalSamplingSettings,
@@ -198,6 +228,101 @@ mod tests {
     #[test]
     fn generation_test_serialize_deserialize() {
         generic_test_settings::<GenerationSettings>();
+    }
+
+    #[test]
+    fn step_iii_3d_settings_parse_and_guard_modes() {
+        let settings: GlobalSettings = toml::from_str(
+            r#"
+3d_representation = "LTD"
+
+[generation]
+explicit_orientation_sum_only = true
+
+[generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(settings.three_d_representation, ThreeDRepresentation::Ltd);
+        assert!(settings.generation.explicit_orientation_sum_only);
+        assert!(
+            settings
+                .generation
+                .uv
+                .local_uv_cts_from_expanded_4d_integrands
+        );
+
+        settings
+            .ensure_step_iii_pending_options_are_supported()
+            .expect("LTD is supported when all orientations are explicitly summed");
+    }
+
+    #[test]
+    fn ltd_requires_explicit_orientation_sum_mode() {
+        let settings: GlobalSettings = toml::from_str(
+            r#"
+3d_representation = "LTD"
+"#,
+        )
+        .unwrap();
+
+        let error = settings
+            .ensure_step_iii_pending_options_are_supported()
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("3d_representation = LTD"));
+        assert!(error.contains("explicit_orientation_sum_only = true"));
+    }
+
+    #[test]
+    fn explicit_orientation_sum_rejects_generation_orientation_pattern() {
+        let settings: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+explicit_orientation_sum_only = true
+
+[generation.orientation_pattern]
+pat = "(+,-)"
+"#,
+        )
+        .unwrap();
+
+        let error = settings
+            .ensure_step_iii_pending_options_are_supported()
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("explicit_orientation_sum_only = true"));
+        assert!(error.contains("orientation_pattern"));
+    }
+
+    #[test]
+    fn local_uv_4d_source_is_supported_without_explicit_orientation_sum_mode() {
+        let settings: GenerationSettings = toml::from_str(
+            r#"
+[uv]
+local_uv_cts_from_expanded_4d_integrands = true
+"#,
+        )
+        .unwrap();
+
+        settings
+            .ensure_step_iii_pending_options_are_supported()
+            .expect("CFF local UV from expanded 4D integrands does not require explicit orientation summing");
+
+        let explicit_settings: GenerationSettings = toml::from_str(
+            r#"
+explicit_orientation_sum_only = true
+
+[uv]
+local_uv_cts_from_expanded_4d_integrands = true
+"#,
+        )
+        .unwrap();
+        explicit_settings
+            .ensure_step_iii_pending_options_are_supported()
+            .expect("local UV from expanded 4D integrands is also supported in explicit orientation sum mode");
     }
 
     #[test]

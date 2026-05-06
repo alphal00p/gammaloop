@@ -1454,7 +1454,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(GS.pi.into(), pi_rational.into());
-        new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
+        new.values = vec![vec![Complex::new_re(F(T::new_zero())); len]];
         new.update_model_values(model);
         new.update_idenso_values();
 
@@ -1496,8 +1496,9 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     pub(crate) fn update_idenso_values(&mut self) {
-        let tr_value = Complex::new_re(F(T::from_f64(0.5)));
-        let nc_value = Complex::new_re(F(T::from_f64(3.)));
+        let zero = F(T::new_zero());
+        let tr_value = Complex::new_re(zero.one() / zero.from_i64(2));
+        let nc_value = Complex::new_re(zero.from_i64(3));
         debug_assert!(self.pairs.idenso_vars.value_range.len() == 2);
 
         for (index, values) in self.values.iter_mut().enumerate() {
@@ -1788,20 +1789,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
 
             // Log external momentum info for debugging
+            let zero = F(T::new_zero());
             debug!(
                 "   🔍 External momenta: [{:.6}, {:.6}, {:.6}, {:.6}] (first external)",
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.temporal.value),
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.spatial.px),
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.spatial.py),
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.spatial.pz),
+                external_moms.first().map_or(&zero, |m| &m.temporal.value),
+                external_moms.first().map_or(&zero, |m| &m.spatial.px),
+                external_moms.first().map_or(&zero, |m| &m.spatial.py),
+                external_moms.first().map_or(&zero, |m| &m.spatial.pz),
             );
         } else {
             // Only log this in very verbose debug mode

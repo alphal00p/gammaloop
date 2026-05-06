@@ -55,6 +55,8 @@ mod multi_integrand;
 mod photonic;
 #[path = "test_runs/profile_bulk.rs"]
 mod profile_bulk;
+#[path = "test_runs/scalar_3L_cross_section_inspects.rs"]
+mod scalar_3l_cross_section_inspects;
 #[path = "test_runs/smoke.rs"]
 mod smoke;
 #[path = "test_runs/spin_sums.rs"]

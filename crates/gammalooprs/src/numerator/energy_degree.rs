@@ -3,17 +3,17 @@ use std::{
     ops::MulAssign,
 };
 
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
     representation::{LibraryRep, Minkowski},
 };
-use symbolica::atom::{Atom, AtomView, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use thiserror::Error;
 
 use crate::{
-    graph::Graph,
-    utils::{GS, symbolica_ext::LogPrint},
+    graph::{Graph, lmb::LMBext},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::UltravioletGraph,
 };
 
@@ -91,6 +91,12 @@ pub struct EnergyPowerAnalyzer {
     minkowski_symbol: Symbol,
 }
 
+#[derive(Clone, Copy)]
+enum EnergyPowerAnalysisMode {
+    StrictPolynomial,
+    ConservativeUpperBound,
+}
+
 impl EnergyPowerAnalyzer {
     pub fn new(loop_edges: impl IntoIterator<Item = EdgeIndex>) -> Self {
         Self {
@@ -115,32 +121,46 @@ impl EnergyPowerAnalyzer {
         &self,
         expression: &Atom,
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
-        self.analyze_view(expression.as_view())
+        self.analyze_view(
+            expression.as_view(),
+            EnergyPowerAnalysisMode::StrictPolynomial,
+        )
+    }
+
+    pub fn analyze_atom_upper_bound(
+        &self,
+        expression: &Atom,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_view(
+            expression.as_view(),
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
     }
 
     fn analyze_view(
         &self,
         expression: AtomView<'_>,
+        mode: EnergyPowerAnalysisMode,
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
         match expression {
             AtomView::Num(_) | AtomView::Var(_) => Ok(EnergyPowerCapMap::default()),
             AtomView::Add(add) => {
                 let mut max_degree = EnergyPowerCapMap::default();
                 for term in add.iter() {
-                    max_degree.max_assign(self.analyze_view(term)?);
+                    max_degree.max_assign(self.analyze_view(term, mode)?);
                 }
                 Ok(max_degree)
             }
             AtomView::Mul(mul) => {
                 let mut product_degree = EnergyPowerCapMap::default();
                 for factor in mul.iter() {
-                    product_degree.add_assign(self.analyze_view(factor)?);
+                    product_degree.add_assign(self.analyze_view(factor, mode)?);
                 }
                 Ok(product_degree)
             }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                let mut base_degree = self.analyze_view(base)?;
+                let mut base_degree = self.analyze_view(base, mode)?;
                 if base_degree.is_empty() {
                     return Ok(base_degree);
                 }
@@ -152,6 +172,9 @@ impl EnergyPowerAnalyzer {
                     });
                 };
                 if exponent < 0 {
+                    if matches!(mode, EnergyPowerAnalysisMode::ConservativeUpperBound) {
+                        return Ok(EnergyPowerCapMap::default());
+                    }
                     return Err(EnergyPowerAnalysisError::NonPolynomialEnergyPower {
                         expression: base.to_owned().log_print(None),
                         exponent: exponent.to_string(),
@@ -196,7 +219,7 @@ impl EnergyPowerAnalyzer {
 
                 let mut degree = EnergyPowerCapMap::default();
                 for argument in function.iter() {
-                    degree.add_assign(self.analyze_view(argument)?);
+                    degree.add_assign(self.analyze_view(argument, mode)?);
                 }
                 Ok(degree)
             }
@@ -236,15 +259,127 @@ impl Graph {
     pub fn numerator_energy_power_caps(
         &self,
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::StrictPolynomial)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds_for_3d_expression(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds_after_lmb_rewrite(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
         let internal_edges = self
             .underlying
             .iter_edges()
-            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge));
+            .filter_map(|(pair, edge, edge_data)| {
+                (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
+            });
+        let momentum_replacements = self.normal_emr_replacement(
+            &self.full_filter(),
+            &self.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        let numerator = self
+            .full_numerator_atom()
+            .replace_multiple(&momentum_replacements)
+            .expand();
+
         EnergyPowerAnalyzer::with_internal_edges(
             self.loop_momentum_basis.loop_edges.iter().copied(),
             internal_edges,
         )
-        .analyze_atom(&self.full_numerator_atom())
+        .analyze_view(
+            numerator.as_view(),
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
+    }
+
+    fn analyze_numerator_energy_powers(
+        &self,
+        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        let internal_edges = self
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge, edge_data)| {
+                (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
+            });
+        // Keep edge-energy variables attached to their source denominator.
+        // Rewriting them to a loop-momentum basis loses cancellation
+        // information in non-coordinate UV directions, e.g. when q_i-q_j is
+        // kept fixed while q_i and q_j are both large.
+        let numerator = self.full_numerator_atom().expand();
+
+        EnergyPowerAnalyzer::with_internal_edges(
+            self.loop_momentum_basis.loop_edges.iter().copied(),
+            internal_edges,
+        )
+        .analyze_view(numerator.as_view(), mode)
+    }
+
+    pub fn automatic_numerator_energy_degree_bounds(
+        &self,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        self.automatic_numerator_energy_degree_bounds_excluding([])
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_excluding(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        self.automatic_numerator_energy_degree_bounds_excluding_with_min_degree(excluded_edges, 2)
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_excluding_with_min_degree(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_for_3d_expression()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
+    }
+
+    pub(crate) fn automatic_lmb_numerator_energy_degree_bounds_excluding_with_min_degree(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_after_lmb_rewrite()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
     }
 }
 

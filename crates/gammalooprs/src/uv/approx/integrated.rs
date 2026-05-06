@@ -61,31 +61,39 @@ impl Graph {
         }
 
         let tsquare = Atom::var(GS.rescale).pow(2);
+        let rescaled_denominator_edges = self
+            .iter_edges_of(replacement_subgraph)
+            .filter_map(|(pair, edge_id, _)| pair.is_paired().then_some(edge_id.0 as i64))
+            .collect::<Vec<_>>();
 
         debug!(res = %atomarg.log_print(None),"Rescaled momenta expanded");
         atomarg = atomarg
             .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with(
-                GS.den(
-                    W_.a_,
-                    W_.mom_,
-                    Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
-                    Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
-                        - (Atom::var(GS.m_uv)).pow(2),
-                ) / &tsquare,
-            )
-            .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
             .with_map(move |m| {
-                let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
-                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
-                f = f.add_arg(
-                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
-                        .expand()
-                        .replace(GS.rescale)
-                        .with(Atom::Zero),
-                );
-                f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-                f.finish()
+                let edge = m.get(W_.a_).unwrap();
+                let edge_atom = edge.to_atom();
+                let momentum = m.get(W_.mom_).unwrap().to_atom();
+                let mass = m.get(W_.mass_).unwrap().to_atom();
+                let propagator = m.get(W_.prop_).unwrap().to_atom();
+
+                let should_rescale = i64::try_from(edge_atom.as_view())
+                    .ok()
+                    .is_some_and(|edge_id| rescaled_denominator_edges.contains(&edge_id));
+                if !should_rescale {
+                    return GS.den(edge_atom, momentum, mass, propagator);
+                }
+
+                let leading_momentum = (momentum * GS.rescale)
+                    .expand()
+                    .replace(GS.rescale)
+                    .with(Atom::Zero);
+                GS.den(
+                    edge_atom,
+                    leading_momentum,
+                    Atom::var(GS.m_uv).pow(2),
+                    propagator * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
+                        - (Atom::var(GS.m_uv)).pow(2),
+                ) / &tsquare
             });
 
         atomarg *= Atom::var(GS.rescale).pow(-4 * n_loops as i64);

@@ -1606,6 +1606,7 @@ dependencies = [
  "momtrop",
  "ndarray",
  "rand 0.9.4",
+ "schemars",
  "serde",
  "serde_json",
  "serial_test",

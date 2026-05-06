@@ -71,6 +71,7 @@ use super::{
     RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
     format_lmb_channel_label, format_orientation_label, histogram_process_info_for_integrand,
     prepare_buffered_event, resolve_visible_orientation_id,
+    validate_explicit_orientation_sum_runtime_settings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -79,6 +80,7 @@ pub struct AmplitudeGraphTerm {
     pub original_integrand: EvaluatorStack,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: SubSet<OrientationID>,
+    pub explicit_orientation_sum_only: bool,
     pub esurfaces: EsurfaceCollection,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -116,6 +118,7 @@ impl AmplitudeGraphTerm {
         _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
+        settings.ensure_step_iii_pending_options_are_supported()?;
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -127,7 +130,10 @@ impl AmplitudeGraphTerm {
             .unwrap()
             .orientations
             .iter()
-            .filter(|orientation| settings.generation.orientation_pattern.filter(*orientation))
+            .filter(|orientation| {
+                settings.generation.explicit_orientation_sum_only
+                    || settings.generation.orientation_pattern.filter(*orientation)
+            })
             .collect_vec();
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
             selected_generation_orientations
@@ -168,13 +174,23 @@ impl AmplitudeGraphTerm {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
-        let (original_integrand, evaluator_timings) = EvaluatorStack::new_with_timings(
-            &[&graph.derived_data.all_mighty_integrand],
-            &graph.graph.param_builder,
-            orientations.as_slice().as_ref(),
-            None,
-            &settings.generation.evaluator,
-        )?;
+        let (original_integrand, evaluator_timings) =
+            if settings.generation.explicit_orientation_sum_only {
+                EvaluatorStack::new_explicit_sum_with_timings(
+                    &[&graph.derived_data.all_mighty_integrand],
+                    &graph.graph.param_builder,
+                    None,
+                    &settings.generation.evaluator,
+                )?
+            } else {
+                EvaluatorStack::new_with_timings(
+                    &[&graph.derived_data.all_mighty_integrand],
+                    &graph.graph.param_builder,
+                    orientations.as_slice().as_ref(),
+                    None,
+                    &settings.generation.evaluator,
+                )?
+            };
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -228,6 +244,7 @@ impl AmplitudeGraphTerm {
         Ok((
             AmplitudeGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
+                explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 orientations,
                 original_integrand,
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
@@ -388,6 +405,27 @@ impl AmplitudeGraphTerm {
         Ok(event)
     }
 
+    fn runtime_event_orientation_id(&self, sampled_orientation: Option<usize>) -> Option<usize> {
+        if self.explicit_orientation_sum_only {
+            Some(0)
+        } else {
+            sampled_orientation
+        }
+    }
+
+    fn explicit_orientation_label(&self, orientation_id: usize) -> Option<String> {
+        if orientation_id != 0 {
+            return None;
+        }
+
+        let n_edges = self
+            .orientations
+            .first()
+            .map(|orientation| orientation.iter().count())
+            .unwrap_or(0);
+        Some("x".repeat(n_edges))
+    }
+
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -493,24 +531,28 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
-        self.orientation_filter = SubSet::empty(self.orientations.len());
-        for (id, o) in self.orientations.iter_enumerated() {
-            if settings.general.orientation_pat.filter(o) {
-                self.orientation_filter.add(id);
+        if self.explicit_orientation_sum_only {
+            self.orientation_filter = SubSet::full(self.orientations.len());
+        } else {
+            self.orientation_filter = SubSet::empty(self.orientations.len());
+            for (id, o) in self.orientations.iter_enumerated() {
+                if settings.general.orientation_pat.filter(o) {
+                    self.orientation_filter.add(id);
+                }
             }
-        }
-        if self.orientation_filter.included_iter().next().is_none() {
-            let pattern = settings
-                .general
-                .orientation_pat
-                .pat
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "<empty>".to_string());
-            return Err(eyre!(
-                "Runtime orientation pattern {pattern} matched no orientations for graph {}",
-                self.graph.name
-            ));
+            if self.orientation_filter.included_iter().next().is_none() {
+                let pattern = settings
+                    .general
+                    .orientation_pat
+                    .pat
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "<empty>".to_string());
+                return Err(eyre!(
+                    "Runtime orientation pattern {pattern} matched no orientations for graph {}",
+                    self.graph.name
+                ));
+            }
         }
 
         self.estimated_scale = Some(
@@ -583,6 +625,10 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
+        if self.explicit_orientation_sum_only {
+            return self.explicit_orientation_label(orientation_id);
+        }
+
         self.orientations
             .get(resolve_visible_orientation_id(
                 &self.orientation_filter,
@@ -621,7 +667,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             || {
                 self.generate_event(
                     context.settings,
-                    momentum_sample.sample.orientation,
+                    self.runtime_event_orientation_id(momentum_sample.sample.orientation),
                     event_channel_id,
                 )
             },
@@ -676,6 +722,10 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
+        if self.explicit_orientation_sum_only {
+            return 1;
+        }
+
         filtered_orientation_count(&self.orientation_filter, &self.orientations)
     }
 
@@ -721,6 +771,7 @@ pub struct AmplitudeIntegrandData {
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub graph_to_group_id: Vec<usize>,
     pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
+    pub explicit_orientation_sum_only: bool,
 }
 
 pub mod export;
@@ -1132,6 +1183,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         self.data.loop_cache_id
     }
 
+    fn uses_explicit_orientation_sum_only(&self) -> bool {
+        self.data.explicit_orientation_sum_only
+    }
+
     #[instrument(
           skip_all,
           fields(
@@ -1139,6 +1194,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
           )
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
+        if self.data.explicit_orientation_sum_only {
+            validate_explicit_orientation_sum_runtime_settings(&self.settings)?;
+        }
+
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()

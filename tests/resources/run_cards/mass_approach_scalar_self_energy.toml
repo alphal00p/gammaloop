@@ -4,6 +4,9 @@ commands = [
 "generate",
 ]
 
+[cli_settings.state]
+folder = "tests/artifacts/mass_approach_scalar_self_energy"
+
 [default_runtime_settings.general]
 integral_unit = "none"
 disable_flux_factor = true

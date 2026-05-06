@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 
 use std::{
+    collections::BTreeSet,
     env, fs,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
@@ -15,7 +16,10 @@ use gammaloop_api::{
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
+use schemars::{JsonSchema, schema_for};
+use serde_json::Value as JsonValue;
 use serial_test::serial;
+use toml::Value as TomlValue;
 
 static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
 
@@ -782,6 +786,209 @@ fn save_state_writes_global_settings_file() -> Result<()> {
     assert!(global_settings_path.exists());
     assert!(!global_settings_contents.contains("dummy"));
     Ok(())
+}
+
+#[test]
+#[serial]
+fn save_state_writes_exhaustive_default_settings_files() -> Result<()> {
+    let mut cli = new_cli("save_state_writes_exhaustive_default_settings_files")?;
+
+    cli.save_state()?;
+
+    assert_settings_file_contains_schema_paths::<CLISettings>(
+        &cli.cli_settings.state.folder.join("global_settings.toml"),
+    )?;
+    assert_settings_file_contains_schema_paths::<RuntimeSettings>(
+        &cli.cli_settings
+            .state
+            .folder
+            .join("default_runtime_settings.toml"),
+    )?;
+
+    Ok(())
+}
+
+fn assert_settings_file_contains_schema_paths<T: JsonSchema>(path: &Path) -> Result<()> {
+    let contents = fs::read_to_string(path)?;
+    let value: TomlValue = toml::from_str(&contents)?;
+    let actual_paths = toml_paths(&value);
+    let schema = serde_json::to_value(schema_for!(T))?;
+    let mut expected_paths = BTreeSet::new();
+    collect_schema_visible_paths(
+        &schema,
+        &schema,
+        &mut Vec::new(),
+        &mut expected_paths,
+        &mut Vec::new(),
+    );
+
+    let missing = expected_paths
+        .difference(&actual_paths)
+        .cloned()
+        .collect::<Vec<_>>();
+    let missing_preview = missing
+        .iter()
+        .take(80)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let omitted_count = missing.len().saturating_sub(80);
+    let omitted_message = if omitted_count == 0 {
+        String::new()
+    } else {
+        format!("\n... and {omitted_count} more")
+    };
+
+    assert!(
+        missing.is_empty(),
+        "{} is missing schema-backed default setting paths:\n{}{omitted_message}",
+        path.display(),
+        missing_preview
+    );
+
+    Ok(())
+}
+
+fn toml_paths(value: &TomlValue) -> BTreeSet<String> {
+    let mut paths = BTreeSet::new();
+    collect_toml_paths(value, &mut Vec::new(), &mut paths);
+    paths
+}
+
+fn collect_toml_paths(value: &TomlValue, path: &mut Vec<String>, paths: &mut BTreeSet<String>) {
+    if !path.is_empty() {
+        paths.insert(path.join("."));
+    }
+
+    match value {
+        TomlValue::Table(table) => {
+            for (key, value) in table {
+                path.push(key.clone());
+                collect_toml_paths(value, path, paths);
+                path.pop();
+            }
+        }
+        TomlValue::Array(items) => {
+            for item in items {
+                if matches!(item, TomlValue::Table(_) | TomlValue::Array(_)) {
+                    collect_toml_paths(item, path, paths);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_schema_visible_paths(
+    schema_root: &JsonValue,
+    node: &JsonValue,
+    path: &mut Vec<String>,
+    paths: &mut BTreeSet<String>,
+    ref_stack: &mut Vec<String>,
+) {
+    if let Some(reference) = node.get("$ref").and_then(JsonValue::as_str) {
+        if ref_stack.iter().any(|existing| existing == reference) {
+            if !path.is_empty() {
+                paths.insert(path.join("."));
+            }
+            return;
+        }
+        let Some(resolved) = schema_ref_target(schema_root, reference) else {
+            return;
+        };
+        ref_stack.push(reference.to_string());
+        collect_schema_visible_paths(schema_root, resolved, path, paths, ref_stack);
+        ref_stack.pop();
+        return;
+    }
+
+    if schema_is_nullable(schema_root, node, &mut Vec::new()) {
+        // TOML has no native null value, so default `None` fields cannot be
+        // exhaustively represented without a field-specific sentinel encoding.
+        return;
+    }
+
+    if let Some(properties) = node.get("properties").and_then(JsonValue::as_object) {
+        for (key, child) in properties {
+            path.push(key.clone());
+            collect_schema_visible_paths(schema_root, child, path, paths, ref_stack);
+            path.pop();
+        }
+        return;
+    }
+
+    if schema_has_keyword_variants(node) {
+        for keyword in ["allOf", "anyOf", "oneOf"] {
+            let Some(variants) = node.get(keyword).and_then(JsonValue::as_array) else {
+                continue;
+            };
+            for variant in variants {
+                collect_schema_visible_paths(schema_root, variant, path, paths, ref_stack);
+            }
+        }
+        return;
+    }
+
+    if !path.is_empty() {
+        paths.insert(path.join("."));
+    }
+}
+
+fn schema_ref_target<'a>(schema_root: &'a JsonValue, reference: &str) -> Option<&'a JsonValue> {
+    schema_root.pointer(reference.strip_prefix('#')?)
+}
+
+fn schema_is_nullable(
+    schema_root: &JsonValue,
+    node: &JsonValue,
+    ref_stack: &mut Vec<String>,
+) -> bool {
+    if let Some(reference) = node.get("$ref").and_then(JsonValue::as_str) {
+        if ref_stack.iter().any(|existing| existing == reference) {
+            return false;
+        }
+        let Some(resolved) = schema_ref_target(schema_root, reference) else {
+            return false;
+        };
+        ref_stack.push(reference.to_string());
+        let nullable = schema_is_nullable(schema_root, resolved, ref_stack);
+        ref_stack.pop();
+        return nullable;
+    }
+
+    if schema_type_names(node).any(|type_name| type_name == "null") {
+        return true;
+    }
+
+    ["allOf", "anyOf", "oneOf"].iter().any(|keyword| {
+        node.get(keyword)
+            .and_then(JsonValue::as_array)
+            .is_some_and(|variants| {
+                variants
+                    .iter()
+                    .any(|variant| schema_is_nullable(schema_root, variant, ref_stack))
+            })
+    })
+}
+
+fn schema_type_names(node: &JsonValue) -> impl Iterator<Item = &str> {
+    node.get("type")
+        .into_iter()
+        .flat_map(|type_value| match type_value {
+            JsonValue::String(type_name) => vec![type_name.as_str()],
+            JsonValue::Array(type_names) => {
+                type_names.iter().filter_map(JsonValue::as_str).collect()
+            }
+            _ => Vec::new(),
+        })
+}
+
+fn schema_has_keyword_variants(node: &JsonValue) -> bool {
+    ["allOf", "anyOf", "oneOf"].iter().any(|keyword| {
+        node.get(keyword)
+            .and_then(JsonValue::as_array)
+            .is_some_and(|variants| !variants.is_empty())
+    })
 }
 
 fn import_graphs_relative_path_prefers_active_state_root_parent() -> Result<()> {

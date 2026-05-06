@@ -264,7 +264,7 @@ impl GammaloopSymbols {
         function!(self.theta, arg.as_view())
     }
 
-    pub(crate) fn sign(&self, edge: EdgeIndex) -> Atom {
+    pub fn sign(&self, edge: EdgeIndex) -> Atom {
         function!(self.sign, Atom::num(edge.0 as i64))
     }
 }

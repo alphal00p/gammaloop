@@ -95,14 +95,25 @@ impl AmplitudeCountertermAtom {
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
-        let (evaluator_stack, timings) = EvaluatorStack::new_with_timings(
-            &[&self.parametric_local, &self.parametric_integrated],
-            param_builder,
-            orientations.as_slice().as_ref(),
-            None,
-            &global_settings.generation.evaluator,
-        )
-        .unwrap();
+        let (evaluator_stack, timings) = if global_settings.generation.explicit_orientation_sum_only
+        {
+            EvaluatorStack::new_explicit_sum_with_timings(
+                &[&self.parametric_local, &self.parametric_integrated],
+                param_builder,
+                None,
+                &global_settings.generation.evaluator,
+            )
+            .unwrap()
+        } else {
+            EvaluatorStack::new_with_timings(
+                &[&self.parametric_local, &self.parametric_integrated],
+                param_builder,
+                orientations.as_slice().as_ref(),
+                None,
+                &global_settings.generation.evaluator,
+            )
+            .unwrap()
+        };
 
         (
             AmplitudeCountertermEvaluator {

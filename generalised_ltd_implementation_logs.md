@@ -74,7 +74,7 @@ standalone CLI exploration:
 - `pure_ltd`: available in the `bin` CLI and tests. Repeated propagators are
   allowed, but the generation emits a warning that numerator derivatives would
   be required and that the result is diagnostic only.
-- `old_cff`: available behind an `old-cff` feature. This is the migrated legacy
+- `old_cff`: available behind an `old_cff` feature. This is the migrated legacy
   GammaLoop CFF generator, used for parity testing. It must cleanly error when
   higher-power energy numerator dependence is requested.
 
@@ -134,7 +134,7 @@ Optional components:
 - `eval`: standalone evaluator support.
 - `symbolica-eval`: Symbolica-based evaluator construction.
 - `compiled-eval`: compiled complex-valued evaluator support.
-- `old-cff`: migrated legacy CFF generator for parity tests and CLI exploration.
+- `old_cff`: migrated legacy CFF generator for parity tests and CLI exploration.
 - `test-support`: helpers for `pure_ltd` and multi-way comparison tests.
 
 ### Validation Commands
@@ -184,7 +184,7 @@ just test_gammaloop
 - Verified `cargo test -p generalise-ltd --all-features`.
 - Added a feature-gated `old_cff` mode selector and high-energy-power rejection
   path in the new crate. The legacy generator body still needs to be migrated
-  from GammaLoop into the `old-cff` feature module.
+  from GammaLoop into the `old_cff` feature module.
 - Verified `just clippy`.
 - The first `just test_gammaloop` attempt after the structural move failed
   during compilation because the local `target/` directory had exhausted the
@@ -273,7 +273,7 @@ cargo run -p generalise-ltd --features bin --bin generalise-ltd -- graph-from-si
   - repeated-topology support at the old pure-CFF level.
 - CFF contraction branches are stored as multiple `CFFVariant` entries under
   the same orientation/numerator energy map.
-- Wired the `old-cff` feature mode to the migrated pure-CFF generator for parsed
+- Wired the `old_cff` feature mode to the migrated pure-CFF generator for parsed
   DOT inputs and kept the explicit higher-energy-power rejection path.
 - Replaced the placeholder `build` CLI with a feature-gated implementation that:
   - accepts GammaLoop DOT input,
@@ -291,7 +291,7 @@ cargo run -p generalise-ltd --features bin --bin generalise-ltd -- graph-from-si
   repeated-propagator `ltd` kernel and the bounded-degree generalized `cff`
   kernel. The public `ltd` path still explicitly errors on repeated
   propagators until that kernel is ported; the old pure-CFF recursion is
-  available and feature-gated `old-cff` parity support is wired for parsed DOT
+  available and feature-gated `old_cff` parity support is wired for parsed DOT
   inputs.
 - Verified the expanded no-default-feature test set:
 
@@ -1147,7 +1147,7 @@ passed
   `three-dimensional-reps` / `three-dimensional-reps-cli` split:
 
 ```text
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 ```
 
@@ -1195,7 +1195,7 @@ cargo fmt
 RUSTFLAGS=-Dwarnings cargo check -p three-dimensional-reps -p three-dimensional-reps-cli -p gammalooprs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 42 passed
 ```
 
@@ -1242,10 +1242,10 @@ passed
   subproblem DOT roundtrip:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 39 passed
 
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 ```
 
@@ -1270,10 +1270,10 @@ passed
   storage:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 39 passed
 
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 ```
 
@@ -1343,10 +1343,10 @@ passed
 ### Verification 2026-04-29 Core Generalized Tests
 
 - Ran the current Rust port tests for the core crate, including diagnostics,
-  `old-cff`, and test-support paths:
+  `old_cff`, and test-support paths:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 39 passed
 ```
 
@@ -1488,10 +1488,10 @@ cargo fmt
 RUSTFLAGS=-Dwarnings cargo check -p three-dimensional-reps -p three-dimensional-reps-cli -p gammalooprs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 42 passed
 
-cargo test -p three-dimensional-reps-cli --features old-cff -- --test-threads=1
+cargo test -p three-dimensional-reps-cli --features old_cff -- --test-threads=1
 3 passed
 
 cargo test -p three-dimensional-reps --no-default-features --lib -- --test-threads=1
@@ -1510,7 +1510,7 @@ just test_gammaloop
 - `three-dimensional-reps` remains the core library crate. It should stay free
   of GammaLoop API/evaluator dependencies and expose graph-source traits,
   expression construction, expression data structures, display helpers, and
-  optional diagnostic/old-cff support.
+  optional diagnostic/old_cff support.
 - The new `3Drep` command should obtain graphs through GammaLoop's existing
   state/model/process/integrand machinery, using the same `-p`, `-i`, and graph
   selection conventions as existing commands. Direct DOT parsing in the
@@ -1696,7 +1696,7 @@ cargo test -p three-dimensional-reps graph_from_signatures -- --test-threads=1
 - Verified this checkpoint with:
 
 ```text
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support --lib --tests -- --test-threads=1
 43 passed
 ```
 
@@ -1800,7 +1800,7 @@ passed
 RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval --lib --tests -- --test-threads=1
 46 passed
 
 just test_gammaloop
@@ -1876,7 +1876,7 @@ passed
 RUSTFLAGS=-Dwarnings cargo check -p gammaloop-integration-tests --test test_runs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval --lib --tests -- --test-threads=1
 46 passed
 
 just test_gammaloop
@@ -2017,7 +2017,7 @@ just test_gammaloop
 cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
 3 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 
 cargo fmt --check
@@ -2148,7 +2148,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old-cff,test-support,eval,display -- --nocapture
+cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old_cff,test-support,eval,display -- --nocapture
 passed
 
 cargo test -p gammaloop-api completion_offers_3drep_nested_selectors_and_enum_values -- --nocapture
@@ -2326,7 +2326,7 @@ Verification completed:
 cargo fmt
 passed
 
-cargo test -p three-dimensional-reps --features display,diagnostics,test-support,eval,old-cff display::tests -- --nocapture
+cargo test -p three-dimensional-reps --features display,diagnostics,test-support,eval,old_cff display::tests -- --nocapture
 3 passed
 
 cargo check -p gammaloop-api --features default
@@ -2387,7 +2387,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display graph_signatures -- --nocapture --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display graph_signatures -- --nocapture --test-threads=1
 5 passed; 35 filtered out
 
 cargo test -p gammaloop-integration-tests --test test_runs graph_from_signatures -- --nocapture --test-threads=1
@@ -2546,7 +2546,7 @@ old Python 3Drep case matrix: 309 ok, 0 failed, 309 total
 cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
 7 passed; 1 ignored
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 ```
 
@@ -2606,7 +2606,7 @@ cargo test -p gammaloop-integration-tests --test test_runs cli_old_python_slow_f
 cargo test -p gammaloop-integration-tests --test test_runs test_3d_reps -- --nocapture --test-threads=1
 8 passed; 1 ignored
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 
 cargo fmt --check
@@ -2726,7 +2726,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo check -p three-dimensional-reps --features diagnostics,display,eval,test-support,old-cff
+cargo check -p three-dimensional-reps --features diagnostics,display,eval,test-support,old_cff
 passed
 
 cargo check -p gammaloop-api
@@ -2735,7 +2735,7 @@ passed
 cargo check -p gammaloop-integration-tests --test test_runs
 passed
 
-cargo test -p three-dimensional-reps --features diagnostics,old-cff,test-support,eval,display --lib --tests -- --test-threads=1
+cargo test -p three-dimensional-reps --features diagnostics,old_cff,test-support,eval,display --lib --tests -- --test-threads=1
 40 passed
 
 cargo test -p gammaloop-api completion_offers -- --nocapture
@@ -2784,7 +2784,7 @@ passed
 just clippy -- -D warnings
 passed
 
-cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old-cff,test-support,eval,display -- --nocapture
+cargo test -p three-dimensional-reps all_sampling_scale_mode_affects_quadratic_reconstruction --features diagnostics,old_cff,test-support,eval,display -- --nocapture
 1 passed
 
 cargo test -p gammaloop-api completion_offers_3drep_nested_selectors_and_enum_values -- --nocapture
@@ -3527,6 +3527,682 @@ passed after assigning unique group ids in aa_aa.dot
 
 The full test suite was not run for this pass.
 
+## 2026-05-03: remove GammaLoop-side legacy CFF mode
+
+Follow-up correction:
+
+- `global.generation.uv.use_legacy` is no longer a supported setting. UV
+  renormalization always uses the hedge-poset forest implementation, and the old
+  branch-selection setting was removed from defaults, tests, and example cards.
+- The old CFF generator is no longer exposed through `gammalooprs`. Production
+  CFF construction now goes through `generate_3d_expr`; denominator-only helper
+  options remain available only for CFF denominator/orientation construction and
+  do not form a legacy mode.
+- The `gammalooprs` crate no longer has an `old_cff` feature. The optional
+  comparison anchor remains only in `crates/three-dimensional-reps` behind the
+  `old_cff` feature.
+- Removed the Python API helper methods that imported GammaLoop-side
+  subgraph-CFF generation directly.
+- Dropped the now-unused old forest pole-part helper and renamed stale comments
+  so the UV stack no longer carries a legacy-mode concept.
+
+Verification completed:
+
+```text
+cargo fmt --all
+cargo check -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked
+cargo check -p three-dimensional-reps --tests --features old_cff --locked
+
+just test_gammaloop
+Summary [169.177s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-02: external tree preservation in generalized CFF generation
+
+Step III.a external-tree follow-up:
+
+- `generate_3d_expr` now supports preserving selected internal edges as
+  residual four-dimensional denominators instead of feeding them into CFF
+  partial fractioning.
+- The generated expression carries these residual denominators explicitly, with
+  stable edge ids and powers, and remaps them alongside orientation edge maps.
+- Pure-tree inputs are handled as a degenerate CFF expression: one undirected
+  orientation, no CFF E-surfaces, and all internal tree propagators listed as
+  residual four-dimensional denominators.
+- GammaLoop's uncontracted full-amplitude CFF path now calls the generalized
+  `generate_3d_expr` path. External tree edges are detected from the graph
+  tree edges whose loop-momentum signature has no loop dependence; these are
+  excluded from the contracted CFF source graph and reintroduced through the
+  residual-denominator metadata.
+- The residual denominator factor is materialized centrally in `Graph::cff`,
+  including the integrated/local UV CFF paths that call through it, so the old
+  manual four-dimensional tree-denominator multiplications are no longer
+  duplicated in UV approximations.
+- The legacy pure-CFF generator has not yet been eliminated from `gammalooprs`.
+  It remains a bounded fallback for rank-deficient reduced sources,
+  initial-state cut graphs, and contracted-subgraph CFFs. A strict removal pass
+  was tried during this update, but it regressed the mass-approach inspect
+  checks, so retiring this fallback still requires generalized support for those
+  reduced/initial-cut cases.
+
+Coverage added:
+
+- 3D-reps unit coverage for preserving an external tree branch attached to a
+  loop and for the pure-tree degenerate expression.
+- Top-level end-to-end inspect comparison tests for imported scalar graphs:
+  a triangle with one external tree, a box with two external trees, and a pure
+  tree. Each compares normal CFF generation against
+  `explicit_orientation_sum_only=true` using local inspect only.
+
+Verification completed for this pass so far:
+
+```text
+cargo test -p three-dimensional-reps cff_generation_ --locked
+cargo check -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked
+cargo test -p gammaloop-integration-tests imported_external_tree_inspects_match_explicit_orientation_sum --locked -- --nocapture
+cargo fmt --all --check
+just test_gammaloop
+```
+
+`just test_gammaloop` passed with warnings enforced:
+
+```text
+1057 tests run: 1057 passed, 128 skipped
+```
+
+The recipe now supplies `RUST_MIN_STACK=33554432` by default, while preserving a
+caller-provided override, because the curated GammaLoop test suite otherwise
+stack-overflows in deep symbolic generation tests on the default Rust test
+thread stack.
+
+## 2026-05-02: production numerator energy bounds for `generate_3d_expression`
+
+Follow-up implementation after the initial Step III.c pass:
+
+- Moved automatic numerator energy-degree bound construction from the `3Drep`
+  command implementation into `gammalooprs`.
+- Added `Graph::automatic_numerator_energy_degree_bounds()`, which returns a
+  bound entry for every paired internal edge and overlays the detected numerator
+  energy powers from `Graph::numerator_energy_power_caps()`.
+- Updated `3Drep build` and `3Drep test-cff-ltd` to call the new `Graph` method
+  instead of carrying a local copy of the bound-building logic in the API crate.
+- Updated production `Graph::generate_3d_expression_for_integrand(...)` so the
+  caller supplies `Generate3DExpressionOptions` instead of using hard-coded empty
+  energy bounds.
+- Added production CFF option construction from `GenerationSettings`, mapping
+  `global.generation.uniform_numerator_sampling_scale` to the generalized
+  `NumeratorSamplingScaleMode`.
+- Updated amplitude and cross-section production CFF generation to pass automatic
+  numerator energy bounds and the selected numerator-sampling scale mode into
+  the generalized 3D expression generator.
+- Added a guard at the legacy `Graph::generate_cff(...)` entry point: if the
+  graph numerator has any detected EMR/loop-energy power above linear, legacy
+  CFF generation now errors with a clear message instead of silently proceeding
+  through an unsupported path.
+- Added a focused regression test that constructs a nonlinear energy numerator
+  and verifies the legacy CFF guard reports the unsupported edge degree.
+
+Verification completed before the full selected suite:
+
+```text
+cargo fmt
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+cargo test -p gammalooprs \
+  cff::generation::tests_cff::legacy_cff_rejects_nonlinear_energy_numerator \
+  --locked -- --nocapture
+```
+
+## 2026-05-02: commit summary for `ltd_in_gammaloop`
+
+This working-set commit collects the Step III production-integration work and
+the supporting CLI/test/documentation changes needed to keep the branch
+reviewable.
+
+Included changes:
+
+- Added the production Step III settings surface:
+  - `global.3d_representation`, with parsed values `CFF` and `LTD`;
+  - `global.generation.explicit_orientation_sum_only`;
+  - `global.generation.uv.local_uv_cts_from_expanded_4d_integrands`.
+- Kept unsupported Step III paths explicit:
+  - production `LTD` generation still errors as not implemented;
+  - `local_uv_cts_from_expanded_4d_integrands` still errors outside explicit
+    orientation-sum mode.
+- Added the generalized CFF bridge
+  `Graph::generate_3d_expression_for_integrand(...)`, including:
+  - GammaLoop-to-`ThreeDGraphSource` contracted graph extraction;
+  - GammaLoop edge-id preservation through `EnergyEdgeIndexMap`;
+  - conversion from generalized linear E/H surfaces back into GammaLoop concrete
+    surface caches;
+  - stripping generalized half-edge inverse-energy factors to preserve the
+    existing production CFF convention;
+  - legacy CFF fallback for initial-state-cut and contracted-subgraph cases
+    until those parity boundaries are closed.
+- Wired production amplitude, cross-section, and lower-level CFF call sites to
+  the generalized CFF bridge while preserving the default CFF behavior.
+- Implemented `explicit_orientation_sum_only = true` for production CFF:
+  - graph-term atoms are explicitly summed over all selected orientations at
+    generation time;
+  - evaluator construction uses a direct summed evaluator path with no runtime
+    orientation branching;
+  - runtime settings must use `general.evaluator_method = Summed`;
+  - individual-orientation Monte Carlo sampling and explicit orientation
+    selection are rejected cleanly;
+  - event/observable orientation ids collapse to a single effective orientation
+    id `0`, displayed as all `x` markers.
+- Propagated explicit orientation-sum semantics through local UV, integrated UV,
+  threshold counterterm, amplitude-counterterm, and LU-counterterm evaluator
+  construction.
+- Added an exhaustive saved-state default-settings regression test ensuring
+  `global_settings.toml` and `default_runtime_settings.toml` retain all
+  schema-visible default options when `SHOWDEFAULTS` is active.
+- Updated `AGENTS.md` to document `just test_gammaloop` as the default selected
+  GammaLoop suite and to note that it runs with warnings as errors.
+- Extended `3Drep evaluate` with:
+  - `--manifest-name` for selecting the evaluate manifest file name;
+  - `--no-show-parameters` for suppressing the parameter table in command
+    output.
+- Added the `summarize_3drep_workspace.py` demo helper and ignored generated
+  nested `*_workspace/` directories in `examples/`.
+- Added/updated tests for:
+  - Step III setting parsing and guard behavior;
+  - exhaustive default settings serialization;
+  - generalized CFF bridge parity on a scalar bubble fixture;
+  - inspect-level equality between ordinary CFF and explicit orientation-sum CFF;
+  - explicit runtime rejection of non-`Summed`, orientation Monte Carlo, and
+    explicit orientation selection;
+  - stable event-order expectations in graph-grouped event tests.
+
+Final verification before commit:
+
+```text
+just test_gammaloop
+passed: 1055 tests run, 1055 passed, 128 skipped
+```
+
+## 2026-05-02: Step III kickoff - production GammaLoop integration
+
+Step III targets the production GammaLoop integrand-generation path. The branch
+for this work is:
+
+```text
+ltd_in_gammaloop
+```
+
+The intended merge target is `ltd_expr`, not `main`.
+
+### Step III subgoals
+
+a. Replace the production GammaLoop `generate_cff` call by the generalized
+`three-dimensional-reps::generate_3d_expression` entry point, while preserving
+the existing production behavior for the default CFF mode.
+
+b. Add a global top-level `3d_representation` setting with variants:
+
+- `CFF` (default)
+- `LTD`
+
+For the initial guard pass, `LTD` is parsed but raises an explicit
+not-implemented error when production generation is reached.
+
+c. Add a generation-level `explicit_orientation_sum_only` setting. The intended
+semantics are to remove Monte Carlo sampling over individual orientations and
+force an explicit sum over all orientations per sample. This is required for
+LTD, while CFF should eventually support both the old sampled-orientation mode
+and explicit-sum mode.
+
+For the initial guard pass, this setting defaults to `false` and raises an
+explicit not-implemented error when evaluator/generation construction is
+reached.
+
+d. Add `global.generation.uv.local_uv_cts_from_expanded_4d_integrands`. The
+intended semantics are to build local UV counterterms from the expanded
+four-dimensional integrand and then localize them, instead of expanding the
+already generated three-dimensional expression of the original integrand.
+
+This setting defaults to `false`, is only valid together with
+`global.generation.explicit_orientation_sum_only = true`, and raises an
+explicit not-implemented error when reached.
+
+### Initial guard implementation
+
+- Added `global.3d_representation` as a top-level serialized setting, backed by
+  a Rust `ThreeDRepresentation` enum.
+- Added `global.generation.explicit_orientation_sum_only`.
+- Added
+  `global.generation.uv.local_uv_cts_from_expanded_4d_integrands`.
+- Added guard checks at process preprocessing and graph-term construction
+  boundaries so unsupported Step III modes fail explicitly before silently using
+  the old CFF implementation.
+- Added a direct UV forest guard so direct UV calls with
+  `local_uv_cts_from_expanded_4d_integrands = true` do not silently use the
+  old local-3D UVCT construction.
+- Added settings tests covering parsing and guard errors for the new Step III
+  settings.
+
+Verification completed:
+
+```text
+cargo fmt --all -- --check
+cargo test -p gammalooprs step_iii_3d_settings_parse_and_guard_pending_modes
+cargo test -p gammalooprs local_uv_4d_source_requires_explicit_orientation_sum_mode
+cargo check -p gammalooprs --tests --locked
+just check
+just clippy -- -D warnings
+just test_gammaloop
+passed: 1051 tests run, 1051 passed, 128 skipped
+```
+
+### Plan for subgoal III.a only
+
+1. Add a GammaLoop graph adapter audit for `ThreeDGraphSource`.
+   The `3Drep` CLI already calls `generate_3d_expression` from GammaLoop graph
+   state. The production path must reuse that adapter rather than serializing
+   DOT or rebuilding graph topology. The first check is that the generated edge
+   index map, mass expressions, external-energy shifts, initial-state cut
+   treatment, and contracted-tree-edge handling match the current
+   `Graph::generate_cff` production call.
+
+2. Introduce a production helper next to `Graph::generate_cff`, provisionally
+   `Graph::generate_3d_expression_for_integrand(...)`.
+   It should accept the same contraction/canonization context as the current
+   CFF helper, translate `GenerationSettings` into
+   `Generate3DExpressionOptions`, call `generate_3d_expression`, and return the
+   existing GammaLoop concrete alias `CFFExpression<OrientationID>` /
+   `ThreeDExpression<OrientationID, Esurface, Hsurface>`.
+
+3. Keep default behavior CFF-only for this subgoal.
+   `global.3d_representation = CFF` should be the only enabled mode during
+   III.a. The old `generate_cff` implementation should remain available as a
+   parity fallback until the new CFF path passes existing production tests.
+
+4. Port surface-cache compatibility deliberately.
+   Production threshold subtraction and UV code currently depend on
+   `graph.surface_cache.esurface_cache` and concrete GammaLoop `Esurface` /
+   `Hsurface` payloads. The generalized crate returns linear-surface cache
+   entries. The helper must either construct equivalent GammaLoop concrete
+   surface payloads or add a narrow conversion layer so existing
+   `determine_raised_esurfaces_from_expression`, residue selection, and
+   threshold-counterterm builders keep seeing the same physical E-surface
+   identities.
+
+5. Rebuild numerator substitution around orientation energy maps.
+   Current production CFF substitution is mostly orientation-sign based. The
+   generalized expression invariant is stronger: one orientation corresponds to
+   one explicit EMR edge-energy numerator map. Numerator replacement must read
+   `OrientationExpression.edge_energy_map` directly and replace every EMR
+   temporal component with that map. This must cover ordinary `+/- OSE`, zero
+   samples, finite integer samples, external-energy shifts, and future
+   uniform-scale `M` samples without special-casing the representation family.
+
+6. Rebuild threshold residues from denominator E-surfaces generically.
+   Current code selects residues by matching raised GammaLoop E-surfaces in CFF
+   denominator trees. The new path must collect denominator E-surface
+   occurrences directly from each `CFFVariant.denominator` tree, ignoring
+   numerator-only surfaces, and map them to the same raised-cut data. This keeps
+   threshold subtraction tied to actual denominator singularities rather than to
+   CFF-specific orientation assumptions.
+
+7. Generalize orientation marker handling before enabling generated expressions
+   in production.
+   The generalized representation uses:
+
+   - `+` and `-` for `+/- OSE` numerator samples;
+   - `0` for a genuine zero-energy numerator sample;
+   - `X`/unspecified for no orientation marker, corresponding to the old
+     tree-level/undirected placeholder that was previously encoded as `0`.
+
+   Production `OrientationPattern`, selector rendering, runtime filtering, and
+   integrated-UV orientation localization currently conflate "undirected" with
+   `0`. III.a must separate these semantics. Internally this likely still maps
+   to `Orientation::Undirected`, but user-facing patterns and labels must stop
+   treating `0` as "no orientation".
+
+8. Preserve integrated UV orientation localization.
+   The existing localization picks a representative full orientation compatible
+   with reduced CFF terms. With generalized expressions, compatibility must use
+   denominator/support orientation constraints and tolerate `X`/unspecified
+   entries, while still rejecting incompatible representatives. This should be
+   covered by the existing integrated-UV tests plus targeted tests for zero
+   numerator samples.
+
+9. Add parity tests before deleting or bypassing the old CFF path.
+   The minimum gate for III.a is:
+
+   - CFF production generation for existing amplitude and cross-section tests;
+   - threshold-subtraction tests using raised E-surfaces;
+   - UV local/integrated tests, including orientation localization;
+   - a direct comparison between old `generate_cff` and new
+     `generate_3d_expression(... CFF ...)` on representative graph fixtures;
+   - `just test_gammaloop`.
+
+### Main difficulties for III.a
+
+- The generalized crate has a neutral linear-surface model, while production
+  GammaLoop still uses concrete `Esurface`/`Hsurface` payloads and a mutable
+  graph-level surface cache. Maintaining stable E-surface ids is the highest
+  risk for threshold subtraction.
+- Numerator evaluation must stop deriving energy substitutions from compact
+  orientation labels. Labels are diagnostic; the source of truth is
+  `edge_energy_map`.
+- `0` now has physical meaning as a zero-energy numerator sample. Existing
+  GammaLoop pattern parsing and orientation-delta display historically used
+  `0` for an unspecified/undirected marker, so this is an easy place to create
+  silent selector bugs.
+- Existing evaluator code assumes an orientation-parametric integrand evaluated
+  with orientation variables. The explicit-orientation-sum mode is deliberately
+  not part of III.a, but III.a must not make it harder to add later.
+- Local and integrated UVCT code builds reduced local 3D terms from CFF-like
+  expressions. The generalized CFF default must keep those terms equivalent
+  before LTD or 4D-expanded UVCT construction is attempted.
+
+### Subgoal III.a implementation progress
+
+Implemented the first production bridge from GammaLoop CFF generation to the
+generalized `three-dimensional-reps::generate_3d_expression` entry point while
+keeping the enabled mode CFF-only.
+
+- Added `Graph::generate_3d_expression_for_integrand(...)` next to the legacy
+  `Graph::generate_cff(...)`.
+- Added a contracted GammaLoop graph source adapter for the generalized
+  `ThreeDGraphSource` trait. It contracts the same tree edges as the legacy
+  production path, preserves GammaLoop edge ids through
+  `EnergyEdgeIndexMap`, and keeps the original external-energy basis.
+- Replaced the production CFF generation calls in:
+  - amplitude graph generation;
+  - cross-section graph generation;
+  - the lower-level `Graph::cff(...)` helper.
+- Added a linear-surface conversion layer from generalized
+  `LinearSurfaceKind::{Esurface,Hsurface}` entries back into GammaLoop
+  concrete `Esurface` / `Hsurface` cache entries. This keeps downstream raised
+  E-surface discovery and threshold-residue code operating on the existing
+  concrete surface ids.
+- Lowered paired initial-state cut terms in generated linear surfaces into
+  GammaLoop external shifts with the cross-section cut convention sign. This is
+  needed for the generated CFF surface cache to contain the same s-channel cut
+  E-surfaces used by `CrossSectionCut::new_from_cut_left(...)`.
+- Preserved the current GammaLoop convention that inverse on-shell-energy
+  factors live outside the CFF denominator tree. The generalized crate stores
+  these factors in `CFFVariant::half_edges`, so the bridge strips them after
+  surface remapping to avoid double-counting in the existing production
+  pipeline.
+- Kept numerator-energy substitution tied to the generalized
+  `OrientationExpression::edge_energy_map`; this had already been introduced
+  in the GammaLoop expression layer and now becomes the production source of
+  truth for CFF-generated orientations.
+- Added a parity regression comparing legacy CFF generation with the new
+  generalized CFF bridge for a scalar bubble, both without contractions and
+  with the same amplitude-production tree contractions.
+
+Current deliberately unresolved Step III pieces:
+
+- `global.3d_representation = LTD` remains guarded as not implemented in
+  production generation.
+- `global.generation.explicit_orientation_sum_only = true` remains guarded.
+- `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true`
+  remains guarded.
+- Genuine zero-energy numerator sample markers are still only exercised inside
+  the generalized crate. The production CFF bridge does not enable those modes
+  yet, so the full user-facing `0` versus `X` selector split remains part of
+  the later explicit-orientation/numerator-sampling work.
+
+Verification completed for this pass:
+
+```text
+cargo fmt --all -- --check
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs --tests --locked -- -D warnings
+cargo test -p gammalooprs \
+  cff::generation::tests_cff::generated_cff_matches_legacy_cff_for_scalar_bubble \
+  --locked -- --nocapture
+cargo test -p gammalooprs \
+  processes::amplitude::test::generation_orientation_pattern_filters_evaluator_orientations \
+  --locked -- --nocapture
+cargo test -p gammaloop-integration-tests \
+  cli_stateful_workflow_behaviors --test test_cli --locked -- --nocapture
+cargo test -p gammaloop-integration-tests \
+  cross_section_vector_spin_sum_matches_explicit_incoming_helicity_average \
+  --test test_runs --locked -- --nocapture
+cargo test -p gammaloop-integration-tests \
+  save_state_writes_exhaustive_default_settings_files \
+  --test test_cli --locked -- --nocapture
+```
+
+`cargo test -p gammalooprs --locked` still aborts in the existing
+`cff::esurface::tests::failing::test_from_cut_left_box` test before reaching the
+new bridge-specific tests when run as a whole.
+
+## 2026-05-02: Step III.c explicit orientation sum mode
+
+Implemented `global.generation.explicit_orientation_sum_only = true` for the
+current production CFF mode.
+
+Semantics implemented:
+
+- Explicit-sum generation now builds graph-term evaluators that contain the
+  direct sum over all valid CFF orientations in the generated atom, so runtime
+  evaluation does not sample or branch over orientation choices.
+- Runtime settings are validated for this mode:
+  - `general.evaluator_method` must be `Summed`;
+  - individual-orientation Monte Carlo sampling is rejected;
+  - explicit runtime orientation selection is rejected.
+- The effective event/observable orientation space is collapsed to one
+  orientation, id `0`, rendered as an all-`x` signature.
+- Generation evaluator options that only select between iterative/summed
+  orientation implementations are ignored in this mode, except that an
+  explicitly requested iterative generation path still remains unsupported.
+- `global.generation.uv.local_uv_cts_from_expanded_4d_integrands` is accepted
+  when explicit orientation summation is enabled, but still guarded as
+  not-implemented without explicit orientation summation.
+- Local UV and threshold counterterm evaluator construction uses the same
+  explicit-sum evaluator path when this mode is active.
+- Superseded on 2026-05-03: the generalized CFF production helper no longer
+  keeps any GammaLoop-side legacy CFF fallback. Initial-state-cut and
+  contracted-subgraph support must be handled by `generate_3d_expr` directly;
+  the old comparison generator remains only in the `three-dimensional-reps`
+  `old_cff` feature.
+
+Test coverage added:
+
+- inspect-level comparison between ordinary CFF generation and
+  `explicit_orientation_sum_only = true` for scalar amplitude topologies;
+- explicit runtime rejection tests for non-`Summed` evaluator mode,
+  individual-orientation Monte Carlo sampling, and explicit orientation
+  selection;
+- settings coverage for the revised
+  `local_uv_cts_from_expanded_4d_integrands` guard semantics.
+
+Verification completed:
+
+```text
+just test_gammaloop
+passed: 1055 tests run, 1055 passed, 128 skipped
+```
+
+## 2026-05-01: aa_aa profiling command blocks
+
+Follow-up implementation:
+
+- Extended `examples/cli/three_d_expr_demo/aa_aa.toml` so the `load` block now
+  imports both:
+  - the physical numerator demo graphs from `aa_aa.dot` into process `aa_aa`;
+  - the scalar no-numerator variants from `aa_aa_no_numerator.dot` into process
+    `aa_aa_no_numerator`.
+- Added `aa_aa_no_numerator.dot`, mirroring the 1L/2L/3L/4L `aa_aa` box
+  topologies with graph, edge, node, and projector numerators set to `1`.
+- Added long-form profiling command blocks:
+  - `1L_profile`, `2L_profile`, `3L_profile`, `4L_profile`;
+  - `1L_profile_numerator_only`, `2L_profile_numerator_only`,
+    `3L_profile_numerator_only`, `4L_profile_numerator_only`;
+  - `1L_profile_no_numerator`, `2L_profile_no_numerator`,
+    `3L_profile_no_numerator`, `4L_profile_no_numerator`.
+- Each profile block builds/reuses LTD and CFF artifacts in that order and runs
+  `3Drep evaluate --profile 10s` for:
+  - Double eager;
+  - Double compiled with assembly;
+  - Double compiled with symjit;
+  - Quad eager;
+  - ArbPrec eager.
+- The numerator-only blocks exercise the direct `--numerator-only` evaluator
+  path without requiring prebuilt oriented-expression JSON.
+
+Verification completed:
+
+```text
+cargo fmt
+cargo check -p gammaloop-api
+just build-cli
+cargo clippy -p gammaloop-api -- -D warnings
+
+python3 - <<'PY'
+from pathlib import Path
+import tomllib
+with Path("examples/cli/three_d_expr_demo/aa_aa.toml").open("rb") as f:
+    data = tomllib.load(f)
+blocks = [b["name"] for b in data["command_blocks"]]
+assert all(name in blocks for name in [
+    "load",
+    "1L_profile", "1L_profile_numerator_only", "1L_profile_no_numerator",
+    "2L_profile", "2L_profile_numerator_only", "2L_profile_no_numerator",
+    "3L_profile", "3L_profile_numerator_only", "3L_profile_no_numerator",
+    "4L_profile", "4L_profile_numerator_only", "4L_profile_no_numerator",
+])
+PY
+
+./gammaloop --dev-optim --clean-state \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml run load -c "quit -n"
+
+./gammaloop --dev-optim --clean-state \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml \
+  run load \
+  1L_profile 1L_profile_numerator_only 1L_profile_no_numerator \
+  2L_profile 2L_profile_numerator_only 2L_profile_no_numerator \
+  -c "quit -n"
+```
+
+The x=1 and x=2 profile, numerator-only profile, and no-numerator profile
+blocks all completed successfully. The full `just test_gammaloop` suite was not
+run for this pass.
+
+## 2026-05-01: 3Drep workspace summary helper
+
+Follow-up implementation:
+
+- Added the top-level helper script `summarize_3drep_workspace.py`.
+- The script scans a supplied 3Drep workspace for all `evaluate_manifest.json`
+  files and renders a colored `prettytable` summary with:
+  - graph name;
+  - representation;
+  - numerator category (`no_numerator`, `only_numerator`, or `full`);
+  - precision;
+  - evaluator mode (`eager`, `compiled assembly`, `compiled symjit`, etc.);
+  - evaluator build time in seconds;
+  - profile/evaluation time per sample in microseconds.
+- Timings are printed with three significant digits. When a Double/eager
+  baseline exists for the same graph, representation, and numerator category,
+  timing ratios are shown in parentheses.
+- If multiple manifests share the same displayed category, the script adds a
+  final `details` column containing the path and relevant settings needed to
+  distinguish the entries.
+
+Verification completed:
+
+```text
+python3 -m py_compile summarize_3drep_workspace.py
+
+./summarize_3drep_workspace.py \
+  ./examples/cli/three_d_expr_demo/aa_aa_workspace --no-color
+```
+
+The helper found and summarized the 13 evaluate manifests currently present in
+the local `aa_aa_workspace`.
+
+## 2026-05-02: named 3Drep evaluate manifests
+
+Follow-up implementation:
+
+- Added `3Drep evaluate --manifest-name <name>`.
+- The option selects the evaluate summary JSON filename inside the selected
+  3Drep artifact directory. The default remains `evaluate_manifest.json` for
+  existing workflows. Names without a `.json` suffix receive it automatically;
+  path separators are rejected so the option cannot escape the artifact folder.
+- Added `3Drep evaluate --no-show-parameters`.
+- The option keeps the full `parameters` array in the JSON manifest, but skips
+  the large input-parameter table in the terminal output.
+- Updated `examples/cli/three_d_expr_demo/aa_aa.toml` so every `3Drep evaluate`
+  command writes a unique manifest name and passes `--no-show-parameters`.
+- Updated `summarize_3drep_workspace.py` to scan all JSON files under a
+  workspace and retain only those matching the evaluate-manifest schema. This
+  lets it pick up arbitrary manifest names supplied with `--manifest-name`.
+
+Verification completed:
+
+```text
+python3 - <<'PY'
+from pathlib import Path
+import tomllib
+with Path("examples/cli/three_d_expr_demo/aa_aa.toml").open("rb") as f:
+    data = tomllib.load(f)
+names = []
+for block in data["command_blocks"]:
+    for cmd in block["commands"]:
+        if cmd.startswith("3Drep evaluate"):
+            assert "--manifest-name " in cmd
+            assert "--no-show-parameters" in cmd
+            parts = cmd.split()
+            names.append(parts[parts.index("--manifest-name") + 1])
+assert len(names) == len(set(names))
+PY
+
+./gammaloop --dev-optim --clean-state -s /tmp/gammaloop_state_named_manifest \
+  ./examples/cli/three_d_expr_demo/aa_aa.toml run load \
+  -c "3Drep evaluate -p aa_aa -i default -g 0 --representation cff \
+      --workspace-path /tmp/gammaloop_3drep_named_manifest --precision Double \
+      --seed 11 --scale 0.25 --profile 1ms --eager --clean \
+      --numerator-only --manifest-name smoke_eval.json --no-show-parameters; quit -n"
+
+./summarize_3drep_workspace.py /tmp/gammaloop_3drep_named_manifest --no-color
+```
+
+The smoke test wrote the named `smoke_eval.json` manifest, suppressed the
+parameter table in the terminal output, and the summary helper discovered the
+non-default manifest name.
+
+## 2026-05-02: wrapped 3Drep summary details
+
+Follow-up implementation:
+
+- Updated `examples/cli/three_d_expr_demo/summarize_3drep_workspace.py` so the
+  optional `details` column wraps at 40 visible characters.
+- This keeps long manifest paths readable without allowing duplicate-category
+  rows to make the summary table excessively wide.
+- The summary now deduplicates manifests with identical visible category and
+  identical detail properties.
+- By default, entries that differ only in detail properties are collapsed to the
+  first representative row; `--show-duplicates` expands them and highlights
+  differing detail fields in red.
+- Added a final `manifest` column with the manifest basename.
+- Timing ratios are now measured per graph, representation, and numerator kind
+  against the first available baseline in this priority order within that
+  subset:
+  1. Double compiled assembly;
+  2. Double eager.
+- The selected reference row is sorted first inside each
+  graph/representation/kind subset and its manifest basename is colored green.
+- Added horizontal separators between graph groups.
+
+Verification completed:
+
+```text
+python3 -m py_compile examples/cli/three_d_expr_demo/summarize_3drep_workspace.py
+
+./examples/cli/three_d_expr_demo/summarize_3drep_workspace.py \
+  ./examples/cli/three_d_expr_demo/aa_aa_workspace --no-color
+
+./examples/cli/three_d_expr_demo/summarize_3drep_workspace.py \
+  ./examples/cli/three_d_expr_demo/aa_aa_workspace --no-color --show-duplicates
+```
+
 ## 2026-05-01: aa_aa 3Drep integration test coverage
 
 Follow-up implementation completed:
@@ -3543,13 +4219,16 @@ Follow-up implementation completed:
   - Double precision + assembly compiled evaluator;
   - Double precision + symjit compiled evaluator;
   - Quad precision eager evaluator.
-- Added an `evaluate` cache-reuse test for both graphs that:
+- Added an `evaluate` cache-reuse test for the one-loop Box graph that:
   - builds and evaluates the CFF expression once with `--clean`;
   - runs `3Drep evaluate` again without `--clean` and asserts the evaluator
     build time is absent, proving the cached evaluator was reused;
   - exercises `--numerator-only` directly from the graph, with an explicit
     `--numerator-q0 4:1.25e-1` override;
   - asserts the numerator-only evaluator cache is reused on the second call.
+  The two-loop DoubleBox remains part of the parsed-graph structural coverage
+  but is no longer used for this cache diagnostic because its automatic
+  `beyond_quadratic` bounds are a nonconvergent generalized-CFF sector.
 
 Verification completed:
 
@@ -3764,3 +4443,1488 @@ passed; the build summary shows both `numerator` and `simplified_numerator`.
 ```
 
 The full test suite was not run for this pass.
+
+## 2026-05-03: final Step III cleanup pass before staging
+
+Global review outcome:
+
+- Confirmed the retired `generate_cff` entry points are not present in active
+  GammaLoop source anymore. The only `old_cff` gate left is in
+  `crates/three-dimensional-reps`, and it is disabled by default.
+- Removed the GammaLoop crate-level `old_cff` feature so production GammaLoop
+  cannot accidentally enable or route through the old generator.
+- Renamed current GammaLoop CFF production wrappers from `generate_cff...` to
+  `build_cff_expression...` so the remaining production path is clearly a
+  `generate_3d_expr` bridge, not the retired generator.
+- Removed the Python API's direct subgraph-CFF helpers. The Python API no
+  longer imports the removed GammaLoop-side subgraph generator.
+- Moved `SurfaceCache` imports to `cff::surface`; `cff::generation` no longer
+  re-exports surface storage.
+- Removed stale `use_legacy` UV settings, example comments, and the old UV
+  branch. UV renormalization now has a single hedge-poset path.
+- Dropped the unused old forest pole-part helper that became dead code after
+  removing the UV branch.
+- Removed the last dead GammaLoop-side CFF graph-contraction implementation
+  (`CFFGenerationGraph`, its edge/vertex types, and its self-contained tests).
+  The module now contains only the compact `VertexSet` bitset still used by
+  surface bookkeeping.
+- Renamed that surviving surface bitset module from `cff_graph` to
+  `vertex_set` and re-exported `VertexSet` through `cff`, avoiding imports that
+  suggest a remaining GammaLoop-side CFF graph builder.
+- Removed the unregistered `benches_old` Criterion files that still called the
+  retired `Graph::generate_cff()` API. Keeping them would have left broken
+  source files in the tree and an implicit second CFF construction surface.
+- Added a public GammaLoop-side `Graph::three_d_expression_options(...)` helper
+  for the standalone `3Drep` CLI so auto-detected numerator energy bounds,
+  initial-state-cut exclusions, and preserved 4D tree denominators are selected
+  from the same place as production CFF generation.
+- Centralized preserved tree-edge handling in the GammaLoop
+  `generate_3d_expression` bridge. Production callers no longer pass external
+  tree edges as contracted edges; the bridge selects preserved 4D denominators,
+  filters them out of virtual graph contraction, and the denominator-only CFF
+  wrapper explicitly excludes them from GammaLoop's surrounding inverse-OSE
+  normalization.
+- Changed the loop-signature rank helper used while extracting reduced
+  generalized-3D graph sources from a floating-point row reduction to exact
+  rational row reduction.
+- Replaced derived `from_f64` constants in CFF/evaluator/subtraction hot paths
+  with active-precision constants: exact integer signs now use representative
+  `.from_i64(...)` values, derivative factorial normalization uses
+  `.from_usize(...)`, and orientation/override zeros use `T::new_zero()`.
+- Unified GammaLoop graph extraction for generalized 3D generation behind a
+  single `GraphThreeDSource` adapter. The direct `Graph` API and production CFF
+  bridge now share dummy-edge filtering, initial-state-cut externalization,
+  contracted-edge handling, and active loop-energy column reduction.
+- Tightened automatic numerator energy-bound detection and generalized-3D graph
+  extraction so dummy/non-denominator edges do not participate in numerator
+  energy analysis or parsed 3D graph sources.
+- Normalized logbook feature spelling from `old_cff`'s earlier dashed spelling
+  to the current Cargo feature name.
+- Simplified the preserved-edge graph contraction helper to avoid repeatedly
+  cloning the union-find parent map while computing roots.
+
+Design observations:
+
+- Current CFF production in `gammalooprs` always calls
+  `three_dimensional_reps::generate_3d_expression`; there is no fallback to the
+  retired CFF generator.
+- GammaLoop no longer carries a hidden old-CFF graph builder behind
+  `allow(dead_code)`, so the remaining CFF-related code is limited to surface
+  representation/evaluation and the generalized 3D-expression bridge.
+- A repository-wide source scan now finds no active `generate_cff` references
+  outside historical logs/artifacts and the explicitly gated old-CFF mode in
+  `three-dimensional-reps`.
+- `3Drep build` and `3Drep test-cff-ltd` no longer hand-construct incomplete
+  generalized-3D options; they reuse GammaLoop graph defaults and then apply
+  only user-supplied energy-bound overrides.
+- Standalone 3Drep CLI graph validation/build paths now use the same GammaLoop
+  parsed-source extraction rules as production CFF generation.
+- Denominator-only CFF options still exist for UV/threshold denominator
+  construction, but they are explicit zero-degree generalized-3D options, not a
+  legacy mode.
+- The only old-CFF comparison anchor is `RepresentationMode::OldCff` in the
+  `three-dimensional-reps` crate, compiled only with `--features old_cff`.
+
+Verification completed:
+
+```text
+cargo fmt --all
+cargo check -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked
+cargo clippy -p three-dimensional-reps -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo check -p three-dimensional-reps --tests --features old_cff --locked
+git diff --check
+
+just test_gammaloop
+Summary [152.605s] 1039 tests run: 1039 passed, 125 skipped
+```
+
+## 2026-05-03: final bridge cleanup, detailed test target, and state-artifact hardening
+
+Follow-up cleanup after the previous global pass:
+
+- Added `just test_gammaloop_detailed`, an alias for the curated GammaLoop
+  suite with nextest reporter flags:
+  `--show-progress=bar --status-level=slow --final-status-level=fail
+  --max-progress-running=8`.
+- Moved the GammaLoop-to-3D graph adapter into
+  `crates/gammalooprs/src/graph/three_d_source.rs`, keeping `graph/mod.rs`
+  focused on graph data and general graph operations.
+- Kept graph contraction virtual inside `GraphThreeDSource`. I checked the
+  linnet contraction helpers during this pass; they mutate/reindex graph
+  structure, while this adapter must preserve original `EdgeIndex` values for
+  energy caches, residual denominators, and orientation vectors.
+- Made `GraphThreeDSource` own the initial-state-cut edge set and refuse to
+  virtually contract those edges even if a future caller accidentally includes
+  them in a contracted-edge request.
+- Normalized preserved 4D denominator selection in one helper on the GammaLoop
+  generation bridge. Initial-state-cut edges and preserved 4D denominator edges
+  are now treated uniformly as non-contractible before the reduced source graph
+  reaches `three_dimensional_reps::generate_3d_expression`.
+- Adjusted denominator-only CFF construction so preserved 4D denominator edges
+  are also excluded from the separate inverse on-shell-energy product assembled
+  by GammaLoop around the generated expression.
+- Replaced several exact zero/one/two/three/four constants near the new path
+  with active-precision constructions (`T::new_zero()`, `.one()`,
+  `.from_i64(...)`, `.from_usize(...)`) so internally derived constants do not
+  pass through `f64` in generic-precision evaluation paths.
+- Hardened the mass-approach run card with an explicit
+  `tests/artifacts/mass_approach_scalar_self_energy` state folder and removed
+  stale top-level state artifacts that had been left from an earlier ad hoc run.
+
+Verification completed:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+git diff --check
+
+just test_gammaloop_detailed
+Summary [153.382s] 1039 tests run: 1039 passed, 125 skipped
+```
+
+## 2026-05-03: Step III LTD production-support plan
+
+This is the next-to-last Step III subgoal: support
+`global.3d_representation = "LTD"` in production GammaLoop generation. LTD is
+only supported in the generation mode where orientations are explicitly summed.
+The intended runtime object is one effective summed orientation, with observable
+orientation id `0`; no individual-orientation Monte Carlo, no generated
+orientation selector, and no runtime orientation selector is supported.
+
+Clarified design constraints:
+
+- `global.3d_representation = "LTD"` must require
+  `global.generation.explicit_orientation_sum_only = true`. If this is false,
+  generation must fail with a clear not-supported error.
+- In any explicit-orientation-sum mode, a non-empty
+  `global.generation.orientation_pattern` is also invalid. The mode means "sum
+  all orientations", so user-provided orientation filtering must fail clearly
+  instead of being ignored.
+- The same per-orientation numerator logic applies to CFF and LTD in explicit
+  orientation-sum mode: each generated orientation carries its own numerator
+  energy map. LTD is not conceptually different here; its EMR energy
+  substitutions are just more general affine oriented maps.
+- H-surfaces in LTD are spurious singularities that cancel in the required full
+  orientation sum. They must be ignored for threshold-subtraction activation.
+- Physical threshold counterterms are driven only by generated E-surfaces. The
+  E-surfaces in the fully summed LTD expression should canonically match the
+  E-surfaces found by the fully summed CFF expression, because both represent
+  the same loop-energy-integrated function.
+- Integrated UV localization uses a representation-independent normalization
+  function of spatial loop momenta. It should not be made CFF- or LTD-aware.
+- Current CFF behavior is a hard regression boundary. The code can be renamed
+  and generalized, but choosing `CFF` must continue to produce the same local
+  inspect values and current test behavior.
+
+Implementation plan:
+
+1. Add the strict LTD/explicit-sum settings guards.
+   `LTD` with `explicit_orientation_sum_only = false` should error before
+   generation. Any non-trivial `orientation_pattern` together with
+   `explicit_orientation_sum_only = true` should also error.
+
+2. Generalize production naming and data flow away from CFF-specific concepts.
+   The production objects currently named `cff_expression`,
+   `global_cff_expression`, `CFFapprox`, and related helpers should become
+   representation-neutral 3D-expression concepts. CFF-specific behavior should
+   remain only in explicit `RepresentationMode::Cff` branches.
+
+3. Make the GammaLoop bridge preserve the rich generated oriented structure.
+   Production atom construction should use each orientation's own energy map,
+   variant prefactor, half-edge factors, numerator surfaces, denominator tree,
+   and residual denominators. For CFF, keep the existing convention that
+   generalized half-edge factors are stripped and supplied by the existing
+   inverse-OSE product. For LTD, keep the variant half-edge factors because they
+   are part of the residue formula. If matching the CFF normalization requires
+   an additional inverse-OSE factor, multiply it explicitly into the generated
+   atom/numerator side rather than hiding it in CFF-only plumbing.
+
+4. First enable the original integrand in LTD with UV disabled.
+   Build local inspect comparisons between CFF explicit-sum and LTD for simple
+   amplitudes, imported external-tree graphs, pure trees, and cross-section
+   fixtures that do not require UV counterterms. The expected comparison is
+   equality within the numerical accuracy of the selected precision.
+
+5. Threshold subtraction in LTD should scan only canonical E-surfaces.
+   H-surfaces are ignored. If an expected physical E-surface does not match the
+   CFF canonical surface set, the fix should be in E-surface canonicalization or
+   in how `generate_3d_expression` exposes E-surfaces, not in treating
+   H-surfaces as thresholds.
+
+6. Local UV counterterms for LTD must not use the current 3D-expansion UV
+   forest. That forest is intentionally CFF-shaped: it stores denominator-only
+   selector terms and introduces numerator energy substitutions later through
+   CFF on-shell-energy signs. LTD needs the full affine EMR-energy map attached
+   to each oriented term at numerator-insertion time. Supporting LTD through
+   that path would add complexity without a physics or maintenance benefit, so
+   `LTD + local UV from 3D expansions` is permanently `NotSupported`.
+
+7. Implement local UV counterterms from expanded 4D integrands instead. This
+   path should be allowed for both CFF and LTD, and LTD with
+   `uv.subtract_uv = true` should require
+   `uv.local_uv_cts_from_expanded_4d_integrands = true`. The 4D-expanded route
+   keeps the UV R-operation representation-neutral until the step where the
+   chosen 3D representation is applied, so CFF and LTD can share the same UV
+   construction while retaining their distinct oriented energy maps.
+
+8. Extend the inspect test matrix broadly.
+   Every integration-test function in the top-level `tests` crate that performs
+   a local `inspect` check should, where physically applicable, gain a CFF
+   explicit-sum versus LTD explicit-sum comparison at the same local sample
+   point. Do not add integrated-level LTD comparisons for this subgoal; local
+   inspect equality is the intended validation. These comparisons should cover
+   amplitudes and cross sections, and include configurations with threshold
+   subtraction and, after the UV port, local UV counterterms.
+
+Expected validation sequence:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+targeted inspect tests for bare LTD/CFF parity
+targeted inspect tests with threshold subtraction
+targeted inspect tests with local UV CTs after the UV port
+just test_gammaloop_detailed
+```
+
+## 2026-05-03: Step III LTD original-integrand implementation
+
+Implemented the first production LTD slice: original-integrand generation with
+all orientations explicitly summed and local UV/threshold counterterms disabled.
+
+Changes made:
+
+- Relaxed the production settings guard so `global.3d_representation = "LTD"`
+  is accepted when `global.generation.explicit_orientation_sum_only = true`.
+- Added a strict guard that rejects any non-empty
+  `global.generation.orientation_pattern` in explicit-orientation-sum mode.
+  This mode now means "sum every generated orientation" unambiguously.
+- Kept LTD individual-orientation generation unsupported. `LTD` with
+  `explicit_orientation_sum_only = false` errors before generation.
+- Generalized the GammaLoop production bridge so
+  `Graph::production_3d_expression_options(...)` selects CFF or LTD and passes
+  the representation to `three_dimensional_reps::generate_3d_expression`.
+- Generalized preserved-internal-edge handling in the `three-dimensional-reps`
+  generator. The preserve/re-attach wrapper is no longer CFF-only; LTD can now
+  leave selected internal tree structures as residual 4D denominators too.
+- Changed GammaLoop's automatic preserved-4D-denominator selection so external
+  tree denominators are preserved for both CFF and LTD. The generated LTD
+  expression keeps its variant half-edge factors, while CFF keeps the existing
+  production convention of stripping those factors and applying the separate
+  inverse-OSE product.
+- Added a production atom path that accepts an explicit numerator atom and then
+  applies the generated orientation's own EMR-energy substitution map. This is
+  needed because the diagnostic `full_numerator_atom()` carries raw graph-level
+  helper factors such as `AutG(...)`, while production must use
+  `graph.global_atom()` so those factors are evaluated before evaluator
+  parsing.
+- Added direct LTD original-integrand assembly in amplitude generation. This
+  uses the full generated 3D expression, sums orientations without theta
+  selectors, multiplies residual preserved 4D denominators, applies the
+  standard `(2π)^(-3L)` normalization, simplifies graph/global factors, unwraps
+  preserved tree denominators, and builds a single effective orientation
+  evaluator.
+- Canonicalized generated negative E-surfaces during GammaLoop surface import.
+  LTD can expose the same physical E-surface with all internal energy terms
+  carrying an overall minus sign. The bridge flips such surfaces to the
+  canonical positive-energy convention and absorbs the sign into the variant
+  prefactor. Mixed-sign E-surfaces still error explicitly.
+- Routed amplitude and cross-section preprocessing through `GlobalSettings`
+  rather than only `GenerationSettings`, so representation-aware generation
+  decisions cannot be silently lost.
+- Added explicit not-supported errors for LTD local UV counterterms from 3D
+  expansions and for cross-section threshold subtraction. This prevents
+  accidental CFF-shaped fallback while the remaining Step III subgoals are
+  still open.
+- Added amplitude threshold-subtraction support for LTD explicit-sum mode. The
+  amplitude path now derives the raised canonical E-surfaces directly from the
+  generated LTD expression, ignores non-E/H surfaces for threshold selection,
+  applies the existing generation-time existence checks and external-flow
+  threshold filters, selects the LTD E-surface residue, and builds the
+  parametric counterterm with the same threshold prefactors as CFF. The
+  threshold path deliberately uses only the algebra cleanup portion of the
+  normal integrand finalizer because the threshold prefactors already contain
+  the `(2π)^(-3L)` measure normalization.
+- Added the first narrow cross-section LTD original-integrand path. Cross
+  sections now build their global 3D expression through the same
+  representation-aware bridge as amplitudes, and bare LTD cross sections select
+  LU E-surface residues directly from the generated LTD expression instead of
+  sending those terms through the CFF UV forest. The path remains guarded to
+  `uv.subtract_uv = false` and threshold subtraction disabled.
+
+Tests added:
+
+- `three-dimensional-reps` unit tests proving LTD preservation of an external
+  tree edge and LTD pure-tree passthrough.
+- Integration tests comparing CFF explicit-sum and LTD explicit-sum local
+  inspect values for scalar triangle/box amplitudes with UV disabled.
+- Integration tests comparing CFF and LTD local inspect values for imported
+  external-tree loop graphs and a pure tree graph, again with UV disabled.
+- Integration test comparing CFF and LTD local inspect values for imported
+  scalar one-loop topologies with manually attached quartic numerators:
+  `box.dot` uses `(Q4.Q5) * (Q6.Q7)` and `box_pow3.dot` uses
+  `(Q4.Q6) * (Q7.Q9)`. This exercises automatic EMR energy-degree detection
+  up to quartic order in production GammaLoop generation, including a repeated
+  propagator topology.
+- Integration test comparing CFF and LTD local inspect values for scalar
+  triangle and box amplitudes with threshold subtraction enabled and UV
+  disabled. This covers the new LTD amplitude threshold path and catches the
+  threshold-measure normalization convention against the existing CFF result.
+- Integration test checking that LTD with default local UV subtraction fails
+  with a clear not-supported error.
+- Settings tests for LTD's explicit-sum requirement and the
+  explicit-sum/orientation-pattern incompatibility.
+
+Cross-section validation note:
+
+- I attempted to add a scalar generated cross-section local-inspect CFF/LTD
+  parity test, but the simplest scalar candidate generated a zero-loop
+  forward-scattering case. The existing CFF local-inspect evaluation for that
+  case panics while constructing the LU radial guess because it assumes at
+  least one loop momentum (`unit_loops[0]`). I therefore did not keep that test
+  as a LTD validation target. A useful cross-section parity test should use a
+  genuinely loopful forward-scattering topology without repeated propagators,
+  so that the CFF reference path is meaningful and the comparison probes LTD
+  rather than this pre-existing zero-loop cross-section limitation.
+- I also probed imported Standard Model forward-scattering fixtures. The
+  `epemttbar.dot` fixture reaches the relevant loopful CFF reference path but
+  is too expensive for a normal `just test_gammaloop` local-inspect parity test.
+  The smaller `addbar.dot` candidate fails in the existing CFF/imported-graph
+  generation path before it can test LTD. I therefore did not keep either as a
+  committed LTD parity test.
+- I also tried to promote `four_loop_stress.dot` to a production quartic
+  numerator parity test, but CFF generation itself rejected the manually chosen
+  numerator through the generalized degree-of-divergence guard before any LTD
+  comparison could be made. That probe is useful as a boundary check but not as
+  a retained LTD validation test.
+
+Verification so far:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs -p gammaloop-api --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p three-dimensional-reps ltd_generation --locked
+cargo test -p gammaloop-integration-tests ltd_ --locked
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_threshold_explicit_orientation_sum_inspect_matches_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_with_uv_subtraction_errors_cleanly --locked -- --nocapture
+cargo test -p gammalooprs step_iii --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [143.479s] 1048 tests run: 1048 passed, 125 skipped
+```
+
+Remaining structural boundary:
+
+- The local UV forest is still CFF-shaped internally. It stores denominator-only
+  local terms with orientation selectors, then introduces the numerator later
+  through simple `σ(edge) * OSE(edge)` substitutions. That is sufficient for the
+  old CFF path, but not for LTD because LTD requires each orientation's full
+  affine EMR-energy map at the exact point where the numerator is introduced.
+  Reusing the current denominator-only selector storage for LTD would silently
+  lose the LTD numerator energy substitutions, so `LTD + local UV from 3D
+  expansions` is permanently `NotSupported`.
+- The 4D-expanded local-UV route is the intended production UV path for LTD.
+  The implementation boundary is not the R-operation itself: GammaLoop already
+  has the 4D UV expansion machinery used by the integrated counterterm path.
+  The missing bridge is converting each expanded 4D local term into a generated
+  3D expression without losing its UV-limit denominator data. Expanded local
+  denominators may have UV masses such as `m_uv`, dropped external shifts, and
+  repeated powers that no longer correspond one-to-one to the original
+  production graph edge ids. The current `generate_3d_expr` bridge emits
+  `OSE(edge)` and spatial-vector references keyed only by graph edge id, so it
+  cannot yet represent an auxiliary UV denominator whose spatial momentum or
+  mass differs from the original edge with the same id.
+- The clean route is to add an intermediate representation for expanded 4D
+  local terms: numerator atom, denominator factors with signatures/masses/power
+  data, and explicit maps from generated denominator edges back to GammaLoop
+  spatial momentum expressions and OSE definitions. The representation can then
+  call `generate_3d_expr` on a parsed denominator graph and substitute the
+  generated auxiliary OSE/spatial references into GammaLoop atoms. Until that
+  bridge exists, `local_uv_cts_from_expanded_4d_integrands = true` now fails
+  loudly instead of falling back to the existing local-3D CFF forest.
+
+Bridge design note for expanded-4D local UV counterterms:
+
+- Local UV counterterms built from expanded 4D integrands must keep their
+  numerator in strict four dimensions. Unlike the integrated UV counterterm
+  path, this local branch must not call `gamma_simplify` or otherwise simplify
+  the numerator with integrated-counterterm algebra. Such simplification is
+  useful before feeding tensor integrals to Vakint, but it would change the
+  local numerator representation and can break pointwise cancellations against
+  the original integrand.
+- When `local_uv_cts_from_expanded_4d_integrands = true`, the local UV forest
+  must bypass the existing 3D-expanded local-UV path entirely. The bridge should
+  first build representation-neutral expanded 4D local terms, then apply the
+  selected 3D representation. This makes the three local inspect evaluations
+  `CFF + 3D-expanded UV`, `CFF + 4D-expanded UV`, and
+  `LTD + 4D-expanded UV` directly comparable at identical spatial sample
+  points.
+
+## 2026-05-03: Step III: final subgoal plan
+
+The final Step III subgoal is to implement local UV counterterms built from
+expanded 4D integrands and then apply the selected 3D representation to those
+terms. This is the missing bridge needed for `LTD` with UV subtraction. It is
+also useful for `CFF`, where it gives a representation-neutral validation path
+against the existing local-UV construction from 3D expansions.
+
+Design boundary:
+
+- `LTD + local UV from 3D expansions` remains permanently unsupported. The
+  current local-3D UV forest is intentionally CFF-shaped and stores
+  denominator-only selector terms before introducing numerator energies through
+  simple CFF OSE signs. LTD needs each orientation's full affine energy map at
+  numerator insertion time, so adapting that path would add maintenance cost
+  without a physics benefit.
+- `local_uv_cts_from_expanded_4d_integrands = true` must bypass the existing
+  local-3D UV path entirely for both CFF and LTD. The expanded-4D forest terms
+  are built first, and only then converted to the requested 3D representation.
+- Local expanded-4D UV numerators are strict four-dimensional objects. Unlike
+  the integrated UV path, this local branch must not call `gamma_simplify`,
+  tensor reduction, or Vakint topology canonicalization. Those operations are
+  appropriate for integrated counterterms but can change the local numerator
+  representation and break pointwise cancellations.
+
+Implementation plan:
+
+1. Add a local expanded-4D UV term representation in GammaLoop.
+   Each term should carry one numerator atom, a scalar prefactor, denominator
+   factor records, the compatible loop-momentum basis, and enough provenance to
+   report clear diagnostics. Denominator records should store source edge data
+   when available, endpoint data, momentum atom, momentum signature, mass-squared
+   atom, and integer power.
+
+2. Reuse the integrated UV topology-building strategy, but stop before Vakint.
+   The useful shared idea is to turn structured `GS.den(...)` factors into
+   propagator records with momenta, masses, powers, and a consistent loop basis.
+   The local bridge must not inherit Vakint-only simplifications, same-mass
+   contractions, tensor reduction, or component-merging steps unless a later
+   proof and regression tests justify them.
+
+3. Build one possibly disconnected parsed denominator graph per expanded local
+   term. The numerator remains global to that term because disconnected
+   denominator components can still carry numerator factors with open indices
+   contracted across components. If the 3D generator needs component
+   factorization internally, implement that inside `three-dimensional-reps` and
+   recombine component orientations, surfaces, prefactors, half-edge factors,
+   and energy maps into one global `ThreeDExpression`.
+
+4. Add a local 3D source/context for auxiliary denominator edges. The generated
+   auxiliary edge ids must map back to GammaLoop spatial momentum expressions,
+   OSE definitions built from the denominator mass-squared atom, and loop-energy
+   symbols in the local loop basis. This should generalize the existing
+   production `GraphThreeDSource` bridge without requiring a full production
+   `Graph` for auxiliary UV denominators.
+
+5. Generalize GammaLoop orientation substitution over a context instead of only
+   `Graph`. Production graphs and expanded local terms should share the same
+   code path for applying `OrientationExpression` energy maps to numerator
+   atoms. This is where CFF and LTD remain representation-specific only through
+   the generated orientation data.
+
+6. Generate the selected 3D representation for each local term. CFF and LTD call
+   `generate_3d_expr` with the same parsed denominator graph and automatic
+   numerator energy-degree bounds computed in the local auxiliary-edge context.
+   LTD remains restricted to `explicit_orientation_sum_only = true`; non-trivial
+   orientation patterns in explicit-sum mode still fail cleanly.
+
+7. Assemble the expanded-4D UV forest without CFF selectors. The final local
+   forest terms should be ordinary parametric atoms ready for evaluator
+   construction. The existing integrated finite insertion remains
+   representation-independent, but its reduced-factor localization must use this
+   new bridge when the expanded-4D mode is selected rather than calling the
+   CFF-shaped `localized_integrated_reduced_factor`.
+
+Validation plan:
+
+- First add unit tests for extracting expanded local denominator records:
+  original mass versus `m_uv`, repeated powers, strict `dim = 4`, absence of
+  gamma simplification, and disconnected denominator components with a single
+  global numerator.
+- Add `three-dimensional-reps` tests for disconnected parsed graphs or the
+  internal component-product recombination needed by the local bridge.
+- Add local inspect comparisons at identical spatial sample points for the
+  three UV modes:
+  `CFF + local UV from 3D expansions`,
+  `CFF + local UV from expanded 4D integrands`, and
+  `LTD + local UV from expanded 4D integrands`.
+- Extend the existing LTD/CFF local inspect matrix where runtime permits:
+  scalar UV amplitudes, threshold plus UV, external-tree loop cases, pure-tree
+  non-regressions, loopful scalar cross sections without repeated propagators,
+  and manually written quartic numerator cases.
+- The final validation target remains `just test_gammaloop_detailed`.
+
+## 2026-05-03: Step III final subgoal implementation
+
+Implemented the expanded-4D local-UV bridge and wired it into the production UV
+forest for both `CFF` and `LTD`.
+
+Main implementation points:
+
+- Added `uv::approx::expanded_4d`, which extracts strict-4D expanded local UV
+  terms from `GS.den(edge,momentum,mass,full_denominator)^-n` factors, builds a
+  parsed auxiliary denominator graph, calls `generate_3d_expr` with either CFF
+  or LTD, and maps the generated residues back to GammaLoop atoms.
+- The bridge computes numerator energy-degree bounds from the local expanded
+  numerator and the active denominator edges before calling `generate_3d_expr`.
+  This keeps the automatic EMR power-shape detection in GammaLoop rather than in
+  the 3Drep CLI.
+- The local expanded-4D path keeps numerators in strict four dimensions and
+  does not call `gamma_simplify` or Vakint tensor simplification. This preserves
+  local pointwise cancellations.
+- `local_uv_cts_from_expanded_4d_integrands = true` now bypasses the old
+  local-3D UV path entirely. CFF may still use either local-3D UV or
+  expanded-4D UV; LTD requires expanded-4D UV whenever UV subtraction is enabled.
+- `LTD + local UV from 3D expansions` remains permanently `NotSupported`.
+  There is no maintained fallback to the CFF-shaped local-3D UV forest.
+- The finite integrated UV insertion now also goes through the expanded-4D
+  bridge in this mode. Denominator-free finite terms are normalized in CFF
+  explicit-orientation-sum mode so the later explicit orientation sum does not
+  replicate orientation-independent constants. Denominator-free terms are also
+  dropped when a cut/threshold residue selector is active, since constants have
+  no E-surface residue.
+- Fixed the UV-rescaled denominator metadata: after the UV expansion the
+  `GS.den` mass entry is `m_uv^2`, matching the denominator actually seen by
+  the local 3D bridge. The Vakint integrated path remains unaffected because it
+  substitutes the full denominator expression separately.
+- Removed the production guard that rejected
+  `local_uv_cts_from_expanded_4d_integrands = true`, including the old
+  restriction that it only made sense in explicit-orientation-sum mode. The CFF
+  expanded-4D path is tested both with and without explicit orientation summing.
+
+Tracked LTD/CFF local inspect comparisons:
+
+| test | coverage | expanded-4D local UV CT? |
+| --- | --- | --- |
+| `ltd_bare_explicit_orientation_sum_inspect_matches_cff` | scalar triangle/box amplitudes, UV and thresholds off | no |
+| `ltd_threshold_explicit_orientation_sum_inspect_matches_cff` | scalar triangle/box amplitudes with threshold subtraction | no |
+| `ltd_bare_scalar_cross_section_inspect_matches_cff` | generated scalar cross section, UV and thresholds off | no |
+| `ltd_scalar_cross_section_local_uv_from_expanded_4d_inspect_matches_cff` | generated scalar cross section with UV subtraction through the expanded-4D local UV path | yes, cross-section LU-residue path |
+| `ltd_bare_external_tree_inspects_match_cff` | imported external-tree loop graphs and pure-tree passthrough | no |
+| `ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff` | imported scalar one-loop topologies with quartic numerator dot products, including a repeated-propagator case | no |
+| `local_uv_from_expanded_4d_inspects_match_cff_and_ltd` | scalar triangle/box, compares `CFF + 3D UV`, `CFF + 4D UV`, and `LTD + 4D UV` | bridge/plumbing coverage; not a strongly divergent UV topology |
+| `divergent_bubble_local_uv_from_expanded_4d_inspects_match_cff_and_ltd` | divergent scalar bubble, compares `CFF + 3D UV`, `CFF + 4D UV`, and `LTD + 4D UV` | yes, nonzero local UV subtraction |
+| `divergent_bubble_integrated_uv_from_expanded_4d_inspects_match_cff_and_ltd` | divergent scalar bubble with finite integrated UV insertion, same three-way comparison | yes, local UV plus finite integrated UV insertion |
+| `cff_local_uv_from_expanded_4d_works_without_explicit_orientation_sum` | divergent scalar bubble in CFF sampled-orientation generation mode | yes, CFF-only non-explicit mode |
+| `ltd_with_uv_subtraction_errors_cleanly` | guard that LTD with the local-3D UV path fails cleanly | not a parity test |
+
+Verification:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo test -p gammaloop-integration-tests local_uv --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_ --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_scalar_cross_section_local_uv_from_expanded_4d_inspect_matches_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests scalar_bubble_inspect --locked -- --nocapture
+cargo test -p gammalooprs step_iii --locked
+cargo test -p gammalooprs local_uv_4d_source_is_supported_without_explicit_orientation_sum_mode --locked
+just test_gammaloop_detailed
+
+Summary [146.717s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal review pass
+
+Performed a final cleanup/review pass over the expanded-4D local-UV bridge and
+the LTD/CFF inspect coverage.
+
+Findings and small cleanups:
+
+- Rechecked the new `uv::approx::expanded_4d` path for generic-precision
+  downcasts. The bridge works at the symbolic `Atom` level and does not
+  introduce `from_f64`, `std::f64` constants, or lossy numeric casts in the
+  hot path. Integer atoms are introduced only for exact combinatoric factors
+  such as the explicit-orientation normalization.
+- Replaced new-path invariant panics in expanded-4D UV numerator extraction and
+  threshold-residue selection with propagated `Result` errors carrying context.
+  Also removed a small fixed-size spatial-sum `expect` by constructing the
+  three spatial terms explicitly.
+- Reviewed whether the quotient-node construction in the expanded-4D parsed
+  source should be moved to an existing `linnet` helper. `linnet` has generic
+  connected-component and union-find utilities, but the current local operation
+  is a small node quotient over a GammaLoop `SubGraphLike` plus denominator-edge
+  metadata. Reusing the generic helpers would not currently reduce complexity
+  enough to justify widening the change.
+- Tried to add a manually-written quartic-numerator scalar forward-scattering
+  cross-section fixture. The straightforward imported forward graph generated
+  valid CFF/LTD expressions, but the full local cross-section sum was zero and
+  several cut kinematics were intentionally outside support at the sampled
+  point. Attempting to isolate one nonzero contribution through
+  `general.additional_param_values` exposed an unrelated runtime indexing panic
+  in the existing parameter builder. The fragile fixture was not kept; the
+  retained coverage remains the generated scalar cross-section local-UV test
+  plus the imported quartic-numerator scalar amplitude tests.
+
+Additional focused verification in this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [153.647s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal repeated review pass
+
+Performed another global review pass after the queued follow-up request.
+
+Additional cleanup:
+
+- Converted the remaining new expanded-4D finite integrated UV epsilon-series
+  invariant panic into a contextual propagated error.
+- Converted UV-forest control-flow invariants touched by the expanded-4D local
+  UV routing from panics/asserts into `Result` errors. This includes missing
+  parent simple approximations, missing parent local-3D approximations, and
+  unsupported union nodes. The successful CFF/LTD behavior is unchanged, but
+  failures now point at the relevant forest node instead of aborting with a
+  generic panic.
+
+Review notes:
+
+- Re-ran the precision scan over the changed UV, CFF, and process-generation
+  files. The expanded-4D bridge still does not introduce `from_f64`,
+  `std::f64`, or lossy generic-precision downcasts. Remaining hits are existing
+  settings/test/output/tropical-sampler boundaries outside this subgoal.
+- Rechecked the retained local-inspect coverage. The LTD/CFF parity assertions
+  remain in place for generated scalar amplitudes, scalar cross sections,
+  external-tree and pure-tree imports, imported quartic numerator scalar
+  amplitudes, and the expanded-4D local-UV bridge including the divergent bubble
+  and finite integrated UV insertion cases.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [153.994s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal final queued review pass
+
+Performed one more queued review pass over the active expanded-4D UV forest
+path.
+
+Additional cleanup:
+
+- Replaced the remaining active `unwrap()`s in `Forest::orientation_parametric_expr`
+  with contextual errors. Missing simple approximations, missing final
+  integrands, and inconsistent residue-integrand counts now report the
+  corresponding UV-forest node instead of panicking.
+- Kept this pass intentionally narrow: the remaining panic/unwrap hits in the
+  touched UV modules are either pre-existing local-3D/integrated-UV invariant
+  paths, tests, or commented diagnostic code. They were not mixed into this
+  subgoal to avoid broad unrelated refactoring after the LTD/expanded-4D path
+  was already validated.
+
+Review notes:
+
+- Rechecked the generic-precision scan. No new `from_f64`, `std::f64`, or lossy
+  downcast was introduced by the expanded-4D local-UV bridge or the UV-forest
+  cleanup.
+- Reconfirmed the local-inspect LTD/CFF comparison coverage, including the
+  retained imported quartic-numerator scalar amplitude test and the generated
+  scalar cross-section test through expanded-4D local UV.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [152.078s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal queued symmetry review pass
+
+Performed another queued review pass over the UV-forest aggregation path.
+
+Additional cleanup:
+
+- Tightened `Forest::orientation_parametric_expr` so every UV-forest node must
+  produce exactly the same residue-integrand shape before summing. The previous
+  cleanup reported nodes that produced too many residue terms, but a node
+  producing too few terms would still have left stale entries from earlier
+  nodes. This is now a symmetric contextual error.
+
+Review notes:
+
+- Rechecked precision-sensitive code in the expanded-4D bridge and UV-forest
+  path. No `from_f64`, `std::f64`, or lossy generic-precision downcast was
+  introduced. The only hit in the touched production files remains the
+  pre-existing tropical-sampler `f64` weight outside this subgoal.
+- The retained LTD/CFF local-inspect comparisons remain unchanged, including
+  expanded-4D local UV for scalar amplitudes/cross sections and quartic
+  numerator imported scalar amplitude tests.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [149.831s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal queued coverage audit pass
+
+Performed another queued review pass focused on the remaining coverage request
+and the latest UV-forest residue-shape cleanup.
+
+Review notes:
+
+- Re-audited local inspect tests across `tests/tests/test_runs`. The retained
+  LTD/CFF parity coverage for this subgoal remains in `inspect.rs`, covering
+  generated scalar amplitudes, generated scalar cross sections, external-tree
+  imports, pure-tree passthrough, imported quartic-numerator scalar amplitudes,
+  and expanded-4D local UV including the divergent bubble and finite integrated
+  UV insertion cases.
+- Rechecked whether a robust manually-written quartic-numerator scalar
+  cross-section import could be added in this pass. Imported cross sections
+  require initial-state-cut graph structure, and the simple available scalar
+  forward-scattering fixtures are not clean non-repeated quartic numerator
+  checks. The earlier attempted fixture remains rejected for the reasons logged
+  above; adding a brittle or zero-valued test would not improve confidence.
+- Rechecked precision-sensitive code in the expanded-4D bridge and UV-forest
+  path. No `from_f64`, `std::f64`, or lossy generic-precision downcast was
+  introduced. The remaining production hit is the pre-existing tropical-sampler
+  `f64` weight outside this subgoal.
+
+Validation after this pass:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [147.012s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-03: Step III final subgoal completion audit
+
+Performed a final implementation-status pass before committing the LTD and
+expanded-4D local-UV support.
+
+Additional cleanup:
+
+- Shared the finite integrated UV extraction helper between the existing
+  local-3D UV path and the expanded-4D local-UV path. This removes duplicated
+  epsilon-series extraction logic and makes shape/series failures contextual
+  `Result` errors instead of panics.
+- Tightened the local-3D UV path touched by this work so missing dependent
+  local approximations, mismatched residue-integrand counts, and non-single
+  graph numerators now fail with explicit context.
+- Made expanded-4D threshold-residue selection reject non-singleton threshold
+  residue results explicitly, instead of silently taking the last expression
+  with `pop()`.
+- Reduced one unnecessary symbolic clone by exposing expanded-4D approximation
+  terms as a borrowed slice.
+
+Implementation status:
+
+- The old `generate_cff` production route has been retired from `gammalooprs`.
+  Gammaloop production generation now routes through `generate_3d_expr` /
+  `generate_3d_expression` with automatic energy-power detection for the
+  numerator.
+- `global.3d_representation = "CFF" | "LTD"` is implemented, with LTD allowed
+  only in explicit orientation-sum generation mode.
+- CFF behavior is preserved for standard sampled-orientation generation,
+  explicit orientation-sum generation, local UV from 3D expansions, and local
+  UV from expanded 4D integrands.
+- LTD supports the original integrand and the representation-neutral expanded
+  4D local-UV construction. LTD with local UV from 3D expansions is explicitly
+  unsupported by design.
+- External tree and initial-state-cut structures are handled by the generalized
+  3D-expression path rather than a legacy CFF fallback.
+
+Remaining known limitations:
+
+- LTD threshold subtraction for cross-section supergraphs is still not
+  implemented. Amplitude threshold-subtraction inspect parity is covered.
+- A robust manually-written quartic-numerator scalar cross-section fixture was
+  not retained; the available simple imported forward-scattering attempts were
+  either zero-valued or relied on unrelated fragile runtime-parameter paths.
+  Quartic numerator coverage is retained for imported scalar amplitude
+  topologies, including a repeated-propagator case.
+- The expanded-4D local-UV bridge is correct under the tested cases but is still
+  structurally dense. A future cleanup should split extraction, parsed-source
+  construction, residue projection, and parametric-atom reconstruction into
+  smaller units.
+
+Final validation:
+
+```text
+cargo fmt --all
+cargo check -p gammalooprs --tests --locked
+cargo clippy -p gammalooprs -p gammaloop-api --tests --locked -- -D warnings
+cargo test -p gammaloop-integration-tests expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests explicit_orientation_sum_inspect_matches_standard_cff --locked -- --nocapture
+just test_gammaloop_detailed
+
+Summary [150.212s] 1054 tests run: 1054 passed, 125 skipped
+```
+
+## 2026-05-04: Step III cross-section LTD completion plan
+
+The remaining LTD production work should now be anchored on generated scalar
+forward-scattering cross sections rather than imported DOT graphs. The
+prepared scratch card in `IGNORE/run_cross_section_test.toml` gives three
+small but representative generated cross-section fixtures:
+
+- `GL0`: one-loop bubble-like forward-scattering graph with one selected
+  Cutkosky cut.
+- `GL2`: two-loop double-triangle graph with two selected Cutkosky cuts.
+- `GL06`: three-loop triangle-box-triangle graph with three selected Cutkosky
+  cuts.
+
+These must be generated with `generate xs ... --select-graphs ...` in the tests
+so that the final-state process definition filters the active Cutkosky cuts
+correctly. Saved DOT files may be used for debugging edge signatures and
+momentum decompositions, but DOT imports should not be the primary test path.
+`display integrand` should be used while developing to inspect cut groups,
+loop-momentum bases, threshold surfaces, raised cuts, and repeated-propagator
+structure.
+
+Planned implementation steps:
+
+1. Establish generated-CFF baselines for the three selected no-extra-numerator
+   fixtures against the main-branch local inspect output in
+   `IGNORE/cross_section_tests_output_from_main.txt`. This validates that the
+   test harness reproduces the intended forward-scattering graphs and cut
+   filtering.
+2. Implement LTD threshold subtraction for cross-section supergraphs by
+   generalizing the existing CFF threshold-counterterm path. The existing
+   left/right threshold enumeration, raised-cut grouping, skip-threshold logic,
+   and event additional-weight bookkeeping should remain the authority. The LTD
+   path should select only physical E-surface residues from the generated LTD
+   expression, ignore H-surfaces, and remain restricted to
+   `explicit_orientation_sum_only = true`.
+3. Compare local inspect results across generation scenarios, not integrated
+   results. The core matrix is CFF/LTD with threshold subtraction on/off, UV
+   subtraction off, then CFF local-3D UV, CFF expanded-4D UV, and LTD
+   expanded-4D UV where the graph supports it. The comparison must include the
+   rich event output: event-group structure, cut ids, event weights,
+   `Original`, `ThresholdCounterterm { subset_index }`, and
+   `FullMultiplicativeFactor`.
+4. Add higher-power numerator cross-section coverage using
+   `--global-prefactor-num`. The prepared quadratic/cubic/quartic examples are
+   starting points, but the numerator strings may be changed to useful dot
+   products or edge-energy powers. Validate nontrivially by generating paired
+   numerator variants related by edge-energy conservation and comparing local
+   inspect results and rich event weights exactly within numerical tolerance.
+5. Explore additional generated scalar graphs if useful. If a candidate hits
+   the current `union of disconnected UVs are not supported` limitation, skip it
+   for this subgoal. If a graph exposes raised threshold subtraction, do not fix
+   raised thresholds here; either skip threshold subtraction for that graph or
+   use it only with thresholds disabled. Repeated-propagator cases may still be
+   useful with threshold subtraction disabled to compare CFF/LTD and UV modes.
+6. Optionally try `profile uv` or `profile bulk` as diagnostics only. They are
+   not required for this Step III completion; local inspect consistency is the
+   target.
+7. After behavior is pinned by tests, do only a focused cleanup of the
+   expanded-4D UV bridge if it improves clarity without broad churn. The
+   desired eventual split remains extraction, auxiliary source construction,
+   residue projection, and atom reconstruction.
+
+Implementation status for the first part:
+
+- The cross-section supergraph guard blocking `global.3d_representation = LTD`
+  together with threshold subtraction has been removed. LTD remains restricted
+  to explicit orientation sums, and `LTD + local UV from 3D expansions` still
+  errors cleanly; UV-subtracted LTD cross sections must use
+  `local_uv_cts_from_expanded_4d_integrands = true`.
+- Threshold counterterm generation now receives the selected 3D representation
+  instead of hard-coding CFF. The CFF path keeps the previous explicit
+  orientation summation behavior, while LTD keeps the representation-native
+  explicitly summed expression and ignores orientation-specific selectors.
+- The no-UV LTD original-integrand path and the forest-based LTD UV path now
+  share the same forward-scattering LU residue parity normalization. The
+  normalization is now expressed directly as the global sign convention used by
+  the generalized CFF generator, namely
+  `(-1)^(L-1+duplicate_signature_excess)` after removing denominator edges that
+  are preserved as 4D external-tree factors. This replaces the earlier
+  diagnostic cut-orientation and raised-pole sign branches with a single
+  representation-convention factor, keeping generated LTD local inspect output
+  aligned with the CFF reference for the selected one-, two-, and three-loop
+  scalar forward-scattering graphs and for the retained repeated-propagator
+  GL00 and GL10-GL13 fixtures.
+- The expanded-4D local-UV route is selected for LTD UV subtraction, avoiding
+  the unsupported LTD local-UV-from-3D-expansion path. CFF without UV
+  subtraction no longer changes behavior just because the expanded-4D UV
+  setting is present.
+- The generated scalar forward-scattering integration tests now build the three
+  selected fixtures directly through `generate xs ... --select-graphs ...`:
+  `GL0`, `GL2`, and `GL06`. They compare CFF and LTD local inspect results with
+  rich event output for threshold subtraction only, and for threshold
+  subtraction plus expanded-4D local UV. The comparison checks the integrand
+  result, Jacobian, integrator weight, event-group sizes, graph/cut/orientation
+  metadata, event weights, and additional weights including threshold
+  counterterms.
+- The generation Rayon pool now uses a larger worker stack. The three-loop
+  expanded-4D UV test builds substantially larger symbolic atoms and overflowed
+  the default worker stack before this change; the stack-size adjustment keeps
+  this as a normal generated-integrand test instead of special-casing the test
+  harness.
+
+Targeted validation run while implementing this first part:
+
+```text
+cargo fmt
+cargo check -p gammalooprs --tests --locked
+cargo check -p gammaloop-api --tests --locked
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_forward_cross_section_threshold_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_with_uv_subtraction_errors_cleanly --locked -- --nocapture
+```
+
+Follow-up completion work:
+
+- The automatic numerator energy-power analysis now first canonicalizes all EMR
+  momenta into the graph loop-momentum basis and external variables. This makes
+  energy-conservation-equivalent numerator forms produce the same detected
+  energy-power bounds instead of overestimating the shape from a noncanonical
+  edge choice.
+- The generated cross-section numerator passed to `generate_3d_expr` is
+  canonicalized with the same momentum replacement. This is especially
+  important for forward-scattering graphs with initial-state cut edges: a
+  numerator written with a cut-edge momentum and an equivalent numerator written
+  with external/loop-basis momenta now reach the 3D-representation generator in
+  the same physical form.
+- The expanded-4D local-UV bridge has been split into explicit projection,
+  source-expression generation, and residue-accumulation helpers. The refactor
+  keeps the previous algebraic behavior but makes the path easier to audit:
+  each forest term is either ignored as zero, projected into representation
+  residues, or accumulated with a checked residue-count match.
+- Added a generated scalar forward-scattering higher-power fixture based on the
+  selected two-loop `GL2` graph. It compares a quartic external numerator
+  `((Q(0).Q(0)))^2` against the energy-conservation-equivalent traded form
+  `((Q(1)+Q(2)).(Q(1)+Q(2)))^2`, using the graph relation
+  `Q(1)+Q(2)=-P(0)`. The test checks that CFF and LTD agree locally, and that
+  the LTD traded numerator agrees with the direct CFF reference, including the
+  generated event groups and event weights. Runtime threshold subtraction is
+  disabled in this fixture so the test isolates the higher-power numerator and
+  automatic-bound machinery.
+- A three-loop `GL06` traded-quartic variant was useful as a manual diagnostic
+  but was not retained as a regression test because generation is substantially
+  slower. The retained `GL2` fixture still exercises generated
+  forward-scattering cuts, multiple loop momenta, and a quartic numerator while
+  keeping the integration-test suite practical.
+- Production CFF generation now keeps automatic numerator energy-degree bounds
+  out of the default `uniform_numerator_sampling_scale = none` path. This
+  preserves the previous CFF behavior for ordinary production generation while
+  still enabling the generalized bounded high-power machinery when the user
+  explicitly selects `all` or `beyond_quadratic`. This avoids accidentally
+  routing default CFF jobs through unsupported nonconvergent generalized-CFF
+  sectors.
+- The 3Drep aa -> aa backend/cache diagnostics now keep the two-loop DoubleBox
+  as a structural parsed-graph check only. The evaluator backend and
+  cache-reuse assertions are restricted to the one-loop Box graph because the
+  imported DoubleBox with `beyond_quadratic` automatic bounds is a
+  nonconvergent diagnostic sector, not a required evaluator-cache behavior.
+- The expanded-4D scalar-bubble inspect fixture uses summed graph sampling
+  again. The expanded-4D UV equivalence tests should compare UV construction
+  choices, not require an unrelated discrete graph-group coordinate.
+
+Follow-up validation:
+
+```text
+cargo fmt
+cargo check -p gammalooprs --tests --locked
+cargo check -p gammaloop-api --tests --locked
+cargo test -p gammaloop-integration-tests --test test_runs expanded_4d --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_forward_cross_section --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_bare_quartic_numerator_imported_scalar_inspects_match_cff --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches --locked -- --nocapture
+just test_gammaloop
+```
+
+Current targeted LTD cross-section tests:
+
+| test | coverage | rich event-output comparison? | expanded-4D local UV CT? |
+| --- | --- | --- | --- |
+| `ltd_generated_forward_cross_section_threshold_inspects_match_cff` | Generated `GL0`, `GL2`, and `GL06` scalar forward-scattering graphs with threshold subtraction | yes | no |
+| `ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff` | Same generated graphs with threshold subtraction and UV subtraction through the expanded-4D local-UV path | yes | yes |
+| `ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade` | Generated `GL2` scalar forward-scattering graph with quartic numerator and an energy-conservation-equivalent traded numerator | yes | no |
+| `ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade` | Generated repeated-propagator `GL10` scalar forward-scattering graph with a quartic numerator. The CFF reference uses the external-momentum form, while LTD is checked both on that form and on an equivalent `Q(1)+Q(2)` energy-conservation trade that forces quartic EMR-energy dependence through the repeated topology | yes | no |
+| `ltd_generated_gl00_triple_repeated_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL00` topology with the original `scalar_0 scalar_0` final-state selection, triple repeated propagators, and second-order raised-cut derivatives, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl11_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL11` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl10_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL10` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl10_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL10` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl11_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL11` topology with the original `scalar_0 scalar_0` final-state selection, three raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl12_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL12` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl12_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL12` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl13_simple_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL13` topology with the `scalar_0 scalar_0 scalar_0` final-state selection, simple Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_generated_gl13_raised_cut_inspect_matches_cff` | Generated scalar forward-scattering `GL13` topology with the original `scalar_0 scalar_0` final-state selection, raised Cutkosky cuts, UV disabled, and threshold subtraction disabled | yes | no |
+| `ltd_with_uv_subtraction_errors_cleanly` | Guard that LTD with UV subtraction rejects unsupported local-UV-from-3D-expansion mode | n/a | n/a |
+
+Path-c repeated-propagator progress:
+
+- Repeated-topology scalar forward-scattering coverage now includes a retained
+  `GL11` and `GL10` simple-cut local inspect comparisons between CFF and LTD.
+  Both tests use the `scalar_0 scalar_0 scalar_0` final-state selection so that
+  the selected topologies avoid raised Cutkosky cuts while still exercising the
+  new forward-scattering LTD path on repeated generated fixtures.
+- The `GL10` fixture exposed a representation issue before this pass:
+  canonicalizing E-surface signs in a branching denominator tree can produce
+  different signs on different branches. This is now handled generically by
+  splitting a generated variant into sign-homogeneous denominator-tree variants
+  during the GammaLoop surface conversion step.
+- A direct diagnostic reconstructed the generated `GL10` simple-cut parsed
+  graph and evaluated the core `three-dimensional-reps` CFF and LTD formulas
+  at an arbitrary f64 point. The two core expressions agreed at the expected
+  numerical level, which ruled out the repeated-channel LTD kernel as the
+  immediate source of the GammaLoop mismatch and redirected the search to the
+  GammaLoop surface conversion/cache layer.
+- The concrete conversion bug was in `Hsurface` equality: `to_atom()` includes
+  the `external_shift`, but `PartialEq` only compared the positive and negative
+  energy edge lists. Generated H-surfaces with different external shifts could
+  therefore share one cache entry and reuse the wrong atom in the converted
+  GammaLoop expression. `Hsurface::eq` now includes `external_shift`, fixing the
+  retained `GL10` simple-cut and `GL12` raised-cut CFF/LTD inspect comparisons.
+- The original `scalar_0 scalar_0` final-state selection for `GL10`-`GL13`
+  exposes raised Cutkosky cuts, e.g. `GL10` has `(1,3)^2` and `(1,2)^2`, while
+  `GL11` has cubic raised cuts. The first blocker there was that Cutkosky cuts
+  were mapped to generated E-surfaces before repeated-edge normalization, so a
+  cut such as `(1,3)-P` failed to resolve even though the generated expression
+  contained the normalized representative `(1,2)-P`. Cutkosky map resolution
+  now uses the same repeated-edge normalization as raised E-surface detection.
+  The repeated-edge groups are computed once, generated E-surfaces are
+  normalized once for matching, and `RaisedCutData` now uses an
+  `EsurfaceID -> Vec<CutId>` multimap so several Cutkosky cuts can share one
+  normalized generated E-surface.
+- The retained `GL10`, `GL11`, `GL12`, and `GL13` raised-cut inspect tests verify that
+  this normalized Cutkosky bridge plus the corrected H-surface cache equality
+  give identical local CFF/LTD rich event output for raised repeated-edge cuts.
+  The `GL11` original two-particle final-state fixture is particularly useful
+  here because it exposes three cuts and requires second-order `t` derivatives
+  in the raised-cut construction.
+- The simple-cut repeated-topology sign diagnostics are now resolved without a
+  cut-specific sign rule. The observed GL0, GL10, GL11, GL12, GL13, and GL00
+  signs are all reproduced by the same generalized-CFF global sign exponent
+  `L-1+duplicate_signature_excess`, with preserved 4D external-tree
+  denominator edges excluded from the duplicate-signature count. This removes
+  the earlier diagnostic representative-cut, raised-pole, and simple-cut
+  parity factors and makes the CFF/LTD relative sign a property of the chosen
+  representation convention rather than of an individual Cutkosky cut.
+- Repeated LTD numerator samples now reapply the initial-state cut edge
+  energy-expression override after solving edge energies from the loop-basis
+  targets. This is the same forward-scattering convention required elsewhere:
+  initial-state cut edges are external half-edge data for the 3D representation,
+  not ordinary vacuum-loop energy variables. This did not change the remaining
+  GL12/GL13 mismatch, but it removes a structurally inconsistent path from the
+  repeated LTD builder.
+- Spectator repeated channels in `RepeatedLtdBuilder` are now expanded as the
+  explicit product over member propagators. Only repeated channels that are
+  part of the residue basis keep the confluent repeated-pole treatment.
+  This preserves the member-level energy expressions and derivative rows for
+  spectators instead of replacing them by a representative edge with an
+  aggregate power. The change is structurally cleaner, especially for repeated
+  groups whose members have opposite signature signs, but the GL10 simple-cut
+  and GL12/GL13 raised-cut values are unchanged. This rules out the
+  representative-edge spectator denominator as the sole source of the mismatch.
+- Temporarily skipping all repeated-basis residues in the GL10 simple-cut LTD
+  probe also left the LTD value unchanged. In contrast, temporarily dropping
+  the repeated spectator denominator factors changed the value from
+  `+1.1441280845305029e-9` to `+8.2864154007900689e-10`. The repeated
+  spectator factors therefore participate in the failing local value, but the
+  mismatch is not explained by the previously collapsed representative-edge
+  implementation alone.
+- A controlled diagnostic that forced the repeated LTD builder to use its
+  affine numerator path instead of the bounded-degree path left the `GL10`
+  simple-cut LTD value unchanged. This predated the H-surface equality fix and
+  is retained as a diagnostic that the old mismatch was not merely a bounded
+  numerator-sampling dispatch issue.
+- A repeated-topology quartic-numerator fixture is now retained. The direct
+  numerator uses `Q(0)^2` squared, which is external from the 3D-generation
+  point of view and therefore gives a clean CFF reference. The LTD side is
+  checked both on that same numerator and on the equivalent
+  `(Q(1)+Q(2))^2` squared form, forcing quartic EMR-energy dependence through
+  the repeated generated `GL10` topology. An attempted CFF generation of the
+  traded repeated quartic numerator still hits the current generalized-CFF
+  higher-energy-sector support boundary, so the retained validation uses the
+  external CFF reference plus the LTD energy-conservation trade.
+- During the final path-c cleanup pass, the denominator-tree reconstruction
+  helpers were tightened to preserve strict-prefix branches by installing an
+  explicit terminal `Unit` leaf. This affects both the GammaLoop sign-splitting
+  remapper and the mirrored helper in `three-dimensional-reps`, preventing a
+  latent loss of one branch when one remapped denominator chain is a prefix of
+  another.
+
+Path-c validation during this pass:
+
+```text
+cargo fmt
+cargo check -p gammalooprs --tests --locked
+cargo test -p three-dimensional-reps --lib denominator_tree --locked -- --nocapture
+cargo test -p gammaloop-integration-tests --test test_runs ltd_generated_gl --locked -- --nocapture
+```
+
+Additional repeated cross-section revisit validation:
+
+```text
+cargo fmt
+cargo check
+cargo test -p gammaloop-integration-tests ltd_generated_forward_cross_section_threshold_inspects_match_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl1 -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl12_simple_cut_inspect_matches_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl00_triple_repeated_cut_inspect_matches_cff -- --nocapture
+cargo test -p gammaloop-integration-tests ltd_generated_gl -- --nocapture
+```
+
+Additional manual probes:
+
+```text
+IGNORE/probe_gl10_simple_inspect.toml with the repeated-LTD affine path forced
+IGNORE/probe_GL12_CFF_raised_inspect.toml
+IGNORE/probe_GL12_LTD_raised_inspect.toml
+IGNORE/probe_GL13_CFF_raised_inspect.toml
+IGNORE/probe_GL13_LTD_raised_inspect.toml
+```
+
+The retained post-cleanup repeated probes now agree:
+
+```text
+GL10 simple cut:
+  CFF integrand = +5.2977428778665059e-10
+  LTD integrand = +5.2977428778665659e-10
+
+GL12 raised cut:
+  CFF integrand = +3.1147472899130842e-14
+  LTD integrand = +3.1147472900192478e-14
+
+GL13 raised cut:
+  CFF integrand = -4.9561763361297923e-15
+  LTD integrand = -4.9561763361293142e-15
+```
+
+## 2026-05-04: generalized 3Drep bounded-CFF parity completion
+
+- Investigated the remaining one-loop box discrepancies in the generalized CFF
+  higher-energy-sector scan. The simplest failing Rust cases were already
+  inconsistent for the ordinary CFF/LTD box with explicit external bookkeeping
+  half-edges, while the Python prototype in
+  `IGNORE/generalised_ltd/generalised_ltd.py` agreed with LTD to high precision
+  for the same kinematics and numerators. This showed that the issue was an
+  implementation bug, not a limitation of the generalized construction in
+  `docs/3Dreps/generalised_ltd.tex`.
+- The CFF recursion now derives ordinary external-energy shifts from internal
+  momentum labels, matching the Python prototype. Explicit dashed external
+  half-edges are bookkeeping data and must not be counted independently in the
+  CFF surface shifts. Initial-state cut edges remain a separate contribution
+  because they represent forward-scattering externalized cut data rather than
+  ordinary dashed bookkeeping edges.
+- The bounded known-factor CFF recursion now only falls back to the generalized
+  polynomial normal-form completion when remapping known factors into a lower
+  sector genuinely fails. For ordinary high powers, including quintic/sextic
+  one-loop box contacts, the recursive finite-pole/contact construction is the
+  cleaner path and matches the Python reference. This avoids the earlier
+  over-eager normal-form expansion that produced many extra branches and wrong
+  values in the degree-five and degree-six scan.
+- The broad old-Python parity matrix is now a real assertion rather than a
+  status-only report: all 310 cases must pass. The matrix covers imported
+  3Drep fixtures plus every UV-convergent one-loop box monomial bound with
+  total energy degree up to six, including lower-sector quintic/sextic and
+  quartic-plus-lower terminal-contact cases.
+- Added a dedicated `3Drep test-cff-ltd` CLI integration test for representative
+  lower-contact high-power box numerators. The retained cases are:
+  `single_quartic` (`d_0=4`), `single_quintic` (`d_3=5`),
+  `single_sextic` (`d_0=6`), `cubic_quadratic_lower_contact`
+  (`d_0=3,d_1=2`), `quadratic_linear_cubic_lower_contact`
+  (`d_0=2,d_1=1,d_3=3`), `quartic_linear_terminal`
+  (`d_2=4,d_3=1`), and `quartic_quadratic_terminal` (`d_0=4,d_1=2`).
+  Each test imports a DOT graph with a concrete numerator, lets GammaLoop
+  auto-detect the energy caps, and compares direct CFF/LTD/PureLTD local
+  evaluations through the public CLI manifest path. A cubic-cubic box terminal
+  case was deliberately left to the broad internal matrix instead of the normal
+  CLI test because the public evaluator path is too slow for regular
+  integration runs.
+- Added explicit core CFF/LTD eval regressions for high-power one-loop
+  hexagons. The plain one-loop box, one-loop pentagon, and compact sunrise
+  attempts are rejected by the UV convergence guard with a non-vanishing residue
+  at infinity; the box rejection is now a fast explicit negative regression. A
+  one-loop decagon is convergent but too slow for a normal regression.
+  The retained minimal convergent double-quintic probe is a generated physical
+  one-loop hexagon with momentum-conserving external kinematics and
+  `d_0=5,d_1=5`; it verifies CFF/LTD agreement at one deterministic
+  phase-space point and currently takes about one minute in the
+  feature-enabled `three-dimensional-reps` test target. This is much lighter
+  than pushing the same double-quintic case through the public CLI evaluator
+  path, where the final Symbolica evaluator construction dominates.
+- Fixed the equal-signature vacuum hexagon boundary rather than dismissing it.
+  The duplicated-signature CFF sign correction now keys duplicate sectors by
+  both momentum signature and mass label, so denominators with the same energy
+  routing but different masses are not treated as identical copies. The retained
+  core regression checks the vacuum hexagon with numerator degrees
+  `0,1,2,3,5`, including the double-quintic case.
+- Added a physical-like public CLI hexagon fixture with six external half-edges
+  and momentum conservation enforced by the last external leg. The retained
+  `3Drep test-cff-ltd` integration test covers a direct quadratic sector
+  (`d_0=2,d_1=2`), a direct cubic sector (`d_0=3,d_1=3`), and a quartic
+  single-sector numerator obtained by rewriting the second energy through the
+  first edge and an external half-edge (`d_0=4`). Each case compares CFF, LTD,
+  and PureLTD through the public CLI manifest. The direct double-quintic version
+  was explored but is not retained because it is dominated by public evaluator
+  construction time; the explicit cubic CLI case is the practical integration
+  anchor, while the core crate test keeps the full double-quintic coverage.
+- Added explicit multiloop high-power parity anchors for the lifted guard
+  cases. In `three-dimensional-reps`, the retained core regression compares
+  CFF/LTD numerically for `sunrise_pow4` with the formerly guarded quintic
+  lower sector (`d_2=5`) and repeated-channel cubic pair (`d_2=3,d_3=3`).
+  In the public GammaLoop integration suite, `3Drep test-cff-ltd` now runs the
+  same two multiloop sunrise cases plus the deeper `four_loop_stress`
+  quadratic case through DOT import, concrete numerator injection, explicit
+  energy-degree bounds, and manifest-level CFF/LTD/PureLTD comparison. The
+  four-loop eager-evaluator path needs a larger test-thread stack, so the test
+  runs this multiloop CLI comparison inside a 64 MiB worker thread. The
+  `proper_iterated_sandwiched_bubble` cubic-pair case remains covered by the
+  old-Python parity matrix; using a concrete DOT numerator for that specific
+  public CLI probe causes the automatic bound merger to produce a
+  non-convergent sector, so it is not the right retained CLI fixture.
+- Revisited the artificial repeated-mass alternating hexagon diagnostic. The
+  apparent Rust failure was caused by comparing bounded CFF against an LTD
+  expression generated without the same numerator energy-degree bounds. This is
+  harmless for non-repeated LTD, but repeated-pole LTD needs the bounds in order
+  to build the finite-difference numerator-derivative samples. With matched
+  bounds, the graph now agrees from the constant numerator through the
+  double-quintic `edges[0][0]**5 * edges[1][0]**5` case and has been promoted
+  from an ignored diagnostic to a normal `three-dimensional-reps` regression.
+  The Python prototype was not a useful independent oracle for this degenerate
+  repeated-mass graph: its `test-cff-ltd` path already disagrees for the
+  constant numerator, which appears to be a prototype repeated-mass LTD
+  limitation rather than the Rust issue.
+
+Validation for this pass:
+
+```text
+cargo test -p three-dimensional-reps --features diagnostics,eval,test-support
+cargo test -p gammaloop-integration-tests cli_old_python_case_matrix_records_current_three_drep_status -- --nocapture
+cargo test -p gammaloop-integration-tests cli_box_lower_contact_high_powers_match_ltd -- --nocapture
+cargo test -p gammaloop-integration-tests cli_physical_hexagon_high_power_energy_sectors_match_ltd -- --nocapture
+cargo test -p gammaloop-integration-tests cli_multiloop_high_power_energy_sectors_match_ltd -- --nocapture
+```
+
+Latest focused rerun:
+
+```text
+cargo test -p three-dimensional-reps --features diagnostics,eval,test-support
+cargo test -p gammaloop-integration-tests cli_physical_hexagon_high_power_energy_sectors_match_ltd -- --nocapture
+cargo test -p gammaloop-integration-tests cli_multiloop_high_power_energy_sectors_match_ltd -- --nocapture
+```
+
+These passed with the retained double-quintic core probes, the seven public-CLI
+lower-sector box cases above, the physical hexagon public-CLI cubic/quartic
+cases, the multiloop sunrise public-CLI high-power cases, and the retained
+four-loop public-CLI quadratic stress case. A follow-up rerun of
+`cargo test -p three-dimensional-reps --features diagnostics,eval,test-support`
+also passed with the repeated-mass alternating hexagon enabled as a normal test
+(`53 passed; 0 ignored`). The related fast negative check
+`cff_box_double_quintic_is_rejected_by_infinity_residue_check` is covered by
+the feature-enabled `three-dimensional-reps` suite.
+
+## 2026-05-05: Step III sign cleanup and final local-inspect parity pass
+
+- Removed the remaining ad hoc repeated-cut sign handling from the generated
+  cross-section LTD path. The retained relative CFF/LTD normalization is now
+  expressed through the generalized CFF global sign exponent and, for
+  expanded-4D local UV sources, the corresponding reduced-source exponent.
+  This keeps the correction tied to the graph representation actually handed to
+  `generate_3d_expr` instead of loop-count or cut-count heuristics.
+- Fixed the CFF half-edge convention used when converting generated 3D
+  expressions back to GammaLoop atoms. A non-empty energy-bound list is not
+  sufficient evidence that the bounded CFF algorithm was used, because
+  auto-detected or bridge-generated bounds can contain only zero/linear
+  entries. Pure CFF sectors now clear generated variant-local half-edge factors
+  and use GammaLoop's global `prod(-2E)^{-1}` convention; only genuinely
+  higher-energy sectors (`degree > 1`) keep the generated variant-local
+  half-edge factors. This removed the CFF expanded-4D sign flip for odd
+  denominator counts while preserving high-energy bounded-CFF behavior.
+- Corrected denominatorless expanded-4D terms. These terms are already in the
+  explicit-orientation-summed bridge path and do not receive the later CFF
+  orientation projector, so they must pass through unchanged rather than being
+  averaged over orientations. This fixed the finite integrated-UV contribution
+  in the divergent scalar bubble parity test.
+- Updated the public 3Drep repeated-box fixture to match the generalized
+  repeated-LTD derivative structure. The LTD case now exposes 17 orientations
+  and five derivative variants in the repeated sector, while the manifest
+  still verifies direct CFF/LTD agreement.
+- Adjusted the threshold mass-approach regression to test the raw local
+  integrand after removing the parameterization jacobian. The useful invariant
+  for this fixture is local finiteness through the mass approach, not strict
+  monotonicity of the displayed x-space value.
+
+Retained and rerun local-inspect coverage includes:
+
+- amplitude CFF local-3D, CFF expanded-4D, and LTD expanded-4D parity for the
+  scalar triangle, scalar box, and divergent scalar bubble, including the
+  integrated-UV bubble variant;
+- generated forward-scattering cross-section threshold subtraction with and
+  without expanded-4D local UV;
+- GL06 numerator fixtures with simultaneous UV and threshold subtraction,
+  comparing CFF local-3D, CFF local-4D, and LTD local-4D rich inspect output;
+- GL48 with repeated propagators, higher-energy numerator support, UV
+  subtraction, and threshold subtraction active;
+- repeated-cut probes for GL00, GL10, GL11, GL12, and GL13 as normal
+  integration-test coverage where appropriate.
+
+Final verification for this pass:
+
+```text
+cargo fmt --all --check
+cargo check --profile dev-optim -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests
+just test_gammaloop
+```
+
+`just test_gammaloop` passed with `1082 passed; 125 skipped`.
+
+## 2026-05-05: Scalar 3L all-graph slow-suite branch-A progress
+
+- Started the exhaustive generated scalar three-loop forward-scattering
+  coverage requested for
+  `scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{3}}]`.
+  The current generator returns 49 graph labels, `GL00` through `GL48`, rather
+  than the 45 labels mentioned in the initial plan.
+- Added a slow integration-test harness in
+  `tests/tests/test_runs/scalar_3L_cross_section_inspects.rs`. The harness
+  builds no-numerator and numerator variants of each selected graph and compares
+  rich local inspect output among CFF local-3D, CFF expanded-4D local UV, and
+  LTD expanded-4D local UV. Per-graph UV/threshold fallbacks are guarded by the
+  `ALLOW_DISABLING_UV_SUBTRACTION` and
+  `ALLOW_DISABLING_THRESHOLD_SUBTRACTION` constants.
+- Promoted several rich-inspect comparison helpers into
+  `tests/tests/test_runs/utils.rs` so the new slow harness can reuse the same
+  event-weight and additional-weight comparisons as the focused normal tests.
+- `GL06` passes in the slow harness with UV and threshold subtraction enabled
+  for both the no-numerator case and the `Q(1).Q(2)` numerator.
+- `GL48` revealed an additional unresolved subtlety. With UV and threshold
+  subtraction disabled, the no-numerator case passes. With the fast `Q(1).Q(1)`
+  Lorentz-dot numerator, restored baseline code gives a total local inspect
+  sign mismatch between CFF and LTD. A temporary experiment that skipped the
+  LTD cross-section parity factor for bounded higher-energy sectors made the
+  total sign agree, but the rich event decomposition still differed. That
+  experiment was reverted because it was a convention patch rather than an
+  understood fix.
+- The retained diagnostic showed that raised-cut grouping is structurally
+  consistent between CFF and LTD for this GL48 setup. CFF groups cuts
+  `[0]`, `[1,2]`, `[3,4]`, `[5]`; LTD groups the same cut sets with different
+  representation-specific E-surface ids. This narrows the remaining mismatch
+  to the generated contribution/residue projection within the raised groups,
+  not to cut grouping itself.
+- A repeated-edge all-cuts probe using the `Q(7).Q(8)` numerator was attempted
+  because GL48 has a repeated massive scalar pair at those edge labels. It was
+  too slow for the default slow-suite fixture in its current form (more than
+  five minutes before the run was stopped) and is not retained as a benchmark
+  until a lighter equivalent probe is found.
+- The remaining GL48 all-cuts numerator mismatch is not papered over in the
+  test suite. It must be understood before the slow all-graph benchmark set can
+  be completed and committed.
+
+## 2026-05-06: Scalar 3L all-graph CFF/LTD parity completion
+
+- Completed the retained scalar three-loop forward-scattering slow sweep with
+  `CONSIDER_COMPARISON_WITH_LTD = true`. The harness now compares CFF with
+  local UV from 3D expansions, CFF with local UV from expanded 4D integrands,
+  and LTD with local UV from expanded 4D integrands before snapshotting the
+  agreed total weight. The latest retained sweep passed 149/149 tests in
+  1675.503s.
+- Fixed the repeated-channel lower-sector construction used by generalized CFF.
+  When a repeated denominator copy is removed from a lower sector, the
+  graph-based Rust implementation must form the corresponding graph minor by
+  contracting that edge. Dropping it as an ordinary deleted edge leaves
+  disconnected bookkeeping half-edges and overcounts the lower-sector CFF
+  contribution. This is the graph-native replacement for the older
+  signature-reconstruction shortcut, which remains only a CLI/testing
+  convenience and is not used in GammaLoop generation logic.
+- Refined repeated LTD parity for bounded sectors. Pure, linear, and
+  non-repeated higher-energy bounded sectors keep the duplicate-signature
+  parity factor needed to match CFF's orientation convention. Higher powers
+  living only on repeated-channel members instead use the repeated-channel
+  finite-difference construction directly, without that extra parity factor.
+- Added the finite-pole contact completion required when a graph contains
+  repeated channels but the higher-energy bound is on a non-repeated edge. The
+  LTD expression now receives the same known-factor contact terms as the CFF
+  bounded recursion in this case, with the representation-local normalization
+  adjusted before appending. This fixed the retained GL48 repeated-propagator
+  higher-energy fixture and the later all-graph scalar benchmarks.
+- Refreshed three total-weight scalar snapshots (`GL26`, `GL33`, and `GL44` in
+  the quadratic-pair, UV-disabled, threshold-enabled configuration). These
+  were benchmark changes after the representation fixes, not rich-inspect
+  parity failures: the CFF local-3D, CFF local-4D, and LTD local-4D event
+  groups, event weights, and additional weights had already matched before the
+  snapshots were accepted.
+
+Validation for this pass:
+
+```text
+cargo check --profile dev-optim -p three-dimensional-reps
+env RUST_MIN_STACK=33554432 cargo test -p three-dimensional-reps --features diagnostics,test-support,eval --lib ltd_ -- --nocapture
+env RUST_MIN_STACK=33554432 cargo nextest run --cargo-profile dev-optim -P test_gammaloop -p gammaloop-integration-tests --run-ignored all --ignore-default-filter -j4 -E 'test(/scalar_3l_cross_section_/)' --no-fail-fast
+```
+
+## 2026-05-06: Final scalar Step-III review and default-suite promotion
+
+- Performed a sign-focused review of the current cross-section LTD/CFF bridge.
+  The previous graph-name and loop-number branch parity patches are gone. The
+  remaining representation-dependent signs are formulaic:
+  - the cross-section LTD bridge uses the LU loop-measure parity
+    \((-1)^{L-1}\), with \(L\) the forward-scattering loop count after removing
+    initial-state cut edges;
+  - the expanded-4D CFF local-UV bridge compares the generalized-CFF global
+    sign exponent of the full graph with that of the reduced expanded source,
+    including duplicate-signature excess after preserved 4D denominators are
+    removed.
+- Restored the zero-loop and pure-tree 3D-expression boundary. Empty automatic
+  energy-degree bounds are now treated as trivially convergent, and a zero-loop
+  GammaLoop graph returns only the residual 4D denominator product instead of
+  calling the CFF surface generator. This keeps imported pure-tree
+  external-tree inspect tests in the same `generate_3d_expr` path as the loop
+  cases.
+- Promoted six timed scalar cross-section rich-inspect anchors out of the
+  `slow` module so that `just test_gammaloop` now directly covers a
+  representation-three-way local comparison:
+  - `GL02` baseline with UV and threshold subtraction enabled;
+  - `GL00` with a `Q(7)^2` energy numerator and UV disabled;
+  - `GL16` with a `Q(1)^2` energy numerator and UV/threshold subtraction
+    enabled;
+  - quartic `Q(1)^4` probes for `GL02`, `GL16`, and `GL24`, with `GL24`
+    retaining threshold subtraction disabled to cover the duplicate-leading-
+    denominator expanded-4D UV bridge.
+- Kept heavy but important scalar anchors such as `GL06`, `GL09`, and `GL48`
+  in the slow sweep. The post-promotion scalar sweep still covers 149 retained
+  cases and passed after the test move.
+
+Final verification for this pass:
+
+```text
+cargo fmt --all --check
+cargo check --profile dev-optim -p three-dimensional-reps -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests
+git diff --check
+just test_gammaloop
+env RUST_MIN_STACK=33554432 cargo nextest run --cargo-profile dev-optim -P test_gammaloop -p gammaloop-integration-tests --run-ignored all --ignore-default-filter -j4 -E 'test(/scalar_3l_cross_section_/)' --no-fail-fast
+```
+
+`just test_gammaloop` passed 1090/1090 tests, and the scalar sweep passed
+149/149 retained scalar cross-section tests after the fast-anchor promotion.

@@ -1,7 +1,6 @@
 use gammalooprs::{
-    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
-    graph::{self, FeynmanGraph, Graph, LMBext},
+    graph::{FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
@@ -10,15 +9,11 @@ use gammalooprs::{
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
-    settings::{global::OrientationPattern, RuntimeSettings},
+    settings::RuntimeSettings,
     utils::tracing::{LogFormat, LogLevel},
 };
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::{ModifySubSet, SuBitGraph},
-};
+use linnet::half_edge::involution::Orientation;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
-use typed_index_collections::TiVec;
 
 use crate::{
     commands::{
@@ -2755,143 +2750,6 @@ impl GammaLoopAPI {
                 ))
             })
             .map(|_| ())
-    }
-
-    #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
-    pub(crate) fn generate_cff(
-        &self,
-        dot_string: String,
-        subgraph_nodes: Vec<String>,
-        reverse_dangling: Vec<usize>,
-        orientation_pattern: Option<String>,
-    ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
-
-        let reverse_dangling = reverse_dangling
-            .into_iter()
-            .map(EdgeIndex::from)
-            .collect_vec();
-
-        let subgraph: SuBitGraph = if subgraph_nodes.is_empty() {
-            graph.full_filter()
-        } else {
-            let mut result: SuBitGraph = graph.empty_subgraph();
-            for (_node_id, neighbors, vertex) in graph.iter_nodes() {
-                if subgraph_nodes.contains(&vertex.name.to_string()) {
-                    neighbors.for_each(|hedge| result.add(hedge));
-                }
-            }
-            result
-        };
-
-        let mut surface_cache = SurfaceCache {
-            esurface_cache: TiVec::new(),
-            hsurface_cache: TiVec::new(),
-        };
-
-        let cff = generate_cff_expression_from_subgraph(
-            &graph.underlying,
-            &subgraph,
-            &None,
-            &reverse_dangling,
-            &graph.get_edges_in_initial_state_cut(),
-            &mut surface_cache,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
-        })?;
-
-        let or_pattern = orientation_pattern
-            .as_deref()
-            .map(OrientationPattern::from_user_pattern)
-            .transpose()
-            .map_err(|error| exceptions::PyException::new_err(error.to_string()))?
-            .unwrap_or_default();
-
-        let atoms = cff.get_orientation_atoms_with_data(or_pattern);
-        let inverse_energies = graph::get_cff_inverse_energy_product_impl(&graph, &subgraph, &[]);
-
-        let result = atoms
-            .into_iter()
-            .map(|(atom, orientation_data)| {
-                let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * &inverse_energies;
-                let string_atom = energy_sub.to_string();
-
-                let mut orientation_as_hashmap = HashMap::new();
-                for (edge_id, direction) in orientation_data.orientation.into_iter() {
-                    let direction = match direction {
-                        Orientation::Default => 1,
-                        Orientation::Reversed => -1,
-                        Orientation::Undirected => 0,
-                    };
-                    orientation_as_hashmap.insert(edge_id.0, direction);
-                }
-                (orientation_as_hashmap, string_atom)
-            })
-            .collect_vec();
-
-        Ok(result)
-    }
-
-    #[pyo3(
-        name = "generate_cff_as_json_string",
-        signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)
-    )]
-    pub(crate) fn generate_cff_as_json_string(
-        &self,
-        dot_string: String,
-        subgraph_nodes: Vec<String>,
-        reverse_dangling: Vec<usize>,
-        orientation_pattern: Option<String>,
-    ) -> PyResult<String> {
-        let _ = orientation_pattern;
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
-
-        let reverse_dangling = reverse_dangling
-            .into_iter()
-            .map(EdgeIndex::from)
-            .collect_vec();
-
-        let subgraph: SuBitGraph = if subgraph_nodes.is_empty() {
-            graph.full_filter()
-        } else {
-            let mut result: SuBitGraph = graph.empty_subgraph();
-            for (_node_id, neighbors, vertex) in graph.iter_nodes() {
-                if subgraph_nodes.contains(&vertex.name.to_string()) {
-                    neighbors.for_each(|hedge| result.add(hedge));
-                }
-            }
-            result
-        };
-
-        let mut surface_cache = SurfaceCache {
-            esurface_cache: TiVec::new(),
-            hsurface_cache: TiVec::new(),
-        };
-
-        let cff = generate_cff_expression_from_subgraph(
-            &graph.underlying,
-            &subgraph,
-            &None,
-            &reverse_dangling,
-            &graph.get_edges_in_initial_state_cut(),
-            &mut surface_cache,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
-        })?;
-
-        let json_string = serde_json::to_string(&cff).map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not serialize cff to json: {}", e))
-        })?;
-
-        Ok(json_string)
     }
 
     /*

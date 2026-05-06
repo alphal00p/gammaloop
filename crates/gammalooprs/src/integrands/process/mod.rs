@@ -57,6 +57,7 @@ use color_eyre::Result;
 
 pub mod evaluators;
 pub use evaluators::ActiveF64Backend;
+use evaluators::EvaluatorMethod;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
@@ -621,6 +622,17 @@ impl ProcessIntegrand {
                 .graph_terms
                 .get(graph_id)
                 .map(|term| term.get_num_orientations()),
+        }
+    }
+
+    pub fn uses_explicit_orientation_sum_only(&self) -> bool {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                integrand.uses_explicit_orientation_sum_only()
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                integrand.uses_explicit_orientation_sum_only()
+            }
         }
     }
 
@@ -1446,20 +1458,23 @@ fn stability_check<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
+    let zero = results[0].re.zero();
+    let sample_count = zero.from_usize(results.len());
+
     let average = results
         .iter()
         .skip(1)
         .fold(results[0].clone(), |acc, x| acc + x)
-        / F::<T>::from_f64(results.len() as f64);
+        / sample_count;
 
     let errors = results.iter().map(|res| {
         let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
-            F::<T>::from_f64(0.0)
+            zero.clone()
         } else {
             ((&res.re - &average.re) / &average.re).abs()
         };
         let error_im = if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
-            F::<T>::from_f64(0.0)
+            zero.clone()
         } else {
             ((&res.im - &average.im) / &average.im).abs()
         };
@@ -1472,11 +1487,7 @@ fn stability_check<T: FloatLike>(
     for (index, error) in errors.enumerate() {
         estimated_relative_accuracy =
             estimated_relative_accuracy.max(error.re.clone().max(error.im.clone()));
-        if !is_final_level
-            && escalate_if_exact_zero
-            && error.re == F::<T>::from_f64(0.0)
-            && error.im == F::<T>::from_f64(0.0)
-        {
+        if !is_final_level && escalate_if_exact_zero && error.re == zero && error.im == zero {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
             break;
@@ -1555,14 +1566,17 @@ fn stability_check_on_norm<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
-    let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
-        acc + x.norm_squared().sqrt()
-    }) / F::<T>::from_f64(results.len() as f64);
+    let zero = results[0].re.zero();
+    let sample_count = zero.from_usize(results.len());
+    let average = results
+        .iter()
+        .fold(zero.clone(), |acc, x| acc + x.norm_squared().sqrt())
+        / sample_count;
 
     let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
+            (zero.clone(), true) // true zero is fishy -> upgrade to next precision
         } else {
             (((res - average.clone()) / average.clone()).abs(), false)
         }
@@ -1573,11 +1587,7 @@ fn stability_check_on_norm<T: FloatLike>(
     let mut unstable_sample = None;
     for (index, (error, result_is_exact_zero)) in errors.enumerate() {
         estimated_relative_accuracy = estimated_relative_accuracy.max(error.clone());
-        if !is_final_level
-            && error == F::<T>::from_f64(0.0)
-            && result_is_exact_zero
-            && escalate_if_exact_zero
-        {
+        if !is_final_level && error == zero && result_is_exact_zero && escalate_if_exact_zero {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
             break;
@@ -2032,8 +2042,32 @@ pub trait ProcessIntegrandImpl {
     fn groups_default_sample_events_by_graph_group(&self) -> bool {
         false
     }
+    fn uses_explicit_orientation_sum_only(&self) -> bool {
+        false
+    }
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
+}
+
+pub(crate) fn validate_explicit_orientation_sum_runtime_settings(
+    settings: &RuntimeSettings,
+) -> Result<()> {
+    if settings.general.evaluator_method != EvaluatorMethod::Summed {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` requires runtime `general.evaluator_method = Summed`; {:?} is not supported",
+            settings.general.evaluator_method
+        ));
+    }
+
+    if let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling
+        && discrete_settings.sample_orientations
+    {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` does not support runtime individual-orientation Monte Carlo sampling; set `sampling.sample_orientations = false`"
+        ));
+    }
+
+    Ok(())
 }
 
 fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Option<usize> {
@@ -2800,6 +2834,12 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
 ) -> Result<GammaLoopSample<T>> {
+    if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` represents all orientations as a single summed contribution, so explicit orientation selection is not supported"
+        ));
+    }
+
     let expected_loop_count = if let Some(graph_id) = input.graph_id {
         let group_id = integrand
             .get_group_structure()
@@ -2848,13 +2888,27 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
             )
         })
         .collect::<LoopMomenta<F<T>>>();
+    let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
+    let jacobian = if let Some(momentum) = loop_momenta.first() {
+        momentum.px.one()
+    } else {
+        integrand
+            .get_settings()
+            .kinematics
+            .externals
+            .get_dependent_externals::<T>(dependent_momenta_constructor)?
+            .first()
+            .map(|momentum| momentum.temporal.value.one())
+            .ok_or_else(|| eyre!("Cannot build a direct momentum sample with no momenta."))?
+    };
+
     let sample = MomentumSample::new(
         loop_momenta,
         integrand.loop_cache_id(),
         &integrand.get_settings().kinematics.externals,
         integrand.get_current_external_cache_id(),
-        F::<T>::from_f64(1.0),
-        integrand.get_dependent_momenta_constructor(),
+        jacobian,
+        dependent_momenta_constructor,
         input.orientation,
     )?;
 

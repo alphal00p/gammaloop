@@ -1,9 +1,11 @@
 pub use three_dimensional_reps::expression::{
     AllOrientations, CFFVariant, GraphOrientation, OrientationData, OrientationExpression,
     OrientationID, OrientationSelector, RaisedEsurfaceData, RaisedEsurfaceDataView,
-    RaisedEsurfaceGroup, RaisedEsurfaceGroupView, RaisedEsurfaceId,
+    RaisedEsurfaceGroup, RaisedEsurfaceGroupView, RaisedEsurfaceId, ResidualDenominator,
 };
 
+use color_eyre::Result;
+use eyre::eyre;
 use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, HedgePair, Orientation};
 use spenso::structure::{
@@ -19,7 +21,7 @@ use symbolica::{
 use super::{
     esurface::Esurface,
     hsurface::Hsurface,
-    surface::{GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache},
+    surface::{EsurfaceID, GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, LinearEnergyExpr},
 };
 use crate::{
     graph::Graph,
@@ -31,6 +33,72 @@ pub type ThreeDExpression<O> =
     three_dimensional_reps::expression::ThreeDExpression<O, Esurface, Hsurface>;
 pub type CFFExpression<O> =
     three_dimensional_reps::expression::CFFExpression<O, Esurface, Hsurface>;
+
+pub(crate) fn remove_ltd_global_contact_completions_from_local_residue(
+    residue: &mut CFFExpression<OrientationID>,
+) {
+    // Repeated-signature LTD generation may add CFF lower-sector contact
+    // completions so that the standalone, globally evaluated 3D expression is
+    // equivalent for higher energy-degree numerators. These completions are not
+    // local LTD residues: confluent LTD residues already carry the local
+    // numerator derivatives needed for LU and threshold residues. Projecting the
+    // global CFF completion again into a local residue double counts the local
+    // pole.
+    for orientation in &mut residue.orientations {
+        orientation.variants.retain(|variant| {
+            !variant.origin.as_deref().is_some_and(|origin| {
+                origin.starts_with("bounded_degree_quadratic_recursive_contact")
+                    || origin.starts_with("bounded_degree_known_factor_cff_contact")
+            })
+        });
+    }
+}
+
+pub(crate) fn localize_numerator_energy_maps_on_esurface(
+    residue: &mut CFFExpression<OrientationID>,
+    esurface_id: EsurfaceID,
+) -> Result<()> {
+    let esurface = residue.surfaces.esurface_cache[esurface_id].clone();
+    let Some((localized_external_edge, localized_external_sign)) =
+        esurface.external_shift.first().copied()
+    else {
+        return Ok(());
+    };
+
+    if localized_external_sign.unsigned_abs() != 1 {
+        return Err(eyre!(
+            "cannot localize numerator energy maps on E-surface {esurface_id:?}: expected a unit external-energy coefficient, found {localized_external_sign}"
+        ));
+    }
+
+    let mut replacement = esurface
+        .energies
+        .iter()
+        .fold(LinearEnergyExpr::zero(), |acc, edge_id| {
+            acc + LinearEnergyExpr::ose(*edge_id, 1)
+        });
+    for (external_edge, external_sign) in &esurface.external_shift {
+        if *external_edge != localized_external_edge {
+            replacement = replacement + LinearEnergyExpr::external(*external_edge, *external_sign);
+        }
+    }
+    replacement = replacement.scale(-localized_external_sign);
+
+    for orientation in &mut residue.orientations {
+        for energy_expr in &mut orientation.loop_energy_map {
+            *energy_expr = energy_expr
+                .clone()
+                .substitute_external_energy(localized_external_edge, &replacement);
+        }
+        for energy_expr in &mut orientation.edge_energy_map {
+            *energy_expr = energy_expr
+                .clone()
+                .substitute_external_energy(localized_external_edge, &replacement);
+        }
+    }
+
+    Ok(())
+}
 
 pub trait GammaLoopGraphOrientation: GraphOrientation {
     fn orientation_thetas_gs(&self) -> Atom {
@@ -278,6 +346,18 @@ pub trait GammaLoopThreeDExpression<O> {
         pattern: &OrientationPattern,
     ) -> typed_index_collections::TiVec<OrientationID, Atom>;
     fn get_orientation_atom_gs(&self, orientation_id: O) -> Atom;
+    fn diagnostic_parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom;
+    fn parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom;
     fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
     fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
 }
@@ -323,15 +403,19 @@ where
         self.orientations[orientation_id].to_atom_gs()
     }
 
-    fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
-        let numerator = graph.full_numerator_atom();
+    fn diagnostic_parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom {
         self.orientations
             .iter()
             .filter_map(|orientation| {
                 if pattern.filter_orientation(orientation.orientation()) {
                     Some(orientation.parametric_atom_without_orientation_thetas_gs(
                         graph,
-                        &numerator,
+                        numerator,
                         &self.surfaces,
                     ))
                 } else {
@@ -342,19 +426,35 @@ where
             .unwrap_or_default()
     }
 
-    fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
-        let numerator = graph.full_numerator_atom();
+    fn parametric_atom_with_numerator_gs(
+        &self,
+        graph: &Graph,
+        numerator: &Atom,
+        pattern: &OrientationPattern,
+    ) -> Atom {
         self.orientations
             .iter()
             .filter_map(|orientation| {
                 if pattern.filter_orientation(orientation.orientation()) {
-                    Some(orientation.parametric_atom_gs(graph, &numerator, &self.surfaces))
+                    Some(orientation.parametric_atom_gs(graph, numerator, &self.surfaces))
                 } else {
                     None
                 }
             })
             .reduce(|acc, atom| acc + atom)
             .unwrap_or_default()
+    }
+
+    fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
+        self.diagnostic_parametric_atom_with_numerator_gs(
+            graph,
+            &graph.full_numerator_atom(),
+            pattern,
+        )
+    }
+
+    fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
+        self.parametric_atom_with_numerator_gs(graph, &graph.full_numerator_atom(), pattern)
     }
 }
 

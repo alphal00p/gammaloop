@@ -1,4 +1,8 @@
-use std::{borrow::Borrow, collections::HashMap, fmt::Display};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt::Display,
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use itertools::{EitherOrBoth, Itertools};
@@ -18,12 +22,15 @@ use typed_index_collections::TiVec;
 
 use crate::{
     graph_io::EnergyEdgeIndexMap,
-    surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache, rational_coeff_one},
+    surface::{
+        EsurfaceID, HybridSurfaceID, LinearEnergyExpr, RationalAtomExt, SurfaceCache,
+        rational_coeff_atom, rational_coeff_one,
+    },
     symbols::{
         numerator_sampling_scale, orientation_delta, orientation_delta_symbol, ose_atom_from_index,
         sign, sign_theta,
     },
-    tree::{Tree, TreeNode},
+    tree::{NodeId, Tree, TreeNode},
 };
 
 #[derive(
@@ -247,6 +254,7 @@ pub struct CFFVariant {
     #[serde(with = "crate::utils::serde_atom")]
     pub prefactor: Atom,
     pub half_edges: Vec<EdgeIndex>,
+    pub denominator_edges: Vec<EdgeIndex>,
     pub uniform_scale_power: usize,
     pub numerator_surfaces: Vec<HybridSurfaceID>,
     pub denominator: Tree<HybridSurfaceID>,
@@ -258,6 +266,7 @@ impl CFFVariant {
             origin: Some("cff".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
+            denominator_edges: Vec::new(),
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
             denominator,
@@ -306,15 +315,89 @@ impl CFFVariant {
                 )
             })
             .collect();
+        self.denominator_edges = self
+            .denominator_edges
+            .iter()
+            .map(|edge_id| {
+                EdgeIndex(
+                    edge_map
+                        .internal
+                        .get(&edge_id.0)
+                        .copied()
+                        .unwrap_or(edge_id.0),
+                )
+            })
+            .collect();
+    }
+
+    fn numerator_value_count(&self, value: &HybridSurfaceID) -> usize {
+        self.numerator_surfaces
+            .iter()
+            .filter(|surface| *surface == value)
+            .count()
+    }
+
+    fn supports_any_cut(&self, cut_edge_sets: &[Vec<EdgeIndex>]) -> bool {
+        cut_edge_sets.is_empty()
+            || cut_edge_sets.iter().any(|cut_edges| {
+                cut_edges
+                    .iter()
+                    .all(|cut_edge| self.denominator_edges.contains(cut_edge))
+            })
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
+pub struct ResidualDenominator {
+    pub edge_id: EdgeIndex,
+    pub power: usize,
+    pub origin: Option<String>,
+}
+
+impl ResidualDenominator {
+    pub fn new(edge_id: EdgeIndex, origin: Option<String>) -> Self {
+        Self {
+            edge_id,
+            power: 1,
+            origin,
+        }
+    }
+
+    pub fn remap_energy_edge_indices(&mut self, edge_map: &EnergyEdgeIndexMap) {
+        self.edge_id = EdgeIndex(
+            edge_map
+                .internal
+                .get(&self.edge_id.0)
+                .copied()
+                .unwrap_or(self.edge_id.0),
+        );
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct VariantFusionKey {
     prefactor: String,
+    origin: Option<String>,
     half_edges: Vec<usize>,
+    denominator_edges: Vec<usize>,
     uniform_scale_power: usize,
     numerator_surfaces: Vec<HybridSurfaceID>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct VariantChainKey {
+    half_edges: Vec<usize>,
+    denominator_edges: Vec<usize>,
+    uniform_scale_power: usize,
+    numerator_surfaces: Vec<HybridSurfaceID>,
+    chain: Vec<HybridSurfaceID>,
+}
+
+#[derive(Debug, Clone)]
+struct VariantChainContribution {
+    prefactor: symbolica::domains::rational::Rational,
+    origins: BTreeSet<Option<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
@@ -374,49 +457,68 @@ impl OrientationExpression {
     }
 
     pub fn fuse_compatible_variants(&mut self) {
-        let mut groups = HashMap::<VariantFusionKey, Vec<CFFVariant>>::new();
+        let mut chain_contributions = BTreeMap::<VariantChainKey, VariantChainContribution>::new();
         for mut variant in std::mem::take(&mut self.variants) {
             variant.half_edges.sort_by_key(|edge| edge.0);
+            variant.denominator_edges.sort_by_key(|edge| edge.0);
             variant.numerator_surfaces.sort();
-            let key = VariantFusionKey {
-                prefactor: variant.prefactor.to_canonical_string(),
-                half_edges: variant.half_edges.iter().map(|edge| edge.0).collect(),
-                uniform_scale_power: variant.uniform_scale_power,
-                numerator_surfaces: variant.numerator_surfaces.clone(),
+            for chain in denominator_tree_chains(&variant.denominator) {
+                let key = VariantChainKey {
+                    half_edges: variant.half_edges.iter().map(|edge| edge.0).collect(),
+                    denominator_edges: variant
+                        .denominator_edges
+                        .iter()
+                        .map(|edge| edge.0)
+                        .collect(),
+                    uniform_scale_power: variant.uniform_scale_power,
+                    numerator_surfaces: variant.numerator_surfaces.clone(),
+                    chain,
+                };
+                let entry =
+                    chain_contributions
+                        .entry(key)
+                        .or_insert_with(|| VariantChainContribution {
+                            prefactor: symbolica::domains::rational::Rational::zero(),
+                            origins: BTreeSet::new(),
+                        });
+                entry.prefactor += variant.prefactor.rational_coeff();
+                entry.origins.insert(variant.origin.clone());
+            }
+        }
+
+        let mut groups = BTreeMap::<VariantFusionKey, Vec<Vec<HybridSurfaceID>>>::new();
+        for (key, contribution) in chain_contributions {
+            if contribution.prefactor.is_zero() {
+                continue;
+            }
+            let origin = if contribution.origins.len() == 1 {
+                contribution.origins.into_iter().next().flatten()
+            } else {
+                Some("mixed".to_string())
             };
-            groups.entry(key).or_default().push(variant);
+            groups
+                .entry(VariantFusionKey {
+                    prefactor: rational_coeff_atom(contribution.prefactor).to_canonical_string(),
+                    origin,
+                    half_edges: key.half_edges,
+                    denominator_edges: key.denominator_edges,
+                    uniform_scale_power: key.uniform_scale_power,
+                    numerator_surfaces: key.numerator_surfaces,
+                })
+                .or_default()
+                .push(key.chain);
         }
 
         self.variants = groups
-            .into_values()
-            .map(|mut variants| {
-                if variants.len() == 1 {
-                    return variants.pop().expect("single variant group is nonempty");
-                }
-                let first = variants.first().expect("variant group is nonempty").clone();
-                let first_origin = first.origin.as_deref();
-                let origin = if variants
-                    .iter()
-                    .all(|variant| variant.origin.as_deref() == first_origin)
-                {
-                    first.origin
-                } else {
-                    Some("mixed".to_string())
-                };
-                CFFVariant {
-                    origin,
-                    prefactor: first.prefactor,
-                    half_edges: first.half_edges,
-                    uniform_scale_power: first.uniform_scale_power,
-                    numerator_surfaces: first.numerator_surfaces,
-                    denominator: Tree::from_root_with_child_trees(
-                        HybridSurfaceID::Unit,
-                        variants
-                            .into_iter()
-                            .map(|variant| variant.denominator)
-                            .collect(),
-                    ),
-                }
+            .into_iter()
+            .map(|(key, chains)| CFFVariant {
+                origin: key.origin,
+                prefactor: symbolica::parse!(&key.prefactor),
+                half_edges: key.half_edges.into_iter().map(EdgeIndex).collect(),
+                denominator_edges: key.denominator_edges.into_iter().map(EdgeIndex).collect(),
+                uniform_scale_power: key.uniform_scale_power,
+                numerator_surfaces: key.numerator_surfaces,
+                denominator: denominator_tree_from_chains(&chains),
             })
             .collect();
         self.variants.sort_by(|lhs, rhs| {
@@ -424,6 +526,12 @@ impl OrientationExpression {
                 .iter()
                 .map(|edge| edge.0)
                 .cmp(rhs.half_edges.iter().map(|edge| edge.0))
+                .then(
+                    lhs.denominator_edges
+                        .iter()
+                        .map(|edge| edge.0)
+                        .cmp(rhs.denominator_edges.iter().map(|edge| edge.0)),
+                )
                 .then(lhs.uniform_scale_power.cmp(&rhs.uniform_scale_power))
                 .then(
                     lhs.prefactor
@@ -433,10 +541,18 @@ impl OrientationExpression {
         });
     }
 
-    pub fn max_denominator_value_count_on_branch(&self, value: &HybridSurfaceID) -> usize {
+    pub fn max_effective_denominator_value_count_on_branch(
+        &self,
+        value: &HybridSurfaceID,
+    ) -> usize {
         self.variants
             .iter()
-            .map(|variant| variant.denominator.max_value_count_on_branch(value))
+            .map(|variant| {
+                variant
+                    .denominator
+                    .max_value_count_on_branch(value)
+                    .saturating_sub(variant.numerator_value_count(value))
+            })
             .max()
             .unwrap_or(0)
     }
@@ -483,6 +599,77 @@ impl OrientationExpression {
             variant.remap_energy_edge_indices(edge_map);
         }
     }
+}
+
+fn denominator_tree_from_chains(chains: &[Vec<HybridSurfaceID>]) -> Tree<HybridSurfaceID> {
+    if chains.is_empty() || chains.iter().all(Vec::is_empty) {
+        return Tree::from_root(HybridSurfaceID::Unit);
+    }
+
+    let mut tree = Tree::from_root(HybridSurfaceID::Unit);
+    for chain in chains {
+        if chain.is_empty() {
+            insert_terminal_unit_if_missing(&mut tree, NodeId(0));
+            continue;
+        }
+        let mut parent = NodeId(0);
+        for surface_id in chain {
+            let existing_child = tree
+                .get_node(parent)
+                .children
+                .iter()
+                .copied()
+                .find(|child| tree.get_node(*child).data == *surface_id);
+            if let Some(child) = existing_child {
+                parent = child;
+                continue;
+            }
+            let child = NodeId(tree.get_num_nodes());
+            tree.insert_node(parent, *surface_id);
+            parent = child;
+        }
+        insert_terminal_unit_if_missing(&mut tree, parent);
+    }
+    tree
+}
+
+fn insert_terminal_unit_if_missing(tree: &mut Tree<HybridSurfaceID>, parent: NodeId) {
+    let has_terminal_unit = tree
+        .get_node(parent)
+        .children
+        .iter()
+        .any(|child| tree.get_node(*child).data == HybridSurfaceID::Unit);
+    if !has_terminal_unit {
+        tree.insert_node(parent, HybridSurfaceID::Unit);
+    }
+}
+
+fn denominator_tree_chains(tree: &Tree<HybridSurfaceID>) -> Vec<Vec<HybridSurfaceID>> {
+    fn walk(
+        tree: &Tree<HybridSurfaceID>,
+        node_id: NodeId,
+        current: &mut Vec<HybridSurfaceID>,
+        out: &mut Vec<Vec<HybridSurfaceID>>,
+    ) {
+        let node = tree.get_node(node_id);
+        if node.data != HybridSurfaceID::Unit {
+            current.push(node.data);
+        }
+        if node.children.is_empty() {
+            out.push(current.clone());
+        } else {
+            for child in &node.children {
+                walk(tree, *child, current, out);
+            }
+        }
+        if node.data != HybridSurfaceID::Unit {
+            current.pop();
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(tree, NodeId(0), &mut Vec::new(), &mut out);
+    out
 }
 
 impl GraphOrientation for OrientationExpression {
@@ -606,6 +793,7 @@ where
 {
     pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache<E, H>,
+    pub residual_denominators: Vec<ResidualDenominator>,
 }
 
 pub type CFFExpression<O, E = (), H = ()> = ThreeDExpression<O, E, H>;
@@ -618,6 +806,7 @@ where
         Self {
             orientations: TiVec::new(),
             surfaces: SurfaceCache::new(),
+            residual_denominators: Vec::new(),
         }
     }
 
@@ -684,6 +873,9 @@ where
                 .clone()
                 .remap_energy_edges(&edge_map.internal, &edge_map.external);
         }
+        for denominator in &mut self.residual_denominators {
+            denominator.remap_energy_edge_indices(edge_map);
+        }
 
         self
     }
@@ -726,6 +918,30 @@ where
         E: Clone,
         H: Clone,
     {
+        self.select_esurface_residue_impl(raised_esurface_group, &[])
+    }
+
+    pub fn select_esurface_residue_with_cut_edges(
+        mut self,
+        raised_esurface_group: &impl RaisedEsurfaceGroupView,
+        cut_edge_sets: &[Vec<EdgeIndex>],
+    ) -> Vec<ThreeDExpression<O, E, H>>
+    where
+        E: Clone,
+        H: Clone,
+    {
+        self.select_esurface_residue_impl(raised_esurface_group, cut_edge_sets)
+    }
+
+    fn select_esurface_residue_impl(
+        &mut self,
+        raised_esurface_group: &impl RaisedEsurfaceGroupView,
+        cut_edge_sets: &[Vec<EdgeIndex>],
+    ) -> Vec<ThreeDExpression<O, E, H>>
+    where
+        E: Clone,
+        H: Clone,
+    {
         self.normalize_single_raising(raised_esurface_group);
 
         let representative_esurface_id = raised_esurface_group.esurface_ids()[0];
@@ -735,20 +951,35 @@ where
             let mut new_expression = self.clone();
 
             for orientation in new_expression.orientations.iter_mut() {
-                orientation.for_each_denominator_tree_mut(|denominator| {
-                    denominator.keep_branches_with_value_count_mut(
+                orientation.variants.retain_mut(|variant| {
+                    if !variant.supports_any_cut(cut_edge_sets) {
+                        return false;
+                    }
+                    let numerator_count = variant.numerator_value_count(
                         &HybridSurfaceID::Esurface(representative_esurface_id),
-                        occurrence,
+                    );
+                    variant.denominator.keep_branches_with_value_count_mut(
+                        &HybridSurfaceID::Esurface(representative_esurface_id),
+                        occurrence + numerator_count,
                     );
 
-                    denominator.map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if *esurface_id == representative_esurface_id =>
-                        {
-                            *hybrid_surface_id = HybridSurfaceID::Unit;
-                        }
-                        _ => (),
-                    });
+                    variant
+                        .denominator
+                        .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                            HybridSurfaceID::Esurface(esurface_id)
+                                if *esurface_id == representative_esurface_id =>
+                            {
+                                *hybrid_surface_id = HybridSurfaceID::Unit;
+                            }
+                            _ => (),
+                        });
+
+                    if numerator_count > 0 {
+                        variant.numerator_surfaces.retain(|surface_id| {
+                            *surface_id != HybridSurfaceID::Esurface(representative_esurface_id)
+                        });
+                    }
+                    variant.denominator.get_num_nodes() != 0
                 });
             }
 
@@ -765,6 +996,15 @@ where
         let representative_esurface_id = raised_esurface_group.esurface_ids()[0];
 
         for orientation in self.orientations.iter_mut() {
+            for variant in &mut orientation.variants {
+                for surface_id in &mut variant.numerator_surfaces {
+                    if let HybridSurfaceID::Esurface(esurface_id) = surface_id
+                        && raised_esurface_group.esurface_ids().contains(esurface_id)
+                    {
+                        *esurface_id = representative_esurface_id;
+                    }
+                }
+            }
             orientation.for_each_denominator_tree_mut(|denominator| {
                 denominator.map_mut(|hybrid_surface_id| match hybrid_surface_id {
                     HybridSurfaceID::Esurface(esurface_id)
@@ -790,6 +1030,15 @@ where
         });
 
         for orientation in self.orientations.iter_mut() {
+            for variant in &mut orientation.variants {
+                for surface_id in &mut variant.numerator_surfaces {
+                    if let HybridSurfaceID::Esurface(esurface_id) = surface_id
+                        && let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id)
+                    {
+                        *esurface_id = *normalized_esurface_id;
+                    }
+                }
+            }
             orientation.for_each_denominator_tree_mut(|denominator| {
                 denominator.map_mut(|hybrid_surface_id| {
                     if let HybridSurfaceID::Esurface(esurface_id) = hybrid_surface_id
@@ -811,8 +1060,24 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "id | orientation | variant | pref | M power | half edges | den surfaces | num surfaces"
+            "id | orientation | variant | pref | M power | half edges | den surfaces | num surfaces | residual denominators"
         )?;
+        let residual_denominators = self
+            .residual_denominators
+            .iter()
+            .map(|denominator| {
+                format!(
+                    "e{}^{}{}",
+                    denominator.edge_id.0,
+                    denominator.power,
+                    denominator
+                        .origin
+                        .as_ref()
+                        .map(|origin| format!(":{origin}"))
+                        .unwrap_or_default()
+                )
+            })
+            .join(", ");
 
         for (orientation_id, orientation) in self.orientations.iter_enumerated() {
             let id: usize = orientation_id.into();
@@ -840,7 +1105,7 @@ where
                     .join(", ");
                 writeln!(
                     f,
-                    "{} | {} | {} | {} | {} | [{}] | [{}] | [{}]",
+                    "{} | {} | {} | {} | {} | [{}] | [{}] | [{}] | [{}]",
                     id,
                     label,
                     variant
@@ -851,7 +1116,8 @@ where
                     variant.uniform_scale_power,
                     half_edges,
                     denominator_surfaces,
-                    numerator_surfaces
+                    numerator_surfaces,
+                    residual_denominators
                 )?;
             }
         }

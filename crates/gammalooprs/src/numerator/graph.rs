@@ -455,7 +455,6 @@ mod test {
         processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
             GlobalSettings, RuntimeSettings,
-            global::GenerationSettings,
             runtime::{LockedRuntimeSettings, kinematic::KinematicsSettings},
         },
         uv::UltravioletGraph,
@@ -481,9 +480,9 @@ mod test {
 
         // let model = crate::utils::load_generic_model("sm");
 
-        graph.generate_cff().unwrap();
+        graph.build_cff_expression_for_tests().unwrap();
         graph
-            .build_integrands(&GenerationSettings::default(), vk)
+            .build_integrands(&GlobalSettings::default(), vk)
             .unwrap();
 
         println!("{}", graph.derived_data.all_mighty_integrand);
@@ -593,7 +592,7 @@ mod test {
                 // Amplitude::new(name)
             }
 
-            let proc_set = GenerationSettings::default();
+            let proc_set = GlobalSettings::default();
             let thread_pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(1)
                 .build()
@@ -834,7 +833,7 @@ mod test {
             let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
             a.preprocess(
                 &model,
-                &GenerationSettings::default(),
+                &GlobalSettings::default(),
                 &locked_runtime_settings,
                 &generation_pool,
             )

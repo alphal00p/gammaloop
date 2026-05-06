@@ -1,4 +1,4 @@
-use crate::cff::cff_graph::VertexSet;
+use crate::cff::VertexSet;
 use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
@@ -28,6 +28,7 @@ impl PartialEq for Hsurface {
     fn eq(&self, other: &Self) -> bool {
         self.positive_energies == other.positive_energies
             && self.negative_energies == other.negative_energies
+            && self.external_shift == other.external_shift
     }
 }
 
@@ -131,7 +132,7 @@ mod tests {
 
     use symbolica::parse;
 
-    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
+    use crate::cff::{VertexSet, esurface::Esurface};
 
     use super::Hsurface;
 

@@ -1,0 +1,10 @@
+digraph scalar_pure_tree_four_point {
+num=1;
+overall_factor=1;
+ext    [style=invis]
+ext -> A:0 [particle="scalar_0" id=0];
+ext -> A:1 [particle="scalar_0" id=1];
+B:2 -> ext [particle="scalar_0" id=2];
+B:3 -> ext [particle="scalar_0" id=3];
+A -> B [particle="scalar_1" id=4];
+}

@@ -263,6 +263,7 @@ impl Default for EvaluatorMethod {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
+    pub explicit_orientation_sum_only: bool,
     pub single_parametric: GenericEvaluator,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
@@ -332,6 +333,18 @@ impl EvaluatorStack {
         count
     }
 
+    /// Return the scalar Symbolica atoms produced by the Spenso network pass.
+    ///
+    /// These are the expressions handed to the concrete Symbolica evaluator
+    /// builders after optional color/gamma/metric simplification and tensor
+    /// network execution.
+    pub fn spenso_processed_atoms<A: AtomCore>(
+        atoms: &[A],
+        settings: &EvaluatorSettings,
+    ) -> Result<Vec<Atom>> {
+        Self::parse_atoms_with_timings(atoms, settings).map(|(atoms, _)| atoms)
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -356,6 +369,51 @@ impl EvaluatorStack {
             settings,
         )
     }
+
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Explicit Orientation Sum Evaluator",
+          )
+      )]
+    fn new_direct<A: AtomCore>(
+        parametric_atom: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        GenericEvaluator::new_from_builder(
+            parametric_atom
+                .iter()
+                .map(|atom| atom.as_atom_view().to_owned()),
+            param_builder,
+            dual_shape.clone(),
+            settings.optimization_settings(),
+            settings,
+        )
+    }
+
+    fn new_preprocessed_direct_with_progress<A, P>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<GenericEvaluator>
+    where
+        A: AtomCore,
+        P: FnMut(usize, usize),
+    {
+        GenericEvaluator::new_from_builder_with_progress(
+            atoms.iter().map(|atom| atom.as_atom_view().to_owned()),
+            param_builder,
+            dual_shape.clone(),
+            settings.optimization_settings(),
+            settings,
+            progress,
+        )
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -528,6 +586,41 @@ impl EvaluatorStack {
         Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
     }
 
+    pub fn new_preprocessed_components_with_timings<A, P>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<(Self, EvaluatorBuildTimings)>
+    where
+        A: AtomCore,
+        P: FnMut(usize, usize),
+    {
+        let mut timings = EvaluatorBuildTimings::default();
+        let symbolica_started = std::time::Instant::now();
+        let single_parametric = Self::new_preprocessed_direct_with_progress(
+            atoms,
+            param_builder,
+            &dual_shape,
+            settings,
+            progress,
+        )
+        .with_context(|| "Failed to create preprocessed component evaluator")?;
+        timings.symbolica_time += symbolica_started.elapsed();
+
+        Ok((
+            EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                single_parametric,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            },
+            timings,
+        ))
+    }
+
     #[instrument(
            skip_all,
            fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
@@ -540,42 +633,7 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
-        let mut timings = EvaluatorBuildTimings::default();
-        let spenso_started = std::time::Instant::now();
-        let parsed_atoms = atoms
-            .iter()
-            .map(|a| {
-                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-                let mut net = if settings.do_algebra {
-                    a.as_atom_view()
-                        .simplify_color()
-                        .simplify_gamma()
-                        .simplify_metrics()
-                        .to_dots()
-                        .parse_into_net()?
-                } else {
-                    a.as_atom_view().parse_into_net()?
-                };
-
-                // println!("Executing {}", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-
-                net.result_scalar()
-                    .map(|a| match a {
-                        ExecutionResult::One => Atom::num(1),
-                        ExecutionResult::Zero => Atom::Zero,
-                        ExecutionResult::Val(v) => v.into_owned(),
-                    })
-                    .map_err(|a| {
-                        Report::from(a)
-                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        timings.spenso_time += spenso_started.elapsed();
+        let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
 
         let symbolica_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
@@ -630,6 +688,7 @@ impl EvaluatorStack {
 
         Ok((
             EvaluatorStack {
+                explicit_orientation_sum_only: false,
                 single_parametric,
                 iterative,
                 summed_function_map,
@@ -637,6 +696,81 @@ impl EvaluatorStack {
             },
             timings,
         ))
+    }
+
+    #[instrument(
+           skip_all,
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Explicit Orientation Sum Evaluator Stack"),
+           err
+       )]
+    pub(crate) fn new_explicit_sum_with_timings<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
+
+        let symbolica_started = std::time::Instant::now();
+        let single_parametric =
+            Self::new_direct(&parsed_atoms, param_builder, &dual_shape, settings)
+                .with_context(|| "Failed to create explicit orientation sum evaluator")?;
+        timings.symbolica_time += symbolica_started.elapsed();
+
+        Ok((
+            EvaluatorStack {
+                explicit_orientation_sum_only: true,
+                single_parametric,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            },
+            timings,
+        ))
+    }
+
+    fn parse_atoms_with_timings<A: AtomCore>(
+        atoms: &[A],
+        settings: &EvaluatorSettings,
+    ) -> Result<(Vec<Atom>, EvaluatorBuildTimings)> {
+        let mut timings = EvaluatorBuildTimings::default();
+        let spenso_started = std::time::Instant::now();
+        let parsed_atoms = atoms
+            .iter()
+            .map(|a| {
+                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
+                let mut net = if settings.do_algebra {
+                    a.as_atom_view()
+                        .simplify_color()
+                        .simplify_gamma()
+                        .simplify_metrics()
+                        .to_dots()
+                        .parse_into_net()?
+                } else {
+                    a.as_atom_view().parse_into_net()?
+                };
+
+                // println!("Executing {}", net.dot_pretty());
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+
+                net.result_scalar()
+                    .map(|a| match a {
+                        ExecutionResult::One => Atom::num(1),
+                        ExecutionResult::Zero => Atom::Zero,
+                        ExecutionResult::Val(v) => v.into_owned(),
+                    })
+                    .map_err(|a| {
+                        Report::from(a)
+                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        timings.spenso_time += spenso_started.elapsed();
+
+        Ok((parsed_atoms, timings))
     }
 
     fn evaluate_parametric<'a, T: FloatLike, OID: IndexLike>(
@@ -853,6 +987,22 @@ impl EvaluatorStack {
     where
         usize: From<OID>,
     {
+        if self.explicit_orientation_sum_only {
+            if settings.general.evaluator_method != EvaluatorMethod::Summed {
+                return Err(eyre!(
+                    "`global.generation.explicit_orientation_sum_only = true` requires runtime `general.evaluator_method = Summed`; {:?} is not supported",
+                    settings.general.evaluator_method
+                ));
+            }
+
+            return Ok(evaluate_evaluator(
+                &mut self.single_parametric,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            ));
+        }
+
         match settings.general.evaluator_method {
             EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
                 input,
@@ -1026,6 +1176,15 @@ pub struct GenericEvaluator {
     pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
 }
 
+pub(crate) struct RawEvaluatorBuildParams<'a> {
+    params: &'a [Atom],
+    fn_map: &'a FunctionMap,
+    fn_map_entries: Vec<FnMapEntry>,
+    optimization_settings: OptimizationSettings,
+    dual_shape: Option<Vec<Vec<usize>>>,
+    settings: &'a EvaluatorSettings,
+}
+
 impl GenericEvaluator {
     pub(crate) fn into_eager_only(mut self) -> Self {
         self.backend_policy = EvaluatorBackendPolicy::EagerOnly;
@@ -1154,19 +1313,44 @@ impl GenericEvaluator {
         optimization_settings: OptimizationSettings,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Self::new_from_builder_with_progress(
+            atoms,
+            builder,
+            dual_shape,
+            optimization_settings,
+            settings,
+            |_, _| {},
+        )
+    }
+
+    pub(crate) fn new_from_builder_with_progress<I, P>(
+        atoms: I,
+        builder: &ParamBuilder<f64>,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        optimization_settings: OptimizationSettings,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = Atom>,
+        P: FnMut(usize, usize),
+    {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
             .collect();
 
-        Self::new_from_raw_params(
+        Self::new_from_raw_params_with_progress(
             atoms,
-            &params,
-            &builder.fn_map,
-            builder.reps.clone(),
-            optimization_settings,
-            dual_shape,
-            settings,
+            RawEvaluatorBuildParams {
+                params: &params,
+                fn_map: &builder.fn_map,
+                fn_map_entries: builder.reps.clone(),
+                optimization_settings,
+                dual_shape,
+                settings,
+            },
+            progress,
         )
     }
 
@@ -1179,6 +1363,37 @@ impl GenericEvaluator {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Self::new_from_raw_params_with_progress(
+            atoms,
+            RawEvaluatorBuildParams {
+                params,
+                fn_map,
+                fn_map_entries,
+                optimization_settings,
+                dual_shape,
+                settings,
+            },
+            |_, _| {},
+        )
+    }
+
+    pub(crate) fn new_from_raw_params_with_progress<I, P>(
+        atoms: I,
+        build: RawEvaluatorBuildParams<'_>,
+        mut progress: P,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = Atom>,
+        P: FnMut(usize, usize),
+    {
+        let RawEvaluatorBuildParams {
+            params,
+            fn_map,
+            fn_map_entries,
+            optimization_settings,
+            dual_shape,
+            settings,
+        } = build;
         let reps = if settings.do_fn_map_replacements {
             fn_map_entries
                 .iter()
@@ -1194,11 +1409,14 @@ impl GenericEvaluator {
 
         let exprs: Vec<Atom> = atoms
             .into_iter()
-            .map(|a| a.replace_multiple(&reps).replace_multiple(&reps))
+            .map(|a| {
+                GS.collect_orientation_if(a.replace_multiple(&reps).replace_multiple(&reps), false)
+            })
             .collect();
 
+        let total_exprs = exprs.len();
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
-        for n in exprs.iter() {
+        for (index, n) in exprs.iter().enumerate() {
             let eval = n
                 .evaluator(fn_map, params, optimization_settings.clone())
                 .map_err(|e| {
@@ -1229,6 +1447,7 @@ impl GenericEvaluator {
             } else {
                 eval
             });
+            progress(index + 1, total_exprs);
         }
 
         let mut tree = tree.ok_or_else(|| eyre!("No expressions to evaluate"))?;
@@ -1322,7 +1541,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
     }
 
     pub(crate) fn set_orientation_values<O: GraphOrientation>(&mut self, orientation: &O) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let zero: Complex<F<T>> = Complex::new_re(F(T::new_zero()));
         let one = zero.ref_one();
         let mult_offset = self.multiplicative_offset;
         let start = self.orientations_start;
@@ -1337,7 +1556,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
     }
 
     pub(crate) fn override_if(&mut self, over_ride: bool) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let zero: Complex<F<T>> = Complex::new_re(F(T::new_zero()));
         let one = zero.ref_one();
         let multiplicative_offset = self.multiplicative_offset;
         let start = self.override_pos;

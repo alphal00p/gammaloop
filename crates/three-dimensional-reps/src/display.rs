@@ -471,7 +471,7 @@ fn representation_label(family: RepresentationMode) -> &'static str {
         RepresentationMode::Cff => "cff",
         #[cfg(any(feature = "diagnostics", feature = "test-support"))]
         RepresentationMode::PureLtd => "pure_ltd",
-        #[cfg(feature = "old-cff")]
+        #[cfg(feature = "old_cff")]
         RepresentationMode::OldCff => "old_cff",
     }
 }
@@ -1105,6 +1105,7 @@ mod tests {
             origin: Some("test".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
+            denominator_edges: Vec::new(),
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
             denominator,

@@ -340,6 +340,27 @@ impl LinearEnergyExpr {
         self.constant = rational_coeff_atom(self.constant.rational_coeff() * coeff);
         self.canonical()
     }
+
+    pub fn substitute_external_energy(
+        mut self,
+        edge_id: EdgeIndex,
+        replacement: &LinearEnergyExpr,
+    ) -> Self {
+        let mut replacement_terms = LinearEnergyExpr::zero();
+        let mut retained_external_terms = Vec::with_capacity(self.external_terms.len());
+
+        for (term_edge_id, coeff) in self.external_terms {
+            if term_edge_id == edge_id {
+                replacement_terms =
+                    replacement_terms + replacement.clone().scale_rational(coeff.rational_coeff());
+            } else {
+                retained_external_terms.push((term_edge_id, coeff));
+            }
+        }
+
+        self.external_terms = retained_external_terms;
+        (self + replacement_terms).canonical()
+    }
 }
 
 impl Add for LinearEnergyExpr {

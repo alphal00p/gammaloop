@@ -86,7 +86,10 @@ fn scalar_bubble_root_integrand_reference(
             &mut amplitude_graph.graph,
             vakint,
             &valid_orientations,
-            &reference_settings.uv,
+            &reference_settings,
+            amplitude_graph.derived_data.cff_expression.as_ref(),
+            crate::settings::global::ThreeDRepresentation::Cff,
+            false,
         )
         .unwrap();
 
@@ -165,8 +168,16 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
         uv,
         ..Default::default()
     };
-    amp.preprocess(&model, &generation_settings, &(&runtime).into(), &theadpool)
-        .unwrap();
+    amp.preprocess(
+        &model,
+        &GlobalSettings {
+            generation: generation_settings,
+            ..Default::default()
+        },
+        &(&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
 
     amp.build_integrand(
         &model,
@@ -285,7 +296,6 @@ fn scalars_profile_new() {
         softct: false,
         add_sigma: true,
         subtract_uv: true,
-        use_legacy: false,
         ..Default::default()
     });
 
@@ -1523,8 +1533,15 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff().unwrap();
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_cff_expression_for_tests().unwrap();
+        amp.build_integrands(
+            &GlobalSettings {
+                generation: set,
+                ..Default::default()
+            },
+            vk,
+        )
+        .unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -1564,8 +1581,15 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff().unwrap();
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_cff_expression_for_tests().unwrap();
+        amp.build_integrands(
+            &GlobalSettings {
+                generation: set,
+                ..Default::default()
+            },
+            vk,
+        )
+        .unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -1661,9 +1685,7 @@ mod failing {
         let runtime = RuntimeSettings::default();
         amp.preprocess(
             &model,
-            &GenerationSettings {
-                ..Default::default()
-            },
+            &GlobalSettings::default(),
             &(&runtime).into(),
             &theadpool,
         )
