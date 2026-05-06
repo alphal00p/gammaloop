@@ -21,17 +21,31 @@ use serde_json::{self, Map as JsonMap, Value as JsonValue};
 use walkdir::WalkDir;
 
 const TEMPLATE_SUBDIR: &str = "templates";
+const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
+const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 
 #[derive(RustEmbed)]
 #[folder = "templates"]
 struct EmbeddedTemplates;
 
+#[derive(RustEmbed)]
+#[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
+#[include = "src/*.typ"]
+#[include = "typst.toml"]
+#[include = "linnest.wasm"]
+struct EmbeddedLinnestPackage;
+
+#[derive(RustEmbed)]
+#[folder = "$CARGO_MANIFEST_DIR/../kurvst/typst"]
+#[include = "src/*.typ"]
+#[include = "typst.toml"]
+#[include = "kurvst.wasm"]
+struct EmbeddedKurvstPackage;
+
 #[derive(Copy, Clone)]
 enum TemplateKind {
     Figure,
     Grid,
-    Plugin,
-    CurvePlugin,
     Layout,
 }
 
@@ -41,8 +55,6 @@ impl TemplateKind {
         match self {
             TemplateKind::Figure => "figure.typ",
             TemplateKind::Grid => "grid.typ",
-            TemplateKind::Plugin => "linnest.wasm",
-            TemplateKind::CurvePlugin => "kurvst.wasm",
             TemplateKind::Layout => "layout.typ",
         }
     }
@@ -329,7 +341,6 @@ fn run() -> Result<()> {
                 .unwrap_or(Path::new("."))
                 .join("fig-index.typ")
         });
-    ensure_plugin_assets(&build_dir)?;
 
     let mut style_files = Vec::new();
     for style in &draw_args.style {
@@ -1028,39 +1039,39 @@ fn resolve_template(requested: &Path, kind: TemplateKind, build_dir: &Path) -> R
     Ok(target)
 }
 
-/// Ensure the embedded WASM plugins are available under `build/templates`.
-fn ensure_plugin_asset(build_dir: &Path, kind: TemplateKind) -> Result<PathBuf> {
-    let target = build_dir.join(TEMPLATE_SUBDIR).join(kind.file_name());
-    if target.exists() {
-        return Ok(target);
-    }
-    ensure_parent_dir(&target)?;
-    let contents = kind.embedded_bytes()?;
-    fs::write(&target, contents.as_ref())
-        .with_context(|| format!("failed to write embedded plugin {}", target.display()))?;
-    Ok(target)
-}
-
-fn ensure_plugin_assets(build_dir: &Path) -> Result<()> {
-    ensure_plugin_asset(build_dir, TemplateKind::Plugin)?;
-    ensure_plugin_asset(build_dir, TemplateKind::CurvePlugin)?;
-    Ok(())
-}
-
 /// Ensure every embedded default template dependency exists under `build/templates`.
 fn ensure_default_template_assets(build_dir: &Path) -> Result<()> {
     let template_dir = build_dir.join(TEMPLATE_SUBDIR);
-    for path in EmbeddedTemplates::iter() {
-        let target = template_dir.join(path.as_ref());
-        if target.exists() {
+    write_embedded_assets::<EmbeddedTemplates>(&template_dir, "template dependency", false)?;
+    write_embedded_assets::<EmbeddedLinnestPackage>(
+        &template_dir.join(LINNEST_PACKAGE_DIR),
+        "linnest typst package asset",
+        true,
+    )?;
+    write_embedded_assets::<EmbeddedKurvstPackage>(
+        &template_dir.join(KURVST_PACKAGE_DIR),
+        "kurvst typst package asset",
+        true,
+    )?;
+    Ok(())
+}
+
+fn write_embedded_assets<E: RustEmbed>(
+    root: &Path,
+    description: &str,
+    overwrite: bool,
+) -> Result<()> {
+    for path in E::iter() {
+        let target = root.join(path.as_ref());
+        if target.exists() && !overwrite {
             continue;
         }
         ensure_parent_dir(&target)?;
-        let contents = EmbeddedTemplates::get(path.as_ref())
-            .ok_or_else(|| eyre!("embedded template {} is missing", path))?;
+        let contents = E::get(path.as_ref())
+            .ok_or_else(|| eyre!("embedded {description} {} is missing", path))?;
         fs::write(&target, contents.data.as_ref()).with_context(|| {
             format!(
-                "failed to write embedded template dependency {}",
+                "failed to write embedded {description} {}",
                 target.display()
             )
         })?;

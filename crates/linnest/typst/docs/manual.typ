@@ -8,8 +8,8 @@
 = Linnest Typst APIs
 
 Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst
-API. Its drawing layer bundles `kurvst.wasm`; the standalone Kurvst package
-manual documents the full curve and path-pattern API.
+API. Its drawing layer imports the sibling Kurvst package; the standalone
+Kurvst manual documents the full curve and path-pattern API.
 The public surface is intentionally narrow:
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.

@@ -6,7 +6,7 @@ seed := "42"
 columns := "3"
 rows := "5"
 
-drawing_styles := "--style drawings/templates/curve.typ --style drawings/templates/draw.typ --style drawings/templates/physics-edge-style.typ --style drawings/templates/edge-style.typ --style drawings/templates/graph.typ --style drawings/templates/layout.typ --style drawings/templates/linnest.typ --style drawings/templates/subgraph.typ --style drawings/templates/kurvst.wasm --style drawings/templates/linnest.wasm"
+drawing_styles := "--style drawings/templates/edge-style.typ --style drawings/templates/layout.typ --style drawings/templates/crates/linnest/typst/src/lib.typ --style drawings/templates/crates/linnest/typst/src/graph.typ --style drawings/templates/crates/linnest/typst/src/subgraph.typ --style drawings/templates/crates/linnest/typst/src/draw.typ --style drawings/templates/crates/linnest/typst/src/physics-edge-style.typ --style drawings/templates/crates/linnest/typst/src/curve.typ --style drawings/templates/crates/linnest/typst/linnest.wasm --style drawings/templates/crates/kurvst/typst/src/lib.typ --style drawings/templates/crates/kurvst/typst/kurvst.wasm"
 
 # Output names used by the drawing mode demo recipes
 draw_default_output := "drawings-default.pdf"

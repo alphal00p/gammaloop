@@ -56,11 +56,12 @@ dictionary.
 
 ## Typst wrapper API
 
-The generated templates include `linnest.typ`, a small Typst wrapper around `linnest.wasm`.
-Import it from a directory that also contains the WASM plugin:
+The generated templates include the canonical Linnest Typst package tree and its
+WASM plugin under `crates/linnest/typst`. Import the package source relative to
+the generated template directory:
 
 ```typst
-#import "linnest.typ": draw, graph, layout, subgraph
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
 
 #let b = graph.builder(
   name: "example",

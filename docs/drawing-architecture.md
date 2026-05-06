@@ -18,10 +18,10 @@ rendering run has these steps:
 2. GammaLoop writes a model-specific `edge-style.typ`. This file maps particle
    names to Typst style dictionaries and exports callbacks named
    `source-style`, `sink-style`, and `edge-label`.
-3. The drawing templates in `assets/embedded/drawing/templates/` are copied to
-   the drawing build directory. They include `linnest.wasm`, `kurvst.wasm`,
-   `linnest.typ`, `curve.typ`, `draw.typ`, `graph.typ`, `subgraph.typ`,
-   `figure.typ`, `grid.typ`, and `layout.typ`.
+3. The drawing templates are extracted to `drawings/templates/`. GammaLoop owns
+   its app templates there (`figure.typ`, `grid.typ`, `layout.typ`), while the
+   shared Linnest/Kurvst package files keep their canonical workspace layout
+   under `drawings/templates/crates/{linnest,kurvst}/typst/`.
 4. The `linnet` CLI compiles `figure.typ` for each DOT file. The figure
    template reads the file through `sys.inputs.data-path` and forwards the DOT
    text to `layout.typ`.

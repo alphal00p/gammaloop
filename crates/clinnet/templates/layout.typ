@@ -1,4 +1,4 @@
-#import "linnest.typ": draw, graph, layout as apply-layout
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout as apply-layout
 
 #let layout(
   input,
