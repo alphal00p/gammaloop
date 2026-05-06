@@ -358,9 +358,7 @@ pub static REFERENCE_CASES: &[ReferenceCase] = &[
         domain: ReferenceDomain::Dirac4,
         expression: dirac_feyncalc_slash_sandwich_id4,
         simplification: ReferenceSimplification::GammaDefault,
-        validation: ReferenceValidation::Blocked(
-            "hep-lib parser currently mismatches dangling edges in this compact slash sum",
-        ),
+        validation: ReferenceValidation::Enabled,
     },
     ReferenceCase {
         name: "dirac_feyncalc_gamma5_anticommutes_id5",

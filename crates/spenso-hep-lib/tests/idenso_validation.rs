@@ -7,7 +7,6 @@ use spenso::{
     algebra::upgrading_arithmetic::FallibleSub,
     iterators::IteratableTensor,
     network::parsing::ParseSettings,
-    s,
     shadowing::Concretize,
     structure::{
         TensorStructure,
@@ -93,10 +92,19 @@ fn scalar_constants() -> HashMap<Atom, Complex64> {
     insert_scalar(&mut constants, CS.tr, 0.5);
     insert_scalar(&mut constants, CS.nc, 3.);
     insert_scalar(&mut constants, CS.na, 8.);
-    insert_scalar(&mut constants, s!(m), 5.);
-    insert_scalar(&mut constants, s!(c1), 7.);
-    insert_scalar(&mut constants, s!(c2), 11.);
+    insert_scalar_aliases(&mut constants, "m", 5.);
+    insert_scalar_aliases(&mut constants, "c1", 7.);
+    insert_scalar_aliases(&mut constants, "c2", 11.);
     constants
+}
+
+fn insert_scalar_aliases(constants: &mut HashMap<Atom, Complex64>, name: &str, value: f64) {
+    insert_scalar(constants, symbolica::symbol!(name), value);
+    insert_scalar(
+        constants,
+        symbolica::symbol!(format!("idenso::{name}")),
+        value,
+    );
 }
 
 fn insert_scalar(constants: &mut HashMap<Atom, Complex64>, symbol: Symbol, value: f64) {
