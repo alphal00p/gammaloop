@@ -322,8 +322,8 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NMul for Network<S
 
         let graph = self.graph.n_mul(items);
 
-        if state.is_tensor() && graph.dangling_indices().is_empty() {
-            state = NetworkState::Scalar;
+        if state.is_tensor() {
+            state = graph.state();
         }
 
         Network {

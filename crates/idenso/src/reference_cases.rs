@@ -449,9 +449,7 @@ pub static REFERENCE_CASES: &[ReferenceCase] = &[
         domain: ReferenceDomain::ColorSu3,
         expression: color_feyncalc_three_generator_trace_terminal_id30,
         simplification: ReferenceSimplification::ColorDefault,
-        validation: ReferenceValidation::Blocked(
-            "hep-lib parser cannot yet materialize length-three color traces reliably",
-        ),
+        validation: ReferenceValidation::Enabled,
     },
     ReferenceCase {
         name: "color_feyncalc_repeated_trace_pair_id52",
