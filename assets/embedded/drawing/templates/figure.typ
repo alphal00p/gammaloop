@@ -14,6 +14,18 @@
   let value = str(value).trim("\"")
   value in ("true", "True", "TRUE", "on", "On", "ON", "yes", "Yes", "YES", "1")
 }
+#let mark-input(value) = {
+  let value = str(value).trim("\"")
+  if value == "auto" {
+    auto
+  } else if value == "none" {
+    none
+  } else if value.starts-with("(") {
+    eval(value)
+  } else {
+    value
+  }
+}
 #let edge-style-options = {
   let options = eval(sys.inputs.at("edge-style-options", default: "(:)"))
   let momentum-arrows = sys.inputs.at("momentum-arrows", default: none)
@@ -31,6 +43,22 @@
   let show-particle = sys.inputs.at("show-particle", default: none)
   if show-particle != none {
     options = options + (show-particle: bool-input(show-particle))
+  }
+  let momentum-arrow-mark = sys.inputs.at("momentum-arrow-mark", default: none)
+  if momentum-arrow-mark != none {
+    options = options + (momentum-arrow-mark: mark-input(momentum-arrow-mark))
+  }
+  let momentum-arrow-paint = sys.inputs.at("momentum-arrow-paint", default: none)
+  let momentum-arrow-thickness = sys.inputs.at("momentum-arrow-thickness", default: none)
+  if momentum-arrow-paint != none or momentum-arrow-thickness != none {
+    let stroke = (paint: black, thickness: 0.55pt, cap: "round")
+    if momentum-arrow-paint != none {
+      stroke = stroke + (paint: eval(str(momentum-arrow-paint).trim("\"")))
+    }
+    if momentum-arrow-thickness != none {
+      stroke = stroke + (thickness: eval(str(momentum-arrow-thickness).trim("\"")))
+    }
+    options = options + (momentum-arrow-stroke: stroke)
   }
   options
 }
