@@ -13,7 +13,7 @@ use spenso::{
     iterators::IteratableTensor,
     network::library::symbolic::ExplicitKey,
     network::{
-        ExecutionResult, Network, Sequential, SmallestDegree, Steps,
+        ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree, Steps,
         parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
         store::NetworkStore,
     },
@@ -247,6 +247,30 @@ fn execute_actual_net(label: &str, mut net: ParsingNet) -> Atom {
     result
 }
 
+fn execute_actual_net_min_result_rank(label: &str, mut net: ParsingNet) -> Atom {
+    let lib = TENSORLIB.read().unwrap();
+    let start = Instant::now();
+    net.execute::<Sequential, MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
+        .unwrap_or_else(|error| panic!("{label} min-result-rank actual execution failed: {error}"));
+    report(&format!("{label} min_result_rank_actual_execute"), start);
+    report_actual_net_stats(&format!("{label} min_result_rank_after_execute"), &net);
+
+    let result = net
+        .result_scalar()
+        .unwrap_or_else(|error| panic!("{label} min-result-rank scalar result failed: {error}"));
+    let result = match result {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(value) => value.into_owned(),
+    };
+    eprintln!(
+        "{label} min_result_rank_actual_result stats: terms={} bytes={}",
+        result.nterms(),
+        result.as_view().get_byte_size()
+    );
+    result
+}
+
 fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
     let lib = TENSORLIB.read().unwrap();
     for step in 0..steps {
@@ -310,6 +334,33 @@ fn parse_inline_expression(input: &str) -> Atom {
         .expect("inline diagnostic expression should parse")
 }
 
+fn gamma_ladder_order_mwe_expr() -> Atom {
+    parse_inline_expression(
+        r#"
+        spenso::g(spenso::bis(4,4),spenso::bis(4,5))
+        *spenso::gamma(spenso::bis(4,4),spenso::bis(4,23),spenso::mink(4,0))
+        *spenso::g(spenso::bis(4,22),spenso::bis(4,23))
+        *ϵ(0,spenso::mink(4,0))
+        *spenso::gamma(spenso::bis(4,5),spenso::bis(4,6),spenso::mink(4,1))
+        *spenso::g(spenso::bis(4,6),spenso::bis(4,7))
+        *ϵ(1,spenso::mink(4,1))
+        *spenso::gamma(spenso::bis(4,7),spenso::bis(4,12),spenso::mink(4,14))
+        *spenso::g(spenso::bis(4,12),spenso::bis(4,13))
+        *spenso::gamma(spenso::bis(4,13),spenso::bis(4,16),spenso::mink(4,18))
+        *spenso::g(spenso::bis(4,16),spenso::bis(4,17))
+        *spenso::gamma(spenso::bis(4,8),spenso::bis(4,17),spenso::mink(4,2))
+        *spenso::g(spenso::bis(4,8),spenso::bis(4,9))
+        *ϵbar(2,spenso::mink(4,2))
+        *spenso::gamma(spenso::bis(4,9),spenso::bis(4,10),spenso::mink(4,3))
+        *spenso::g(spenso::bis(4,10),spenso::bis(4,11))
+        *ϵbar(3,spenso::mink(4,3))
+        *spenso::g(spenso::bis(4,20),spenso::bis(4,21))
+        *spenso::gamma(spenso::bis(4,11),spenso::bis(4,20),spenso::mink(4,18))
+        *spenso::gamma(spenso::bis(4,21),spenso::bis(4,22),spenso::mink(4,14))
+        "#,
+    )
+}
+
 #[test]
 #[ignore = "diagnostic timing for GammaLoop's concrete/mixed tensor evaluator path"]
 fn symbolica_expression_input_actual_network_execute() {
@@ -347,4 +398,54 @@ fn concrete_hep_gamma_trace_probe() {
     );
     let net = parse_concrete_hep_net("gamma_trace_probe", &expr);
     execute_concrete_hep_net("gamma_trace_probe", net);
+}
+
+#[test]
+#[ignore = "diagnostic reproduction of the current left-deep SmallestDegree gamma ladder"]
+fn gamma_ladder_mwe_smallest_degree_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = gamma_ladder_order_mwe_expr();
+    let net = parse_actual_net("gamma_ladder_mwe_smallest_degree", &expr);
+    let result = execute_actual_net("gamma_ladder_mwe_smallest_degree", net);
+    assert!(result.nterms() > 0);
+}
+
+#[test]
+#[ignore = "diagnostic comparison order that minimizes intermediate result rank"]
+fn gamma_ladder_mwe_min_result_rank_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = gamma_ladder_order_mwe_expr();
+    let net = parse_actual_net("gamma_ladder_mwe_min_result_rank", &expr);
+    let result = execute_actual_net_min_result_rank("gamma_ladder_mwe_min_result_rank", net);
+    assert!(result.nterms() > 0);
+}
+
+#[test]
+#[ignore = "diagnostic equivalence check for contraction-order output forms"]
+fn gamma_ladder_mwe_order_results_match_after_expand() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = gamma_ladder_order_mwe_expr();
+
+    let smallest = execute_actual_net(
+        "gamma_ladder_mwe_match_smallest_degree",
+        parse_actual_net("gamma_ladder_mwe_match_smallest_degree", &expr),
+    );
+    let min_result_rank = execute_actual_net_min_result_rank(
+        "gamma_ladder_mwe_match_min_result_rank",
+        parse_actual_net("gamma_ladder_mwe_match_min_result_rank", &expr),
+    );
+
+    let start = Instant::now();
+    let diff = (smallest - min_result_rank).expand();
+    report("gamma_ladder_mwe_order_diff_expand", start);
+    eprintln!(
+        "gamma_ladder_mwe_order_diff stats: terms={} bytes={}",
+        diff.nterms(),
+        diff.as_view().get_byte_size()
+    );
+    assert!(
+        diff.is_zero(),
+        "contraction orders produced different scalar values: {}",
+        diff
+    );
 }

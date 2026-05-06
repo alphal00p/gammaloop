@@ -41,6 +41,18 @@ pub struct SmallestDegreeIter<const N: usize, CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
 }
 
+pub struct MinResultRank<CStrat = ()> {
+    phantom: std::marker::PhantomData<CStrat>,
+}
+
+impl<CStrat> Default for MinResultRank<CStrat> {
+    fn default() -> Self {
+        Self {
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 pub struct ContractScalars<CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
 }
@@ -496,6 +508,82 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         .map(|(left, right, degree, _)| (left, right, degree))
     }
 
+    pub fn best_result_rank_pair<Store>(&self, executor: &Store) -> Option<(usize, usize, u32)>
+    where
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure,
+    {
+        self.best_tensor_pair_by::<Store, _, false>(executor, |_, _, degree, left, right| {
+            if degree == 0 {
+                return (u32::MAX, u32::MAX);
+            }
+
+            let result_rank =
+                left.structure().order() + right.structure().order() - 2 * degree as usize;
+
+            (result_rank as u32, u32::MAX - degree)
+        })
+        .map(|(left, right, degree, _)| (left, right, degree))
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn contract_one_by_result_rank<LT, T, L, Sc, CStrat, FK, Store>(
+        &mut self,
+        executor: &mut Store,
+        graph: &NetworkGraph<K, FK, Aind>,
+        lib: &L,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        K: Clone + Debug + Display,
+        FK: Debug + Display,
+        Aind: AbsInd,
+        LT: LibraryTensor + Clone,
+        T: HasStructure + From<LT::WithIndices> + Contract<T, CStrat, LCM = T>,
+        T::Structure: Display,
+        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+            IsAbstractSlot<Aind = Aind>,
+    {
+        self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        let Some((left, right, degree)) = self.best_result_rank_pair::<Store>(executor) else {
+            return Ok(false);
+        };
+
+        let profile_pair = profile::enabled();
+        let pair_start = if profile_pair {
+            let left_tensor = self.local_tensor_index(left).unwrap();
+            let right_tensor = self.local_tensor_index(right).unwrap();
+            eprintln!(
+                "spenso_profile product.result_rank_pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
+                self.operands.len(),
+                left,
+                right,
+                degree,
+                executor.tensor(left_tensor).structure(),
+                executor.tensor(right_tensor).structure(),
+            );
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
+
+        self.contract_pair::<LT, T, L, Sc, CStrat, FK, Store>(left, right, executor, graph, lib)?;
+
+        if let Some(pair_start) = pair_start {
+            let elapsed = pair_start.elapsed();
+            if elapsed.as_millis() >= 10 {
+                eprintln!(
+                    "spenso_profile product.result_rank_slow_pair elapsed_ms={:.3}",
+                    elapsed.as_secs_f64() * 1000.0,
+                );
+            }
+        }
+
+        Ok(true)
+    }
+
     pub fn best_tensor_pair_by<Store, Score: Ord, const LARGEST: bool>(
         &self,
         executor: &Store,
@@ -742,6 +830,57 @@ where
             )? {
                 break;
             }
+            product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        }
+        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
+    }
+}
+
+impl<
+    CStrat,
+    LT: LibraryTensor + Clone,
+    T: HasStructure
+        + TensorStructure
+        + Clone
+        + Contract<T, CStrat, LCM = T>
+        + ScalarMul<Sc, Output = T>
+        + Contract<LT::WithIndices, LCM = T>
+        + From<LT::WithIndices>,
+    L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+    Sc: for<'a> MulAssign<Sc::Ref<'a>>
+        + Clone
+        + for<'a> MulAssign<T::ScalarRef<'a>>
+        + From<T::Scalar>
+        + Ref,
+    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+    K: Display + Debug + Clone,
+    FK: Display + Debug + Clone,
+    Aind: AbsInd,
+> ContractionStrategy<Store, L, K, FK, Aind> for MinResultRank<CStrat>
+where
+    LT::WithIndices: Contract<LT::WithIndices, LCM = T>
+        + ScalarMul<Sc, Output = T>
+        + PermuteTensor<Permuted = LT::WithIndices>,
+    <LT::WithIndices as HasStructure>::Structure: Display,
+    T::Structure: Display,
+    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+        IsAbstractSlot<Aind = Aind>,
+{
+    fn contract(
+        executor: &mut Store,
+        graph: &NetworkGraph<K, FK, Aind>,
+        operation: &NetworkOperation<FK>,
+        lib: &L,
+    ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display,
+    {
+        let mut product = ProductContraction::from_operation(graph, operation)?;
+        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        while product
+            .contract_one_by_result_rank::<LT, T, L, Sc, CStrat, FK, Store>(executor, graph, lib)?
+        {
             product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         }
         product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)

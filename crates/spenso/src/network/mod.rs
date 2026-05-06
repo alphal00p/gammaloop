@@ -1036,8 +1036,8 @@ pub mod parsing;
 // use log::trace;
 pub mod contract;
 pub use contract::{
-    ContractScalars, ContractionStrategy, ProductContraction, SingleSmallestDegree, SmallestDegree,
-    SmallestDegreeIter,
+    ContractScalars, ContractionStrategy, MinResultRank, ProductContraction, SingleSmallestDegree,
+    SmallestDegree, SmallestDegreeIter,
 };
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where
