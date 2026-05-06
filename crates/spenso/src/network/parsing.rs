@@ -902,6 +902,31 @@ where
         // A trace is parsed as a closed chain over fresh slots of the declared
         // representation, so the factors themselves can stay endpoint-free.
         let mut dummies = ParserDummies::new();
+        if let [factor] = factors {
+            let left = dummies.slot(&rep);
+            let right = dummies.slot(&rep);
+            let bridge = dummies.slot(&rep);
+            let materialized_factor =
+                replace_chain_placeholders(*factor, &left.to_atom(), &right.dual().to_atom());
+            let materialized_factor = materialize_schoonschip(materialized_factor.as_view())
+                .unwrap_or(materialized_factor);
+            let left_closure = FunctionBuilder::new(ETS.metric)
+                .add_arg(bridge.to_atom())
+                .add_arg(left.dual().to_atom())
+                .finish();
+            let right_closure = FunctionBuilder::new(ETS.metric)
+                .add_arg(right.to_atom())
+                .add_arg(bridge.dual().to_atom())
+                .finish();
+            let factor_net =
+                Self::try_from_view_impl(materialized_factor.as_view(), state, library, settings)?;
+            let left_net =
+                Self::try_from_view_impl(left_closure.as_view(), state, library, settings)?;
+            let right_net =
+                Self::try_from_view_impl(right_closure.as_view(), state, library, settings)?;
+            return Ok(factor_net.n_mul([right_net, left_net]));
+        }
+
         let links = (0..factors.len())
             .map(|_| dummies.slot(&rep))
             .collect::<Vec<_>>();
@@ -1124,7 +1149,7 @@ impl NetworkParse for AtomView<'_> {
 mod tests {
     use super::*;
     use crate::network::NetworkState;
-    use crate::structure::representation::{Minkowski, RepName};
+    use crate::structure::representation::{Lorentz, Minkowski, RepName};
     use crate::{chain, slot, trace};
     use symbolica::{function, symbol};
 
@@ -1161,6 +1186,19 @@ mod tests {
     fn parse_trace_materializes_closed_links() {
         let rep = mink4();
         let expr = trace!(&rep, chain_factor(symbol!("f")), chain_factor(symbol!("g")));
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_single_factor_trace_closes_dualizable_links() {
+        let rep = Lorentz {}.new_rep(4);
+        let expr = trace!(&rep, chain_factor(symbol!("f")));
 
         let parsed = expr
             .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
