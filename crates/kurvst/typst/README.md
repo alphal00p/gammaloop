@@ -15,14 +15,15 @@ drawing commands.
   end: (x: 3, y: 0),
 )
 
-#let path = kurvst.pattern-segment(
-  segment,
+#let base = kurvst.cubic-path(..segment)
+#let path = kurvst.pattern-path(
+  base,
   pattern: kurvst.coil(longitudinal-scale: 1.6),
   amplitude: 0.15,
   wavelength: 0.7,
 )
 
-#let parallel = kurvst.parallel-segment(segment, distance: 0.18)
+#let parallel = kurvst.parallel-path(base, distance: 0.18)
 ```
 
 See `docs/manual.typ` for the full API manual.

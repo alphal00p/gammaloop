@@ -398,8 +398,9 @@ special physics DOT field. A style dictionary may contain:
 - `pattern-coil-longitudinal-scale`
 - `pattern-accuracy`
 
-Style dictionaries may also contain path-geometry keys. These are consumed by
-`draw` and are not forwarded to CeTZ:
+Style dictionaries may also contain path-geometry keys. Linnest consumes these
+keys while resolving graph edge layers and delegates the actual path operations
+to Kurvst's path-in/path-out helpers:
 
 - `offset`: normal offset for the half-edge path.
 - `length`: maximum visible arc length for a centered parallel path.
@@ -413,10 +414,21 @@ Style dictionaries may also contain path-geometry keys. These are consumed by
 
 `draw` also accepts `edge-offset`, `edge-length`, `edge-ratio`,
 `edge-resolve-length`, `edge-accuracy`, and `edge-optimize` as defaults for both
-half edges. Parallel paths are computed on the base edge geometry before
-patterns and other decorations; node outsets then trim the shifted path, so it
-remains shortened at node boundaries. When both length and ratio limits are set,
-`resolve-length` decides which visible span to use.
+half edges. Derived paths are computed on the base edge geometry before patterns
+and other decorations; node outsets then trim the shifted path, so it remains
+shortened at node boundaries. When both length and ratio limits are set,
+`resolve-length` decides which visible span to use. For paired edges, Linnest
+computes that centered visible interval once on the full edge and then projects
+it onto the source and sink halves, so a short layer can cross the source/sink
+split instead of being shortened independently on each half. The reusable
+operations live in Kurvst (`layer-path`, `center-outset`, `path-segments`, and
+`path-length`); Linnest's `draw` layer only maps graph styles and label
+positions onto those primitives.
+
+Kurvst follows CeTZ's Rust boundary style: Typst sees explicit CBOR wire
+dictionaries and Rust converts those dictionaries to `kurbo::BezPath` internally.
+That keeps the public Typst API path-in/path-out without tying path objects to
+Kurbo's serde representation.
 
 GammaLoop-generated particle styles produce these dictionaries directly. A user
 can also produce them through `source-style` or `sink-style` in eval mode:

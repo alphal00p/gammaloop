@@ -187,14 +187,17 @@ to encode the graph source/sink split. Set `momentum-arrows: true` to draw
 centered parallel arrow decorations while the main edge remains connected to
 the nodes. The arrows flow from source to sink independently of the DOT
 `dir`/`orientation` value; there is one momentum marker per edge, even though
-the base edge is internally styled as source and sink halves. The decoration defaults to a plain black `0.55pt`
+the base edge is internally styled as source and sink halves. On paired edges
+the marker lives on the sink half; on dangling edges it lives on the existing
+source or sink half-edge. The decoration defaults to a plain black `0.55pt`
 stroke and a scaled CeTZ `"barbed"` arrowhead, so it does not inherit the base
 particle stroke. The arrow length is capped by both `momentum-arrow-length` and
 `momentum-arrow-ratio`, so the shorter one wins. When the layout provides an
 edge-label position, the arrow offset is signed so the momentum marker is drawn
 on the same side of the edge as that label. Use `momentum-arrow-offset` to set
 the normal displacement. Override `momentum-arrow-mark` with any CeTZ mark
-style, for example `(end: "stealth")` or `(end: "barbed", scale: 1.6)`.
+style, for example `"stealth"` or `(end: "barbed", scale: 1.6)`; only the `end`
+mark is kept so source/sink splitting cannot create a second momentum head.
 
 Optional labels can be built from edge metadata with `show-edge-index`,
 `show-half-edge-index`, `show-particle`, and, for explicit momentum fields,
