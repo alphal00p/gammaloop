@@ -120,7 +120,7 @@
   length: 5.0,
   ratio: 0.5,
   stroke: _momentum-arrow-stroke,
-  mark: none,
+  mark: auto,
 )
 
 /// Return an edge's particle name, stripping the quotes often present in DOT
@@ -248,13 +248,14 @@
 
 #let _single-end-mark(mark, arrow-stroke) = {
   let base = (
-    end: "barbed",
+    end: "straight",
     stroke: arrow-stroke,
-    fill: black,
-    scale: 1.35,
+    scale: .75,
   )
-  if mark == none {
+  if mark == auto {
     base
+  } else if mark == none {
+    none
   } else if type(mark) == dictionary {
     let clean = mark
     if clean.keys().contains("start") {
@@ -293,7 +294,11 @@
     stroke: arrow-stroke,
   )
   if show-mark {
-    layer + (mark: arrow-mark)
+    if arrow-mark == none {
+      layer
+    } else {
+      layer + (mark: arrow-mark)
+    }
   } else {
     layer
   }
