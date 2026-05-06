@@ -1,7 +1,9 @@
-use graph::{NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp};
+use graph::{
+    NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation,
+};
 use linnet::half_edge::{
     NodeIndex,
-    subgraph::{SuBitGraph, SubSetOps},
+    subgraph::{SuBitGraph, SubSetLike},
 };
 use profile::{Counter, Timer};
 use serde::{Deserialize, Serialize};
@@ -1049,6 +1051,64 @@ where
         FK: Display;
 }
 
+#[allow(clippy::result_large_err)]
+fn replacement_leaf<K, FK, Aind>(
+    replacement: &NetworkGraph<K, FK, Aind>,
+) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
+where
+    K: Clone + Debug + Display,
+    FK: Debug + Display,
+    Aind: AbsInd,
+{
+    let (node, _, _) = replacement.result()?;
+    match node {
+        NetworkNode::Leaf(leaf) => Ok(leaf.clone()),
+        NetworkNode::Op(op) => Err(TensorNetworkError::Other(eyre!(
+            "operation replacement did not collapse to a leaf: {op}"
+        ))),
+    }
+}
+
+fn first_executable_operation<K, FK, Aind>(
+    graph: &mut NetworkGraph<K, FK, Aind>,
+) -> Option<NetworkOperation<FK>>
+where
+    K: Debug,
+    FK: Clone + Debug,
+    Aind: AbsInd,
+{
+    graph.cache_expr_tree_roots();
+    graph.ready_operation_ref().map(|op_ref| (&op_ref).into())
+}
+
+#[allow(clippy::result_large_err)]
+fn collapse_operation_subgraph<K, FK, Aind>(
+    graph: &mut NetworkGraph<K, FK, Aind>,
+    operation: &NetworkOperation<FK>,
+    replacement: NetworkLeaf<K, Aind>,
+) -> Result<(), TensorNetworkError<K, FK>>
+where
+    K: Debug + Display,
+    FK: Debug + Display,
+    Aind: AbsInd,
+{
+    let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
+    graph
+        .identify_subgraph_nodes_without_deleting_self_edges(
+            operation.subgraph(),
+            NetworkNode::Leaf(replacement),
+            &mut ignored,
+        )
+        .ok_or_else(|| {
+            TensorNetworkError::Other(eyre!("ready operation subgraph did not contain any nodes"))
+        })?;
+    graph.finish_deferred_node_identifications();
+    if !ignored.is_empty() {
+        graph.delete(&ignored);
+    }
+    Ok(())
+}
+
 pub struct Sequential;
 pub struct SequentialRef;
 pub struct SequentialExtract;
@@ -1077,7 +1137,7 @@ where
             while executor.execute_self_loop_traces(graph, lib)? {}
 
             // find the *one* ready op
-            if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
+            if let Some((mut extracted_graph, _op)) = graph.extract_next_ready_op() {
                 println!(
                     "Extracted_graph: {}",
                     extracted_graph.dot_impl(
@@ -1097,10 +1157,18 @@ where
                     )
                 );
                 // execute + splice
-                let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
+                let operation =
+                    first_executable_operation(&mut extracted_graph).ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "extracted graph has no executable operation"
+                        ))
+                    })?;
+                let replacement =
+                    executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
+                collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 println!(
                     "Replacement Graph: {}",
-                    replacement.dot_impl(
+                    extracted_graph.dot_impl(
                         |s| s.to_string(),
                         |_| "".to_string(),
                         |s| s.to_string(),
@@ -1108,7 +1176,7 @@ where
                     )
                 );
 
-                graph.splice_descendents_of(replacement);
+                graph.splice_descendents_of(extracted_graph);
             }
         }
 
@@ -1137,10 +1205,18 @@ where
             while executor.execute_self_loop_traces(graph, lib)? {}
 
             // find the *one* ready op
-            if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
+            if let Some((mut extracted_graph, _op)) = graph.extract_next_ready_op() {
                 // execute + splice
-                let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
-                graph.splice_descendents_of(replacement);
+                let operation =
+                    first_executable_operation(&mut extracted_graph).ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "extracted graph has no executable operation"
+                        ))
+                    })?;
+                let replacement =
+                    executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
+                collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
+                graph.splice_descendents_of(extracted_graph);
             }
         }
 
@@ -1171,11 +1247,19 @@ where
                 let _span = profile::span(Timer::ExecuteFindReady);
                 graph.extract_next_ready_op()
             };
-            if let Some((extracted_graph, op)) = ready {
+            if let Some((mut extracted_graph, _op)) = ready {
                 profile::bump(Counter::ExecuteFound, 1);
                 // execute + splice
-                let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
-                graph.splice_descendents_of(replacement);
+                let operation =
+                    first_executable_operation(&mut extracted_graph).ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "extracted graph has no executable operation"
+                        ))
+                    })?;
+                let replacement =
+                    executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
+                collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
+                graph.splice_descendents_of(extracted_graph);
                 true
             } else {
                 false
@@ -1208,10 +1292,18 @@ where
                 let _span = profile::span(Timer::ExecuteFindReady);
                 graph.extract_next_ready_ref_op()
             };
-            if let Some((extracted_graph, op)) = ready {
+            if let Some((mut extracted_graph, _op)) = ready {
                 profile::bump(Counter::ExecuteFound, 1);
-                let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
-                graph.splice_descendents_of(replacement);
+                let operation =
+                    first_executable_operation(&mut extracted_graph).ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "extracted graph has no executable operation"
+                        ))
+                    })?;
+                let replacement =
+                    executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
+                collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
+                graph.splice_descendents_of(extracted_graph);
                 true
             } else {
                 false
@@ -1238,6 +1330,8 @@ where
         K: Display,
         FK: Display,
     {
+        let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
+
         loop {
             if executor.execute_self_loop_traces(graph, lib)? {
                 continue;
@@ -1246,12 +1340,9 @@ where
             profile::bump(Counter::ExecuteIteration, 1);
             let planned = {
                 let _span = profile::span(Timer::ExecuteFindReady);
-                graph.cache_expr_tree_roots();
-                let batch = graph.ready_operation_batch();
-                batch
-                    .iter()
-                    .map(|op_ref| (op_ref.subgraph().clone(), op_ref.op().clone()))
-                    .collect::<Vec<_>>()
+                graph.cache_expr_tree_roots_ignoring(&ignored);
+                let batch = graph.ready_operation_batch_ignoring(&ignored);
+                batch.iter().map(NetworkOperation::from).collect::<Vec<_>>()
             };
 
             if planned.is_empty() {
@@ -1260,26 +1351,28 @@ where
 
             profile::bump(Counter::ExecuteFound, planned.len() as u64);
             let mut replacements = Vec::with_capacity(planned.len());
-            for (subgraph, op) in &planned {
-                let mut extraction_source = graph.clone();
-                let extracted_graph = extraction_source.extract(subgraph);
-                replacements.push(executor.execute::<C>(
-                    extracted_graph,
-                    lib,
-                    fnlib,
-                    op.clone(),
-                )?);
+            for planned_op in &planned {
+                replacements.push(executor.execute::<C>(graph, planned_op, lib, fnlib)?);
             }
 
-            let mut removed: SuBitGraph = graph.graph.empty_subgraph();
-            for (subgraph, _) in planned {
-                removed.union_with(&subgraph);
+            for (planned_op, replacement) in planned.into_iter().zip(replacements) {
+                graph
+                    .identify_subgraph_nodes_without_deleting_self_edges(
+                        planned_op.subgraph(),
+                        NetworkNode::Leaf(replacement),
+                        &mut ignored,
+                    )
+                    .ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "ready operation subgraph did not contain any nodes"
+                        ))
+                    })?;
             }
+            graph.finish_deferred_node_identifications();
+        }
 
-            let _removed = graph.extract(&removed);
-            for replacement in replacements {
-                graph.splice_descendents_of(replacement);
-            }
+        if !ignored.is_empty() {
+            graph.delete(&ignored);
         }
 
         Ok(())
@@ -1340,11 +1433,11 @@ pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
     #[allow(clippy::result_large_err)]
     fn execute<C: ContractionStrategy<Self, L, K, FK, Aind>>(
         &mut self,
-        graph: NetworkGraph<K, FK, Aind>,
+        graph: &NetworkGraph<K, FK, Aind>,
+        operation: &NetworkOperation<FK>,
         lib: &L,
         fn_lib: &FL,
-        op: NetworkOp<FK>,
-    ) -> Result<NetworkGraph<K, FK, Aind>, TensorNetworkError<K, FK>>
+    ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
     where
         K: Display,
         FK: Display;
@@ -1464,7 +1557,7 @@ impl<
         + Ref
         + for<'a> MulAssign<Sc::Ref<'a>>,
     K: Display + Debug + Clone,
-    FK: Display + Debug,
+    FK: Display + Debug + Clone,
     FL: FunctionLibrary<T, Sc, Key = FK>,
     Aind: AbsInd,
 > ExecuteOp<FL, L, K, FK, Aind> for NetworkStore<T, Sc>
@@ -1489,12 +1582,13 @@ where
 
     fn execute<C: ContractionStrategy<Self, L, K, FK, Aind>>(
         &mut self,
-        mut graph: NetworkGraph<K, FK, Aind>,
+        graph: &NetworkGraph<K, FK, Aind>,
+        operation: &NetworkOperation<FK>,
         lib: &L,
         fn_lib: &FL,
-        op: NetworkOp<FK>,
-    ) -> Result<NetworkGraph<K, FK, Aind>, TensorNetworkError<K, FK>> {
+    ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>> {
         let _execute_span = profile::span(Timer::ExecuteOp);
+        let op = operation.op().clone();
         let op_timer = match &op {
             NetworkOp::Neg => {
                 profile::bump(Counter::ExecuteNeg, 1);
@@ -1518,29 +1612,13 @@ where
             }
         };
         let _op_span = profile::span(op_timer);
-        graph.sync_order();
         match op {
             NetworkOp::Neg => {
-                let ops = graph
-                    .graph
-                    .iter_nodes()
-                    .find(|(_, _, d)| matches!(d, NetworkNode::Op(NetworkOp::Neg)));
-
-                let (opid, children, _) = ops.unwrap();
-
-                let mut child = None;
-                for c in children {
-                    if let Some(id) = graph.graph.involved_node_id(c)
-                        && let NetworkNode::Leaf(l) = &graph.graph[id]
-                    {
-                        if child.is_some() {
-                            return Err(TensorNetworkError::MoreThanOneNeg);
-                        } else {
-                            child = Some((id, l));
-                        }
-                    }
+                if operation.children().len() != 1 {
+                    return Err(TensorNetworkError::MoreThanOneNeg);
                 }
-                if let Some((child_id, leaf)) = child {
+                let child_id = operation.children()[0];
+                if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
                     let new_node = match leaf {
                         NetworkLeaf::Scalar(s) => {
                             let s = self.scalar[*s].clone().neg();
@@ -1564,28 +1642,23 @@ where
                             NetworkLeaf::LocalTensor(pos)
                         }
                     };
-                    graph.identify_nodes_without_self_edges(
-                        &[child_id, opid],
-                        NetworkNode::Leaf(new_node),
-                    );
-                    Ok(graph)
+                    Ok(new_node)
                 } else {
                     Err(TensorNetworkError::ChildlessNeg)
                 }
             }
             NetworkOp::Product => {
                 // println!("Doing Product");
-                let (graph, _) = C::contract(self, graph, lib)?;
-                Ok(graph)
+                let operation_graph = graph.clone_subgraph(operation.subgraph());
+                let (graph, _) = C::contract(self, operation_graph, lib)?;
+                replacement_leaf(&graph)
             }
             NetworkOp::Sum => {
                 // let mut op = None;
                 let mut targets = Vec::new();
-                let mut all_nodes = Vec::new();
-                for (n, _, v) in graph.graph.iter_nodes() {
-                    all_nodes.push(n);
-                    if let NetworkNode::Leaf(l) = &v {
-                        targets.push((n, l));
+                for node in operation.children() {
+                    if let NetworkNode::Leaf(l) = &graph.graph[*node] {
+                        targets.push((*node, l));
                     }
                 }
 
@@ -1701,34 +1774,16 @@ where
                     }
                 };
 
-                graph.identify_nodes_without_self_edges(&all_nodes, NetworkNode::Leaf(new_node));
-                Ok(graph)
+                Ok(new_node)
             }
             NetworkOp::Function(f) => {
-                let ops = graph
-                    .graph
-                    .iter_nodes()
-                    .find(|(_, _, d)| matches!(d, NetworkNode::Op(NetworkOp::Function(_))));
-
-                let (opid, children, _) = ops.unwrap();
-
-                let mut child = None;
-                for c in children {
-                    if let Some(id) = graph.graph.involved_node_id(c)
-                        && let NetworkNode::Leaf(l) = &graph.graph[id]
-                    {
-                        if let Some((nid, _)) = child {
-                            if nid != id {
-                                return Err(TensorNetworkError::Other(eyre!(
-                                    "Cannot have more than one tensor argument to function"
-                                )));
-                            }
-                        } else {
-                            child = Some((id, l));
-                        }
-                    }
+                if operation.children().len() != 1 {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "Cannot have more than one tensor argument to function"
+                    )));
                 }
-                if let Some((child_id, leaf)) = child {
+                let child_id = operation.children()[0];
+                if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
                     let new_node = match leaf {
                         NetworkLeaf::Scalar(s) => {
                             let s = self.scalar[*s].clone();
@@ -1753,47 +1808,21 @@ where
                             NetworkLeaf::LocalTensor(pos)
                         }
                     };
-                    graph.identify_nodes_without_self_edges(
-                        &[child_id, opid],
-                        NetworkNode::Leaf(new_node),
-                    );
-                    Ok(graph)
+                    Ok(new_node)
                 } else {
                     Err(TensorNetworkError::ChildlessNeg)
                 }
             }
-            NetworkOp::Power(_) => {
-                let mut pow = 0;
-                let ops = graph.graph.iter_nodes().find(|(_, _, d)| {
-                    if let NetworkNode::Op(NetworkOp::Power(i)) = d {
-                        pow = *i;
-                        true
-                    } else {
-                        false
-                    }
-                });
-
-                let (opid, children, _) = ops.unwrap();
-
-                let mut child = None;
-                for c in children {
-                    if let Some(id) = graph.graph.involved_node_id(c)
-                        && let NetworkNode::Leaf(l) = &graph.graph[id]
-                    {
-                        if let Some((nid, _)) = child {
-                            if nid != id {
-                                return Err(TensorNetworkError::Other(eyre!(
-                                    "Cannot have more than one tensor argument to power:{}",
-                                    graph.dot()
-                                )));
-                            }
-                        } else {
-                            child = Some((id, l));
-                        }
-                    }
+            NetworkOp::Power(pow) => {
+                if operation.children().len() != 1 {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "Cannot have more than one tensor argument to power:{}",
+                        graph.dot()
+                    )));
                 }
                 let n = pow.abs();
-                if let Some((child_id, leaf)) = child {
+                let child_id = operation.children()[0];
+                if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
                     let new_node = match leaf {
                         NetworkLeaf::Scalar(si) => {
                             if n == 0 {
@@ -1934,11 +1963,7 @@ where
                             }
                         }
                     };
-                    graph.identify_nodes_without_self_edges(
-                        &[child_id, opid],
-                        NetworkNode::Leaf(new_node),
-                    );
-                    Ok(graph)
+                    Ok(new_node)
                 } else {
                     Err(TensorNetworkError::ChildlessNeg)
                 }

@@ -107,6 +107,47 @@ impl<'a, K, FK, Aind> NetworkOperationRef<'a, K, FK, Aind> {
     }
 }
 #[derive(Debug, Clone)]
+pub struct NetworkOperation<FK = i8> {
+    op_node: NodeIndex,
+    op: NetworkOp<FK>,
+    children: Vec<NodeIndex>,
+    subgraph: SuBitGraph,
+}
+
+impl<FK> NetworkOperation<FK> {
+    pub fn op_node(&self) -> NodeIndex {
+        self.op_node
+    }
+
+    pub fn op(&self) -> &NetworkOp<FK> {
+        &self.op
+    }
+
+    pub fn children(&self) -> &[NodeIndex] {
+        &self.children
+    }
+
+    pub fn subgraph(&self) -> &SuBitGraph {
+        &self.subgraph
+    }
+
+    pub fn leaf_count(&self) -> usize {
+        self.children.len()
+    }
+}
+
+impl<K, FK: Clone, Aind> From<&NetworkOperationRef<'_, K, FK, Aind>> for NetworkOperation<FK> {
+    fn from(op_ref: &NetworkOperationRef<'_, K, FK, Aind>) -> Self {
+        Self {
+            op_node: op_ref.op_node(),
+            op: op_ref.op().clone(),
+            children: op_ref.children().to_vec(),
+            subgraph: op_ref.subgraph().clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct NetworkOperationBatchRef<'a, K, FK = i8, Aind = AbstractIndex> {
     operations: Vec<NetworkOperationRef<'a, K, FK, Aind>>,
     subgraph: SuBitGraph,
@@ -566,6 +607,59 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         Self {
             slot_order,
             graph: extracted,
+        }
+    }
+
+    pub fn clone_subgraph<S>(&self, subgraph: &S) -> Self
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+        K: Clone,
+        FK: Clone,
+    {
+        let mut builder = HedgeGraphBuilder::new();
+        let mut node_map = BTreeMap::new();
+        for node in self.graph.nodes(subgraph) {
+            let copied = builder.add_node(self.graph[node].clone());
+            node_map.insert(node, copied);
+        }
+
+        let mut slot_order = Vec::new();
+        for hedge in subgraph.included_iter() {
+            let inverse = self.graph.inv(hedge);
+            if inverse != hedge && subgraph.includes(&inverse) {
+                if inverse < hedge {
+                    continue;
+                }
+
+                let (source, sink) = if matches!(self.graph.flow(hedge), Flow::Source) {
+                    (hedge, inverse)
+                } else {
+                    (inverse, hedge)
+                };
+                let edge_data = self.graph.get_edge_data_full(source);
+                builder.add_edge(
+                    node_map[&self.graph.node_id(source)],
+                    node_map[&self.graph.node_id(sink)],
+                    *edge_data.data,
+                    edge_data.orientation,
+                );
+                slot_order.push(self.slot_order[source.0]);
+                slot_order.push(self.slot_order[sink.0]);
+            } else {
+                let edge_data = self.graph.get_edge_data_full(hedge);
+                builder.add_external_edge(
+                    node_map[&self.graph.node_id(hedge)],
+                    *edge_data.data,
+                    edge_data.orientation,
+                    self.graph.flow(hedge),
+                );
+                slot_order.push(self.slot_order[hedge.0]);
+            }
+        }
+
+        Self {
+            graph: builder.build(),
+            slot_order,
         }
     }
 
@@ -1105,6 +1199,33 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         //     self.dot_simple()
         // );
         n
+    }
+
+    pub fn identify_subgraph_nodes_without_deleting_self_edges<S>(
+        &mut self,
+        subgraph: &S,
+        node_data: NetworkNode<K, FK, Aind>,
+        ignored: &mut SuBitGraph,
+    ) -> Option<NodeIndex>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let _span = profile::span(Timer::IdentifyNodes);
+        let nodes = self.graph.nodes(subgraph);
+        if nodes.is_empty() {
+            return None;
+        }
+
+        let (n, self_edges) = self
+            .graph
+            .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, node_data);
+        ignored.union_with(&self_edges);
+        Some(n)
+    }
+
+    pub fn finish_deferred_node_identifications(&mut self) {
+        self.graph.forget_identification_history();
+        self.graph.node_store.check_and_set_nodes().unwrap();
     }
 
     pub fn identify_nodes_without_self_edges_merge_heads(
@@ -2526,6 +2647,47 @@ pub mod test {
         }
 
         assert_eq!(batch.subgraph(), &union);
+    }
+
+    #[test]
+    fn cloned_ready_subgraph_matches_extracted_boundary() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let mut expr = (tensor_a + tensor_b) * (scalar + scalar_b);
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+        let op_ref = expr.ready_operation_ref().unwrap();
+
+        let mut extracted_expr = expr.clone();
+        let extracted = extracted_expr.extract(op_ref.subgraph());
+        let cloned = expr.clone_subgraph(op_ref.subgraph());
+
+        assert_eq!(extracted.n_nodes(), cloned.n_nodes());
+        assert_eq!(extracted.graph.n_hedges(), cloned.graph.n_hedges());
+        assert_eq!(extracted.n_dangling(), cloned.n_dangling());
+
+        let mut extracted_dangling = extracted.dangling_indices();
+        let mut cloned_dangling = cloned.dangling_indices();
+        extracted_dangling.sort();
+        cloned_dangling.sort();
+        assert_eq!(extracted_dangling, cloned_dangling);
     }
 
     #[test]
