@@ -36,6 +36,8 @@ How it works:
 Validation run:
 
 - `cargo fmt`
+- `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
+- `cargo check --package gammalooprs --tests --profile dev-optim`
 - `cargo check --package idenso --test network_dumb --profile dev-optim`
 
 ### Full-Depth Parse And Execution Profiling
@@ -309,3 +311,34 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
+
+### Staged Index Disconnection Diagnostic
+
+Trace commit: `ntrwxyor`.
+
+What this adds:
+
+- Adds a diagnostic MWE that manually stages a contraction by disconnecting one
+  boundary index before parsing.
+- Executes the disconnected tensor-valued intermediate first, then reconnects
+  it with an explicit metric in a second network execution.
+- Adds `docs/architecture/spenso-large-expression-pathology.md`, summarizing
+  the large-expression behavior and what the lazy-sum, boundary-factor, and
+  staged-disconnect experiments show.
+
+How it works:
+
+- The direct MWE parses and executes the fully connected expression.
+- The staged variant parses an expression where one index is renamed so the
+  corresponding contraction boundary is temporarily disconnected.
+- The first stage executes to a tensor-valued `ActualTensor` intermediate.
+- The second stage builds a network from that intermediate and multiplies it by
+  a reconnecting metric network.
+- The diagnostic compares the expanded scalar result against the direct path
+  and asserts the difference is zero.
+- The rebase keeps current parser imports for opaque shorthand settings and
+  also imports `ShadowedStructure` for the `ActualTensor` alias.
+
+Validation run:
+
+- `cargo fmt`

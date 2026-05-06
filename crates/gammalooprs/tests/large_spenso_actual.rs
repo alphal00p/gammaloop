@@ -14,11 +14,14 @@ use spenso::{
     network::library::symbolic::ExplicitKey,
     network::{
         ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree, Steps,
-        parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
+        parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
         store::NetworkStore,
     },
     structure::{HasName, HasStructure, TensorStructure},
-    tensors::{data::DataTensor, parametric::ParamOrConcrete},
+    tensors::{
+        data::DataTensor,
+        parametric::{MixedTensor, ParamOrConcrete},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, Indeterminate, Symbol},
@@ -38,6 +41,8 @@ type ConcreteParsingNet = Network<
     Symbol,
     Aind,
 >;
+
+type ActualTensor = MixedTensor<F<f64>, ShadowedStructure<Aind>>;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -311,6 +316,46 @@ fn execute_actual_net_min_result_rank_parallel(label: &str, mut net: ParsingNet)
     result
 }
 
+fn execute_actual_net_min_result_rank_parallel_tensor(
+    label: &str,
+    mut net: ParsingNet,
+) -> ActualTensor {
+    let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    net.execute_parallel::<MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
+        .unwrap_or_else(|error| {
+            panic!("{label} parallel min-result-rank tensor execution failed: {error}")
+        });
+    report(
+        &format!("{label} parallel_min_result_rank_tensor_execute"),
+        start,
+    );
+    report_actual_net_stats(
+        &format!("{label} parallel_min_result_rank_tensor_after_execute"),
+        &net,
+    );
+    spenso::network::profile::report(&format!(
+        "{label} after_parallel_min_result_rank_tensor_execute"
+    ));
+
+    let result = net.result_tensor(&*lib).unwrap_or_else(|error| {
+        panic!("{label} parallel min-result-rank tensor result failed: {error}")
+    });
+    let tensor = match result {
+        ExecutionResult::Val(value) => value.into_owned(),
+        ExecutionResult::One => panic!("{label} produced tensor result One"),
+        ExecutionResult::Zero => panic!("{label} produced tensor result Zero"),
+    };
+    eprintln!(
+        "{label} tensor_result stats: order={} logical_entries={} flat_entries={}",
+        tensor.structure().order(),
+        tensor.structure().size().unwrap_or(0),
+        tensor.iter_flat().count()
+    );
+    tensor
+}
+
 fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
     let lib = TENSORLIB.read().unwrap();
     for step in 0..steps {
@@ -421,14 +466,28 @@ fn scalar_poly(seed: usize, terms: usize) -> String {
         .join("+")
 }
 
-fn late_tensor_sum_mwe_expr(leaves: usize, scalar_terms: usize) -> Atom {
+fn late_tensor_sum_mwe_expanded_sum(leaves: usize, scalar_terms: usize) -> String {
     let tensor = "spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*Q(0,spenso::mink(4,mu))";
-    let expanded_sum = (0..leaves)
+    (0..leaves)
         .map(|leaf| format!("({})*({tensor})", scalar_poly(leaf, scalar_terms)))
         .collect::<Vec<_>>()
-        .join("+");
+        .join("+")
+}
+
+fn late_tensor_sum_mwe_expr(leaves: usize, scalar_terms: usize) -> Atom {
+    let expanded_sum = late_tensor_sum_mwe_expanded_sum(leaves, scalar_terms);
 
     parse_inline_expression(&format!("({expanded_sum})*Q(99,spenso::mink(4,nu))"))
+}
+
+fn late_tensor_sum_mwe_disconnected_expr(leaves: usize, scalar_terms: usize) -> Atom {
+    let expanded_sum = late_tensor_sum_mwe_expanded_sum(leaves, scalar_terms);
+
+    parse_inline_expression(&format!("({expanded_sum})*Q(99,spenso::mink(4,rho))"))
+}
+
+fn late_tensor_sum_mwe_reconnect_metric_expr() -> Atom {
+    parse_inline_expression("spenso::g(spenso::mink(4,nu),spenso::mink(4,rho))")
 }
 
 fn factored_tensor_sum_mwe_expr(leaves: usize, scalar_terms: usize) -> Atom {
@@ -662,5 +721,46 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
         expanded_hornered_diff.is_zero(),
         "expanded and Hornered MWE forms produced different scalar values: {}",
         expanded_hornered_diff
+    );
+}
+
+#[test]
+#[ignore = "diagnostic staged orchestration for a late tensor-valued sum"]
+fn late_tensor_sum_mwe_staged_disconnect_reconnect_metric() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let direct = late_tensor_sum_mwe_expr(12, 12);
+    let disconnected = late_tensor_sum_mwe_disconnected_expr(12, 12);
+    let reconnect_metric = late_tensor_sum_mwe_reconnect_metric_expr();
+
+    let direct_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_staged_direct",
+        parse_actual_net("late_tensor_sum_mwe_staged_direct", &direct),
+    );
+    let intermediate = execute_actual_net_min_result_rank_parallel_tensor(
+        "late_tensor_sum_mwe_staged_disconnected",
+        parse_actual_net("late_tensor_sum_mwe_staged_disconnected", &disconnected),
+    );
+    let intermediate_net: ParsingNet = Network::from_tensor(intermediate);
+    let reconnect_net = parse_actual_net(
+        "late_tensor_sum_mwe_staged_reconnect_metric",
+        &reconnect_metric,
+    );
+    let staged_result = execute_actual_net_min_result_rank_parallel(
+        "late_tensor_sum_mwe_staged_reconnected",
+        intermediate_net * reconnect_net,
+    );
+
+    let start = Instant::now();
+    let diff = (direct_result - staged_result).expand();
+    report("late_tensor_sum_mwe_staged_diff_expand", start);
+    eprintln!(
+        "late_tensor_sum_mwe_staged_diff stats: terms={} bytes={}",
+        diff.nterms(),
+        diff.as_view().get_byte_size()
+    );
+    assert!(
+        diff.is_zero(),
+        "direct and staged MWE forms produced different scalar values: {}",
+        diff
     );
 }
