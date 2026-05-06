@@ -174,7 +174,7 @@
   /// Edge specifications. Each edge may define `source`, `sink`,
   /// `orientation`, `flow`, `id`, `pin`, `statements`, `source-style-eval`,
   /// `sink-style-eval`, and `label-eval`. The `source` and `sink` fields use
-  /// the same endpoint dictionaries accepted by @edge. -> array
+  /// the same half-edge dictionaries accepted by @edge. -> array
   edges: (),
 ) = {
   let edge-statements = _edge-render-statements(
@@ -263,7 +263,7 @@
 /// Add a paired or external edge to a builder object.
 ///
 /// Set `source` to `none` or `sink` to `none` for an external edge.
-/// Endpoint dictionaries accept `node`, `statement`, `id`, `port-label`,
+/// Half-edge dictionaries accept `node`, `statement`, `id`, `port-label`,
 /// `compass`, and `in-subgraph`.
 ///
 /// ```example

@@ -103,7 +103,7 @@ Use destructuring to keep the builder value moving:
 #let (node: a, builder: b) = graph.node(b, name: "a")
 ```
 
-`graph.edge` accepts `source` and `sink` endpoint dictionaries. An endpoint can
+`graph.edge` accepts `source` and `sink` half-edge dictionaries. A half edge can
 contain `node`, `statement`, `id`, `port-label`, `compass`, and `in-subgraph`.
 Set `source: none` or `sink: none` to create an external half edge.
 
@@ -169,8 +169,8 @@ external legs on opposite sides while pairing rows by a shared `y` group:
 ```
 
 Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge
-callbacks receive the merged `scope`, edge statements, endpoint records, and the
-edge index:
+callbacks receive the merged `scope`, edge statements, source/sink half-edge
+records, and the edge index:
 
 ```typ
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display-label]

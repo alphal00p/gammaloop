@@ -69,7 +69,7 @@ Examples are `particle`, `pdg`, `lmb_id`, `num`, `int_id`, and
 `overall_factor`.
 
 Drawing data is read by the Linnest drawing templates. Examples are
-`display-label`, `label-template`, `source-style`, `sink-style`, endpoint
+`display-label`, `label-template`, `source-style`, `sink-style`, half-edge
 compass points, and subgraph selections by compass.
 
 The same DOT file may contain both kinds of data for drawing. If a manually
@@ -98,14 +98,14 @@ digraph demo {
 
 Important parser rules:
 
-- `style=invis` on a node marks that node as a dangling external endpoint. It
+- `style=invis` on a node marks that node as a dangling external half-edge. It
   is not a normal drawn node in the half-edge graph.
 - An edge from an invisible node to a real node becomes an incoming dangling
   half-edge at the real node.
 - An edge from a real node to an invisible node becomes an outgoing dangling
   half-edge at the real node.
 - An edge between two invisible nodes is invalid.
-- `node:port` and `node:port:compass` are preserved as endpoint data. The port
+- `node:port` and `node:port:compass` are preserved as half-edge data. The port
   becomes the hedge id/port label; the compass is used by drawing subgraphs such
   as `subgraph.compass(g, "e")`.
 - `edge [key=value]` and `node [key=value]` defaults are merged into individual
@@ -188,11 +188,11 @@ GraphViz-only presentation fields such as `label`, `shape`, `style`, `pos`,
   orientation from the particle.
 
 `source`
-: Endpoint payload for the source half-edge. GammaLoop expects JSON5 when the
+: Half-edge payload for the source half-edge. GammaLoop expects JSON5 when the
   payload carries structured data, for example `source="{ufo_order:2}"`.
 
 `sink`
-: Endpoint payload for the sink half-edge, with the same JSON5 convention as
+: Half-edge payload for the sink half-edge, with the same JSON5 convention as
   `source`.
 
 `lmb_id`
@@ -251,10 +251,10 @@ The `draw` callback data for edges includes:
 
 - `eid`: zero-based edge index in the drawn graph.
 - `edge`: the full edge object.
-- `source`: source endpoint statement, if present.
-- `sink`: sink endpoint statement, if present.
-- `source-endpoint`: endpoint object with node, hedge, port, and compass data.
-- `sink-endpoint`: endpoint object with node, hedge, port, and compass data.
+- `source-statement`: source half-edge statement, if present.
+- `sink-statement`: sink half-edge statement, if present.
+- `source-half-edge`: source half-edge object with node, hedge, port, and compass data.
+- `sink-half-edge`: sink half-edge object with node, hedge, port, and compass data.
 - `orientation`: `default`, `reversed`, or `undirected`.
 - `ext`: boolean, true for dangling half-edges.
 - every edge statement preserved from DOT.
@@ -343,7 +343,7 @@ Eval fields are interpolated first and evaluated afterward. Their eval scope is
 the generated style scope plus the edge callback dictionary, so expressions can
 refer to helpers such as `source-stroke`, `sink-stroke`, `wave`, `coil`,
 `zigzag`, and to edge fields such as `particle`, `label`, `eid`,
-`source-endpoint`, and `sink-endpoint`.
+`source-half-edge`, and `sink-half-edge`.
 
 ### Eval Mode
 
@@ -451,8 +451,8 @@ subgraph and pass it to `draw`:
 #draw(layed-out, subgraph: east)
 ```
 
-Compass subgraphs use endpoint compass data from DOT ports such as `v:0:e` or
-from Typst-built endpoint dictionaries such as `(node: a, compass: "e")`.
+Compass subgraphs use half-edge compass data from DOT ports such as `v:0:e` or
+from Typst-built half-edge dictionaries such as `(node: a, compass: "e")`.
 
 `draw` shades included half-edges with `subgraph-edge-style`. By default this
 is an underlay, so the normal edge style remains visible on top.
