@@ -5,7 +5,7 @@ edition = "2024"
 description = "A spenso tensor library for high energy physics"
 
 [dependencies]
-idenso = { workspace = true }
+idenso = { workspace = true, features = ["reference-cases"] }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-macros = { workspace = true }
 symbolica = { workspace = true }

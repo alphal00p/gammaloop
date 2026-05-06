@@ -52,5 +52,6 @@ harness = false
 [features]
 default = []
 bincode = ["dep:bincode", "dep:bincode-trait-derive"]
+reference-cases = []
 python = ["dep:pyo3"]
 python_stubgen = ["dep:pyo3-stub-gen", "python", "symbolica/python_stubgen"]
