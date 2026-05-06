@@ -371,6 +371,15 @@ fn symbolica_expression_input_actual_network_execute() {
 }
 
 #[test]
+#[ignore = "diagnostic timing for GammaLoop's concrete/mixed tensor evaluator path with MinResultRank"]
+fn symbolica_expression_input_actual_network_min_result_rank_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("symbolica_expression.txt");
+    let net = parse_actual_net("raw_min_result_rank", &expr);
+    let _ = execute_actual_net_min_result_rank("raw_min_result_rank", net);
+}
+
+#[test]
 #[ignore = "diagnostic timing for the first few GammaLoop concrete/mixed tensor execution steps"]
 fn symbolica_expression_input_actual_network_first_steps() {
     test_initialise().expect("GammaLoop initialization should succeed");
