@@ -689,6 +689,66 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         Ok(())
     }
 
+    /// Appends `other` without attempting to match dangling half-edges.
+    ///
+    /// Returns the half-edge offset that maps half-edge ids from `other` into
+    /// their ids after appending.
+    pub fn append_disconnected_mut(&mut self, other: Self) -> Result<Hedge, HedgeGraphError> {
+        let HedgeGraph {
+            hedge_data,
+            edge_store,
+            node_store,
+        } = other;
+
+        self.node_store.extend_mut(node_store);
+        let hedge_shift = self.edge_store.append_disconnected_mut(edge_store);
+        self.hedge_data.extend(hedge_data);
+        self.node_store.check_and_set_nodes()?;
+
+        Ok(hedge_shift)
+    }
+
+    /// Appends multiple graphs without attempting to match dangling half-edges.
+    ///
+    /// Returns the half-edge offsets that map half-edge ids from each input
+    /// graph into their ids after appending. The node store is validated once
+    /// after all inputs have been appended.
+    pub fn append_disconnected_many_mut<I>(
+        &mut self,
+        others: I,
+    ) -> Result<Vec<Hedge>, HedgeGraphError>
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        let mut edge_stores = Vec::new();
+
+        for other in others {
+            let HedgeGraph {
+                hedge_data,
+                edge_store,
+                node_store,
+            } = other;
+
+            self.node_store.extend_mut(node_store);
+            edge_stores.push(edge_store);
+            self.hedge_data.extend(hedge_data);
+        }
+
+        let hedge_shifts = self.edge_store.append_disconnected_many_mut(edge_stores);
+        self.node_store.check_and_set_nodes()?;
+        Ok(hedge_shifts)
+    }
+
+    /// Connects two dangling identity half-edges by their exact ids.
+    pub fn connect_identities(
+        &mut self,
+        source: Hedge,
+        sink: Hedge,
+        merge_fn: impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> (Flow, EdgeData<E>),
+    ) {
+        self.edge_store.connect_identities(source, sink, merge_fn);
+    }
+
     /// Sews dangling edges internal to the graph, matching edges with the given function and merging them with the given function.
     /// "Sews" together pairs of dangling (identity) half-edges within the graph `self`.
     ///

@@ -910,6 +910,57 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.ready_operation_refs_ignoring(&hidden)
     }
 
+    /// Return owned ready operations from the cached expression tree.
+    ///
+    /// This is the execution fast path: it avoids building borrowed
+    /// `NetworkOperationRef`s and then cloning their child lists and subgraphs
+    /// into owned operations before mutating the graph.
+    pub fn ready_operations_from_tree_ignoring<S>(&self, hidden: &S) -> Vec<NetworkOperation<FK>>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+        FK: Clone,
+    {
+        let mut ready = Vec::new();
+
+        #[cfg(debug_assertions)]
+        let mut used: SuBitGraph = self.graph.empty_subgraph();
+
+        let cached_nodes = {
+            let _span = profile::span(Timer::ExecuteReadyPreorder);
+            self.cached_expr_preorder_nodes_ignoring(hidden)
+        };
+
+        for nid in cached_nodes {
+            let parts = {
+                let _span = profile::span(Timer::ExecuteReadyParts);
+                self.ready_operation_parts_ignoring(nid, hidden)
+            };
+            let Some((op, children)) = parts else {
+                continue;
+            };
+
+            let subgraph = {
+                let _span = profile::span(Timer::ExecuteReadySubgraph);
+                self.operation_subgraph_ignoring(nid, &children, hidden)
+            };
+
+            #[cfg(debug_assertions)]
+            {
+                debug_assert!(subgraph.empty_intersection(&used));
+                used.union_with(&subgraph);
+            }
+
+            ready.push(NetworkOperation {
+                op_node: nid,
+                op: op.clone(),
+                children,
+                subgraph,
+            });
+        }
+
+        ready
+    }
+
     /// Return ready operations from the cached expression tree without building a
     /// second disjointness filter. Each selected operation is an expression-tree
     /// node plus its cached tree children, so one traversal cannot select
@@ -1877,6 +1928,57 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         Ok(())
     }
 
+    fn append_disconnected_many_mut<I>(&mut self, others: I) -> Result<Vec<Hedge>, HedgeGraphError>
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        let mut graphs = Vec::new();
+        for other in others {
+            self.slot_order.extend(other.slot_order);
+            graphs.push(other.graph);
+        }
+
+        self.graph.append_disconnected_many_mut(graphs)
+    }
+
+    fn connect_identities(&mut self, source: Hedge, sink: Hedge) {
+        self.graph
+            .connect_identities(source, sink, NetworkGraph::<K, FK, Aind>::join_heads);
+    }
+
+    fn dangling_slot_hedges(&self) -> Vec<(LibrarySlot<Aind>, Hedge)> {
+        let exts: SuBitGraph = self.graph.external_filter();
+        exts.included_iter()
+            .filter_map(|hedge| match self.graph[[&hedge]] {
+                NetworkEdge::Slot(slot) => Some((slot, hedge)),
+                NetworkEdge::Head => None,
+            })
+            .collect()
+    }
+
+    fn sum_input_hedges(
+        &self,
+        n_operands: usize,
+    ) -> (Vec<Hedge>, BTreeMap<LibrarySlot<Aind>, Vec<Hedge>>) {
+        let mut head_inputs = Vec::with_capacity(n_operands);
+        let mut slot_inputs: BTreeMap<LibrarySlot<Aind>, Vec<Hedge>> = BTreeMap::new();
+        let op_node = self.graph.node_id(self.head());
+
+        for hedge in self.graph.iter_crown(op_node) {
+            if self.graph.flow(hedge) != Flow::Sink {
+                continue;
+            }
+
+            match self.graph[[&hedge]] {
+                NetworkEdge::Head => head_inputs.push(hedge),
+                NetworkEdge::Slot(slot) => slot_inputs.entry(slot).or_default().push(hedge),
+            }
+        }
+
+        debug_assert_eq!(head_inputs.len(), n_operands);
+        (head_inputs, slot_inputs)
+    }
+
     pub fn pow(self, pow: i8) -> Self {
         let dangling = self.dangling_indices();
         let mut pow = NetworkGraph::pow_graph(pow, &dangling);
@@ -1978,16 +2080,14 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NAdd for NetworkGraph<K, FK, Aind> {
             );
         }
 
-        let mut add = Self::add_graph(all.len() + 1, &slots);
+        let n_operands = all.len() + 1;
+        let mut add = Self::add_graph(n_operands, &slots);
+        let (head_inputs, mut slot_inputs) = add.sum_input_hedges(n_operands);
+        let mut operand_heads = Vec::with_capacity(n_operands);
+        let mut operand_slots = Vec::with_capacity(n_operands);
+        let mut operands = Vec::with_capacity(n_operands);
 
-        add.join_mut(
-            self,
-            NetworkGraph::<K, FK, Aind>::add_match,
-            NetworkGraph::<K, FK, Aind>::join_heads,
-        )
-        .unwrap();
-
-        for rhs in all {
+        for rhs in std::iter::once(self).chain(all) {
             debug_assert!(
                 slots.len() == rhs.n_dangling(),
                 "Mismatched dangling edges in sum, Trying to add {} to {}",
@@ -1995,12 +2095,27 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NAdd for NetworkGraph<K, FK, Aind> {
                 rhs.dot_simple()
             );
 
-            add.join_mut(
-                rhs,
-                NetworkGraph::<K, FK, Aind>::add_match,
-                NetworkGraph::<K, FK, Aind>::join_heads,
-            )
-            .unwrap();
+            operand_heads.push(rhs.head());
+            operand_slots.push(rhs.dangling_slot_hedges());
+            operands.push(rhs);
+        }
+
+        let hedge_shifts = add.append_disconnected_many_mut(operands).unwrap();
+
+        for (operand_index, (head, (dangling_slots, hedge_shift))) in operand_heads
+            .into_iter()
+            .zip(operand_slots.into_iter().zip(hedge_shifts))
+            .enumerate()
+        {
+            add.connect_identities(head_inputs[operand_index], head + hedge_shift);
+
+            for (slot, hedge) in dangling_slots {
+                let input = slot_inputs
+                    .get_mut(&slot)
+                    .and_then(Vec::pop)
+                    .expect("sum input slot must exist for every operand slot");
+                add.connect_identities(input, hedge + hedge_shift);
+            }
         }
         debug_assert!(
             slots.len() == add.n_dangling(),

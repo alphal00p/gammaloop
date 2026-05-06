@@ -483,7 +483,7 @@ impl<T> SmartEdgeVec<T> {
     }
 
     /// The first two arguments of the merge function correspond to the source hedge, and the second two to the sink hedge.
-    fn connect_identities(
+    pub(crate) fn connect_identities(
         &mut self,
         source: Hedge,
         sink: Hedge,
@@ -552,6 +552,56 @@ impl<T> SmartEdgeVec<T> {
             .unwrap();
         g.data.push((merged_data.data, pair));
         g.data.swap(keep_edge_id, current_last);
+    }
+
+    fn append_disconnected_without_fix(&mut self, other: Self) -> Hedge {
+        let self_n_h: Hedge = self.len();
+        let edge_data_shift = self.data.len();
+        self.data.extend(
+            other
+                .data
+                .into_iter()
+                .map(|(index, (data, pair))| (index, (data, pair.shifted(self_n_h)))),
+        );
+
+        self.involution
+            .inv
+            .extend(other.involution.into_iter().map(|(i, m)| {
+                (
+                    i,
+                    match m {
+                        InvolutiveMapping::Sink { source_idx } => InvolutiveMapping::Sink {
+                            source_idx: source_idx + self_n_h,
+                        },
+                        InvolutiveMapping::Source { data, sink_idx } => InvolutiveMapping::Source {
+                            data: data.map(|e| e + edge_data_shift),
+                            sink_idx: sink_idx + self_n_h,
+                        },
+                        InvolutiveMapping::Identity { data, underlying } => {
+                            InvolutiveMapping::Identity {
+                                data: data.map(|e| e + edge_data_shift),
+                                underlying,
+                            }
+                        }
+                    },
+                )
+            }));
+
+        self_n_h
+    }
+
+    pub(crate) fn append_disconnected_mut(&mut self, other: Self) -> Hedge {
+        self.append_disconnected_without_fix(other)
+    }
+
+    pub(crate) fn append_disconnected_many_mut<I>(&mut self, others: I) -> Vec<Hedge>
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        others
+            .into_iter()
+            .map(|other| self.append_disconnected_without_fix(other))
+            .collect()
     }
 
     pub(crate) fn sew(
