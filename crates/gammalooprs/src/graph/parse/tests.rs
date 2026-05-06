@@ -1648,6 +1648,55 @@ mod failing {
     }
 
     #[test]
+    fn split_dot_export_places_initial_state_cut_inputs_left_and_outputs_right() {
+        test_initialise().unwrap();
+        let g: Graph = dot!(
+            digraph cut_external_flow_graph{
+                num = "1";
+                overall_factor = "AutG(1)^-1";
+                0[num=1 dod=0]
+                1[num=1 dod=0]
+                ext_in [style=invis]
+                ext_out [style=invis]
+                ext_in -> 0:0 [id=0 is_cut=0 name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
+                1:1 -> ext_out [id=1 is_cut=0 name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
+                0:2 -> 1:3 [id=2 name=prop num=1 dod=-2]
+            }
+        )
+        .unwrap();
+
+        let split = g.dot_serialize(&DotExportSettings {
+            split_xs_by_initial_states: true,
+            ..DotExportSettings::default()
+        });
+
+        assert!(
+            g.initial_state_cut
+                .iter_edges_idx_relative()
+                .next()
+                .is_some()
+        );
+
+        let incoming_edge = split
+            .lines()
+            .find(|line| line.contains("sink=") && line.contains("is_cut="))
+            .unwrap_or_else(|| panic!("missing incoming cut edge in split DOT:\n{split}"));
+        assert!(
+            incoming_edge.contains("pin=\"x:@-left,y:@edge"),
+            "{incoming_edge}"
+        );
+
+        let outgoing_edge = split
+            .lines()
+            .find(|line| line.contains("source=") && line.contains("is_cut="))
+            .unwrap_or_else(|| panic!("missing outgoing cut edge in split DOT:\n{split}"));
+        assert!(
+            outgoing_edge.contains("pin=\"x:@+right,y:@edge"),
+            "{outgoing_edge}"
+        );
+    }
+
+    #[test]
     #[should_panic(expected = "vertex dod autogeneration is not implemented yet")]
     fn missing_vertex_dod_panics() {
         test_initialise().unwrap();
