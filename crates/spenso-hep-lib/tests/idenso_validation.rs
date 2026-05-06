@@ -2,7 +2,7 @@ use ahash::{HashMap, HashMapExt};
 use idenso::{
     color::CS,
     epsilon::EPSILON_SYMBOL,
-    reference_cases::{ReferenceCase, ReferenceDomain, ReferenceValidation, reference_cases},
+    reference_cases::{ReferenceCase, ReferenceDomain, reference_cases},
 };
 use spenso::{
     algebra::upgrading_arithmetic::FallibleSub,
@@ -13,21 +13,26 @@ use spenso::{
         TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::{Minkowski, RepName},
+        slot::{DualSlotTo, IsAbstractSlot},
     },
+    sym,
     symbolica_atom::ProjectorExpander,
     tensors::{
         data::{DenseTensor, SparseOrDense},
         parametric::atomcore::TensorAtomMaps,
     },
+    trace,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     coefficient::CoefficientView,
     domains::float::RealLike,
     evaluate::EvaluationFn,
+    function,
 };
 
 use crate::common::{HepAtomExt, NetExt, test_initialize};
+use idenso::representations::{ColorAdjoint, ColorFundamental};
 
 mod common;
 
@@ -54,19 +59,455 @@ fn enabled_idenso_reference_cases_validate_against_explicit_tensors() {
 }
 
 #[test]
-fn blocked_idenso_reference_cases_stay_documented() {
-    let blocked = reference_cases()
-        .iter()
-        .filter_map(|case| match case.validation {
-            ReferenceValidation::Enabled => None,
-            ReferenceValidation::Blocked(reason) => Some((case.name, reason)),
-        })
-        .collect::<Vec<_>>();
+fn color_trace_structure_contraction_matches_commutator() {
+    test_initialize();
 
-    assert!(
-        !blocked.is_empty(),
-        "remove this test once every shared idenso reference case validates explicitly"
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = Atom::i()
+        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * trace!(
+            &cof,
+            idenso::color_t!(a.clone()),
+            idenso::color_t!(b.clone()),
+            idenso::color_t!(x)
+        );
+    let rhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone())
+    ) - trace!(
+        &cof,
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(d),
+        idenso::color_t!(c)
     );
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_middle_trace_structure_contraction_matches_commutator() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = Atom::i()
+        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * trace!(
+            &cof,
+            idenso::color_t!(a.clone()),
+            idenso::color_t!(x),
+            idenso::color_t!(b.clone())
+        );
+    let rhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone()),
+        idenso::color_t!(b.clone())
+    ) - trace!(
+        &cof,
+        idenso::color_t!(a),
+        idenso::color_t!(d),
+        idenso::color_t!(c),
+        idenso::color_t!(b)
+    );
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_explicit_middle_generator_contraction_matches_commutator() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let [i, j, k] =
+        ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = Atom::i()
+        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * function!(
+            CS.t,
+            a.clone().to_atom(),
+            i.clone().to_atom(),
+            j.dual().to_atom()
+        )
+        * function!(CS.t, x.to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, b.clone().to_atom(), k.to_atom(), i.dual().to_atom());
+    let rhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone()),
+        idenso::color_t!(b.clone())
+    ) - trace!(
+        &cof,
+        idenso::color_t!(a),
+        idenso::color_t!(d),
+        idenso::color_t!(c),
+        idenso::color_t!(b)
+    );
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_trace_materialization_is_cyclic() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c] =
+        ["a", "b", "c"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(c.clone())
+    );
+    let rhs = trace!(
+        &cof,
+        idenso::color_t!(b),
+        idenso::color_t!(c),
+        idenso::color_t!(a)
+    );
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_three_trace_antisymmetric_part_matches_structure_constant() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c] =
+        ["a", "b", "c"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(c.clone())
+    ) - trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(b.clone())
+    );
+    let rhs = Atom::i() * Atom::var(CS.tr) * idenso::color_f!(a, b, c);
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_explicit_three_trace_antisymmetric_part_matches_structure_constant() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c] =
+        ["a", "b", "c"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let [i, j, k] =
+        ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let abc = function!(
+        CS.t,
+        a.clone().to_atom(),
+        i.clone().to_atom(),
+        j.dual().to_atom()
+    ) * function!(
+        CS.t,
+        b.clone().to_atom(),
+        j.clone().to_atom(),
+        k.dual().to_atom()
+    ) * function!(
+        CS.t,
+        c.clone().to_atom(),
+        k.clone().to_atom(),
+        i.dual().to_atom()
+    );
+    let acb = function!(
+        CS.t,
+        a.clone().to_atom(),
+        i.clone().to_atom(),
+        j.dual().to_atom()
+    ) * function!(CS.t, c.clone().to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, b.clone().to_atom(), k.to_atom(), i.dual().to_atom());
+    let rhs = Atom::i() * Atom::var(CS.tr) * idenso::color_f!(a, b, c);
+
+    assert_valid(abc - acb, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_symmetric_trace_structure_contraction_matches_commutator_average() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = Atom::i()
+        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * trace!(
+            &cof,
+            sym!(
+                idenso::color_t!(a.clone()),
+                idenso::color_t!(b.clone()),
+                idenso::color_t!(x)
+            )
+        );
+    let rhs = (trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone())
+    ) - trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(d.clone()),
+        idenso::color_t!(c.clone())
+    ) + trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone()),
+        idenso::color_t!(b.clone())
+    ) - trace!(
+        &cof,
+        idenso::color_t!(a),
+        idenso::color_t!(d),
+        idenso::color_t!(c),
+        idenso::color_t!(b)
+    )) / 2;
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_trace_materialization_matches_explicit_generator_product() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d] =
+        ["a", "b", "c", "d"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let [i, j, k, l] =
+        ["i", "j", "k", "l"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone())
+    );
+    let rhs = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
+        * function!(CS.t, b.to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, c.to_atom(), k.to_atom(), l.dual().to_atom())
+        * function!(CS.t, d.to_atom(), l.to_atom(), i.dual().to_atom());
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_permuted_trace_materialization_matches_explicit_generator_product() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d] =
+        ["a", "b", "c", "d"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let [i, j, k, l] =
+        ["i", "j", "k", "l"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone()),
+        idenso::color_t!(b.clone())
+    );
+    let rhs = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
+        * function!(CS.t, c.to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, d.to_atom(), k.to_atom(), l.dual().to_atom())
+        * function!(CS.t, b.to_atom(), l.to_atom(), i.dual().to_atom());
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_middle_trace_materialization_matches_explicit_generator_product() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, x] =
+        ["a", "b", "x"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let [i, j, k] =
+        ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(x.clone()),
+        idenso::color_t!(b.clone())
+    );
+    let rhs = function!(CS.t, a.to_atom(), i.clone().to_atom(), j.dual().to_atom())
+        * function!(CS.t, x.to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, b.to_atom(), k.to_atom(), i.dual().to_atom());
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_structure_constant_matches_generator_commutator() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c] =
+        ["a", "b", "c"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let [i, j, k] =
+        ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = Atom::i()
+        * idenso::color_f!(a.clone(), b.clone(), c.clone())
+        * function!(CS.t, c.to_atom(), i.clone().to_atom(), j.dual().to_atom());
+    let rhs = function!(
+        CS.t,
+        a.clone().to_atom(),
+        i.clone().to_atom(),
+        k.dual().to_atom()
+    ) * function!(
+        CS.t,
+        b.clone().to_atom(),
+        k.clone().to_atom(),
+        j.dual().to_atom()
+    ) - function!(CS.t, b.to_atom(), i.to_atom(), k.dual().to_atom())
+        * function!(CS.t, a.to_atom(), k.to_atom(), j.dual().to_atom());
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_four_generator_symmetric_trace_matches_permutation_average() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d] =
+        ["a", "b", "c", "d"].map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let factors = [a, b, c, d].map(|slot| idenso::color_t!(slot));
+    let lhs = trace!(&cof, sym!(; factors.clone()));
+    let mut rhs = Atom::Zero;
+    for i in 0..4 {
+        for j in 0..4 {
+            for k in 0..4 {
+                for l in 0..4 {
+                    if [j, k, l].contains(&i) || k == j || l == j || l == k {
+                        continue;
+                    }
+                    rhs += trace!(
+                        &cof,
+                        factors[i].clone(),
+                        factors[j].clone(),
+                        factors[k].clone(),
+                        factors[l].clone()
+                    );
+                }
+            }
+        }
+    }
+    rhs /= Atom::num(24);
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_four_generator_trace_decomposition_matches_direct_trace() {
+    test_initialize();
+
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+
+    let lhs = trace!(
+        &cof,
+        idenso::color_t!(a.clone()),
+        idenso::color_t!(b.clone()),
+        idenso::color_t!(c.clone()),
+        idenso::color_t!(d.clone())
+    );
+    let rhs = trace!(
+        &cof,
+        sym!(
+            idenso::color_t!(a.clone()),
+            idenso::color_t!(b.clone()),
+            idenso::color_t!(c.clone()),
+            idenso::color_t!(d.clone())
+        )
+    ) + Atom::i() / Atom::num(2)
+        * idenso::color_f!(a.clone(), b.clone(), x.clone())
+        * trace!(
+            &cof,
+            sym!(
+                idenso::color_t!(c.clone()),
+                idenso::color_t!(d.clone()),
+                idenso::color_t!(x.clone())
+            )
+        )
+        + Atom::i() / Atom::num(2)
+            * idenso::color_f!(c.clone(), d.clone(), x.clone())
+            * trace!(
+                &cof,
+                sym!(
+                    idenso::color_t!(a.clone()),
+                    idenso::color_t!(b.clone()),
+                    idenso::color_t!(x.clone())
+                )
+            )
+        - Atom::var(CS.tr) / Atom::num(6)
+            * idenso::color_f!(a.clone(), c.clone(), x.clone())
+            * idenso::color_f!(b.clone(), d.clone(), x.clone())
+        + Atom::var(CS.tr) / Atom::num(3)
+            * idenso::color_f!(a, d, x.clone())
+            * idenso::color_f!(b, c, x);
+
+    assert_valid(lhs, rhs, &scalar_constants());
+}
+
+#[test]
+fn color_single_contracted_structure_constants_satisfy_jacobi() {
+    test_initialize();
+
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let expr = idenso::color_f!(a.clone(), b.clone(), x.clone())
+        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        - idenso::color_f!(a.clone(), c.clone(), x.clone())
+            * idenso::color_f!(b.clone(), d.clone(), x.clone())
+        + idenso::color_f!(a, d, x.clone()) * idenso::color_f!(b, c, x);
+
+    assert_valid(expr, Atom::Zero, &scalar_constants());
 }
 
 #[track_caller]
@@ -75,7 +516,7 @@ fn assert_case_valid(case: &ReferenceCase) {
     let simplified = case.simplify(&original);
     let constants = constants_for(case.domain);
 
-    assert_valid(original, simplified, &constants);
+    assert_valid_with_label(original, simplified, &constants, case.name);
 }
 
 fn constants_for(domain: ReferenceDomain) -> HashMap<Atom, Complex64> {
@@ -134,13 +575,24 @@ fn insert_vector_values(constants: &mut HashMap<Atom, Complex64>, name: &str, of
 
 #[track_caller]
 fn assert_valid(original: Atom, simplified: Atom, constants: &HashMap<Atom, Complex64>) {
+    let label = format!("`{original}` should equal `{simplified}`");
+    assert_valid_with_label(original, simplified, constants, &label);
+}
+
+#[track_caller]
+fn assert_valid_with_label(
+    original: Atom,
+    simplified: Atom,
+    constants: &HashMap<Atom, Complex64>,
+    label: &str,
+) {
     if simplified.is_zero() {
-        assert_hep_tensor_zero(evaluate(original, constants));
+        assert_hep_tensor_zero(evaluate(original, constants), label);
         return;
     }
 
     if original.is_zero() {
-        assert_hep_tensor_zero(evaluate(simplified, constants));
+        assert_hep_tensor_zero(evaluate(simplified, constants), label);
         return;
     }
 
@@ -148,11 +600,11 @@ fn assert_valid(original: Atom, simplified: Atom, constants: &HashMap<Atom, Comp
     let simplified_result = evaluate(simplified, constants);
     let difference = original_result.sub_fallible(&simplified_result).unwrap();
 
-    assert_hep_tensor_zero(difference);
+    assert_hep_tensor_zero(difference, label);
 }
 
 #[track_caller]
-fn assert_hep_tensor_zero(mut difference: spenso_hep_lib::HepTensor<AbstractIndex>) {
+fn assert_hep_tensor_zero(mut difference: spenso_hep_lib::HepTensor<AbstractIndex>, label: &str) {
     difference.to_param();
     let difference = difference.try_into_parametric().unwrap();
     let zero = difference
@@ -172,9 +624,43 @@ fn assert_hep_tensor_zero(mut difference: spenso_hep_lib::HepTensor<AbstractInde
             panic!("validation inconclusive")
         }
         symbolica::id::ConditionResult::False => {
-            panic!("validation difference should be zero:\n{difference}")
+            panic!(
+                "validation difference should be zero for `{label}`:\n{}",
+                validation_difference_summary(&difference)
+            )
         }
     }
+}
+
+fn validation_difference_summary<T>(difference: &T) -> String
+where
+    T: IteratableTensor,
+    for<'a> T::Data<'a>: Into<AtomView<'a>>,
+{
+    let mut count = 0usize;
+    let mut shown = Vec::new();
+
+    for (index, value) in difference.iter_flat() {
+        let value = value.into();
+        if is_numerically_small(value, 1e-12) {
+            continue;
+        }
+
+        count += 1;
+        if shown.len() < 16 {
+            let expanded = difference
+                .expanded_index(index)
+                .map(|index| format!("{index:?}"))
+                .unwrap_or_else(|_| format!("flat {}", usize::from(index)));
+            shown.push(format!("{expanded}: {value}"));
+        }
+    }
+
+    format!(
+        "{count} entries exceed tolerance 1e-12; first {}:\n{}",
+        shown.len(),
+        shown.join("\n")
+    )
 }
 
 fn is_numerically_small(value: AtomView, tolerance: f64) -> bool {
@@ -203,6 +689,14 @@ fn evaluate(
     constants: &HashMap<Atom, Complex64>,
 ) -> spenso_hep_lib::HepTensor<AbstractIndex> {
     let expression = expression.expand_projectors().expand();
+
+    evaluate_term(expression, constants)
+}
+
+fn evaluate_term(
+    expression: Atom,
+    constants: &HashMap<Atom, Complex64>,
+) -> spenso_hep_lib::HepTensor<AbstractIndex> {
     let net = expression
         .parse_to_hep_net(&ParseSettings::default())
         .unwrap_or_else(|err| {

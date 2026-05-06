@@ -804,7 +804,12 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
                     jbase += 1;
                 }
                 std::cmp::Ordering::Equal => {
-                    panic!("Cannot have equal bases")
+                    panic!(
+                        "cannot merge ordered structures with equal base slots at self[{left}] and other[{right}]: {slot}\nself: {self:?}\nother: {other:?}",
+                        left = i + ibase,
+                        right = j + jbase,
+                        slot = self.structure[i + ibase],
+                    )
                 }
             }
         }
@@ -867,7 +872,12 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
                     jdual += 1;
                 }
                 Ordering::Equal => {
-                    panic!("Cannot have equal duals")
+                    panic!(
+                        "cannot merge ordered structures with equal dual slots at self[{left}] and other[{right}]: {slot}\nself: {self:?}\nother: {other:?}",
+                        left = i + ibase + idual,
+                        right = j + jbase + jdual,
+                        slot = self.structure[i + ibase + idual],
+                    )
                 }
             }
         }

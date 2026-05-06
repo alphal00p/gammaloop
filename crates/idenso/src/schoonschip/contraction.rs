@@ -541,14 +541,14 @@ where
         loop {
             graph.sync_order();
 
-            let node_size = |_nid, node: &NetworkNode<DummyKey, symbolica::atom::Symbol>| match node
-            {
-                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                    Some(expression_size(&executor.tensors[*index].expression))
-                }
-                NetworkNode::Leaf(NetworkLeaf::LibraryKey(_)) => None,
-                _ => None,
-            };
+            let node_size =
+                |_nid, node: &NetworkNode<DummyKey, symbolica::atom::Symbol, Aind>| match node {
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                        Some(expression_size(&executor.tensors[*index].expression))
+                    }
+                    NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => None,
+                    _ => None,
+                };
 
             let mut last_tensor = None;
             let edge_to_contract = graph
@@ -599,16 +599,18 @@ where
             };
 
             if trace_ordering {
-                let describe = |node: &NetworkNode<DummyKey, symbolica::atom::Symbol>| match node {
-                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                        let tensor = &executor.tensors[*index];
-                        let (bytes, terms) = expression_size(&tensor.expression);
-                        format!(
-                            "tensor#{index} degree_expr_terms={terms} bytes={bytes} structure={}",
-                            tensor.structure
-                        )
+                let describe = |node: &NetworkNode<DummyKey, symbolica::atom::Symbol, Aind>| {
+                    match node {
+                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                            let tensor = &executor.tensors[*index];
+                            let (bytes, terms) = expression_size(&tensor.expression);
+                            format!(
+                                "tensor#{index} degree_expr_terms={terms} bytes={bytes} structure={}",
+                                tensor.structure
+                            )
+                        }
+                        other => format!("{other:?}"),
                     }
-                    other => format!("{other:?}"),
                 };
                 eprintln!(
                     "order_contract metric={} step={} degree={} score={:?} left={} right={}",
@@ -641,7 +643,7 @@ where
                         executor.tensors.push(contracted);
                         NetworkLeaf::LocalTensor(pos)
                     }
-                    (NetworkLeaf::LibraryKey(_), _) | (_, NetworkLeaf::LibraryKey(_)) => {
+                    (NetworkLeaf::LibraryKey { .. }, _) | (_, NetworkLeaf::LibraryKey { .. }) => {
                         return Err(TensorNetworkError::FailedContractMsg(
                             "expression-order contraction does not support library tensors"
                                 .to_owned(),
@@ -650,8 +652,8 @@ where
                 },
                 (a, b) => {
                     return Err(TensorNetworkError::CannotContractEdgeBetween(
-                        a.clone(),
-                        b.clone(),
+                        a.to_string(),
+                        b.to_string(),
                     ));
                 }
             };
