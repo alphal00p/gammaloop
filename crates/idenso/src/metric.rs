@@ -12,7 +12,7 @@ use spenso::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, PermutedStructure, TensorStructure, ToSymbolic,
-        abstract_index::AbstractIndex,
+        abstract_index::{AIND_SYMBOLS, AbstractIndex},
         permuted::Perm,
         representation::{LibraryRep, LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
@@ -29,20 +29,17 @@ use symbolica::{
     symbol,
 };
 
-use crate::parsing_ind::Parsind;
-use eyre::{Result, eyre};
+use eyre::Result;
 
 use super::rep_symbols::RS;
 
 pub struct MetricSymbols {
     pub dim: Symbol,
-    // pub dot: Symbol,
     pub dummy: Symbol,
 }
 
 pub static MS: LazyLock<MetricSymbols> = LazyLock::new(|| MetricSymbols {
     dim: symbol!("spenso::dim"),
-    // dot: symbol!("spenso::dot";Symmetric, Linear),
     dummy: symbol!("spenso::dummy"),
 });
 
@@ -516,7 +513,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         let f = func_with_rep(m, RS.f_, RS.a___, &rep);
         let g = func_with_rep(m, RS.g_, RS.b___, &rep);
 
-        function!(ETS.metric, f, g)
+        function!(SPENSO_TAG.dot, f, g)
     })
     .replace(
         function!(
@@ -536,7 +533,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
             .replace_wildcards_with_matches(m);
         let f = func_with_rep(m, RS.f_, RS.a___, &rep);
 
-        function!(ETS.metric, &f, &f)
+        function!(SPENSO_TAG.dot, &f, &f)
     })
     .replace(
         function!(
@@ -564,16 +561,48 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         let f = func_with_rep(m, RS.f_, RS.a___, &rep);
         let g = func_with_rep(m, RS.g_, RS.b___, &dual_rep);
 
-        function!(ETS.metric, f, g)
+        function!(SPENSO_TAG.dot, f, g)
+    })
+    .replace(function!(ETS.metric, RS.f_, RS.g_))
+    .level_range((0, Some(0)))
+    .when(not_slot(RS.f_) & not_slot(RS.g_))
+    .repeat()
+    .with(function!(SPENSO_TAG.dot, RS.f_, RS.g_))
+}
+
+fn matched_i64(m: &MatchStack<'_>, symbol: Symbol) -> Option<i64> {
+    match m.get(symbol)? {
+        Match::Single(value) => i64::try_from(*value).ok(),
+        _ => None,
+    }
+}
+
+fn simplify_generated_metric_components(expr: Atom) -> Atom {
+    let pat = function!(ETS.metric, function!(AIND_SYMBOLS.cind, RS.i_, RS.j_)).to_pattern();
+    expr.replace(pat.clone()).with_map(move |m| {
+        let Some(i) = matched_i64(m, RS.i_) else {
+            return pat.replace_wildcards_with_matches(m);
+        };
+        let Some(j) = matched_i64(m, RS.j_) else {
+            return pat.replace_wildcards_with_matches(m);
+        };
+
+        if i != j {
+            Atom::Zero
+        } else if i == 0 {
+            Atom::num(1)
+        } else {
+            Atom::num(-1)
+        }
     })
 }
 
 /// Trait for simplifying expressions involving metric tensors and converting
-/// index contractions to compact Schoonschip metric products.
+/// index contractions to compact Schoonschip scalar products.
 ///
 /// Provides methods for contracting indices with metric tensors (`g(mu, nu)`) or
 /// identity tensors (`id(mu, nu)`), and for replacing contracted index patterns
-/// (like `p(mu)*q(mu)`) with `g(p(rep), q(rep))`.
+/// (like `p(mu)*q(mu)`) with `dot(p(rep), q(rep))`.
 pub trait MetricSimplifier {
     /// Simplifies contractions involving metric tensors (`g` or `metric`) and identity tensors (`id` or `𝟙`).
     ///
@@ -585,14 +614,14 @@ pub trait MetricSimplifier {
 
     fn expand_dots(&self) -> Result<Atom>;
 
-    /// Converts contracted index patterns into compact metric-product notation.
+    /// Converts contracted index patterns into compact scalar-product notation.
     ///
     /// Replaces expressions like `p(mu) * q(mu)` or `p(mu) * M(mu, nu) * q(nu)` (implicitly via metric rules)
-    /// with `g(p(rep), q(rep))`. Assumes standard representations for vectors and tensors involved
+    /// with `dot(p(rep), q(rep))`. Assumes standard representations for vectors and tensors involved
     /// in the contractions.
     ///
     /// # Returns
-    /// An [`Atom`] where contractions have been replaced by compact metric products where possible.
+    /// An [`Atom`] where contractions have been replaced by compact scalar products where possible.
     fn to_dots(&self) -> Atom;
 }
 
@@ -616,16 +645,20 @@ impl MetricSimplifier for AtomView<'_> {
 
     fn expand_dots(&self) -> Result<Atom> {
         let set = ParseSettings::default();
-        let pat = function!(ETS.metric, RS.f_, RS.g_).to_pattern();
-        Ok(self.replace(pat.clone()).with_map(move |a| {
+        let compact = self.to_dots();
+        let pat = function!(SPENSO_TAG.dot, RS.f_, RS.g_).to_pattern();
+        let metric_pat = function!(ETS.metric, RS.f_, RS.g_).to_pattern();
+        Ok(compact.as_view().replace(pat.clone()).with_map(move |a| {
             let filled = pat.replace_wildcards_with_matches(a);
+            let metric_filled = metric_pat.replace_wildcards_with_matches(a);
 
-            match filled.parse_to_atom_net::<AbstractIndex>(&set) {
+            match metric_filled.parse_to_atom_net::<AbstractIndex>(&set) {
                 Err(_) => filled,
                 Ok(mut net) => {
                     net.simple_execute();
                     match net.result_scalar() {
-                        Ok(scalar) => scalar.into(),
+                        Ok(scalar) => simplify_generated_metric_components(Atom::from(scalar))
+                            .simplify_metrics(),
                         Err(_) => filled,
                     }
                 }
@@ -764,20 +797,19 @@ mod test {
             a,
             parse_lit!(P(spenso::mink(4, 2)) * P(spenso::mink(4, -g(2)), spenso::mink(4, 2)))
         );
-        let a =
-            parse_lit!(P(wrong::mink(4, -1 * g(2)), spenso::mink(4, 2)) * P(spenso::mink(4, 2)))
-                .to_dots();
-        assert_eq!(
-            a,
-            parse_lit!(spenso::g(
-                idenso::P(spenso::mink(4)),
-                idenso::P(wrong::mink(4, -idenso::g(2)), spenso::mink(4))
-            ))
-        );
-        insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(mink(4,-1*g(2)),cind(1))+-1*P(cind(2))*P(mink(4,-1*g(2)),cind(2))+-1*P(cind(3))*P(mink(4,-1*g(2)),cind(3))+P(cind(0))*P(mink(4,-1*g(2)),cind(0))");
+        let a = parse_lit!(P(label, spenso::mink(4, 2)) * P(spenso::mink(4, 2))).to_dots();
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(P(label,mink(4)),P(mink(4)))");
+        insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(label,cind(1))+-1*P(cind(2))*P(label,cind(2))+-1*P(cind(3))*P(label,cind(3))+P(cind(0))*P(label,cind(0))");
 
         let a = parse_lit!(k1(spenso::mink(4, mu1)) ^ 2).to_dots();
-        insta::assert_snapshot!(a.to_bare_ordered_string(),@"g(k1(mink(4)),k1(mink(4)))");
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(k1(mink(4)),k1(mink(4)))");
+
+        let a = parse_lit!(spenso::g(
+            k(1, spenso::mink(4)) + k(2, spenso::mink(4)),
+            p(3, spenso::mink(4))
+        ))
+        .to_dots();
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(k(1,mink(4)),p(3,mink(4)))+dot(k(2,mink(4)),p(3,mink(4)))");
     }
 
     #[test]

@@ -11,7 +11,7 @@ use crate::network::tags::SPENSO_TAG;
 
 use crate::network::library::symbolic::ETS;
 use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
-use crate::structure::representation::Representation;
+use crate::structure::representation::{RepName, Representation};
 // use crate::shadowing::Concretize;
 use crate::structure::slot::{DualSlotTo, DummyAind, ParseableAind, Slot, SlotError};
 use crate::structure::{
@@ -26,6 +26,7 @@ use store::TensorScalarStore;
 // use log::trace;
 
 use symbolica::atom::{AddView, Atom, AtomView, MulView, PowView, representation::FunView};
+use symbolica::id::MatchSettings;
 
 use crate::structure::{HasStructure, TensorStructure};
 
@@ -318,13 +319,21 @@ struct SchoonschipMaterialization {
     compact_self: bool,
 }
 
-/// Turns compact Schoonschip notation such as `p(mink(4))` into an indexed
-/// tensor factor and returns the fresh slot that should replace it in context.
-fn compact_schoonschip_tensor(
-    value: FunView<'_>,
-    dummies: &mut ParserDummies,
-) -> Option<SchoonschipMaterialization> {
-    if value.get_symbol() == ETS.metric {
+fn compact_rep_pattern_match(arg: AtomView<'_>) -> Option<Representation<LibraryRep>> {
+    let rep_pattern = Atom::var(SPENSO_TAG.rep_).to_pattern();
+    let settings = MatchSettings {
+        level_range: (0, Some(0)),
+        partial: false,
+        ..Default::default()
+    };
+    let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
+    let matched = matches.next_detailed()?;
+    let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);
+    Representation::<LibraryRep>::try_from(rep.as_view()).ok()
+}
+
+fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
+    if value.get_symbol() == ETS.metric || value.get_symbol() == SPENSO_TAG.dot {
         return None;
     }
 
@@ -343,22 +352,105 @@ fn compact_schoonschip_tensor(
     let rep_args = args
         .iter()
         .enumerate()
-        .filter_map(|(position, arg)| {
-            Representation::<LibraryRep>::try_from(*arg)
-                .ok()
-                .map(|rep| (position, rep))
-        })
+        .filter_map(|(position, arg)| compact_rep_pattern_match(*arg).map(|rep| (position, rep)))
         .collect::<Vec<_>>();
 
     let [(position, rep)] = rep_args.as_slice() else {
         return None;
     };
 
-    let slot = dummies.slot(rep);
+    Some((*position, *rep))
+}
+
+fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
+    match value {
+        AtomView::Fun(fun) => compact_tensor_rep_arg(fun).map(|(_, rep)| rep),
+        AtomView::Add(add) => {
+            let mut reps = add.iter().map(compact_vector_rep);
+            let rep = reps.next()??;
+            reps.all(|candidate| candidate == Some(rep)).then_some(rep)
+        }
+        _ => None,
+    }
+}
+
+fn materialize_compact_vector_with_slot(
+    value: AtomView<'_>,
+    rep: &Representation<LibraryRep>,
+    slot: &Atom,
+) -> Option<Atom> {
+    match value {
+        AtomView::Fun(fun) => {
+            let (position, matched_rep) = compact_tensor_rep_arg(fun)?;
+            if matched_rep != *rep {
+                return None;
+            }
+
+            let mut tensor = FunctionBuilder::new(fun.get_symbol());
+            for (arg_position, arg) in fun.iter().enumerate() {
+                if arg_position == position {
+                    tensor = tensor.add_arg(slot);
+                } else {
+                    tensor = tensor.add_arg(arg);
+                }
+            }
+            Some(tensor.finish())
+        }
+        AtomView::Add(add) => {
+            let mut terms = add
+                .iter()
+                .map(|term| materialize_compact_vector_with_slot(term, rep, slot));
+            let first = terms.next()??;
+            let rest = terms.collect::<Option<Vec<_>>>()?;
+            Some(rest.into_iter().fold(first, |sum, term| sum + term))
+        }
+        _ => None,
+    }
+}
+
+fn compact_scalar_product(
+    value: FunView<'_>,
+    dummies: &mut ParserDummies,
+) -> Option<SchoonschipMaterialization> {
+    if value.get_symbol() != ETS.metric && value.get_symbol() != SPENSO_TAG.dot {
+        return None;
+    }
+
+    let args = value.iter().collect::<Vec<_>>();
+    let [lhs, rhs] = args.as_slice() else {
+        return None;
+    };
+
+    let rep = compact_vector_rep(*lhs)?;
+    if rep != compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
+        return None;
+    }
+
+    let slot = dummies.slot(&rep).to_atom();
+    let lhs = materialize_compact_vector_with_slot(*lhs, &rep, &slot)?;
+    let rhs = materialize_compact_vector_with_slot(*rhs, &rep, &slot)?;
+
+    Some(SchoonschipMaterialization {
+        replacement: Atom::num(1),
+        factors: vec![lhs, rhs],
+        compact_self: true,
+    })
+}
+
+/// Turns compact Schoonschip notation such as `p(mink(4))` into an indexed
+/// tensor factor and returns the fresh slot that should replace it in context.
+fn compact_schoonschip_tensor(
+    value: FunView<'_>,
+    dummies: &mut ParserDummies,
+) -> Option<SchoonschipMaterialization> {
+    let (position, rep) = compact_tensor_rep_arg(value)?;
+    let args = value.iter().collect::<Vec<_>>();
+
+    let slot = dummies.slot(&rep);
     let slot_atom = slot.to_atom();
     let mut tensor = FunctionBuilder::new(value.get_symbol());
     for (arg_position, arg) in args.into_iter().enumerate() {
-        if arg_position == *position {
+        if arg_position == position {
             tensor = tensor.add_arg(&slot_atom);
         } else {
             tensor = tensor.add_arg(arg);
@@ -372,6 +464,31 @@ fn compact_schoonschip_tensor(
     })
 }
 
+fn compact_dot_as_metric(value: AtomView<'_>) -> Option<Atom> {
+    let AtomView::Fun(fun) = value else {
+        return None;
+    };
+
+    if fun.get_symbol() != SPENSO_TAG.dot || fun.get_nargs() != 2 {
+        return None;
+    }
+
+    let args = fun.iter().collect::<Vec<_>>();
+    if args
+        .iter()
+        .all(|arg| Slot::<LibraryRep, AbstractIndex>::try_from(*arg).is_ok())
+    {
+        Some(
+            FunctionBuilder::new(ETS.metric)
+                .add_arg(args[0])
+                .add_arg(args[1])
+                .finish(),
+        )
+    } else {
+        None
+    }
+}
+
 fn materialize_schoonschip_arg(
     value: AtomView<'_>,
     dummies: &mut ParserDummies,
@@ -379,6 +496,10 @@ fn materialize_schoonschip_arg(
     let AtomView::Fun(fun) = value else {
         return None;
     };
+
+    if let Some(materialized) = compact_scalar_product(fun, dummies) {
+        return Some(materialized);
+    }
 
     if let Some(materialized) = compact_schoonschip_tensor(fun, dummies) {
         return Some(materialized);
@@ -398,10 +519,13 @@ fn materialize_schoonschip_arg(
         }
     }
 
-    changed.then(|| SchoonschipMaterialization {
-        replacement: rebuilt.finish(),
-        factors,
-        compact_self: false,
+    changed.then(|| {
+        let replacement = rebuilt.finish();
+        SchoonschipMaterialization {
+            replacement: compact_dot_as_metric(replacement.as_view()).unwrap_or(replacement),
+            factors,
+            compact_self: false,
+        }
     })
 }
 
@@ -1073,6 +1197,36 @@ mod tests {
     }
 
     #[test]
+    fn compact_schoonschip_tensor_uses_direct_rep_pattern_match() {
+        let rep = mink4();
+        let expr = function!(symbol!("p"), rep.to_symbolic([]));
+        let AtomView::Fun(fun) = expr.as_view() else {
+            panic!("expected function");
+        };
+
+        let materialized = compact_schoonschip_tensor(fun, &mut ParserDummies::new()).unwrap();
+
+        assert!(
+            Slot::<LibraryRep, AbstractIndex>::try_from(materialized.replacement.as_view()).is_ok()
+        );
+        assert_eq!(materialized.factors.len(), 1);
+    }
+
+    #[test]
+    fn compact_schoonschip_tensor_ignores_nested_rep_pattern_match() {
+        let rep = mink4();
+        let expr = function!(
+            symbol!("p"),
+            function!(symbol!("label"), rep.to_symbolic([]))
+        );
+        let AtomView::Fun(fun) = expr.as_view() else {
+            panic!("expected function");
+        };
+
+        assert!(compact_schoonschip_tensor(fun, &mut ParserDummies::new()).is_none());
+    }
+
+    #[test]
     fn materialize_schoonschip_vectors_parse_as_dot_product() {
         let rep = mink4();
         let expr = function!(symbol!("p"), rep.to_symbolic([]))
@@ -1112,6 +1266,55 @@ mod tests {
             function!(symbol!("p"), rep.to_symbolic([])),
             function!(symbol!("q"), rep.to_symbolic([]))
         );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_schoonschipped_metric_sum_product() {
+        let rep = mink4();
+        let k1 = function!(symbol!("k"), Atom::num(1), rep.to_symbolic([]));
+        let k2 = function!(symbol!("k"), Atom::num(2), rep.to_symbolic([]));
+        let p = function!(symbol!("p"), Atom::num(3), rep.to_symbolic([]));
+        let expr = function!(ETS.metric, k1 + k2, p);
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_schoonschipped_dot_product() {
+        let rep = mink4();
+        let expr = function!(
+            SPENSO_TAG.dot,
+            function!(symbol!("p"), rep.to_symbolic([])),
+            function!(symbol!("q"), rep.to_symbolic([]))
+        );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_linear_schoonschipped_dot_product() {
+        let rep = mink4();
+        let p = function!(symbol!("p"), rep.to_symbolic([]));
+        let q = function!(symbol!("q"), rep.to_symbolic([]));
+        let r = function!(symbol!("r"), rep.to_symbolic([]));
+        let expr = function!(SPENSO_TAG.dot, p + q, r);
 
         let parsed = expr
             .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())

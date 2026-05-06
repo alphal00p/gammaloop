@@ -530,7 +530,7 @@ impl<T: RepName> Representation<T> {
         let b: AtomOrView<'a> = b.into();
         let rep = self.to_symbolic([]);
         function!(
-            ETS.metric,
+            SPENSO_TAG.dot,
             with_rep(a.as_view(), &rep),
             with_rep(b.as_view(), &rep)
         )

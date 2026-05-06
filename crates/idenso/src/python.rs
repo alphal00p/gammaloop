@@ -485,7 +485,7 @@ pub fn simplify_gamma(self_: &PythonExpression) -> PythonExpression {
 /// Converts contracted Lorentz/Minkowski indices into dot product notation.
 ///
 /// Automatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`
-/// into the more compact and physically meaningful `dot(p, q)` notation. This
+/// into the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This
 /// simplification is essential for physics calculations involving four-vectors.
 ///
 /// The function recognizes:

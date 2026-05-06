@@ -990,7 +990,7 @@ mod failing {
         );
 
         let res = parse_lit!(
-            7776 * G ^ 6 * g(P(2, mink(4)), P(3, mink(4))),
+            7776 * G ^ 6 * dot(P(2, mink(4)), P(3, mink(4))),
             default_namespace = "spenso"
         );
         assert_eq!(

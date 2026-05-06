@@ -413,11 +413,10 @@ impl TryFrom<AtomView<'_>> for Aind {
 
 #[cfg(test)]
 mod tests {
-    use idenso::metric::MetricSimplifier;
+    use idenso::{metric::MetricSimplifier, tensor::SymbolicTensor};
     use spenso::{
         network::parsing::ShadowedStructure,
         structure::{PermutedStructure, TensorStructure, permuted::Perm},
-        tensors::symbolic::SymbolicTensor,
     };
     use symbolica::{atom::AtomCore, parse_lit};
 
