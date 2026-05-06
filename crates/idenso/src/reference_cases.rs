@@ -435,9 +435,7 @@ pub static REFERENCE_CASES: &[ReferenceCase] = &[
         domain: ReferenceDomain::ColorSu3,
         expression: color_feyncalc_structure_times_open_chain_id4,
         simplification: ReferenceSimplification::ColorDefault,
-        validation: ReferenceValidation::Blocked(
-            "hep-lib parser cannot yet materialize repeated open color-chain adjoint contractions",
-        ),
+        validation: ReferenceValidation::Enabled,
     },
     ReferenceCase {
         name: "color_feyncalc_delta_closes_doubled_two_generator_chain_id18",
