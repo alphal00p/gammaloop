@@ -475,8 +475,8 @@
   }
 }
 
-#let _in-subgraph(hedges, endpoint) = {
-  hedges != none and endpoint != none and hedges.contains(endpoint.hedge)
+#let _in-subgraph(hedges, half-edge) = {
+  hedges != none and half-edge != none and hedges.contains(half-edge.hedge)
 }
 
 /// Draw a laid-out graph object with CeTZ.
@@ -738,11 +738,11 @@
         }
 
         for (i, e) in edges.enumerate() {
-          let start = e.source
-          let end = e.sink
-          let source = if start == none { none } else { start.statement }
-          let sink = if end == none { none } else { end.statement }
-          let ext = start == none or end == none
+          let source-half-edge = e.source
+          let sink-half-edge = e.sink
+          let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
+          let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
+          let ext = source-half-edge == none or sink-half-edge == none
           let data = e.statements
           let orientation = e.orientation
           let edge-data = (
@@ -751,16 +751,16 @@
               + (
                 eid: i,
                 edge: e,
-                source: source,
-                sink: sink,
-                source-endpoint: start,
-                sink-endpoint: end,
+                source-statement: source-statement,
+                sink-statement: sink-statement,
+                source-half-edge: source-half-edge,
+                sink-half-edge: sink-half-edge,
                 orientation: orientation,
                 ext: ext,
               )
           )
-          let source-in-subgraph = _in-subgraph(subgraph-hedges, start)
-          let sink-in-subgraph = _in-subgraph(subgraph-hedges, end)
+          let source-in-subgraph = _in-subgraph(subgraph-hedges, source-half-edge)
+          let sink-in-subgraph = _in-subgraph(subgraph-hedges, sink-half-edge)
 
           let geometry-style = _edge-geometry-defaults + (
             offset: edge-offset,
@@ -806,7 +806,7 @@
 
             if source-style-value == none and sink-style-value == none {
               ()
-            } else if start != none and end != none {
+            } else if source-half-edge != none and sink-half-edge != none {
               let source-geometry-style = if source-style-value == none { sink-style-value } else { source-style-value }
               let sink-geometry-style = if sink-style-value == none { source-style-value } else { sink-style-value }
               let halves = _edge-geometry-halves(
@@ -815,8 +815,8 @@
                 source-geometry-style,
                 sink-geometry-style,
                 omega: edge-omega,
-                source-outset: node-outsets.at(start.node),
-                sink-outset: node-outsets.at(end.node),
+                source-outset: node-outsets.at(source-half-edge.node),
+                sink-outset: node-outsets.at(sink-half-edge.node),
                 accuracy: edge-trim-accuracy,
                 label-pos: label-pos,
               )
@@ -853,11 +853,11 @@
                   elements.push(element)
                 }
               }
-            } else if start != none {
+            } else if source-half-edge != none {
               let line-start = curve-api.outset-point(
-                nodes.at(start.node).pos,
+                nodes.at(source-half-edge.node).pos,
                 e.pos,
-                distance: node-outsets.at(start.node),
+                distance: node-outsets.at(source-half-edge.node),
               )
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-line(
@@ -874,11 +874,11 @@
                   elements.push(element)
                 }
               }
-            } else if end != none {
+            } else if sink-half-edge != none {
               let line-end = curve-api.outset-point(
-                nodes.at(end.node).pos,
+                nodes.at(sink-half-edge.node).pos,
                 e.pos,
-                distance: node-outsets.at(end.node),
+                distance: node-outsets.at(sink-half-edge.node),
               )
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-line(

@@ -116,50 +116,12 @@
 /// Default style for source-to-sink momentum arrow layers.
 /// -> dictionary
 #let momentum-arrow-defaults = (
-  offset: 0.16,
+  offset: 0.46,
   length: 5.0,
   ratio: 0.5,
   stroke: _momentum-arrow-stroke,
   mark: none,
 )
-
-#let _single-end-mark(mark, arrow-stroke) = {
-  let base = (
-    stroke: arrow-stroke,
-    fill: black,
-  )
-  if mark == none {
-    base + (
-      end: "barbed",
-      scale: 1.35,
-    )
-  } else if type(mark) == dictionary {
-    let clean = mark
-    if clean.keys().contains("start") {
-      let _ = clean.remove("start")
-    }
-    if not clean.keys().contains("end") {
-      clean = clean + (end: "barbed")
-    }
-    base + clean
-  } else {
-    base + (end: mark)
-  }
-}
-
-#let _has-source(edge) = edge.at("source-endpoint", default: none) != none or edge.at("source", default: none) != none
-
-#let _has-sink(edge) = edge.at("sink-endpoint", default: none) != none or edge.at("sink", default: none) != none
-
-#let _momentum-arrow-half(edge) = {
-  if _has-sink(edge) {
-    "sink"
-  } else if _has-source(edge) {
-    "source"
-  } else {
-    none
-  }
-}
 
 /// Return an edge's particle name, stripping the quotes often present in DOT
 /// statement values.
@@ -284,6 +246,30 @@
   }
 }
 
+#let _single-end-mark(mark, arrow-stroke) = {
+  let base = (
+    end: "barbed",
+    stroke: arrow-stroke,
+    fill: black,
+    scale: 1.35,
+  )
+  if mark == none {
+    base
+  } else if type(mark) == dictionary {
+    let clean = mark
+    if clean.keys().contains("start") {
+      let _ = clean.remove("start")
+    }
+    if clean.keys().contains("end") {
+      base + clean
+    } else {
+      base + clean + (end: "barbed")
+    }
+  } else {
+    base + (end: mark)
+  }
+}
+
 #let _momentum-arrow-layer(
   offset: momentum-arrow-defaults.offset,
   length: momentum-arrow-defaults.length,
@@ -297,6 +283,7 @@
   } else {
     stroke
   }
+  let arrow-mark = _single-end-mark(mark, arrow-stroke)
   let layer = (
     offset: offset,
     length: length,
@@ -306,9 +293,27 @@
     stroke: arrow-stroke,
   )
   if show-mark {
-    layer + (mark: _single-end-mark(mark, arrow-stroke))
+    layer + (mark: arrow-mark)
   } else {
     layer
+  }
+}
+
+#let _has-source(edge) = {
+  edge.at("source-half-edge", default: none) != none
+}
+
+#let _has-sink(edge) = {
+  edge.at("sink-half-edge", default: none) != none
+}
+
+#let _momentum-arrow-half(edge) = {
+  if _has-sink(edge) {
+    "sink"
+  } else if _has-source(edge) {
+    "source"
+  } else {
+    none
   }
 }
 
@@ -448,17 +453,17 @@
   if not edge.at("ext", default: false) {
     none
   } else {
-    let endpoint = if edge.at("source", default: none) == none {
-      edge.at("sink-endpoint", default: none)
-    } else if edge.at("sink", default: none) == none {
-      edge.at("source-endpoint", default: none)
+    let half-edge = if not _has-source(edge) {
+      edge.at("sink-half-edge", default: none)
+    } else if not _has-sink(edge) {
+      edge.at("source-half-edge", default: none)
     } else {
       none
     }
-    if endpoint == none {
+    if half-edge == none {
       none
     } else {
-      endpoint.at("statement", default: endpoint.at("id", default: endpoint.at("hedge", default: none)))
+      half-edge.at("statement", default: half-edge.at("id", default: half-edge.at("hedge", default: none)))
     }
   }
 }

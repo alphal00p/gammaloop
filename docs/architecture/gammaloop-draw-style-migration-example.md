@@ -210,7 +210,7 @@ export regular Typst callbacks instead of strings that are later evaluated.
 The important part is that `source-style`, `sink-style`, and `edge-label` are
 ordinary Typst functions. Linnest calls them with the merged edge data:
 DOT statements such as `particle`, plus fields like `eid`, `orientation`,
-`source-endpoint`, `sink-endpoint`, and `edge`.
+`source-half-edge`, `sink-half-edge`, and `edge`.
 
 Interpolation is still data-driven by default: DOT statements can provide
 `display-label` or `label-template` with `{field}` placeholders, for example
