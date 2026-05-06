@@ -2,6 +2,67 @@
 
 ci_cargo_profile := "dev-optim"
 
+mod linnet 'crates/linnet/Justfile'
+
+alias sync-draw-assets := sync-drawing-assets
+
+# Sync drawing Typst templates and Nix-built WASM bundles for development.
+sync-drawing-assets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    root="{{ justfile_directory() }}"
+    cd "$root"
+
+    copy_typst_templates() {
+      local target="$1"
+      mkdir -p "$target"
+
+      cp crates/kurvst/typst/src/lib.typ "$target/curve.typ"
+      perl -0pi -e 's#plugin\("\.\./kurvst\.wasm"\)#plugin("kurvst.wasm")#' "$target/curve.typ"
+
+      cp crates/linnest/typst/src/draw.typ "$target/draw.typ"
+      cp crates/linnest/typst/src/physics-edge-style.typ "$target/physics-edge-style.typ"
+
+      cp crates/linnest/typst/src/lib.typ "$target/linnest.typ"
+      cp crates/linnest/typst/src/graph.typ "$target/graph.typ"
+      cp crates/linnest/typst/src/subgraph.typ "$target/subgraph.typ"
+      perl -0pi -e 's#plugin\("\.\./linnest\.wasm"\)#plugin("./linnest.wasm")#' \
+        "$target/linnest.typ" "$target/graph.typ" "$target/subgraph.typ"
+    }
+
+    copy_wasm_bundles() {
+      local target="$1"
+      mkdir -p "$target"
+      cp result/kurvst.wasm "$target/kurvst.wasm"
+      cp result/linnest.wasm "$target/linnest.wasm"
+    }
+
+    copy_typst_templates assets/embedded/drawing/templates
+    copy_typst_templates crates/clinnet/templates
+    if [ -d gammaloop_state/drawings/templates ]; then
+      copy_typst_templates gammaloop_state/drawings/templates
+      cp assets/embedded/drawing/templates/figure.typ gammaloop_state/drawings/templates/figure.typ
+      cp assets/embedded/drawing/justfile gammaloop_state/justfile
+    fi
+
+    nix build .#linnest-wasm --print-build-logs
+
+    copy_wasm_bundles assets/embedded/drawing/templates
+    copy_wasm_bundles crates/clinnet/templates
+    if [ -d gammaloop_state/drawings/templates ]; then
+      copy_wasm_bundles gammaloop_state/drawings/templates
+    fi
+
+    cp result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+    cp result/kurvst.wasm crates/linnest/typst/kurvst.wasm
+    cp result/linnest.wasm crates/linnest/typst/linnest.wasm
+
+    cmp result/kurvst.wasm assets/embedded/drawing/templates/kurvst.wasm
+    cmp result/linnest.wasm assets/embedded/drawing/templates/linnest.wasm
+    cmp result/kurvst.wasm crates/clinnet/templates/kurvst.wasm
+    cmp result/linnest.wasm crates/clinnet/templates/linnest.wasm
+
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim

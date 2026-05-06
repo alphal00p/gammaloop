@@ -125,9 +125,15 @@
         root = workspaceRoot;
         fileset = lib.fileset.unions [
           cargoSources
+          ./crates/clinnet/templates/curve.typ
+          ./crates/clinnet/templates/draw.typ
           ./crates/clinnet/templates/figure.typ
+          ./crates/clinnet/templates/graph.typ
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
+          ./crates/clinnet/templates/linnest.typ
+          ./crates/clinnet/templates/physics-edge-style.typ
+          ./crates/clinnet/templates/subgraph.typ
         ];
       };
 
@@ -186,6 +192,10 @@
 
       apiMeta = craneLib.crateNameFromCargoToml {
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
+      };
+
+      clinnetMeta = craneLib.crateNameFromCargoToml {
+        cargoToml = ./crates/clinnet/Cargo.toml;
       };
 
       linnestMeta = wasmCraneLib.crateNameFromCargoToml {
@@ -304,7 +314,7 @@
         doCheck = false;
         buildType = "release";
         CARGO_BUILD_TARGET = wasmTarget;
-        cargoExtraArgs = "--locked -p linnest --features custom --target ${wasmTarget}";
+        cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/custom --target ${wasmTarget}";
       };
 
       linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (linnestWasmArgs
@@ -319,8 +329,10 @@
           installPhaseCommand = ''
             mkdir -p "$out/templates"
             cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
+            cp "target/${wasmTarget}/release/kurvst.wasm" "$out/kurvst.wasm"
             cp crates/clinnet/templates/*.typ "$out/templates/"
             cp "$out/linnest.wasm" "$out/templates/linnest.wasm"
+            cp "$out/kurvst.wasm" "$out/templates/kurvst.wasm"
           '';
         });
 
@@ -333,6 +345,27 @@
           inherit (apiMeta) version;
           cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
+        });
+
+      clinnetArgs = commonArgs
+        // {
+          buildType = ciCargoProfile;
+          CARGO_PROFILE = ciCargoProfile;
+          doCheck = false;
+          pname = "clinnet";
+          inherit (clinnetMeta) version;
+          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
+          cargoExtraArgs = "--locked -p clinnet --bin linnet";
+        };
+
+      clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
+        // {
+          pname = "clinnet-deps";
+        });
+
+      clinnet-cli = craneLib.buildPackage (clinnetArgs
+        // {
+          cargoArtifacts = clinnetCargoArtifacts;
         });
 
       impureCheckRunnerTargets = [
@@ -401,9 +434,13 @@
             nativeBuildInputs = [pkgs.wasm-tools];
           } ''
             test -s ${linnest-wasm}/linnest.wasm
+            test -s ${linnest-wasm}/kurvst.wasm
             test -s ${linnest-wasm}/templates/linnest.wasm
+            test -s ${linnest-wasm}/templates/kurvst.wasm
             cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
+            cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/kurvst.wasm
             wasm-tools validate ${linnest-wasm}/linnest.wasm
+            wasm-tools validate ${linnest-wasm}/kurvst.wasm
             test -s ${linnest-wasm}/templates/layout.typ
             mkdir -p "$out"
           '';
@@ -428,8 +465,9 @@
       packages =
         {
           default = gammaloop-cli;
+          clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
-          inherit linnest-wasm linnestWasmCargoArtifacts;
+          inherit clinnetCargoArtifacts linnest-wasm linnestWasmCargoArtifacts;
           inherit cargoArtifacts;
         }
         // impureCheckRunnerPackages
@@ -448,6 +486,14 @@
         };
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
+        };
+        clinnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
+        linnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
         };
       };
 
@@ -508,15 +554,7 @@
           rust-analyzer
           maturin
           virtualenv
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "clinnet";
-            version = "0.1.8";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-            };
-            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-          })
+          clinnet-cli
           (pkgs.rustPlatform.buildRustPackage rec {
             pname = "rscls";
             version = "0.2.3";

@@ -1261,13 +1261,13 @@ impl Particle {
         };
 
         // Generate base styles
-        let base_source = format!("source_stroke(c: {}, thickness: {})", color, thickness);
-        let base_sink = format!("sink_stroke(c: {}, thickness: {})", color, thickness);
+        let base_source = format!("source-stroke(c: {}, thickness: {})", color, thickness);
+        let base_sink = format!("sink-stroke(c: {}, thickness: {})", color, thickness);
 
         let (source, sink) = if self.is_ghost() {
             (
-                format!("source_stroke(c: {color}, thickness: {thickness},dash: dotted)",),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dotted)"),
+                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)",),
+                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
             )
         } else if self.is_fermion() {
             (base_source, base_sink)
@@ -1295,15 +1295,21 @@ impl Particle {
         } else if self.is_scalar() {
             // Scalar particles: dashed lines
             (
-                format!("source_stroke(c: {color}, thickness: {thickness},dash: dashed)",),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dashed)"),
+                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dashed)",),
+                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
             )
         } else {
             // Default: solid line
             (base_source, base_sink)
         };
 
-        format!("(source:{}, sink:{}, label:{})", source, sink, label)
+        let flow_marker = if self.is_fermion() && !self.is_ghost() {
+            " + fermion-flow"
+        } else {
+            ""
+        };
+
+        format!("(source:{source}, sink:{sink}, label:{label}){flow_marker}")
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -1850,31 +1856,15 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         }
 
         let mut edge_style_content = String::new();
-        edge_style_content.push_str(r#"#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, cetz,edge,hide
-#import "@preview/mitex:0.2.6": *
+        edge_style_content.push_str(
+            r#"#import "physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
 
-#let massive = 1mm
-#let massless = 0.5mm
-#let source_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:(paint:c,thickness:thickness)+dash)
-#let sink_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:source_stroke(c:c.lighten(50%), thickness:thickness,dash:dash).stroke)
-#let wave = (decorations:cetz.decorations.wave.with(amplitude: 4pt,segment-length:0.2))
-#let double = (extrude:(-0.5mm, 0.5mm))
-#let arrow = (marks:((inherit:"solid",rev:false,pos:1.1,scale:50%),))
-#let antiarrow = (marks:((inherit:"solid",rev:true,pos:1.1,scale:50%),))
-#let arrowmap = orientation => if orientation == "Default"{
-  arrow
-} else if orientation == "Reversed"{
-  antiarrow
-} else{
-  (:)
-}
-#let coil = (decorations:cetz.decorations.coil.with(amplitude: 4pt,segment-length:0.2))
-#let zigzag = (decorations:cetz.decorations.zigzag.with(amplitude: 4pt,segment-length:0.2))
-#let dashed = (dash: (0.1em, 0.5em))
-#let dotted = (dash: (0.01em, 0.3em))
-// Auto-generated particle styles from model (computed in Rust)
+// Auto-generated particle styles from model (computed in Rust). The reusable
+// physics drawing callbacks live in physics-edge-style.typ; this file only
+// supplies the model-specific particle map and GammaLoop-compatible wrappers.
 #let map = (
-"#);
+"#,
+        );
 
         // Generate styles for all particles in the model
         for particle in self.particles.iter() {
@@ -1886,7 +1876,25 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             ));
         }
 
-        edge_style_content.push_str(")\n");
+        edge_style_content.push_str(
+            r#")
+
+#let source-style(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.source-style)(edge)
+}
+
+#let sink-style(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.sink-style)(edge)
+}
+
+#let edge-label(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.edge-label)(edge)
+}
+"#,
+        );
 
         fs::write(&template_path, edge_style_content)?;
         info!(

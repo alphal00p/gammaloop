@@ -10,6 +10,10 @@ use crate::half_edge::{
 use super::{strip_quotes, subgraph_free::Edge, DotHedgeData, GlobalData, NodeIdOrDangling};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct DotEdgeData {
     pub statements: BTreeMap<String, String>,
     pub local_statements: BTreeMap<String, String>,

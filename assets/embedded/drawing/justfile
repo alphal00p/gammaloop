@@ -6,15 +6,103 @@ seed := "42"
 columns := "3"
 rows := "5"
 
-# Generate drawings from dot files taking into account steps and columns
-draw *EXTRA_INPUTS:
+drawing_styles := "--style drawings/templates/curve.typ --style drawings/templates/draw.typ --style drawings/templates/physics-edge-style.typ --style drawings/templates/edge-style.typ --style drawings/templates/graph.typ --style drawings/templates/layout.typ --style drawings/templates/linnest.typ --style drawings/templates/subgraph.typ --style drawings/templates/kurvst.wasm --style drawings/templates/linnest.wasm"
+
+# Output names used by the drawing mode demo recipes
+draw_default_output := "drawings-default.pdf"
+draw_momentum_output := "drawings-momentum.pdf"
+draw_momentum_labels_output := "drawings-momentum-labels.pdf"
+draw_momentum_lines_output := "drawings-momentum-lines.pdf"
+
+# Drawing mode options. Override from the CLI with e.g.
+#   just momentum_mark=none momentum_paint=red draw-momentum
+momentum_arrows := "true"
+momentum_mark := "auto"
+momentum_paint := "black"
+momentum_thickness := "0.55pt"
+show_edge_index := "true"
+show_half_edge_index := "false"
+show_particle := "true"
+
+# Defaults for the no-arrowhead momentum-line demo.
+momentum_line_mark := "none"
+momentum_line_paint := "red"
+momentum_line_thickness := "1.0pt"
+
+# Internal drawing helper. EXTRA_INPUTS are passed straight to linnet, so
+# recipes below can demonstrate drawing modes without hiding the underlying CLI.
+_draw-output OUTPUT *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  {{drawing_styles}} \
 	  --input steps={{steps}} \
 	  --input seed={{seed}} \
 	  --input columns={{columns}} \
 	  --input rows={{rows}} \
-	  -o drawings.pdf
+	  -o {{OUTPUT}}
+
+# Generate drawings from dot files taking into account steps and columns
+draw *EXTRA_INPUTS:
+	just _draw-output drawings.pdf {{EXTRA_INPUTS}}
+
+# Generate the plain particle-style drawings.
+draw-default *EXTRA_INPUTS:
+	just _draw-output {{draw_default_output}} {{EXTRA_INPUTS}}
+
+# Generate drawings with source-to-sink momentum arrows.
+draw-momentum *EXTRA_INPUTS:
+	linnet \
+	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --input 'momentum-arrows={{momentum_arrows}}' \
+	  --input 'momentum-arrow-mark={{momentum_mark}}' \
+	  --input 'momentum-arrow-paint={{momentum_paint}}' \
+	  --input 'momentum-arrow-thickness={{momentum_thickness}}' \
+	  {{drawing_styles}} \
+	  --input steps={{steps}} \
+	  --input seed={{seed}} \
+	  --input columns={{columns}} \
+	  --input rows={{rows}} \
+	  -o {{draw_momentum_output}}
+
+# Generate drawings with momentum arrows plus particle and edge-index labels.
+draw-momentum-labels *EXTRA_INPUTS:
+	linnet \
+	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --input 'momentum-arrows={{momentum_arrows}}' \
+	  --input 'momentum-arrow-mark={{momentum_mark}}' \
+	  --input 'momentum-arrow-paint={{momentum_paint}}' \
+	  --input 'momentum-arrow-thickness={{momentum_thickness}}' \
+	  --input 'show-edge-index={{show_edge_index}}' \
+	  --input 'show-half-edge-index={{show_half_edge_index}}' \
+	  --input 'show-particle={{show_particle}}' \
+	  {{drawing_styles}} \
+	  --input steps={{steps}} \
+	  --input seed={{seed}} \
+	  --input columns={{columns}} \
+	  --input rows={{rows}} \
+	  -o {{draw_momentum_labels_output}}
+
+# Generate drawings with offset momentum lines but no momentum arrowheads.
+draw-momentum-lines *EXTRA_INPUTS:
+	linnet \
+	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --input 'momentum-arrows={{momentum_arrows}}' \
+	  --input 'momentum-arrow-mark={{momentum_line_mark}}' \
+	  --input 'momentum-arrow-paint={{momentum_line_paint}}' \
+	  --input 'momentum-arrow-thickness={{momentum_line_thickness}}' \
+	  {{drawing_styles}} \
+	  --input steps={{steps}} \
+	  --input seed={{seed}} \
+	  --input columns={{columns}} \
+	  --input rows={{rows}} \
+	  -o {{draw_momentum_lines_output}}
+
+# Build one PDF per bundled drawing mode.
+draw-modes:
+	just draw-default
+	just draw-momentum
+	just draw-momentum-labels
+	just draw-momentum-lines
 
 # Generate a single figure from dot files
 draw-single FIGURE *EXTRA_INPUTS:
