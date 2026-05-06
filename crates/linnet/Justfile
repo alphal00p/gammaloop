@@ -11,12 +11,12 @@ alias w := wasm
 
 default: wasm
 
-# Build WASM target for linnest
+# Build WASM target for linnest through the workspace Nix package
 wasm:
-    RUSTFLAGS='' cargo build -p linnest --release --target wasm32-unknown-unknown --features custom
+    cd "{{ justfile_directory() }}/../.." && nix build .#linnest-wasm --print-build-logs
 
-prepare-templates: wasm
-    cp "{{ justfile_directory() }}/target/wasm32-unknown-unknown/release/linnest.wasm" "{{ justfile_directory() }}/crates/clinnet/templates/linnest.wasm"
+prepare-templates:
+    cd "{{ justfile_directory() }}/../.." && just sync-drawing-assets
 
 # Build all packages
 build:
