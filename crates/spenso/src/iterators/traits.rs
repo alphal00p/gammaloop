@@ -5,13 +5,14 @@
 
 use super::fiber::{Fiber, FiberClass, FiberClassMut, FiberMut};
 use super::indices::{AbstractFiberIndex, FiberData};
+use crate::structure::SlotIndex;
 use crate::structure::{
     HasStructure, TensorStructure,
     concrete_index::{ExpandedIndex, FlatIndex},
     dimension::Dimension,
     representation::{RepName, Representation},
 };
-use bitvec::vec::BitVec;
+use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::permutation::Permutation;
 
 /// Trait for items yielded by fiber iterators
@@ -124,7 +125,7 @@ pub trait AbstractFiber<Out: AbstractFiberIndex>: std::ops::Index<usize, Output 
     fn single(&self) -> Option<usize>;
 
     /// Returns a bitvector indicating free (true) and fixed (false) dimensions
-    fn bitvec(&self) -> BitVec;
+    fn bitvec(&self) -> SubSet<SlotIndex>;
 }
 
 /// Trait for tensor types that can be iterated

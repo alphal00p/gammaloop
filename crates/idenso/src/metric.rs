@@ -7,8 +7,9 @@ use spenso::{
     network::{
         Network,
         library::{DummyLibrary, symbolic::ETS},
-        parsing::{NetworkParse, ParseSettings, SPENSO_TAG},
+        parsing::{NetworkParse, ParseSettings},
         store::NetworkStore,
+        tags::SPENSO_TAG,
     },
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
@@ -18,19 +19,20 @@ use spenso::{
         representation::{LibraryRep, LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
-    tensors::symbolic::SymbolicTensor,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomType, AtomView, FunctionBuilder, Symbol, representation::FunView},
     coefficient::CoefficientView,
     function,
     id::{
-        Condition, FilterFn, Match, MatchSettings, PatternRestriction, Replacement,
+        Condition, FilterFn, Match, MatchSettings, MatchStack, PatternRestriction, Replacement,
         WildcardRestriction,
     },
     symbol,
 };
 use tracing::warn;
+
+use crate::tensor::{SymbolicNetParse, SymbolicTensor};
 
 use crate::parsing_ind::Parsind;
 use eyre::{Result, eyre};
@@ -363,114 +365,72 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd>(view: AtomView, header: S
 }
 
 pub fn simplify_metrics_impl(view: AtomView) -> Atom {
-    let mut reps = vec![];
-
-    reps.push((
-        function!(ETS.metric, RS.a_, LibraryRep::Dummy.to_symbolic([RS.i__]))
-            * function!(
-                RS.f_,
-                RS.a___,
-                LibraryRep::Dummy.to_symbolic([RS.i__]),
-                RS.b___
-            ),
-        function!(RS.f_, RS.a___, RS.a_, RS.b___),
-    ));
-
-    for i in LibraryRep::all_representations() {
-        reps.extend([(i.id_atom([RS.d_, RS.i_], [RS.d_, RS.i_]), Atom::var(RS.d_))]);
-    }
-
-    // You can only really simplify kroneckers when the metric is the identity or when you have the concept of dualizability
-
-    // The metric acts like the identity when there is no dual
-    for i in LibraryRep::all_inline_metrics().chain(LibraryRep::all_self_duals()) {
-        reps.extend([
-            (
-                i.metric_atom([RS.a__], [RS.i__])
-                    * function!(RS.f_, RS.a___, i.to_symbolic([RS.i__]), RS.b___),
-                function!(RS.f_, RS.a___, i.to_symbolic([RS.a__]), RS.b___),
-            ),
-            //Only when the you have no concept of dualizability is a squared metric acceptable
-            (
-                i.metric_atom([RS.d_, RS.i_], [RS.d_, RS.a_])
-                    .pow(Atom::num(2)),
-                Atom::var(RS.d_),
-            ),
-        ]);
-    }
-
-    for i in LibraryRep::all_dualizables() {
-        let di = i.dual();
-
-        reps.extend([
-            (
-                i.id_atom([RS.d_, RS.i_], [RS.d_, RS.a_]).pow(Atom::num(2)),
-                Atom::var(RS.d_),
-            ),
-            (
-                di.id_atom([RS.a__], [RS.i__])
-                    * function!(RS.f_, RS.a___, i.to_symbolic([RS.i__]), RS.b___),
-                function!(RS.f_, RS.a___, i.to_symbolic([RS.a__]), RS.b___),
-            ),
-            (
-                i.id_atom([RS.a__], [RS.i__])
-                    * function!(RS.f_, RS.a___, di.to_symbolic([RS.i__]), RS.b___),
-                function!(RS.f_, RS.a___, di.to_symbolic([RS.a__]), RS.b___),
-            ),
-            (
-                i.metric_atom([RS.a__], [RS.i__])
-                    * function!(RS.f_, RS.a___, di.to_symbolic([RS.i__]), RS.b___),
-                function!(RS.f_, RS.a___, i.to_symbolic([RS.a__]), RS.b___),
-            ),
-            (
-                di.metric_atom([RS.a__], [RS.i__])
-                    * function!(RS.f_, RS.a___, i.to_symbolic([RS.i__]), RS.b___),
-                function!(RS.f_, RS.a___, di.to_symbolic([RS.a__]), RS.b___),
-            ),
-        ]);
-    }
-
-    let reps: Vec<_> = reps
-        .into_iter()
-        .map(|(lhs, rhs)| Replacement::new(lhs.to_pattern(), rhs.to_pattern()))
-        .collect();
-
-    // for rep in &reps {
-    //     println!("{}", rep)
-    // }
-
-    let mut atom = Atom::new();
-    let mut expr = view.to_owned();
-
-    while expr.replace_multiple_into(&reps, &mut atom) {
-        std::mem::swap(&mut expr, &mut atom);
-        // expr = expr.expand();
-    }
-
-    expr
+    view.replace(
+        function!(ETS.metric, RS.a_, SPENSO_TAG.self_dual_)
+            * function!(RS.f_, RS.a___, SPENSO_TAG.self_dual_, RS.b___),
+    )
+    .repeat()
+    .level_range((0, Some(0)))
+    .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
+    // // g(a_,dual_)*f_(a___,dind(dual_),b___) = f_(a___,a_,b___)
+    // .replace(
+    //     function!(ETS.metric, RS.a_, SPENSO_TAG.dualizable_([RS.a__]))
+    //         * function!(
+    //             RS.f_,
+    //             RS.a___,
+    //             SPENSO_TAG.dualizable_dual_([RS.a__]),
+    //             RS.b___
+    //         ),
+    // )
+    // .repeat()
+    // .level_range((0, Some(0)))
+    // .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
+    // // g(a_,dind(dual_))*f_(a___,dual_,b___) = f_(a___,dual_,b___)
+    // .replace(
+    //     function!(ETS.metric, RS.a_, SPENSO_TAG.dualizable_dual_([RS.a__]))
+    //         * function!(RS.f_, RS.a___, SPENSO_TAG.dualizable_([RS.a__]), RS.b___),
+    // )
+    // .repeat()
+    // .level_range((0, Some(0)))
+    // .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
+    .replace(function!(
+        ETS.metric,
+        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
+        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+    ))
+    .repeat()
+    .level_range((0, Some(0)))
+    .with(Atom::var(RS.d_))
+    .replace(
+        function!(
+            ETS.metric,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.j_])
+        )
+        .npow(2),
+    )
+    .repeat()
+    .level_range((0, Some(0)))
+    .with(Atom::var(RS.d_))
+    // .replace(function!(
+    //     ETS.metric,
+    //     SPENSO_TAG.dualizable_([RS.d_, RS.i_]),
+    //     SPENSO_TAG.dualizable_dual_([RS.d_, RS.i_])
+    // ))
+    // .repeat()
+    // .level_range((0, Some(0)))
+    // .with(Atom::var(RS.d_))
 }
 
 pub fn not_slot(sym: Symbol) -> Condition<PatternRestriction> {
     sym.restrict(WildcardRestriction::IsAtomType(AtomType::Var))
         | sym.restrict(WildcardRestriction::IsAtomType(AtomType::Num))
         | sym.restrict(WildcardRestriction::filter(|a| match a {
-            Match::FunctionName(f) => {
-                // println!("FunctionName{f}");
-                LibraryRep::all_representations().all(|r| r.symbol() != *f)
-            }
+            Match::FunctionName(f) => !f.has_tag(&SPENSO_TAG.representation),
             Match::Multiple(_, views) => {
-                // println!("Multiple:");
-                // for v in views {
-                //     print!("{v}");
-                // }
-                views
-                    .iter()
-                    .all(|a| LibrarySlot::<Parsind>::try_from(*a).is_err())
+                !views.iter().any(|a| a.has_attributes_of(SPENSO_TAG.rep_))
             }
-            Match::Single(s) => {
-                // println!("Single{s}");
-                LibrarySlot::<Parsind>::try_from(*s).is_err()
-            }
+            Match::Single(s) => !s.has_attributes_of(SPENSO_TAG.rep_),
         }))
 }
 
@@ -499,76 +459,102 @@ pub fn not_slot(sym: Symbol) -> Condition<PatternRestriction> {
 // }
 
 pub fn to_dots_impl(expr: AtomView) -> Atom {
-    let mut reps = vec![];
+    fn func_without_index(m: &MatchStack<'_>, fun_wild: Symbol, arg_wild: Symbol) -> Atom {
+        match m.get(arg_wild).unwrap() {
+            Match::FunctionName(a) => {
+                panic!("Can't be a function")
+            }
+            Match::Single(a) => {
+                let Match::FunctionName(f) = m.get(fun_wild).unwrap() else {
+                    panic!("Not a function");
+                };
+                FunctionBuilder::new(*f).add_arg(a).finish()
+            }
 
-    for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
-        reps.push(Replacement::new(
-            (function!(RS.f_, i.to_symbolic([RS.d_, RS.i_]))
-                * function!(RS.g_, i.to_symbolic([RS.d_, RS.i_])))
-            .to_pattern(),
-            function!(SPENSO_TAG.dot, i.to_symbolic([RS.d_]), RS.f_, RS.g_),
-        ));
-
-        reps.push(Replacement::new(
-            (function!(RS.f_, i.to_symbolic([RS.d_, RS.i_])).pow(Atom::num(2))).to_pattern(),
-            function!(SPENSO_TAG.dot, i.to_symbolic([RS.d_]), RS.f_, RS.f_),
-        ));
-
-        reps.push(
-            Replacement::new(
-                (function!(RS.f_, RS.x___, i.to_symbolic([RS.d_, RS.i_]))
-                    * function!(RS.g_, RS.y___, i.to_symbolic([RS.d_, RS.i_])))
-                .to_pattern(),
-                function!(
-                    SPENSO_TAG.dot,
-                    i.to_symbolic([RS.d_]),
-                    function!(RS.f_, RS.x___),
-                    function!(RS.g_, RS.y___)
-                ),
-            )
-            .with_conditions(not_slot(RS.x___) & not_slot(RS.y___)),
-        );
-
-        reps.push(
-            Replacement::new(
-                (function!(RS.f_, RS.x___, i.to_symbolic([RS.d_, RS.i_])).pow(Atom::num(2)))
-                    .to_pattern(),
-                function!(
-                    SPENSO_TAG.dot,
-                    i.to_symbolic([RS.d_]),
-                    function!(RS.f_, RS.x___),
-                    function!(RS.f_, RS.x___)
-                ),
-            )
-            .with_conditions(not_slot(RS.x___)),
-        );
+            Match::Multiple(a, args) => {
+                if args.is_empty() {
+                    m.get(fun_wild).unwrap().to_atom()
+                } else if let Match::FunctionName(f) = m.get(fun_wild).unwrap() {
+                    FunctionBuilder::new(*f).add_args(args).finish()
+                } else {
+                    panic!("Not a function");
+                }
+            }
+        }
     }
 
-    for i in LibraryRep::all_dualizables() {
-        let di = i.dual();
-        reps.push(
-            Replacement::new(
-                (function!(RS.f_, RS.x___, i.to_symbolic([RS.d_, RS.i_]))
-                    * function!(RS.g_, RS.y___, di.to_symbolic([RS.d_, RS.i_])))
-                .to_pattern(),
-                function!(
-                    SPENSO_TAG.dot,
-                    i.to_symbolic([RS.d_]),
-                    function!(RS.f_, RS.x___),
-                    function!(RS.g_, RS.y___)
-                ),
-            )
-            .with_conditions(not_slot(RS.x___) & not_slot(RS.y___)),
-        );
-    }
+    expr.replace(
+        function!(
+            RS.f_,
+            RS.a___,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+        ) * function!(
+            RS.g_,
+            RS.b___,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+        ),
+    )
+    .level_range((0, Some(0)))
+    .when(not_slot(RS.a___) & not_slot(RS.b___))
+    .repeat()
+    .with_map(move |m| {
+        let f = func_without_index(m, RS.f_, RS.a___);
+        let g = func_without_index(m, RS.g_, RS.b___);
+        // println!("{}", f);
 
-    let mut atom = Atom::new();
-    let mut expr = expr.expand();
-    while expr.replace_multiple_into(&reps, &mut atom) {
-        std::mem::swap(&mut expr, &mut atom);
-    }
+        let rep = SPENSO_TAG
+            .self_dual_::<0, _>([RS.d_])
+            .to_pattern()
+            .replace_wildcards_with_matches(m);
 
-    expr
+        function!(ETS.metric, rep, f, g)
+    })
+    .replace(
+        function!(
+            RS.f_,
+            RS.a___,
+            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
+        )
+        .npow(2),
+    )
+    .level_range((0, Some(0)))
+    .when(not_slot(RS.a___))
+    .repeat()
+    .with_map(move |m| {
+        let f = func_without_index(m, RS.f_, RS.a___);
+
+        let rep = SPENSO_TAG
+            .self_dual_::<0, _>([RS.d_])
+            .to_pattern()
+            .replace_wildcards_with_matches(m);
+
+        function!(ETS.metric, rep, &f, &f)
+    })
+    .replace(
+        function!(
+            RS.f_,
+            RS.a___,
+            SPENSO_TAG.dualizable_::<0, _>([RS.d_, RS.i_])
+        ) * function!(
+            RS.g_,
+            RS.b___,
+            SPENSO_TAG.dualizable_dual_::<0, _>([RS.d_, RS.i_])
+        ),
+    )
+    .level_range((0, Some(0)))
+    .when(not_slot(RS.a___) & not_slot(RS.b___))
+    .repeat()
+    .with_map(move |m| {
+        let f = func_without_index(m, RS.f_, RS.a___);
+        let g = func_without_index(m, RS.g_, RS.b___);
+
+        let rep = SPENSO_TAG
+            .dualizable_::<0, _>([RS.d_])
+            .to_pattern()
+            .replace_wildcards_with_matches(m);
+
+        function!(ETS.metric, rep, f, g)
+    })
 }
 
 /// Trait for simplifying expressions involving metric tensors and converting
@@ -683,7 +669,6 @@ mod test {
             permuted::Perm,
             representation::{Euclidean, Lorentz},
         },
-        tensors::symbolic::SymbolicTensor,
     };
     use symbolica::parse_lit;
 
@@ -780,16 +765,27 @@ mod test {
         let a =
             parse_lit!(P(wrong::mink(4, -1 * g(2)), spenso::mink(4, 2)) * P(spenso::mink(4, 2)))
                 .to_dots();
-        println!("{a}");
         assert_eq!(
             a,
-            parse_lit!(spenso::dot(
+            parse_lit!(spenso::g(
                 spenso::mink(4),
-                idenso::P(),
+                idenso::P,
                 idenso::P(wrong::mink(4, -idenso::g(2)))
             ))
         );
+        insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(mink(4,-1*g(2)),cind(1))+-1*P(cind(2))*P(mink(4,-1*g(2)),cind(2))+-1*P(cind(3))*P(mink(4,-1*g(2)),cind(3))+P(cind(0))*P(mink(4,-1*g(2)),cind(0))");
 
-        insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(mink(4,-1*g(2)),cind(1))+-1*P(cind(2))*P(mink(4,-1*g(2)),cind(2))+-1*P(cind(3))*P(mink(4,-1*g(2)),cind(3))+P(cind(0))*P(mink(4,-1*g(2)),cind(0))")
+        let a = parse_lit!(k1(spenso::mink(4, mu1)) ^ 2).to_dots();
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"g(k1,k1,mink(4))");
+    }
+
+    #[test]
+    fn true_cooking() {
+        test_initialize();
+        let expr = parse_lit!(spenso::g(spenso::mink(4, f(0))));
+
+        println!("{}", expr.cook());
+        println!("{}", expr.cook().uncook());
+        // println!("{}", symbol!(&a, data = UserData::Atom(expr)));
     }
 }

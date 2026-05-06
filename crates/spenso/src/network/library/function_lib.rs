@@ -12,13 +12,12 @@ use colored::Colorize;
 use crate::{
     network::{
         library::{FunctionLibrary, FunctionLibraryError},
-        parsing::SPENSO_TAG,
+        tags::SPENSO_TAG,
     },
-    structure::{HasStructure, TensorStructure, slot::AbsInd},
+    structure::{HasStructure, TensorStructure},
     tensors::{
         data::StorageTensor,
         parametric::{ParamOrConcrete, ParamTensor, to_param::ToParam},
-        symbolic::SymbolicTensor,
     },
 };
 
@@ -95,37 +94,6 @@ impl Panic {
         }
     }
 }
-pub struct Wrap;
-
-impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
-    type Key = Symbol;
-    fn apply(
-        &self,
-        key: &Self::Key,
-        tensor: SymbolicTensor<Aind>,
-    ) -> eyre::Result<SymbolicTensor<Aind>, FunctionLibraryError<Self::Key>> {
-        Ok(SymbolicTensor {
-            structure: tensor.structure,
-            expression: function!(*key, tensor.expression),
-        })
-    }
-
-    fn apply_scalar(
-        &self,
-        key: &Self::Key,
-        scalar: Atom,
-    ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
-    }
-}
-impl Wrap {
-    pub fn new_lib<T>() -> SymbolLib<T, Self> {
-        SymbolLib {
-            functions: HashMap::new(),
-            _missing: Self,
-        }
-    }
-}
 
 impl<S: TensorStructure> FunctionLibrary<ParamTensor<S>, Atom>
     for SymbolLib<ParamTensor<S>, Panic>
@@ -153,6 +121,15 @@ impl<S: TensorStructure> FunctionLibrary<ParamTensor<S>, Atom>
     }
 }
 
+pub struct Wrap;
+impl Wrap {
+    pub fn new_lib<T>() -> SymbolLib<T, Self> {
+        SymbolLib {
+            functions: HashMap::new(),
+            _missing: Self,
+        }
+    }
+}
 impl<S: TensorStructure + Clone> FunctionLibrary<ParamTensor<S>, Atom>
     for SymbolLib<ParamTensor<S>, Wrap>
 {

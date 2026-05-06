@@ -1,7 +1,7 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{dirac::GammaSimplifier, metric::MetricSimplifier};
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,

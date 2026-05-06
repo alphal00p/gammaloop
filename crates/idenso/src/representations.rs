@@ -1,5 +1,5 @@
 use spenso::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
         abstract_index::AIND_SYMBOLS,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
@@ -8,7 +8,7 @@ use spenso::{
 use spenso_macros::SimpleRepresentation;
 use symbolica::atom::Atom;
 
-use super::{color::CS, gamma::AGS, metric::MS, rep_symbols::RS};
+use super::{color::CS, dirac::AGS, metric::MS, rep_symbols::RS};
 
 #[cfg(feature = "python")]
 use pyo3::pyfunction;
@@ -142,6 +142,7 @@ pub fn initialize() {
     let _ = RS.a_;
     let _ = MS.dummy;
     let _ = AGS.gamma;
+    let _ = *crate::epsilon::EPSILON_SYMBOL;
     let _ = ETS.metric;
     let _ = CS.f;
     let _ = SPENSO_TAG.bracket;

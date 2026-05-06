@@ -1,4 +1,4 @@
-use crate::{network::parsing::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
+use crate::{network::tags::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -88,7 +88,7 @@ impl SpensoPrintSettings {
     // x^-1*a^-1*b^-1 -> ((1/x)/a)/b
     pub fn compact() -> Self {
         Self {
-            parens: false,
+            parens: true,
             commas: false,
             with_dim: false,
             symbol_scripts: false,
@@ -997,7 +997,7 @@ impl IntoSymbol for std::string::String {
 #[cfg(test)]
 mod test {
     use crate::{
-        network::parsing::SPENSO_TAG,
+        network::tags::SPENSO_TAG,
         shadowing::symbolica_utils::{AtomCoreExt, TypstSettings},
     };
 

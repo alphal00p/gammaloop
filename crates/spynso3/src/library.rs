@@ -319,7 +319,7 @@ impl SpensorLibrary {
     /// --------
     /// >>> import symbolica
     /// >>> from symbolica.community.spenso import TensorLibrary, TensorName
-    /// >>> hep_lib = TensorLibrary.hep_lib()
+    /// >>> hep_lib = TensorLibrary.hep_lib_atom()
     /// >>> gamma_structure = hep_lib[symbolica.S("spenso::gamma")]
     pub fn hep_lib_atom() -> Self {
         Self {

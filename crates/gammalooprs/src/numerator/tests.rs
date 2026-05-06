@@ -1,5 +1,5 @@
 use brotli::CompressorWriter;
-use idenso::{gamma::GammaSimplifier, representations::Bispinor};
+use idenso::{dirac::GammaSimplifier, representations::Bispinor};
 use insta::assert_snapshot;
 use linnet::half_edge::involution::Orientation;
 use spenso::{

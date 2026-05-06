@@ -28,7 +28,7 @@ use tabled::{
 
 // use log::{info, trace};
 use idenso::{
-    gamma::AGS,
+    dirac::AGS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
 };
 use serde::{Deserialize, Serialize};

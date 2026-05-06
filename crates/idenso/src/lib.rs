@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use base64::{Engine, engine::general_purpose::URL_SAFE};
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
 use metric::{
@@ -21,28 +22,77 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, UserData},
     function,
     id::Replacement,
-    symbol,
+    symbol, tag,
 };
 use thiserror::Error;
 
 use crate::{
-    gamma::{AGS, GammaSimplifier},
+    dirac::{AGS, GammaSimplifier},
     metric::MetricSimplifier,
     rep_symbols::RS,
     representations::Bispinor,
+    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
+pub mod tensor;
+
+pub mod chain;
 pub mod color;
-pub mod gamma;
+pub mod dirac;
+pub mod epsilon;
 pub mod metric;
 pub mod parsing_ind;
 #[cfg(feature = "python")]
 pub mod python;
 pub mod rep_symbols;
 pub mod representations;
+pub mod schoonschip;
+#[cfg(test)]
+pub(crate) mod test_support;
+
+#[macro_export]
+macro_rules!  symbol_set {
+        // Identifier symbols with explicit struct and static names
+        ($struct_name:ident, $static_name:ident; $($char:ident)*) => {
+            #[allow(non_snake_case)]
+            pub struct $struct_name {
+                $(pub $char: Symbol,)*
+            }
+
+            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($char: symbol!(stringify!($char)),)*
+            });
+        };
+
+        // String literals as individual statics
+        (statics; $($field:ident : $string:literal),* $(,)?) => {
+            $(
+                #[allow(non_upper_case_globals)]
+                pub static $field: ::std::sync::LazyLock<Symbol> = ::std::sync::LazyLock::new(|| symbol!($string));
+            )*
+        };
+
+        // String literals grouped in a struct
+        ($struct_name:ident, $static_name:ident; $($field:ident : $string:literal),* $(,)?) => {
+            #[allow(non_snake_case)]
+            pub struct $struct_name {
+                $(pub $field: Symbol,)*
+            }
+
+            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($field: symbol!($string),)*
+            });
+        };
+    }
+
+symbol_set!(Wildcards, W_;
+    a_ b_ c_ d_ e_ f_ g_ h_ i_ j_ k_ l_ m_ n_ o_ p_ q_ r_ s_ t_ u_ v_ w_ x_ y_ z_
+    a__ b__ c__ d__ e__ f__ g__ h__ i__ j__ k__ l__ m__ n__ o__ p__ q__ r__ s__ t__ u__ v__ w__ x__ y__ z__
+    a___ b___ c___ d___ e___ f___ g___ h___ i___ j___ k___ l___ m___ n___ o___ p___ q___ r___ s___ t___ u___ v___ w___ x___ y___ z___
+);
 
 /// Defines operations related to manipulating abstract indices within symbolic expressions,
 /// particularly relevant for physics calculations involving tensor structures and diagrams.
@@ -102,6 +152,10 @@ pub trait IndexTooling {
     /// `Err(CookingError)` if the input cannot be cooked.
     fn cook_function(&self) -> Result<Atom, CookingError>;
 
+    fn cook(&self) -> Atom;
+
+    fn uncook(&self) -> Atom;
+
     /// Computes the physics-aware conjugate of the expression.
     ///
     /// Applies conjugation rules specific to physics objects like spinors, gamma matrices,
@@ -130,6 +184,14 @@ impl IndexTooling for Atom {
         new_dummy: impl FnMut(usize) -> Aind,
     ) -> Atom {
         self.as_view().canonize(new_dummy)
+    }
+
+    fn cook(&self) -> Atom {
+        self.as_view().cook()
+    }
+
+    fn uncook(&self) -> Atom {
+        self.as_view().uncook()
     }
     fn spenso_conj(&self) -> Atom {
         self.as_view().spenso_conj()
@@ -167,6 +229,33 @@ pub enum AdjointError {
 }
 
 impl IndexTooling for AtomView<'_> {
+    fn cook(&self) -> Atom {
+        self.replace_map(|a, _, out| {
+            if let AtomView::Fun(f) = a {
+                let hash = blake3::hash(a.get_data());
+                let bytes12 = &hash.as_bytes()[..12];
+                let a = symbol!(
+                    URL_SAFE.encode(bytes12) + f.get_symbol().get_name(),
+                    data = UserData::Atom(a.to_owned()),
+                    tag = tag!("cooked")
+                );
+                **out = Atom::var(a);
+            }
+        })
+    }
+
+    fn uncook(&self) -> Atom {
+        self.replace_map(|a, _, out| {
+            if let AtomView::Var(s) = a {
+                let s = s.get_symbol();
+                if s.has_tag("idenso::cooked")
+                    && let UserData::Atom(a) = s.get_data()
+                {
+                    **out = a.clone();
+                }
+            }
+        })
+    }
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
@@ -225,7 +314,7 @@ impl IndexTooling for AtomView<'_> {
             }
         }
 
-        let expr = net.simple_execute();
+        let expr = net.simple_execute::<()>();
 
         let a = expr.canonize_tensors(dummies).unwrap();
 
@@ -401,7 +490,7 @@ pub mod test {
 
     use crate::{
         IndexTooling,
-        gamma::AGS,
+        dirac::AGS,
         metric::PermuteWithMetric,
         representations::{Bispinor, initialize},
     };

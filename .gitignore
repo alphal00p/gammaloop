@@ -271,3 +271,4 @@ log.glog/
 !.jj/repo/config.toml
 output.svg
 crates/gammaloop-api/test_path.toml
+.codex

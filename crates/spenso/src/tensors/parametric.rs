@@ -1,6 +1,12 @@
 extern crate derive_more;
 
-use crate::structure::{IndexLess, slot::IsAbstractSlot};
+use std::{
+    fmt::{Debug, Display},
+    io::Cursor,
+    path::Path,
+};
+
+use crate::structure::{IndexLess, SlotIndex, slot::IsAbstractSlot};
 use crate::structure::{StructureError, slot::AbsInd};
 use crate::structure::{
     permuted::PermuteTensor, representation::Representation, slot::ParseableAind,
@@ -15,17 +21,12 @@ use crate::{
 };
 use ahash::HashMap;
 use delegate::delegate;
-use std::{
-    fmt::{Debug, Display},
-    io::Cursor,
-    path::Path,
-};
 
 use eyre::Result;
 use eyre::eyre;
 
 use atomcore::{ReplaceBuilderGeneric, TensorAtomMaps};
-// use anyhow::Ok;
+
 use enum_try_as_inner::EnumTryAsInner;
 use log::trace;
 use serde::{Deserialize, Serialize};
@@ -372,10 +373,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -1283,10 +1284,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -2373,10 +2374,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }

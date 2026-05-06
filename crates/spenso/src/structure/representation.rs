@@ -23,7 +23,7 @@ use bincode::{Decode, Encode};
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{abstract_index::AIND_SYMBOLS, slot::SlotError},
 };
 
@@ -514,12 +514,7 @@ impl<T: RepName> Representation<T> {
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
-        function!(
-            SPENSO_TAG.dot,
-            self.to_symbolic([]),
-            a.as_view(),
-            b.as_view()
-        )
+        function!(ETS.metric, self.to_symbolic([]), a.as_view(), b.as_view())
     }
 
     pub fn base(self) -> Representation<T::Base> {
@@ -722,17 +717,45 @@ impl LibraryRep {
                 name
             );
 
-            let rep_name = match self {
-                LibraryRep::SelfDual(a) => encode_base(*a as usize, &LATIN),
-                LibraryRep::Dualizable(a) => encode_base(a.unsigned_abs() as usize, &CYRILLIC),
-                LibraryRep::InlineMetric(a) => encode_base(*a as usize, &GREEK),
-                LibraryRep::Dummy => String::new(),
+            let (rep_name, tags) = match self {
+                LibraryRep::SelfDual(a) => (
+                    encode_base(*a as usize, &LATIN),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
+                LibraryRep::Dualizable(a) => (
+                    encode_base(a.unsigned_abs() as usize, &CYRILLIC),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.dualizable,
+                    ],
+                ),
+                LibraryRep::InlineMetric(a) => (
+                    encode_base(*a as usize, &GREEK),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
+                LibraryRep::Dummy => (
+                    String::new(),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
             };
+
             let name = name.to_string();
 
             symbol!(
                 &name,
-                tag = SPENSO_TAG.upper,
                 print = move |a, opt| {
                     match opt.custom_print_mode {
                         Some(("typst", 1)) => Some(body.clone()),
@@ -811,7 +834,234 @@ impl LibraryRep {
                             Some(out)
                         }
                     }
-                }
+                },
+                norm = |ain, out| {
+                    let AtomView::Fun(f) = ain else {
+                        return;
+                    };
+
+                    // println!("Normalizing representation function: {:#}", ain);
+
+                    let name = f.get_symbol();
+
+                    if f.get_nargs() == 3 {
+                        let mut args = f.iter();
+                        let dim = args.next().unwrap();
+                        let a = args.next().unwrap();
+                        let b = args.next().unwrap();
+
+                        // A rep is linear in each index slot;
+                        match a {
+                            AtomView::Add(a) => {
+                                let builder = FunctionBuilder::new(name);
+
+                                let mut new_out = Atom::Zero;
+                                for t in a.iter() {
+                                    new_out += builder.clone().add_args(&[dim, t, b]).finish();
+                                }
+                                **out = new_out;
+                                return;
+                            }
+
+                            AtomView::Mul(a) => {
+                                let builder = FunctionBuilder::new(name);
+
+                                let mut new_out = Atom::num(1);
+                                let mut coef = Atom::num(1);
+                                for t in a.iter() {
+                                    if let AtomView::Num(_) = t {
+                                        coef *= t;
+                                    } else {
+                                        new_out *= t;
+                                    }
+                                }
+
+                                if coef != Atom::num(1) {
+                                    **out = coef
+                                        * builder.add_args(&[dim, new_out.as_view(), b]).finish();
+                                    return;
+                                }
+                            }
+
+                            _ => {}
+                        }
+
+                        match b {
+                            AtomView::Add(b) => {
+                                let builder = FunctionBuilder::new(name);
+
+                                let mut new_out = Atom::Zero;
+                                for t in b.iter() {
+                                    new_out += builder.clone().add_args(&[dim, a, t]).finish();
+                                }
+                                **out = new_out;
+                                return;
+                            }
+
+                            AtomView::Mul(b) => {
+                                let builder = FunctionBuilder::new(name);
+
+                                let mut new_out = Atom::num(1);
+                                let mut coef = Atom::num(1);
+                                for t in b.iter() {
+                                    if let AtomView::Num(_) = t {
+                                        coef *= t;
+                                    } else {
+                                        new_out *= t;
+                                    }
+                                }
+
+                                if coef != Atom::num(1) {
+                                    **out = coef
+                                        * builder.add_args(&[dim, a, new_out.as_view()]).finish();
+                                    return;
+                                }
+                            }
+
+                            AtomView::Pow(_) => {
+                                panic!("Powers are not supported in index slots {ain}");
+                            }
+                            _ => {}
+                        }
+
+                        let a_build = match a {
+                            AtomView::Fun(f) => {
+                                let sym = f.get_symbol();
+                                if sym.get_wildcard_level() > 0 {
+                                    return;
+                                }
+
+                                if sym.has_tag(&SPENSO_TAG.index) {
+                                    None
+                                } else if sym.has_tag(&SPENSO_TAG.representation) {
+                                    return;
+                                } else {
+                                    Some((sym, f.iter().collect::<Vec<_>>()))
+                                }
+                            }
+                            AtomView::Var(v) => {
+                                let sym = v.get_symbol();
+                                if sym.get_wildcard_level() > 0 {
+                                    return;
+                                }
+                                if sym.has_tag(&SPENSO_TAG.index) {
+                                    None
+                                } else if sym.has_tag(&SPENSO_TAG.representation) {
+                                    return;
+                                } else {
+                                    Some((sym, vec![]))
+                                }
+                            }
+                            _ => None,
+                        };
+
+                        let b_build = match b {
+                            AtomView::Fun(f) => {
+                                let sym = f.get_symbol();
+                                if sym.get_wildcard_level() > 0 {
+                                    return;
+                                }
+                                if sym.has_tag(&SPENSO_TAG.index) {
+                                    None
+                                } else if sym.has_tag(&SPENSO_TAG.representation) {
+                                    return;
+                                } else {
+                                    Some((sym, f.iter().collect::<Vec<_>>()))
+                                }
+                            }
+                            AtomView::Var(v) => {
+                                let sym = v.get_symbol();
+                                if sym.get_wildcard_level() > 0 {
+                                    return;
+                                }
+                                // sym
+                                if sym.has_tag(&SPENSO_TAG.index) {
+                                    None
+                                } else if sym.has_tag(&SPENSO_TAG.representation) {
+                                    return;
+                                } else {
+                                    Some((sym, vec![]))
+                                }
+                            }
+                            _ => None,
+                        };
+
+                        match (a_build, b_build) {
+                            (Some((a, args)), Some((b, args_b))) => {
+                                // println!(
+                                //     "Both are functions or variables, so this is a dot product;"
+                                // );
+                                let builder = FunctionBuilder::new(ETS.metric);
+                                let rep = FunctionBuilder::new(name).add_arg(dim).finish();
+
+                                let a = if args.is_empty() {
+                                    Atom::var(a)
+                                } else {
+                                    FunctionBuilder::new(a).add_args(&args).finish()
+                                };
+
+                                let b = if args_b.is_empty() {
+                                    Atom::var(b)
+                                } else {
+                                    FunctionBuilder::new(b).add_args(&args_b).finish()
+                                };
+
+                                let atom = builder.add_args(&[rep, a, b]).finish();
+                                // println!("{atom}");
+                                **out = atom;
+                            }
+                            (None, Some((b, args))) => {
+                                // println!("a is an index and b is a tensor, we just append to b");
+                                let index =
+                                    FunctionBuilder::new(name).add_arg(dim).add_arg(a).finish();
+                                // println!("index: {index}");
+                                let atom = FunctionBuilder::new(b)
+                                    .add_args(&args)
+                                    .add_arg(index)
+                                    .finish();
+                                // println!("atom:{atom}");
+                                **out = atom;
+                            }
+                            (Some((a, args)), None) => {
+                                // // println!(
+                                //     "b is a dual index (in second position) and a is a tensor, we just append to a"
+                                // );
+                                let index =
+                                    // FunctionBuilder::new(AIND_SYMBOLS.dind)
+                                    // .add_arg(
+                                        FunctionBuilder::new(name).add_arg(dim).add_arg(b).finish();
+                                // );
+                                // .finish();
+                                // println!("index: {index}");
+                                let atom = FunctionBuilder::new(a)
+                                    .add_args(&args)
+                                    .add_arg(index)
+                                    .finish();
+                                // println!("atom: {atom}");
+                                **out = atom;
+                            }
+                            (None, None) => {
+                                // println!("both are indices so this is a metric shorthand");
+                                let index_builder = FunctionBuilder::new(name).add_arg(dim);
+
+                                let atom = FunctionBuilder::new(ETS.metric)
+                                    .add_args(&[
+                                        index_builder.clone().add_arg(a).finish(),
+                                        index_builder.add_arg(b).finish(),
+                                    ])
+                                    .finish();
+
+                                // println!("atom:{atom}");
+                                **out = atom;
+                            }
+                        }
+                    }
+                    // println!("DOne");
+                    // else {
+                    //     // println!("Does not have 3 arguments: {}", f.get_nargs());
+                    // }
+                },
+                tags = tags
             )
         }
     }
@@ -1208,7 +1458,7 @@ impl RepName for LibraryRep {
     }
 
     #[cfg(feature = "shadowing")]
-    /// yields a function builder for the representation, adding a first variable: the dimension.
+    /// yields a function builder for the representation
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
         &self,
         args: impl IntoIterator<Item = It>,
@@ -1462,6 +1712,23 @@ mod test {
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
 mod shadowing_tests {
+    use crate::network::tags::SPENSO_TAG;
+    use crate::structure::representation::initialize;
+    use symbolica::{atom::AtomCore, parse, parse_lit, symbol};
+
+    #[test]
+    fn normalization_shortcuts() {
+        initialize();
+        let mu = symbol!("mu", tags = [&SPENSO_TAG.index]);
+        let a = parse!("mink(4,a,mu)");
+        let b = parse!("mink(4,mu,a)");
+        assert_eq!(a, b);
+        let a = parse!("lor(4,a,mu)");
+        let b = parse!("lor(4,mu,a)");
+
+        let a = parse!("mink(4,mu,mink(4,mu))");
+        // assert_ne!(a, b);
+    }
     // use symbolica::symbol;
 
     // use crate::structure::representation::BaseRepName;

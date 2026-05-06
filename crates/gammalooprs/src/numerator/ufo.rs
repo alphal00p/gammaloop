@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
 use idenso::color::CS;
-use idenso::gamma::AGS;
+use idenso::dirac::AGS;
 use idenso::representations::{
     Bispinor, ColorAdjoint, ColorAntiFundamental, ColorAntiSextet, ColorFundamental, ColorSextet,
 };

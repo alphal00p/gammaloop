@@ -1,9 +1,11 @@
+use std::sync::LazyLock;
+
 use super::*;
 use ahash::AHashMap;
 use eyre::eyre;
 use linnet::permutation::Permutation;
-use std::sync::LazyLock;
 
+use symbolica::atom::{AtomOrView, FunctionBuilder};
 use symbolica::printer::PrintState;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -219,6 +221,19 @@ pub struct ExplicitTensorSymbols {
     pub metric: Symbol,
 }
 
+impl ExplicitTensorSymbols {
+    pub fn metric<'a, 'b, A: Into<AtomOrView<'a>>, B: Into<AtomOrView<'b>>>(
+        &self,
+        a: A,
+        b: B,
+    ) -> Atom {
+        FunctionBuilder::new(self.metric)
+            .add_arg(a)
+            .add_arg(b)
+            .finish()
+    }
+}
+
 pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
     flat: symbol!("♭";Symmetric;print = |a, opt| {
 
@@ -266,6 +281,7 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
     }),
     // sharp: symbol!("♯";Symmetric),
     metric: symbol!(METRIC_NAME;Symmetric,Real;print = |a, opt| {
+
 
         match opt.custom_print_mode {
              Some(("typst", 1)) =>{
@@ -448,6 +464,19 @@ $g(#to-eq(a),#to-eq(b))$
             _=>{}
         }
         None
+    },norm = |f,_|{
+
+        let AtomView::Fun(f)=f else{
+            return;
+        };
+
+        match f.get_nargs(){
+            3=>{},
+            2=>{},
+            1=>{},
+            _=>{},
+        }
+
     }),
 });
 

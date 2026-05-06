@@ -5,16 +5,13 @@ edition = "2024"
 description = "A spenso tensor library for high energy physics"
 
 [dependencies]
-
+idenso = { workspace = true }
 spenso = { workspace = true, features = ["shadowing"] }
-symbolica = { workspace = true, default-features = false }
 spenso-macros = { workspace = true }
-idenso = {workspace = true}
-
+symbolica = { workspace = true }
 
 ahash = { version = "0.8.11", features = ["serde"] }
 xpct = "0.5.1"
 
 [dev-dependencies]
-
-insta = { workspace = true, features = ["yaml", "json", "ron", "toml"] }
+insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
