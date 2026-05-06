@@ -1110,25 +1110,18 @@ where
         let _span = profile::span(Timer::ExecuteCacheRoots);
         graph.cache_expr_tree_roots_ignoring(ignored)
     };
-    let operations = {
+    let planned = {
         let _span = profile::span(Timer::ExecuteReadyBatch);
-        graph.ready_operation_tree_refs_ignoring(ignored)
+        graph.ready_operations_from_tree_ignoring(ignored)
     };
-    let batch_len = operations.len();
+    let batch_len = planned.len();
     let batch_subgraph_hedges = if profile::enabled() {
-        operations
+        planned
             .iter()
-            .map(|op_ref| op_ref.subgraph().n_included())
+            .map(|op| op.subgraph().n_included())
             .sum::<usize>()
     } else {
         0
-    };
-    let planned = {
-        let _span = profile::span(Timer::ExecutePlanOps);
-        operations
-            .iter()
-            .map(NetworkOperation::from)
-            .collect::<Vec<_>>()
     };
 
     if profile::enabled() {
