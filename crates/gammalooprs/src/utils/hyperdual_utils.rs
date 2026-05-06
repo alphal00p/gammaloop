@@ -3,7 +3,7 @@ use std::ops::AddAssign;
 
 use crate::cff::CutCFFIndex;
 use crate::utils::{F, FloatLike, PrecisionUpgradable};
-use itertools::iproduct;
+use itertools::{Itertools, iproduct};
 use spenso::algebra::{algebraic_traits::RefZero, complex::Complex};
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 
@@ -60,21 +60,39 @@ pub(crate) fn shape_from_cut_cff_index(cut_cff_index: &CutCFFIndex) -> Option<Ve
                 .collect(),
         )
     } else if max_derivative_shape.len() == 2 {
-        Some(
-            iproduct!(0..=max_derivative_shape[0], 0..=max_derivative_shape[1])
-                .map(|(order1, order2)| vec![order1, order2])
-                .collect(),
-        )
+        let mut result = iproduct!(0..=max_derivative_shape[0], 0..=max_derivative_shape[1])
+            .map(|(order1, order2)| vec![order1, order2])
+            .sorted()
+            .collect_vec();
+
+        result.sort_by(|a, b| {
+            let sum_a: usize = a.iter().sum();
+            let sum_b: usize = b.iter().sum();
+            sum_a.cmp(&sum_b)
+        });
+
+        result[1..3].sort_by(|a, b| b[0].cmp(&a[0]).then(b[1].cmp(&a[1])));
+
+        Some(result)
     } else if max_derivative_shape.len() == 3 {
-        Some(
-            iproduct!(
-                0..=max_derivative_shape[0],
-                0..=max_derivative_shape[1],
-                0..=max_derivative_shape[2]
-            )
-            .map(|(order1, order2, order3)| vec![order1, order2, order3])
-            .collect(),
+        let mut result = iproduct!(
+            0..=max_derivative_shape[0],
+            0..=max_derivative_shape[1],
+            0..=max_derivative_shape[2]
         )
+        .map(|(order1, order2, order3)| vec![order1, order2, order3])
+        .sorted()
+        .collect_vec();
+
+        result.sort_by(|a, b| {
+            let sum_a: usize = a.iter().sum();
+            let sum_b: usize = b.iter().sum();
+            sum_a.cmp(&sum_b)
+        });
+
+        result[1..4].sort_by(|a, b| b[0].cmp(&a[0]).then(b[1].cmp(&a[1])).then(b[2].cmp(&a[2])));
+
+        Some(result)
     } else {
         unreachable!("shape_from_cut_cff_index only supports up to 3 derivative orders")
     }
