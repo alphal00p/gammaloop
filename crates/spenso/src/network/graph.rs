@@ -910,6 +910,59 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.ready_operation_refs_ignoring(&hidden)
     }
 
+    /// Return ready operations from the cached expression tree without building a
+    /// second disjointness filter. Each selected operation is an expression-tree
+    /// node plus its cached tree children, so one traversal cannot select
+    /// overlapping operation subgraphs. Debug builds assert that invariant.
+    pub fn ready_operation_tree_refs_ignoring<S>(
+        &self,
+        hidden: &S,
+    ) -> Vec<NetworkOperationRef<'_, K, FK, Aind>>
+    where
+        S: SubSetLike<Base = SuBitGraph>,
+    {
+        let mut ready = Vec::new();
+
+        #[cfg(debug_assertions)]
+        let mut used: SuBitGraph = self.graph.empty_subgraph();
+
+        let cached_nodes = {
+            let _span = profile::span(Timer::ExecuteReadyPreorder);
+            self.cached_expr_preorder_nodes_ignoring(hidden)
+        };
+
+        for nid in cached_nodes {
+            let parts = {
+                let _span = profile::span(Timer::ExecuteReadyParts);
+                self.ready_operation_parts_ignoring(nid, hidden)
+            };
+            let Some((op, children)) = parts else {
+                continue;
+            };
+
+            let subgraph = {
+                let _span = profile::span(Timer::ExecuteReadySubgraph);
+                self.operation_subgraph_ignoring(nid, &children, hidden)
+            };
+
+            #[cfg(debug_assertions)]
+            {
+                debug_assert!(subgraph.empty_intersection(&used));
+                used.union_with(&subgraph);
+            }
+
+            ready.push(NetworkOperationRef {
+                graph: self,
+                op_node: nid,
+                op,
+                children,
+                subgraph,
+            });
+        }
+
+        ready
+    }
+
     pub fn ready_operation_refs_ignoring<S>(
         &self,
         hidden: &S,
@@ -920,17 +973,36 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let mut used: SuBitGraph = self.graph.empty_subgraph();
         let mut ready = Vec::new();
 
-        for nid in self.cached_expr_preorder_nodes_ignoring(hidden) {
-            let Some((op, children)) = self.ready_operation_parts_ignoring(nid, hidden) else {
+        let cached_nodes = {
+            let _span = profile::span(Timer::ExecuteReadyPreorder);
+            self.cached_expr_preorder_nodes_ignoring(hidden)
+        };
+
+        for nid in cached_nodes {
+            let parts = {
+                let _span = profile::span(Timer::ExecuteReadyParts);
+                self.ready_operation_parts_ignoring(nid, hidden)
+            };
+            let Some((op, children)) = parts else {
                 continue;
             };
 
-            let subgraph = self.operation_subgraph_ignoring(nid, &children, hidden);
-            if !subgraph.empty_intersection(&used) {
+            let subgraph = {
+                let _span = profile::span(Timer::ExecuteReadySubgraph);
+                self.operation_subgraph_ignoring(nid, &children, hidden)
+            };
+            let overlaps_used = {
+                let _span = profile::span(Timer::ExecuteReadyIntersection);
+                !subgraph.empty_intersection(&used)
+            };
+            if overlaps_used {
                 continue;
             }
 
-            used.union_with(&subgraph);
+            {
+                let _span = profile::span(Timer::ExecuteReadyUnion);
+                used.union_with(&subgraph);
+            }
             ready.push(NetworkOperationRef {
                 graph: self,
                 op_node: nid,
@@ -958,6 +1030,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let operations = self.ready_operation_refs_ignoring(hidden);
         let mut subgraph: SuBitGraph = self.graph.empty_subgraph();
         for op_ref in &operations {
+            let _span = profile::span(Timer::ExecuteReadyUnion);
             subgraph.union_with(op_ref.subgraph());
         }
 
