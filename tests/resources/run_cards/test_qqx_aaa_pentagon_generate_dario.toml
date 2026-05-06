@@ -224,8 +224,8 @@ compile = 1
 integrate = 1
 
 [cli_settings.global]
-logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"  # ,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "debug"  # ,gammalooprs[final_integrand]=debug"
+logfile_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::uv::forest=debug,gammalooprs::uv::approx=debug"
+display_directive = "gammaloop_api=debug,gammalooprs=debug,symbolica=off,poly::gcd=off"
 
 [cli_settings.global.log_style]
 log_format = "Min"

@@ -248,6 +248,7 @@ fn scalars_profile() {
         generate_integrated: false,
         softct: false,
         add_sigma: true,
+        keep_sigma: false,
         subtract_uv: true,
         ..Default::default()
     });
@@ -270,6 +271,7 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
         generate_integrated: false,
         softct: false,
         add_sigma: true,
+        keep_sigma: false,
         subtract_uv: true,
         ..Default::default()
     });
@@ -295,6 +297,7 @@ fn scalars_profile_new() {
         generate_integrated: false,
         softct: false,
         add_sigma: true,
+        keep_sigma: false,
         subtract_uv: true,
         ..Default::default()
     });
@@ -1623,6 +1626,7 @@ mod failing {
             generate_integrated: false,
             softct: false,
             add_sigma: true,
+            keep_sigma: false,
             subtract_uv: true,
             ..Default::default()
         });

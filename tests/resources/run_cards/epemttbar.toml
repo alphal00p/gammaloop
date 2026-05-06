@@ -8,8 +8,8 @@ commands = [
 ]
 
 [cli_settings.global]
-logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug"  # ,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "info"  # gammalooprs[orientation_parametric_expr]=debug"#,gammalooprs[final_integrand]=debug"
+logfile_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::uv::forest=debug,gammalooprs::uv::approx=debug"
+display_directive = "gammaloop_api=info,gammalooprs=info"
 
 [cli_settings.global.generation.uv]
 generate_integrated = false

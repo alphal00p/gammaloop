@@ -18,7 +18,7 @@ use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::algebra::complex::Complex;
+use spenso::{algebra::complex::Complex, network::library::TensorLibraryData};
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -26,7 +26,7 @@ use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol}
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        esurface::GroupEsurfaceId,
+        esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId},
         expression::{CFFExpression, OrientationID},
     },
     graph::{
@@ -34,19 +34,19 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::{
-        LmbMultiChannelingSetup,
+        GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
     processes::{
-        DotExportSettings, GraphGenerationStats, NamedGraphGenerationReport,
-        StandaloneExportSettings,
+        DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
+        StandaloneExportSettings, build_derivative_structure_atom, params_for_derivative_order,
     },
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, GS, Length, W_},
+    utils::{F, GS, Length, W_, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
@@ -67,6 +67,8 @@ use linnet::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
+    domains::rational::Rational,
+    evaluate::FunctionMap,
     function,
 };
 use three_dimensional_reps::{Generate3DExpressionOptions, RepresentationMode};
@@ -98,7 +100,7 @@ pub struct Amplitude {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GroupDerivedData {
-    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
     pub esurface_atoms: TiVec<GroupEsurfaceId, Atom>,
 }
 
@@ -464,7 +466,8 @@ impl Amplitude {
             .iter()
             .map(|group| {
                 let mut group_esurface_structure =
-                    BTreeMap::<Atom, TiVec<GraphGroupPosition, Option<EsurfaceID>>>::default();
+                    BTreeMap::<Atom, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>::default(
+                    );
 
                 for (graph_group_position, graph_id) in group.iter_enumerated() {
                     let amplitude_graph = &self.graphs[graph_id];
@@ -476,13 +479,19 @@ impl Amplitude {
 
                     let esurfaces = &amplitude_graph.graph.surface_cache.esurface_cache;
 
-                    for (esurface_id, esurface) in esurfaces.iter_enumerated() {
+                    for (raised_esurface_id, raised_group) in amplitude_graph
+                        .derived_data
+                        .raised_data
+                        .raised_groups
+                        .iter_enumerated()
+                    {
+                        let esurface = &esurfaces[raised_group.esurface_ids[0]];
                         let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
 
                         group_esurface_structure
                             .entry(esurface_atom)
                             .or_insert(ti_vec![None; group.len()])[graph_group_position] =
-                            Some(esurface_id);
+                            Some(raised_esurface_id);
                     }
                 }
 
@@ -530,6 +539,11 @@ impl AmplitudeGraph {
                 tropical_sampler: None,
                 multi_channeling_setup: None,
                 threshold_counterterms: TiVec::new(),
+                raised_data: RaisedEsurfaceData {
+                    raised_groups: TiVec::new(),
+                    pass_two_evaluator: None,
+                },
+                raised_esurface_ids: TiVec::new(),
             },
         }
     }
@@ -641,7 +655,37 @@ impl AmplitudeGraph {
         }
 
         if settings.threshold_subtraction.enable_thresholds {
-            self.derived_data.threshold_counterterms = self
+            let mut raised_data = self.graph.determine_raised_esurfaces_from_expression(
+                self.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .expect("cff_expression should have been created"),
+            );
+            let max_order = raised_data
+                .raised_groups
+                .iter()
+                .map(|raised_group| raised_group.max_occurence)
+                .max()
+                .unwrap_or(0);
+            if max_order > 1 {
+                self.graph
+                    .param_builder
+                    .initialize_t_derivatives(max_order - 1);
+            }
+            raised_data.pass_two_evaluator = Some(
+                (1..=max_order)
+                    .map(|order| {
+                        threshold_counterterm_helper(
+                            order as u8,
+                            self.graph.get_loop_number(),
+                            &settings.evaluator,
+                        )
+                    })
+                    .collect(),
+            );
+            self.derived_data.raised_data = raised_data;
+
+            let (threshold_counterterms, raised_esurface_ids) = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,
                     global_settings.three_d_representation,
@@ -649,6 +693,8 @@ impl AmplitudeGraph {
                     locked_runtime_settings,
                     model,
                 )?;
+            self.derived_data.threshold_counterterms = threshold_counterterms;
+            self.derived_data.raised_esurface_ids = raised_esurface_ids;
         }
 
         Ok(GraphGenerationStats {
@@ -1009,7 +1055,7 @@ impl AmplitudeGraph {
             settings.explicit_orientation_sum_only,
         )?;
         let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, false)?
+            .orientation_parametric_exprs(&self.graph, &settings.uv)?
             .into_iter()
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .map(|e| {
@@ -1041,19 +1087,10 @@ impl AmplitudeGraph {
         vakint: &Vakint,
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
-    ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
-        if representation == crate::settings::global::ThreeDRepresentation::Ltd {
-            return self.build_ltd_threshold_counterterm_parametric_integrand(
-                settings,
-                locked_runtime_settings,
-                model,
-            );
-        }
-
-        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = ti_vec![
-            AmplitudeCountertermAtom::new();
-            self.graph.surface_cache.esurface_cache.len()
-        ];
+    ) -> Result<(
+        TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
+        TiVec<EsurfaceID, RaisedEsurfaceId>,
+    )> {
         let valid_orientations: Vec<_> = self
             .derived_data
             .cff_expression
@@ -1064,12 +1101,27 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        let (local_prefactor, integrated_prefactor) = self.th_counterterm_prefactor_helpter();
-
         let global_cff = self.derived_data.cff_expression.as_ref().unwrap(); // should always be set at this point
-        let esurface_raising = self
-            .graph
-            .determine_raised_esurfaces_from_expression(global_cff);
+        let esurface_raising = &self.derived_data.raised_data;
+        let mut counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom> = ti_vec![
+            AmplitudeCountertermAtom::new();
+            esurface_raising.raised_groups.len()
+        ];
+        let mut raised_esurface_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
+            ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
+
+        for (raised_esurface_id, raised_group) in esurface_raising.raised_groups.iter_enumerated() {
+            for &esurface_id in &raised_group.esurface_ids {
+                raised_esurface_ids[esurface_id] = Some(raised_esurface_id);
+            }
+        }
+        let raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId> = raised_esurface_ids
+            .into_iter()
+            .map(|raised_esurface_id| {
+                raised_esurface_id
+                    .expect("every esurface should belong to exactly one raised-esurface group")
+            })
+            .collect();
 
         let mut cuts = vec![];
 
@@ -1091,19 +1143,13 @@ impl AmplitudeGraph {
             }
         }
 
-        for raised_data in esurface_raising.raised_groups.into_iter() {
-            assert!(
-                raised_data.esurface_ids.len() == 1,
-                "raise threshold subtraction not yet implemented"
-            );
-
-            assert!(
-                raised_data.max_occurence == 1,
-                "raise threshold subtraction not yet implemented"
-            );
-
+        for raised_data in esurface_raising.raised_groups.iter().cloned() {
             let esurface_id = raised_data.esurface_ids[0];
             let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
+
+            if esurface.external_shift.is_empty() {
+                continue;
+            }
 
             if settings.threshold_subtraction.check_esurface_at_generation {
                 let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
@@ -1118,11 +1164,16 @@ impl AmplitudeGraph {
                 }
             }
 
-            if esurface.contains_all_with_minus_sign(&incoming_externals)
-                || esurface.contains_only_with_minus_sign(&outgoing_externals)
+            if settings
+                .threshold_subtraction
+                .assume_positive_external_energies
             {
-            } else {
-                continue;
+                if esurface.contains_all_with_minus_sign(&incoming_externals)
+                    || esurface.contains_only_with_minus_sign(&outgoing_externals)
+                {
+                } else {
+                    continue;
+                }
             }
 
             let mut cut_union: SuBitGraph = self.graph.empty_subgraph();
@@ -1140,9 +1191,9 @@ impl AmplitudeGraph {
 
             let cutset = CutSet {
                 residue_selector: ResidueSelector {
-                    lu_cut: None,
+                    lu_cut: Some(raised_data.clone()),
                     lu_cut_edge_sets: Vec::new(),
-                    left_th_cut: Some(raised_data.clone()),
+                    left_th_cut: None,
                     right_th_cut: None,
                 },
                 union: cut_union,
@@ -1166,7 +1217,7 @@ impl AmplitudeGraph {
         )?;
 
         let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, false)?
+            .orientation_parametric_exprs(&self.graph, &settings.uv)?
             .into_iter()
             .map(|e| {
                 if settings.explicit_orientation_sum_only
@@ -1181,155 +1232,26 @@ impl AmplitudeGraph {
             })
             .collect();
 
-        for mut expr in exprs.into_iter() {
-            assert!(
-                expr.integrands.len() == 1,
-                "threshold counterterm generation not yet implemented for raised"
-            );
-            let integrand = expr.integrands.pop().unwrap();
-            let local = &local_prefactor * &integrand;
-            let integrated = &integrated_prefactor * integrand;
+        for expr in exprs.into_iter() {
+            let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
+            let jacobian_factor = Atom::var(GS.radius_star_left).pow(loop_number as i32 * 3 - 1);
 
+            let expr = expr.map(|integrand| integrand * &jacobian_factor);
             let counterterm_atom = AmplitudeCountertermAtom {
-                parametric_local: local,
-                parametric_integrated: integrated,
+                parametric: expr.integrands,
             };
-            let esurfaces = expr.cuts.residue_selector.left_th_cut.unwrap();
-            let esurface_id = esurfaces.esurface_ids[0];
+            let raised_group = expr.cuts.residue_selector.lu_cut.unwrap();
+            let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
+            debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            counterterms[esurface_id] = counterterm_atom;
+            for integrand in &counterterm_atom.parametric {
+                debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
+            }
+
+            counterterms[raised_esurface_id] = counterterm_atom;
         }
 
-        Ok(counterterms)
-    }
-
-    fn build_ltd_threshold_counterterm_parametric_integrand(
-        &self,
-        settings: &GenerationSettings,
-        locked_runtime_settings: &LockedRuntimeSettings,
-        model: &Model,
-    ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
-        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = ti_vec![
-            AmplitudeCountertermAtom::new();
-            self.graph.surface_cache.esurface_cache.len()
-        ];
-
-        let (local_prefactor, integrated_prefactor) = self.th_counterterm_prefactor_helpter();
-        let expression = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .expect("3D expression should have been created");
-        let esurface_raising = self
-            .graph
-            .determine_raised_esurfaces_from_expression(expression);
-        let numerator = self.production_numerator_atom_for_full_3d_expression();
-
-        let external_filter: SuBitGraph = self.graph.external_filter();
-        let external_signature = self.graph.get_external_signature();
-
-        let mut incoming_externals = vec![];
-        let mut outgoing_externals = vec![];
-
-        for ((_, edge_id, _), external_sign) in self
-            .graph
-            .iter_edges_of(&external_filter)
-            .zip(external_signature.iter())
-        {
-            match external_sign {
-                SignOrZero::Plus => incoming_externals.push(edge_id),
-                SignOrZero::Minus => outgoing_externals.push(edge_id),
-                _ => {}
-            }
-        }
-
-        for raised_data in esurface_raising.raised_groups.into_iter() {
-            if raised_data.esurface_ids.len() != 1 {
-                return Err(eyre!(
-                    "raised threshold subtraction for grouped e-surfaces is not implemented yet"
-                ));
-            }
-            if raised_data.max_occurence != 1 {
-                return Err(eyre!(
-                    "raised threshold subtraction for repeated e-surfaces is not implemented yet"
-                ));
-            }
-
-            let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &expression.surfaces.esurface_cache[esurface_id];
-
-            if settings.threshold_subtraction.check_esurface_at_generation {
-                let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
-                let lmb = &self.graph.loop_momentum_basis;
-                if !locked_runtime_settings.existence_check(
-                    esurface,
-                    &masses,
-                    &self.graph.get_external_signature(),
-                    lmb,
-                ) {
-                    continue;
-                }
-            }
-
-            if !(esurface.contains_all_with_minus_sign(&incoming_externals)
-                || esurface.contains_only_with_minus_sign(&outgoing_externals))
-            {
-                continue;
-            }
-
-            let residues = expression.clone().select_esurface_residue(&raised_data);
-            if residues.len() != 1 {
-                return Err(eyre!(
-                    "threshold counterterm generation is not implemented for raised e-surface groups with {} residue orders",
-                    residues.len()
-                ));
-            }
-            let residue = residues.into_iter().next().unwrap();
-            let atom = self
-                .graph
-                .three_d_expression_parametric_atom_with_numerator_gs(
-                    &residue,
-                    &numerator,
-                    RepresentationMode::Ltd,
-                    true,
-                    &settings.orientation_pattern,
-                );
-            let integrand = self.prepare_parametric_integrand_atom(atom)?;
-
-            counterterms[esurface_id] = AmplitudeCountertermAtom {
-                parametric_local: &local_prefactor * &integrand,
-                parametric_integrated: &integrated_prefactor * integrand,
-            };
-        }
-
-        Ok(counterterms)
-    }
-
-    fn th_counterterm_prefactor_helpter(&self) -> (Atom, Atom) {
-        let loop_3 = self.graph.get_loop_number() as i64 * 3;
-
-        let grad_eta = Atom::var(GS.deta_left_th);
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
-        let i = Atom::i();
-
-        let radius = Atom::var(GS.radius_left);
-        let radius_star = Atom::var(GS.radius_star_left);
-        let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
-        let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
-        let hfunction = Atom::var(GS.hfunction_left_th);
-
-        let delta_r_plus = &radius - &radius_star;
-        let delta_r_minus = -&radius - &radius_star;
-
-        let jacobian_ratio = (&radius_star / &radius).pow(loop_3 - 1);
-
-        let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
-            * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
-
-        let integrated_prefactor =
-            -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
-
-        (local_prefactor, integrated_prefactor)
+        Ok((counterterms, raised_esurface_ids))
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Loop Momentum Bases"))]
@@ -1459,7 +1381,7 @@ impl AmplitudeGraph {
         &self,
         model: &Model,
         own_group_position: GraphGroupPosition,
-        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         global_settings: &GlobalSettings,
     ) -> Result<(AmplitudeGraphTerm, GraphGenerationStats)> {
         AmplitudeGraphTerm::from_amplitude_graph(
@@ -1476,7 +1398,9 @@ impl AmplitudeGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
-    pub threshold_counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom>,
+    pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
+    pub raised_data: RaisedEsurfaceData,
+    pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
@@ -1572,6 +1496,93 @@ impl Amplitude {
         //  TODO: validate that the graph is compatible
         Ok(())
     }
+}
+
+pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -> Atom {
+    let loop_3 = loop_number as i64 * 3;
+
+    let laurent_coeff_indices = (1..=order).map(|i| -(i as i8));
+
+    let mut laurent_coeffs = laurent_coeff_indices.map(|laurent_coeff_index| {
+        build_derivative_structure_atom(order, laurent_coeff_index)
+            .replace(GS.rescale_star)
+            .with(GS.radius_star_left)
+    });
+
+    let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
+    let i = Atom::i();
+
+    let radius = Atom::var(GS.radius_left);
+    let radius_star = Atom::var(GS.radius_star_left);
+    let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+    let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+    let hfunction = Atom::var(GS.hfunction_left_th);
+
+    let delta_r_plus = &radius - &radius_star;
+    let delta_r_minus = -&radius - &radius_star;
+
+    let jacobian_ratio = (Atom::one() / &radius).pow(loop_3 - 1);
+
+    let local_prefactor = &jacobian_ratio / &factors_of_pi
+        * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
+
+    let integrated_prefactor = i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
+
+    let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
+
+    for pow in 2..=order {
+        result += laurent_coeffs.next().unwrap() * &jacobian_ratio / &factors_of_pi
+            * (Atom::one() / delta_r_plus.pow(pow as i64)
+                + Atom::one() / delta_r_minus.pow(pow as i64));
+    }
+
+    debug!(
+        "Threshold counterterm helper atom for order {} and loop number {}: {}",
+        order, loop_number, result
+    );
+    result
+}
+
+pub(crate) fn threshold_counterterm_helper(
+    order: u8,
+    loop_number: usize,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    let atom = threshold_counterterm_helper_atom(order, loop_number);
+    let mut fn_map = FunctionMap::default();
+    fn_map.add_constant(
+        GS.pi.into(),
+        Rational::try_from(std::f64::consts::PI).unwrap().into(),
+    );
+
+    let mut params = params_for_derivative_order(order)
+        .into_iter()
+        .map(|param| param.replace(GS.rescale_star).with(GS.radius_star_left))
+        .collect_vec();
+
+    let radius = Atom::var(GS.radius_left);
+    let radius_star = Atom::var(GS.radius_star_left);
+    let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+    let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+    let hfunction = Atom::var(GS.hfunction_left_th);
+
+    params.push(radius);
+    params.push(radius_star);
+    params.push(uv_damp_plus);
+    params.push(uv_damp_minus);
+    params.push(hfunction);
+
+    GenericEvaluator::new_from_raw_params(
+        [atom],
+        &params,
+        &fn_map,
+        vec![],
+        evaluator_settings.optimization_settings(),
+        None,
+        evaluator_settings,
+    )
+    .unwrap()
+    .into_eager_only()
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use rand::Rng;
+use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::MonteCarloRng;
 use tabled::{builder::Builder, settings::Style};
 use tracing::warn;
@@ -16,7 +17,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor,
-    cff::esurface::{EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId},
+    cff::esurface::{ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId},
     graph::{FeynmanGraph, GraphGroupPosition, LmbError, lmb::LMBwithEdges},
     integrands::{
         evaluation::PreciseEvaluationResult,
@@ -485,6 +486,13 @@ fn render_display_only_reports(
     write!(f, "{}", display_only_table.build().with(Style::rounded()))
 }
 
+fn format_missing_fit_item(label: String, fit_error: Option<&str>) -> String {
+    match fit_error {
+        Some(error) => format!("{label} (no fit: {error})"),
+        None => label,
+    }
+}
+
 fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 4] {
     let (scaling, exponent, r_squared) = match (&cut_report.power_law_fit, &cut_report.fit_error) {
         (Some(fit), None) => (
@@ -497,7 +505,10 @@ fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 4] {
     };
 
     [
-        format!("cut {}", cut_report.cut_id),
+        format_missing_fit_item(
+            format!("cut {}", cut_report.cut_id),
+            cut_report.fit_error.as_deref(),
+        ),
         scaling,
         exponent,
         r_squared,
@@ -522,7 +533,10 @@ fn display_only_report_display_row(display_only_report: &DisplayOnlyLimitReport)
     };
 
     [
-        display_only_report.label.clone(),
+        format_missing_fit_item(
+            display_only_report.label.clone(),
+            display_only_report.fit_error.as_deref(),
+        ),
         scaling,
         exponent,
         r_squared,
@@ -753,6 +767,10 @@ fn build_display_only_limit_reports(
 fn display_only_limit_label(key: AdditionalWeightKey) -> String {
     match key {
         AdditionalWeightKey::Original => "original".to_string(),
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("ct_{esurface_id}_{overlap_group}"),
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("ct_{subset_index}")
         }
@@ -1380,7 +1398,7 @@ struct IrLimit {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct ThresholdLimit {
-    esurface_id: EsurfaceID,
+    esurface_id: RaisedEsurfaceId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1445,7 +1463,7 @@ impl Display for ProfileLimit {
 impl ThresholdLimit {
     fn enumerate_from_overlap_structure(
         existing_esurfaces: &ExistingEsurfaces,
-        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         own_group_position: GraphGroupPosition,
     ) -> Vec<Self> {
         existing_esurfaces
@@ -1477,13 +1495,13 @@ impl ThresholdLimit {
             .map_err(|_| eyre!("Threshold must be a valid integer, got: {}", threshold))?;
 
         Ok(Self {
-            esurface_id: EsurfaceID::from(threshold_id),
+            esurface_id: RaisedEsurfaceId::from(threshold_id),
         })
     }
 
     fn resolve_existing_esurface_id(
         &self,
-        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         own_group_position: GraphGroupPosition,
         existing_esurfaces: &ExistingEsurfaces,
     ) -> Result<ExistingEsurfaceId> {
@@ -2043,18 +2061,21 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         true,
     )? {
         PreciseEvaluationResult::Arb(result) => {
-            let zero = result.integrand_result.re.zero();
+            let zero_complex = Complex::new_re(result.integrand_result.re.zero());
             let per_cut = if show_per_cut_info {
                 let mut per_cut = BTreeMap::new();
                 for event_group in result.event_groups.iter() {
                     for event in event_group.iter() {
                         let entry = per_cut
                             .entry(event.cut_info.cut_id)
-                            .or_insert_with(|| zero.clone());
-                        *entry += event.weight.re.clone();
+                            .or_insert_with(|| zero_complex.clone());
+                        *entry += event.weight.clone();
                     }
                 }
                 per_cut
+                    .into_iter()
+                    .map(|(cut_id, weight)| (cut_id, weight.norm_squared().sqrt()))
+                    .collect()
             } else {
                 BTreeMap::new()
             };
@@ -2067,20 +2088,25 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
                             key,
                             AdditionalWeightKey::Original
                                 | AdditionalWeightKey::ThresholdCounterterm { .. }
+                                | AdditionalWeightKey::AmplitudeThresholdCounterterm { .. }
                         ) {
                             continue;
                         }
 
                         let entry = display_only_components
                             .entry(*key)
-                            .or_insert_with(|| zero.clone());
-                        *entry += weight.re.clone();
+                            .or_insert_with(|| zero_complex.clone());
+                        *entry += weight.clone();
                     }
                 }
             }
+            let display_only_components = display_only_components
+                .into_iter()
+                .map(|(key, weight)| (key, weight.norm_squared().sqrt()))
+                .collect();
 
             Ok(ProfilePointValue {
-                total: result.integrand_result.re,
+                total: result.integrand_result.norm_squared().sqrt(),
                 per_cut,
                 display_only_components,
             })
@@ -2202,6 +2228,7 @@ impl<T: FloatLike> LimitData<T> {
                     key,
                     AdditionalWeightKey::Original
                         | AdditionalWeightKey::ThresholdCounterterm { .. }
+                        | AdditionalWeightKey::AmplitudeThresholdCounterterm { .. }
                 )
             })
             .unique()
@@ -2308,7 +2335,7 @@ mod tests {
     #[test]
     fn test_threshold_display() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(8usize),
+            esurface_id: RaisedEsurfaceId::from(8usize),
         };
 
         let display = threshold_limit.to_string();
@@ -2337,7 +2364,7 @@ mod tests {
     fn parse_threshold() {
         let threshold_str = "t5";
         let threshold_limit = ThresholdLimit::parse_threshold(threshold_str).unwrap();
-        assert_eq!(threshold_limit.esurface_id, EsurfaceID::from(5usize));
+        assert_eq!(threshold_limit.esurface_id, RaisedEsurfaceId::from(5usize));
 
         let invalid_threshold_str = "5"; // missing 't'
         assert!(ThresholdLimit::parse_threshold(invalid_threshold_str).is_err());
@@ -2389,7 +2416,7 @@ mod tests {
         assert_eq!(
             threshold_limit,
             ProfileLimit::Threshold(ThresholdLimit {
-                esurface_id: EsurfaceID::from(8usize),
+                esurface_id: RaisedEsurfaceId::from(8usize),
             }),
             "Threshold limit does not match"
         );
@@ -2428,14 +2455,14 @@ mod tests {
     #[test]
     fn resolve_existing_esurface_id_for_threshold_limit() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
         let esurface_map = ti_vec![
             ti_vec![
-                Some(EsurfaceID::from(5usize)),
-                Some(EsurfaceID::from(6usize))
+                Some(RaisedEsurfaceId::from(5usize)),
+                Some(RaisedEsurfaceId::from(6usize))
             ],
-            ti_vec![Some(EsurfaceID::from(7usize)), None],
+            ti_vec![Some(RaisedEsurfaceId::from(7usize)), None],
         ];
         let existing_esurfaces =
             ti_vec![GroupEsurfaceId::from(0usize), GroupEsurfaceId::from(1usize)];
@@ -2454,11 +2481,11 @@ mod tests {
     #[test]
     fn resolve_existing_esurface_id_rejects_threshold_missing_from_graph() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(9usize),
+            esurface_id: RaisedEsurfaceId::from(9usize),
         };
         let esurface_map = ti_vec![ti_vec![
-            Some(EsurfaceID::from(5usize)),
-            Some(EsurfaceID::from(6usize))
+            Some(RaisedEsurfaceId::from(5usize)),
+            Some(RaisedEsurfaceId::from(6usize))
         ]];
         let existing_esurfaces = ti_vec![GroupEsurfaceId::from(0usize)];
 
@@ -2476,9 +2503,9 @@ mod tests {
     #[test]
     fn resolve_existing_esurface_id_rejects_threshold_missing_from_overlap() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
-        let esurface_map = ti_vec![ti_vec![Some(EsurfaceID::from(7usize))]];
+        let esurface_map = ti_vec![ti_vec![Some(RaisedEsurfaceId::from(7usize))]];
         let existing_esurfaces = ti_vec![GroupEsurfaceId::from(1usize)];
 
         assert!(
@@ -2496,15 +2523,15 @@ mod tests {
     fn enumerate_threshold_limits_from_overlap_structure() {
         let esurface_map = ti_vec![
             ti_vec![
-                Some(EsurfaceID::from(5usize)),
-                Some(EsurfaceID::from(8usize))
+                Some(RaisedEsurfaceId::from(5usize)),
+                Some(RaisedEsurfaceId::from(8usize))
             ],
-            ti_vec![Some(EsurfaceID::from(7usize)), None],
+            ti_vec![Some(RaisedEsurfaceId::from(7usize)), None],
             ti_vec![
-                Some(EsurfaceID::from(5usize)),
-                Some(EsurfaceID::from(9usize))
+                Some(RaisedEsurfaceId::from(5usize)),
+                Some(RaisedEsurfaceId::from(9usize))
             ],
-            ti_vec![None, Some(EsurfaceID::from(3usize))],
+            ti_vec![None, Some(RaisedEsurfaceId::from(3usize))],
         ];
         let existing_esurfaces = ti_vec![
             GroupEsurfaceId::from(2usize),
@@ -2528,10 +2555,10 @@ mod tests {
             threshold_limits,
             vec![
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(5usize),
+                    esurface_id: RaisedEsurfaceId::from(5usize),
                 },
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(7usize),
+                    esurface_id: RaisedEsurfaceId::from(7usize),
                 },
             ]
         );
@@ -2539,13 +2566,13 @@ mod tests {
             threshold_limits_for_other_group,
             vec![
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(3usize),
+                    esurface_id: RaisedEsurfaceId::from(3usize),
                 },
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(8usize),
+                    esurface_id: RaisedEsurfaceId::from(8usize),
                 },
                 ThresholdLimit {
-                    esurface_id: EsurfaceID::from(9usize),
+                    esurface_id: RaisedEsurfaceId::from(9usize),
                 },
             ]
         );
@@ -2627,7 +2654,7 @@ mod tests {
     #[test]
     fn threshold_limit_builds_group_trajectories_for_matching_overlap_groups() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
         let threshold_point = test_momentum_sample(vec![ThreeMomentum::new(
             F::from_f64(1.0),
@@ -2704,7 +2731,7 @@ mod tests {
     #[test]
     fn threshold_limit_rejects_group_missing_threshold_kinematics() {
         let threshold_limit = ThresholdLimit {
-            esurface_id: EsurfaceID::from(7usize),
+            esurface_id: RaisedEsurfaceId::from(7usize),
         };
         let overlap_structure: OverlapStructureWithKinematics<f64> =
             OverlapStructureWithKinematics {
@@ -2862,7 +2889,10 @@ mod tests {
                 }),
             ),
             (
-                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                    esurface_id: 3,
+                    overlap_group: 1,
+                },
                 Ok(PowerLawFit {
                     exponent: -0.5,
                     r_squared: 0.991,
@@ -2874,8 +2904,56 @@ mod tests {
 
         assert!(rendered.contains("display-only fits for"));
         assert!(rendered.contains("original"));
-        assert!(rendered.contains("ct_0"));
+        assert!(rendered.contains("ct_3_1"));
         assert!(!rendered.contains("note"));
+    }
+
+    #[test]
+    fn single_limit_display_includes_display_only_fit_error_reason() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let mut report = build_single_limit_report(&ir_limit, None, total_fit, Vec::new());
+        report.display_only_reports = build_display_only_limit_reports(vec![(
+            AdditionalWeightKey::Original,
+            Err(eyre!("fit_power_law requires at least three observations")),
+        )]);
+
+        let rendered = format!("{report}");
+
+        assert!(
+            rendered
+                .contains("original (no fit: fit_power_law requires at least three observations)")
+        );
+    }
+
+    #[test]
+    fn graph_limit_display_includes_per_cut_fit_error_reason() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let graph_report = GraphIRLimitReport {
+            graph_name: "GL0".to_string(),
+            all_limits_passed: true,
+            cut_definitions: Vec::new(),
+            single_limit_reports: vec![build_single_limit_report(
+                &ir_limit,
+                None,
+                total_fit,
+                build_cut_limit_reports(
+                    ir_limit.num_soft(),
+                    vec![(0, Err(eyre!("fit_power_law requires finite y values")))],
+                ),
+            )],
+        };
+
+        let rendered = format!("{graph_report}");
+
+        assert!(rendered.contains("cut 0 (no fit: fit_power_law requires finite y values)"));
     }
 
     #[test]
@@ -2915,7 +2993,10 @@ mod tests {
                 }),
             ),
             (
-                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                    esurface_id: 3,
+                    overlap_group: 1,
+                },
                 Ok(PowerLawFit {
                     exponent: -0.5,
                     r_squared: 0.991,
@@ -2964,7 +3045,7 @@ mod tests {
         assert!(rendered.contains("item"));
         assert!(rendered.contains("cut 0"));
         assert!(rendered.contains("original"));
-        assert!(rendered.contains("ct_0"));
+        assert!(rendered.contains("ct_3_1"));
         assert!(!rendered.contains("note"));
         assert!(rendered.contains("sum"));
         assert!(rendered.contains("INFO"));
@@ -2991,7 +3072,10 @@ mod tests {
                     F::<ArbPrec>::from_f64(3.0 * lambda_f64.powf(-1.5) + 0.5),
                 );
                 display_only_components.insert(
-                    AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                    AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                        esurface_id: 3,
+                        overlap_group: 1,
+                    },
                     F::<ArbPrec>::from_f64(5.0 * lambda_f64.powf(-0.5) + 1.0),
                 );
                 display_only_components.insert(
@@ -3025,7 +3109,10 @@ mod tests {
             .as_ref()
             .unwrap();
         let ct_fit = component_fits
-            .get(&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 })
+            .get(&AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                esurface_id: 3,
+                overlap_group: 1,
+            })
             .unwrap()
             .as_ref()
             .unwrap();

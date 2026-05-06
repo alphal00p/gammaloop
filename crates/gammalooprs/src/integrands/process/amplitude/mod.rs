@@ -30,7 +30,8 @@ use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{
-            EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
+            EsurfaceCollection, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId,
+            get_representative,
         },
         expression::OrientationID,
         surface::HybridSurfaceID,
@@ -59,7 +60,7 @@ use crate::{
     subtraction::{
         amplitude_counterterm::{
             AmplitudeCountertermAtom, AmplitudeCountertermData, AmplitudeCountertermEvaluation,
-            OverlapStructureWithKinematics,
+            AmplitudeLocalCountertermEvaluation, OverlapStructureWithKinematics,
         },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
@@ -114,7 +115,7 @@ impl AmplitudeGraphTerm {
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
-        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
@@ -169,7 +170,11 @@ impl AmplitudeGraphTerm {
             })
             .collect::<HashSet<_>>();
 
-        debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
+        crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
+            orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS),
+            "Building evaluator for all orientations \n{}",
+            graph.graph.param_builder.table()
+        );
 
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
@@ -200,17 +205,29 @@ impl AmplitudeGraphTerm {
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
         let mut threshold_evaluators =
             Vec::with_capacity(graph.derived_data.threshold_counterterms.len());
-        let active_mask: TiVec<EsurfaceID, bool> = graph
+        let selected_generation_raised_esurfaces: HashSet<RaisedEsurfaceId> =
+            if graph.derived_data.threshold_counterterms.is_empty() {
+                HashSet::new()
+            } else {
+                selected_generation_esurfaces
+                    .iter()
+                    .map(|esurface_id| graph.derived_data.raised_esurface_ids[*esurface_id])
+                    .collect()
+            };
+        let active_mask: TiVec<RaisedEsurfaceId, bool> = graph
             .derived_data
             .threshold_counterterms
             .iter_enumerated()
-            .map(|(esurface_id, _)| selected_generation_esurfaces.contains(&esurface_id))
+            .map(|(raised_esurface_id, _)| {
+                selected_generation_raised_esurfaces.contains(&raised_esurface_id)
+            })
             .collect();
-        for (esurface_id, ct) in graph.derived_data.threshold_counterterms.iter_enumerated() {
+        for (raised_esurface_id, ct) in graph.derived_data.threshold_counterterms.iter_enumerated()
+        {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            let masked_counterterm = if active_mask[esurface_id] {
+            let masked_counterterm = if active_mask[raised_esurface_id] {
                 ct.clone()
             } else {
                 ct.zero_like()
@@ -224,7 +241,7 @@ impl AmplitudeGraphTerm {
                 return Err(eyre!("Generation interrupted by user"));
             }
             stats.add_evaluator_build_timings(evaluator_timings);
-            stats.evaluator_count += evaluator.evaluator_stack.borrow().generic_evaluator_count();
+            stats.evaluator_count += evaluator.generic_evaluator_count();
             threshold_evaluators.push(evaluator);
         }
         threshold_counterterm.evaluators = threshold_evaluators.into();
@@ -238,6 +255,14 @@ impl AmplitudeGraphTerm {
         // while `active_mask` answers "is that generated slot compatible with the
         // selected generation-time orientation subset for this evaluator build?"
         threshold_counterterm.active_mask = active_mask;
+        threshold_counterterm.raised_data = graph.derived_data.raised_data.clone();
+        threshold_counterterm.helper_evaluators = graph
+            .derived_data
+            .raised_data
+            .pass_two_evaluator
+            .clone()
+            .unwrap_or_default();
+        stats.evaluator_count += threshold_counterterm.helper_evaluators.len();
 
         threshold_counterterm.esurface_map = esurface_map;
 
@@ -493,15 +518,20 @@ impl AmplitudeGraphTerm {
         )?;
         let sum_of_cts = counterterm_evaluation.total.clone();
 
-        debug!(
+        crate::debug_tags!(#integration, #subtraction;
             bare_cff = format!("{result:16e}"),
-            "{}: {result:16e}", self.graph.name
+            "{}: {result:16e}",
+            self.graph.name
         );
-        debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
-        debug!("result: {result:16e}");
-        debug!("sum_of_cts: {sum_of_cts:16e}");
+        crate::debug_tags!(#integration, #subtraction;
+            cts = format!("{sum_of_cts:16e}"),
+            "{}",
+            self.graph.name
+        );
+        crate::debug_tags!(#integration, #subtraction; "result: {result:16e}");
+        crate::debug_tags!(#integration, #subtraction; "sum_of_cts: {sum_of_cts:16e}");
 
-        debug!(
+        crate::debug_tags!(#integration, #subtraction;
             value = format!("{sum_of_cts:16e}"),
             "evaluated sum of threshold counterterms"
         );
@@ -515,7 +545,17 @@ impl AmplitudeGraphTerm {
                 local_counterterms: counterterm_evaluation
                     .local_counterterms
                     .into_iter()
-                    .map(|counterterm| counterterm * prefactor.clone())
+                    .map(
+                        |AmplitudeLocalCountertermEvaluation {
+                             esurface_id,
+                             overlap_group,
+                             value,
+                         }| AmplitudeLocalCountertermEvaluation {
+                            esurface_id,
+                            overlap_group,
+                            value: value * prefactor.clone(),
+                        },
+                    )
                     .collect(),
             },
         ))
@@ -574,6 +614,11 @@ impl GraphTerm for AmplitudeGraphTerm {
             .param_builder
             .add_external_four_mom_all_derivatives(&externals);
         let pols = self.graph.param_builder.pairs.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+        self.graph.param_builder.pairs.warn_zero_polarizations(
             &self.graph,
             &externals,
             settings.kinematics.externals.get_helicities(),
@@ -697,14 +742,13 @@ impl GraphTerm for AmplitudeGraphTerm {
                     .additional_weights
                     .weights
                     .insert(AdditionalWeightKey::Original, original);
-                for (subset_index, threshold_counterterm) in counterterm_evaluation
-                    .local_counterterms
-                    .into_iter()
-                    .enumerate()
-                {
+                for threshold_counterterm in counterterm_evaluation.local_counterterms.into_iter() {
                     event.additional_weights.weights.insert(
-                        AdditionalWeightKey::ThresholdCounterterm { subset_index },
-                        -threshold_counterterm,
+                        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                            esurface_id: threshold_counterterm.esurface_id.0,
+                            overlap_group: threshold_counterterm.overlap_group,
+                        },
+                        -threshold_counterterm.value,
                     );
                 }
             }
@@ -1054,15 +1098,19 @@ impl AmplitudeIntegrand {
 
                 group_esurface_map
                     .iter_enumerated()
-                    .filter_map(|(group_esurface_id, esurface_map)| {
-                        let esurface_exists = esurface_map
+                    .filter_map(|(group_esurface_id, raised_esurface_map)| {
+                        let esurface_exists = raised_esurface_map
                             .iter_enumerated()
-                            .find_map(|(graph_group_pos, option_esurface_id)| {
-                                option_esurface_id.map(|esurface_id| {
+                            .find_map(|(graph_group_pos, option_raised_esurface_id)| {
+                                option_raised_esurface_id.map(|raised_esurface_id| {
                                     // extreme indexing
                                     let graph = &self.data.graph_terms[self
                                         .data
                                         .graph_group_structure[group_id][graph_group_pos]];
+                                    let esurface_id =
+                                        graph.threshold_counterterm.raised_data.raised_groups
+                                            [raised_esurface_id]
+                                            .esurface_ids[0];
 
                                     let esurface = &graph.esurfaces[esurface_id];
                                     esurface.exists(
@@ -1092,12 +1140,12 @@ impl AmplitudeIntegrand {
     ) -> Result<()> {
         for (group_id, group_existing_esurfaces) in existing_esurfaces.iter_enumerated() {
             for group_esurface_id in group_existing_esurfaces.iter().copied() {
-                for (graph_group_pos, local_esurface_id) in self.data.group_derived_data[group_id]
+                for (graph_group_pos, raised_esurface_id) in self.data.group_derived_data[group_id]
                     .esurface_map[group_esurface_id]
                     .iter_enumerated()
-                    .filter_map(|(graph_group_pos, local_esurface_id)| {
-                        local_esurface_id
-                            .map(|local_esurface_id| (graph_group_pos, local_esurface_id))
+                    .filter_map(|(graph_group_pos, raised_esurface_id)| {
+                        raised_esurface_id
+                            .map(|raised_esurface_id| (graph_group_pos, raised_esurface_id))
                     })
                 {
                     let graph_id = self.data.graph_group_structure[group_id][graph_group_pos];
@@ -1105,13 +1153,13 @@ impl AmplitudeIntegrand {
                     let is_generated = graph_term
                         .threshold_counterterm
                         .generated_mask
-                        .get(local_esurface_id)
+                        .get(raised_esurface_id)
                         .copied()
                         .ok_or_else(|| {
                             eyre!(
-                                "Threshold counterterm generation mask is inconsistent for graph '{}' and e-surface {}",
+                                "Threshold counterterm generation mask is inconsistent for graph '{}' and raised e-surface {}",
                                 graph_term.graph.name,
-                                local_esurface_id.0
+                                raised_esurface_id.0
                             )
                         })?;
 
@@ -1257,6 +1305,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                         SingleGraphOverlapData {
                             lmb: &graph.graph.loop_momentum_basis,
                             esurfaces: &graph.esurfaces,
+                            raised_data: &graph.threshold_counterterm.raised_data,
                             edge_masses: graph.graph.get_real_mass_vector::<f64>(model),
                         }
                     })
@@ -1283,22 +1332,26 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             let readable_esurfaces = existing_esurfaces
                                 .iter()
                                 .map(|group_esurface_id| {
-                                    let (graph_group_pos, esurface_id) = get_representative(
+                                    let (graph_group_pos, raised_esurface_id) = get_representative(
                                         &self.data.group_derived_data[group_id].esurface_map
                                             [*group_esurface_id],
                                     )
                                     .unwrap();
                                     let graph_id =
                                         self.data.graph_group_structure[group_id][graph_group_pos];
-                                    let graph = &self.data.graph_terms[graph_id].graph;
+                                    let graph_term = &self.data.graph_terms[graph_id];
+                                    let graph = &graph_term.graph;
+                                    let esurface_id =
+                                        graph_term.threshold_counterterm.raised_data.raised_groups
+                                            [raised_esurface_id]
+                                            .esurface_ids[0];
                                     let lmb_reps = graph.integrand_replacement(
                                         &graph.full_filter(),
                                         &graph.loop_momentum_basis,
                                         &[W_.x___],
                                     );
 
-                                    let esurface =
-                                        &self.data.graph_terms[graph_id].esurfaces[esurface_id];
+                                    let esurface = &graph_term.esurfaces[esurface_id];
                                     let atom = esurface.lmb_atom_simplified(graph, &lmb_reps);
                                     (esurface_id, atom)
                                 })
@@ -1318,6 +1371,20 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
                             msg
                         })?;
+
+                let max_required_power = self.data.graph_group_structure[group_id]
+                    .into_iter()
+                    .flat_map(|graph_id| {
+                        self.data.graph_terms[graph_id]
+                            .threshold_counterterm
+                            .raised_data
+                            .raised_groups
+                            .iter()
+                            .map(|raised_group| raised_group.max_occurence)
+                    })
+                    .max()
+                    .unwrap_or(0) as i32
+                    + 1;
 
                 overlap
                     .build_evaluators(
@@ -1339,6 +1406,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             .model_parameters
                             .params
                             .clone(),
+                        max_required_power,
                     )
                     .with_context(|| {
                         format!(

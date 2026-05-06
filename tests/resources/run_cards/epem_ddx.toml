@@ -4,5 +4,5 @@ commands = [
 ]
 
 [cli_settings.global]
-logfile_directive = "off,gammalooprs[from_symbolica_graph]=debug"
-display_directive = "off,gammalooprs[from_symbolica_graph]=debug"
+logfile_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::graph::parse=debug,gammalooprs::feyngen::diagram_generator=debug"
+display_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::graph::parse=debug,gammalooprs::feyngen::diagram_generator=debug"

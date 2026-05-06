@@ -5,7 +5,7 @@ commands = [
 ]
 
 [cli_settings.global]
-display_directive = "off,info,gammalooprs[generate_term_for_graph]=debug"  # ,gammalooprs[final_integrand]=debug"
+display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::processes=debug"
 
 [default_runtime_settings.kinematics]
 e_cm = 1000.0

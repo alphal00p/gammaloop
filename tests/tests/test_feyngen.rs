@@ -180,7 +180,8 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
 #[rustfmt::skip]
 fn cp_fix_from_symbolica()->Result<()>{
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
-    cli.cli_settings.global.logfile_directive = "[from_numerator_symbolic_expression]=debug,[compare_with_scalar_rescaling]=debug,[compare_with_sign_only]=debug".to_string();
+    cli.cli_settings.global.logfile_directive =
+        "gammalooprs::feyngen::diagram_generator=debug".to_string();
     cli.cli_settings.sync_settings().unwrap();
 
     // Choose the model to consider

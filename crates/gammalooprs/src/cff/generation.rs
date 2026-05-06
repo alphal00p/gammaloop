@@ -164,6 +164,7 @@ impl Graph {
             // bounds: a numerator can be linear in each denominator energy but
             // still higher than affine in a common loop-energy direction.
             RepresentationMode::Cff => 1,
+            #[allow(unreachable_patterns)]
             _ => 2,
         };
         let source_edge_bounds = self

@@ -47,7 +47,7 @@ use tabled::{
     builder::Builder,
     settings::{Modify, Span, Style},
 };
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use typed_index_collections::TiVec;
 
@@ -1299,7 +1299,7 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     for (x, s) in inspect.iter().zip(scales) {
         let norm = x.magnitude();
         if norm <= 0.0 {
-            println!("{s}:\t{}", x.result.evaluation_metadata);
+            debug!("{s}:\t{}", x.result.evaluation_metadata);
             continue;
         }
         if !norm.is_finite() {

@@ -179,31 +179,52 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 summed_fnmap,
             };
             let mut threshold_counterterms = Vec::new();
-            for (ct_idx, ct) in graph.threshold_counterterms.into_iter().enumerate() {
-                let ct_parametric_label = format!("ct[{ct_idx}].parametric");
-                let parametric = timed_build(&ct_parametric_label, ct.single_parametric, false)?;
-                let iterative = ct
-                    .iterative
-                    .map(|payload| {
-                        let ct_iterative_label = format!("ct[{ct_idx}].iterative");
-                        timed_build(&ct_iterative_label, payload, true)
-                    })
-                    .transpose()?;
-                let ct_evaluator = LoadedStandaloneEvaluatorStack {
-                    orientation_start: ct.start,
-                    mult_offset: ct.mult_offset,
-                    representative_input: ct
-                        .representative_input
-                        .iter()
-                        .map(StandaloneComplexInput::to_f64)
-                        .collect::<Result<Vec<_>>>()?,
-                    override_pos: ct.override_pos,
-                    parametric,
-                    iterative,
-                    summed: None,
-                    summed_fnmap: None,
-                };
-                threshold_counterterms.push(ct_evaluator);
+            for (ct_idx, ct_orders) in graph.threshold_counterterms.into_iter().enumerate() {
+                let mut loaded_orders = Vec::with_capacity(ct_orders.len());
+
+                for (order_idx, ct) in ct_orders.into_iter().enumerate() {
+                    let ct_parametric_label = format!("ct[{ct_idx}][{order_idx}].parametric");
+                    let parametric =
+                        timed_build(&ct_parametric_label, ct.single_parametric, false)?;
+                    let iterative = ct
+                        .iterative
+                        .map(|payload| {
+                            let label = format!("ct[{ct_idx}][{order_idx}].iterative");
+                            timed_build(&label, payload, true)
+                        })
+                        .transpose()?;
+                    let summed = ct
+                        .summed
+                        .map(|payload| {
+                            let label = format!("ct[{ct_idx}][{order_idx}].summed");
+                            timed_build(&label, payload, false)
+                        })
+                        .transpose()?;
+                    let summed_fnmap = ct
+                        .summed_function_map
+                        .map(|payload| {
+                            let label = format!("ct[{ct_idx}][{order_idx}].summed_fnmap");
+                            timed_build(&label, payload, false)
+                        })
+                        .transpose()?;
+
+                    loaded_orders.push(LoadedStandaloneEvaluatorStack {
+                        orientation_start: ct.start,
+                        mult_offset: ct.mult_offset,
+                        representative_input: ct
+                            .representative_input
+                            .iter()
+                            .map(StandaloneComplexInput::to_f64)
+                            .collect::<Result<Vec<_>>>()?,
+                        override_pos: ct.override_pos,
+                        parametric,
+                        iterative,
+                        summed,
+                        summed_fnmap,
+                    });
+                }
+
+                threshold_counterterms.push(loaded_orders);
             }
 
             println!("Loaded evaluators for graph {}", graph.graph_name);
@@ -244,7 +265,7 @@ pub struct StandaloneGraphTermArchive<A = Vec<u8>> {
     pub(crate) param_builder_params: Vec<A>,
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     pub(crate) original_integrand: StandaloneEvaluatorStackArchive<A>,
-    pub(crate) threshold_counterterms: Vec<StandaloneEvaluatorStackArchive<A>>,
+    pub(crate) threshold_counterterms: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -347,7 +368,7 @@ impl StandaloneMethod {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum StandaloneStackSelection {
     Original,
-    ThresholdCounterterm(usize),
+    ThresholdCounterterm((usize, usize)),
 }
 
 impl StandaloneStackSelection {
@@ -357,18 +378,27 @@ impl StandaloneStackSelection {
         }
 
         if let Some(rest) = value.strip_prefix("ct:") {
-            return Ok(Self::ThresholdCounterterm(rest.parse::<usize>()?));
+            let mut parts = rest.split(',');
+            let first = parts
+                .next()
+                .ok_or_else(|| eyre!("Invalid threshold counterterm format"))?
+                .parse::<usize>()?;
+            let second = parts
+                .next()
+                .ok_or_else(|| eyre!("Invalid threshold counterterm format"))?
+                .parse::<usize>()?;
+            return Ok(Self::ThresholdCounterterm((first, second)));
         }
 
         Err(eyre!(
-            "Unsupported stack '{value}', expected original or ct:<index>"
+            "Unsupported stack '{value}', expected original or ct:<first>,<second>"
         ))
     }
 
     fn label(&self) -> String {
         match self {
             Self::Original => "original".to_string(),
-            Self::ThresholdCounterterm(index) => format!("ct_{index}"),
+            Self::ThresholdCounterterm((first, second)) => format!("ct_{first}_{second}"),
         }
     }
 }
@@ -682,7 +712,7 @@ pub struct LoadedStandaloneGraphTerm {
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
     pub original_integrand: LoadedStandaloneEvaluatorStack,
-    pub threshold_counterterms: Vec<LoadedStandaloneEvaluatorStack>,
+    pub threshold_counterterms: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -776,15 +806,18 @@ impl LoadedStandaloneGraphTerm {
     ) -> Result<&mut LoadedStandaloneEvaluatorStack> {
         match selection {
             StandaloneStackSelection::Original => Ok(&mut self.original_integrand),
-            StandaloneStackSelection::ThresholdCounterterm(index) => {
-                self.threshold_counterterms.get_mut(*index).ok_or_else(|| {
+            StandaloneStackSelection::ThresholdCounterterm((ct_idx, order_idx)) => self
+                .threshold_counterterms
+                .get_mut(*ct_idx)
+                .and_then(|orders| orders.get_mut(*order_idx))
+                .ok_or_else(|| {
                     eyre!(
-                        "Threshold counterterm index {} is out of range for graph {}",
-                        index,
+                        "Threshold counterterm index {},{} is out of range for graph {}",
+                        ct_idx,
+                        order_idx,
                         self.graph_name
                     )
-                })
-            }
+                }),
         }
     }
 }
@@ -821,7 +854,7 @@ fn print_usage(program: &str) {
            --input-json <path>\n\
            --graph-index <usize>\n\
            --graph-name <name>\n\
-           --stack <original|ct:N>\n\
+           --stack <original|ct:N,M>\n\
            --method <single_parametric|iterative|summed_function_map|summed>\n\
            --orientation-index <usize>\n\
            --artifact-dir <path>\n\

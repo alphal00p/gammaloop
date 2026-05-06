@@ -19,7 +19,7 @@ cgmath = { version = "0.18.0", features = ["serde"] }
 figment = "0.10.19"
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
 rand = "0.8.5"
-thiserror = "2.0.16"
+thiserror = { workspace = true }
 wasm-minimal-protocol = "0.2.0"
 
 [features]

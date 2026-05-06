@@ -85,7 +85,7 @@ struct StandaloneGraphTermArchive<A = Vec<u8>> {
     param_builder_params: Vec<A>,
     fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     original_integrand: StandaloneEvaluatorStackArchive<A>,
-    threshold_counterterms: Vec<StandaloneEvaluatorStackArchive<A>>,
+    threshold_counterterms: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -182,7 +182,7 @@ impl StandaloneMethod {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum StandaloneStackSelection {
     Original,
-    ThresholdCounterterm(usize),
+    ThresholdCounterterm((usize, usize)),
 }
 
 impl StandaloneStackSelection {
@@ -192,18 +192,27 @@ impl StandaloneStackSelection {
         }
 
         if let Some(rest) = value.strip_prefix("ct:") {
-            return Ok(Self::ThresholdCounterterm(rest.parse::<usize>()?));
+            let mut parts = rest.split(',');
+            let first = parts
+                .next()
+                .ok_or_else(|| eyre!("Invalid threshold counterterm format"))?
+                .parse::<usize>()?;
+            let second = parts
+                .next()
+                .ok_or_else(|| eyre!("Invalid threshold counterterm format"))?
+                .parse::<usize>()?;
+            return Ok(Self::ThresholdCounterterm((first, second)));
         }
 
         Err(eyre!(
-            "Unsupported stack '{value}', expected original or ct:<index>",
+            "Unsupported stack '{value}', expected original or ct:<first>,<second>",
         ))
     }
 
     fn label(&self) -> String {
         match self {
             Self::Original => "original".to_string(),
-            Self::ThresholdCounterterm(index) => format!("ct_{index}"),
+            Self::ThresholdCounterterm((first, second)) => format!("ct_{first}_{second}"),
         }
     }
 }
@@ -343,9 +352,11 @@ impl StandaloneNumber for f64 {
 
 impl StandaloneNumber for DoubleFloat {
     fn parse_standalone_input(value: &str) -> Result<Self> {
-        Ok(ArbFloat::parse(value, Some(DoubleFloat::default().get_precision()))
-            .map_err(|error| eyre!(error))?
-            .to_double_float())
+        Ok(
+            ArbFloat::parse(value, Some(DoubleFloat::default().get_precision()))
+                .map_err(|error| eyre!(error))?
+                .to_double_float(),
+        )
     }
 
     fn exact_from_rational(value: &Rational) -> Self {
@@ -601,7 +612,10 @@ fn set_orientation_values_impl<A: Clone + Neg<Output = A>>(
 }
 
 impl<A> StandaloneEvaluatorStackArchive<A> {
-    fn selected_payload(&self, method: StandaloneMethod) -> Result<(&StandaloneGenericEvaluatorArchive<A>, bool)> {
+    fn selected_payload(
+        &self,
+        method: StandaloneMethod,
+    ) -> Result<(&StandaloneGenericEvaluatorArchive<A>, bool)> {
         match method {
             StandaloneMethod::SingleParametric => Ok((&self.single_parametric, false)),
             StandaloneMethod::Iterative => self
@@ -613,7 +627,9 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
                 .summed_function_map
                 .as_ref()
                 .map(|payload| (payload, false))
-                .ok_or_else(|| eyre!("Missing summed_function_map evaluator in standalone archive")),
+                .ok_or_else(|| {
+                    eyre!("Missing summed_function_map evaluator in standalone archive")
+                }),
             StandaloneMethod::Summed => self
                 .summed
                 .as_ref()
@@ -661,16 +677,21 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
 }
 
 impl<A> StandaloneGraphTermArchive<A> {
-    fn stack(&self, selection: &StandaloneStackSelection) -> Result<&StandaloneEvaluatorStackArchive<A>> {
+    fn stack(
+        &self,
+        selection: &StandaloneStackSelection,
+    ) -> Result<&StandaloneEvaluatorStackArchive<A>> {
         match selection {
             StandaloneStackSelection::Original => Ok(&self.original_integrand),
-            StandaloneStackSelection::ThresholdCounterterm(index) => self
+            StandaloneStackSelection::ThresholdCounterterm((first, second)) => self
                 .threshold_counterterms
-                .get(*index)
+                .get(*first)
+                .and_then(|orders| orders.get(*second))
                 .ok_or_else(|| {
                     eyre!(
-                        "Threshold counterterm index {} is out of range for graph {}",
-                        index,
+                        "Threshold counterterm index {},{} is out of range for graph {}",
+                        first,
+                        second,
                         self.graph_name
                     )
                 }),
@@ -679,7 +700,11 @@ impl<A> StandaloneGraphTermArchive<A> {
 }
 
 impl<S, A> StandaloneEvaluatorArchive<S, A> {
-    fn graph_term(&self, graph_index: usize, graph_name: Option<&str>) -> Result<&StandaloneGraphTermArchive<A>> {
+    fn graph_term(
+        &self,
+        graph_index: usize,
+        graph_name: Option<&str>,
+    ) -> Result<&StandaloneGraphTermArchive<A>> {
         if let Some(graph_name) = graph_name {
             return self
                 .graph_terms
@@ -770,7 +795,7 @@ fn print_usage(program: &str) {
            --input-json <path>\n\
            --graph-index <usize>\n\
            --graph-name <name>\n\
-           --stack <original|ct:N>\n\
+           --stack <original|ct:N,M>\n\
            --method <single_parametric|iterative|summed_function_map|summed>\n\
            --orientation-index <usize>\n\
            --artifact-dir <path>\n\
@@ -1009,7 +1034,8 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
                     })?;
                     vec![stack.set_orientation::<f64>(orientation)?]
                 } else {
-                    graph.orientations
+                    graph
+                        .orientations
                         .iter()
                         .map(|orientation| stack.set_orientation::<f64>(orientation))
                         .collect::<Result<Vec<_>>>()?
@@ -1131,7 +1157,8 @@ fn evaluate_higher_precision_archive<T: StandaloneNumber, A: ImportWithMap, S>(
                     })?;
                     vec![stack.set_orientation::<T>(orientation)?]
                 } else {
-                    graph.orientations
+                    graph
+                        .orientations
                         .iter()
                         .map(|orientation| stack.set_orientation::<T>(orientation))
                         .collect::<Result<Vec<_>>>()?
@@ -1190,22 +1217,26 @@ fn main() -> Result<()> {
                 StandaloneNumericTarget::Double => {
                     evaluate_double_archive(archive, &state_map, &options, custom_input.as_deref())
                 }
-                StandaloneNumericTarget::Quad => evaluate_higher_precision_archive::<DoubleFloat, _, _>(
-                    archive,
-                    &state_map,
-                    &options,
-                    custom_input.as_deref(),
-                    "quad",
-                    StandaloneNumericTarget::Quad,
-                ),
-                StandaloneNumericTarget::Arb => evaluate_higher_precision_archive::<ArbFloat, _, _>(
-                    archive,
-                    &state_map,
-                    &options,
-                    custom_input.as_deref(),
-                    "arb",
-                    StandaloneNumericTarget::Arb,
-                ),
+                StandaloneNumericTarget::Quad => {
+                    evaluate_higher_precision_archive::<DoubleFloat, _, _>(
+                        archive,
+                        &state_map,
+                        &options,
+                        custom_input.as_deref(),
+                        "quad",
+                        StandaloneNumericTarget::Quad,
+                    )
+                }
+                StandaloneNumericTarget::Arb => {
+                    evaluate_higher_precision_archive::<ArbFloat, _, _>(
+                        archive,
+                        &state_map,
+                        &options,
+                        custom_input.as_deref(),
+                        "arb",
+                        StandaloneNumericTarget::Arb,
+                    )
+                }
             }
         }
         "json" => {
@@ -1214,22 +1245,26 @@ fn main() -> Result<()> {
                 StandaloneNumericTarget::Double => {
                     evaluate_double_archive(archive, &state_map, &options, custom_input.as_deref())
                 }
-                StandaloneNumericTarget::Quad => evaluate_higher_precision_archive::<DoubleFloat, _, _>(
-                    archive,
-                    &state_map,
-                    &options,
-                    custom_input.as_deref(),
-                    "quad",
-                    StandaloneNumericTarget::Quad,
-                ),
-                StandaloneNumericTarget::Arb => evaluate_higher_precision_archive::<ArbFloat, _, _>(
-                    archive,
-                    &state_map,
-                    &options,
-                    custom_input.as_deref(),
-                    "arb",
-                    StandaloneNumericTarget::Arb,
-                ),
+                StandaloneNumericTarget::Quad => {
+                    evaluate_higher_precision_archive::<DoubleFloat, _, _>(
+                        archive,
+                        &state_map,
+                        &options,
+                        custom_input.as_deref(),
+                        "quad",
+                        StandaloneNumericTarget::Quad,
+                    )
+                }
+                StandaloneNumericTarget::Arb => {
+                    evaluate_higher_precision_archive::<ArbFloat, _, _>(
+                        archive,
+                        &state_map,
+                        &options,
+                        custom_input.as_deref(),
+                        "arb",
+                        StandaloneNumericTarget::Arb,
+                    )
+                }
             }
         }
         _ => Err(eyre!(

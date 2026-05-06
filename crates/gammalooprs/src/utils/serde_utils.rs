@@ -3,7 +3,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{
     env,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::Command,
     sync::{
         Mutex, MutexGuard,
         atomic::{AtomicBool, Ordering},
@@ -15,7 +16,7 @@ use eyre::{Context, eyre};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-use std::{fs, fs::File, io::Read, path::Path};
+use std::{fs, fs::File, io::Read};
 
 #[derive(Error, Debug)]
 pub enum SerdeFileError {
@@ -33,7 +34,33 @@ pub enum SerdeFileError {
     NoExtension(String),
 }
 
-const BRANCH: &str = env!("VERGEN_GIT_BRANCH"); // e.g., "main" or "feature-x"
+fn current_git_commit(git_dir: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(git_dir)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let commit = String::from_utf8(output.stdout).ok()?;
+    let commit = commit.trim();
+    if commit.is_empty() {
+        None
+    } else {
+        Some(commit.to_owned())
+    }
+}
+
+fn schema_ref() -> String {
+    env::var("GAMMALOOP_SCHEMA_REF")
+        .ok()
+        .or_else(|| current_git_commit(Path::new(".")))
+        .or_else(|| current_git_commit(Path::new(env!("CARGO_MANIFEST_DIR"))))
+        .unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")))
+}
 
 pub trait SmartSerde: Serialize + DeserializeOwned {
     fn to_file(&self, file_path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
@@ -203,9 +230,9 @@ pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
         Ok(path) => PathBuf::from(path),
         Err(_) => {
             if online {
+                let schema_ref = schema_ref();
                 PathBuf::from(format!(
-                    "https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/{}/assets/schemas",
-                    BRANCH
+                    "https://raw.githubusercontent.com/alphal00p/gammaloop/{schema_ref}/assets/schemas"
                 ))
             } else {
                 match home_dir() {

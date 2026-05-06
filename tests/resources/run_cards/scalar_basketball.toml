@@ -8,12 +8,12 @@ commands = [
 ]
 
 [cli_settings.global]
-logfile_directive = "info"  # ,gammalooprs[build_original_parametric_integrand]=debug"
+logfile_directive = "info"
 
 display_directive = "info"
 # display_directive = "info"
 # display_directive = "info,gammalooprs::integrands[inspect]=off"
-# display_directive = "info,gammalooprs::integrands[inspect{message=.*jacobian.*}]=off"#,gammalooprs::uv::profile[profile]=info,gammalooprs::integrands[inspect]=off"#,gammalooprs[final_integrand]=debug"
+# display_directive = "gammaloop_api=info,gammalooprs=info,gammalooprs::integrands::process::cross_section[{integration,!inspect}]=debug"
 
 [cli_settings.global.generation.uv]
 generate_integrated = false

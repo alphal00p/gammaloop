@@ -4,7 +4,10 @@ use crate::{
     graph::{Graph, cuts::CutSet},
     settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
-    uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
+    uv::{
+        UVgenerationSettings,
+        approx::{CFFapprox, CutStructure, ForestNodeLike},
+    },
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -195,7 +198,7 @@ impl CutForests {
     pub(crate) fn orientation_parametric_exprs(
         self,
         graph: &Graph,
-        add_sigma: bool,
+        settings: &UVgenerationSettings,
     ) -> Result<Vec<ParametricIntegrands>> {
         let mut exprs = vec![];
 
@@ -205,7 +208,7 @@ impl CutForests {
             .zip(self.cuts.cuts.into_iter())
             .enumerate()
         {
-            let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
+            let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
 
             debug!(integrands=%integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
                 "Orientation Parametric integrand {i},with {} terms for \n{}\n{}",
@@ -214,6 +217,13 @@ impl CutForests {
                 integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
 
             );
+            if !settings.keep_sigma {
+                integrands.iter_mut().for_each(|s| {
+                    *s = s
+                        .replace(function!(GS.if_sigma, W_.a___))
+                        .with(Atom::num(1))
+                });
+            }
             exprs.push(ParametricIntegrands {
                 integrands,
                 cuts,
