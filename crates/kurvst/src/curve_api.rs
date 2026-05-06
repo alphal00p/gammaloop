@@ -1,9 +1,9 @@
 use kurbo::{
-    BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathSeg, Point, Vec2,
-    fit_to_bezpath, fit_to_bezpath_opt, offset::CubicOffset,
+    BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl, PathSeg, Point,
+    Vec2, fit_to_bezpath, fit_to_bezpath_opt, offset::CubicOffset,
 };
 use serde::{
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Deserializer, Serialize, Serializer,
     de::{self, Visitor},
 };
 use std::fmt;
@@ -38,6 +38,7 @@ pub struct CubicPathSpec {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TrimPathSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
     pub path: BezPath,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub start_outset: f64,
@@ -53,6 +54,7 @@ pub struct TrimPathSpec {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct PatternPathSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
     pub path: BezPath,
     #[serde(default = "default_pattern")]
     pub pattern: PatternInput,
@@ -89,6 +91,7 @@ pub struct PatternPathSpec {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ParallelPathSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
     pub path: BezPath,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub distance: f64,
@@ -175,6 +178,10 @@ pub struct LineSegmentSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PatternPathOutput {
+    #[serde(
+        serialize_with = "serialize_bez_path",
+        deserialize_with = "deserialize_bez_path"
+    )]
     pub path: BezPath,
     pub pattern: String,
     pub length: f64,
@@ -185,6 +192,10 @@ pub struct PatternPathOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CurvePathOutput {
+    #[serde(
+        serialize_with = "serialize_bez_path",
+        deserialize_with = "deserialize_bez_path"
+    )]
     pub path: BezPath,
     pub length: f64,
     pub points: Vec<CurvePoint>,
@@ -241,6 +252,97 @@ fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     ciborium::ser::into_writer(value, &mut bytes)
         .map_err(|err| format!("Failed to serialize CBOR value: {err}"))?;
     Ok(bytes)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+struct WirePath {
+    elements: Vec<WirePathElement>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum WirePathElement {
+    MoveTo {
+        point: CurvePoint,
+    },
+    LineTo {
+        point: CurvePoint,
+    },
+    QuadTo {
+        ctrl: CurvePoint,
+        end: CurvePoint,
+    },
+    CurveTo {
+        ctrl_a: CurvePoint,
+        ctrl_b: CurvePoint,
+        end: CurvePoint,
+    },
+    ClosePath,
+}
+
+impl From<&BezPath> for WirePath {
+    fn from(path: &BezPath) -> Self {
+        let elements = path
+            .elements()
+            .iter()
+            .map(|element| match *element {
+                PathEl::MoveTo(point) => WirePathElement::MoveTo {
+                    point: point.into(),
+                },
+                PathEl::LineTo(point) => WirePathElement::LineTo {
+                    point: point.into(),
+                },
+                PathEl::QuadTo(ctrl, end) => WirePathElement::QuadTo {
+                    ctrl: ctrl.into(),
+                    end: end.into(),
+                },
+                PathEl::CurveTo(ctrl_a, ctrl_b, end) => WirePathElement::CurveTo {
+                    ctrl_a: ctrl_a.into(),
+                    ctrl_b: ctrl_b.into(),
+                    end: end.into(),
+                },
+                PathEl::ClosePath => WirePathElement::ClosePath,
+            })
+            .collect();
+        Self { elements }
+    }
+}
+
+impl From<WirePath> for BezPath {
+    fn from(value: WirePath) -> Self {
+        let mut path = BezPath::new();
+        for element in value.elements {
+            match element {
+                WirePathElement::MoveTo { point } => path.move_to(Point::from(point)),
+                WirePathElement::LineTo { point } => path.line_to(Point::from(point)),
+                WirePathElement::QuadTo { ctrl, end } => {
+                    path.quad_to(Point::from(ctrl), Point::from(end));
+                }
+                WirePathElement::CurveTo {
+                    ctrl_a,
+                    ctrl_b,
+                    end,
+                } => path.curve_to(Point::from(ctrl_a), Point::from(ctrl_b), Point::from(end)),
+                WirePathElement::ClosePath => path.close_path(),
+            }
+        }
+        path
+    }
+}
+
+fn serialize_bez_path<S>(path: &BezPath, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    WirePath::from(path).serialize(serializer)
+}
+
+fn deserialize_bez_path<'de, D>(deserializer: D) -> Result<BezPath, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    WirePath::deserialize(deserializer).map(Into::into)
 }
 
 fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
@@ -1541,7 +1643,7 @@ mod tests {
     }
 
     #[test]
-    fn cbor_api_returns_serialized_bezpath() {
+    fn cbor_api_returns_explicit_wire_path() {
         let input = HobbyThroughSpec {
             start: point(0.0, 0.0),
             through: point(1.0, 1.0),

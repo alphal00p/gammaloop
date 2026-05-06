@@ -4,6 +4,24 @@
 
 #let _point(p, unit: 1) = (p.x * unit, p.y * unit)
 
+/// Default geometry options for derived path layers.
+///
+/// These defaults are shared by @layer-path and drawing packages that build on
+/// Kurvst. The dictionary shape intentionally mirrors the public function
+/// arguments so callers can merge user styles into it and unpack the result.
+/// -> dictionary
+#let layer-defaults = (
+  offset: 0,
+  length: none,
+  ratio: none,
+  resolve-length: "min",
+  start-outset: 0,
+  end-outset: 0,
+  side-point: none,
+  accuracy: 0.001,
+  optimize: true,
+)
+
 #let _sampled-pattern(samples-per-period, offset) = {
   let samples = calc.max(1, samples-per-period)
   range(0, samples + 1).map(index => {
@@ -129,6 +147,200 @@
   }
 }
 
+/// Build a cubic segment dictionary for a straight line.
+///
+/// -> dictionary
+#let line-segment(start, end) = {
+  let ctrl-a = (
+    x: start.x + (end.x - start.x) / 3,
+    y: start.y + (end.y - start.y) / 3,
+  )
+  let ctrl-b = (
+    x: start.x + (end.x - start.x) * 2 / 3,
+    y: start.y + (end.y - start.y) * 2 / 3,
+  )
+  (
+    start: start,
+    ctrl-a: ctrl-a,
+    ctrl-b: ctrl-b,
+    end: end,
+  )
+}
+
+#let _lerp(a, b, t) = a + (b - a) * t
+
+/// Evaluate a cubic segment at parameter `t`.
+///
+/// -> dictionary
+#let cubic-point(segment, t) = {
+  let ab = (
+    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
+    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
+  )
+  let bc = (
+    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
+    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
+  )
+  let cd = (
+    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
+    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
+  )
+  let abc = (
+    x: _lerp(ab.x, bc.x, t),
+    y: _lerp(ab.y, bc.y, t),
+  )
+  let bcd = (
+    x: _lerp(bc.x, cd.x, t),
+    y: _lerp(bc.y, cd.y, t),
+  )
+  (
+    x: _lerp(abc.x, bcd.x, t),
+    y: _lerp(abc.y, bcd.y, t),
+  )
+}
+
+/// Evaluate the tangent of a cubic segment at parameter `t`.
+///
+/// -> dictionary
+#let cubic-tangent(segment, t) = {
+  let ab = (
+    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
+    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
+  )
+  let bc = (
+    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
+    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
+  )
+  let cd = (
+    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
+    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
+  )
+  let abc = (
+    x: _lerp(ab.x, bc.x, t),
+    y: _lerp(ab.y, bc.y, t),
+  )
+  let bcd = (
+    x: _lerp(bc.x, cd.x, t),
+    y: _lerp(bc.y, cd.y, t),
+  )
+  (
+    x: bcd.x - abc.x,
+    y: bcd.y - abc.y,
+  )
+}
+
+/// Return drawable cubic segments for any Kurvst path dictionary.
+///
+/// Line segments and sampled point paths are converted to equivalent cubic
+/// line segments so downstream renderers can use one code path.
+/// -> array
+#let path-segments(path) = {
+  let segments = ()
+  if path.keys().contains("curves") and path.curves.len() > 0 {
+    for segment in path.curves {
+      segments.push(segment)
+    }
+  } else if path.keys().contains("segments") and path.segments.len() > 0 {
+    for segment in path.segments {
+      segments.push(line-segment(segment.start, segment.end))
+    }
+  } else if path.keys().contains("points") and path.points.len() > 1 {
+    for i in range(0, path.points.len() - 1) {
+      segments.push(line-segment(path.points.at(i), path.points.at(i + 1)))
+    }
+  }
+  segments
+}
+
+/// Compute the arc length of a path dictionary.
+///
+/// If the path already carries a `length` field, that value is returned.
+/// Otherwise the length is computed from the drawable segments.
+/// -> int | float
+#let path-length(path, accuracy: 0.001) = {
+  if path.keys().contains("length") {
+    path.length
+  } else {
+    path-segments(path).map(segment => cubic-path(..segment, accuracy: accuracy).length).sum()
+  }
+}
+
+/// Resolve a fixed and relative visible path length.
+///
+/// `length` is interpreted as a fixed arc length. `ratio` is interpreted as a
+/// fraction of `base-length`. `method` may be `"min"`/`"shorter"`,
+/// `"max"`/`"longer"`, `"length"`/`"fixed"`, `"ratio"`/`"relative"`,
+/// `"none"`/`"full"`, or a function receiving
+/// `(base-length, length, ratio)`.
+/// -> none | int | float
+#let _resolve-length-target(base-length, length: none, ratio: none, method: "min") = {
+  let fixed = if length != none and length > 0 { length } else { none }
+  let relative = if ratio != none and ratio > 0 { base-length * ratio } else { none }
+  if type(method) == function {
+    method((base-length: base-length, length: fixed, ratio: relative))
+  } else if fixed == none {
+    relative
+  } else if relative == none {
+    fixed
+  } else if method in ("max", "longer") {
+    calc.max(fixed, relative)
+  } else if method in ("length", "fixed") {
+    fixed
+  } else if method in ("ratio", "relative") {
+    relative
+  } else if method in ("none", "full") {
+    none
+  } else {
+    calc.min(fixed, relative)
+  }
+}
+
+#let resolve-length(base-length, length: none, ratio: none, method: "min") = {
+  _resolve-length-target(base-length, length: length, ratio: ratio, method: method)
+}
+
+/// Compute the symmetric trim needed to center a shorter path layer.
+///
+/// -> int | float
+#let center-outset(
+  base-length,
+  length: none,
+  ratio: none,
+  resolve-length: "min",
+  start-outset: 0,
+  end-outset: 0,
+) = {
+  let target = _resolve-length-target(base-length, length: length, ratio: ratio, method: resolve-length)
+  if target == none {
+    0
+  } else {
+    let visible-length = calc.max(0, base-length - start-outset - end-outset)
+    calc.max(0, (visible-length - target) / 2)
+  }
+}
+
+#let _side-segment(path) = {
+  let segments = path-segments(path)
+  if segments.len() == 0 { none } else { segments.at(calc.quo(segments.len(), 2)) }
+}
+
+#let _offset-toward-side-point(path, offset, side-point) = {
+  if side-point == none or offset == none or offset == 0 {
+    offset
+  } else {
+    let segment = _side-segment(path)
+    if segment == none {
+      offset
+    } else {
+      let mid = cubic-point(segment, 0.5)
+      let tangent = cubic-tangent(segment, 0.5)
+      let cross = tangent.x * (side-point.y - mid.y) - tangent.y * (side-point.x - mid.x)
+      let sign = if cross < 0 { -1 } else { 1 }
+      sign * calc.abs(offset)
+    }
+  }
+}
+
 /// Build a path dictionary from one cubic Bezier.
 ///
 /// ```example
@@ -199,9 +411,10 @@
 
 /// Build an open Hobby spline through two or more points.
 ///
-/// The returned dictionary is a path dictionary backed by a serialized Kurbo
-/// `BezPath`, so it can be passed directly to @parallel-path, @pattern-path,
-/// @trim-path, or @cetz-path.
+/// The returned dictionary is a path dictionary backed by Kurvst's explicit
+/// wire path. Rust converts that wire path to Kurbo's `BezPath` internally, so
+/// it can be passed directly to @parallel-path, @pattern-path, @trim-path, or
+/// @cetz-path.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
@@ -226,7 +439,7 @@
   ))))
 }
 
-/// Generate a sampled 1D pattern along a serialized Kurbo `BezPath`.
+/// Generate a sampled 1D pattern along a path.
 ///
 /// `pattern` may be `wave()`, `zigzag()`, `coil()`, a compatible string name,
 /// or a point pattern:
@@ -285,11 +498,11 @@
   ))))
 }
 
-/// Generate a parallel path for a serialized Kurbo `BezPath`.
+/// Generate a parallel path for a path.
 ///
 /// Pass any path returned by this module, such as @hobby-spline. The result is a
-/// drawable path dictionary with the fitted parallel path and its serialized
-/// `BezPath`.
+/// drawable path dictionary with the fitted parallel path and its explicit wire
+/// path.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
@@ -322,6 +535,72 @@
     accuracy: accuracy,
     optimize: optimize,
   ))))
+}
+
+/// Build a derived visible path layer.
+///
+/// `layer-path` combines the common operations needed by drawing packages:
+/// optional side-aware offsetting, endpoint trimming, and centered shortening by
+/// a fixed `length`, a relative `ratio`, or both. The return value is a normal
+/// Kurvst path dictionary that can be passed to @pattern-path, @parallel-path,
+/// @trim-path, or @cetz-path.
+///
+/// ```example
+/// #let base = kurvst.hobby-spline((
+///   (x: 0.0, y: 0.0),
+///   (x: 0.9, y: 0.8),
+///   (x: 1.8, y: -0.3),
+///   (x: 2.8, y: 0.4),
+/// ))
+/// #let layer = kurvst.layer-path(
+///   base,
+///   offset: 0.16,
+///   length: 1.6,
+///   ratio: 0.5,
+///   resolve-length: "min",
+/// )
+/// #native-scene({
+///   native-cubics(base.curves, stroke: rgb("#c8c8c8") + 0.45pt)
+///   native-cubics(layer.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+/// })
+/// ```
+///
+/// -> dictionary
+#let layer-path(
+  path,
+  offset: 0,
+  length: none,
+  ratio: none,
+  resolve-length: "min",
+  start-outset: 0,
+  end-outset: 0,
+  side-point: none,
+  accuracy: 0.001,
+  optimize: true,
+) = {
+  let distance = _offset-toward-side-point(path, offset, side-point)
+  let trim = center-outset(
+    path-length(path, accuracy: accuracy),
+    length: length,
+    ratio: ratio,
+    resolve-length: resolve-length,
+    start-outset: start-outset,
+    end-outset: end-outset,
+  )
+  let start-outset = start-outset + trim
+  let end-outset = end-outset + trim
+  if distance == none or distance == 0 {
+    trim-path(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+  } else {
+    parallel-path(
+      path,
+      distance: distance,
+      start-outset: start-outset,
+      end-outset: end-outset,
+      accuracy: accuracy,
+      optimize: optimize,
+    )
+  }
 }
 
 #let _cetz-args(segment, unit: 1) = (
