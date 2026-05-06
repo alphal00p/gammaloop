@@ -162,7 +162,7 @@ fn parse_root_input(filename: &str) -> Atom {
     expr
 }
 
-fn parse_smallest_input() -> Atom {
+fn parse_symbolica_expression_input() -> Atom {
     parse_root_input("symbolica_expression.txt")
 }
 
@@ -310,16 +310,16 @@ fn collect_horner(expr: &Atom) -> Atom {
 
 #[test]
 #[ignore = "diagnostic timing for root-level large Spenso input"]
-fn smallest_root_input_symbolic_network_parse_default() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_parse_default() {
+    let expr = parse_symbolica_expression_input();
     let settings = ParseSettings::default();
     time_symbolic_network_parse_and_execute("default", &expr, &settings);
 }
 
 #[test]
 #[ignore = "diagnostic timing for sequential vs parallel symbolic execution"]
-fn smallest_root_input_symbolic_network_execute_sequential_vs_parallel() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_execute_sequential_vs_parallel() {
+    let expr = parse_symbolica_expression_input();
     let settings = ParseSettings::default();
     spenso::network::profile::reset();
     let start = Instant::now();
@@ -343,17 +343,45 @@ fn smallest_root_input_symbolic_network_execute_sequential_vs_parallel() {
 }
 
 #[test]
+#[ignore = "diagnostic timing for Hornered sequential vs parallel symbolic execution"]
+fn symbolica_expression_input_horner_symbolic_network_execute_sequential_vs_parallel() {
+    let expr = parse_symbolica_expression_input();
+    let expr = collect_horner(&expr);
+    let settings = ParseSettings::default();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    let net = expr
+        .parse_to_symbolic_net::<Parsind>(&settings)
+        .expect("failed to parse Hornered expression into symbolic network");
+    eprintln!(
+        "horner_compare symbolic_net stats: graph_nodes={} graph_edges={} tensors={} scalars={}",
+        net.graph.graph.n_nodes(),
+        net.graph.graph.n_edges(),
+        net.store.tensors.len(),
+        net.store.scalar.len(),
+    );
+    report("horner_compare symbolic_network_parse", start);
+    spenso::network::profile::report("horner_compare after_symbolic_network_parse");
+
+    let sequential =
+        time_symbolic_network_execute_sequential("horner_sequential", net.clone(), &expr);
+    let parallel = time_symbolic_network_execute_parallel("horner_parallel", net, &expr);
+
+    assert_eq!(parallel, sequential);
+}
+
+#[test]
 #[ignore = "diagnostic timing for root-level large Spenso input"]
-fn smallest_root_input_symbolic_network_parse_raw_full_depth_profile() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_parse_raw_full_depth_profile() {
+    let expr = parse_symbolica_expression_input();
     let settings = ParseSettings::default();
     time_symbolic_network_parse_only("raw_full_depth", &expr, &settings);
 }
 
 #[test]
 #[ignore = "diagnostic timing for root-level large Spenso input"]
-fn smallest_root_input_symbolic_network_parse_without_scalar_precontraction() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_parse_without_scalar_precontraction() {
+    let expr = parse_symbolica_expression_input();
     let settings = ParseSettings {
         precontract_scalars: false,
         ..Default::default()
@@ -363,8 +391,8 @@ fn smallest_root_input_symbolic_network_parse_without_scalar_precontraction() {
 
 #[test]
 #[ignore = "diagnostic timing for root-level large Spenso input"]
-fn smallest_root_input_symbolic_network_parse_top_level_tensor_factors() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_parse_top_level_tensor_factors() {
+    let expr = parse_symbolica_expression_input();
     let settings = ParseSettings {
         depth_limit: Some(2),
         ..Default::default()
@@ -374,8 +402,8 @@ fn smallest_root_input_symbolic_network_parse_top_level_tensor_factors() {
 
 #[test]
 #[ignore = "diagnostic timing for root-level large Spenso input"]
-fn smallest_root_input_symbolic_network_parse_after_collect_factors() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_parse_after_collect_factors() {
+    let expr = parse_symbolica_expression_input();
     let expr = collect_common_factors(&expr);
     let settings = ParseSettings {
         depth_limit: Some(2),
@@ -386,8 +414,8 @@ fn smallest_root_input_symbolic_network_parse_after_collect_factors() {
 
 #[test]
 #[ignore = "diagnostic timing for root-level large Spenso input"]
-fn smallest_root_input_symbolic_network_parse_after_collect_horner() {
-    let expr = parse_smallest_input();
+fn symbolica_expression_input_symbolic_network_parse_after_collect_horner() {
+    let expr = parse_symbolica_expression_input();
     let expr = collect_horner(&expr);
     let settings = ParseSettings {
         depth_limit: Some(2),
