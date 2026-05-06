@@ -235,7 +235,7 @@ The embedded drawing template can import that generated file and pass the
 callbacks directly to `draw`.
 
 ```typ
-#import "linnest.typ": draw, graph, layout as apply-layout
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout as apply-layout
 #import "edge-style.typ" as edge-style
 
 #let layout(

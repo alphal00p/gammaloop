@@ -1857,7 +1857,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let mut edge_style_content = String::new();
         edge_style_content.push_str(
-            r#"#import "physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
+            r#"#import "crates/linnest/typst/src/physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
 
 // Auto-generated particle styles from model (computed in Rust). The reusable
 // physics drawing callbacks live in physics-edge-style.typ; this file only

@@ -1,1 +1,1 @@
-../../../kurvst/typst/src/lib.typ
+#import "../../../kurvst/typst/src/lib.typ": *

@@ -1,7 +1,6 @@
-// Default per-graph Typst template bundled with the linnet CLI.
+// Default per-graph Typst template bundled with GammaLoop drawing state.
 // The CLI passes --input title="..." and --input data-path="..." for every build.
 #import "layout.typ": layout
-
 
 #set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm))
 
