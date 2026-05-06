@@ -38,7 +38,7 @@ dirac_gamma5_four_gamma_trace_is_epsilon [Dirac4, GammaDefault, enabled]
 color_form_one_generator_trace [ColorSu3, ColorDefault, enabled]
 0
 
-color_form_two_generator_trace [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize color traces reliably]
+color_form_two_generator_trace [ColorSu3, ColorDefault, enabled]
 TR*g(coad(8,a),coad(8,b))
 
 color_form_fierz_generator_contraction [ColorSu3, ColorDefault, enabled]
