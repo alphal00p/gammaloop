@@ -424,23 +424,25 @@
     let length = curve-api.path-length(path, accuracy: _style-value(style, "accuracy"))
     let first = curve-api.trim-path(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
     let second = curve-api.trim-path(path, start-outset: length / 2, accuracy: _style-value(style, "accuracy"))
-    let pieces = ()
-    for element in _segments-elements(
+    let first-elements = _segments-elements(
       curve-api.path-segments(first),
       style,
       phase: phase,
       anchor-start: anchor-start,
       anchor-end: false,
-    ).elements {
-      pieces.push(element)
-    }
-    for element in _segments-elements(
+    ).elements
+    let second-elements = _segments-elements(
       curve-api.path-segments(second),
       _without-mark-style(style),
       phase: phase,
       anchor-start: false,
       anchor-end: anchor-end,
-    ).elements {
+    ).elements
+    let pieces = ()
+    for element in second-elements {
+      pieces.push(element)
+    }
+    for element in first-elements {
       pieces.push(element)
     }
     (elements: pieces, length: length)
@@ -462,18 +464,39 @@
     let wavelength = _style-value(source-style, "pattern-wavelength")
     let phase = _style-value(source-style, "pattern-phase")
     let sink-phase = phase + 2 * calc.pi * source.length / wavelength
-    for element in source.elements {
-      elements.push(element)
-    }
-    for element in _segments-elements(halves.sink, sink-style, phase: sink-phase, anchor-start: false).elements {
-      elements.push(element)
+    let sink-elements = _segments-elements(halves.sink, sink-style, phase: sink-phase, anchor-start: false).elements
+    if _has-mark(source-style) and not _has-mark(sink-style) {
+      for element in sink-elements {
+        elements.push(element)
+      }
+      for element in source.elements {
+        elements.push(element)
+      }
+    } else {
+      for element in source.elements {
+        elements.push(element)
+      }
+      for element in sink-elements {
+        elements.push(element)
+      }
     }
   } else {
-    for element in _segments-elements(halves.source, source-style).elements {
-      elements.push(element)
-    }
-    for element in _segments-elements(halves.sink, sink-style).elements {
-      elements.push(element)
+    let source-elements = _segments-elements(halves.source, source-style).elements
+    let sink-elements = _segments-elements(halves.sink, sink-style).elements
+    if _has-mark(source-style) and not _has-mark(sink-style) {
+      for element in sink-elements {
+        elements.push(element)
+      }
+      for element in source-elements {
+        elements.push(element)
+      }
+    } else {
+      for element in source-elements {
+        elements.push(element)
+      }
+      for element in sink-elements {
+        elements.push(element)
+      }
     }
   }
   elements
