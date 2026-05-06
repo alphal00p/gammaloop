@@ -1,8 +1,6 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, LazyLock, atomic::AtomicBool},
-};
+use std::{collections::HashSet, sync::LazyLock};
 
+use crate::tensor::{SymbolicNetParse, SymbolicTensor};
 use spenso::{
     network::{
         Network,
@@ -30,9 +28,6 @@ use symbolica::{
     },
     symbol,
 };
-use tracing::warn;
-
-use crate::tensor::{SymbolicNetParse, SymbolicTensor};
 
 use crate::parsing_ind::Parsind;
 use eyre::{Result, eyre};
@@ -459,26 +454,42 @@ pub fn not_slot(sym: Symbol) -> Condition<PatternRestriction> {
 // }
 
 pub fn to_dots_impl(expr: AtomView) -> Atom {
-    fn func_without_index(m: &MatchStack<'_>, fun_wild: Symbol, arg_wild: Symbol) -> Atom {
+    fn append_rep(atom: Atom, rep: &Atom) -> Atom {
+        match atom.as_view() {
+            AtomView::Fun(fun) => {
+                let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+                for arg in fun.iter() {
+                    rebuilt = rebuilt.add_arg(arg);
+                }
+                rebuilt.add_arg(rep).finish()
+            }
+            AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+            _ => atom,
+        }
+    }
+
+    fn func_with_rep(m: &MatchStack<'_>, fun_wild: Symbol, arg_wild: Symbol, rep: &Atom) -> Atom {
         match m.get(arg_wild).unwrap() {
-            Match::FunctionName(a) => {
+            Match::FunctionName(_) => {
                 panic!("Can't be a function")
             }
             Match::Single(a) => {
                 let Match::FunctionName(f) = m.get(fun_wild).unwrap() else {
                     panic!("Not a function");
                 };
-                FunctionBuilder::new(*f).add_arg(a).finish()
+                FunctionBuilder::new(*f).add_arg(a).add_arg(rep).finish()
             }
 
-            Match::Multiple(a, args) => {
-                if args.is_empty() {
+            Match::Multiple(_, args) => {
+                let atom = if args.is_empty() {
                     m.get(fun_wild).unwrap().to_atom()
                 } else if let Match::FunctionName(f) = m.get(fun_wild).unwrap() {
                     FunctionBuilder::new(*f).add_args(args).finish()
                 } else {
                     panic!("Not a function");
-                }
+                };
+
+                append_rep(atom, rep)
             }
         }
     }
@@ -498,16 +509,14 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
     .when(not_slot(RS.a___) & not_slot(RS.b___))
     .repeat()
     .with_map(move |m| {
-        let f = func_without_index(m, RS.f_, RS.a___);
-        let g = func_without_index(m, RS.g_, RS.b___);
-        // println!("{}", f);
-
         let rep = SPENSO_TAG
             .self_dual_::<0, _>([RS.d_])
             .to_pattern()
             .replace_wildcards_with_matches(m);
+        let f = func_with_rep(m, RS.f_, RS.a___, &rep);
+        let g = func_with_rep(m, RS.g_, RS.b___, &rep);
 
-        function!(ETS.metric, rep, f, g)
+        function!(ETS.metric, f, g)
     })
     .replace(
         function!(
@@ -521,14 +530,13 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
     .when(not_slot(RS.a___))
     .repeat()
     .with_map(move |m| {
-        let f = func_without_index(m, RS.f_, RS.a___);
-
         let rep = SPENSO_TAG
             .self_dual_::<0, _>([RS.d_])
             .to_pattern()
             .replace_wildcards_with_matches(m);
+        let f = func_with_rep(m, RS.f_, RS.a___, &rep);
 
-        function!(ETS.metric, rep, &f, &f)
+        function!(ETS.metric, &f, &f)
     })
     .replace(
         function!(
@@ -545,24 +553,27 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
     .when(not_slot(RS.a___) & not_slot(RS.b___))
     .repeat()
     .with_map(move |m| {
-        let f = func_without_index(m, RS.f_, RS.a___);
-        let g = func_without_index(m, RS.g_, RS.b___);
-
         let rep = SPENSO_TAG
             .dualizable_::<0, _>([RS.d_])
             .to_pattern()
             .replace_wildcards_with_matches(m);
+        let dual_rep = SPENSO_TAG
+            .dualizable_dual_::<0, _>([RS.d_])
+            .to_pattern()
+            .replace_wildcards_with_matches(m);
+        let f = func_with_rep(m, RS.f_, RS.a___, &rep);
+        let g = func_with_rep(m, RS.g_, RS.b___, &dual_rep);
 
-        function!(ETS.metric, rep, f, g)
+        function!(ETS.metric, f, g)
     })
 }
 
 /// Trait for simplifying expressions involving metric tensors and converting
-/// index contractions to dot product notation.
+/// index contractions to compact Schoonschip metric products.
 ///
 /// Provides methods for contracting indices with metric tensors (`g(mu, nu)`) or
 /// identity tensors (`id(mu, nu)`), and for replacing contracted index patterns
-/// (like `p(mu)*q(mu)`) with dot products (`dot(p, q)`).
+/// (like `p(mu)*q(mu)`) with `g(p(rep), q(rep))`.
 pub trait MetricSimplifier {
     /// Simplifies contractions involving metric tensors (`g` or `metric`) and identity tensors (`id` or `𝟙`).
     ///
@@ -574,14 +585,14 @@ pub trait MetricSimplifier {
 
     fn expand_dots(&self) -> Result<Atom>;
 
-    /// Converts contracted index patterns into dot product notation `dot(...)`.
+    /// Converts contracted index patterns into compact metric-product notation.
     ///
     /// Replaces expressions like `p(mu) * q(mu)` or `p(mu) * M(mu, nu) * q(nu)` (implicitly via metric rules)
-    /// with `dot(p, q)`. Assumes standard representations for vectors and tensors involved
+    /// with `g(p(rep), q(rep))`. Assumes standard representations for vectors and tensors involved
     /// in the contractions.
     ///
     /// # Returns
-    /// An [`Atom`] where contractions have been replaced by `dot` functions where possible.
+    /// An [`Atom`] where contractions have been replaced by compact metric products where possible.
     fn to_dots(&self) -> Atom;
 }
 
@@ -605,30 +616,21 @@ impl MetricSimplifier for AtomView<'_> {
 
     fn expand_dots(&self) -> Result<Atom> {
         let set = ParseSettings::default();
-        let pat = function!(SPENSO_TAG.dot, RS.f_, RS.g_, RS.h_).to_pattern();
-        let has_errored = Arc::new(AtomicBool::new(false));
-        let has_errored_for_closure = has_errored.clone();
-        let out = self.replace(pat.clone()).with_map(move |a| {
+        let pat = function!(ETS.metric, RS.f_, RS.g_).to_pattern();
+        Ok(self.replace(pat.clone()).with_map(move |a| {
             let filled = pat.replace_wildcards_with_matches(a);
 
             match filled.parse_to_atom_net::<AbstractIndex>(&set) {
-                Err(e) => {
-                    warn!("Failed to parse network from {}:{}", filled, e);
-                    has_errored_for_closure.store(true, std::sync::atomic::Ordering::Relaxed);
-                    filled
-                }
+                Err(_) => filled,
                 Ok(mut net) => {
                     net.simple_execute();
-                    net.result_scalar().unwrap().into()
+                    match net.result_scalar() {
+                        Ok(scalar) => scalar.into(),
+                        Err(_) => filled,
+                    }
                 }
             }
-        });
-
-        if has_errored.load(std::sync::atomic::Ordering::Relaxed) {
-            Err(eyre!("Failed to parse network"))
-        } else {
-            Ok(out)
-        }
+        }))
     }
     fn simplify_metrics(&self) -> Atom {
         simplify_metrics_impl(*self)
@@ -768,15 +770,14 @@ mod test {
         assert_eq!(
             a,
             parse_lit!(spenso::g(
-                spenso::mink(4),
-                idenso::P,
-                idenso::P(wrong::mink(4, -idenso::g(2)))
+                idenso::P(spenso::mink(4)),
+                idenso::P(wrong::mink(4, -idenso::g(2)), spenso::mink(4))
             ))
         );
         insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(mink(4,-1*g(2)),cind(1))+-1*P(cind(2))*P(mink(4,-1*g(2)),cind(2))+-1*P(cind(3))*P(mink(4,-1*g(2)),cind(3))+P(cind(0))*P(mink(4,-1*g(2)),cind(0))");
 
         let a = parse_lit!(k1(spenso::mink(4, mu1)) ^ 2).to_dots();
-        insta::assert_snapshot!(a.to_bare_ordered_string(),@"g(k1,k1,mink(4))");
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"g(k1(mink(4)),k1(mink(4)))");
     }
 
     #[test]

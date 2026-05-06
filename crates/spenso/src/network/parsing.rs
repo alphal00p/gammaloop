@@ -10,10 +10,10 @@ use crate::network::library::panicing::ErroringLibrary;
 use crate::network::tags::SPENSO_TAG;
 
 use crate::network::library::symbolic::ETS;
-use crate::structure::abstract_index::AIND_SYMBOLS;
+use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use crate::structure::representation::Representation;
 // use crate::shadowing::Concretize;
-use crate::structure::slot::{DummyAind, ParseableAind, Slot, SlotError};
+use crate::structure::slot::{DualSlotTo, DummyAind, ParseableAind, Slot, SlotError};
 use crate::structure::{
     NamedStructure, OrderedStructure, PermutedStructure, StructureContract, StructureError,
     TensorShell,
@@ -292,6 +292,166 @@ pub trait Parse: Sized {
     }
 }
 
+struct ParserDummies {
+    next: usize,
+}
+
+impl ParserDummies {
+    fn new() -> Self {
+        Self { next: 1_000_000 }
+    }
+
+    fn next(&mut self) -> AbstractIndex {
+        let index = self.next;
+        self.next += 1;
+        AbstractIndex::new_dummy_at(index)
+    }
+
+    fn slot(&mut self, rep: &Representation<LibraryRep>) -> Slot<LibraryRep, AbstractIndex> {
+        rep.slot(self.next())
+    }
+}
+
+struct SchoonschipMaterialization {
+    replacement: Atom,
+    factors: Vec<Atom>,
+    compact_self: bool,
+}
+
+/// Turns compact Schoonschip notation such as `p(mink(4))` into an indexed
+/// tensor factor and returns the fresh slot that should replace it in context.
+fn compact_schoonschip_tensor(
+    value: FunView<'_>,
+    dummies: &mut ParserDummies,
+) -> Option<SchoonschipMaterialization> {
+    if value.get_symbol() == ETS.metric {
+        return None;
+    }
+
+    if Representation::<LibraryRep>::try_from(value.as_view()).is_ok() {
+        return None;
+    }
+
+    let args = value.iter().collect::<Vec<_>>();
+    if args
+        .iter()
+        .any(|arg| Slot::<LibraryRep, AbstractIndex>::try_from(*arg).is_ok())
+    {
+        return None;
+    }
+
+    let rep_args = args
+        .iter()
+        .enumerate()
+        .filter_map(|(position, arg)| {
+            Representation::<LibraryRep>::try_from(*arg)
+                .ok()
+                .map(|rep| (position, rep))
+        })
+        .collect::<Vec<_>>();
+
+    let [(position, rep)] = rep_args.as_slice() else {
+        return None;
+    };
+
+    let slot = dummies.slot(rep);
+    let slot_atom = slot.to_atom();
+    let mut tensor = FunctionBuilder::new(value.get_symbol());
+    for (arg_position, arg) in args.into_iter().enumerate() {
+        if arg_position == *position {
+            tensor = tensor.add_arg(&slot_atom);
+        } else {
+            tensor = tensor.add_arg(arg);
+        }
+    }
+
+    Some(SchoonschipMaterialization {
+        replacement: slot_atom,
+        factors: vec![tensor.finish()],
+        compact_self: true,
+    })
+}
+
+fn materialize_schoonschip_arg(
+    value: AtomView<'_>,
+    dummies: &mut ParserDummies,
+) -> Option<SchoonschipMaterialization> {
+    let AtomView::Fun(fun) = value else {
+        return None;
+    };
+
+    if let Some(materialized) = compact_schoonschip_tensor(fun, dummies) {
+        return Some(materialized);
+    }
+
+    let mut changed = false;
+    let mut factors = Vec::new();
+    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+
+    for arg in fun.iter() {
+        if let Some(materialized) = materialize_schoonschip_arg(arg, dummies) {
+            changed = true;
+            rebuilt = rebuilt.add_arg(&materialized.replacement);
+            factors.extend(materialized.factors);
+        } else {
+            rebuilt = rebuilt.add_arg(arg);
+        }
+    }
+
+    changed.then(|| SchoonschipMaterialization {
+        replacement: rebuilt.finish(),
+        factors,
+        compact_self: false,
+    })
+}
+
+fn materialize_schoonschip(value: AtomView<'_>) -> Option<Atom> {
+    let mut dummies = ParserDummies::new();
+    let materialized = materialize_schoonschip_arg(value, &mut dummies)?;
+    let mut expression = if materialized.compact_self {
+        Atom::num(1)
+    } else {
+        materialized.replacement
+    };
+
+    for factor in materialized.factors {
+        expression *= factor;
+    }
+
+    Some(expression)
+}
+
+fn replace_chain_placeholders(value: AtomView<'_>, chain_in: &Atom, chain_out: &Atom) -> Atom {
+    match value {
+        AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => chain_in.clone(),
+        AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => chain_out.clone(),
+        AtomView::Fun(fun) => {
+            let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+            for arg in fun.iter() {
+                rebuilt = rebuilt.add_arg(replace_chain_placeholders(arg, chain_in, chain_out));
+            }
+            rebuilt.finish()
+        }
+        AtomView::Add(add) => add.iter().fold(Atom::Zero, |sum, term| {
+            sum + replace_chain_placeholders(term, chain_in, chain_out)
+        }),
+        AtomView::Mul(mul) => mul.iter().fold(Atom::num(1), |product, factor| {
+            product * replace_chain_placeholders(factor, chain_in, chain_out)
+        }),
+        AtomView::Pow(pow) => {
+            let (base, exponent) = pow.get_base_exp();
+            replace_chain_placeholders(base, chain_in, chain_out).pow(exponent.to_owned())
+        }
+        _ => value.to_owned(),
+    }
+}
+
+fn parser_product(factors: impl IntoIterator<Item = Atom>) -> Atom {
+    factors
+        .into_iter()
+        .fold(Atom::num(1), |product, factor| product * factor)
+}
+
 impl<
     'a,
     Sc,
@@ -467,6 +627,10 @@ where
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(n_muls.pop().unwrap().n_mul(n_muls))
+        } else if symbol == SPENSO_TAG.chain {
+            Self::parse_chain(value, state, library, settings)
+        } else if symbol == SPENSO_TAG.trace {
+            Self::parse_trace(value, state, library, settings)
         } else if symbol == SPENSO_TAG.pure_scalar {
             if value.get_nargs() != 1 {
                 return Err(TensorNetworkError::TooManyArgsFunction(
@@ -475,119 +639,8 @@ where
             }
 
             Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?))
-        } else if symbol == ETS.metric && settings.parse_inner_products && value.get_nargs() == 3 {
-            let mut args = value.iter();
-            let a = args.next().unwrap();
-            let b = args.next().unwrap();
-            let c = args.next().unwrap();
-
-            let (rep, l, r) = if let Ok(rep) = Representation::<LibraryRep>::try_from(a)
-                && Representation::<LibraryRep>::try_from(b).is_err()
-                && Representation::<LibraryRep>::try_from(c).is_err()
-            {
-                (rep, b, c)
-            } else if let Ok(rep) = Representation::<LibraryRep>::try_from(b)
-                && Representation::<LibraryRep>::try_from(a).is_err()
-                && Representation::<LibraryRep>::try_from(c).is_err()
-            {
-                (rep, a, c)
-            } else if let Ok(rep) = Representation::<LibraryRep>::try_from(c)
-                && Representation::<LibraryRep>::try_from(b).is_err()
-                && Representation::<LibraryRep>::try_from(a).is_err()
-            {
-                (rep, a, b)
-            } else {
-                return Err(TensorNetworkError::InvalidDotFunction(
-                    value.as_view().to_plain_string(),
-                ));
-            };
-
-            let dummy_index: Slot<LibraryRep> = rep.slot(1);
-
-            fn index<D: Display>(
-                ind: Slot<LibraryRep>,
-                view: AtomView,
-            ) -> Result<Atom, TensorNetworkError<D, Symbol>> {
-                match view {
-                    AtomView::Fun(f) => {
-                        let mut fb = FunctionBuilder::new(f.get_symbol());
-
-                        for a in f.iter() {
-                            fb = fb.add_arg(a);
-                        }
-                        Ok(fb.add_arg(ind.to_atom()).finish())
-                    }
-                    AtomView::Var(s) => Ok(FunctionBuilder::new(s.get_symbol())
-                        .add_arg(ind.to_atom())
-                        .finish()),
-                    a => Err(TensorNetworkError::InvalidDotFunction(a.to_plain_string())),
-                }
-            }
-
-            let indexed_l = index(dummy_index, l)?;
-            // let Ok(indexed_l_structure): Result<PermutedStructure<S>, _> =
-            //     indexed_l.as_view().try_into()
-            // else {
-            //     return Err(TensorNetworkError::InvalidDotFunction(
-            //         indexed_l.as_view().to_plain_string(),
-            //     ));
-            // };
-            let indexed_r = index(dummy_index, r)?;
-
-            Self::try_from_view_impl((indexed_l * indexed_r).as_view(), state, library, settings)
-            // let Ok(indexed_r_structure): Result<PermutedStructure<S>, _> =
-            //     indexed_r.as_view().try_into()
-            // else {
-            //     return Err(TensorNetworkError::InvalidDotFunction(
-            //         indexed_l.as_view().to_plain_string(),
-            //     ));
-            // };
-
-            // let l = match library.key_for_structure(&indexed_l_structure) {
-            //     Ok(key) => {
-            //         // println!("Adding lib");
-            //         // let t = library.get(&key).unwrap();
-            //         Self::library_tensor(
-            //             &indexed_l_structure.structure,
-            //             PermutedStructure {
-            //                 structure: key,
-            //                 rep_permutation: indexed_l_structure.rep_permutation,
-            //                 index_permutation: indexed_l_structure.index_permutation,
-            //             },
-            //         )
-            //     }
-            //     Err(_) => Self::from_tensor(
-            //         indexed_l_structure
-            //             .structure
-            //             .to_shell()
-            //             .concretize(Some(indexed_l_structure.index_permutation.inverse())),
-            //     ),
-            // };
-
-            // let r = match library.key_for_structure(&indexed_r_structure) {
-            //     Ok(key) => {
-            //         // println!("Adding lib");
-            //         // let t = library.get(&key).unwrap();
-            //         Self::library_tensor(
-            //             &indexed_r_structure.structure,
-            //             PermutedStructure {
-            //                 structure: key,
-            //                 rep_permutation: indexed_r_structure.rep_permutation,
-            //                 index_permutation: indexed_r_structure.index_permutation,
-            //             },
-            //         )
-            //     }
-            //     Err(_) => Self::from_tensor(
-            //         indexed_r_structure
-            //             .structure
-            //             .to_shell()
-            //             .concretize(Some(indexed_r_structure.index_permutation.inverse())),
-            //     ),
-            // };
-
-            // let res
-            // Ok(l * r)
-            // Ok(Self::from_scalar(a.try_into()?))
+        } else if let Some(materialized) = materialize_schoonschip(value.as_view()) {
+            Self::try_from_view_impl(materialized.as_view(), state, library, settings)
         } else if symbol.has_tag(&SPENSO_TAG.tag) {
             if value.get_nargs() != 1 {
                 return Err(TensorNetworkError::TooManyArgsFunction(
@@ -629,6 +682,119 @@ where
                 Ok(Self::from_scalar(value.as_view().try_into()?))
             }
         }
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_chain<S, Lib: Library<S, Key = K>>(
+        value: FunView<'a>,
+        state: ParseState,
+        library: &Lib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + Clone + Parse,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+    {
+        let args = value.iter().collect::<Vec<_>>();
+        if args.len() < 2 {
+            return Err(TensorNetworkError::TooManyArgsFunction(
+                value.as_view().to_plain_string(),
+            ));
+        }
+
+        let start = args[0].to_owned();
+        let end = args[1].to_owned();
+        let start_slot = Slot::<LibraryRep, AbstractIndex>::try_from(args[0])
+            .map_err(|err| eyre!("invalid chain start `{}`: {err}", args[0]))?;
+
+        let factors = &args[2..];
+        if factors.is_empty() {
+            let metric = FunctionBuilder::new(ETS.metric)
+                .add_arg(&start)
+                .add_arg(&end)
+                .finish();
+            return Self::try_from_view_impl(metric.as_view(), state, library, settings);
+        }
+
+        // The chain head is inert at expression level; parsing materializes it
+        // into ordinary indexed tensor factors with fresh contracted links.
+        let mut dummies = ParserDummies::new();
+        let mut left = start;
+        let mut materialized_factors = Vec::with_capacity(factors.len());
+        for (position, factor) in factors.iter().enumerate() {
+            let (right, next_left) = if position + 1 == factors.len() {
+                (end.clone(), None)
+            } else {
+                let link = start_slot.reindex(dummies.next());
+                (link.dual().to_atom(), Some(link.to_atom()))
+            };
+
+            let factor = replace_chain_placeholders(*factor, &left, &right);
+            materialized_factors.push(materialize_schoonschip(factor.as_view()).unwrap_or(factor));
+            if let Some(next_left) = next_left {
+                left = next_left;
+            }
+        }
+
+        let expression = parser_product(materialized_factors);
+        Self::try_from_view_impl(expression.as_view(), state, library, settings)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_trace<S, Lib: Library<S, Key = K>>(
+        value: FunView<'a>,
+        state: ParseState,
+        library: &Lib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + Clone + Parse,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+    {
+        let args = value.iter().collect::<Vec<_>>();
+        let Some(rep_view) = args.first() else {
+            return Err(TensorNetworkError::TooManyArgsFunction(
+                value.as_view().to_plain_string(),
+            ));
+        };
+
+        let rep = Representation::<LibraryRep>::try_from(*rep_view)
+            .map_err(|err| eyre!("invalid trace representation `{rep_view}`: {err}"))?;
+        let factors = &args[1..];
+
+        if factors.is_empty() {
+            return Self::try_from_view_impl(
+                rep.dim.to_symbolic().as_view(),
+                state,
+                library,
+                settings,
+            );
+        }
+
+        // A trace is parsed as a closed chain over fresh slots of the declared
+        // representation, so the factors themselves can stay endpoint-free.
+        let mut dummies = ParserDummies::new();
+        let links = (0..factors.len())
+            .map(|_| dummies.slot(&rep))
+            .collect::<Vec<_>>();
+
+        let materialized_factors = factors
+            .iter()
+            .enumerate()
+            .map(|(position, factor)| {
+                let left = links[position].to_atom();
+                let right = links[(position + 1) % links.len()].dual().to_atom();
+                let factor = replace_chain_placeholders(*factor, &left, &right);
+                materialize_schoonschip(factor.as_view()).unwrap_or(factor)
+            })
+            .collect::<Vec<_>>();
+
+        let expression = parser_product(materialized_factors);
+        Self::try_from_view_impl(expression.as_view(), state, library, settings)
     }
 
     #[allow(clippy::result_large_err)]
@@ -827,5 +993,150 @@ impl NetworkParse for AtomView<'_> {
         let lib = DummyLibrary::<ParamTensor<ShadowedStructure<Aind>>>::new();
 
         ParamNet::<Aind>::try_from_view::<ShadowedStructure<Aind>, _>(*self, &lib, settings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::network::NetworkState;
+    use crate::structure::representation::{Minkowski, RepName};
+    use crate::{chain, slot, trace};
+    use symbolica::{function, symbol};
+
+    fn mink4() -> Representation<Minkowski> {
+        Minkowski {}.new_rep(4)
+    }
+
+    fn chain_factor(name: Symbol) -> Atom {
+        FunctionBuilder::new(name)
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .finish()
+    }
+
+    #[test]
+    fn parse_chain_materializes_placeholder_links() {
+        let rep = mink4();
+        let expr = chain!(
+            slot!(rep, i),
+            slot!(rep, j),
+            chain_factor(symbol!("f")),
+            chain_factor(symbol!("g")),
+        );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+        assert_eq!(parsed.graph.dangling_indices().len(), 2);
+    }
+
+    #[test]
+    fn parse_trace_materializes_closed_links() {
+        let rep = mink4();
+        let expr = trace!(&rep, chain_factor(symbol!("f")), chain_factor(symbol!("g")));
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_empty_trace_unwraps_representation_dimension() {
+        let rep = mink4();
+        let expr = trace!(&rep);
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::PureScalar);
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_empty_chain_as_endpoint_metric() {
+        let rep = mink4();
+        let expr = chain!(slot!(rep, i), slot!(rep, j));
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+        assert_eq!(parsed.graph.dangling_indices().len(), 2);
+    }
+
+    #[test]
+    fn materialize_schoonschip_vectors_parse_as_dot_product() {
+        let rep = mink4();
+        let expr = function!(symbol!("p"), rep.to_symbolic([]))
+            * function!(symbol!("q"), rep.to_symbolic([]));
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn three_argument_metric_inner_product_is_not_parser_syntax() {
+        let rep = mink4();
+        let expr = function!(
+            ETS.metric,
+            rep.to_symbolic([]),
+            Atom::var(symbol!("p")),
+            Atom::var(symbol!("q"))
+        );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::PureScalar);
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_schoonschipped_metric_product() {
+        let rep = mink4();
+        let expr = function!(
+            ETS.metric,
+            function!(symbol!("p"), rep.to_symbolic([])),
+            function!(symbol!("q"), rep.to_symbolic([]))
+        );
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert!(parsed.state.is_scalar());
+        assert!(parsed.graph.dangling_indices().is_empty());
+    }
+
+    #[test]
+    fn parse_chain_materializes_schoonschip_factor_arguments() {
+        let rep = mink4();
+        let compact_vector = function!(symbol!("p"), rep.to_symbolic([]));
+        let factor = FunctionBuilder::new(symbol!("f"))
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .add_arg(&compact_vector)
+            .finish();
+        let expr = chain!(slot!(rep, i), slot!(rep, j), factor);
+
+        let parsed = expr
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+
+        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+        assert_eq!(parsed.graph.dangling_indices().len(), 2);
     }
 }

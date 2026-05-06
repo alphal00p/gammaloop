@@ -444,6 +444,13 @@ macro_rules! antisym {
 /// ```
 #[macro_export]
 macro_rules! chain {
+    ($start:expr, $end:expr $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.chain(
+            $crate::symbolica_atom::IntoAtom::into_atom($start),
+            $crate::symbolica_atom::IntoAtom::into_atom($end),
+            std::iter::empty::<symbolica::atom::Atom>(),
+        )
+    };
     ($start:expr, $end:expr; $factors:expr $(,)?) => {
         $crate::network::tags::SPENSO_TAG.chain(
             $crate::symbolica_atom::IntoAtom::into_atom($start),
@@ -493,6 +500,12 @@ macro_rules! chain {
 /// ```
 #[macro_export]
 macro_rules! trace {
+    ($rep:expr $(,)?) => {
+        $crate::network::tags::SPENSO_TAG.trace(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            std::iter::empty::<symbolica::atom::Atom>(),
+        )
+    };
     ($rep:expr; $factors:expr $(,)?) => {
         $crate::network::tags::SPENSO_TAG.trace(
             $crate::symbolica_atom::IntoAtom::into_atom($rep),
