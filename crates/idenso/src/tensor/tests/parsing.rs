@@ -105,7 +105,7 @@ fn parse_scalar() {
 
 #[test]
 fn batched_sequential_matches_legacy_extract_result() {
-    initialize();
+    test_initialize();
     let expr = parse!(
         "c*a*b(spenso::mink(4,1))*d(spenso::mink(4,2))*d(spenso::mink(4,1))*d(spenso::mink(4,2))"
     );
