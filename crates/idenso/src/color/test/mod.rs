@@ -29,7 +29,10 @@ static CT: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = La
         None,
     )
 });
-use spenso::{chain, network::parsing::ShadowedStructure, slot, structure::permuted::Perm, trace};
+use spenso::{
+    antisym, chain, network::parsing::ShadowedStructure, slot, structure::permuted::Perm, sym,
+    trace,
+};
 use symbolica::{parse, parse_lit};
 
 use crate::dirac::PS;
@@ -142,6 +145,141 @@ fn color_casimir_basis_keeps_trace_normalization_symbolic_by_default() {
     assert_snapshot!(expr
         .to_color_casimir_with(ColorCasimirSettings::default().with_trace_normalization())
         .to_bare_ordered_string(), @"1/2");
+}
+
+#[test]
+fn antisymmetric_two_generator_trace_vanishes() {
+    let r = TestReps::new();
+    let expr = trace!(
+        &r.cof_nc,
+        antisym!(color_t!(slot!(r.coad_na, a)), color_t!(slot!(r.coad_na, b)))
+    );
+
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"0");
+}
+
+#[test]
+fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
+    let r = TestReps::new();
+    let expr = trace!(
+        &r.cof_nc,
+        antisym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+        )
+    );
+
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+}
+
+#[test]
+fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
+    let r = TestReps::new();
+    let expr = trace!(
+        &r.cof_nc,
+        antisym!(color_t!(slot!(r.coad_na, a)), color_t!(slot!(r.coad_na, b))),
+        color_t!(slot!(r.coad_na, c)),
+    );
+
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+}
+
+#[test]
+fn antisymmetric_trace_commutator_preserves_projector_sign() {
+    let r = TestReps::new();
+    let expr = trace!(
+        &r.cof_nc,
+        antisym!(color_t!(slot!(r.coad_na, b)), color_t!(slot!(r.coad_na, a))),
+        color_t!(slot!(r.coad_na, c)),
+    );
+
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+}
+
+#[test]
+fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.cof_nc, i),
+        slot!(r.cof_nc.dual(), j),
+        antisym!(color_t!(slot!(r.coad_na, a)), color_t!(slot!(r.coad_na, b))),
+    );
+
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,x),in,out))*f(coad(NA,a),coad(NA,b),coad(NA,x))");
+}
+
+#[test]
+fn symmetric_trace_d33_partial_contraction() {
+    let r = TestReps::new();
+    let left = trace!(
+        &r.cof_nc,
+        sym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+        )
+    );
+    let right = trace!(
+        &r.cof_nc,
+        sym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, d)),
+        )
+    );
+
+    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"NA^(-1)*d33(cof(Nc),cof(Nc))*g(coad(NA,c),coad(NA,d))");
+}
+
+#[test]
+fn symmetric_trace_d44_partial_contraction() {
+    let r = TestReps::new();
+    let left = trace!(
+        &r.cof_nc,
+        sym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+            color_t!(slot!(r.coad_na, d)),
+        )
+    );
+    let right = trace!(
+        &r.cof_nc,
+        sym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+            color_t!(slot!(r.coad_na, e)),
+        )
+    );
+
+    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"NA^(-1)*d44(cof(Nc),cof(Nc))*g(coad(NA,d),coad(NA,e))");
+}
+
+#[test]
+fn symmetric_trace_d44_full_contraction() {
+    let r = TestReps::new();
+    let left = trace!(
+        &r.cof_nc,
+        sym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+            color_t!(slot!(r.coad_na, d)),
+        )
+    );
+    let right = trace!(
+        &r.cof_nc,
+        sym!(
+            color_t!(slot!(r.coad_na, a)),
+            color_t!(slot!(r.coad_na, b)),
+            color_t!(slot!(r.coad_na, c)),
+            color_t!(slot!(r.coad_na, d)),
+        )
+    );
+
+    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"d44(cof(Nc),cof(Nc))");
 }
 
 mod feyncalc_reference;

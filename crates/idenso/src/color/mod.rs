@@ -743,6 +743,10 @@ fn simplify_color_chain_node(chain: AtomView) -> Option<Atom> {
         ));
     }
 
+    if let Some(rewritten) = simplify_antisymmetric_chain_projector(&start, &end, &factors) {
+        return Some(rewritten);
+    }
+
     for i in 0..factors.len().saturating_sub(1) {
         let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
             continue;
@@ -785,6 +789,10 @@ fn simplify_color_trace_node(trace: AtomView) -> Option<Atom> {
             rep,
             factors_excluding_indices(&factors, &[identity_index]),
         ));
+    }
+
+    if let Some(rewritten) = simplify_antisymmetric_trace_projector(&rep, &factors) {
+        return Some(rewritten);
     }
 
     if factors.len() > 2
@@ -833,6 +841,70 @@ fn simplify_adjacent_trace_casimir(rep: &Atom, factors: &[Atom]) -> Option<Atom>
         return Some(
             Atom::var(CS.cf)
                 * trace_with_factors(rep.clone(), factors_excluding_range(factors, i, i + 2)),
+        );
+    }
+
+    None
+}
+
+fn simplify_antisymmetric_chain_projector(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+) -> Option<Atom> {
+    // `antisym(T^a,T^b)` is the normalized commutator: i/2 f^{abx} T^x.
+    for (position, factor) in factors.iter().enumerate() {
+        let Some((prefactor, args)) = color_antisymmetric_generator_args(factor.as_view()) else {
+            continue;
+        };
+        let [a, b] = args.as_slice() else {
+            continue;
+        };
+        let x = color_adjoint_dummy_for_pair(a, b)?;
+
+        let mut replacement_factors = factors.to_vec();
+        replacement_factors[position] = CS.chain_t(x.clone());
+        return Some(
+            prefactor * Atom::i() / Atom::num(2)
+                * color_f([a.clone(), b.clone(), x])
+                * chain_with_factors(start.clone(), end.clone(), replacement_factors),
+        );
+    }
+
+    None
+}
+
+fn simplify_antisymmetric_trace_projector(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
+    if let [factor] = factors {
+        let (prefactor, args) = color_antisymmetric_generator_args(factor.as_view())?;
+        return match args.as_slice() {
+            [_, _] => Some(Atom::Zero),
+            [a, b, c] => Some(
+                prefactor
+                    * Atom::i()
+                    * Atom::var(CS.tr)
+                    * color_f([a.clone(), b.clone(), c.clone()])
+                    / Atom::num(2),
+            ),
+            _ => None,
+        };
+    }
+
+    for (position, factor) in factors.iter().enumerate() {
+        let Some((prefactor, args)) = color_antisymmetric_generator_args(factor.as_view()) else {
+            continue;
+        };
+        let [a, b] = args.as_slice() else {
+            continue;
+        };
+        let x = color_adjoint_dummy_for_pair(a, b)?;
+
+        let mut replacement_factors = factors.to_vec();
+        replacement_factors[position] = CS.chain_t(x.clone());
+        return Some(
+            prefactor * Atom::i() / Atom::num(2)
+                * color_f([a.clone(), b.clone(), x])
+                * trace_with_factors(rep.clone(), replacement_factors),
         );
     }
 
@@ -923,7 +995,7 @@ fn simplify_color_product(product: AtomView) -> Option<Atom> {
         .or_else(|| simplify_symmetric_structure_product(&factors))
         .or_else(|| simplify_two_f_loop_product(&factors))
         .or_else(|| simplify_three_f_loop_product(&factors))
-        .or_else(|| simplify_d33_product(&factors))
+        .or_else(|| simplify_symmetric_invariant_product(&factors))
 }
 
 fn join_color_chain_product(factors: &[Atom]) -> Option<Atom> {
@@ -977,6 +1049,16 @@ fn simplify_color_power(power: AtomView) -> Option<Atom> {
     let (base, exponent) = pow.get_base_exp();
     if positive_integer(exponent)? != 2 {
         return None;
+    }
+
+    if let Some(invariant) = color_symmetric_invariant(base)
+        && invariant.args.len() >= 3
+    {
+        return Some(color_symmetric_product(
+            invariant.args.len(),
+            invariant.rep.clone(),
+            invariant.rep,
+        ));
     }
 
     let args = structure_constant_args(base)?;
@@ -1195,28 +1277,43 @@ fn simplify_three_f_loop_product(factors: &[Atom]) -> Option<Atom> {
     None
 }
 
-fn simplify_d33_product(factors: &[Atom]) -> Option<Atom> {
+fn simplify_symmetric_invariant_product(factors: &[Atom]) -> Option<Atom> {
     for (left_index, left_factor) in factors.iter().enumerate() {
-        let Some((left_rep, left_args)) = symmetric_invariant_args(left_factor.as_view()) else {
+        let Some(left) = color_symmetric_invariant(left_factor.as_view()) else {
             continue;
         };
         for (right_index, right_factor) in factors.iter().enumerate().skip(left_index + 1) {
-            let Some((right_rep, right_args)) = symmetric_invariant_args(right_factor.as_view())
-            else {
+            let Some(right) = color_symmetric_invariant(right_factor.as_view()) else {
                 continue;
             };
-            let [la, lb, lc] = left_args.as_slice() else {
+            if left.args.len() != right.args.len() || left.args.len() < 3 {
                 continue;
             };
-            let [ra, rb, rc] = right_args.as_slice() else {
-                continue;
-            };
-            if la != ra || lb != rb {
-                continue;
+
+            // Contract equal-rank symmetric traces into the corresponding
+            // scalar invariant family, leaving a metric for one open pair.
+            let (common, left_open, right_open) =
+                symmetric_common_and_open_args(&left.args, &right.args);
+            if common.len() == left.args.len() {
+                let replacement =
+                    color_symmetric_product(left.args.len(), left.rep.clone(), right.rep.clone());
+                return Some(product_replacing_pair(
+                    factors,
+                    left_index,
+                    right_index,
+                    replacement,
+                ));
             }
-            let dimension = color_adjoint_dimension(la)?;
+            let ([left_open], [right_open]) = (left_open.as_slice(), right_open.as_slice()) else {
+                continue;
+            };
+            let dimension = color_adjoint_dimension(left_open)
+                .or_else(|| color_adjoint_dimension(right_open))
+                .or_else(|| common.iter().find_map(color_adjoint_dimension))?;
             let replacement =
-                color_d33(left_rep, right_rep) * color_metric(lc.clone(), rc.clone()) / dimension;
+                color_symmetric_product(left.args.len(), left.rep.clone(), right.rep.clone())
+                    * color_metric(left_open.clone(), right_open.clone())
+                    / dimension;
             return Some(product_replacing_pair(
                 factors,
                 left_index,
@@ -1287,35 +1384,37 @@ fn structure_constant_args(factor: AtomView) -> Option<[Atom; 3]> {
     Some([args[0].clone(), args[1].clone(), args[2].clone()])
 }
 
-fn symmetric_invariant_args(invariant: AtomView) -> Option<(Atom, Vec<Atom>)> {
+#[derive(Clone, Debug)]
+struct ColorSymmetricInvariant {
+    rep: Atom,
+    args: Vec<Atom>,
+}
+
+fn color_symmetric_invariant(invariant: AtomView) -> Option<ColorSymmetricInvariant> {
+    if let Some((rep, factors)) = trace_parts(invariant) {
+        let [factor] = factors.as_slice() else {
+            return None;
+        };
+        let args = color_symmetric_trace_args(factor.as_view())?;
+        return Some(ColorSymmetricInvariant { rep, args });
+    }
+
     let AtomView::Fun(f) = invariant else {
         return None;
     };
-    if f.get_symbol() != *COLOR_D_SYMBOL || f.get_nargs() != 4 {
+    if f.get_symbol() != *COLOR_D_SYMBOL || f.get_nargs() < 4 {
         return None;
     }
 
     let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    Some((args[0].clone(), args[1..].to_vec()))
+    Some(ColorSymmetricInvariant {
+        rep: args[0].clone(),
+        args: args[1..].to_vec(),
+    })
 }
 
 fn color_symmetric_args(invariant: AtomView) -> Option<Vec<Atom>> {
-    if let Some((_, factors)) = trace_parts(invariant) {
-        let [factor] = factors.as_slice() else {
-            return None;
-        };
-        return color_symmetric_trace_args(factor.as_view());
-    }
-
-    let AtomView::Fun(f) = invariant else {
-        return None;
-    };
-    if f.get_symbol() == *COLOR_D_SYMBOL && f.get_nargs() >= 3 {
-        let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-        return Some(args[1..].to_vec());
-    }
-
-    None
+    color_symmetric_invariant(invariant).map(|invariant| invariant.args)
 }
 
 fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
@@ -1329,6 +1428,58 @@ fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
     f.iter()
         .map(color_generator_adjoint)
         .collect::<Option<Vec<_>>>()
+}
+
+fn color_antisymmetric_generator_args(factor: AtomView) -> Option<(Atom, Vec<Atom>)> {
+    let (prefactor, projector_symbol, factors) = projector_factor(factor)?;
+    if projector_symbol != *symbolica_atom::ANTISYM {
+        return None;
+    }
+
+    let args = factors
+        .iter()
+        .map(|factor| color_generator_adjoint(factor.as_view()))
+        .collect::<Option<Vec<_>>>()?;
+    Some((prefactor, args))
+}
+
+fn projector_factor(factor: AtomView) -> Option<(Atom, Symbol, Vec<Atom>)> {
+    if let Some((projector_symbol, factors)) = projector_parts(factor) {
+        return Some((Atom::num(1), projector_symbol, factors));
+    }
+
+    let AtomView::Mul(product) = factor else {
+        return None;
+    };
+
+    let mut prefactor = Atom::num(1);
+    let mut projector = None;
+    for factor in product.iter() {
+        if let Some(parts) = projector_parts(factor) {
+            if projector.is_some() {
+                return None;
+            }
+            projector = Some(parts);
+        } else if matches!(factor, AtomView::Num(_)) {
+            prefactor *= factor.to_owned();
+        } else {
+            return None;
+        }
+    }
+
+    let (projector_symbol, factors) = projector?;
+    Some((prefactor, projector_symbol, factors))
+}
+
+fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
+    let AtomView::Fun(f) = projector else {
+        return None;
+    };
+    if f.get_symbol() != *symbolica_atom::SYM && f.get_symbol() != *symbolica_atom::ANTISYM {
+        return None;
+    }
+
+    Some((f.get_symbol(), f.iter().map(|arg| arg.to_owned()).collect()))
 }
 
 fn color_fundamental_slot(slot: AtomView) -> Option<(Atom, Atom, bool)> {
@@ -1354,6 +1505,14 @@ fn color_adjoint_dimension(slot: &Atom) -> Option<Atom> {
 fn color_adjoint_dummy_like(slot: &Atom) -> Option<Atom> {
     let dimension = color_adjoint_dimension(slot)?;
     Some(ColorAdjoint {}.to_symbolic([dimension, Atom::var(*COLOR_TRACE_DUMMY_SYMBOL)]))
+}
+
+fn color_adjoint_dummy_for_pair(left: &Atom, right: &Atom) -> Option<Atom> {
+    let left_dimension = color_adjoint_dimension(left)?;
+    let right_dimension = color_adjoint_dimension(right)?;
+    (left_dimension == right_dimension).then(|| {
+        ColorAdjoint {}.to_symbolic([left_dimension, Atom::var(*COLOR_TRACE_DUMMY_SYMBOL)])
+    })
 }
 
 fn representation_slot(slot: AtomView, symbol: Symbol) -> Option<(Atom, Atom)> {
@@ -1422,8 +1581,47 @@ fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) ->
     trace!(rep.clone(), symbolica_atom::sym(sym_factors))
 }
 
-fn color_d33(left_rep: Atom, right_rep: Atom) -> Atom {
-    function!(*COLOR_D33_SYMBOL, left_rep, right_rep)
+fn color_symmetric_product(rank: usize, left_rep: Atom, right_rep: Atom) -> Atom {
+    function!(color_symmetric_product_symbol(rank), left_rep, right_rep)
+}
+
+fn color_symmetric_product_symbol(rank: usize) -> Symbol {
+    if rank == 3 {
+        *COLOR_D33_SYMBOL
+    } else {
+        symbol!(format!("spenso::d{rank}{rank}"))
+    }
+}
+
+fn symmetric_common_and_open_args(
+    left: &[Atom],
+    right: &[Atom],
+) -> (Vec<Atom>, Vec<Atom>, Vec<Atom>) {
+    let mut right_used = vec![false; right.len()];
+    let mut common = Vec::new();
+    let mut left_open = Vec::new();
+
+    for left_arg in left {
+        if let Some((right_index, _)) = right
+            .iter()
+            .enumerate()
+            .find(|(index, right_arg)| !right_used[*index] && *right_arg == left_arg)
+        {
+            right_used[right_index] = true;
+            common.push(left_arg.clone());
+        } else {
+            left_open.push(left_arg.clone());
+        }
+    }
+
+    let right_open = right
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !right_used[*index])
+        .map(|(_, right_arg)| right_arg.clone())
+        .collect();
+
+    (common, left_open, right_open)
 }
 
 fn chain_with_removed_range(
