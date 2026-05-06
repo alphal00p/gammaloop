@@ -79,12 +79,36 @@
 /// generated `edge-style.typ` files pass their model-specific map to `style`.
 /// -> dictionary
 #let default-map = (
-  "a": (source: source-stroke(c: black, thickness: massless) + wave, sink: sink-stroke(c: black, thickness: massless) + wave, label: mi(`{\gamma}`)),
-  "photon": (source: source-stroke(c: black, thickness: massless) + wave, sink: sink-stroke(c: black, thickness: massless) + wave, label: mi(`{\gamma}`)),
-  "g": (source: source-stroke(c: black, thickness: massless) + coil, sink: sink-stroke(c: black, thickness: massless) + coil, label: mi(`{g}`)),
-  "gluon": (source: source-stroke(c: black, thickness: massless) + coil, sink: sink-stroke(c: black, thickness: massless) + coil, label: mi(`{g}`)),
-  "fermion": (source: source-stroke(c: blue, thickness: massless), sink: sink-stroke(c: blue, thickness: massless), label: mi(`{f}`)),
-  "scalar": (source: source-stroke(c: black, thickness: massive, dash: dashed), sink: sink-stroke(c: black, thickness: massive, dash: dashed), label: mi(`{\phi}`)),
+  "a": (
+    source: source-stroke(c: black, thickness: massless) + wave,
+    sink: sink-stroke(c: black, thickness: massless) + wave,
+    label: mi(`{\gamma}`),
+  ),
+  "photon": (
+    source: source-stroke(c: black, thickness: massless) + wave,
+    sink: sink-stroke(c: black, thickness: massless) + wave,
+    label: mi(`{\gamma}`),
+  ),
+  "g": (
+    source: source-stroke(c: black, thickness: massless) + coil,
+    sink: sink-stroke(c: black, thickness: massless) + coil,
+    label: mi(`{g}`),
+  ),
+  "gluon": (
+    source: source-stroke(c: black, thickness: massless) + coil,
+    sink: sink-stroke(c: black, thickness: massless) + coil,
+    label: mi(`{g}`),
+  ),
+  "fermion": (
+    source: source-stroke(c: blue, thickness: massless),
+    sink: sink-stroke(c: blue, thickness: massless),
+    label: mi(`{f}`),
+  ),
+  "scalar": (
+    source: source-stroke(c: black, thickness: massive, dash: dashed),
+    sink: sink-stroke(c: black, thickness: massive, dash: dashed),
+    label: mi(`{\phi}`),
+  ),
 )
 
 /// Return an edge's particle name, stripping the quotes often present in DOT
@@ -210,13 +234,13 @@
   }
 }
 
-#let _momentum-arrow-style(
-  base,
+#let _momentum-arrow-layer(
   offset: 0.16,
   length: 1.0,
   ratio: 0.5,
   stroke: none,
   mark: none,
+  show-mark: false,
 ) = {
   let arrow-stroke = if stroke == none {
     (paint: black, thickness: 0.55pt, cap: "round")
@@ -232,9 +256,12 @@
     )
   } else if type(mark) == dictionary {
     (
-      stroke: arrow-stroke,
-      fill: black,
-    ) + mark
+      (
+        stroke: arrow-stroke,
+        fill: black,
+      )
+        + mark
+    )
   } else {
     (
       end: mark,
@@ -242,15 +269,19 @@
       fill: black,
     )
   }
-  base + (
-    parallel-mark: (
-      offset: offset,
-      length: length,
-      ratio: ratio,
-      stroke: arrow-stroke,
-      mark: arrow-mark,
-    ),
+  let layer = (
+    offset: offset,
+    length: length,
+    ratio: ratio,
+    resolve-length: "min",
+    offset-side: "label",
+    stroke: arrow-stroke,
   )
+  if show-mark {
+    layer + (mark: arrow-mark)
+  } else {
+    layer
+  }
 }
 
 #let _half-style(
@@ -272,13 +303,18 @@
   style = style + style-dict(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
   style = style + style-dict(edge.at(half + "-style-eval", default: none), edge, mode: "eval", map: map, scope: scope)
   if momentum-arrows {
-    _momentum-arrow-style(
+    let full-edge = edge.at("source", default: none) != none and edge.at("sink", default: none) != none
+    let show-mark = if full-edge { half == "sink" } else { true }
+    (
       style,
-      offset: momentum-arrow-offset,
-      length: momentum-arrow-length,
-      ratio: momentum-arrow-ratio,
-      stroke: momentum-arrow-stroke,
-      mark: momentum-arrow-mark,
+      _momentum-arrow-layer(
+        offset: momentum-arrow-offset,
+        length: momentum-arrow-length,
+        ratio: momentum-arrow-ratio,
+        stroke: momentum-arrow-stroke,
+        mark: momentum-arrow-mark,
+        show-mark: show-mark,
+      ),
     )
   } else {
     style
@@ -289,7 +325,7 @@
 ///
 /// `momentum-arrows: true` adds one centered black CeTZ-mark decoration while
 /// the main edge remains drawn with its normal particle style.
-/// -> dictionary
+/// -> dictionary | array
 #let source-style(
   edge,
   map: default-map,
@@ -324,7 +360,7 @@
 /// `momentum-arrows: true` adds one centered black CeTZ-mark decoration toward
 /// the sink node, so momentum arrows always flow from source to sink
 /// independently of `edge.orientation`.
-/// -> dictionary
+/// -> dictionary | array
 #let sink-style(
   edge,
   map: default-map,
@@ -473,7 +509,12 @@
     if label-template != none {
       label-content(label-template, edge, mode: typst-fields, map: map, scope: scope)
     } else {
-      label-content(edge-entry(edge, map: map, default: default).at("label", default: none), edge, map: map, scope: scope)
+      label-content(
+        edge-entry(edge, map: map, default: default).at("label", default: none),
+        edge,
+        map: map,
+        scope: scope,
+      )
     }
   }
 }
