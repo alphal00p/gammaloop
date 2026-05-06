@@ -118,7 +118,7 @@ jobs:
 
       - name: Run tests
         if: ${{ !startsWith(matrix.os, 'macos-') }}
-        run: just test-ci
+        run: just --unstable test-ci
 
       - name: Run tests
         if: startsWith(matrix.os, 'macos-')
@@ -170,15 +170,15 @@ jobs:
 
       - name: Run clippy
         if: matrix.check == 'clippy'
-        run: just clippy -- -D warnings
+        run: just --unstable clippy -- -D warnings
 
       - name: Run fmt
         if: matrix.check == 'fmt'
-        run: just fmt -- --check
+        run: just --unstable fmt -- --check
 
       - name: Run doc
         if: matrix.check == 'doc'
-        run: just doc
+        run: just --unstable doc
 
   checks:
     name: Checks
