@@ -119,9 +119,10 @@ Cubic segments use `start`, `ctrl-a`, `ctrl-b`, and `end`:
 ```
 
 Use `cubic-path(..segment)` once to turn that cubic dictionary into a path
-dictionary. Returned paths carry a serialized Kurbo `BezPath` in `path`, plus
+dictionary. Returned paths carry Kurvst's explicit wire path in `path`, plus
 Typst-friendly `points`, cubic `curves`, line `segments`, and `length` fields
-for drawing or inspection.
+for drawing or inspection. Rust converts the wire path to Kurbo's `BezPath`
+internally.
 
 ```typ
 #let path = kurvst.cubic-path(..segment)
@@ -259,6 +260,39 @@ offset is computed.
   native-cubics(right.curves, stroke: rgb("#355c9a") + 0.8pt)
 })
 ```
+
+== Path Layers
+
+`layer-path` is a convenience wrapper for drawing derived visible paths. It
+combines side-aware offsetting, endpoint outsets, and centered shortening into
+one path-in/path-out operation. `length` is a fixed visible arc length, `ratio`
+is a fraction of the input path length, and `resolve-length` decides how to
+combine them. The default `"min"` keeps whichever limit is shorter.
+
+```typ
+#let base = kurvst.hobby-spline((
+  (x: 0.0, y: 0.0),
+  (x: 0.9, y: 0.8),
+  (x: 1.8, y: -0.3),
+  (x: 2.8, y: 0.4),
+))
+#let layer = kurvst.layer-path(
+  base,
+  offset: 0.16,
+  length: 1.6,
+  ratio: 0.5,
+  resolve-length: "min",
+)
+#cetz.canvas({
+  kurvst.cetz-path(base, stroke: rgb("#bbbbbb") + 0.45pt)
+  kurvst.cetz-path(layer, stroke: rgb("#1b7f4c") + 0.8pt)
+})
+```
+
+Use `side-point` to choose the sign of the offset from a point on the desired
+side of the path. Drawing packages can use this to place derived layers on the
+same side as an edge label without knowing anything about the physics or graph
+style that requested the layer.
 
 == Native Drawing Primitives
 
