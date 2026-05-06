@@ -1096,6 +1096,56 @@ where
     Ok(())
 }
 
+fn plan_ready_operation_batch<K, FK, Aind>(
+    graph: &mut NetworkGraph<K, FK, Aind>,
+    ignored: &SuBitGraph,
+) -> Vec<NetworkOperation<FK>>
+where
+    K: Debug,
+    FK: Clone + Debug,
+    Aind: AbsInd,
+{
+    let _span = profile::span(Timer::ExecuteFindReady);
+    let rerooted = {
+        let _span = profile::span(Timer::ExecuteCacheRoots);
+        graph.cache_expr_tree_roots_ignoring(ignored)
+    };
+    let operations = {
+        let _span = profile::span(Timer::ExecuteReadyBatch);
+        graph.ready_operation_tree_refs_ignoring(ignored)
+    };
+    let batch_len = operations.len();
+    let batch_subgraph_hedges = if profile::enabled() {
+        operations
+            .iter()
+            .map(|op_ref| op_ref.subgraph().n_included())
+            .sum::<usize>()
+    } else {
+        0
+    };
+    let planned = {
+        let _span = profile::span(Timer::ExecutePlanOps);
+        operations
+            .iter()
+            .map(NetworkOperation::from)
+            .collect::<Vec<_>>()
+    };
+
+    if profile::enabled() {
+        eprintln!(
+            "spenso_profile execute.plan graph_nodes={} graph_hedges={} ignored_hedges={} rerooted={} ready_batch={} batch_subgraph_hedges={}",
+            graph.graph.n_nodes(),
+            graph.graph.n_hedges(),
+            ignored.n_included(),
+            rerooted,
+            batch_len,
+            batch_subgraph_hedges,
+        );
+    }
+
+    planned
+}
+
 pub struct Sequential;
 pub struct Parallel;
 pub struct SequentialRef;
@@ -1326,12 +1376,7 @@ where
             }
 
             profile::bump(Counter::ExecuteIteration, 1);
-            let planned = {
-                let _span = profile::span(Timer::ExecuteFindReady);
-                graph.cache_expr_tree_roots_ignoring(&ignored);
-                let batch = graph.ready_operation_batch_ignoring(&ignored);
-                batch.iter().map(NetworkOperation::from).collect::<Vec<_>>()
-            };
+            let planned = plan_ready_operation_batch(graph, &ignored);
 
             if planned.is_empty() {
                 break;
@@ -1416,12 +1461,7 @@ impl Parallel {
 
         loop {
             profile::bump(Counter::ExecuteIteration, 1);
-            let planned = {
-                let _span = profile::span(Timer::ExecuteFindReady);
-                graph.cache_expr_tree_roots_ignoring(&ignored);
-                let batch = graph.ready_operation_batch_ignoring(&ignored);
-                batch.iter().map(NetworkOperation::from).collect::<Vec<_>>()
-            };
+            let planned = plan_ready_operation_batch(graph, &ignored);
 
             if planned.is_empty() {
                 break;
