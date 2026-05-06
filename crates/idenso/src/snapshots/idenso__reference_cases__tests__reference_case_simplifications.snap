@@ -44,7 +44,7 @@ TR*g(coad(8,a),coad(8,b))
 color_form_fierz_generator_contraction [ColorSu3, ColorDefault, enabled]
 -1/3*TR*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))+TR*g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j)))
 
-color_feyncalc_open_chain_separated_casimir_id2 [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize repeated open color-chain adjoint contractions]
+color_feyncalc_open_chain_separated_casimir_id2 [ColorSu3, ColorDefault, enabled]
 -1/2*CA*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))+CF*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))
 
 color_feyncalc_structure_loop_to_adjoint_delta_id3 [ColorSu3, ColorDefault, enabled]
