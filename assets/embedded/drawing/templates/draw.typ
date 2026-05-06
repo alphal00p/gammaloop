@@ -21,139 +21,41 @@
   }
 }
 
-#let _line-segment(start, end) = {
-  let ctrl-a = (
-    x: start.x + (end.x - start.x) / 3,
-    y: start.y + (end.y - start.y) / 3,
-  )
-  let ctrl-b = (
-    x: start.x + (end.x - start.x) * 2 / 3,
-    y: start.y + (end.y - start.y) * 2 / 3,
-  )
-  (
-    start: start,
-    ctrl-a: ctrl-a,
-    ctrl-b: ctrl-b,
-    end: end,
-  )
-}
-
-#let _lerp(a, b, t) = a + (b - a) * t
-
-#let _bezier-point(segment, t) = {
-  let ab = (
-    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
-    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
-  )
-  let bc = (
-    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
-    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
-  )
-  let cd = (
-    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
-    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
-  )
-  let abc = (
-    x: _lerp(ab.x, bc.x, t),
-    y: _lerp(ab.y, bc.y, t),
-  )
-  let bcd = (
-    x: _lerp(bc.x, cd.x, t),
-    y: _lerp(bc.y, cd.y, t),
-  )
-  (
-    x: _lerp(abc.x, bcd.x, t),
-    y: _lerp(abc.y, bcd.y, t),
-  )
-}
-
-#let _bezier-tangent(segment, t) = {
-  let ab = (
-    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
-    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
-  )
-  let bc = (
-    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
-    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
-  )
-  let cd = (
-    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
-    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
-  )
-  let abc = (
-    x: _lerp(ab.x, bc.x, t),
-    y: _lerp(ab.y, bc.y, t),
-  )
-  let bcd = (
-    x: _lerp(bc.x, cd.x, t),
-    y: _lerp(bc.y, cd.y, t),
-  )
-  (
-    x: bcd.x - abc.x,
-    y: bcd.y - abc.y,
-  )
-}
-
-#let _label-side-offset(style, segment, label-pos) = {
-  let offset = style.at("offset", default: 0)
-  if label-pos == none or offset == none or offset == 0 {
-    offset
-  } else {
-    let mid = _bezier-point(segment, 0.5)
-    let tangent = _bezier-tangent(segment, 0.5)
-    let cross = tangent.x * (label-pos.y - mid.y) - tangent.y * (label-pos.x - mid.x)
-    let sign = if cross < 0 { -1 } else { 1 }
-    sign * calc.abs(offset)
-  }
-}
-
-#let _style-with-offset-side(style, segment, label-pos) = {
-  if style.at("offset-side", default: none) == "label" {
-    style + (offset: _label-side-offset(style, segment, label-pos))
-  } else {
-    style
-  }
-}
-
-
-#let _pattern-style-keys = (
-  "pattern",
-  "pattern-amplitude",
-  "pattern-wavelength",
-  "pattern-phase",
-  "pattern-samples-per-period",
-  "pattern-coil-longitudinal-scale",
-  "pattern-accuracy",
+#let _edge-geometry-defaults = (
+  offset: 0,
+  length: none,
+  ratio: none,
+  resolve-length: "min",
+  accuracy: 0.001,
+  optimize: true,
+  offset-side: none,
 )
 
-#let _parallel-style-keys = (
-  "offset",
-  "length",
-  "ratio",
-  "resolve-length",
-  "accuracy",
-  "optimize",
-  "offset-side",
+#let _pattern-defaults = (
+  pattern: none,
+  pattern-amplitude: 0.1,
+  pattern-wavelength: 1.0,
+  pattern-phase: 0,
+  pattern-samples-per-period: 16,
+  pattern-coil-longitudinal-scale: 1.25,
+  pattern-accuracy: 0.001,
 )
 
-#let _without-pattern-style(style) = {
+#let _without-keys(style, keys) = {
   let clean = style
-  for key in _pattern-style-keys {
+  for key in keys {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
   }
   clean
 }
+
+#let _without-pattern-style(style) = _without-keys(style, _pattern-defaults.keys())
 
 #let _draw-style(style) = {
   let clean = _without-pattern-style(style)
-  for key in _parallel-style-keys {
-    if clean.keys().contains(key) {
-      let _ = clean.remove(key)
-    }
-  }
-  clean
+  _without-keys(clean, _edge-geometry-defaults.keys())
 }
 
 #let _without-mark-style(style) = {
@@ -164,34 +66,26 @@
   clean
 }
 
-#let _style-value(style, key, default) = style.at(key, default: default)
+#let _style-value(style, key) = {
+  if _edge-geometry-defaults.keys().contains(key) {
+    style.at(key, default: _edge-geometry-defaults.at(key))
+  } else if _pattern-defaults.keys().contains(key) {
+    style.at(key, default: _pattern-defaults.at(key))
+  } else {
+    style.at(key, default: none)
+  }
+}
+
+#let _edge-geometry(style) = _edge-geometry-defaults + style
+
+#let _pattern-style(style) = _pattern-defaults + style
 
 #let _style-offset(style) = {
-  style.at("offset", default: 0)
+  _style-value(style, "offset")
 }
 
 #let _resolve-length-method(style) = {
-  style.at("resolve-length", default: "min")
-}
-
-#let _resolve-parallel-target(base-length, fixed, relative, method) = {
-  if type(method) == function {
-    method((base-length: base-length, length: fixed, ratio: relative))
-  } else if fixed == none {
-    relative
-  } else if relative == none {
-    fixed
-  } else if method in ("max", "longer") {
-    calc.max(fixed, relative)
-  } else if method in ("length", "fixed") {
-    fixed
-  } else if method in ("ratio", "relative") {
-    relative
-  } else if method in ("none", "full") {
-    none
-  } else {
-    calc.min(fixed, relative)
-  }
+  _style-value(style, "resolve-length")
 }
 
 #let _call(value, data) = {
@@ -235,151 +129,163 @@
   }
 }
 
-#let _pattern-name(style) = _style-value(style, "pattern", none)
+#let _pattern-name(style) = _style-value(style, "pattern")
 
 #let _has-pattern(style) = {
   let pattern = _pattern-name(style)
   pattern != none and pattern != "normal" and pattern != "curve"
 }
 
-#let _has-parallel(style) = {
-  let offset = _style-offset(style)
-  offset != none and offset != 0
-}
+#let _has-mark(style) = style.at("mark", default: none) != none
 
-#let _has-mark(style) = _style-value(style, "mark", none) != none
-
-#let _same-parallel-geometry(source-style, sink-style) = {
+#let _same-layer-geometry(source-style, sink-style) = {
   let same = _style-offset(source-style) == _style-offset(sink-style)
   same = (
-    same and _style-value(source-style, "length", none) == _style-value(sink-style, "length", none)
+    same and _style-value(source-style, "length") == _style-value(sink-style, "length")
   )
-  same = same and _style-value(source-style, "ratio", none) == _style-value(sink-style, "ratio", none)
+  same = same and _style-value(source-style, "ratio") == _style-value(sink-style, "ratio")
   same = same and _resolve-length-method(source-style) == _resolve-length-method(sink-style)
   same = (
-    same and _style-value(source-style, "accuracy", 0.001) == _style-value(sink-style, "accuracy", 0.001)
+    same and _style-value(source-style, "accuracy") == _style-value(sink-style, "accuracy")
   )
   same = (
-    same and _style-value(source-style, "optimize", true) == _style-value(sink-style, "optimize", true)
+    same and _style-value(source-style, "optimize") == _style-value(sink-style, "optimize")
   )
+  same = same and _style-value(source-style, "offset-side") == _style-value(sink-style, "offset-side")
   same
 }
 
 #let _same-pattern-geometry(source-style, sink-style) = {
   let same = _has-pattern(source-style)
   same = same and _pattern-name(source-style) == _pattern-name(sink-style)
-  same = same and _same-parallel-geometry(source-style, sink-style)
+  same = same and _same-layer-geometry(source-style, sink-style)
   same = (
-    same and _style-value(source-style, "pattern-amplitude", 0.1) == _style-value(sink-style, "pattern-amplitude", 0.1)
+    same and _style-value(source-style, "pattern-amplitude") == _style-value(sink-style, "pattern-amplitude")
   )
   same = (
     same
-      and _style-value(source-style, "pattern-wavelength", 1.0) == _style-value(sink-style, "pattern-wavelength", 1.0)
+      and _style-value(source-style, "pattern-wavelength") == _style-value(sink-style, "pattern-wavelength")
   )
-  same = same and _style-value(source-style, "pattern-phase", 0) == _style-value(sink-style, "pattern-phase", 0)
+  same = same and _style-value(source-style, "pattern-phase") == _style-value(sink-style, "pattern-phase")
   same = (
     same
-      and _style-value(source-style, "pattern-samples-per-period", 16)
-        == _style-value(sink-style, "pattern-samples-per-period", 16)
-  )
-  same = (
-    same
-      and _style-value(source-style, "pattern-coil-longitudinal-scale", 1.25)
-        == _style-value(sink-style, "pattern-coil-longitudinal-scale", 1.25)
+      and _style-value(source-style, "pattern-samples-per-period")
+        == _style-value(sink-style, "pattern-samples-per-period")
   )
   same = (
     same
-      and _style-value(source-style, "pattern-accuracy", 0.001) == _style-value(sink-style, "pattern-accuracy", 0.001)
+      and _style-value(source-style, "pattern-coil-longitudinal-scale")
+        == _style-value(sink-style, "pattern-coil-longitudinal-scale")
+  )
+  same = (
+    same and _style-value(source-style, "pattern-accuracy") == _style-value(sink-style, "pattern-accuracy")
   )
   same
 }
 
-#let _parallel-path(segment, style, start-outset: 0, end-outset: 0) = {
-  curve-api.parallel-path(
-    curve-api.cubic-path(..segment, accuracy: _style-value(style, "accuracy", 0.001)),
-    distance: _style-offset(style),
-    start-outset: start-outset,
-    end-outset: end-outset,
-    accuracy: _style-value(style, "accuracy", 0.001),
-    optimize: _style-value(style, "optimize", true),
+#let _center-outset(base-length, style, source-outset: 0, sink-outset: 0) = {
+  let geometry = _edge-geometry(style)
+  curve-api.center-outset(
+    base-length,
+    length: geometry.length,
+    ratio: geometry.ratio,
+    resolve-length: geometry.resolve-length,
+    start-outset: source-outset,
+    end-outset: sink-outset,
   )
 }
 
+#let _clamp(value, low, high) = calc.min(high, calc.max(low, value))
+
 #let _segment-length(segment, accuracy: 0.001) = {
-  curve-api.cubic-path(..segment, accuracy: accuracy).length
+  curve-api.path-length(curve-api.cubic-path(..segment, accuracy: accuracy), accuracy: accuracy)
 }
 
-#let _segments-length(segments, accuracy: 0.001) = {
-  let length = 0
-  for segment in segments {
-    length = length + _segment-length(segment, accuracy: accuracy)
-  }
-  length
-}
-
-#let _parallel-target-length(base-length, style) = {
-  let length = _style-value(style, "length", none)
-  let ratio = _style-value(style, "ratio", none)
-  let fixed = if length != none and length > 0 { length } else { none }
-  let relative = if ratio != none and ratio > 0 { base-length * ratio } else { none }
-  _resolve-parallel-target(base-length, fixed, relative, _resolve-length-method(style))
-}
-
-#let _parallel-center-outset(base-length, style, source-outset: 0, sink-outset: 0) = {
-  let target = _parallel-target-length(base-length, style)
-  if target == none {
-    0
+#let _visible-half-outsets(
+  base-length,
+  half-start,
+  half-length,
+  style,
+  source-outset: 0,
+  sink-outset: 0,
+) = {
+  let center-outset = _center-outset(
+    base-length,
+    style,
+    source-outset: source-outset,
+    sink-outset: sink-outset,
+  )
+  let visible-start = source-outset + center-outset
+  let visible-end = base-length - sink-outset - center-outset
+  let local-start = _clamp(visible-start - half-start, 0, half-length)
+  let local-end = _clamp(visible-end - half-start, 0, half-length)
+  if local-end <= local-start {
+    none
   } else {
-    let visible-length = calc.max(0, base-length - source-outset - sink-outset)
-    calc.max(0, (visible-length - target) / 2)
+    (
+      start: local-start,
+      end: half-length - local-end,
+    )
   }
 }
 
-#let _path-segments(path) = {
-  let segments = ()
-  if path.keys().contains("curves") and path.curves.len() > 0 {
-    for segment in path.curves {
-      segments.push(segment)
-    }
-  } else if path.keys().contains("segments") and path.segments.len() > 0 {
-    for segment in path.segments {
-      segments.push(_line-segment(segment.start, segment.end))
-    }
-  } else if path.keys().contains("points") and path.points.len() > 1 {
-    for i in range(0, path.points.len() - 1) {
-      segments.push(_line-segment(path.points.at(i), path.points.at(i + 1)))
-    }
+#let _layer-path(segment, style, start-outset: 0, end-outset: 0, label-pos: none, center-outset: auto) = {
+  let geometry = _edge-geometry(style)
+  let side-point = if geometry.offset-side == "label" { label-pos } else { none }
+  let length = geometry.length
+  let ratio = geometry.ratio
+  if center-outset != auto {
+    start-outset = start-outset + center-outset
+    end-outset = end-outset + center-outset
+    length = none
+    ratio = none
   }
-  segments
+  curve-api.layer-path(
+    curve-api.cubic-path(..segment, accuracy: geometry.accuracy),
+    offset: geometry.offset,
+    length: length,
+    ratio: ratio,
+    resolve-length: geometry.resolve-length,
+    start-outset: start-outset,
+    end-outset: end-outset,
+    side-point: side-point,
+    accuracy: geometry.accuracy,
+    optimize: geometry.optimize,
+  )
 }
 
-#let _trim-path-curves(segments, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
-  let trimmed = ()
-  for (index, segment) in segments.enumerate() {
-    let piece = segment
-    if index == 0 and start-outset != 0 {
-      piece = curve-api
-        .trim-path(curve-api.cubic-path(..piece, accuracy: accuracy), start-outset: start-outset, accuracy: accuracy)
-        .curves
-        .at(0)
-    }
-    if index == segments.len() - 1 and end-outset != 0 {
-      piece = curve-api
-        .trim-path(curve-api.cubic-path(..piece, accuracy: accuracy), end-outset: end-outset, accuracy: accuracy)
-        .curves
-        .at(0)
-    }
-    trimmed.push(piece)
-  }
-  trimmed
+#let _geometry-segments(
+  segment,
+  style,
+  start-outset: 0,
+  end-outset: 0,
+  accuracy: 0.001,
+  label-pos: none,
+  center-outset: auto,
+) = {
+  curve-api.path-segments(_layer-path(
+    segment,
+    style,
+    start-outset: start-outset,
+    end-outset: end-outset,
+    label-pos: label-pos,
+    center-outset: center-outset,
+  ))
 }
 
-#let _geometry-segments(segment, style, start-outset: 0, end-outset: 0, accuracy: 0.001, label-pos: none) = {
-  let style = _style-with-offset-side(style, segment, label-pos)
-  if _has-parallel(style) {
-    _path-segments(_parallel-path(segment, style, start-outset: start-outset, end-outset: end-outset))
+#let _half-geometry(segment, style, outsets, accuracy: 0.001, label-pos: none) = {
+  if outsets == none {
+    ()
   } else {
-    _trim-path-curves((segment,), start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+    _geometry-segments(
+      segment,
+      style,
+      start-outset: outsets.start,
+      end-outset: outsets.end,
+      accuracy: accuracy,
+      label-pos: label-pos,
+      center-outset: 0,
+    )
   }
 }
 
@@ -394,79 +300,62 @@
   accuracy: 0.001,
   label-pos: none,
 ) = {
-  if _has-parallel(source-style) or _has-parallel(sink-style) {
-    let base = curve-api.edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
-    let base-length = _segments-length(base.curve.curves, accuracy: accuracy)
-    let source-center-outset = _parallel-center-outset(
+  let base = curve-api.edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
+  let source-segment = base.curve.curves.at(0)
+  let sink-segment = base.curve.curves.at(1)
+  let source-length = _segment-length(source-segment, accuracy: accuracy)
+  let sink-length = _segment-length(sink-segment, accuracy: accuracy)
+  let base-length = source-length + sink-length
+  let source-outsets = _visible-half-outsets(
+    base-length,
+    0,
+    source-length,
+    source-style,
+    source-outset: source-outset,
+    sink-outset: sink-outset,
+  )
+  let source-geometry = _half-geometry(source-segment, source-style, source-outsets, accuracy: accuracy, label-pos: label-pos)
+  let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
+    let sink-outsets = _visible-half-outsets(
       base-length,
+      source-length,
+      sink-length,
       source-style,
       source-outset: source-outset,
       sink-outset: sink-outset,
     )
-    let source-geometry = _geometry-segments(
-      base.curve.curves.at(0),
-      source-style,
-      start-outset: source-outset + source-center-outset,
-      accuracy: accuracy,
-      label-pos: label-pos,
-    )
-    let sink-geometry = if _same-parallel-geometry(source-style, sink-style) {
-      _geometry-segments(
-        base.curve.curves.at(1),
-        source-style,
-        end-outset: sink-outset + source-center-outset,
-        accuracy: accuracy,
-        label-pos: label-pos,
-      )
-    } else {
-      let sink-center-outset = _parallel-center-outset(
-        base-length,
-        sink-style,
-        source-outset: source-outset,
-        sink-outset: sink-outset,
-      )
-      _geometry-segments(
-        base.curve.curves.at(1),
-        sink-style,
-        end-outset: sink-outset + sink-center-outset,
-        accuracy: accuracy,
-        label-pos: label-pos,
-      )
-    }
-    (
-      source: source-geometry,
-      sink: sink-geometry,
-      curve: base.curve,
-    )
+    _half-geometry(sink-segment, source-style, sink-outsets, accuracy: accuracy, label-pos: label-pos)
   } else {
-    let trimmed = curve-api.edge-halves(
-      edge,
-      nodes,
-      omega: omega,
+    let sink-outsets = _visible-half-outsets(
+      base-length,
+      source-length,
+      sink-length,
+      sink-style,
       source-outset: source-outset,
       sink-outset: sink-outset,
-      accuracy: accuracy,
     )
-    (
-      source: _path-segments(trimmed.source),
-      sink: _path-segments(trimmed.sink),
-      curve: trimmed.curve,
-    )
+    _half-geometry(sink-segment, sink-style, sink-outsets, accuracy: accuracy, label-pos: label-pos)
   }
+  (
+    source: source-geometry,
+    sink: sink-geometry,
+    curve: base.curve,
+  )
 }
 
 #let _pattern-path(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
+  let pattern-style = _pattern-style(style)
   curve-api.pattern-path(
-    curve-api.cubic-path(..segment, accuracy: _style-value(style, "pattern-accuracy", 0.001)),
-    pattern: _pattern-name(style),
-    amplitude: _style-value(style, "pattern-amplitude", 0.1),
-    wavelength: _style-value(style, "pattern-wavelength", 1.0),
-    phase: if phase == auto { _style-value(style, "pattern-phase", 0) } else { phase },
-    samples-per-period: _style-value(style, "pattern-samples-per-period", 16),
-    coil-longitudinal-scale: _style-value(style, "pattern-coil-longitudinal-scale", 1.25),
+    curve-api.cubic-path(..segment, accuracy: pattern-style.pattern-accuracy),
+    pattern: pattern-style.pattern,
+    amplitude: pattern-style.pattern-amplitude,
+    wavelength: pattern-style.pattern-wavelength,
+    phase: if phase == auto { pattern-style.pattern-phase } else { phase },
+    samples-per-period: pattern-style.pattern-samples-per-period,
+    coil-longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
     anchor-start: anchor-start,
     anchor-end: anchor-end,
-    accuracy: _style-value(style, "pattern-accuracy", 0.001),
+    accuracy: pattern-style.pattern-accuracy,
   )
 }
 
@@ -484,8 +373,8 @@
   let elements = ()
   let length = 0
   if _has-pattern(style) {
-    let current-phase = if phase == auto { _style-value(style, "pattern-phase", 0) } else { phase }
-    let wavelength = _style-value(style, "pattern-wavelength", 1.0)
+    let current-phase = if phase == auto { _style-value(style, "pattern-phase") } else { phase }
+    let wavelength = _style-value(style, "pattern-wavelength")
     for (index, segment) in segments.enumerate() {
       let piece = _pattern-path(
         segment,
@@ -526,8 +415,8 @@
   let elements = ()
   if _same-pattern-geometry(source-style, sink-style) {
     let source = _segments-elements(halves.source, source-style, anchor-end: false)
-    let wavelength = _style-value(source-style, "pattern-wavelength", 1.0)
-    let phase = _style-value(source-style, "pattern-phase", 0)
+    let wavelength = _style-value(source-style, "pattern-wavelength")
+    let phase = _style-value(source-style, "pattern-phase")
     let sink-phase = phase + 2 * calc.pi * source.length / wavelength
     for element in source.elements {
       elements.push(element)
@@ -547,7 +436,7 @@
 }
 
 #let _pattern-line(start, end, style, label-pos: none) = {
-  _segment-elements(_line-segment(start, end), style, label-pos: label-pos).elements
+  _segment-elements(curve-api.line-segment(start, end), style, label-pos: label-pos).elements
 }
 
 #let _node-outset(style, node-outset) = {
@@ -747,23 +636,23 @@
   edge-stroke: 0.1em,
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
-  edge-offset: 0,
+  edge-offset: _edge-geometry-defaults.offset,
   /// Maximum visible arc length for centered parallel edge paths. `none` keeps
   /// the full shifted path. -> none | int | float
-  edge-length: none,
+  edge-length: _edge-geometry-defaults.length,
   /// Maximum visible fraction of the base edge length for centered parallel edge
   /// paths. Combined with `edge-length` according to `edge-resolve-length`.
   /// -> none | int | float
-  edge-ratio: none,
+  edge-ratio: _edge-geometry-defaults.ratio,
   /// Resolve `edge-length` and `edge-ratio`. Accepted string
   /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
   /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
   /// `(base-length, length, ratio)`. -> string | function
-  edge-resolve-length: "min",
+  edge-resolve-length: _edge-geometry-defaults.resolve-length,
   /// Arc-length accuracy for fitted parallel edge paths. -> float
-  edge-accuracy: 0.001,
+  edge-accuracy: _edge-geometry-defaults.accuracy,
   /// Let Kurbo optimize the fitted parallel path. -> bool
-  edge-optimize: true,
+  edge-optimize: _edge-geometry-defaults.optimize,
   /// Source half-edge style dictionary, array of layer dictionaries, or
   /// callback. A callback receives edge data. -> dictionary | array | function | none
   source-style: (:),
@@ -873,7 +762,7 @@
           let source-in-subgraph = _in-subgraph(subgraph-hedges, start)
           let sink-in-subgraph = _in-subgraph(subgraph-hedges, end)
 
-          let geometry-style = (
+          let geometry-style = _edge-geometry-defaults + (
             offset: edge-offset,
             length: edge-length,
             ratio: edge-ratio,

@@ -111,6 +111,56 @@
   ),
 )
 
+#let _momentum-arrow-stroke = (paint: black, thickness: 0.55pt, cap: "round")
+
+/// Default style for source-to-sink momentum arrow layers.
+/// -> dictionary
+#let momentum-arrow-defaults = (
+  offset: 0.16,
+  length: 5.0,
+  ratio: 0.5,
+  stroke: _momentum-arrow-stroke,
+  mark: none,
+)
+
+#let _single-end-mark(mark, arrow-stroke) = {
+  let base = (
+    stroke: arrow-stroke,
+    fill: black,
+  )
+  if mark == none {
+    base + (
+      end: "barbed",
+      scale: 1.35,
+    )
+  } else if type(mark) == dictionary {
+    let clean = mark
+    if clean.keys().contains("start") {
+      let _ = clean.remove("start")
+    }
+    if not clean.keys().contains("end") {
+      clean = clean + (end: "barbed")
+    }
+    base + clean
+  } else {
+    base + (end: mark)
+  }
+}
+
+#let _has-source(edge) = edge.at("source-endpoint", default: none) != none or edge.at("source", default: none) != none
+
+#let _has-sink(edge) = edge.at("sink-endpoint", default: none) != none or edge.at("sink", default: none) != none
+
+#let _momentum-arrow-half(edge) = {
+  if _has-sink(edge) {
+    "sink"
+  } else if _has-source(edge) {
+    "source"
+  } else {
+    none
+  }
+}
+
 /// Return an edge's particle name, stripping the quotes often present in DOT
 /// statement values.
 /// -> none | string
@@ -235,39 +285,17 @@
 }
 
 #let _momentum-arrow-layer(
-  offset: 0.16,
-  length: 1.0,
-  ratio: 0.5,
+  offset: momentum-arrow-defaults.offset,
+  length: momentum-arrow-defaults.length,
+  ratio: momentum-arrow-defaults.ratio,
   stroke: none,
-  mark: none,
+  mark: momentum-arrow-defaults.mark,
   show-mark: false,
 ) = {
   let arrow-stroke = if stroke == none {
-    (paint: black, thickness: 0.55pt, cap: "round")
+    momentum-arrow-defaults.stroke
   } else {
     stroke
-  }
-  let arrow-mark = if mark == none {
-    (
-      end: "barbed",
-      stroke: arrow-stroke,
-      fill: black,
-      scale: 1.35,
-    )
-  } else if type(mark) == dictionary {
-    (
-      (
-        stroke: arrow-stroke,
-        fill: black,
-      )
-        + mark
-    )
-  } else {
-    (
-      end: mark,
-      stroke: arrow-stroke,
-      fill: black,
-    )
   }
   let layer = (
     offset: offset,
@@ -278,7 +306,7 @@
     stroke: arrow-stroke,
   )
   if show-mark {
-    layer + (mark: arrow-mark)
+    layer + (mark: _single-end-mark(mark, arrow-stroke))
   } else {
     layer
   }
@@ -293,18 +321,17 @@
   scope: (:),
   orientation-split: true,
   momentum-arrows: false,
-  momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
-  momentum-arrow-ratio: 0.5,
+  momentum-arrow-offset: momentum-arrow-defaults.offset,
+  momentum-arrow-length: momentum-arrow-defaults.length,
+  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
-  momentum-arrow-mark: none,
+  momentum-arrow-mark: momentum-arrow-defaults.mark,
 ) = {
   let style = _base-half-style(edge, half, map: map, default: default, orientation-split: orientation-split)
   style = style + style-dict(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
   style = style + style-dict(edge.at(half + "-style-eval", default: none), edge, mode: "eval", map: map, scope: scope)
   if momentum-arrows {
-    let full-edge = edge.at("source", default: none) != none and edge.at("sink", default: none) != none
-    let show-mark = if full-edge { half == "sink" } else { true }
+    let show-mark = _momentum-arrow-half(edge) == half
     (
       style,
       _momentum-arrow-layer(
@@ -334,11 +361,11 @@
   scope: (:),
   orientation-split: true,
   momentum-arrows: false,
-  momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
-  momentum-arrow-ratio: 0.5,
+  momentum-arrow-offset: momentum-arrow-defaults.offset,
+  momentum-arrow-length: momentum-arrow-defaults.length,
+  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
-  momentum-arrow-mark: none,
+  momentum-arrow-mark: momentum-arrow-defaults.mark,
 ) = _half-style(
   edge,
   "source",
@@ -369,11 +396,11 @@
   scope: (:),
   orientation-split: true,
   momentum-arrows: false,
-  momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
-  momentum-arrow-ratio: 0.5,
+  momentum-arrow-offset: momentum-arrow-defaults.offset,
+  momentum-arrow-length: momentum-arrow-defaults.length,
+  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
-  momentum-arrow-mark: none,
+  momentum-arrow-mark: momentum-arrow-defaults.mark,
 ) = _half-style(
   edge,
   "sink",
@@ -605,11 +632,11 @@
   scope: (:),
   orientation-split: true,
   momentum-arrows: false,
-  momentum-arrow-offset: 0.16,
-  momentum-arrow-length: 1.0,
-  momentum-arrow-ratio: 0.5,
+  momentum-arrow-offset: momentum-arrow-defaults.offset,
+  momentum-arrow-length: momentum-arrow-defaults.length,
+  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
-  momentum-arrow-mark: none,
+  momentum-arrow-mark: momentum-arrow-defaults.mark,
   show-momentum: false,
   show-edge-index: false,
   show-half-edge-index: false,
