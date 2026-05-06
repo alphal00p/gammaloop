@@ -6,11 +6,12 @@ use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
-    subgraph::{SuBitGraph, SubGraphLike, SubSetOps},
+    subgraph::{SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 use spenso::structure::concrete_index::ExpandedIndex;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
+    function,
     id::Replacement,
 };
 use three_dimensional_reps::{
@@ -27,7 +28,7 @@ use crate::{
     cff::{
         expression::{
             GammaLoopCFFVariant, GammaLoopGraphOrientation, GammaLoopOrientationExpression,
-            OrientationID,
+            OrientationID, RaisedEsurfaceGroupView,
         },
         generation::generated_cff_expression_uses_variant_half_edges,
         surface::GammaLoopSurfaceCache,
@@ -36,7 +37,7 @@ use crate::{
     momentum::{Sign, SignOrZero, sample::LoopIndex},
     numerator::energy_degree::EnergyPowerAnalyzer,
     settings::global::{GenerationSettings, ThreeDRepresentation},
-    utils::{GS, symbolica_ext::LogPrint},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{UltravioletGraph, approx::ForestNodeLike},
 };
 
@@ -49,6 +50,7 @@ pub struct Expanded4DApprox {
 #[derive(Clone, Debug)]
 struct ExpandedDenominator {
     source_edge: EdgeIndex,
+    momentum: Atom,
     mass_squared: Atom,
     full_expr: Atom,
 }
@@ -63,6 +65,7 @@ struct ExpandedTerm {
 struct ParsedDenominatorEdge {
     local_edge_id: usize,
     source_edge: EdgeIndex,
+    momentum: Atom,
     mass_squared: Atom,
     full_expr: Atom,
     is_preserved_4d: bool,
@@ -122,10 +125,46 @@ fn expanded_4d_uv_rescaled(
     atom: &Atom,
 ) -> Result<Atom> {
     let atomarg = graph.uv_rescaled(replacement_subgraph, n_loops, lmb, atom);
+    if let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_RESCALING") {
+        std::fs::create_dir_all(&dump_dir).ok();
+        let path = std::path::Path::new(&dump_dir)
+            .join(format!("{}_expanded_4d_rescaling.txt", graph.name));
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok();
+        if let Some(file) = file.as_mut() {
+            use std::io::Write as _;
+            writeln!(
+                file,
+                "replacement_subgraph={} n_loops={} input={} rescaled={}",
+                replacement_subgraph.string_label(),
+                n_loops,
+                atom.to_canonical_string(),
+                atomarg.to_canonical_string()
+            )
+            .ok();
+        }
+    }
     let series = atomarg
         .series(GS.rescale, Atom::Zero, 0.into(), true)
         .map_err(|error| eyre!("expanded 4D local UV series expansion failed: {error}"))?;
-    Ok(series.to_atom().replace(GS.rescale).with(Atom::num(1)))
+    let result = series.to_atom().replace(GS.rescale).with(Atom::num(1));
+    if let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_RESCALING") {
+        let path = std::path::Path::new(&dump_dir)
+            .join(format!("{}_expanded_4d_rescaling.txt", graph.name));
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok();
+        if let Some(file) = file.as_mut() {
+            use std::io::Write as _;
+            writeln!(file, "series_result={}", result.to_canonical_string()).ok();
+        }
+    }
+    Ok(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -139,6 +178,44 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
     contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
 ) -> Result<Vec<Atom>> {
     let terms = extract_expanded_terms(atom)?;
+    if let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_PROJECTION") {
+        std::fs::create_dir_all(&dump_dir).ok();
+        let path = std::path::Path::new(&dump_dir).join(format!(
+            "{}_{:?}_expanded_4d_projection.txt",
+            graph.name, representation
+        ));
+        let mut dump = String::new();
+        use std::fmt::Write;
+        writeln!(
+            dump,
+            "terms={} has_selector={} contract_subgraph={}",
+            terms.len(),
+            cutset_has_residue_selector(cutset),
+            contract_subgraph.string_label()
+        )
+        .ok();
+        for (term_id, term) in terms.iter().enumerate() {
+            writeln!(
+                dump,
+                "term {term_id}: numerator_zero={} denominators={}",
+                term.numerator.is_zero(),
+                term.denominators
+                    .iter()
+                    .map(|denominator| denominator.source_edge.0.to_string())
+                    .join(",")
+            )
+            .ok();
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok();
+        if let Some(file) = file.as_mut() {
+            use std::io::Write as _;
+            writeln!(file, "{dump}").ok();
+        }
+    }
     if terms.is_empty() {
         return Ok(vec![Atom::Zero]);
     }
@@ -177,14 +254,45 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
     }
 
     let source = build_expanded_4d_parsed_source(graph, &term.denominators, contract_subgraph)?;
+    dump_expanded_4d_parsed_source_if_requested(
+        graph,
+        &source,
+        &term.numerator,
+        cutset,
+        representation,
+        settings,
+        contract_subgraph,
+    )?;
+    let local_projection_representation =
+        if representation == ThreeDRepresentation::Ltd && cutset_has_residue_selector(cutset) {
+            // Expanded-4D local UV counterterms are representation-independent 4D
+            // objects. When they must be projected onto a LU/threshold residue, use
+            // GammaLoop's canonical CFF E-surface decomposition as the local
+            // projector. The generated LTD source is globally equivalent, but its
+            // denominator tree does not expose the same local E-surface branches for
+            // these UV-expanded sources. The top-level/original integrand remains
+            // in the requested representation.
+            ThreeDRepresentation::Cff
+        } else {
+            representation
+        };
+
     let expression = generate_expanded_4d_source_expression(
         graph,
         &source,
         &term.numerator,
-        representation,
+        local_projection_representation,
         settings,
     )?;
+
     let residues = select_cut_residues(expression, cutset)?;
+    dump_expanded_4d_selected_residues_if_requested(
+        graph,
+        &source,
+        &residues,
+        local_projection_representation,
+        contract_subgraph,
+    );
 
     residues
         .into_iter()
@@ -195,12 +303,197 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
                 &term.numerator,
                 &source,
                 cutset,
-                representation,
+                local_projection_representation,
                 settings,
             )
         })
         .collect::<Result<Vec<_>>>()
         .map(Some)
+}
+
+fn dump_expanded_4d_selected_residues_if_requested(
+    graph: &Graph,
+    source: &Expanded4DParsedSource,
+    residues: &[crate::cff::expression::ThreeDExpression<OrientationID>],
+    representation: ThreeDRepresentation,
+    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+) {
+    let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_SELECTED_RESIDUES") else {
+        return;
+    };
+    std::fs::create_dir_all(&dump_dir).ok();
+    let path = std::path::Path::new(&dump_dir).join(format!(
+        "{}_{:?}_{}_selected_residues.txt",
+        graph.name,
+        representation,
+        contract_subgraph.string_label()
+    ));
+    let mut dump = String::new();
+    use std::fmt::Write;
+    writeln!(dump, "graph {}", graph.name).ok();
+    writeln!(dump, "representation {:?}", representation).ok();
+    writeln!(
+        dump,
+        "contract_subgraph {}",
+        contract_subgraph.string_label()
+    )
+    .ok();
+    writeln!(dump, "source {}", expanded_source_summary(&source.parsed)).ok();
+    writeln!(dump, "residue_count {}", residues.len()).ok();
+    for (residue_id, residue) in residues.iter().enumerate() {
+        writeln!(
+            dump,
+            "residue {residue_id}: orientations={} esurfaces={} hsurfaces={} linear_surfaces={}",
+            residue.orientations.len(),
+            residue.surfaces.esurface_cache.len(),
+            residue.surfaces.hsurface_cache.len(),
+            residue.surfaces.linear_surface_cache.len()
+        )
+        .ok();
+        writeln!(dump, "  esurfaces {:?}", residue.surfaces.esurface_cache).ok();
+        writeln!(dump, "  hsurfaces {:?}", residue.surfaces.hsurface_cache).ok();
+        for (orientation_id, orientation) in residue.orientations.iter_enumerated() {
+            writeln!(
+                dump,
+                "  orientation {} label {:?} variants={} unfolded={}",
+                usize::from(orientation_id),
+                orientation.data.label,
+                orientation.variants.len(),
+                orientation.num_unfolded_terms()
+            )
+            .ok();
+            for (variant_id, variant) in orientation.variants.iter().enumerate() {
+                writeln!(
+                    dump,
+                    "    variant {variant_id} origin {:?} prefactor {} half_edges {:?} denominator_edges {:?} numerator_surfaces {:?} denominator_nodes {}",
+                    variant.origin,
+                    variant.prefactor.to_canonical_string(),
+                    variant.half_edges,
+                    variant.denominator_edges,
+                    variant.numerator_surfaces,
+                    variant.denominator.get_num_nodes()
+                )
+                .ok();
+                writeln!(dump, "      denominator {:?}", variant.denominator).ok();
+            }
+        }
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .ok();
+    if let Some(file) = file.as_mut() {
+        use std::io::Write as _;
+        writeln!(file, "{dump}").ok();
+    }
+}
+
+fn dump_expanded_4d_parsed_source_if_requested(
+    graph: &Graph,
+    source: &Expanded4DParsedSource,
+    numerator: &Atom,
+    cutset: &CutSet,
+    representation: ThreeDRepresentation,
+    settings: &GenerationSettings,
+    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+) -> Result<()> {
+    let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_SOURCE") else {
+        return Ok(());
+    };
+    let options =
+        expression_options_for_expanded_term(source, numerator, representation, settings, graph)?;
+    std::fs::create_dir_all(&dump_dir).ok();
+    let path = std::path::Path::new(&dump_dir).join(format!(
+        "{}_{:?}_{}_source.txt",
+        graph.name,
+        representation,
+        contract_subgraph.string_label()
+    ));
+    let mut dump = String::new();
+    use std::fmt::Write;
+    writeln!(dump, "graph {}", graph.name).ok();
+    writeln!(dump, "representation {:?}", representation).ok();
+    writeln!(
+        dump,
+        "contract_subgraph {}",
+        contract_subgraph.string_label()
+    )
+    .ok();
+    writeln!(dump, "has_selector {}", cutset_has_residue_selector(cutset)).ok();
+    writeln!(dump, "lu_cut {:?}", cutset.residue_selector.lu_cut).ok();
+    if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+        write_raised_group_surfaces(&mut dump, graph, "lu_cut", lu_cut);
+    }
+    writeln!(
+        dump,
+        "lu_cut_edge_sets {:?}",
+        cutset.residue_selector.lu_cut_edge_sets
+    )
+    .ok();
+    if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+        write_raised_group_surfaces(&mut dump, graph, "left_th_cut", left_threshold);
+    }
+    if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+        write_raised_group_surfaces(&mut dump, graph, "right_th_cut", right_threshold);
+    }
+    writeln!(
+        dump,
+        "energy_degree_bounds {:?}",
+        options.energy_degree_bounds
+    )
+    .ok();
+    writeln!(
+        dump,
+        "preserve_internal_edges_as_four_d_denominators {:?}",
+        options.preserve_internal_edges_as_four_d_denominators
+    )
+    .ok();
+    writeln!(dump, "numerator {}", numerator.to_canonical_string()).ok();
+    writeln!(dump, "source {}", expanded_source_summary(&source.parsed)).ok();
+    writeln!(dump, "denominator_edges").ok();
+    for edge in &source.denominator_edges {
+        writeln!(
+            dump,
+            "  local={} source={} preserved={} mass={} momentum={} full={}",
+            edge.local_edge_id,
+            edge.source_edge.0,
+            edge.is_preserved_4d,
+            edge.mass_squared.to_canonical_string(),
+            edge.momentum.to_canonical_string(),
+            edge.full_expr.to_canonical_string()
+        )
+        .ok();
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .ok();
+    if let Some(file) = file.as_mut() {
+        use std::io::Write as _;
+        writeln!(file, "{dump}").ok();
+    }
+    Ok(())
+}
+
+fn write_raised_group_surfaces(
+    dump: &mut String,
+    graph: &Graph,
+    label: &str,
+    group: &impl RaisedEsurfaceGroupView,
+) {
+    use std::fmt::Write;
+    for esurface_id in group.esurface_ids() {
+        if let Some(esurface) = graph.surface_cache.esurface_cache.get(*esurface_id) {
+            writeln!(
+                dump,
+                "{label} surface {:?}: energies={:?} external_shift={:?}",
+                esurface_id, esurface.energies, esurface.external_shift
+            )
+            .ok();
+        }
+    }
 }
 
 fn generate_expanded_4d_source_expression(
@@ -227,10 +520,12 @@ fn generate_expanded_4d_source_expression(
         .iter_edges_of(&graph.initial_state_cut)
         .map(|(_, edge_id, _)| edge_id)
         .collect_vec();
+    let use_generated_cff_half_edges =
+        generated_cff_expression_uses_variant_half_edges(&options, &raw_expression);
     graph.convert_generated_expression_surfaces(
         raw_expression,
         representation_mode(representation),
-        generated_cff_expression_uses_variant_half_edges(&options),
+        use_generated_cff_half_edges,
         &graph.get_esurface_canonization(&graph.loop_momentum_basis),
         &initial_state_cut_edges,
     )
@@ -277,7 +572,10 @@ fn select_cut_residues(
 
     Ok(
         if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-            residue.select_esurface_residue(lu_cut)
+            residue.select_esurface_residue_with_cut_edges(
+                lu_cut,
+                &cutset.residue_selector.lu_cut_edge_sets,
+            )
         } else {
             vec![residue]
         },
@@ -318,8 +616,11 @@ fn expanded_expression_parametric_atom(
     } else {
         Atom::num(1)
     };
-    let ltd_parity_correction =
-        ltd_cross_section_residue_parity_correction(graph, source, cutset, representation);
+    let source_parity_correction = if representation == ThreeDRepresentation::Cff {
+        cross_section_residue_source_parity_correction(graph, source, cutset)
+    } else {
+        Atom::num(1)
+    };
     let all_orientations = crate::settings::global::OrientationPattern::default();
     let pattern = if settings.explicit_orientation_sum_only {
         &all_orientations
@@ -347,7 +648,7 @@ fn expanded_expression_parametric_atom(
     }
 
     Ok(
-        (sum * inverse_energy_product * residual_denominator_factor * ltd_parity_correction)
+        (sum * inverse_energy_product * residual_denominator_factor * source_parity_correction)
             .replace_multiple(&ose_replacements)
             .replace(GS.dim)
             .with(4)
@@ -357,22 +658,21 @@ fn expanded_expression_parametric_atom(
     )
 }
 
-fn ltd_cross_section_residue_parity_correction(
+fn cross_section_residue_source_parity_correction(
     graph: &Graph,
     source: &Expanded4DParsedSource,
     cutset: &CutSet,
-    representation: ThreeDRepresentation,
 ) -> Atom {
-    if representation != ThreeDRepresentation::Ltd || cutset.residue_selector.lu_cut.is_none() {
+    if cutset.residue_selector.lu_cut.is_none() {
         return Atom::num(1);
     }
 
-    // Cross-section LU residues are converted to GammaLoop's CFF production
-    // convention after the forest is assembled. Expanded-4D local UV terms are
-    // generated on reduced parsed sources, whose generalized-CFF global sign
-    // can differ from the full graph, especially for repeated denominators.
-    // Correct each reduced source to the full-graph convention before the
-    // outer cross-section parity factor is applied.
+    // Cross-section LU residues are assembled in GammaLoop's full-graph CFF
+    // production convention. Expanded-4D local UV terms are generated on
+    // reduced parsed sources, whose generalized-CFF global sign can differ
+    // from the full graph, especially for repeated UV denominators. Correct
+    // each reduced source to the full-graph convention before the forest terms
+    // are combined.
     let full_exponent = graph.cff_global_sign_exponent_for_3d_expression();
     let source_exponent = cff_global_sign_exponent_for_expanded_source(source);
     if (full_exponent + source_exponent).is_multiple_of(2) {
@@ -438,13 +738,17 @@ fn expanded_ose_replacements(source: &Expanded4DParsedSource) -> Vec<Replacement
 fn expanded_ose_atom(edge: &ParsedDenominatorEdge) -> Atom {
     let mut q3q3 = Atom::Zero;
     for spatial_index in 1..=3 {
-        let component = GS.emr_mom(
-            edge.source_edge,
-            Atom::from(ExpandedIndex::from_iter([spatial_index])),
-        );
+        let component = momentum_component_atom(&edge.momentum, spatial_index);
         q3q3 += component.clone() * component;
     }
     (edge.mass_squared.clone() + q3q3).sqrt()
+}
+
+fn momentum_component_atom(momentum: &Atom, spatial_index: usize) -> Atom {
+    let component_index = Atom::from(ExpandedIndex::from_iter([spatial_index]));
+    momentum
+        .replace(function!(GS.emr_mom, W_.i_))
+        .with(function!(GS.emr_mom, W_.i_, component_index))
 }
 
 fn expression_options_for_expanded_term(
@@ -531,7 +835,7 @@ fn build_expanded_4d_parsed_source(
         node_to_internal.insert(*node_id, root_to_internal[&root]);
     }
 
-    let active_loop_columns = active_loop_columns_for_denominators(graph, denominators);
+    let active_loop_columns = active_loop_columns_for_denominators(graph, denominators)?;
     let loop_names = active_loop_columns
         .iter()
         .map(|loop_index| {
@@ -629,14 +933,8 @@ fn build_expanded_4d_parsed_source(
                 denominator.source_edge
             )
         })?;
-        let signature = &graph.loop_momentum_basis.edge_signatures[denominator.source_edge];
-        let momentum_signature = MomentumSignature {
-            loop_signature: active_loop_columns
-                .iter()
-                .map(|loop_index| sign_to_i32(signature.internal[LoopIndex::from(*loop_index)]))
-                .collect(),
-            external_signature: (&signature.external).into_iter().map(sign_to_i32).collect(),
-        };
+        let momentum_signature =
+            denominator_momentum_signature(graph, denominator, &active_loop_columns)?;
         let is_preserved_4d = momentum_signature
             .loop_signature
             .iter()
@@ -653,6 +951,7 @@ fn build_expanded_4d_parsed_source(
         denominator_edges.push(ParsedDenominatorEdge {
             local_edge_id,
             source_edge: denominator.source_edge,
+            momentum: denominator.momentum.clone(),
             mass_squared: denominator.mass_squared.clone(),
             full_expr: denominator.full_expr.clone(),
             is_preserved_4d,
@@ -717,18 +1016,186 @@ fn build_expanded_4d_parsed_source(
 fn active_loop_columns_for_denominators(
     graph: &Graph,
     denominators: &[ExpandedDenominator],
-) -> Vec<usize> {
+) -> Result<Vec<usize>> {
     let rows = denominators
         .iter()
         .map(|denominator| {
-            graph.loop_momentum_basis.edge_signatures[denominator.source_edge]
-                .internal
-                .iter()
-                .map(|sign| sign_to_i32(*sign))
-                .collect::<Vec<_>>()
+            Ok(full_denominator_momentum_signature(graph, denominator)?
+                .loop_signature
+                .into_iter()
+                .collect::<Vec<_>>())
         })
-        .collect::<Vec<_>>();
-    independent_loop_columns(&rows)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(independent_loop_columns(&rows))
+}
+
+fn denominator_momentum_signature(
+    graph: &Graph,
+    denominator: &ExpandedDenominator,
+    active_loop_columns: &[usize],
+) -> Result<MomentumSignature> {
+    let full_signature = full_denominator_momentum_signature(graph, denominator)?;
+    Ok(MomentumSignature {
+        loop_signature: active_loop_columns
+            .iter()
+            .map(|loop_index| {
+                full_signature
+                    .loop_signature
+                    .get(*loop_index)
+                    .copied()
+                    .unwrap_or_default()
+            })
+            .collect(),
+        external_signature: full_signature.external_signature,
+    })
+}
+
+fn full_denominator_momentum_signature(
+    graph: &Graph,
+    denominator: &ExpandedDenominator,
+) -> Result<MomentumSignature> {
+    let mut loop_signature = vec![0; graph.loop_momentum_basis.loop_edges.len()];
+    let mut external_signature = vec![0; graph.loop_momentum_basis.ext_edges.len()];
+    accumulate_momentum_signature_from_view(
+        graph,
+        denominator.momentum.as_view(),
+        1,
+        denominator_uses_uv_loop_basis(denominator),
+        &mut loop_signature,
+        &mut external_signature,
+    )
+    .map_err(|error| {
+        eyre!(
+            "could not extract expanded 4D denominator momentum signature for edge {} from `{}`: {error}",
+            denominator.source_edge,
+            denominator.momentum.log_print(None)
+        )
+    })?;
+    let signature = MomentumSignature {
+        loop_signature,
+        external_signature,
+    };
+    Ok(if denominator_uses_uv_loop_basis(denominator) {
+        signature.canonical_up_to_sign().0
+    } else {
+        signature
+    })
+}
+
+fn accumulate_momentum_signature_from_view(
+    graph: &Graph,
+    view: AtomView<'_>,
+    coefficient: i32,
+    use_uv_loop_basis: bool,
+    loop_signature: &mut [i32],
+    external_signature: &mut [i32],
+) -> Result<()> {
+    match view {
+        AtomView::Add(add) => {
+            for term in add.iter() {
+                accumulate_momentum_signature_from_view(
+                    graph,
+                    term,
+                    coefficient,
+                    use_uv_loop_basis,
+                    loop_signature,
+                    external_signature,
+                )?;
+            }
+        }
+        AtomView::Mul(mul) => {
+            let mut scalar = coefficient;
+            let mut momentum_factor = None;
+            for factor in mul.iter() {
+                if let Ok(integer) = i64::try_from(factor) {
+                    scalar = scalar.checked_mul(i32::try_from(integer)?).ok_or_else(|| {
+                        eyre!("integer coefficient overflow in expanded denominator momentum")
+                    })?;
+                } else if momentum_factor.replace(factor).is_some() {
+                    return Err(eyre!(
+                        "expected a linear momentum expression, found product `{}`",
+                        view.to_owned().log_print(None)
+                    ));
+                }
+            }
+            if let Some(momentum_factor) = momentum_factor {
+                accumulate_momentum_signature_from_view(
+                    graph,
+                    momentum_factor,
+                    scalar,
+                    use_uv_loop_basis,
+                    loop_signature,
+                    external_signature,
+                )?;
+            } else if scalar != 0 {
+                return Err(eyre!(
+                    "expected a momentum factor, found scalar `{}`",
+                    view.to_owned().log_print(None)
+                ));
+            }
+        }
+        AtomView::Fun(function) => {
+            if function.get_symbol() != GS.emr_mom || function.get_nargs() != 1 {
+                return Err(eyre!(
+                    "expected an EMR momentum, found `{}`",
+                    view.to_owned().log_print(None)
+                ));
+            }
+            let edge = EdgeIndex(usize::try_from(function.get(0)).map_err(|_| {
+                eyre!(
+                    "EMR momentum has non-integer edge id `{}`",
+                    function.get(0).to_owned().log_print(None)
+                )
+            })?);
+            if use_uv_loop_basis {
+                let loop_index = graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .position(|loop_edge| *loop_edge == edge)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "UV-leading denominator momentum references edge {edge}, which is not a loop-basis edge"
+                        )
+                    })?;
+                loop_signature[loop_index] += coefficient;
+            } else {
+                let signature = graph
+                    .loop_momentum_basis
+                    .edge_signatures
+                    .get(edge)
+                    .ok_or_else(|| {
+                        eyre!("edge {edge} is not present in the loop-momentum basis")
+                    })?;
+                for (loop_index, sign) in signature.internal.iter_enumerated() {
+                    loop_signature[usize::from(loop_index)] += coefficient * sign_to_i32(*sign);
+                }
+                for (external_index, sign) in signature.external.iter_enumerated() {
+                    external_signature[usize::from(external_index)] +=
+                        coefficient * sign_to_i32(*sign);
+                }
+            }
+        }
+        AtomView::Num(_) => {
+            if !view.to_owned().is_zero() {
+                return Err(eyre!(
+                    "expected a momentum expression, found scalar `{}`",
+                    view.to_owned().log_print(None)
+                ));
+            }
+        }
+        _ => {
+            return Err(eyre!(
+                "expected a linear momentum expression, found `{}`",
+                view.to_owned().log_print(None)
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn denominator_uses_uv_loop_basis(denominator: &ExpandedDenominator) -> bool {
+    denominator.mass_squared == Atom::var(GS.m_uv).pow(2)
 }
 
 fn extract_expanded_terms(atom: &Atom) -> Result<Vec<ExpandedTerm>> {
@@ -808,6 +1275,7 @@ fn denominator_from_view(view: AtomView<'_>) -> Result<Option<ExpandedDenominato
     })?);
     Ok(Some(ExpandedDenominator {
         source_edge,
+        momentum: function.get(1).to_owned(),
         mass_squared: function.get(2).to_owned(),
         full_expr: function.get(3).to_owned(),
     }))

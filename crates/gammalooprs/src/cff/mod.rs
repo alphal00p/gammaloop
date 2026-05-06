@@ -124,7 +124,6 @@ impl Graph {
     }
 
     pub fn cff<S: SubSetLike>(&mut self, contract_subgraph: &S, cutset: &CutSet) -> Result<CutCFF> {
-        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
 
         for (p, eid, _) in self.iter_edges_of(contract_subgraph) {
@@ -134,6 +133,35 @@ impl Graph {
         }
         contract_edges.sort_unstable();
         contract_edges.dedup();
+
+        if self.get_loop_number() == 0 {
+            let graph_without_is_cut = self
+                .underlying
+                .full_filter()
+                .subtract(&self.initial_state_cut.left)
+                .subtract(&self.initial_state_cut.right);
+            let residual_denominators = self
+                .underlying
+                .iter_edges_of(&graph_without_is_cut)
+                .filter_map(|(pair, edge_id, _)| {
+                    (pair.is_paired() && !contract_edges.contains(&edge_id))
+                        .then(|| ResidualDenominator::new(edge_id, None))
+                })
+                .collect::<Vec<_>>();
+            return Ok(CutCFF {
+                terms: vec![CFFTerm {
+                    expression: vec![
+                        self.residual_denominator_factor_gs(&residual_denominators, true),
+                    ],
+                    orientations: vec![
+                        self.underlying
+                            .new_edgevec(|_, _, _| Orientation::Undirected),
+                    ],
+                }],
+            });
+        }
+
+        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
 
         let mut inverse_energy_excluded_edges = contract_edges.clone();
         inverse_energy_excluded_edges
@@ -163,7 +191,10 @@ impl Graph {
         };
 
         let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-            residue.select_esurface_residue(lu_cut)
+            residue.select_esurface_residue_with_cut_edges(
+                lu_cut,
+                &cutset.residue_selector.lu_cut_edge_sets,
+            )
         } else {
             vec![residue]
         };

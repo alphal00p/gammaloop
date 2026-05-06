@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import math
 import sys
@@ -45,6 +46,17 @@ def human_sig(value: float | None, scale: float, suffix: str) -> str:
     return f"{value * scale:.3g} {suffix}"
 
 
+def human_bytes(value: int | None) -> str:
+    if value is None:
+        return "-"
+    scaled = float(value)
+    for unit in ["B", "KiB", "MiB", "GiB"]:
+        if abs(scaled) < 1024.0 or unit == "GiB":
+            return f"{scaled:.3g} {unit}"
+        scaled /= 1024.0
+    return f"{scaled:.3g} GiB"
+
+
 def with_ratio(
     value: float | None,
     baseline: float | None,
@@ -84,14 +96,18 @@ def normalize_representation(manifest: dict[str, Any], path: Path) -> str:
 def normalize_precision(manifest: dict[str, Any]) -> str:
     evaluation = manifest.get("evaluation", {})
     settings = manifest.get("settings", {})
-    return str(evaluation.get("runtime_precision") or settings.get("runtime_precision") or "-")
+    return str(
+        evaluation.get("runtime_precision") or settings.get("runtime_precision") or "-"
+    )
 
 
 def normalize_evaluator_mode(manifest: dict[str, Any]) -> str:
     settings = manifest.get("settings", {})
     evaluation = manifest.get("evaluation", {})
     backend = str(
-        settings.get("evaluator_backend") or evaluation.get("evaluator_backend") or "eager"
+        settings.get("evaluator_backend")
+        or evaluation.get("evaluator_backend")
+        or "eager"
     )
     force_eager = bool(settings.get("force_eager", False))
     compiled_available = bool(settings.get("compiled_backend_available", False))
@@ -101,6 +117,16 @@ def normalize_evaluator_mode(manifest: dict[str, Any]) -> str:
         normalized = "c++" if backend == "cpp" else backend
         return f"compiled {normalized}"
     return backend
+
+
+def normalize_build_strategy(manifest: dict[str, Any]) -> str:
+    settings = manifest.get("settings", {})
+    evaluation = manifest.get("evaluation", {})
+    return str(
+        evaluation.get("build_strategy")
+        or settings.get("build_strategy")
+        or "monolithic"
+    )
 
 
 def numerator_kind(manifest: dict[str, Any], path: Path) -> str:
@@ -123,7 +149,9 @@ def graph_sort_key(name: str) -> tuple[int, str]:
     return sort_index(name, preferred)
 
 
-def detail_fields(manifest: dict[str, Any], path: Path, workspace: Path) -> dict[str, str]:
+def detail_fields(
+    manifest: dict[str, Any], path: Path, workspace: Path
+) -> dict[str, str]:
     settings = manifest.get("settings", {})
     rel_path = path.relative_to(workspace) if path.is_relative_to(workspace) else path
     return {
@@ -136,6 +164,82 @@ def detail_fields(manifest: dict[str, Any], path: Path, workspace: Path) -> dict
         "scale": str(settings.get("scale", "-")),
         "path": str(rel_path.parent),
     }
+
+
+def resolve_artifact_path(
+    raw_path: object, manifest_path: Path, workspace: Path
+) -> Path | None:
+    if not raw_path:
+        return None
+    path = Path(str(raw_path)).expanduser()
+    candidates = (
+        [path]
+        if path.is_absolute()
+        else [
+            Path.cwd() / path,
+            workspace / path,
+            manifest_path.parent / path,
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
+
+
+@functools.lru_cache(maxsize=None)
+def oriented_structure_stats(expression_path: str) -> tuple[int | None, int | None]:
+    path = Path(expression_path)
+    try:
+        expression = json.loads(path.read_text()).get("expression", {})
+    except Exception:
+        return (None, None)
+
+    orientations = expression.get("orientations")
+    if not isinstance(orientations, list):
+        return (None, None)
+
+    node_count = 0
+    for orientation in orientations:
+        if not isinstance(orientation, dict):
+            continue
+        variants = orientation.get("variants", [])
+        if not isinstance(variants, list):
+            continue
+        for variant in variants:
+            if not isinstance(variant, dict):
+                continue
+            denominator = variant.get("denominator", {})
+            if not isinstance(denominator, dict):
+                continue
+            nodes = denominator.get("nodes", [])
+            if isinstance(nodes, list):
+                node_count += len(nodes)
+
+    return (len(orientations), node_count)
+
+
+@functools.lru_cache(maxsize=None)
+def parametric_numerator_size(symbolica_expression_path: str) -> int | None:
+    path = Path(symbolica_expression_path)
+    try:
+        with path.open("rb") as handle:
+            if handle.readline().strip() != b"# 3Drep iterative component expression":
+                return None
+            in_numerator = False
+            size = 0
+            for line in handle:
+                stripped = line.rstrip(b"\r\n")
+                if stripped == b"[processed_numerator]":
+                    in_numerator = True
+                    continue
+                if in_numerator and stripped.startswith(b"[component 0 "):
+                    break
+                if in_numerator:
+                    size += len(stripped)
+    except OSError:
+        return None
+    return size
 
 
 def wrap_text(text: str) -> str:
@@ -157,19 +261,24 @@ class Entry:
     representation: str
     numerator_kind: str
     precision: str
+    build_strategy: str
     evaluator_mode: str
+    orientation_count: int | None
+    oriented_node_count: int | None
+    parametric_numerator_bytes: int | None
     build_seconds: float | None
     sample_seconds: float | None
     details: dict[str, str]
     manifest_basename: str
 
     @property
-    def category(self) -> tuple[str, str, str, str, str]:
+    def category(self) -> tuple[str, str, str, str, str, str]:
         return (
             self.graph_name,
             self.representation,
             self.numerator_kind,
             self.precision,
+            self.build_strategy,
             self.evaluator_mode,
         )
 
@@ -180,9 +289,10 @@ class Entry:
     @property
     def baseline_priority(self) -> tuple[int, tuple[Any, ...]]:
         precision_ok = self.precision == "Double"
+        monolithic = self.build_strategy == "monolithic"
         candidates = [
-            precision_ok and self.evaluator_mode == "compiled assembly",
-            precision_ok and self.evaluator_mode == "eager",
+            precision_ok and monolithic and self.evaluator_mode == "compiled assembly",
+            precision_ok and monolithic and self.evaluator_mode == "eager",
         ]
         for index, matches in enumerate(candidates):
             if matches:
@@ -196,6 +306,7 @@ class Entry:
             sort_index(self.representation, ["LTD", "CFF", "N/A"]),
             sort_index(self.numerator_kind, ["no_numerator", "only_numerator", "full"]),
             sort_index(self.precision, ["Double", "Quad", "ArbPrec"]),
+            sort_index(self.build_strategy, ["monolithic", "iterative"]),
             sort_index(
                 self.evaluator_mode,
                 ["eager", "compiled assembly", "compiled symjit"],
@@ -224,18 +335,38 @@ def read_manifest(path: Path, workspace: Path) -> Entry | None:
 
     evaluation = manifest.get("evaluation", {})
     profile = evaluation.get("profile") or {}
-    sample_seconds = (
-        profile.get("timing_per_sample_seconds")
-        or evaluation.get("sample_evaluation_timing_seconds")
+    sample_seconds = profile.get("timing_per_sample_seconds") or evaluation.get(
+        "sample_evaluation_timing_seconds"
     )
     build_seconds = evaluation.get("evaluator_build_timing_seconds")
     graph_name = str(manifest.get("graph_name") or "-")
+    expression_path = resolve_artifact_path(
+        manifest.get("expression_path"), path, workspace
+    )
+    orientation_count = None
+    oriented_node_count = None
+    if expression_path is not None:
+        orientation_count, oriented_node_count = oriented_structure_stats(
+            str(expression_path)
+        )
+    symbolica_expression_path = resolve_artifact_path(
+        manifest.get("symbolica_expression_path"), path, workspace
+    )
+    parametric_numerator_bytes = (
+        parametric_numerator_size(str(symbolica_expression_path))
+        if symbolica_expression_path is not None
+        else None
+    )
     return Entry(
         graph_name=graph_name,
         representation=normalize_representation(manifest, path),
         numerator_kind=numerator_kind(manifest, path),
         precision=normalize_precision(manifest),
+        build_strategy=normalize_build_strategy(manifest),
         evaluator_mode=normalize_evaluator_mode(manifest),
+        orientation_count=orientation_count,
+        oriented_node_count=oriented_node_count,
+        parametric_numerator_bytes=parametric_numerator_bytes,
         build_seconds=float(build_seconds) if build_seconds is not None else None,
         sample_seconds=float(sample_seconds) if sample_seconds is not None else None,
         details=detail_fields(manifest, path, workspace),
@@ -256,13 +387,15 @@ def deduplicate_entries(entries: list[Entry]) -> list[Entry]:
 
 
 def collapse_duplicate_categories(entries: list[Entry]) -> list[Entry]:
-    selected: dict[tuple[str, str, str, str, str], Entry] = {}
+    selected: dict[tuple[str, str, str, str, str, str], Entry] = {}
     for entry in sorted(entries, key=lambda item: item.sort_key):
         selected.setdefault(entry.category, entry)
     return sorted(selected.values(), key=lambda item: item.sort_key)
 
 
-def display_sort_key(entry: Entry, baselines: dict[tuple[str, str, str], Entry]) -> tuple[Any, ...]:
+def display_sort_key(
+    entry: Entry, baselines: dict[tuple[str, str, str], Entry]
+) -> tuple[Any, ...]:
     baseline = baselines.get(entry.baseline_key)
     return (
         graph_sort_key(entry.graph_name),
@@ -270,6 +403,7 @@ def display_sort_key(entry: Entry, baselines: dict[tuple[str, str, str], Entry])
         sort_index(entry.numerator_kind, ["no_numerator", "only_numerator", "full"]),
         0 if entry == baseline else 1,
         sort_index(entry.precision, ["Double", "Quad", "ArbPrec"]),
+        sort_index(entry.build_strategy, ["monolithic", "iterative"]),
         sort_index(
             entry.evaluator_mode,
             ["compiled assembly", "eager", "compiled symjit"],
@@ -291,14 +425,12 @@ def collect_entries(workspace: Path) -> list[Entry]:
 def baseline_map(entries: list[Entry]) -> dict[tuple[str, str, str], Entry]:
     baselines = {}
     for baseline_key in sorted({entry.baseline_key for entry in entries}):
-        candidates = [
-            entry
-            for entry in entries
-            if entry.baseline_key == baseline_key
-        ]
+        candidates = [entry for entry in entries if entry.baseline_key == baseline_key]
         ranked = [
             entry
-            for entry in sorted(candidates, key=lambda candidate: candidate.baseline_priority)
+            for entry in sorted(
+                candidates, key=lambda candidate: candidate.baseline_priority
+            )
             if entry.baseline_priority[0] < 2
         ]
         if ranked:
@@ -320,7 +452,7 @@ def format_details(entry: Entry, reference: Entry, use_color: bool) -> str:
 
 def render_table(entries: list[Entry], use_color: bool, show_duplicates: bool) -> str:
     baselines = baseline_map(entries)
-    reference_by_category: dict[tuple[str, str, str, str, str], Entry] = {}
+    reference_by_category: dict[tuple[str, str, str, str, str, str], Entry] = {}
     for entry in entries:
         reference_by_category.setdefault(entry.category, entry)
     duplicate_categories = {
@@ -328,8 +460,12 @@ def render_table(entries: list[Entry], use_color: bool, show_duplicates: bool) -
         for category, reference in reference_by_category.items()
         if any(other.category == category and other != reference for other in entries)
     }
-    display_entries = entries if show_duplicates else collapse_duplicate_categories(entries)
-    display_entries = sorted(display_entries, key=lambda entry: display_sort_key(entry, baselines))
+    display_entries = (
+        entries if show_duplicates else collapse_duplicate_categories(entries)
+    )
+    display_entries = sorted(
+        display_entries, key=lambda entry: display_sort_key(entry, baselines)
+    )
     include_details = show_duplicates and bool(duplicate_categories)
 
     table = PrettyTable()
@@ -338,7 +474,11 @@ def render_table(entries: list[Entry], use_color: bool, show_duplicates: bool) -
         "representation",
         "kind",
         "precision",
+        "build strategy",
         "evaluator mode",
+        "orientations",
+        "oriented nodes",
+        "param numerator",
         "evaluator build time",
         "evaluation / sample",
     ]
@@ -360,12 +500,36 @@ def render_table(entries: list[Entry], use_color: bool, show_duplicates: bool) -
         sample_baseline = baseline.sample_seconds if baseline else None
         row = [
             color(entry.graph_name, BLUE, use_color),
-            color(entry.representation, MAGENTA if entry.representation == "CFF" else CYAN, use_color),
+            color(
+                entry.representation,
+                MAGENTA if entry.representation == "CFF" else CYAN,
+                use_color,
+            ),
             color(entry.numerator_kind, YELLOW, use_color),
             color(entry.precision, GREEN, use_color),
+            color(
+                entry.build_strategy,
+                MAGENTA if entry.build_strategy == "iterative" else BLUE,
+                use_color,
+            ),
             color(entry.evaluator_mode, BOLD, use_color),
+            color(
+                entry.orientation_count if entry.orientation_count is not None else "-",
+                BLUE,
+                use_color,
+            ),
+            color(
+                entry.oriented_node_count
+                if entry.oriented_node_count is not None
+                else "-",
+                BLUE,
+                use_color,
+            ),
+            color(human_bytes(entry.parametric_numerator_bytes), YELLOW, use_color),
             with_ratio(entry.build_seconds, build_baseline, 1.0, "s", use_color),
-            with_ratio(entry.sample_seconds, sample_baseline, 1_000_000.0, "µs", use_color),
+            with_ratio(
+                entry.sample_seconds, sample_baseline, 1_000_000.0, "µs", use_color
+            ),
         ]
         if include_details:
             reference = reference_by_category[entry.category]
@@ -400,7 +564,10 @@ def main() -> int:
     args = parse_args()
     workspace = args.workspace.expanduser().resolve()
     if not workspace.exists() or not workspace.is_dir():
-        print(f"error: workspace does not exist or is not a directory: {workspace}", file=sys.stderr)
+        print(
+            f"error: workspace does not exist or is not a directory: {workspace}",
+            file=sys.stderr,
+        )
         return 2
 
     entries = collect_entries(workspace)

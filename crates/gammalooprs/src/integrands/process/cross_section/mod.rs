@@ -603,7 +603,8 @@ impl CrossSectionGraphTerm {
                 .iter()
                 .map(|esurface_id| {
                     active_cuts[raised_cut_id]
-                        && selected_generation_esurfaces.contains(esurface_id)
+                        && (settings.generation.explicit_orientation_sum_only
+                            || selected_generation_esurfaces.contains(esurface_id))
                 })
                 .collect();
             let right_active: TiVec<_, bool> = counterterm_data
@@ -611,7 +612,8 @@ impl CrossSectionGraphTerm {
                 .iter()
                 .map(|esurface_id| {
                     active_cuts[raised_cut_id]
-                        && selected_generation_esurfaces.contains(esurface_id)
+                        && (settings.generation.explicit_orientation_sum_only
+                            || selected_generation_esurfaces.contains(esurface_id))
                 })
                 .collect();
             let mut iterated_active = counterterm_data.iterated.map_ref(|_| false);
@@ -1455,7 +1457,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     context.evaluation_metadata,
                     context.record_primary_timing,
                 );
-
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
@@ -1533,7 +1534,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "total bare contribution for cut {}: {:+16e}",
                 cut_id.0, total_bare_contribution
             );
-
             all_cut_result += total_bare_contribution;
 
             debug!(

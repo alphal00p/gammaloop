@@ -11,12 +11,16 @@ use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
+use std::collections::BTreeSet;
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
 };
 
-use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
+use linnet::half_edge::{
+    involution::HedgePair,
+    subgraph::{SubSetLike, SubSetOps},
+};
 use tracing::{debug, instrument};
 
 use vakint::Vakint;
@@ -37,6 +41,7 @@ pub struct CutForests {
 pub struct ParametricIntegrands {
     pub integrands: Vec<Atom>,
     pub cuts: CutSet,
+    pub explicitly_summed_orientations: bool,
 }
 
 impl ParametricIntegrands {
@@ -44,6 +49,7 @@ impl ParametricIntegrands {
         Self {
             integrands: self.integrands.into_iter().map(map).collect(),
             cuts: self.cuts,
+            explicitly_summed_orientations: self.explicitly_summed_orientations,
         }
     }
 
@@ -51,11 +57,14 @@ impl ParametricIntegrands {
         Self {
             integrands: vec![Atom::Zero; self.integrands.len()],
             cuts: self.cuts.clone(),
+            explicitly_summed_orientations: self.explicitly_summed_orientations,
         }
     }
 
     pub fn sum_orientations_explicitly(self, orientations: &[EdgeVec<Orientation>]) -> Self {
-        self.map(|atom| explicit_orientation_sum_atom(&atom, orientations))
+        let mut summed = self.map(|atom| explicit_orientation_sum_atom(&atom, orientations));
+        summed.explicitly_summed_orientations = true;
+        summed
     }
 }
 
@@ -68,6 +77,47 @@ pub(crate) fn explicit_orientation_sum_atom(
         .map(|orientation| orientation.select_gs(atom.as_atom_view()))
         .fold(Atom::Zero, |acc, term| acc + term)
         .collect_factors()
+}
+
+fn uv_reduced_subgraph_has_duplicate_leading_denominators(
+    graph: &Graph,
+    current: &Approximation,
+    parent: &Approximation,
+) -> bool {
+    // Local UV rescaling drops external shifts and replaces all masses in the
+    // reduced subgraph by mUV. Equal loop signatures up to an overall sign
+    // therefore become confluent denominators even when the original graph did
+    // not have a repeated edge group.
+    let reduced = current.reduced_subgraph(parent);
+    let mut seen = BTreeSet::new();
+
+    for (pair, edge_id, _) in graph.iter_edges_of(&reduced) {
+        if !matches!(pair, HedgePair::Paired { .. }) {
+            continue;
+        }
+
+        let mut leading_signature = current.lmb().edge_signatures[edge_id]
+            .internal
+            .to_momtrop_format();
+        if leading_signature.iter().all(|sign| *sign == 0) {
+            continue;
+        }
+        if leading_signature
+            .iter()
+            .find(|sign| **sign != 0)
+            .is_some_and(|first_non_zero| *first_non_zero < 0)
+        {
+            for sign in &mut leading_signature {
+                *sign = -*sign;
+            }
+        }
+
+        if !seen.insert(leading_signature) {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Decide whether a forest term must be built from the 4D-expanded integrand
@@ -164,7 +214,11 @@ impl CutForests {
                 integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
 
             );
-            exprs.push(ParametricIntegrands { integrands, cuts });
+            exprs.push(ParametricIntegrands {
+                integrands,
+                cuts,
+                explicitly_summed_orientations: forest.explicitly_summed_orientations,
+            });
         }
         Ok(exprs)
     }
@@ -172,6 +226,7 @@ impl CutForests {
 
 pub struct Forest {
     pub dag: DAG<Approximation, DagNode, ()>,
+    pub explicitly_summed_orientations: bool,
 }
 
 impl Forest {
@@ -199,7 +254,15 @@ impl Forest {
         // and LTD project the same local counterterm before
         // representation-specific residue evaluation.
         let use_expanded_4d_local_uv =
-            uses_expanded_4d_forest_path(graph, cut_data, settings, representation);
+            uses_expanded_4d_forest_path(graph, cut_data, settings, representation)
+                || self.cff_explicit_sum_has_uv_leading_duplicate_denominators(
+                    graph,
+                    settings,
+                    representation,
+                );
+        self.explicitly_summed_orientations = settings.explicit_orientation_sum_only
+            && representation == ThreeDRepresentation::Cff
+            && use_expanded_4d_local_uv;
         let order = self.dag.compute_topological_order();
 
         for (i, n) in order.into_iter().enumerate() {
@@ -213,6 +276,7 @@ impl Forest {
                             valid_orientations,
                             settings,
                             representation,
+                            root_expression,
                         )?;
                     } else {
                         self.dag.nodes[n].data.root(
@@ -297,6 +361,30 @@ impl Forest {
         Ok(())
     }
 
+    fn cff_explicit_sum_has_uv_leading_duplicate_denominators(
+        &self,
+        graph: &Graph,
+        settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
+    ) -> bool {
+        if !settings.uv.subtract_uv
+            || !settings.explicit_orientation_sum_only
+            || representation != ThreeDRepresentation::Cff
+        {
+            return false;
+        }
+
+        self.dag.nodes.values().any(|node| {
+            if node.parents.len() != 1 {
+                return false;
+            }
+            let Some(parent) = self.dag.nodes.get(node.parents[0]) else {
+                return false;
+            };
+            uv_reduced_subgraph_has_duplicate_leading_denominators(graph, &node.data, &parent.data)
+        })
+    }
+
     #[instrument(skip_all)]
     pub(crate) fn orientation_parametric_expr(
         &self,
@@ -304,13 +392,31 @@ impl Forest {
         add_sigma: bool,
     ) -> Result<Vec<Atom>> {
         let mut sum = None;
+        let mut node_dump_terms = std::env::var("GAMMALOOP_DUMP_UV_FOREST_NODE_TERMS")
+            .ok()
+            .map(|dump_dir| (dump_dir, Vec::<(String, Vec<Atom>)>::new()));
+        let node_filter = std::env::var("GAMMALOOP_UV_FOREST_NODE_FILTER").ok();
 
         for (node_id, n) in &self.dag.nodes {
             let simple_approx = n.data.simple_approx.as_ref().ok_or_else(|| {
                 eyre!("UV forest node {node_id:?} simple approximation was not computed")
             })?;
             let simple_expr = simple_approx.expr(&graph.full_filter());
+            let node_header = format!(
+                "node {node_id:?}; topo_order {}; dod {}; subgraph {}; simple {}",
+                n.data.topo_order,
+                n.data.dod(),
+                n.data.spinney.subgraph.string_label(),
+                simple_expr.to_canonical_string()
+            );
+            if node_filter
+                .as_ref()
+                .is_some_and(|filter| !node_header.contains(filter))
+            {
+                continue;
+            }
             debug!(dod = %n.data.dod(), simple = %simple_expr, "Terms");
+            let mut node_terms = Vec::new();
 
             let first = sum.is_none();
             let sum = sum.get_or_insert_with(Vec::new);
@@ -333,15 +439,60 @@ impl Forest {
                     integrand.clone()
                 };
                 if first {
-                    sum.push(a);
+                    sum.push(a.clone());
                 } else {
-                    sum[i] += a;
+                    sum[i] += a.clone();
                 }
+                node_terms.push(a);
+            }
+
+            if let Some((_, dump_terms)) = node_dump_terms.as_mut() {
+                dump_terms.push((node_header, node_terms));
             }
         }
 
-        let mut sum = sum.ok_or(eyre!("No terms in forest"))?;
+        let mut sum = if let Some(sum) = sum {
+            sum
+        } else if node_filter.is_some() {
+            vec![Atom::Zero]
+        } else {
+            return Err(eyre!("No terms in forest"));
+        };
 
+        Self::finalize_parametric_terms(graph, &mut sum);
+
+        if let Some((dump_dir, mut dump_terms)) = node_dump_terms {
+            static FOREST_DUMP_COUNTER: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
+            let dump_id = FOREST_DUMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let mode = std::env::var("GAMMALOOP_DUMP_UV_FOREST_NODE_MODE")
+                .unwrap_or_else(|_| "unknown".to_string());
+            let path = std::path::Path::new(&dump_dir)
+                .join(format!("{}_{}_forest_{dump_id:03}.txt", graph.name, mode));
+            let mut dump = String::new();
+            use std::fmt::Write;
+            writeln!(dump, "graph {}", graph.name).ok();
+            writeln!(dump, "mode {mode}").ok();
+            writeln!(dump, "forest {dump_id}").ok();
+            for (header, terms) in &mut dump_terms {
+                Self::finalize_parametric_terms(graph, terms);
+                writeln!(dump, "{header}").ok();
+                for (term_id, term) in terms.iter().enumerate() {
+                    writeln!(dump, "term {term_id}: {}", term.to_canonical_string()).ok();
+                }
+            }
+            writeln!(dump, "sum").ok();
+            for (term_id, term) in sum.iter().enumerate() {
+                writeln!(dump, "term {term_id}: {}", term.to_canonical_string()).ok();
+            }
+            std::fs::create_dir_all(&dump_dir).ok();
+            std::fs::write(path, dump).ok();
+        }
+
+        Ok(sum)
+    }
+
+    fn finalize_parametric_terms(graph: &Graph, terms: &mut [Atom]) {
         for (pair, edge_index, _) in graph.iter_edges_of(
             &graph
                 .full_filter()
@@ -352,18 +503,17 @@ impl Forest {
                 continue;
             }
 
-            for s in &mut sum {
+            for s in terms.iter_mut() {
                 *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
             }
         }
 
-        for s in &mut sum {
+        for s in terms.iter_mut() {
             *s = s
                 .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                 .with(W_.d_)
                 .collect_factors();
         }
-        Ok(sum)
     }
 
     // pub(crate) fn graphs(&self, graph: &Graph) -> String {
@@ -400,6 +550,7 @@ mod tests {
         let integrands = ParametricIntegrands {
             integrands: vec![Atom::var(symbol!("x")), Atom::num(7)],
             cuts: CutSet::empty(3),
+            explicitly_summed_orientations: false,
         };
 
         let zeroed = integrands.zero_like();

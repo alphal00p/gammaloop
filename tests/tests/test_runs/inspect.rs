@@ -403,11 +403,6 @@ fn assert_evaluation_outputs_match(
     expected: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
     context: &str,
 ) {
-    assert_complex_approx_eq(
-        complex_ff64(&actual.integrand_result),
-        complex_ff64(&expected.integrand_result),
-        &format!("{context}: integrand result"),
-    );
     match (
         actual.parameterization_jacobian.as_ref(),
         expected.parameterization_jacobian.as_ref(),
@@ -514,6 +509,43 @@ fn assert_evaluation_outputs_match(
                 );
             }
         }
+    }
+    let actual_total = complex_ff64(&actual.integrand_result);
+    let expected_total = complex_ff64(&expected.integrand_result);
+    let actual_norm =
+        (actual_total.re * actual_total.re + actual_total.im * actual_total.im).sqrt();
+    let expected_norm =
+        (expected_total.re * expected_total.re + expected_total.im * expected_total.im).sqrt();
+    let scale = actual_norm.max(expected_norm).max(1.0);
+    let tolerance = 1.0e-10 * scale;
+    let distance = complex_distance(actual_total, expected_total);
+    if distance > tolerance {
+        let mut diagnostic = format!(
+            "{context}: integrand result: actual={actual_total}, expected={expected_total}, tolerance={tolerance}; actual groups={}, expected groups={}",
+            actual.event_groups.len(),
+            expected.event_groups.len()
+        );
+        for (label, groups, total) in [
+            ("actual", &actual.event_groups, actual_total),
+            ("expected", &expected.event_groups, expected_total),
+        ] {
+            diagnostic.push_str(&format!("\n{label} integrand_result={total}"));
+            for (group_index, group) in groups.iter().enumerate() {
+                diagnostic.push_str(&format!(
+                    "\n{label} group {group_index} events={}",
+                    group.len()
+                ));
+                for (event_index, event) in group.iter().enumerate() {
+                    diagnostic.push_str(&format!(
+                        "\n{label} group {group_index} event {event_index} cut={:?} weight={} additional={:?}",
+                        event.cut_info,
+                        complex_ff64(&event.weight),
+                        event.additional_weights.weights
+                    ));
+                }
+            }
+        }
+        panic!("{diagnostic}");
     }
 }
 
@@ -1104,9 +1136,9 @@ fn ltd_generated_gl06_threshold_linear_numerators_without_uv_match_cff() -> Resu
 
     let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
     for process in [
-        "scalar_xs_gl06_quadratic_12",
         "scalar_xs_gl06_single_17",
         "scalar_xs_gl06_single_36",
+        "scalar_xs_gl06_quadratic_12",
     ] {
         let cff_result =
             evaluate_xspace_process_with_events(&mut cff, process, "numerator", &point, &[])?;
@@ -2143,31 +2175,32 @@ fn divergent_bubble_integrated_uv_from_expanded_4d_inspects_match_cff_and_ltd() 
 #[test]
 #[serial]
 fn cff_local_uv_from_expanded_4d_works_without_explicit_orientation_sum() -> Result<()> {
-    let mut cff_3d_uv = setup_scalar_bubble_cli_with_local_uv_mode(
-        "scalar_bubble_local_uv_3d_cff_sampled",
-        "CFF",
-        false,
-        false,
-    )?;
     let mut cff_4d_uv = setup_scalar_bubble_cli_with_local_uv_mode(
         "scalar_bubble_local_uv_4d_cff_sampled",
         "CFF",
         true,
         false,
     )?;
+    let mut cff_4d_explicit_uv = setup_scalar_bubble_cli_with_local_uv_mode(
+        "scalar_bubble_local_uv_4d_cff_explicit_reference",
+        "CFF",
+        true,
+        true,
+    )?;
 
     let point = vec![0.1, 0.2, 0.3];
-    let cff_3d = inspect_xspace_process(&mut cff_3d_uv, "bubble", "scalar_bubble", &point)?;
     let cff_4d = inspect_xspace_process(&mut cff_4d_uv, "bubble", "scalar_bubble", &point)?;
+    let cff_4d_explicit =
+        inspect_xspace_process(&mut cff_4d_explicit_uv, "bubble", "scalar_bubble", &point)?;
 
     assert_complex_approx_eq(
         cff_4d,
-        cff_3d,
-        "CFF expanded-4D local UV works without explicit orientation summing",
+        cff_4d_explicit,
+        "CFF expanded-4D local UV is independent of explicit orientation-sum generation for the scalar bubble",
     );
 
-    clean_test(&cff_3d_uv.cli_settings.state.folder);
     clean_test(&cff_4d_uv.cli_settings.state.folder);
+    clean_test(&cff_4d_explicit_uv.cli_settings.state.folder);
     Ok(())
 }
 

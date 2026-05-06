@@ -196,6 +196,9 @@ impl Wood {
 
         let _ = self.unfold_bfs(graph, lmb, &mut dag, &mut unions, root);
 
-        Forest { dag }
+        Forest {
+            dag,
+            explicitly_summed_orientations: false,
+        }
     }
 }

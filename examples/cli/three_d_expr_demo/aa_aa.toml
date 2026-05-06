@@ -167,26 +167,39 @@ commands = [
 name = "profile_evaluate_eager"
 commands = [
   "set global kv global.generation.evaluator.compile=false",
-  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --manifest-name {manifest_name} --no-show-parameters --standalone-rust-only",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --clean --manifest-name {manifest_name} --no-show-parameters",
 ]
 
 [[command_blocks]]
 name = "profile_evaluate_compiled"
 commands = [
-  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --manifest-name {manifest_name} --no-show-parameters --standalone-rust-only",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --clean --manifest-name {manifest_name} --no-show-parameters",
+]
+
+[[command_blocks]]
+name = "profile_evaluate_iterative_eager"
+commands = [
+  "set global kv global.generation.evaluator.compile=false",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --iterative --clean --manifest-name {manifest_name} --no-show-parameters",
+]
+
+[[command_blocks]]
+name = "profile_evaluate_iterative_compiled"
+commands = [
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --iterative --clean --manifest-name {manifest_name} --no-show-parameters",
 ]
 
 [[command_blocks]]
 name = "profile_evaluate_numerator_only_eager"
 commands = [
   "set global kv global.generation.evaluator.compile=false",
-  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --numerator-only --manifest-name {manifest_name} --no-show-parameters --standalone-rust-only",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --eager --numerator-only --clean --manifest-name {manifest_name} --no-show-parameters",
 ]
 
 [[command_blocks]]
 name = "profile_evaluate_numerator_only_compiled"
 commands = [
-  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --numerator-only --manifest-name {manifest_name} --no-show-parameters --standalone-rust-only",
+  "3Drep evaluate -p {process_name} -i default -g {graph_id} --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path ./examples/cli/three_d_expr_demo/aa_aa_workspace/{workspace_name} --precision {precision} --seed {seed} --scale {scale} --profile {profile_duration} --numerator-only --clean --manifest-name {manifest_name} --no-show-parameters",
 ]
 
 [[command_blocks]]
@@ -195,19 +208,29 @@ commands = [
   "run profile_build_structure -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D representation=ltd",
   "run profile_build_structure -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D representation=cff",
   "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_01.json",
-#  "run profile_compile_assembly",
-#  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_02.json",
-#  "run profile_compile_symjit",
-#  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_03.json",
-#  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Quad -D manifest_name={workspace_name}_eval_04.json",
-#  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=ArbPrec -D manifest_name={workspace_name}_eval_05.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_02.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_03.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Quad -D manifest_name={workspace_name}_eval_04.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=ArbPrec -D manifest_name={workspace_name}_eval_05.json",
+  "run profile_evaluate_iterative_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_11.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_iterative_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_12.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_iterative_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=ltd -D precision=Double -D manifest_name={workspace_name}_eval_13.json",
   "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_06.json",
-#  "run profile_compile_assembly",
-#  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_07.json",
-#  "run profile_compile_symjit",
-#  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_08.json",
-#  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Quad -D manifest_name={workspace_name}_eval_09.json",
-#  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=ArbPrec -D manifest_name={workspace_name}_eval_10.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_07.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_08.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Quad -D manifest_name={workspace_name}_eval_09.json",
+  "run profile_evaluate_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=ArbPrec -D manifest_name={workspace_name}_eval_10.json",
+  "run profile_evaluate_iterative_eager -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_14.json",
+  "run profile_compile_assembly",
+  "run profile_evaluate_iterative_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_15.json",
+  "run profile_compile_symjit",
+  "run profile_evaluate_iterative_compiled -D process_name={process_name} -D graph_id={graph_id} -D workspace_name={workspace_name} -D seed={seed} -D scale={scale} -D profile_duration={profile_duration} -D representation=cff -D precision=Double -D manifest_name={workspace_name}_eval_16.json",
 ]
 
 [[command_blocks]]

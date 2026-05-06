@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{atom::AtomView, try_parse};
 use thiserror::Error;
 
+#[cfg(test)]
 use crate::graph_io::{ParsedGraph, ParsedGraphExternalEdge, ParsedGraphInternalEdge};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -184,6 +185,7 @@ pub fn reconstruct_dot(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn reconstruct_parsed_graph(
     extracted: &ExtractedSignatureExpression,
     options: &ReconstructDotOptions,
@@ -878,6 +880,7 @@ fn loop_carrier_edges(signatures: &[MomentumSignature]) -> BTreeMap<usize, usize
     carriers
 }
 
+#[cfg(test)]
 fn format_momentum(
     signature: &MomentumSignature,
     loop_names: &[String],
@@ -901,6 +904,7 @@ fn format_momentum(
     format_signed_terms(parts)
 }
 
+#[cfg(test)]
 fn format_signed_terms(parts: Vec<(String, i32)>) -> String {
     if parts.is_empty() {
         return "0".to_string();

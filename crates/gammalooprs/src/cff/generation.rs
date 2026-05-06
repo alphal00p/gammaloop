@@ -19,6 +19,7 @@ use linnet::half_edge::{
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::{
     Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode, ThreeDGraphSource,
+    energy_divergence_report,
     tree::{NodeId, Tree},
 };
 
@@ -97,10 +98,13 @@ impl Graph {
             )
         }?;
 
+        let use_generated_cff_half_edges =
+            generated_cff_expression_uses_variant_half_edges(&local_options, &expression);
+
         self.convert_generated_expression_surfaces(
             expression,
             local_options.representation,
-            generated_cff_expression_uses_variant_half_edges(&local_options),
+            use_generated_cff_half_edges,
             canonize_esurface,
             &initial_state_cut_edges,
         )
@@ -147,14 +151,65 @@ impl Graph {
 
     pub fn automatic_numerator_energy_degree_bounds_for_3d_expression(
         &self,
-        _representation: RepresentationMode,
+        representation: RepresentationMode,
     ) -> Result<Vec<(usize, usize)>> {
         let excluded_edges = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
             .chain(self.external_tree_4d_denominator_edges())
             .collect_vec();
-        Ok(self.automatic_numerator_energy_degree_bounds_excluding(excluded_edges)?)
+        let min_degree = match representation {
+            RepresentationMode::Ltd => 1,
+            // The generalized CFF builder also needs multilinear source-edge
+            // bounds: a numerator can be linear in each denominator energy but
+            // still higher than affine in a common loop-energy direction.
+            RepresentationMode::Cff => 1,
+            _ => 2,
+        };
+        let source_edge_bounds = self
+            .automatic_numerator_energy_degree_bounds_excluding_with_min_degree(
+                excluded_edges.iter().copied(),
+                min_degree,
+            )?;
+        if representation != RepresentationMode::Cff {
+            return Ok(source_edge_bounds);
+        }
+
+        let lmb_bounds = self
+            .automatic_lmb_numerator_energy_degree_bounds_excluding_with_min_degree(
+                excluded_edges,
+                2,
+            )?;
+        if self.energy_degree_bounds_are_convergent_for_3d_source(&lmb_bounds)? {
+            return Ok(lmb_bounds);
+        }
+
+        Ok(source_edge_bounds)
+    }
+
+    fn energy_degree_bounds_are_convergent_for_3d_source(
+        &self,
+        bounds: &[(usize, usize)],
+    ) -> Result<bool> {
+        if bounds.is_empty() {
+            return Ok(true);
+        }
+
+        let source = GraphThreeDSource::new(self, &[]);
+        let parsed = source.to_three_d_parsed_graph()?;
+        let Some(edge_map) = source.energy_edge_index_map(&parsed) else {
+            return Ok(false);
+        };
+        let local_bounds = match edge_map.remap_bounds_to_local(bounds) {
+            Ok(bounds) => bounds,
+            Err(_) => return Ok(false),
+        };
+        let signatures = parsed
+            .internal_edges
+            .iter()
+            .map(|edge| edge.signature.clone())
+            .collect::<Vec<_>>();
+        Ok(energy_divergence_report(&signatures, &local_bounds)?.convergent)
     }
 
     pub fn preserved_4d_denominator_edges_for_3d_expression(
@@ -273,7 +328,10 @@ impl Graph {
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
     ) -> Result<SurfaceMapEntry> {
-        if surface.numerator_only {
+        if surface.numerator_only
+            && (!surface.expression.uniform_scale_coeff.is_zero()
+                || !surface.expression.constant.is_zero())
+        {
             let surface_id =
                 Into::<LinearSurfaceID>::into(self.surface_cache.linear_surface_cache.len());
             self.surface_cache
@@ -374,12 +432,17 @@ impl Graph {
 
 pub(crate) fn generated_cff_expression_uses_variant_half_edges(
     options: &Generate3DExpressionOptions,
+    expression: &three_dimensional_reps::ThreeDExpression<OrientationID>,
 ) -> bool {
     options.representation == RepresentationMode::Cff
-        && options
-            .energy_degree_bounds
-            .iter()
-            .any(|(_, degree)| *degree > 1)
+        && expression.orientations.iter().any(|orientation| {
+            orientation.variants.iter().any(|variant| {
+                variant
+                    .origin
+                    .as_deref()
+                    .is_some_and(|origin| origin != "pure_cff" && origin != "preserved_tree")
+            })
+        })
 }
 
 fn three_d_source_summary(parsed: &three_dimensional_reps::ParsedGraph) -> String {

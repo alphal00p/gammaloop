@@ -1016,6 +1016,7 @@ impl AmplitudeGraph {
                 if settings.explicit_orientation_sum_only
                     && global_settings.three_d_representation == ThreeDRepresentation::Cff
                     && !settings.uv.local_uv_cts_from_expanded_4d_integrands
+                    && !e.explicitly_summed_orientations
                 {
                     e.sum_orientations_explicitly(&valid_orientations)
                 } else {
@@ -1140,6 +1141,7 @@ impl AmplitudeGraph {
             let cutset = CutSet {
                 residue_selector: ResidueSelector {
                     lu_cut: None,
+                    lu_cut_edge_sets: Vec::new(),
                     left_th_cut: Some(raised_data.clone()),
                     right_th_cut: None,
                 },
@@ -1170,6 +1172,7 @@ impl AmplitudeGraph {
                 if settings.explicit_orientation_sum_only
                     && representation == ThreeDRepresentation::Cff
                     && !settings.uv.local_uv_cts_from_expanded_4d_integrands
+                    && !e.explicitly_summed_orientations
                 {
                     e.sum_orientations_explicitly(&valid_orientations)
                 } else {

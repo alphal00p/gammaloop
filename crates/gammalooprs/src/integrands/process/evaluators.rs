@@ -392,6 +392,28 @@ impl EvaluatorStack {
             settings,
         )
     }
+
+    fn new_preprocessed_direct_with_progress<A, P>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<GenericEvaluator>
+    where
+        A: AtomCore,
+        P: FnMut(usize, usize),
+    {
+        GenericEvaluator::new_from_builder_with_progress(
+            atoms.iter().map(|atom| atom.as_atom_view().to_owned()),
+            param_builder,
+            dual_shape.clone(),
+            settings.optimization_settings(),
+            settings,
+            progress,
+        )
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -562,6 +584,41 @@ impl EvaluatorStack {
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
         Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
+    }
+
+    pub fn new_preprocessed_components_with_timings<A, P>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<(Self, EvaluatorBuildTimings)>
+    where
+        A: AtomCore,
+        P: FnMut(usize, usize),
+    {
+        let mut timings = EvaluatorBuildTimings::default();
+        let symbolica_started = std::time::Instant::now();
+        let single_parametric = Self::new_preprocessed_direct_with_progress(
+            atoms,
+            param_builder,
+            &dual_shape,
+            settings,
+            progress,
+        )
+        .with_context(|| "Failed to create preprocessed component evaluator")?;
+        timings.symbolica_time += symbolica_started.elapsed();
+
+        Ok((
+            EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                single_parametric,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            },
+            timings,
+        ))
     }
 
     #[instrument(
@@ -1119,6 +1176,15 @@ pub struct GenericEvaluator {
     pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
 }
 
+pub(crate) struct RawEvaluatorBuildParams<'a> {
+    params: &'a [Atom],
+    fn_map: &'a FunctionMap,
+    fn_map_entries: Vec<FnMapEntry>,
+    optimization_settings: OptimizationSettings,
+    dual_shape: Option<Vec<Vec<usize>>>,
+    settings: &'a EvaluatorSettings,
+}
+
 impl GenericEvaluator {
     pub(crate) fn into_eager_only(mut self) -> Self {
         self.backend_policy = EvaluatorBackendPolicy::EagerOnly;
@@ -1247,19 +1313,44 @@ impl GenericEvaluator {
         optimization_settings: OptimizationSettings,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Self::new_from_builder_with_progress(
+            atoms,
+            builder,
+            dual_shape,
+            optimization_settings,
+            settings,
+            |_, _| {},
+        )
+    }
+
+    pub(crate) fn new_from_builder_with_progress<I, P>(
+        atoms: I,
+        builder: &ParamBuilder<f64>,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        optimization_settings: OptimizationSettings,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = Atom>,
+        P: FnMut(usize, usize),
+    {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
             .collect();
 
-        Self::new_from_raw_params(
+        Self::new_from_raw_params_with_progress(
             atoms,
-            &params,
-            &builder.fn_map,
-            builder.reps.clone(),
-            optimization_settings,
-            dual_shape,
-            settings,
+            RawEvaluatorBuildParams {
+                params: &params,
+                fn_map: &builder.fn_map,
+                fn_map_entries: builder.reps.clone(),
+                optimization_settings,
+                dual_shape,
+                settings,
+            },
+            progress,
         )
     }
 
@@ -1272,6 +1363,37 @@ impl GenericEvaluator {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Self::new_from_raw_params_with_progress(
+            atoms,
+            RawEvaluatorBuildParams {
+                params,
+                fn_map,
+                fn_map_entries,
+                optimization_settings,
+                dual_shape,
+                settings,
+            },
+            |_, _| {},
+        )
+    }
+
+    pub(crate) fn new_from_raw_params_with_progress<I, P>(
+        atoms: I,
+        build: RawEvaluatorBuildParams<'_>,
+        mut progress: P,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = Atom>,
+        P: FnMut(usize, usize),
+    {
+        let RawEvaluatorBuildParams {
+            params,
+            fn_map,
+            fn_map_entries,
+            optimization_settings,
+            dual_shape,
+            settings,
+        } = build;
         let reps = if settings.do_fn_map_replacements {
             fn_map_entries
                 .iter()
@@ -1292,8 +1414,9 @@ impl GenericEvaluator {
             })
             .collect();
 
+        let total_exprs = exprs.len();
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
-        for n in exprs.iter() {
+        for (index, n) in exprs.iter().enumerate() {
             let eval = n
                 .evaluator(fn_map, params, optimization_settings.clone())
                 .map_err(|e| {
@@ -1324,6 +1447,7 @@ impl GenericEvaluator {
             } else {
                 eval
             });
+            progress(index + 1, total_exprs);
         }
 
         let mut tree = tree.ok_or_else(|| eyre!("No expressions to evaluate"))?;

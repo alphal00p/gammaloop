@@ -1105,6 +1105,7 @@ mod tests {
             origin: Some("test".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
+            denominator_edges: Vec::new(),
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
             denominator,

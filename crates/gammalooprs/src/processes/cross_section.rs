@@ -24,7 +24,10 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
-        expression::{CFFExpression, OrientationID},
+        expression::{
+            CFFExpression, OrientationID, localize_numerator_energy_maps_on_esurface,
+            remove_ltd_global_contact_completions_from_local_residue,
+        },
     },
     define_index,
     graph::{
@@ -131,6 +134,13 @@ impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T
         let (left_id, right_id) = index;
         &mut self.data[left_id.0 * self.num_left_thresholds + right_id.0]
     }
+}
+
+fn numerator_fingerprint(numerator: &str) -> String {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    numerator.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -868,6 +878,58 @@ impl CrossSectionGraph {
             .map(Into::into)
     }
 
+    fn projected_raised_cut_groups_for_current_3d_expression(
+        &self,
+        expression: &CFFExpression<OrientationID>,
+        evaluator_settings: &EvaluatorSettings,
+    ) -> Result<TiVec<RaisedCutId, RaisedCutGroup>> {
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let normalized_generated_esurfaces =
+            self.normalized_generated_esurfaces(&raised_edge_groups);
+        let cut_esurface_map = self
+            .cut_esurface
+            .iter()
+            .map(|esurface| {
+                self.find_generated_esurface_id(
+                    esurface,
+                    &normalized_generated_esurfaces,
+                    &raised_edge_groups,
+                    "Cutkosky cut projected into local 3D residue expression",
+                )
+            })
+            .collect::<Result<TiVec<CutId, _>>>()?;
+
+        let projected_esurface_raised_data = self
+            .graph
+            .determine_raised_esurfaces_from_expression(expression);
+        let (projected_raised_data, _) = RaisedCutData::new_from_esurface(
+            &projected_esurface_raised_data,
+            &cut_esurface_map,
+            evaluator_settings,
+        );
+
+        self.derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|requested_group| {
+                projected_raised_data
+                    .raised_cut_groups
+                    .iter()
+                    .find(|projected_group| projected_group.cuts == requested_group.cuts)
+                    .cloned()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "could not project Cutkosky cut group {:?} into graph {} local 3D residue expression; projected groups were {:?}",
+                            requested_group.cuts,
+                            self.graph.name,
+                            projected_raised_data.raised_cut_groups
+                        )
+                    })
+            })
+            .collect()
+    }
+
     fn generate_cuts(
         &mut self,
         model: &Model,
@@ -988,34 +1050,73 @@ impl CrossSectionGraph {
             );
         }
 
+        let representation = global_settings.three_d_representation;
+        let projection_expression;
+        let (root_expression, projection_representation, raised_cut_groups) =
+            if representation == ThreeDRepresentation::Ltd {
+                let canonize_esurface = self
+                    .graph
+                    .get_esurface_canonization(&self.graph.loop_momentum_basis);
+                let options = self
+                    .graph
+                    .production_3d_expression_options(ThreeDRepresentation::Cff, settings)?;
+                projection_expression = Some(self.graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &canonize_esurface,
+                    &options,
+                )?);
+                let expression = projection_expression
+                    .as_ref()
+                    .expect("projection expression was just created");
+                (
+                    expression,
+                    ThreeDRepresentation::Cff,
+                    self.projected_raised_cut_groups_for_current_3d_expression(
+                        expression,
+                        &settings.evaluator,
+                    )?,
+                )
+            } else {
+                (
+                    self.derived_data
+                        .global_cff_expression
+                        .as_ref()
+                        .expect("global_cff_expression should have been created"),
+                    representation,
+                    self.derived_data.raised_data.raised_cut_groups.clone(),
+                )
+            };
+
+        let cuts = self.cutsets_for_raised_cut_groups(&raised_cut_groups);
         let cut_structure = CutStructure { cuts };
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .global_cff_expression
-            .as_ref()
-            .expect("global_cff_expression should have been created")
+        let valid_orientations: Vec<_> = root_expression
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
         let lu_prefactor = self.lu_prefactor_helper();
-        let representation = global_settings.three_d_representation;
         let mut cut_forests = cut_woods.unfold(&self.graph);
         cut_forests.compute(
             &mut self.graph,
             vakint,
             &valid_orientations,
             settings,
-            self.derived_data.global_cff_expression.as_ref(),
-            representation,
+            Some(root_expression),
+            projection_representation,
             settings.explicit_orientation_sum_only,
         )?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
+
+        self.dump_parametric_integrands_if_requested(
+            &parametric_integrands,
+            projection_representation,
+            settings.uv.local_uv_cts_from_expanded_4d_integrands,
+        );
 
         Ok(parametric_integrands
             .into_iter()
@@ -1024,8 +1125,9 @@ impl CrossSectionGraph {
                     &self.graph,
                     &integrand.cuts,
                     settings,
-                    representation,
-                ) {
+                    projection_representation,
+                ) && !integrand.explicitly_summed_orientations
+                {
                     integrand.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     integrand
@@ -1033,24 +1135,31 @@ impl CrossSectionGraph {
             })
             .zip(self.derived_data.raised_data.raised_cut_groups.iter())
             .map(|(integrand, _raised_cut_group)| {
-                let representation_prefactor = if representation == ThreeDRepresentation::Ltd {
-                    self.ltd_cut_parity_factor()
-                } else {
-                    Atom::num(1)
-                };
+                let representation_prefactor =
+                    if projection_representation == ThreeDRepresentation::Ltd {
+                        self.ltd_cut_parity_factor()
+                    } else {
+                        Atom::num(1)
+                    };
                 integrand.map(|a| a * &lu_prefactor * &representation_prefactor)
             })
             .collect())
     }
 
     fn cutsets_for_raised_cuts(&self) -> Vec<CutSet> {
-        self.derived_data
-            .raised_data
-            .raised_cut_groups
+        self.cutsets_for_raised_cut_groups(&self.derived_data.raised_data.raised_cut_groups)
+    }
+
+    fn cutsets_for_raised_cut_groups(
+        &self,
+        raised_cut_groups: &TiVec<RaisedCutId, RaisedCutGroup>,
+    ) -> Vec<CutSet> {
+        raised_cut_groups
             .iter()
             .map(|cuts| CutSet {
                 residue_selector: ResidueSelector {
                     lu_cut: Some(cuts.related_esurface_group.clone()),
+                    lu_cut_edge_sets: self.cut_edge_sets(cuts.cuts.iter().copied()),
                     left_th_cut: None,
                     right_th_cut: None,
                 },
@@ -1060,6 +1169,27 @@ impl CrossSectionGraph {
                     .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
                     .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
                     .unwrap_or_else(|| self.graph.empty_subgraph()),
+            })
+            .collect()
+    }
+
+    fn cut_edge_sets(
+        &self,
+        cut_ids: impl IntoIterator<Item = CutId>,
+    ) -> Vec<Vec<linnet::half_edge::involution::EdgeIndex>> {
+        cut_ids
+            .into_iter()
+            .map(|cut_id| {
+                self.cuts[cut_id]
+                    .cut
+                    .iter_edges(&self.graph)
+                    .map(|(_, edge_data)| {
+                        self.graph
+                            .edge_name_to_index(&edge_data.data.name)
+                            .expect("Cut edge should belong to the graph")
+                    })
+                    .sorted()
+                    .collect()
             })
             .collect()
     }
@@ -1099,33 +1229,96 @@ impl CrossSectionGraph {
     }
 
     fn build_direct_3d_original_integrand(
-        &self,
+        &mut self,
         cuts: &[CutSet],
         settings: &GenerationSettings,
         representation: ThreeDRepresentation,
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
-        let expression = self
-            .derived_data
-            .global_cff_expression
-            .as_ref()
-            .expect("global 3D expression should have been created");
+        let projection_expression;
+        let (expression, projection_representation) = if representation == ThreeDRepresentation::Ltd
+        {
+            let canonize_esurface = self
+                .graph
+                .get_esurface_canonization(&self.graph.loop_momentum_basis);
+            let options = self
+                .graph
+                .production_3d_expression_options(ThreeDRepresentation::Cff, settings)?;
+            projection_expression = Some(self.graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonize_esurface,
+                &options,
+            )?);
+            (
+                projection_expression
+                    .as_ref()
+                    .expect("projection expression was just created"),
+                ThreeDRepresentation::Cff,
+            )
+        } else {
+            (
+                self.derived_data
+                    .global_cff_expression
+                    .as_ref()
+                    .expect("global 3D expression should have been created"),
+                representation,
+            )
+        };
+        let projected_raised_cut_groups = if projection_representation != representation {
+            Some(self.projected_raised_cut_groups_for_current_3d_expression(
+                expression,
+                &settings.evaluator,
+            )?)
+        } else {
+            None
+        };
         let numerator = self.production_numerator_atom_for_full_3d_expression();
         let lu_prefactor = self.lu_prefactor_helper();
 
-        self.derived_data
+        let parametric_integrands = self
+            .derived_data
             .raised_data
             .raised_cut_groups
             .iter()
+            .enumerate()
             .zip(cuts.iter())
-            .map(|(raised_cut_group, cutset)| {
-                let representation_prefactor = if representation == ThreeDRepresentation::Ltd {
-                    self.ltd_cut_parity_factor()
-                } else {
-                    Atom::num(1)
-                };
-                let residues = expression
-                    .clone()
-                    .select_esurface_residue(&raised_cut_group.related_esurface_group);
+            .map(|((raised_cut_index, raised_cut_group), cutset)| {
+                let projected_raised_cut_group = projected_raised_cut_groups
+                    .as_ref()
+                    .map(|groups| &groups[RaisedCutId(raised_cut_index)])
+                    .unwrap_or(raised_cut_group);
+                let representation_prefactor =
+                    if projection_representation == ThreeDRepresentation::Ltd {
+                        self.ltd_cut_parity_factor()
+                    } else {
+                        Atom::num(1)
+                    };
+                let mut residues = expression.clone().select_esurface_residue_with_cut_edges(
+                    &projected_raised_cut_group.related_esurface_group,
+                    &cutset.residue_selector.lu_cut_edge_sets,
+                );
+                if projection_representation == ThreeDRepresentation::Ltd {
+                    let representative_esurface_id = projected_raised_cut_group
+                        .related_esurface_group
+                        .esurface_ids[0];
+                    for residue in &mut residues {
+                        localize_numerator_energy_maps_on_esurface(
+                            residue,
+                            representative_esurface_id,
+                        )?;
+                        remove_ltd_global_contact_completions_from_local_residue(residue);
+                    }
+                }
+                self.dump_selected_residues_if_requested(
+                    &residues,
+                    &projected_raised_cut_group.related_esurface_group,
+                    projection_representation,
+                    settings.uv.local_uv_cts_from_expanded_4d_integrands,
+                    raised_cut_group
+                        .cuts
+                        .first()
+                        .map(|cut_id| usize::from(*cut_id))
+                        .unwrap_or(0),
+                );
                 let integrands = residues
                     .into_iter()
                     .map(|residue| {
@@ -1134,7 +1327,7 @@ impl CrossSectionGraph {
                             .three_d_expression_parametric_atom_with_numerator_gs(
                                 &residue,
                                 &numerator,
-                                match representation {
+                                match projection_representation {
                                     ThreeDRepresentation::Cff => RepresentationMode::Cff,
                                     ThreeDRepresentation::Ltd => RepresentationMode::Ltd,
                                 },
@@ -1149,9 +1342,218 @@ impl CrossSectionGraph {
                 Ok(ParametricIntegrands {
                     integrands,
                     cuts: cutset.clone(),
+                    explicitly_summed_orientations: true,
                 })
             })
-            .collect()
+            .collect::<Result<TiVec<_, _>>>()?;
+        self.dump_parametric_integrands_if_requested(
+            &parametric_integrands,
+            projection_representation,
+            settings.uv.local_uv_cts_from_expanded_4d_integrands,
+        );
+        Ok(parametric_integrands)
+    }
+
+    fn dump_selected_residues_if_requested(
+        &self,
+        residues: &[CFFExpression<OrientationID>],
+        raised_esurface_group: &RaisedEsurfaceGroup,
+        representation: ThreeDRepresentation,
+        local_uv_from_expanded_4d: bool,
+        cut_id: usize,
+    ) {
+        let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_PARAMETRIC_INTEGRANDS") else {
+            return;
+        };
+        let representation_label = match representation {
+            ThreeDRepresentation::Cff => "cff",
+            ThreeDRepresentation::Ltd => "ltd",
+        };
+        let mode = if local_uv_from_expanded_4d {
+            "local4d"
+        } else {
+            "local3d"
+        };
+        let numerator = self
+            .production_numerator_atom_for_full_3d_expression()
+            .to_canonical_string();
+        let numerator_fingerprint = numerator_fingerprint(&numerator);
+        let path = std::path::Path::new(&dump_dir).join(format!(
+            "{}_{}_{}_{}_cut{}_selected_residues.txt",
+            self.graph.name, representation_label, mode, numerator_fingerprint, cut_id
+        ));
+        let mut dump = String::new();
+        use std::fmt::Write;
+        writeln!(dump, "numerator {numerator}").ok();
+        writeln!(dump, "raised_esurface_group {:?}", raised_esurface_group).ok();
+        writeln!(dump, "residue_count {}", residues.len()).ok();
+        for (residue_id, residue) in residues.iter().enumerate() {
+            writeln!(dump, "residue {residue_id}").ok();
+            writeln!(dump, "  esurfaces {:?}", residue.surfaces.esurface_cache).ok();
+            writeln!(dump, "  hsurfaces {:?}", residue.surfaces.hsurface_cache).ok();
+            writeln!(dump, "  orientations {}", residue.orientations.len()).ok();
+            for (orientation_id, orientation) in residue.orientations.iter_enumerated() {
+                writeln!(
+                    dump,
+                    "  orientation {} label {:?} variants {} unfolded {}",
+                    usize::from(orientation_id),
+                    orientation.data.label,
+                    orientation.variants.len(),
+                    orientation.num_unfolded_terms()
+                )
+                .ok();
+                writeln!(
+                    dump,
+                    "    loop_energy_map {:?}",
+                    orientation.loop_energy_map
+                )
+                .ok();
+                writeln!(
+                    dump,
+                    "    edge_energy_map {:?}",
+                    orientation.edge_energy_map
+                )
+                .ok();
+                for (variant_id, variant) in orientation.variants.iter().enumerate() {
+                    writeln!(
+                        dump,
+                        "    variant {variant_id} origin {:?} prefactor {} half_edges {:?} denominator_edges {:?} numerator_surfaces {:?} denominator {:?}",
+                        variant.origin,
+                        variant.prefactor.to_canonical_string(),
+                        variant.half_edges,
+                        variant.denominator_edges,
+                        variant.numerator_surfaces,
+                        variant.denominator
+                    )
+                    .ok();
+                }
+            }
+        }
+        std::fs::create_dir_all(&dump_dir).ok();
+        std::fs::write(path, dump).ok();
+    }
+
+    fn dump_parametric_integrands_if_requested<'a>(
+        &self,
+        parametric_integrands: impl IntoIterator<Item = &'a ParametricIntegrands>,
+        representation: ThreeDRepresentation,
+        local_uv_from_expanded_4d: bool,
+    ) {
+        let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_PARAMETRIC_INTEGRANDS") else {
+            return;
+        };
+        let representation_label = match representation {
+            ThreeDRepresentation::Cff => "cff",
+            ThreeDRepresentation::Ltd => "ltd",
+        };
+        let mode = if local_uv_from_expanded_4d {
+            "local4d"
+        } else {
+            "local3d"
+        };
+        let numerator = self
+            .production_numerator_atom_for_full_3d_expression()
+            .to_canonical_string();
+        let numerator_fingerprint = numerator_fingerprint(&numerator);
+        let path = std::path::Path::new(&dump_dir).join(format!(
+            "{}_{}_{}_{}_parametric_integrands.txt",
+            self.graph.name, representation_label, mode, numerator_fingerprint
+        ));
+        let mut dump = String::new();
+        use std::fmt::Write;
+        writeln!(dump, "numerator {numerator}").ok();
+        for (cut_id, integrands) in parametric_integrands.into_iter().enumerate() {
+            writeln!(dump, "cut {cut_id}").ok();
+            for (derivative, atom) in integrands.integrands.iter().enumerate() {
+                writeln!(
+                    dump,
+                    "derivative {derivative}: {}",
+                    atom.to_canonical_string()
+                )
+                .ok();
+            }
+        }
+        std::fs::create_dir_all(&dump_dir).ok();
+        std::fs::write(path, dump).ok();
+    }
+
+    fn dump_threshold_counterterms_if_requested<'a>(
+        &self,
+        threshold_counterterms: impl IntoIterator<Item = &'a LUCounterTermData>,
+        representation: ThreeDRepresentation,
+        local_uv_from_expanded_4d: bool,
+    ) {
+        let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_THRESHOLD_COUNTERTERMS") else {
+            return;
+        };
+        let representation_label = match representation {
+            ThreeDRepresentation::Cff => "cff",
+            ThreeDRepresentation::Ltd => "ltd",
+        };
+        let mode = if local_uv_from_expanded_4d {
+            "local4d"
+        } else {
+            "local3d"
+        };
+        let numerator = self
+            .production_numerator_atom_for_full_3d_expression()
+            .to_canonical_string();
+        let numerator_fingerprint = numerator_fingerprint(&numerator);
+        let path = std::path::Path::new(&dump_dir).join(format!(
+            "{}_{}_{}_{}_threshold_counterterms.txt",
+            self.graph.name, representation_label, mode, numerator_fingerprint
+        ));
+        let mut dump = String::new();
+        use std::fmt::Write;
+        writeln!(dump, "numerator {numerator}").ok();
+        for (cut_id, counterterm_data) in threshold_counterterms.into_iter().enumerate() {
+            writeln!(dump, "cut {cut_id}").ok();
+            for (left_id, atoms) in counterterm_data.left_atoms.iter_enumerated() {
+                writeln!(
+                    dump,
+                    "left {left_id:?} esurface {:?}",
+                    counterterm_data.left_thresholds[left_id]
+                )
+                .ok();
+                for (derivative, atom) in atoms.integrands.iter().enumerate() {
+                    writeln!(
+                        dump,
+                        "derivative {derivative}: {}",
+                        atom.to_canonical_string()
+                    )
+                    .ok();
+                }
+            }
+            for (right_id, atoms) in counterterm_data.right_atoms.iter_enumerated() {
+                writeln!(
+                    dump,
+                    "right {right_id:?} esurface {:?}",
+                    counterterm_data.right_thresholds[right_id]
+                )
+                .ok();
+                for (derivative, atom) in atoms.integrands.iter().enumerate() {
+                    writeln!(
+                        dump,
+                        "derivative {derivative}: {}",
+                        atom.to_canonical_string()
+                    )
+                    .ok();
+                }
+            }
+            for (index, atoms) in counterterm_data.iterated.iter().enumerate() {
+                writeln!(dump, "iterated {index}").ok();
+                for (derivative, atom) in atoms.integrands.iter().enumerate() {
+                    writeln!(
+                        dump,
+                        "derivative {derivative}: {}",
+                        atom.to_canonical_string()
+                    )
+                    .ok();
+                }
+            }
+        }
+        std::fs::create_dir_all(&dump_dir).ok();
+        std::fs::write(path, dump).ok();
     }
 
     fn lu_prefactor_helper(&self) -> Atom {
@@ -1168,14 +1570,13 @@ impl CrossSectionGraph {
     }
 
     fn ltd_cut_parity_factor(&self) -> Atom {
-        // GammaLoop's CFF production convention carries the global sign used by
-        // the generalized CFF generator, while the LTD generator returns the
-        // contour-residue formula in its native convention. The extra factor
-        // needed when comparing cross-section LU cuts is therefore exactly the
-        // CFF generator's global sign exponent, not a property of a particular
-        // cut orientation.
-        let cff_sign_exponent = self.graph.cff_global_sign_exponent_for_3d_expression();
-        let parity = if cff_sign_exponent.is_multiple_of(2) {
+        // Cross-section LU residues are assembled in the same measure
+        // convention as CFF. The LTD expression itself already carries the
+        // duplicate-signature sign of confluent poles, so the remaining bridge
+        // is the loop-measure parity only.
+        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
+            - self.graph.initial_state_cut.nedges(&self.graph);
+        let parity = if loop_number.saturating_sub(1).is_multiple_of(2) {
             1
         } else {
             -1
@@ -1394,6 +1795,47 @@ impl CrossSectionGraph {
         representation: ThreeDRepresentation,
         vakint: &Vakint,
     ) -> Result<()> {
+        let threshold_projection_representation = if representation == ThreeDRepresentation::Ltd {
+            // Threshold counterterms are local E-surface residues. LTD H-surfaces
+            // are spurious and cancel only after the explicit orientation sum, so
+            // using them as local threshold-projector branches can make the local
+            // counterterm representation-dependent. Project threshold
+            // counterterms through the canonical CFF E-surface decomposition
+            // instead; the original integrand itself remains in LTD.
+            ThreeDRepresentation::Cff
+        } else {
+            representation
+        };
+        let threshold_root_expression = if threshold_projection_representation != representation {
+            let canonize_esurface = self
+                .graph
+                .get_esurface_canonization(&self.graph.loop_momentum_basis);
+            let options = self
+                .graph
+                .production_3d_expression_options(threshold_projection_representation, settings)?;
+            Some(self.graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonize_esurface,
+                &options,
+            )?)
+        } else {
+            None
+        };
+        let root_expression = threshold_root_expression
+            .as_ref()
+            .or_else(|| self.derived_data.global_cff_expression.as_ref());
+        let projected_raised_cut_groups = if threshold_projection_representation != representation {
+            let expression = root_expression
+                .as_ref()
+                .expect("threshold root 3D expression should have been created");
+            Some(self.projected_raised_cut_groups_for_current_3d_expression(
+                expression,
+                &settings.evaluator,
+            )?)
+        } else {
+            None
+        };
+
         // threshold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
             let mut unsorted = self.graph.all_st_cuts_for_cs(
@@ -1552,6 +1994,10 @@ impl CrossSectionGraph {
             .raised_cut_groups
             .iter_enumerated()
         {
+            let projected_raised_cut_group = projected_raised_cut_groups
+                .as_ref()
+                .map(|groups| &groups[raised_cut_id])
+                .unwrap_or(raised_cut_group);
             let left_thresholds = &left_raised_cut_threshold_data[raised_cut_id];
             let right_thresholds = &right_raised_cut_threshold_data[raised_cut_id];
 
@@ -1578,7 +2024,8 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
+                        lu_cut: Some(projected_raised_cut_group.related_esurface_group.clone()),
+                        lu_cut_edge_sets: self.cut_edge_sets(raised_cut_group.cuts.iter().copied()),
                         left_th_cut: Some(raised_esurface_group.clone()),
                         right_th_cut: None,
                     },
@@ -1602,7 +2049,8 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
+                        lu_cut: Some(projected_raised_cut_group.related_esurface_group.clone()),
+                        lu_cut_edge_sets: self.cut_edge_sets(raised_cut_group.cuts.iter().copied()),
                         left_th_cut: None,
                         right_th_cut: Some(raised_esurface_group.clone()),
                     },
@@ -1644,7 +2092,8 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
+                        lu_cut: Some(projected_raised_cut_group.related_esurface_group.clone()),
+                        lu_cut_edge_sets: self.cut_edge_sets(raised_cut_group.cuts.iter().copied()),
                         left_th_cut: Some(left_raised_esurface_group.clone()),
                         right_th_cut: Some(right_raised_esurface_group.clone()),
                     },
@@ -1659,11 +2108,8 @@ impl CrossSectionGraph {
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .global_cff_expression
-            .as_ref()
-            .expect("global_cff_expression should have been created")
+        let valid_orientations: Vec<_> = root_expression
+            .expect("threshold root 3D expression should have been created")
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
@@ -1674,8 +2120,8 @@ impl CrossSectionGraph {
             vakint,
             &valid_orientations,
             settings,
-            self.derived_data.global_cff_expression.as_ref(),
-            representation,
+            root_expression,
+            threshold_projection_representation,
             settings.explicit_orientation_sum_only,
         )?;
 
@@ -1718,8 +2164,9 @@ impl CrossSectionGraph {
                     &self.graph,
                     &atoms.cuts,
                     settings,
-                    representation,
-                ) {
+                    threshold_projection_representation,
+                ) && !atoms.explicitly_summed_orientations
+                {
                     atoms.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     atoms
@@ -1733,8 +2180,9 @@ impl CrossSectionGraph {
                     &self.graph,
                     &atoms.cuts,
                     settings,
-                    representation,
-                ) {
+                    threshold_projection_representation,
+                ) && !atoms.explicitly_summed_orientations
+                {
                     atoms.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     atoms
@@ -1750,8 +2198,9 @@ impl CrossSectionGraph {
                     &self.graph,
                     &atoms.cuts,
                     settings,
-                    representation,
-                ) {
+                    threshold_projection_representation,
+                ) && !atoms.explicitly_summed_orientations
+                {
                     atoms.sum_orientations_explicitly(&valid_orientations)
                 } else {
                     atoms
@@ -1774,6 +2223,11 @@ impl CrossSectionGraph {
             result.push(counterterm_data);
         }
 
+        self.dump_threshold_counterterms_if_requested(
+            &result,
+            representation,
+            settings.uv.local_uv_cts_from_expanded_4d_integrands,
+        );
         self.derived_data.threshold_counterterms = result;
 
         Ok(())
@@ -1951,9 +2405,18 @@ impl RaisedCutData {
                     .into_iter()
                     .sorted_by_key(|cut_id| cut_id.0)
                     .collect_vec();
+                let representative_esurface_id = cut_esurface_map[cuts[0]];
+                let mut related_esurface_group = raised_esurface_group.clone();
+                if let Some(position) = related_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .position(|esurface_id| *esurface_id == representative_esurface_id)
+                {
+                    related_esurface_group.esurface_ids.swap(0, position);
+                }
                 let raised_cut_group = RaisedCutGroup {
                     cuts,
-                    related_esurface_group: raised_esurface_group.clone(),
+                    related_esurface_group,
                 };
 
                 groups.push(raised_cut_group);

@@ -268,9 +268,14 @@ impl Graph {
         self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
     }
 
-    fn analyze_numerator_energy_powers(
+    pub(crate) fn numerator_energy_power_upper_bounds_for_3d_expression(
         &self,
-        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds_after_lmb_rewrite(
+        &self,
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
         let internal_edges = self
             .underlying
@@ -293,6 +298,32 @@ impl Graph {
             self.loop_momentum_basis.loop_edges.iter().copied(),
             internal_edges,
         )
+        .analyze_view(
+            numerator.as_view(),
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
+    }
+
+    fn analyze_numerator_energy_powers(
+        &self,
+        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        let internal_edges = self
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge, edge_data)| {
+                (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
+            });
+        // Keep edge-energy variables attached to their source denominator.
+        // Rewriting them to a loop-momentum basis loses cancellation
+        // information in non-coordinate UV directions, e.g. when q_i-q_j is
+        // kept fixed while q_i and q_j are both large.
+        let numerator = self.full_numerator_atom().expand();
+
+        EnergyPowerAnalyzer::with_internal_edges(
+            self.loop_momentum_basis.loop_edges.iter().copied(),
+            internal_edges,
+        )
         .analyze_view(numerator.as_view(), mode)
     }
 
@@ -306,11 +337,43 @@ impl Graph {
         &self,
         excluded_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        self.automatic_numerator_energy_degree_bounds_excluding_with_min_degree(excluded_edges, 2)
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_excluding_with_min_degree(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
         let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
         let mut bounds = BTreeMap::new();
 
-        for (edge, degree) in self.numerator_energy_power_upper_bounds()?.iter() {
-            if excluded_edges.contains(&edge) || degree <= 1 {
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_for_3d_expression()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
+    }
+
+    pub(crate) fn automatic_lmb_numerator_energy_degree_bounds_excluding_with_min_degree(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_after_lmb_rewrite()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
                 continue;
             }
             bounds.insert(usize::from(edge), degree);

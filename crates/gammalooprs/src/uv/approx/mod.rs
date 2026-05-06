@@ -1,9 +1,12 @@
 use crate::{
-    cff::expression::{CFFExpression, OrientationID},
+    cff::expression::{
+        CFFExpression, OrientationID, localize_numerator_energy_maps_on_esurface,
+        remove_ltd_global_contact_completions_from_local_residue,
+    },
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::global::GenerationSettings,
+    settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{
         GS, W_,
         symbolica_ext::{LOGPRINTOPTS, LogPrint},
@@ -379,6 +382,8 @@ impl Approximation {
                     root_expression,
                     valid_orientations,
                     settings,
+                    ThreeDRepresentation::Cff,
+                    true,
                 )?);
             } else {
                 self.final_integrand = Some(self.final_integrand(
@@ -401,6 +406,8 @@ impl Approximation {
         expression: &CFFExpression<OrientationID>,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
+        average_for_outer_orientation_projection: bool,
     ) -> Result<Vec<Atom>> {
         let reduced = graph.full_filter().subtract(&graph.initial_state_cut);
         let numerator = graph
@@ -432,11 +439,29 @@ impl Approximation {
                 .flat_map(|expression| expression.select_esurface_residue(left_threshold))
                 .collect();
         }
+        let lu_cut_representative_esurface = cutset
+            .residue_selector
+            .lu_cut
+            .as_ref()
+            .map(|lu_cut| lu_cut.esurface_ids[0]);
         if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
             residues = residues
                 .into_iter()
-                .flat_map(|expression| expression.select_esurface_residue(lu_cut))
+                .flat_map(|expression| {
+                    expression.select_esurface_residue_with_cut_edges(
+                        lu_cut,
+                        &cutset.residue_selector.lu_cut_edge_sets,
+                    )
+                })
                 .collect();
+        }
+        if representation == ThreeDRepresentation::Ltd {
+            for residue in &mut residues {
+                if let Some(esurface_id) = lu_cut_representative_esurface {
+                    localize_numerator_energy_maps_on_esurface(residue, esurface_id)?;
+                }
+                remove_ltd_global_contact_completions_from_local_residue(residue);
+            }
         }
 
         residues
@@ -445,21 +470,26 @@ impl Approximation {
                 let mut atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
                     &residue,
                     &numerator,
-                    RepresentationMode::Cff,
+                    match representation {
+                        ThreeDRepresentation::Cff => RepresentationMode::Cff,
+                        ThreeDRepresentation::Ltd => RepresentationMode::Ltd,
+                    },
                     true,
                     &settings.orientation_pattern,
                 );
-                // The root term comes from the explicitly summed production
-                // expression, while CFF local-3D forests apply the orientation
-                // projector once to the whole forest after all local terms are
-                // assembled. Embed the root as a uniform orientation average
-                // so that this later projector acts as the identity on it.
-                if valid_orientations.is_empty() {
-                    return Err(eyre!(
-                        "cannot embed explicitly summed root 3D expression into an empty orientation projector"
-                    ));
+                if average_for_outer_orientation_projection {
+                    // The root term comes from the explicitly summed production
+                    // expression, while CFF local-3D forests apply the orientation
+                    // projector once to the whole forest after all local terms are
+                    // assembled. Embed the root as a uniform orientation average
+                    // so that this later projector acts as the identity on it.
+                    if valid_orientations.is_empty() {
+                        return Err(eyre!(
+                            "cannot embed explicitly summed root 3D expression into an empty orientation projector"
+                        ));
+                    }
+                    atom /= Atom::num(valid_orientations.len() as i64);
                 }
-                atom /= Atom::num(valid_orientations.len() as i64);
                 Ok(atom
                     .replace(GS.dim)
                     .with(4)
@@ -478,7 +508,8 @@ impl Approximation {
         cuts: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &crate::settings::global::GenerationSettings,
-        representation: crate::settings::global::ThreeDRepresentation,
+        representation: ThreeDRepresentation,
+        root_expression: Option<&CFFExpression<OrientationID>>,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
@@ -490,12 +521,20 @@ impl Approximation {
             if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
                 self.final_integrand = Some(Self::zero_terms(1));
             } else {
-                self.final_integrand = Some(self.final_integrand_expanded_4d(
+                let root_expression = root_expression.ok_or_else(|| {
+                    eyre!(
+                        "expanded-4D local UV generation requires the production root 3D expression for the original integrand"
+                    )
+                })?;
+                self.final_integrand = Some(self.final_integrand_from_root_expression(
                     graph,
                     cuts,
+                    root_expression,
                     valid_orientations,
                     settings,
                     representation,
+                    representation == ThreeDRepresentation::Cff
+                        && !settings.explicit_orientation_sum_only,
                 )?);
             }
         }
@@ -869,7 +908,7 @@ impl Approximation {
             -sign * finite * reduced_denominator * &outside_numerator
         };
 
-        let finite_integrands = expanded_4d_terms_to_3d_parametric_integrands(
+        let mut finite_integrands = expanded_4d_terms_to_3d_parametric_integrands(
             graph,
             &finite_atom,
             cutset,
@@ -879,11 +918,17 @@ impl Approximation {
             self.spinney.filter(),
         )?;
         if integrands.len() != finite_integrands.len() {
-            return Err(eyre!(
-                "expanded 4D local UV generated {} local residue integrands, but finite integrated UV generated {}",
-                integrands.len(),
-                finite_integrands.len()
-            ));
+            if integrands.len() == 1 && integrands[0].is_zero() {
+                integrands = Self::zero_terms(finite_integrands.len());
+            } else if finite_integrands.len() == 1 && finite_integrands[0].is_zero() {
+                finite_integrands = Self::zero_terms(integrands.len());
+            } else {
+                return Err(eyre!(
+                    "expanded 4D local UV generated {} local residue integrands, but finite integrated UV generated {}",
+                    integrands.len(),
+                    finite_integrands.len()
+                ));
+            }
         }
         for (sum, finite) in integrands.iter_mut().zip(finite_integrands) {
             *sum += finite;

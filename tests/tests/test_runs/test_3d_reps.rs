@@ -1211,6 +1211,7 @@ fn assert_evaluate_manifest_ok(manifest: &JsonValue, context: &str) -> Result<()
     );
     for field in [
         "symbolica_expression_path",
+        "symbolica_expression_pretty_path",
         "symbolica_expression_raw_path",
         "symbolica_expression_raw_script_path",
         "param_builder_path",
@@ -2253,7 +2254,22 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
     let expression_dir = expression_path
         .parent()
         .ok_or_else(|| eyre!("oriented expression path has no parent"))?;
-    assert!(expression_dir.join("symbolica_expression.txt").exists());
+    let symbolica_expression_path = expression_dir.join("symbolica_expression.txt");
+    assert!(symbolica_expression_path.exists());
+    assert!(
+        !fs::read_to_string(&symbolica_expression_path)?
+            .trim()
+            .is_empty(),
+        "canonical Symbolica expression should be written"
+    );
+    let symbolica_expression_pretty_path = expression_dir.join("symbolica_expression_pretty.txt");
+    assert!(symbolica_expression_pretty_path.exists());
+    assert!(
+        !fs::read_to_string(&symbolica_expression_pretty_path)?
+            .trim()
+            .is_empty(),
+        "pretty Symbolica expression should be written"
+    );
     let raw_expression_path = expression_dir.join("symbolica_expression_raw.json");
     assert!(raw_expression_path.exists());
     let raw_expression =
@@ -2278,6 +2294,16 @@ fn cli_validate_build_and_evaluate_use_gammaloop_graph_state() -> Result<()> {
     let evaluate_manifest = serde_json::from_str::<JsonValue>(&fs::read_to_string(
         expression_dir.join("evaluate_manifest.json"),
     )?)?;
+    assert_eq!(
+        evaluate_manifest["symbolica_expression_path"].as_str(),
+        symbolica_expression_path.to_str(),
+        "3Drep evaluate manifest should record the canonical Symbolica expression path"
+    );
+    assert_eq!(
+        evaluate_manifest["symbolica_expression_pretty_path"].as_str(),
+        symbolica_expression_pretty_path.to_str(),
+        "3Drep evaluate manifest should record the pretty Symbolica expression path"
+    );
     assert_eq!(
         evaluate_manifest["symbolica_expression_raw_path"].as_str(),
         raw_expression_path.to_str(),
@@ -2946,6 +2972,56 @@ fn cli_aa_aa_box_and_double_box_multibackend_threedrep_comparisons() -> Result<(
 
 #[test]
 #[serial]
+fn cli_aa_aa_double_box_energy_bounds_track_edge_energies() -> Result<()> {
+    let test_name = "threedreps_aa_aa_double_box_energy_bounds";
+    let test_root = get_tests_workspace_path().join(test_name);
+    clean_test(&test_root);
+    let process_name = "threedreps_aa_aa_double_box_bounds";
+    let mut cli = import_aa_aa_threedrep_graphs(test_name, process_name)?;
+    let graph = imported_graph_from_cli(&cli, process_name, "default", 1)?;
+    let ltd_bounds = graph
+        .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Ltd)?;
+    let cff_bounds = graph
+        .automatic_numerator_energy_degree_bounds_for_3d_expression(RepresentationMode::Cff)?;
+
+    assert_eq!(
+        ltd_bounds,
+        vec![(4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1)],
+        "aa_aa double-box LTD bounds should stay attached to the six fermion edge energies"
+    );
+    assert_eq!(
+        cff_bounds, ltd_bounds,
+        "aa_aa double-box CFF bounds should also stay attached to source edge energies instead of collapsing onto loop-carrier powers"
+    );
+    assert!(
+        cff_bounds.iter().all(|(_, degree)| *degree <= 1),
+        "aa_aa double-box CFF should not infer beyond-linear source-edge caps"
+    );
+
+    for (representation, expected_bounds) in [("ltd", ltd_bounds), ("cff", cff_bounds)] {
+        let workspace = test_root.join(representation);
+        cli.run_command(&format!(
+            "3Drep build -p {process_name} -i default -g 1 --representation {representation} --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path {} --no-pretty",
+            workspace.display()
+        ))?;
+        let expression_path = find_named_artifact(&workspace, "oriented_expression.json")?;
+        let expression = serde_json::from_str::<JsonValue>(&fs::read_to_string(expression_path)?)?;
+        assert_eq!(
+            serde_json::from_value::<Vec<(usize, usize)>>(
+                expression["automatic_energy_degree_bounds"].clone()
+            )?,
+            expected_bounds,
+            "3Drep build should persist the graph-level {representation} energy bounds"
+        );
+    }
+
+    clean_test(test_root);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches() -> Result<()> {
     let test_name = "threedreps_aa_aa_evaluate_cache_reuse";
     let test_root = get_tests_workspace_path().join(test_name);
@@ -3526,7 +3602,7 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     );
 
     assert_manifest_case(manifest, "cff", 62, 27)?;
-    assert_manifest_case(manifest, "ltd", 17, 36)?;
+    assert_manifest_case(manifest, "ltd", 17, 24)?;
     assert_manifest_case(manifest, "pureltd", 6, 57)?;
 
     assert_eq!(
@@ -3552,13 +3628,7 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
         &ltd_half_edges[..3],
         [vec![vec![4]], vec![vec![5]], vec![vec![6]]]
     );
-    let repeated_ltd_half_edges = vec![
-        vec![7, 7, 7],
-        vec![7, 7, 7, 7],
-        vec![7, 7, 7, 7],
-        vec![7, 7, 7, 7, 7],
-        vec![7, 7, 7, 7, 7],
-    ];
+    let repeated_ltd_half_edges = vec![vec![7, 7, 7], vec![7, 7, 7, 7], vec![7, 7, 7, 7, 7]];
     assert!(
         ltd_half_edges[3..]
             .iter()
@@ -3569,12 +3639,12 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     assert_eq!(
         &ltd_denominator_ids[..3],
         [
-            vec![vec![1, 3, 5, 7, 9]],
-            vec![vec![11, 13, 15, 17, 19]],
-            vec![vec![21, 23, 25, 27, 29]],
+            vec![vec![1, 3, 5]],
+            vec![vec![7, 9, 11]],
+            vec![vec![13, 15, 17]],
         ]
     );
-    let repeated_ltd_denominator_ids = vec![vec![31, 33, 35]; 5];
+    let repeated_ltd_denominator_ids = vec![vec![19, 21, 23]; 3];
     assert!(
         ltd_denominator_ids[3..]
             .iter()
@@ -3584,8 +3654,8 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     assert!(
         variant_prefactors(&run.ltd.expression)[3..]
             .iter()
-            .all(|prefactors| prefactors.len() == 5),
-        "repeated LTD orientations should expose the full five-variant derivative structure"
+            .all(|prefactors| prefactors.len() == 3),
+        "repeated LTD orientations should expose the fused three-variant derivative structure"
     );
 
     assert_eq!(

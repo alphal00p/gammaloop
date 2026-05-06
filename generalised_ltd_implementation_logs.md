@@ -5799,3 +5799,132 @@ just test_gammaloop
 ```
 
 `just test_gammaloop` passed with `1082 passed; 125 skipped`.
+
+## 2026-05-05: Scalar 3L all-graph slow-suite branch-A progress
+
+- Started the exhaustive generated scalar three-loop forward-scattering
+  coverage requested for
+  `scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{3}}]`.
+  The current generator returns 49 graph labels, `GL00` through `GL48`, rather
+  than the 45 labels mentioned in the initial plan.
+- Added a slow integration-test harness in
+  `tests/tests/test_runs/scalar_3L_cross_section_inspects.rs`. The harness
+  builds no-numerator and numerator variants of each selected graph and compares
+  rich local inspect output among CFF local-3D, CFF expanded-4D local UV, and
+  LTD expanded-4D local UV. Per-graph UV/threshold fallbacks are guarded by the
+  `ALLOW_DISABLING_UV_SUBTRACTION` and
+  `ALLOW_DISABLING_THRESHOLD_SUBTRACTION` constants.
+- Promoted several rich-inspect comparison helpers into
+  `tests/tests/test_runs/utils.rs` so the new slow harness can reuse the same
+  event-weight and additional-weight comparisons as the focused normal tests.
+- `GL06` passes in the slow harness with UV and threshold subtraction enabled
+  for both the no-numerator case and the `Q(1).Q(2)` numerator.
+- `GL48` revealed an additional unresolved subtlety. With UV and threshold
+  subtraction disabled, the no-numerator case passes. With the fast `Q(1).Q(1)`
+  Lorentz-dot numerator, restored baseline code gives a total local inspect
+  sign mismatch between CFF and LTD. A temporary experiment that skipped the
+  LTD cross-section parity factor for bounded higher-energy sectors made the
+  total sign agree, but the rich event decomposition still differed. That
+  experiment was reverted because it was a convention patch rather than an
+  understood fix.
+- The retained diagnostic showed that raised-cut grouping is structurally
+  consistent between CFF and LTD for this GL48 setup. CFF groups cuts
+  `[0]`, `[1,2]`, `[3,4]`, `[5]`; LTD groups the same cut sets with different
+  representation-specific E-surface ids. This narrows the remaining mismatch
+  to the generated contribution/residue projection within the raised groups,
+  not to cut grouping itself.
+- A repeated-edge all-cuts probe using the `Q(7).Q(8)` numerator was attempted
+  because GL48 has a repeated massive scalar pair at those edge labels. It was
+  too slow for the default slow-suite fixture in its current form (more than
+  five minutes before the run was stopped) and is not retained as a benchmark
+  until a lighter equivalent probe is found.
+- The remaining GL48 all-cuts numerator mismatch is not papered over in the
+  test suite. It must be understood before the slow all-graph benchmark set can
+  be completed and committed.
+
+## 2026-05-06: Scalar 3L all-graph CFF/LTD parity completion
+
+- Completed the retained scalar three-loop forward-scattering slow sweep with
+  `CONSIDER_COMPARISON_WITH_LTD = true`. The harness now compares CFF with
+  local UV from 3D expansions, CFF with local UV from expanded 4D integrands,
+  and LTD with local UV from expanded 4D integrands before snapshotting the
+  agreed total weight. The latest retained sweep passed 149/149 tests in
+  1675.503s.
+- Fixed the repeated-channel lower-sector construction used by generalized CFF.
+  When a repeated denominator copy is removed from a lower sector, the
+  graph-based Rust implementation must form the corresponding graph minor by
+  contracting that edge. Dropping it as an ordinary deleted edge leaves
+  disconnected bookkeeping half-edges and overcounts the lower-sector CFF
+  contribution. This is the graph-native replacement for the older
+  signature-reconstruction shortcut, which remains only a CLI/testing
+  convenience and is not used in GammaLoop generation logic.
+- Refined repeated LTD parity for bounded sectors. Pure, linear, and
+  non-repeated higher-energy bounded sectors keep the duplicate-signature
+  parity factor needed to match CFF's orientation convention. Higher powers
+  living only on repeated-channel members instead use the repeated-channel
+  finite-difference construction directly, without that extra parity factor.
+- Added the finite-pole contact completion required when a graph contains
+  repeated channels but the higher-energy bound is on a non-repeated edge. The
+  LTD expression now receives the same known-factor contact terms as the CFF
+  bounded recursion in this case, with the representation-local normalization
+  adjusted before appending. This fixed the retained GL48 repeated-propagator
+  higher-energy fixture and the later all-graph scalar benchmarks.
+- Refreshed three total-weight scalar snapshots (`GL26`, `GL33`, and `GL44` in
+  the quadratic-pair, UV-disabled, threshold-enabled configuration). These
+  were benchmark changes after the representation fixes, not rich-inspect
+  parity failures: the CFF local-3D, CFF local-4D, and LTD local-4D event
+  groups, event weights, and additional weights had already matched before the
+  snapshots were accepted.
+
+Validation for this pass:
+
+```text
+cargo check --profile dev-optim -p three-dimensional-reps
+env RUST_MIN_STACK=33554432 cargo test -p three-dimensional-reps --features diagnostics,test-support,eval --lib ltd_ -- --nocapture
+env RUST_MIN_STACK=33554432 cargo nextest run --cargo-profile dev-optim -P test_gammaloop -p gammaloop-integration-tests --run-ignored all --ignore-default-filter -j4 -E 'test(/scalar_3l_cross_section_/)' --no-fail-fast
+```
+
+## 2026-05-06: Final scalar Step-III review and default-suite promotion
+
+- Performed a sign-focused review of the current cross-section LTD/CFF bridge.
+  The previous graph-name and loop-number branch parity patches are gone. The
+  remaining representation-dependent signs are formulaic:
+  - the cross-section LTD bridge uses the LU loop-measure parity
+    \((-1)^{L-1}\), with \(L\) the forward-scattering loop count after removing
+    initial-state cut edges;
+  - the expanded-4D CFF local-UV bridge compares the generalized-CFF global
+    sign exponent of the full graph with that of the reduced expanded source,
+    including duplicate-signature excess after preserved 4D denominators are
+    removed.
+- Restored the zero-loop and pure-tree 3D-expression boundary. Empty automatic
+  energy-degree bounds are now treated as trivially convergent, and a zero-loop
+  GammaLoop graph returns only the residual 4D denominator product instead of
+  calling the CFF surface generator. This keeps imported pure-tree
+  external-tree inspect tests in the same `generate_3d_expr` path as the loop
+  cases.
+- Promoted six timed scalar cross-section rich-inspect anchors out of the
+  `slow` module so that `just test_gammaloop` now directly covers a
+  representation-three-way local comparison:
+  - `GL02` baseline with UV and threshold subtraction enabled;
+  - `GL00` with a `Q(7)^2` energy numerator and UV disabled;
+  - `GL16` with a `Q(1)^2` energy numerator and UV/threshold subtraction
+    enabled;
+  - quartic `Q(1)^4` probes for `GL02`, `GL16`, and `GL24`, with `GL24`
+    retaining threshold subtraction disabled to cover the duplicate-leading-
+    denominator expanded-4D UV bridge.
+- Kept heavy but important scalar anchors such as `GL06`, `GL09`, and `GL48`
+  in the slow sweep. The post-promotion scalar sweep still covers 149 retained
+  cases and passed after the test move.
+
+Final verification for this pass:
+
+```text
+cargo fmt --all --check
+cargo check --profile dev-optim -p three-dimensional-reps -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests
+git diff --check
+just test_gammaloop
+env RUST_MIN_STACK=33554432 cargo nextest run --cargo-profile dev-optim -P test_gammaloop -p gammaloop-integration-tests --run-ignored all --ignore-default-filter -j4 -E 'test(/scalar_3l_cross_section_/)' --no-fail-fast
+```
+
+`just test_gammaloop` passed 1090/1090 tests, and the scalar sweep passed
+149/149 retained scalar cross-section tests after the fast-anchor promotion.

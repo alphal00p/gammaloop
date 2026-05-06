@@ -1914,6 +1914,28 @@ implementation still may become impractical for very large cap vectors because
 the number of Lagrange samples and lower-contact sectors grows rapidly, but the
 JSON grammar and evaluator semantics do not require a separate fallback branch.
 
+\paragraph{Embedding in gammaLoop cross-section integrands.}
+The gammaLoop production path always constructs the three-dimensional
+representation through \texttt{generate\_3d\_expr}.  Initial-state cut edges of a
+forward-scattering graph are treated as external energy shifts rather than
+ordinary CFF/LTD denominator edges.  External tree structures and pure tree
+graphs are likewise preserved as residual four-dimensional denominators: when
+the reduced source has no loop-energy variables, the energy-bound check is
+trivially convergent and the generated object is just the product of those
+residual denominators.
+
+Local inspect parity in the cross-section tests compares three structurally
+different constructions: CFF with local UV counterterms from 3D expansions, CFF
+with local UV counterterms from expanded four-dimensional integrands, and LTD
+with local UV counterterms from expanded four-dimensional integrands.  The only
+LTD-specific global bridge in this comparison is the loop-measure convention
+factor \((-1)^{L-1}\), where \(L\) is the forward-scattering loop count after
+removing initial-state cut edges.  CFF expanded-source UV terms instead receive
+the difference between the full-graph and reduced-source generalized-CFF sign
+exponents; this accounts for duplicate-signature excess lost or gained when a
+local UV source is projected out of the original graph.  These signs are
+representation-convention factors, not graph-name patches.
+
 The hybrid high-power tests are not pure-CFF tests.  They compare the hybrid
 value with a split-mass LTD proxy and verify convergence as the mass split is
 reduced.  This is the correct reference for repeated propagators because

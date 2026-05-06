@@ -1163,7 +1163,6 @@ impl LUCounterTerm {
                 evaluation_meta_data,
                 record_primary_timing,
             );
-
             total_result += pass_two_result;
         }
 
