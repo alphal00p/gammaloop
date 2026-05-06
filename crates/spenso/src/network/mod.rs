@@ -1047,6 +1047,7 @@ where
 }
 
 pub struct Sequential;
+pub struct SequentialExtract;
 
 pub struct Steps<const N: usize> {}
 pub struct StepsDebug<const N: usize> {}
@@ -1143,6 +1144,44 @@ where
     }
 }
 
+impl<E, L, FL, K, FK, Aind: AbsInd> ExecutionStrategy<E, FL, L, K, FK, Aind> for SequentialExtract
+where
+    E: ExecuteOp<FL, L, K, FK, Aind>,
+    FK: Clone + Debug,
+    K: Clone + Debug,
+{
+    fn execute_all<C: ContractionStrategy<E, L, K, FK, Aind>>(
+        executor: &mut E,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+        fnlib: &FL,
+    ) -> Result<(), TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display,
+    {
+        while {
+            // find the *one* ready op
+            profile::bump(Counter::ExecuteIteration, 1);
+            let ready = {
+                let _span = profile::span(Timer::ExecuteFindReady);
+                graph.extract_next_ready_op()
+            };
+            if let Some((extracted_graph, op)) = ready {
+                profile::bump(Counter::ExecuteFound, 1);
+                // execute + splice
+                let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
+                graph.splice_descendents_of(replacement);
+                true
+            } else {
+                false
+            }
+        } {}
+
+        Ok(())
+    }
+}
+
 impl<E, L, FL, K, FK, Aind: AbsInd> ExecutionStrategy<E, FL, L, K, FK, Aind> for Sequential
 where
     E: ExecuteOp<FL, L, K, FK, Aind>,
@@ -1167,11 +1206,10 @@ where
                 profile::bump(Counter::ExecuteIteration, 1);
                 let ready = {
                     let _span = profile::span(Timer::ExecuteFindReady);
-                    graph.extract_next_ready_op()
+                    graph.extract_next_ready_ref_op()
                 };
                 if let Some((extracted_graph, op)) = ready {
                     profile::bump(Counter::ExecuteFound, 1);
-                    // execute + splice
                     let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
                     graph.splice_descendents_of(replacement);
                     true

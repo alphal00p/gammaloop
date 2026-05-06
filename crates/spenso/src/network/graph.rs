@@ -687,6 +687,60 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         None
     }
 
+    pub fn extract_next_ready_ref_op(&mut self) -> Option<(Self, NetworkOp<FK>)>
+    where
+        K: Clone + Display,
+        FK: Clone + Display,
+    {
+        let (subgraph, op) = {
+            let ready = self.ready_operation_ref_in_expr_tree_order()?;
+            (ready.subgraph().clone(), ready.op().clone())
+        };
+
+        self.graph.check().unwrap();
+        let extracted = self.extract(&subgraph);
+        extracted.graph.check().unwrap();
+
+        Some((extracted, op))
+    }
+
+    pub fn ready_operation_ref_in_expr_tree_order(
+        &self,
+    ) -> Option<NetworkOperationRef<'_, K, FK, Aind>> {
+        let tt: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree().cast();
+        let root_node = self.graph.node_id(self.head());
+
+        for nid in tt.iter_preorder_tree_nodes(&self.graph, root_node) {
+            let NetworkNode::Op(op) = &self.graph[nid] else {
+                continue;
+            };
+
+            let mut children = Vec::new();
+            let mut all_leaves = true;
+            for child in tt.iter_children(nid, &self.graph) {
+                if matches!(&self.graph[child], NetworkNode::Leaf(_)) {
+                    children.push(child);
+                } else {
+                    all_leaves = false;
+                    break;
+                }
+            }
+
+            if all_leaves && !children.is_empty() {
+                let subgraph = self.operation_subgraph(nid, &children);
+                return Some(NetworkOperationRef {
+                    graph: self,
+                    op_node: nid,
+                    op,
+                    children,
+                    subgraph,
+                });
+            }
+        }
+
+        None
+    }
+
     pub fn cache_expr_tree_roots(&mut self) -> usize {
         let hidden: SuBitGraph = self.graph.empty_subgraph();
         self.cache_expr_tree_roots_ignoring(&hidden)
@@ -2472,5 +2526,49 @@ pub mod test {
         }
 
         assert_eq!(batch.subgraph(), &union);
+    }
+
+    #[test]
+    fn ready_ref_extraction_matches_legacy_ready_extraction_boundary() {
+        let scalar = NetworkGraph::<i8>::scalar(2);
+        let scalar_b = NetworkGraph::<i8>::scalar(3);
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+
+        let mut legacy_expr = (tensor_a + tensor_b) * (scalar + scalar_b);
+        legacy_expr.merge_ops();
+        let mut ref_expr = legacy_expr.clone();
+
+        let (legacy_extracted, legacy_op) = legacy_expr.extract_next_ready_op().unwrap();
+        let (ref_extracted, ref_op) = ref_expr.extract_next_ready_ref_op().unwrap();
+
+        let legacy_leaf_count = legacy_extracted
+            .graph
+            .iter_nodes()
+            .filter(|(_, _, node)| matches!(node, NetworkNode::Leaf(_)))
+            .count();
+        let ref_leaf_count = ref_extracted
+            .graph
+            .iter_nodes()
+            .filter(|(_, _, node)| matches!(node, NetworkNode::Leaf(_)))
+            .count();
+
+        assert_eq!(legacy_op, ref_op);
+        assert_eq!(legacy_leaf_count, ref_leaf_count);
+        assert_eq!(legacy_extracted.n_nodes(), ref_extracted.n_nodes());
     }
 }
