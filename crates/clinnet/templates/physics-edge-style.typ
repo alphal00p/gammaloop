@@ -45,7 +45,13 @@
 /// CeTZ marker used for fermion particle-flow arrows on the main edge.
 /// -> dictionary
 #let fermion-arrow-mark = (
-  end: (symbol: "straight"),
+  end: (
+    symbol: ">",
+    fill: black,
+    stroke: black + 0.2pt,
+    anchor: "center",
+    shorten-to: auto,
+  ),
   scale: 0.75,
 )
 
