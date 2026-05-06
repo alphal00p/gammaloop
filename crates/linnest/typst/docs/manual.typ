@@ -195,9 +195,11 @@ particle stroke. The arrow length is capped by both `momentum-arrow-length` and
 `momentum-arrow-ratio`, so the shorter one wins. When the layout provides an
 edge-label position, the arrow offset is signed so the momentum marker is drawn
 on the same side of the edge as that label. Use `momentum-arrow-offset` to set
-the normal displacement. Override `momentum-arrow-mark` with any CeTZ mark
-style, for example `"stealth"` or `(end: "barbed", scale: 1.6)`; only the `end`
-mark is kept so source/sink splitting cannot create a second momentum head.
+the normal displacement. `momentum-arrow-mark: auto` uses the default barbed
+marker, `momentum-arrow-mark: none` draws only the momentum line, and any other
+value overrides the CeTZ mark style, for example `"stealth"` or `(end: "barbed",
+scale: 1.6)`. Only the `end` mark is kept so source/sink splitting cannot
+create a second momentum head.
 
 Optional labels can be built from edge metadata with `show-edge-index`,
 `show-half-edge-index`, `show-particle`, and, for explicit momentum fields,

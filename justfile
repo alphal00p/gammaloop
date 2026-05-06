@@ -42,6 +42,8 @@ sync-drawing-assets:
     copy_typst_templates crates/clinnet/templates
     if [ -d gammaloop_state/drawings/templates ]; then
       copy_typst_templates gammaloop_state/drawings/templates
+      cp assets/embedded/drawing/templates/figure.typ gammaloop_state/drawings/templates/figure.typ
+      cp assets/embedded/drawing/justfile gammaloop_state/justfile
     fi
 
     nix build .#linnest-wasm --print-build-logs
