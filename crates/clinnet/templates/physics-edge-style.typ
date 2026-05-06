@@ -42,6 +42,20 @@
   stroke-style(c: c.lighten(lighten), thickness: thickness, dash: dash)
 }
 
+/// CeTZ marker used for fermion particle-flow arrows on the main edge.
+/// -> dictionary
+#let fermion-arrow-mark = (
+  end: (symbol: "straight"),
+  scale: 0.75,
+)
+
+/// Mark an edge-map entry as a fermion so the main edge receives one centered
+/// particle-flow arrow. This is separate from optional momentum arrows.
+/// -> dictionary
+#let fermion-flow = (
+  fermion-arrow: true,
+)
+
 /// Photon-style wave pattern.
 /// -> dictionary
 #let wave = (
@@ -102,6 +116,7 @@
   "fermion": (
     source: source-stroke(c: blue, thickness: massless),
     sink: sink-stroke(c: blue, thickness: massless),
+    fermion-arrow: true,
     label: mi(`{f}`),
   ),
   "scalar": (
@@ -178,6 +193,8 @@
   stroke-style: stroke-style,
   source-stroke: source-stroke,
   sink-stroke: sink-stroke,
+  fermion-arrow-mark: fermion-arrow-mark,
+  fermion-flow: fermion-flow,
   wave: wave,
   coil: coil,
   zigzag: zigzag,
@@ -237,12 +254,27 @@
   let entry = edge-entry(edge, map: map, default: default)
   let source = entry.at("source", default: (:))
   let sink = entry.at("sink", default: source)
-  if half == "source" {
+  let base = if half == "source" {
     source
   } else if orientation-split {
     sink
   } else {
     source
+  }
+  let has-source = edge.at("source-half-edge", default: none) != none
+  let has-sink = edge.at("sink-half-edge", default: none) != none
+  let needs-arrow = entry.at("fermion-arrow", default: false)
+  let arrow-half = needs-arrow and (
+    (half == "source" and has-source)
+      or (half == "sink" and not has-source and has-sink)
+  )
+  if arrow-half {
+    base + (
+      mark: entry.at("fermion-arrow-mark", default: fermion-arrow-mark),
+      mark-position: "center-if-dangling",
+    )
+  } else {
+    base
   }
 }
 

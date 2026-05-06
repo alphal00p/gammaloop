@@ -31,6 +31,10 @@
   offset-side: none,
 )
 
+#let _mark-defaults = (
+  mark-position: "end",
+)
+
 #let _pattern-defaults = (
   pattern: none,
   pattern-amplitude: 0.1,
@@ -55,7 +59,8 @@
 
 #let _draw-style(style) = {
   let clean = _without-pattern-style(style)
-  _without-keys(clean, _edge-geometry-defaults.keys())
+  clean = _without-keys(clean, _edge-geometry-defaults.keys())
+  _without-keys(clean, _mark-defaults.keys())
 }
 
 #let _without-mark-style(style) = {
@@ -71,6 +76,8 @@
     style.at(key, default: _edge-geometry-defaults.at(key))
   } else if _pattern-defaults.keys().contains(key) {
     style.at(key, default: _pattern-defaults.at(key))
+  } else if _mark-defaults.keys().contains(key) {
+    style.at(key, default: _mark-defaults.at(key))
   } else {
     style.at(key, default: none)
   }
@@ -137,6 +144,16 @@
 }
 
 #let _has-mark(style) = style.at("mark", default: none) != none
+
+#let _mark-position(style) = _style-value(style, "mark-position")
+
+#let _dangling-mark-style(style) = {
+  if _mark-position(style) == "center-if-dangling" {
+    style + (mark-position: "center")
+  } else {
+    style
+  }
+}
 
 #let _same-layer-geometry(source-style, sink-style) = {
   let same = _style-offset(source-style) == _style-offset(sink-style)
@@ -402,13 +419,40 @@
 }
 
 #let _segment-elements(segment, style, phase: auto, anchor-start: true, anchor-end: true, label-pos: none) = {
-  _segments-elements(
-    _geometry-segments(segment, style, label-pos: label-pos),
-    style,
-    phase: phase,
-    anchor-start: anchor-start,
-    anchor-end: anchor-end,
-  )
+  let path = _layer-path(segment, style, label-pos: label-pos)
+  if _has-mark(style) and _mark-position(style) == "center" and not _has-pattern(style) {
+    let length = curve-api.path-length(path, accuracy: _style-value(style, "accuracy"))
+    let first = curve-api.trim-path(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
+    let second = curve-api.trim-path(path, start-outset: length / 2, accuracy: _style-value(style, "accuracy"))
+    let pieces = ()
+    for element in _segments-elements(
+      curve-api.path-segments(first),
+      style,
+      phase: phase,
+      anchor-start: anchor-start,
+      anchor-end: false,
+    ).elements {
+      pieces.push(element)
+    }
+    for element in _segments-elements(
+      curve-api.path-segments(second),
+      _without-mark-style(style),
+      phase: phase,
+      anchor-start: false,
+      anchor-end: anchor-end,
+    ).elements {
+      pieces.push(element)
+    }
+    (elements: pieces, length: length)
+  } else {
+    _segments-elements(
+      curve-api.path-segments(path),
+      style,
+      phase: phase,
+      anchor-start: anchor-start,
+      anchor-end: anchor-end,
+    )
+  }
 }
 
 #let _pattern-edge-halves(halves, source-style, sink-style) = {
@@ -654,10 +698,14 @@
   /// Let Kurbo optimize the fitted parallel path. -> bool
   edge-optimize: _edge-geometry-defaults.optimize,
   /// Source half-edge style dictionary, array of layer dictionaries, or
-  /// callback. A callback receives edge data. -> dictionary | array | function | none
+  /// callback. `mark-position: "center-if-dangling"` keeps an end marker at the
+  /// paired-edge split point while centering it on dangling half edges.
+  /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
-  /// A callback receives edge data. -> dictionary | array | function | none
+  /// A callback receives edge data. `mark-position: "center-if-dangling"` has
+  /// the same dangling-edge behavior as for `source-style`.
+  /// -> dictionary | array | function | none
   sink-style: (:),
   /// Edge label content or callback. A callback receives edge data.
   /// -> content | string | function | none
@@ -824,7 +872,7 @@
                 for element in (
                   _segments-elements(
                     halves.source,
-                    _without-pattern-style(source-style-value) + subgraph-edge-style,
+                    _without-mark-style(_without-pattern-style(source-style-value)) + subgraph-edge-style,
                   ).elements
                 ) {
                   elements.push(element)
@@ -834,7 +882,7 @@
                 for element in (
                   _segments-elements(
                     halves.sink,
-                    _without-pattern-style(sink-style-value) + subgraph-edge-style,
+                    _without-mark-style(_without-pattern-style(sink-style-value)) + subgraph-edge-style,
                   ).elements
                 ) {
                   elements.push(element)
@@ -863,14 +911,14 @@
                 for element in _pattern-line(
                   line-start,
                   e.pos,
-                  _without-pattern-style(source-style-value) + subgraph-edge-style,
+                  _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-edge-style,
                   label-pos: label-pos,
                 ) {
                   elements.push(element)
                 }
               }
               if source-style-value != none {
-                for element in _pattern-line(line-start, e.pos, source-draw-style, label-pos: label-pos) {
+                for element in _pattern-line(line-start, e.pos, _dangling-mark-style(source-draw-style), label-pos: label-pos) {
                   elements.push(element)
                 }
               }
@@ -884,14 +932,14 @@
                 for element in _pattern-line(
                   e.pos,
                   line-end,
-                  _without-pattern-style(sink-style-value) + subgraph-edge-style,
+                  _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-edge-style,
                   label-pos: label-pos,
                 ) {
                   elements.push(element)
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-line(e.pos, line-end, sink-draw-style, label-pos: label-pos) {
+                for element in _pattern-line(e.pos, line-end, _dangling-mark-style(sink-draw-style), label-pos: label-pos) {
                   elements.push(element)
                 }
               }
