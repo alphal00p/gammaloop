@@ -2,8 +2,8 @@ use spenso::network::parsing::{
     ParseSettings, SchoonschipExpansionMode, ShadowedStructure, ShorthandParsing, StructureFromAtom,
 };
 use spenso::network::{
-    ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SingleSmallestDegree,
-    SmallestDegree, Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
+    ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
+    SingleSmallestDegree, SmallestDegree, Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
 };
 use symbolica::atom::{Atom, AtomCore, Symbol};
 
@@ -101,6 +101,56 @@ fn parse_scalar() {
         .unwrap();
 
     assert_eq!(net.simple_execute::<()>(), expr);
+}
+
+#[test]
+fn batched_sequential_matches_legacy_extract_result() {
+    initialize();
+    let expr = parse!(
+        "c*a*b(spenso::mink(4,1))*d(spenso::mink(4,2))*d(spenso::mink(4,1))*d(spenso::mink(4,2))"
+    );
+    let mut batched = expr
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let mut legacy = batched.clone();
+    let lib = DummyLibrary::<_>::new();
+    let fnlib = ErroringLibrary::<Symbol>::new();
+
+    batched
+        .execute::<Sequential, SmallestDegree, _, _, _>(&lib, &fnlib)
+        .unwrap();
+    legacy
+        .execute::<SequentialExtract, SmallestDegree, _, _, _>(&lib, &fnlib)
+        .unwrap();
+
+    let batched_string = match batched.result().unwrap() {
+        ExecutionResult::One => "1".to_string(),
+        ExecutionResult::Zero => "0".to_string(),
+        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
+            scalar.to_bare_ordered_string()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
+            tensor.expression.to_bare_ordered_string()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
+            panic!("unexpected library key result")
+        }
+    };
+    let legacy_string = match legacy.result().unwrap() {
+        ExecutionResult::One => "1".to_string(),
+        ExecutionResult::Zero => "0".to_string(),
+        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
+            scalar.to_bare_ordered_string()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
+            tensor.expression.to_bare_ordered_string()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
+            panic!("unexpected library key result")
+        }
+    };
+
+    assert_eq!(batched_string, legacy_string);
 }
 
 #[test]
