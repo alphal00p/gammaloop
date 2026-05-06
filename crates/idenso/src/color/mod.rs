@@ -15,7 +15,7 @@ use spenso::{
         representation::{Minkowski, RepName},
         slot::{AbsInd, IsAbstractSlot},
     },
-    trace,
+    symbolica_atom, trace,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
@@ -43,6 +43,8 @@ pub enum ColorError {
 pub struct ColorSymbols {
     pub nc_: Symbol,
     pub adj_: Symbol,
+    /// The adjoint representation dimension symbol, i.e. NA = Nc^2 - 1.
+    pub na: Symbol,
     /// The adjoint Casimir symbol, i.e. CA = Nc
     pub ca: Symbol,
     /// The fundamental Casimir symbol.
@@ -273,6 +275,7 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
     cf: symbol!("spenso::CF";Real),
     adj_: symbol!("adj_"),
     nc_: symbol!("nc_"),
+    na: symbol!("NA";Real),
     tr: symbol!("spenso::TR";Real),
     nc: symbol!("spenso::Nc";Real),
 });
@@ -631,7 +634,6 @@ static COLOR_ADJOINT_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
 });
 
 static COLOR_D_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::d"));
-static COLOR_DR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::dR"));
 static COLOR_D33_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::d33"));
 static COLOR_TRACE_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("x"));
 
@@ -706,7 +708,7 @@ fn close_color_trace_chain(arg: AtomView, _context: &Context, out: &mut Settable
 }
 
 // Try product-level rewrites first so trace*f contractions can fire before the
-// trace terminal expands into dR and f terms.
+// trace terminal expands into symmetric trace and f terms.
 fn color_algebra_rewrite(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
     if let Some(rewritten) = rewrite_color_node(arg) {
         **out = rewritten;
@@ -730,6 +732,17 @@ fn simplify_color_chain_node(chain: AtomView) -> Option<Atom> {
         return Some(color_metric(start.clone(), end.clone()));
     }
 
+    if let Some(identity_index) = factors
+        .iter()
+        .position(|factor| is_chain_identity_factor(factor.as_view()))
+    {
+        return Some(chain_with_factors(
+            start,
+            end,
+            factors_excluding_indices(&factors, &[identity_index]),
+        ));
+    }
+
     for i in 0..factors.len().saturating_sub(1) {
         let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
             continue;
@@ -744,6 +757,12 @@ fn simplify_color_chain_node(chain: AtomView) -> Option<Atom> {
         return Some(Atom::var(CS.cf) * chain_with_removed_range(&start, &end, &factors, i, i + 2));
     }
 
+    if factors.len() > 2
+        && let Some(rewritten) = simplify_separated_chain_casimir(&start, &end, &factors)
+    {
+        return Some(rewritten);
+    }
+
     None
 }
 
@@ -756,6 +775,16 @@ fn simplify_color_trace_node(trace: AtomView) -> Option<Atom> {
             .all(|factor| is_chain_identity_factor(factor.as_view()))
     {
         return trace_terminal_dimension(rep.as_view());
+    }
+
+    if let Some(identity_index) = factors
+        .iter()
+        .position(|factor| is_chain_identity_factor(factor.as_view()))
+    {
+        return Some(trace_with_factors(
+            rep,
+            factors_excluding_indices(&factors, &[identity_index]),
+        ));
     }
 
     if factors.len() > 2
@@ -779,12 +808,12 @@ fn simplify_color_trace_node(trace: AtomView) -> Option<Atom> {
         [_] => Some(Atom::Zero),
         [a, b] => Some(Atom::var(CS.tr) * color_metric(a.clone(), b.clone())),
         [a, b, c] => Some(
-            color_d_r([a.clone(), b.clone(), c.clone()])
+            color_symmetric_trace(&rep, [a.clone(), b.clone(), c.clone()])
                 + Atom::i() * Atom::num(1) / Atom::num(2)
                     * Atom::var(CS.tr)
                     * color_f([a.clone(), b.clone(), c.clone()]),
         ),
-        [a, b, c, d] => simplify_four_generator_trace_terminal(a, b, c, d),
+        [a, b, c, d] => simplify_four_generator_trace_terminal(&rep, a, b, c, d),
         _ => None,
     }
 }
@@ -831,16 +860,47 @@ fn simplify_separated_trace_casimir(rep: &Atom, factors: &[Atom]) -> Option<Atom
     None
 }
 
-fn simplify_four_generator_trace_terminal(a: &Atom, b: &Atom, c: &Atom, d: &Atom) -> Option<Atom> {
+fn simplify_separated_chain_casimir(start: &Atom, end: &Atom, factors: &[Atom]) -> Option<Atom> {
+    for i in 0..factors.len().saturating_sub(2) {
+        let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
+            continue;
+        };
+        let Some(right) = color_generator_adjoint(factors[i + 2].as_view()) else {
+            continue;
+        };
+        if left != right {
+            continue;
+        }
+
+        return Some(
+            (Atom::var(CS.cf) - Atom::var(CS.ca) / Atom::num(2))
+                * chain_with_factors(
+                    start.clone(),
+                    end.clone(),
+                    factors_excluding_indices(factors, &[i, i + 2]),
+                ),
+        );
+    }
+
+    None
+}
+
+fn simplify_four_generator_trace_terminal(
+    rep: &Atom,
+    a: &Atom,
+    b: &Atom,
+    c: &Atom,
+    d: &Atom,
+) -> Option<Atom> {
     let x = color_adjoint_dummy_like(a)?;
 
     Some(
-        color_d_r([a.clone(), b.clone(), c.clone(), d.clone()])
+        color_symmetric_trace(rep, [a.clone(), b.clone(), c.clone(), d.clone()])
             + Atom::i() / Atom::num(2)
-                * color_d_r([a.clone(), b.clone(), x.clone()])
+                * color_symmetric_trace(rep, [a.clone(), b.clone(), x.clone()])
                 * color_f([c.clone(), d.clone(), x.clone()])
             + Atom::i() / Atom::num(2)
-                * color_d_r([c.clone(), d.clone(), x.clone()])
+                * color_symmetric_trace(rep, [c.clone(), d.clone(), x.clone()])
                 * color_f([a.clone(), b.clone(), x.clone()])
             - Atom::var(CS.tr) / Atom::num(6)
                 * color_f([a.clone(), c.clone(), x.clone()])
@@ -859,6 +919,7 @@ fn simplify_color_product(product: AtomView) -> Option<Atom> {
 
     join_color_chain_product(&factors)
         .or_else(|| simplify_trace_structure_product(&factors))
+        .or_else(|| simplify_chain_structure_product(&factors))
         .or_else(|| simplify_symmetric_structure_product(&factors))
         .or_else(|| simplify_two_f_loop_product(&factors))
         .or_else(|| simplify_three_f_loop_product(&factors))
@@ -961,6 +1022,79 @@ fn simplify_trace_structure_product(factors: &[Atom]) -> Option<Atom> {
     }
 
     None
+}
+
+fn simplify_chain_structure_product(factors: &[Atom]) -> Option<Atom> {
+    for (chain_index, chain_factor) in factors.iter().enumerate() {
+        let Some((start, end, chain_factors)) = chain_parts(chain_factor.as_view()) else {
+            continue;
+        };
+
+        for pair_index in 0..chain_factors.len().saturating_sub(1) {
+            let Some(left) = color_generator_adjoint(chain_factors[pair_index].as_view()) else {
+                continue;
+            };
+            let Some(right) = color_generator_adjoint(chain_factors[pair_index + 1].as_view())
+            else {
+                continue;
+            };
+
+            for (f_index, f_factor) in factors.iter().enumerate() {
+                if f_index == chain_index {
+                    continue;
+                }
+                let Some(f_args) = structure_constant_args(f_factor.as_view()) else {
+                    continue;
+                };
+                let Some((target, sign)) =
+                    structure_target_for_generator_pair(&f_args, &left, &right)
+                else {
+                    continue;
+                };
+
+                let coefficient = Atom::i() * Atom::var(CS.ca) * Atom::num(sign) / Atom::num(2);
+                let replacement = coefficient
+                    * chain_replacing_factor_pair(
+                        &start,
+                        &end,
+                        &chain_factors,
+                        pair_index,
+                        CS.chain_t(target),
+                    );
+                return Some(product_replacing_pair(
+                    factors,
+                    chain_index,
+                    f_index,
+                    replacement,
+                ));
+            }
+        }
+    }
+
+    None
+}
+
+fn structure_target_for_generator_pair(
+    args: &[Atom; 3],
+    left: &Atom,
+    right: &Atom,
+) -> Option<(Atom, i64)> {
+    let [a, b, c] = args;
+    if b == left && c == right {
+        Some((a.clone(), 1))
+    } else if c == left && a == right {
+        Some((b.clone(), 1))
+    } else if a == left && b == right {
+        Some((c.clone(), 1))
+    } else if b == right && c == left {
+        Some((a.clone(), -1))
+    } else if c == right && a == left {
+        Some((b.clone(), -1))
+    } else if a == right && b == left {
+        Some((c.clone(), -1))
+    } else {
+        None
+    }
 }
 
 fn simplify_symmetric_structure_product(factors: &[Atom]) -> Option<Atom> {
@@ -1166,19 +1300,35 @@ fn symmetric_invariant_args(invariant: AtomView) -> Option<(Atom, Vec<Atom>)> {
 }
 
 fn color_symmetric_args(invariant: AtomView) -> Option<Vec<Atom>> {
+    if let Some((_, factors)) = trace_parts(invariant) {
+        let [factor] = factors.as_slice() else {
+            return None;
+        };
+        return color_symmetric_trace_args(factor.as_view());
+    }
+
     let AtomView::Fun(f) = invariant else {
         return None;
     };
-
-    if f.get_symbol() == *COLOR_DR_SYMBOL && f.get_nargs() >= 2 {
-        return Some(f.iter().map(|arg| arg.to_owned()).collect());
-    }
     if f.get_symbol() == *COLOR_D_SYMBOL && f.get_nargs() >= 3 {
         let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
         return Some(args[1..].to_vec());
     }
 
     None
+}
+
+fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
+    let AtomView::Fun(f) = projector else {
+        return None;
+    };
+    if f.get_symbol() != *symbolica_atom::SYM {
+        return None;
+    }
+
+    f.iter()
+        .map(color_generator_adjoint)
+        .collect::<Option<Vec<_>>>()
 }
 
 fn color_fundamental_slot(slot: AtomView) -> Option<(Atom, Atom, bool)> {
@@ -1264,13 +1414,12 @@ fn color_f(factors: impl IntoIterator<Item = Atom>) -> Atom {
         .finish()
 }
 
-fn color_d_r(factors: impl IntoIterator<Item = Atom>) -> Atom {
-    factors
+fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) -> Atom {
+    let sym_factors = factors
         .into_iter()
-        .fold(FunctionBuilder::new(*COLOR_DR_SYMBOL), |builder, factor| {
-            builder.add_arg(factor)
-        })
-        .finish()
+        .map(|factor| CS.chain_t(factor))
+        .collect::<Vec<_>>();
+    trace!(rep.clone(), symbolica_atom::sym(sym_factors))
 }
 
 fn color_d33(left_rep: Atom, right_rep: Atom) -> Atom {
@@ -1290,6 +1439,26 @@ fn chain_with_removed_range(
     } else {
         chain!(start.clone(), end.clone(); remaining)
     }
+}
+
+fn chain_with_factors(start: Atom, end: Atom, factors: Vec<Atom>) -> Atom {
+    if factors.is_empty() {
+        color_metric(start, end)
+    } else {
+        chain!(start, end; factors)
+    }
+}
+
+fn chain_replacing_factor_pair(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    pair_index: usize,
+    replacement: Atom,
+) -> Atom {
+    let mut remaining = factors.to_vec();
+    remaining.splice(pair_index..pair_index + 2, [replacement]);
+    chain_with_factors(start.clone(), end.clone(), remaining)
 }
 
 fn trace_with_factors(rep: Atom, factors: Vec<Atom>) -> Atom {
@@ -1399,6 +1568,139 @@ fn contains_chain_or_trace(expr: AtomView) -> bool {
         AtomView::Num(_) | AtomView::Var(_) => false,
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ColorCasimirSettings {
+    /// Rewrite the fundamental dimension `Nc` using `CA = Nc`.
+    pub rewrite_nc: bool,
+    /// Rewrite the adjoint dimension `NA` using `NA = Nc^2 - 1 = 2 CA CF`.
+    pub rewrite_na: bool,
+    /// Substitute the common fundamental normalization `TR = 1/2`.
+    pub substitute_tr: bool,
+}
+
+impl Default for ColorCasimirSettings {
+    fn default() -> Self {
+        Self {
+            rewrite_nc: true,
+            rewrite_na: true,
+            substitute_tr: false,
+        }
+    }
+}
+
+impl ColorCasimirSettings {
+    /// Also apply the standard fundamental trace normalization `TR = 1/2`.
+    pub fn with_trace_normalization(mut self) -> Self {
+        self.substitute_tr = true;
+        self
+    }
+}
+
+/// Rewrite dimension symbols into the `CA`, `CF` Casimir basis.
+fn color_casimir_basis_impl(expression: AtomView, settings: ColorCasimirSettings) -> Atom {
+    expression
+        .to_owned()
+        .replace_map(|arg, _context, out| {
+            if let Some(replacement) = color_casimir_rewrite(arg, settings) {
+                **out = replacement;
+            }
+        })
+        .expand()
+}
+
+fn color_casimir_rewrite(arg: AtomView, settings: ColorCasimirSettings) -> Option<Atom> {
+    match arg {
+        AtomView::Var(var) => {
+            let sym = var.get_symbol();
+            if settings.rewrite_na && is_na_symbol(sym) {
+                return Some(adjoint_dimension_in_casimirs());
+            }
+            if settings.rewrite_nc && is_nc_symbol(sym) {
+                return Some(Atom::var(CS.ca));
+            }
+            if settings.substitute_tr && is_tr_symbol(sym) {
+                return Some(Atom::num(1) / Atom::num(2));
+            }
+            None
+        }
+        AtomView::Pow(pow) => {
+            let (base, exponent) = pow.get_base_exp();
+            let exponent = integer_exponent(exponent)?;
+            if settings.rewrite_na && is_symbol_var(base, is_na_symbol) {
+                return Some(atom_integral_power(
+                    adjoint_dimension_in_casimirs(),
+                    exponent,
+                ));
+            }
+            if settings.rewrite_nc && is_symbol_var(base, is_nc_symbol) {
+                return Some(nc_power_in_casimir_basis(exponent));
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn nc_power_in_casimir_basis(exponent: i64) -> Atom {
+    if exponent == 0 {
+        return Atom::num(1);
+    }
+    if exponent < 0 {
+        return atom_integral_power(
+            Atom::var(CS.ca) - Atom::num(2) * Atom::var(CS.cf),
+            -exponent,
+        );
+    }
+
+    let nc_squared = adjoint_dimension_in_casimirs() + Atom::num(1);
+    let even_part = atom_integral_power(nc_squared, exponent / 2);
+    if exponent % 2 == 0 {
+        even_part
+    } else {
+        Atom::var(CS.ca) * even_part
+    }
+}
+
+/// Uses `CA = Nc` and `2 CA CF = Nc^2 - 1`.
+fn adjoint_dimension_in_casimirs() -> Atom {
+    Atom::num(2) * Atom::var(CS.ca) * Atom::var(CS.cf)
+}
+
+fn atom_integral_power(base: Atom, exponent: i64) -> Atom {
+    match exponent {
+        0 => Atom::num(1),
+        1 => base,
+        _ => base.pow(Atom::num(exponent)),
+    }
+}
+
+fn integer_exponent(expr: AtomView) -> Option<i64> {
+    let AtomView::Num(number) = expr else {
+        return None;
+    };
+    let CoefficientView::Natural(value, 1, 0, 1) = number.get_coeff_view() else {
+        return None;
+    };
+    Some(value)
+}
+
+fn is_symbol_var(arg: AtomView, predicate: fn(Symbol) -> bool) -> bool {
+    matches!(arg, AtomView::Var(var) if predicate(var.get_symbol()))
+}
+
+fn is_nc_symbol(sym: Symbol) -> bool {
+    sym.get_stripped_name() == "Nc"
+}
+
+fn is_na_symbol(sym: Symbol) -> bool {
+    sym.get_stripped_name() == "NA"
+}
+
+fn is_tr_symbol(sym: Symbol) -> bool {
+    sym.get_stripped_name() == "TR"
+}
+
 /// Trait for applying SU(N) color algebra simplification rules to a symbolic expression.
 ///
 /// Implementors provide a method to simplify expressions containing color factors
@@ -1417,6 +1719,12 @@ pub trait ColorSimplifier {
     ///   simplified `Atom` is included in the error.
     fn simplify_color(&self) -> Atom;
 
+    /// Rewrites `Nc`/`NA` scalar factors into the `CA`, `CF` Casimir basis.
+    fn to_color_casimir(&self) -> Atom;
+
+    /// Rewrites color scalar factors with explicit control over normalization choices.
+    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom;
+
     // fn canonize_color(&self) -> Atom;
 
     fn wrap_color(&self, symbol: Symbol) -> Atom;
@@ -1424,6 +1732,14 @@ pub trait ColorSimplifier {
 impl ColorSimplifier for Atom {
     fn simplify_color(&self) -> Atom {
         color_simplify_impl(self.as_atom_view())
+    }
+
+    fn to_color_casimir(&self) -> Atom {
+        self.to_color_casimir_with(ColorCasimirSettings::default())
+    }
+
+    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom {
+        color_casimir_basis_impl(self.as_atom_view(), settings)
     }
 
     // fn canonize_color(&self) -> Atom {
@@ -1438,6 +1754,14 @@ impl ColorSimplifier for Atom {
 impl ColorSimplifier for AtomView<'_> {
     fn simplify_color(&self) -> Atom {
         color_simplify_impl(self.as_atom_view())
+    }
+
+    fn to_color_casimir(&self) -> Atom {
+        self.to_color_casimir_with(ColorCasimirSettings::default())
+    }
+
+    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom {
+        color_casimir_basis_impl(self.as_atom_view(), settings)
     }
 
     // fn canonize_color(&self) -> Atom {
