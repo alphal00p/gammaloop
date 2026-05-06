@@ -226,21 +226,20 @@ Optional labels can be built from edge metadata with `show-edge-index`,
 )
 ```
 
-Set `edge-parallel-offset` on `draw`, or `parallel-offset` in a
-`source-style`/`sink-style` dictionary, to draw a fitted parallel path. Style
-callbacks may also return an array of dictionaries; the layers are drawn in
-order on the same graph edge, so parallel strokes do not require duplicate
-graph edges.
+Set `edge-offset` on `draw`, or `offset` in a `source-style`/`sink-style`
+dictionary, to draw a fitted parallel path. Style callbacks may also return an
+array of dictionaries; the layers are drawn in order on the same graph edge, so
+parallel strokes do not require duplicate graph edges.
 
 ```typ
 #let base-style(edge) = (
   stroke: (paint: gray, thickness: 0.7pt, cap: "round"),
 )
 #let offset-style(edge) = (
-  parallel-offset: 0.18,
-  parallel-length: 1.4,
-  parallel-ratio: 0.5,
-  parallel-resolve: "min",
+  offset: 0.18,
+  length: 1.4,
+  ratio: 0.5,
+  resolve-length: "min",
   stroke: (paint: rgb("#2f6f4e"), thickness: 1pt, cap: "round"),
 )
 #let source-style(edge) = (base-style(edge), offset-style(edge))
@@ -249,11 +248,10 @@ graph edges.
 
 The parallel path is applied to the base edge geometry before patterns and other
 decorations; node outsets then trim the shifted path, so shifted paths still
-start and end outside fitted node circles. Add `edge-parallel-length` or
-`parallel-length` to center-trim the shifted path to a fixed arc length, and
-add `edge-parallel-ratio` or `parallel-ratio` to cap it by a fraction of the
-base edge length. `edge-parallel-resolve` / `parallel-resolve` decides how to
-combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
+start and end outside fitted node circles. Add `edge-length` or `length` to
+center-trim the shifted path to a fixed arc length, and add `edge-ratio` or
+`ratio` to cap it by a fraction of the base edge length. `edge-resolve-length`
+/ `resolve-length` decides how to combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
 `"length"`/`"fixed"`, `"ratio"`/`"relative"`, `"none"`/`"full"`, or a function
 receiving `(base-length, length, ratio)`.
 

@@ -14,15 +14,15 @@
 #let parallel-limits(edge) = if edge.eid == 1 {
   (:)
 } else {
-  (parallel-length: 1.6, parallel-ratio: 0.5)
+  (length: 1.6, ratio: 0.5)
 }
 #let source-style(edge) = (
   stroke: (paint: colors.at(edge.eid), thickness: 0.75pt, cap: "round"),
-  parallel-offset: offsets.at(edge.eid),
+  offset: offsets.at(edge.eid),
 ) + parallel-limits(edge)
 #let sink-style(edge) = (
   stroke: (paint: colors.at(edge.eid), thickness: 0.75pt, cap: "round"),
-  parallel-offset: offsets.at(edge.eid),
+  offset: offsets.at(edge.eid),
 ) + parallel-limits(edge)
 
 #draw(

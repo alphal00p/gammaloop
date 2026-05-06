@@ -94,8 +94,8 @@
   )
 }
 
-#let _parallel-offset-on-label-side(style, segment, label-pos) = {
-  let offset = style.at("parallel-offset", default: 0)
+#let _offset-on-label-side(style, segment, label-pos) = {
+  let offset = style.at("offset", default: 0)
   if label-pos == none or offset == none or offset == 0 {
     offset
   } else {
@@ -108,7 +108,7 @@
 }
 
 #let _mark-style-on-label-side(style, segment, label-pos) = {
-  style + (parallel-offset: _parallel-offset-on-label-side(style, segment, label-pos))
+  style + (offset: _offset-on-label-side(style, segment, label-pos))
 }
 
 #let _pattern-style-keys = (
@@ -122,12 +122,12 @@
 )
 
 #let _parallel-style-keys = (
-  "parallel-offset",
-  "parallel-length",
-  "parallel-ratio",
-  "parallel-resolve",
-  "parallel-accuracy",
-  "parallel-optimize",
+  "offset",
+  "length",
+  "ratio",
+  "resolve-length",
+  "accuracy",
+  "optimize",
 )
 
 #let _decoration-style-keys = ("parallel-mark",)
@@ -167,12 +167,12 @@
 
 #let _style-value(style, key, default) = style.at(key, default: default)
 
-#let _parallel-offset(style) = {
-  style.at("parallel-offset", default: 0)
+#let _style-offset(style) = {
+  style.at("offset", default: 0)
 }
 
-#let _parallel-resolve-method(style) = {
-  style.at("parallel-resolve", default: "min")
+#let _resolve-length-method(style) = {
+  style.at("resolve-length", default: "min")
 }
 
 #let _resolve-parallel-target(base-length, fixed, relative, method) = {
@@ -203,12 +203,12 @@
     (
       stroke: mark.at("stroke", default: style.at("stroke", default: (paint: black, thickness: 0.45pt, cap: "round"))),
       mark: mark.at("mark", default: (end: ">")),
-      parallel-offset: mark.at("offset", default: 0),
-      parallel-length: mark.at("length", default: none),
-      parallel-ratio: mark.at("ratio", default: none),
-      parallel-resolve: mark.at("resolve", default: _parallel-resolve-method(style)),
-      parallel-accuracy: mark.at("accuracy", default: _style-value(style, "parallel-accuracy", 0.001)),
-      parallel-optimize: mark.at("optimize", default: _style-value(style, "parallel-optimize", true)),
+      offset: mark.at("offset", default: 0),
+      length: mark.at("length", default: none),
+      ratio: mark.at("ratio", default: none),
+      resolve-length: mark.at("resolve-length", default: _resolve-length-method(style)),
+      accuracy: mark.at("accuracy", default: _style-value(style, "accuracy", 0.001)),
+      optimize: mark.at("optimize", default: _style-value(style, "optimize", true)),
     )
   }
 }
@@ -262,26 +262,26 @@
 }
 
 #let _has-parallel(style) = {
-  let offset = _parallel-offset(style)
+  let offset = _style-offset(style)
   offset != none and offset != 0
 }
 
 #let _has-mark(style) = _style-value(style, "mark", none) != none
 
 #let _same-parallel-geometry(source-style, sink-style) = {
-  let same = _parallel-offset(source-style) == _parallel-offset(sink-style)
+  let same = _style-offset(source-style) == _style-offset(sink-style)
   same = (
-    same and _style-value(source-style, "parallel-length", none) == _style-value(sink-style, "parallel-length", none)
+    same and _style-value(source-style, "length", none) == _style-value(sink-style, "length", none)
   )
-  same = same and _style-value(source-style, "parallel-ratio", none) == _style-value(sink-style, "parallel-ratio", none)
-  same = same and _parallel-resolve-method(source-style) == _parallel-resolve-method(sink-style)
+  same = same and _style-value(source-style, "ratio", none) == _style-value(sink-style, "ratio", none)
+  same = same and _resolve-length-method(source-style) == _resolve-length-method(sink-style)
   same = (
     same
-      and _style-value(source-style, "parallel-accuracy", 0.001) == _style-value(sink-style, "parallel-accuracy", 0.001)
+      and _style-value(source-style, "accuracy", 0.001) == _style-value(sink-style, "accuracy", 0.001)
   )
   same = (
     same
-      and _style-value(source-style, "parallel-optimize", true) == _style-value(sink-style, "parallel-optimize", true)
+      and _style-value(source-style, "optimize", true) == _style-value(sink-style, "optimize", true)
   )
   same
 }
@@ -316,13 +316,13 @@
 }
 
 #let _parallel-path(segment, style, start-outset: 0, end-outset: 0) = {
-    curve-api.parallel-path(
-    curve-api.cubic-path(..segment, accuracy: _style-value(style, "parallel-accuracy", 0.001)),
-    distance: _parallel-offset(style),
+  curve-api.parallel-path(
+    curve-api.cubic-path(..segment, accuracy: _style-value(style, "accuracy", 0.001)),
+    distance: _style-offset(style),
     start-outset: start-outset,
     end-outset: end-outset,
-    accuracy: _style-value(style, "parallel-accuracy", 0.001),
-    optimize: _style-value(style, "parallel-optimize", true),
+    accuracy: _style-value(style, "accuracy", 0.001),
+    optimize: _style-value(style, "optimize", true),
   )
 }
 
@@ -339,11 +339,11 @@
 }
 
 #let _parallel-target-length(base-length, style) = {
-  let length = _style-value(style, "parallel-length", none)
-  let ratio = _style-value(style, "parallel-ratio", none)
+  let length = _style-value(style, "length", none)
+  let ratio = _style-value(style, "ratio", none)
   let fixed = if length != none and length > 0 { length } else { none }
   let relative = if ratio != none and ratio > 0 { base-length * ratio } else { none }
-  _resolve-parallel-target(base-length, fixed, relative, _parallel-resolve-method(style))
+  _resolve-parallel-target(base-length, fixed, relative, _resolve-length-method(style))
 }
 
 #let _parallel-center-outset(base-length, style, source-outset: 0, sink-outset: 0) = {
@@ -582,7 +582,7 @@
         piece-style,
         start-outset: start-outset,
         end-outset: end-outset,
-        accuracy: _style-value(piece-style, "parallel-accuracy", 0.001),
+        accuracy: _style-value(piece-style, "accuracy", 0.001),
       ) {
         geometry.push(piece)
       }
@@ -603,7 +603,7 @@
   } else {
     let base-segments = halves.source + halves.sink
     let center-outset = _parallel-center-outset(
-      _segments-length(base-segments, accuracy: _style-value(mark-style, "parallel-accuracy", 0.001)),
+      _segments-length(base-segments, accuracy: _style-value(mark-style, "accuracy", 0.001)),
       mark-style,
     )
     _parallel-mark-half-elements(
@@ -629,7 +629,7 @@
     let segment = _line-segment(start, end)
     let mark-style = _mark-style-on-label-side(mark-style, segment, label-pos)
     let center-outset = _parallel-center-outset(
-      _segment-length(segment, accuracy: _style-value(mark-style, "parallel-accuracy", 0.001)),
+      _segment-length(segment, accuracy: _style-value(mark-style, "accuracy", 0.001)),
       mark-style,
     )
     let geometry = _geometry-segments(
@@ -637,7 +637,7 @@
       mark-style,
       start-outset: center-outset,
       end-outset: center-outset,
-      accuracy: _style-value(mark-style, "parallel-accuracy", 0.001),
+      accuracy: _style-value(mark-style, "accuracy", 0.001),
     )
     _segments-elements(geometry, mark-style).elements
   }
@@ -713,10 +713,10 @@
 /// )
 /// #let parallel-layer(edge, mark: none) = if edge.eid == parallel-base-edge {
 ///   (
-///     parallel-offset: 0.5,
-///     parallel-length: 4.5,
-///     parallel-ratio: 0.5,
-///     parallel-resolve: "min",
+///     offset: -0.5,
+///     length: 1.5,
+///     ratio: 0.5,
+///     resolve-length: "min",
 ///     stroke: (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round"),
 ///     mark: mark,
 ///   )
@@ -775,10 +775,10 @@
 /// #let (node: pc, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
 /// #let p = graph.edge(p, source: (node: pa), sink: (node: pc))
 /// #let parallel-edge-style(edge) = (
-///     parallel-offset: 0.18,
-///     parallel-length: 1.4,
-///     parallel-ratio: 0.5,
-///     parallel-resolve: "min",
+///     offset: 0.18,
+///     length: 1.4,
+///     ratio: 0.5,
+///     resolve-length: "min",
 ///     stroke: (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round"),
 ///   )
 ///
@@ -837,23 +837,23 @@
   edge-stroke: 0.1em,
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
-  edge-parallel-offset: 0,
+  edge-offset: 0,
   /// Maximum visible arc length for centered parallel edge paths. `none` keeps
   /// the full shifted path. -> none | int | float
-  edge-parallel-length: none,
+  edge-length: none,
   /// Maximum visible fraction of the base edge length for centered parallel edge
-  /// paths. Combined with `edge-parallel-length` according to
-  /// `edge-parallel-resolve`. -> none | int | float
-  edge-parallel-ratio: none,
-  /// Resolve `edge-parallel-length` and `edge-parallel-ratio`. Accepted string
+  /// paths. Combined with `edge-length` according to `edge-resolve-length`.
+  /// -> none | int | float
+  edge-ratio: none,
+  /// Resolve `edge-length` and `edge-ratio`. Accepted string
   /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
   /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
   /// `(base-length, length, ratio)`. -> string | function
-  edge-parallel-resolve: "min",
+  edge-resolve-length: "min",
   /// Arc-length accuracy for fitted parallel edge paths. -> float
-  edge-parallel-accuracy: 0.001,
+  edge-accuracy: 0.001,
   /// Let Kurbo optimize the fitted parallel path. -> bool
-  edge-parallel-optimize: true,
+  edge-optimize: true,
   /// Source half-edge style dictionary, array of layer dictionaries, or
   /// callback. A callback receives edge data. -> dictionary | array | function | none
   source-style: (:),
@@ -964,12 +964,12 @@
           let sink-in-subgraph = _in-subgraph(subgraph-hedges, end)
 
           let geometry-style = (
-            parallel-offset: edge-parallel-offset,
-            parallel-length: edge-parallel-length,
-            parallel-ratio: edge-parallel-ratio,
-            parallel-resolve: edge-parallel-resolve,
-            parallel-accuracy: edge-parallel-accuracy,
-            parallel-optimize: edge-parallel-optimize,
+            offset: edge-offset,
+            length: edge-length,
+            ratio: edge-ratio,
+            resolve-length: edge-resolve-length,
+            accuracy: edge-accuracy,
+            optimize: edge-optimize,
           )
           let source-style-layers = _style-layers(source-style, edge-data)
           let sink-style-layers = _style-layers(sink-style, edge-data)
@@ -1032,7 +1032,10 @@
               }
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for element in (
-                  _segments-elements(halves.sink, _without-pattern-style(sink-style-value) + subgraph-edge-style).elements
+                  _segments-elements(
+                    halves.sink,
+                    _without-pattern-style(sink-style-value) + subgraph-edge-style,
+                  ).elements
                 ) {
                   elements.push(element)
                 }
@@ -1077,7 +1080,12 @@
                 for element in _pattern-line(line-start, e.pos, source-draw-style) {
                   elements.push(element)
                 }
-                for element in _parallel-mark-line-elements(line-start, e.pos, source-style-value, label-pos: label-pos) {
+                for element in _parallel-mark-line-elements(
+                  line-start,
+                  e.pos,
+                  source-style-value,
+                  label-pos: label-pos,
+                ) {
                   elements.push(element)
                 }
               }
