@@ -645,7 +645,7 @@ impl CrossSectionGraphTerm {
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
-                let dual_shape = shape_from_cut_cff_index(cut_cff_index);
+                let dual_shape = shape_from_cut_cff_index( cut_cff_index);
 
                 let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
                     slice::from_ref(integrand_for_subset),

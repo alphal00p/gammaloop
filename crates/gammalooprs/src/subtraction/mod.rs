@@ -1,4 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::owo_colors::colors::xterm::HollywoodCerise;
 use eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -14,7 +15,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::esurface::Esurface,
+    cff::{CutCFFIndex, esurface::Esurface},
     graph::{LmbIndex, LoopMomentumBasis},
     integrands::process::GenericEvaluator,
     momentum::{
@@ -27,7 +28,7 @@ use crate::{
     },
     utils::{
         self, F, FloatLike,
-        hyperdual_utils::{DualOrNot, new_constant},
+        hyperdual_utils::{DualOrNot, new_constant, shape_from_cut_cff_index},
     },
 };
 
@@ -364,10 +365,6 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
             current_t_derivative_counter -= 1;
         }
 
-        for param in &eta_derivatives_at_this_order {
-            println!("  {}", param);
-        }
-
         params.extend(eta_derivatives_at_this_order);
     }
 
@@ -398,4 +395,58 @@ fn test_rstar_t_dependence_evaluator() {
 fn test_rstar_t_dependence_evaluator_zero_derivatives() {
     let evaluator = generate_rstar_t_dependence_evaluator(0).unwrap();
     assert!(!evaluator.supports_t_derivatives());
+}
+
+#[test]
+fn verify_dual_behaviour() {
+    fn test_fn<T: FloatLike>(x: HyperDual<F<T>>, y: HyperDual<F<T>>) -> HyperDual<F<T>> {
+        x.clone() * x + y.clone() * y
+    }
+
+    let cut_cff_index = CutCFFIndex {
+        left_threshold_order: Some(3),
+        right_threshold_order: Some(3),
+        lu_cut_order: Some(3),
+    };
+
+    println!(
+        "Shape from cut cff index: {:#?}",
+        shape_from_cut_cff_index(&cut_cff_index)
+    );
+
+    let shape_1 = vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]];
+    let shape_2 = vec![vec![0, 0], vec![0, 1], vec![1, 0], vec![1, 1]];
+    let shape_3 = vec![vec![0, 0], vec![1, 0], vec![1, 1], vec![0, 1]];
+
+    let dual_shape_1: HyperDual<f64> = HyperDual::new(shape_1);
+    let dual_shape_2: HyperDual<f64> = HyperDual::new(shape_2);
+    let dual_shape_3: HyperDual<f64> = HyperDual::new(shape_3);
+
+    let x_shape_1 = dual_shape_1.variable(0, 3.0);
+    let y_shape_1 = dual_shape_1.variable(1, 4.0);
+    let x_shape_3 = dual_shape_3.variable(0, 3.0);
+    let y_shape_3 = dual_shape_3.variable(1, 4.0);
+
+    let x_shape_2 = dual_shape_2.variable(0, 3.0);
+    let y_shape_2 = dual_shape_2.variable(1, 4.0);
+
+    println!("x_shape_1: {}", x_shape_1);
+    println!("y_shape_1: {}", y_shape_1);
+
+    println!("x_shape_2: {}", x_shape_2);
+    println!("y_shape_2: {}", y_shape_2);
+
+    println!("x_shape_3: {}", x_shape_3);
+    println!("y_shape_3: {}", y_shape_3);
+
+    let dual_cut_index: HyperDual<f64> =
+        HyperDual::new(shape_from_cut_cff_index(&cut_cff_index).unwrap());
+
+    let x_cut = dual_cut_index.variable(0, 3.0);
+    let y_cut = dual_cut_index.variable(1, 4.0);
+    let z_cut = dual_cut_index.variable(2, 5.0);
+
+    println!("x_cut: {}", x_cut);
+    println!("y_cut: {}", y_cut);
+    println!("z_cut: {}", z_cut);
 }
