@@ -59,7 +59,7 @@ color_feyncalc_delta_closes_doubled_two_generator_chain_id18 [ColorSu3, ColorDef
 color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, enabled]
 1𝑖/2*TR*f(coad(8,i),coad(8,j),coad(8,k))+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
 
-color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize repeated color-trace adjoint contractions]
+color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, enabled]
 -4*CA*TR+8*CF*TR
 
 color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize higher color traces reliably]
