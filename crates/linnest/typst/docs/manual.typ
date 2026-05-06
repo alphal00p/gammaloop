@@ -192,9 +192,9 @@ stroke and a scaled CeTZ `"barbed"` arrowhead, so it does not inherit the base
 particle stroke. The arrow length is capped by both `momentum-arrow-length` and
 `momentum-arrow-ratio`, so the shorter one wins. When the layout provides an
 edge-label position, the arrow offset is signed so the momentum marker is drawn
-on the same side of the edge as that label. Override `momentum-arrow-mark` with
-any CeTZ mark style, for example `(end: "stealth")` or `(end: "barbed",
-scale: 1.6)`.
+on the same side of the edge as that label. Use `momentum-arrow-offset` to set
+the normal displacement. Override `momentum-arrow-mark` with any CeTZ mark
+style, for example `(end: "stealth")` or `(end: "barbed", scale: 1.6)`.
 
 Optional labels can be built from edge metadata with `show-edge-index`,
 `show-half-edge-index`, `show-particle`, and, for explicit momentum fields,
@@ -226,14 +226,36 @@ Optional labels can be built from edge metadata with `show-edge-index`,
 )
 ```
 
-Set `edge-parallel-distance` on `draw`, or `parallel-distance` in a
-`source-style`/`sink-style` dictionary, to draw a fitted parallel path. The
-parallel path is applied to the base edge geometry before patterns and other
+Set `edge-parallel-offset` on `draw`, or `parallel-offset` in a
+`source-style`/`sink-style` dictionary, to draw a fitted parallel path. Style
+callbacks may also return an array of dictionaries; the layers are drawn in
+order on the same graph edge, so parallel strokes do not require duplicate
+graph edges.
+
+```typ
+#let base-style(edge) = (
+  stroke: (paint: gray, thickness: 0.7pt, cap: "round"),
+)
+#let offset-style(edge) = (
+  parallel-offset: 0.18,
+  parallel-length: 1.4,
+  parallel-ratio: 0.5,
+  parallel-resolve: "min",
+  stroke: (paint: rgb("#2f6f4e"), thickness: 1pt, cap: "round"),
+)
+#let source-style(edge) = (base-style(edge), offset-style(edge))
+#let sink-style(edge) = (base-style(edge), offset-style(edge) + (mark: (end: ">")))
+```
+
+The parallel path is applied to the base edge geometry before patterns and other
 decorations; node outsets then trim the shifted path, so shifted paths still
 start and end outside fitted node circles. Add `edge-parallel-length` or
 `parallel-length` to center-trim the shifted path to a fixed arc length, and
 add `edge-parallel-ratio` or `parallel-ratio` to cap it by a fraction of the
-base edge length. When both are set, the shorter visible length wins.
+base edge length. `edge-parallel-resolve` / `parallel-resolve` decides how to
+combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
+`"length"`/`"fixed"`, `"ratio"`/`"relative"`, `"none"`/`"full"`, or a function
+receiving `(base-length, length, ratio)`.
 
 The builder keeps `source-style-eval`, `sink-style-eval`, and `label-eval` as
 ordinary kebab-case edge metadata for downstream renderers or DOT export. They
