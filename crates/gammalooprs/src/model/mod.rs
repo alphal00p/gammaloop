@@ -1303,7 +1303,13 @@ impl Particle {
             (base_source, base_sink)
         };
 
-        format!("(source:{}, sink:{}, label:{})", source, sink, label)
+        let flow_marker = if self.is_fermion() && !self.is_ghost() {
+            " + fermion-flow"
+        } else {
+            ""
+        };
+
+        format!("(source:{source}, sink:{sink}, label:{label}){flow_marker}")
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -1851,7 +1857,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let mut edge_style_content = String::new();
         edge_style_content.push_str(
-            r#"#import "physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, wave, coil, zigzag, default-edge, style
+            r#"#import "physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
 
 // Auto-generated particle styles from model (computed in Rust). The reusable
 // physics drawing callbacks live in physics-edge-style.typ; this file only

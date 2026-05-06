@@ -183,9 +183,14 @@ records, and the edge index:
 
 `physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
 callbacks for `draw`. The default source/sink strokes use darker/lighter halves
-to encode the graph source/sink split. Set `momentum-arrows: true` to draw
-centered parallel arrow decorations while the main edge remains connected to
-the nodes. The arrows flow from source to sink independently of the DOT
+to encode the graph source/sink split. Fermion map entries marked with
+`fermion-flow` receive one particle-flow arrow on the main edge; paired edges
+place it at the source half's end, and dangling half edges place it in the
+middle of the visible half edge. This is independent of momentum arrows.
+
+Set `momentum-arrows: true` to draw centered parallel arrow decorations while
+the main edge remains connected to the nodes. The arrows flow from source to
+sink independently of the DOT
 `dir`/`orientation` value; there is one momentum marker per edge, even though
 the base edge is internally styled as source and sink halves. On paired edges
 the marker lives on the sink half; on dangling edges it lives on the existing
@@ -216,8 +221,9 @@ Optional labels can be built from edge metadata with `show-edge-index`,
   b,
   source: (node: a),
   sink: (node: c),
-  statements: (particle: "g", id: "7"),
+  statements: (particle: "fermion", id: "7"),
 )
+#let b = graph.edge(b, source: (node: c), sink: none, statements: (particle: "fermion", id: "8"))
 #let callbacks = physics.style(
   momentum-arrows: true,
   show-edge-index: true,
