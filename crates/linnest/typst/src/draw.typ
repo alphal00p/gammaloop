@@ -94,7 +94,7 @@
   )
 }
 
-#let _offset-on-label-side(style, segment, label-pos) = {
+#let _label-side-offset(style, segment, label-pos) = {
   let offset = style.at("offset", default: 0)
   if label-pos == none or offset == none or offset == 0 {
     offset
@@ -107,9 +107,14 @@
   }
 }
 
-#let _mark-style-on-label-side(style, segment, label-pos) = {
-  style + (offset: _offset-on-label-side(style, segment, label-pos))
+#let _style-with-offset-side(style, segment, label-pos) = {
+  if style.at("offset-side", default: none) == "label" {
+    style + (offset: _label-side-offset(style, segment, label-pos))
+  } else {
+    style
+  }
 }
+
 
 #let _pattern-style-keys = (
   "pattern",
@@ -128,9 +133,8 @@
   "resolve-length",
   "accuracy",
   "optimize",
+  "offset-side",
 )
-
-#let _decoration-style-keys = ("parallel-mark",)
 
 #let _without-pattern-style(style) = {
   let clean = style
@@ -145,11 +149,6 @@
 #let _draw-style(style) = {
   let clean = _without-pattern-style(style)
   for key in _parallel-style-keys {
-    if clean.keys().contains(key) {
-      let _ = clean.remove(key)
-    }
-  }
-  for key in _decoration-style-keys {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -192,24 +191,6 @@
     none
   } else {
     calc.min(fixed, relative)
-  }
-}
-
-#let _parallel-mark-style(style) = {
-  let mark = if style == none { none } else { _style-value(style, "parallel-mark", none) }
-  if mark == none {
-    none
-  } else {
-    (
-      stroke: mark.at("stroke", default: style.at("stroke", default: (paint: black, thickness: 0.45pt, cap: "round"))),
-      mark: mark.at("mark", default: (end: ">")),
-      offset: mark.at("offset", default: 0),
-      length: mark.at("length", default: none),
-      ratio: mark.at("ratio", default: none),
-      resolve-length: mark.at("resolve-length", default: _resolve-length-method(style)),
-      accuracy: mark.at("accuracy", default: _style-value(style, "accuracy", 0.001)),
-      optimize: mark.at("optimize", default: _style-value(style, "optimize", true)),
-    )
   }
 }
 
@@ -393,7 +374,8 @@
   trimmed
 }
 
-#let _geometry-segments(segment, style, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+#let _geometry-segments(segment, style, start-outset: 0, end-outset: 0, accuracy: 0.001, label-pos: none) = {
+  let style = _style-with-offset-side(style, segment, label-pos)
   if _has-parallel(style) {
     _path-segments(_parallel-path(segment, style, start-outset: start-outset, end-outset: end-outset))
   } else {
@@ -410,6 +392,7 @@
   source-outset: 0,
   sink-outset: 0,
   accuracy: 0.001,
+  label-pos: none,
 ) = {
   if _has-parallel(source-style) or _has-parallel(sink-style) {
     let base = curve-api.edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
@@ -425,6 +408,7 @@
       source-style,
       start-outset: source-outset + source-center-outset,
       accuracy: accuracy,
+      label-pos: label-pos,
     )
     let sink-geometry = if _same-parallel-geometry(source-style, sink-style) {
       _geometry-segments(
@@ -432,6 +416,7 @@
         source-style,
         end-outset: sink-outset + source-center-outset,
         accuracy: accuracy,
+        label-pos: label-pos,
       )
     } else {
       let sink-center-outset = _parallel-center-outset(
@@ -445,6 +430,7 @@
         sink-style,
         end-outset: sink-outset + sink-center-outset,
         accuracy: accuracy,
+        label-pos: label-pos,
       )
     }
     (
@@ -526,9 +512,9 @@
   (elements: elements, length: length)
 }
 
-#let _segment-elements(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
+#let _segment-elements(segment, style, phase: auto, anchor-start: true, anchor-end: true, label-pos: none) = {
   _segments-elements(
-    _geometry-segments(segment, style),
+    _geometry-segments(segment, style, label-pos: label-pos),
     style,
     phase: phase,
     anchor-start: anchor-start,
@@ -560,85 +546,8 @@
   elements
 }
 
-#let _parallel-mark-half-elements(
-  segments,
-  style,
-  center-outset: 0,
-  trim-start: false,
-  trim-end: false,
-  label-pos: none,
-) = {
-  let elements = ()
-  if style != none and segments.len() > 0 {
-    let geometry = ()
-    for (index, segment) in segments.enumerate() {
-      let start-outset = if trim-start and index == 0 { center-outset } else { 0 }
-      let end-outset = if trim-end and index == segments.len() - 1 { center-outset } else { 0 }
-      let piece-style = _mark-style-on-label-side(style, segment, label-pos)
-      for piece in _geometry-segments(
-        segment,
-        piece-style,
-        start-outset: start-outset,
-        end-outset: end-outset,
-        accuracy: _style-value(piece-style, "accuracy", 0.001),
-      ) {
-        geometry.push(piece)
-      }
-    }
-    for element in _segments-elements(geometry, style).elements {
-      elements.push(element)
-    }
-  }
-  elements
-}
-
-#let _parallel-mark-edge-elements(halves, source-style, sink-style, label-pos: none) = {
-  let source-mark = _parallel-mark-style(source-style)
-  let sink-mark = _parallel-mark-style(sink-style)
-  let mark-style = if sink-mark != none { sink-mark } else { source-mark }
-  if mark-style == none {
-    ()
-  } else {
-    let base-segments = halves.source + halves.sink
-    let center-outset = _parallel-center-outset(
-      _segments-length(base-segments, accuracy: _style-value(mark-style, "accuracy", 0.001)),
-      mark-style,
-    )
-    _parallel-mark-half-elements(
-      base-segments,
-      mark-style,
-      center-outset: center-outset,
-      trim-start: true,
-      trim-end: true,
-      label-pos: label-pos,
-    )
-  }
-}
-
-#let _pattern-line(start, end, style) = {
-  _segment-elements(_line-segment(start, end), style).elements
-}
-
-#let _parallel-mark-line-elements(start, end, style, label-pos: none) = {
-  let mark-style = _parallel-mark-style(style)
-  if mark-style == none {
-    ()
-  } else {
-    let segment = _line-segment(start, end)
-    let mark-style = _mark-style-on-label-side(mark-style, segment, label-pos)
-    let center-outset = _parallel-center-outset(
-      _segment-length(segment, accuracy: _style-value(mark-style, "accuracy", 0.001)),
-      mark-style,
-    )
-    let geometry = _geometry-segments(
-      segment,
-      mark-style,
-      start-outset: center-outset,
-      end-outset: center-outset,
-      accuracy: _style-value(mark-style, "accuracy", 0.001),
-    )
-    _segments-elements(geometry, mark-style).elements
-  }
+#let _pattern-line(start, end, style, label-pos: none) = {
+  _segment-elements(_line-segment(start, end), style, label-pos: label-pos).elements
 }
 
 #let _node-outset(style, node-outset) = {
@@ -771,7 +680,10 @@
 /// #let p = graph.builder(name: "parallel demo")
 /// #let (node: pa, builder: p) = graph.node(p, name: "a", statements: (pin: "y:0"))
 /// #let (node: pc, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
+/// #let (node: pc1, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
+/// #let (node: pc2, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
 /// #let p = graph.edge(p, source: (node: pa), sink: (node: pc))
+/// #let p = graph.edge(p, source: (node: pc2), sink: (node: pc1))
 /// #let parallel-edge-style(edge) = (
 ///     offset: -0.5,
 ///     length: 1.4,
@@ -791,7 +703,7 @@
 /// #let focused-sink-style(edge) = (focused-base-style(edge), parallel-edge-style(edge) + (
 ///   mark: (end: ">"),
 /// ))
-/// #draw(layout(graph.finish(p),  label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
+/// #draw(layout(graph.finish(p), g-center: 0.004, label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
 /// `,dir:ttb)
 /// -> content
 #let draw(
@@ -1017,6 +929,7 @@
                 source-outset: node-outsets.at(start.node),
                 sink-outset: node-outsets.at(end.node),
                 accuracy: edge-trim-accuracy,
+                label-pos: label-pos,
               )
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for element in (
@@ -1051,14 +964,6 @@
                   elements.push(element)
                 }
               }
-              for element in _parallel-mark-edge-elements(
-                halves,
-                source-style-value,
-                sink-style-value,
-                label-pos: label-pos,
-              ) {
-                elements.push(element)
-              }
             } else if start != none {
               let line-start = curve-api.outset-point(
                 nodes.at(start.node).pos,
@@ -1070,20 +975,13 @@
                   line-start,
                   e.pos,
                   _without-pattern-style(source-style-value) + subgraph-edge-style,
+                  label-pos: label-pos,
                 ) {
                   elements.push(element)
                 }
               }
               if source-style-value != none {
-                for element in _pattern-line(line-start, e.pos, source-draw-style) {
-                  elements.push(element)
-                }
-                for element in _parallel-mark-line-elements(
-                  line-start,
-                  e.pos,
-                  source-style-value,
-                  label-pos: label-pos,
-                ) {
+                for element in _pattern-line(line-start, e.pos, source-draw-style, label-pos: label-pos) {
                   elements.push(element)
                 }
               }
@@ -1098,15 +996,13 @@
                   e.pos,
                   line-end,
                   _without-pattern-style(sink-style-value) + subgraph-edge-style,
+                  label-pos: label-pos,
                 ) {
                   elements.push(element)
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-line(e.pos, line-end, sink-draw-style) {
-                  elements.push(element)
-                }
-                for element in _parallel-mark-line-elements(e.pos, line-end, sink-style-value, label-pos: label-pos) {
+                for element in _pattern-line(e.pos, line-end, sink-draw-style, label-pos: label-pos) {
                   elements.push(element)
                 }
               }
