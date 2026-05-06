@@ -18,7 +18,10 @@ use crate::{
     utils::GS,
     uv::UltravioletGraph,
 };
-use color_eyre::Result;
+use color_eyre::{
+    Result,
+    eyre::{ensure, eyre},
+};
 
 //pub mod cut_expression;
 pub mod esurface;
@@ -176,16 +179,15 @@ impl Graph {
             &cff_options,
         )?;
         let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-            cff.select_esurface_residue(right_threshold).pop().unwrap()
+            let residues = cff.select_esurface_residue(right_threshold);
+            expect_single_cff_threshold_residue(residues, "right")?
         } else {
             cff
         };
 
         let residue = if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-            residue
-                .select_esurface_residue(left_threshold)
-                .pop()
-                .unwrap()
+            let residues = residue.select_esurface_residue(left_threshold);
+            expect_single_cff_threshold_residue(residues, "left")?
         } else {
             residue
         };
@@ -237,6 +239,20 @@ impl Graph {
         let cut_cff = CutCFF { terms };
         Ok(cut_cff)
     }
+}
+
+fn expect_single_cff_threshold_residue(
+    mut residues: Vec<ThreeDExpression<OrientationID>>,
+    side: &str,
+) -> Result<ThreeDExpression<OrientationID>> {
+    ensure!(
+        residues.len() == 1,
+        "{side} threshold residue produced {} expressions; cut CFF construction expects exactly one expression",
+        residues.len()
+    );
+    residues
+        .pop()
+        .ok_or_else(|| eyre!("{side} threshold residue did not produce an expression"))
 }
 
 pub(crate) fn cff_expression_uses_local_half_edges(

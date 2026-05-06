@@ -1914,6 +1914,48 @@ implementation still may become impractical for very large cap vectors because
 the number of Lagrange samples and lower-contact sectors grows rapidly, but the
 JSON grammar and evaluator semantics do not require a separate fallback branch.
 
+\paragraph{Production representation names.}
+The implementation-level family names above separate the mathematical building
+blocks.  In gammaLoop user settings the production choices are only
+\texttt{CFF} and \texttt{LTD}.  The public \texttt{LTD} path uses the
+derivative-free repeated-channel construction where needed, and therefore
+agrees with the split-mass LTD limit without differentiating the numerator.
+\texttt{pure\_ltd} remains a diagnostic/testing object for the 3D-representation
+CLI and is not the production formula for unsplit repeated propagators with
+non-trivial numerator dependence.  The feature-gated \texttt{old\_cff} object is
+kept only inside the \texttt{three-dimensional-reps} crate for legacy parity
+tests.
+
+\paragraph{Uniform \(E\)-surface characterization for LU cuts.}
+Local unitarity cut selection and threshold counterterm construction must not
+depend on whether the original integrand is eventually evaluated as CFF or LTD.
+GammaLoop therefore treats the causal \(E\)-surface groups as the
+representation-neutral catalogue of physical threshold and Cutkosky cut
+surfaces.  CFF expressions expose this catalogue directly.  LTD expressions may
+contain additional \(H\)-surfaces in intermediate dual denominators, but after
+the explicit sum over orientations those surfaces are spurious for the
+threshold problem and are not used as threshold-counterterm surfaces.
+
+For a forward-scattering graph, initial-state cut edges are first externalized
+as correlated external energy shifts and external tree denominators are kept
+four-dimensional.  GammaLoop then builds a companion CFF projection expression
+with the same reduced graph data and uses its canonical \(E\)-surface groups to
+identify raised LU cuts and left/right threshold residues.  The selected
+residue data are mapped back to the requested representation before numerator
+energy maps are localized and event weights are assembled.  This keeps CFF and
+LTD aligned at the level of event groups, individual event weights, and
+additional counterterm weights.
+
+Canonicalization fixes the sign convention of a surface such as
+\(-\omega_{i_1}-\cdots-\omega_{i_r}+\Delta\) by replacing it with
+\(\omega_{i_1}+\cdots+\omega_{i_r}-\Delta\) and carrying the corresponding
+residue orientation in the surface map.  The remaining representation bridges
+are global convention factors: the LTD LU loop-measure parity
+\((-1)^{L-1}\), with \(L\) the forward-scattering loop count after removing
+initial-state cut edges, and the full-source versus reduced-source CFF sign
+exponent used for expanded-four-dimensional UV counterterms.  Neither depends
+on a graph label or on a fitted sign from tests.
+
 \paragraph{Embedding in gammaLoop cross-section integrands.}
 The gammaLoop production path always constructs the three-dimensional
 representation through \texttt{generate\_3d\_expr}.  Initial-state cut edges of a
