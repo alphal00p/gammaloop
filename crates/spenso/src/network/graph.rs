@@ -1231,16 +1231,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         S: SubSetLike<Base = SuBitGraph>,
     {
         let _span = profile::span(Timer::IdentifyNodes);
-        let nodes = self.graph.nodes(subgraph);
-        if nodes.is_empty() {
-            return None;
-        }
-
-        let (n, self_edges) = self
-            .graph
-            .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, node_data);
-        ignored.union_with(&self_edges);
-        Some(n)
+        self.graph
+            .identify_nodes_of_subgraph_marking_self_edges(subgraph, node_data, ignored)
     }
 
     pub fn finish_deferred_node_identifications(&mut self) {

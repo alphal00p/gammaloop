@@ -1440,6 +1440,71 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         (n, self_edges)
     }
 
+    /// Identifies all nodes incident to `subgraph` and returns the half-edges in
+    /// `subgraph` that become self-edges because of the identification.
+    ///
+    /// This is cheaper than first collecting nodes and then rescanning their
+    /// crowns when the caller already has a subgraph containing the operation
+    /// island to collapse.
+    pub fn identify_nodes_of_subgraph_without_self_edges<S, O>(
+        &mut self,
+        subgraph: &S,
+        node_data_merge: V,
+    ) -> Option<(NodeIndex, O)>
+    where
+        S: SubSetLike<Base = N::Base>,
+        O: ModifySubSet<Hedge> + SubSetLike<Base = N::Base>,
+    {
+        let mut self_edges: O = self.empty_subgraph();
+        let n = self.identify_nodes_of_subgraph_marking_self_edges(
+            subgraph,
+            node_data_merge,
+            &mut self_edges,
+        )?;
+
+        Some((n, self_edges))
+    }
+
+    /// Identifies all nodes incident to `subgraph` and adds the half-edges in
+    /// `subgraph` that become self-edges to `self_edges`.
+    ///
+    /// This avoids allocating a temporary self-edge subgraph when the caller
+    /// already has a long-lived ignore/delete set to update.
+    pub fn identify_nodes_of_subgraph_marking_self_edges<S, O>(
+        &mut self,
+        subgraph: &S,
+        node_data_merge: V,
+        self_edges: &mut O,
+    ) -> Option<NodeIndex>
+    where
+        S: SubSetLike<Base = N::Base>,
+        O: ModifySubSet<Hedge> + SubSetLike<Base = N::Base>,
+    {
+        let mut nodes = IndexSet::new();
+
+        for hedge in subgraph.included_iter() {
+            let node = self.node_id(hedge);
+            nodes.insert(node);
+
+            let other = self.inv(hedge);
+            if other == hedge || !subgraph.includes(&other) {
+                continue;
+            }
+
+            if node != self.node_id(other) {
+                self_edges.add(hedge);
+            }
+        }
+
+        let nodes = nodes.into_iter().collect::<Vec<_>>();
+        if nodes.is_empty() {
+            return None;
+        }
+
+        let n = self.node_store.identify_nodes(&nodes, node_data_merge);
+        Some(n)
+    }
+
     /// Collect all edges in the subgraph
     /// (This is without double counting, i.e. if two half-edges are part of the same edge, only one `EdgeIndex` will be collected)
     pub fn edges<S: SubSetLike>(&self, subgraph: &S) -> Vec<EdgeIndex> {
