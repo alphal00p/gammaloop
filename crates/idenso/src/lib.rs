@@ -47,6 +47,8 @@ pub mod metric;
 pub mod parsing_ind;
 #[cfg(feature = "python")]
 pub mod python;
+#[cfg(any(test, feature = "reference-cases"))]
+pub mod reference_cases;
 pub mod rep_symbols;
 pub mod representations;
 pub mod schoonschip;
