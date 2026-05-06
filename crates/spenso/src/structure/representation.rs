@@ -512,9 +512,28 @@ impl<T: RepName> Representation<T> {
     /// a is dualized, b is not.
     ///
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
+        fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
+            match value {
+                AtomView::Fun(fun) => {
+                    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+                    for arg in fun.iter() {
+                        rebuilt = rebuilt.add_arg(arg);
+                    }
+                    rebuilt.add_arg(rep).finish()
+                }
+                AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+                _ => value.to_owned(),
+            }
+        }
+
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
-        function!(ETS.metric, self.to_symbolic([]), a.as_view(), b.as_view())
+        let rep = self.to_symbolic([]);
+        function!(
+            ETS.metric,
+            with_rep(a.as_view(), &rep),
+            with_rep(b.as_view(), &rep)
+        )
     }
 
     pub fn base(self) -> Representation<T::Base> {
