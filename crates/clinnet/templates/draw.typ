@@ -33,6 +33,8 @@
 
 #let _mark-defaults = (
   mark-position: "end",
+  mark-orientation: "path",
+  mark-direction: "forward",
 )
 
 #let _pattern-defaults = (
@@ -69,6 +71,36 @@
     let _ = clean.remove("mark")
   }
   clean
+}
+
+#let _start-mark-entry(entry) = if type(entry) == dictionary {
+  entry
+} else {
+  (symbol: entry)
+}
+
+#let _backward-mark(mark) = if mark == none {
+  none
+} else if type(mark) == dictionary {
+  let clean = mark
+  let entry = none
+  if clean.keys().contains("end") {
+    entry = clean.end
+    let _ = clean.remove("end")
+  } else if clean.keys().contains("symbol") {
+    entry = clean.symbol
+    let _ = clean.remove("symbol")
+  } else if clean.keys().contains("start") {
+    entry = clean.start
+    let _ = clean.remove("start")
+  }
+  if entry == none {
+    mark
+  } else {
+    clean + (start: _start-mark-entry(entry))
+  }
+} else {
+  (start: _start-mark-entry(mark))
 }
 
 #let _style-value(style, key) = {
@@ -147,11 +179,52 @@
 
 #let _mark-position(style) = _style-value(style, "mark-position")
 
+#let _mark-orientation(style) = _style-value(style, "mark-orientation")
+
+#let _mark-direction(style) = _style-value(style, "mark-direction")
+
 #let _dangling-mark-style(style) = {
   if _mark-position(style) == "center-if-dangling" {
     style + (mark-position: "center")
   } else {
     style
+  }
+}
+
+#let _edge-has-source(edge) = edge.at("source-half-edge", default: none) != none
+
+#let _edge-has-sink(edge) = edge.at("sink-half-edge", default: none) != none
+
+#let _edge-oriented-mark-half(edge) = {
+  let has-source = _edge-has-source(edge)
+  let has-sink = _edge-has-sink(edge)
+  if has-source and has-sink {
+    if edge.at("orientation", default: "default") == "reversed" { "sink" } else { "source" }
+  } else if has-source {
+    "source"
+  } else if has-sink {
+    "sink"
+  } else {
+    none
+  }
+}
+
+#let _orient-mark-style(style, edge, half) = {
+  if style == none or not _has-mark(style) or _mark-orientation(style) != "edge" {
+    style
+  } else {
+    let orientation = edge.at("orientation", default: "default")
+    let oriented-half = _edge-oriented-mark-half(edge)
+    if orientation == "undirected" or half != oriented-half {
+      _without-mark-style(style)
+    } else if orientation == "reversed" {
+      style + (
+        mark: _backward-mark(style.mark),
+        mark-direction: "backward",
+      )
+    } else {
+      style + (mark-direction: "forward")
+    }
   }
 }
 
@@ -405,8 +478,9 @@
       current-phase = current-phase + 2 * calc.pi * piece.length / wavelength
     }
   } else {
+    let mark-index = if _mark-direction(style) == "backward" { 0 } else { segments.len() - 1 }
     for (index, segment) in segments.enumerate() {
-      if _has-mark(style) and index == segments.len() - 1 {
+      if _has-mark(style) and index == mark-index {
         elements.push(_bezier-element(segment, style))
       } else if _has-mark(style) {
         elements.push(_bezier-element(segment, _without-mark-style(style)))
@@ -424,26 +498,38 @@
     let length = curve-api.path-length(path, accuracy: _style-value(style, "accuracy"))
     let first = curve-api.trim-path(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
     let second = curve-api.trim-path(path, start-outset: length / 2, accuracy: _style-value(style, "accuracy"))
+    let backward = _mark-direction(style) == "backward"
+    let first-style = if backward { _without-mark-style(style) } else { style }
+    let second-style = if backward { style } else { _without-mark-style(style) }
     let first-elements = _segments-elements(
       curve-api.path-segments(first),
-      style,
+      first-style,
       phase: phase,
       anchor-start: anchor-start,
       anchor-end: false,
     ).elements
     let second-elements = _segments-elements(
       curve-api.path-segments(second),
-      _without-mark-style(style),
+      second-style,
       phase: phase,
       anchor-start: false,
       anchor-end: anchor-end,
     ).elements
     let pieces = ()
-    for element in second-elements {
-      pieces.push(element)
-    }
-    for element in first-elements {
-      pieces.push(element)
+    if backward {
+      for element in first-elements {
+        pieces.push(element)
+      }
+      for element in second-elements {
+        pieces.push(element)
+      }
+    } else {
+      for element in second-elements {
+        pieces.push(element)
+      }
+      for element in first-elements {
+        pieces.push(element)
+      }
     }
     (elements: pieces, length: length)
   } else {
@@ -661,6 +747,26 @@
 /// ))
 /// #draw(layout(graph.finish(p), g-center: 0.004, label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
 /// `,dir:ttb)
+///
+/// #example(`
+/// #let b = graph.builder(name: "oriented marks")
+/// #let (node: a, builder: b) = graph.node(b, name: "a", statements: (pin: "x:0,y:0"))
+/// #let (node: c, builder: b) = graph.node(b, name: "c", statements: (pin: "x:3,y:0"))
+/// #let (node: d, builder: b) = graph.node(b, name: "d", statements: (pin: "x:3,y:-1"))
+/// #let b = graph.edge(b, source: (node: a), sink: (node: c), orientation: "default")
+/// #let b = graph.edge(b, source: (node: a), sink: (node: d), orientation: "reversed")
+/// #let arrow = (
+///   end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto),
+///   scale: 0.75,
+/// )
+/// #let oriented-arrow = (
+///   stroke: black + 0.7pt,
+///   mark: arrow,
+///   mark-position: "center-if-dangling",
+///   mark-orientation: "edge",
+/// )
+/// #draw(layout(graph.finish(b)), unit: 1.4, source-style: oriented-arrow, sink-style: oriented-arrow)
+/// `,dir:ttb)
 /// -> content
 #let draw(
   /// Laid-out graph object returned by `layout`. -> bytes
@@ -723,11 +829,16 @@
   /// Source half-edge style dictionary, array of layer dictionaries, or
   /// callback. `mark-position: "center-if-dangling"` keeps an end marker at the
   /// paired-edge split point while centering it on dangling half edges.
+  /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
+  /// of raw path direction; reversed edges move the mark to the sink half and
+  /// flip it, while undirected edges suppress it.
   /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
   /// A callback receives edge data. `mark-position: "center-if-dangling"` has
-  /// the same dangling-edge behavior as for `source-style`.
+  /// the same dangling-edge behavior as for `source-style`, and
+  /// `mark-orientation: "edge"` participates in the same orientation-aware mark
+  /// placement.
   /// -> dictionary | array | function | none
   sink-style: (:),
   /// Edge label content or callback. A callback receives edge data.
@@ -867,6 +978,7 @@
             } else {
               source-style-value
             }
+            source-draw-style = _orient-mark-style(source-draw-style, edge-data, "source")
             let sink-draw-style = if sink-style-value == none {
               none
             } else if sink-in-subgraph and not subgraph-edge-underlay {
@@ -874,6 +986,7 @@
             } else {
               sink-style-value
             }
+            sink-draw-style = _orient-mark-style(sink-draw-style, edge-data, "sink")
 
             if source-style-value == none and sink-style-value == none {
               ()
