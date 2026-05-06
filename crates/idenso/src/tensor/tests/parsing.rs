@@ -31,10 +31,25 @@ use spenso::{
     tensor_symbol, vector,
 };
 
+use crate::tensor::{SymbolicNet, SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
-use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
+fn symbolic_net_result_string(net: &SymbolicNet<AbstractIndex>) -> String {
+    match net.result().unwrap() {
+        ExecutionResult::One => "1".to_string(),
+        ExecutionResult::Zero => "0".to_string(),
+        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
+            scalar.to_bare_ordered_string()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
+            tensor.expression.to_bare_ordered_string()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
+            panic!("unexpected library key result")
+        }
+    }
+}
 
 fn schoonschip_only_settings() -> ParseSettings {
     ParseSettings {
@@ -123,34 +138,36 @@ fn batched_sequential_matches_legacy_extract_result() {
         .execute::<SequentialExtract, SmallestDegree, _, _, _>(&lib, &fnlib)
         .unwrap();
 
-    let batched_string = match batched.result().unwrap() {
-        ExecutionResult::One => "1".to_string(),
-        ExecutionResult::Zero => "0".to_string(),
-        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
-            scalar.to_bare_ordered_string()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
-            tensor.expression.to_bare_ordered_string()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
-            panic!("unexpected library key result")
-        }
-    };
-    let legacy_string = match legacy.result().unwrap() {
-        ExecutionResult::One => "1".to_string(),
-        ExecutionResult::Zero => "0".to_string(),
-        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
-            scalar.to_bare_ordered_string()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
-            tensor.expression.to_bare_ordered_string()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
-            panic!("unexpected library key result")
-        }
-    };
+    let batched_string = symbolic_net_result_string(&batched);
+    let legacy_string = symbolic_net_result_string(&legacy);
 
     assert_eq!(batched_string, legacy_string);
+}
+
+#[test]
+fn parallel_ready_batches_match_sequential_result() {
+    test_initialize();
+    let expr = parse!(
+        "a(spenso::mink(4,1))*b(spenso::mink(4,1)) + c(spenso::mink(4,2))*d(spenso::mink(4,2))"
+    );
+    let mut sequential = expr
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let mut parallel = sequential.clone();
+    let lib = DummyLibrary::<_>::new();
+    let fnlib = ErroringLibrary::<Symbol>::new();
+
+    sequential
+        .execute::<Sequential, SmallestDegree, _, _, _>(&lib, &fnlib)
+        .unwrap();
+    parallel
+        .execute_parallel::<SmallestDegree, _, _, _>(&lib, &fnlib)
+        .unwrap();
+
+    assert_eq!(
+        symbolic_net_result_string(&parallel),
+        symbolic_net_result_string(&sequential)
+    );
 }
 
 #[test]
