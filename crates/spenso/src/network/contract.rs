@@ -21,7 +21,7 @@ use super::{
     Ref, TensorNetworkError,
     graph::NetworkGraph,
     library::{Library, LibraryTensor},
-    store::NetworkStore,
+    store::NetworkStoreAccess,
 };
 
 pub struct SmallestDegree<CStrat = ()> {
@@ -141,26 +141,28 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         }
     }
 
-    pub fn local_tensor_structure<'a, T, Sc>(
+    pub fn local_tensor_structure<'a, Store>(
         &self,
-        executor: &'a NetworkStore<T, Sc>,
+        executor: &'a Store,
         operand: usize,
-    ) -> Option<&'a T::Structure>
+    ) -> Option<&'a <Store::Tensor as HasStructure>::Structure>
     where
-        T: HasStructure,
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure,
     {
         self.local_tensor_index(operand)
-            .map(|index| executor.tensors[index].structure())
+            .map(|index| executor.tensor(index).structure())
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn materialize_libraries<LT, T, L, Sc, FK>(
+    pub fn materialize_libraries<LT, T, L, Sc, FK, Store>(
         &mut self,
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         lib: &L,
     ) -> Result<(), TensorNetworkError<K, FK>>
     where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
         K: Clone + Debug + Display,
         FK: Debug + Display,
         Aind: AbsInd,
@@ -181,8 +183,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                         "failed to materialize library product operand"
                     ))
                 })?;
-                let index = executor.tensors.len();
-                executor.tensors.push(T::from(tensor));
+                let index = executor.push_tensor(T::from(tensor));
                 operand.leaf = NetworkLeaf::LocalTensor(index);
                 operand.source = None;
             }
@@ -191,13 +192,14 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn contract_scalars<LT, T, L, Sc, FK>(
+    pub fn contract_scalars<LT, T, L, Sc, FK, Store>(
         &mut self,
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         lib: &L,
     ) -> Result<bool, TensorNetworkError<K, FK>>
     where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
         K: Clone + Debug + Display,
         FK: Debug + Display,
         Aind: AbsInd,
@@ -221,19 +223,19 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             let is_scalar = match operand.leaf {
                 NetworkLeaf::Scalar(index) => {
                     if let Some(accumulator) = &mut accumulator {
-                        *accumulator *= executor.scalar[index].refer();
+                        *accumulator *= executor.scalar(index).refer();
                     } else {
-                        accumulator = Some(executor.scalar[index].clone());
+                        accumulator = Some(executor.scalar(index).clone());
                     }
                     true
                 }
                 NetworkLeaf::LocalTensor(index) => {
-                    if let Some(scalar) = executor.tensors[index].scalar_ref() {
+                    if let Some(scalar) = executor.tensor(index).scalar_ref() {
                         if let Some(accumulator) = &mut accumulator {
                             *accumulator *= scalar;
                         } else {
                             accumulator =
-                                Some(Sc::from(executor.tensors[index].clone().scalar().unwrap()));
+                                Some(Sc::from(executor.tensor(index).clone().scalar().unwrap()));
                         }
                         true
                     } else {
@@ -264,8 +266,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 {
                     return Ok(false);
                 }
-                let index = executor.scalar.len();
-                executor.scalar.push(accumulator);
+                let index = executor.push_scalar(accumulator);
                 self.replace_operands(
                     &scalar_positions,
                     ProductOperand {
@@ -277,7 +278,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             }
             1 => {
                 let tensor_position = tensor_positions[0];
-                let leaf = self.scalar_multiply_operand(
+                let leaf = self.scalar_multiply_operand::<LT, T, L, Sc, FK, Store>(
                     tensor_position,
                     accumulator,
                     executor,
@@ -291,8 +292,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 Ok(true)
             }
             _ if scalar_positions.len() > 1 => {
-                let index = executor.scalar.len();
-                executor.scalar.push(accumulator);
+                let index = executor.push_scalar(accumulator);
                 self.replace_operands(
                     &scalar_positions,
                     ProductOperand {
@@ -307,15 +307,16 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     #[allow(clippy::result_large_err)]
-    fn scalar_multiply_operand<LT, T, L, Sc, FK>(
+    fn scalar_multiply_operand<LT, T, L, Sc, FK, Store>(
         &self,
         operand: usize,
         scalar: Sc,
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         lib: &L,
     ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
     where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
         K: Clone + Debug + Display,
         FK: Debug + Display,
         Aind: AbsInd,
@@ -327,7 +328,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             IsAbstractSlot<Aind = Aind>,
     {
         let leaf = match &self.operands[operand].leaf {
-            NetworkLeaf::LocalTensor(index) => executor.tensors[*index]
+            NetworkLeaf::LocalTensor(index) => executor
+                .tensor(*index)
                 .scalar_mul(&scalar)
                 .ok_or(TensorNetworkError::FailedScalarMul)?,
             NetworkLeaf::LibraryKey { .. } => {
@@ -346,21 +348,21 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             NetworkLeaf::Scalar(_) => return Err(TensorNetworkError::SlotEdgeToScalarNode),
         };
 
-        let index = executor.tensors.len();
-        executor.tensors.push(leaf);
+        let index = executor.push_tensor(leaf);
         Ok(NetworkLeaf::LocalTensor(index))
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn contract_pair<LT, T, L, Sc, CStrat, FK>(
+    pub fn contract_pair<LT, T, L, Sc, CStrat, FK, Store>(
         &mut self,
         left: usize,
         right: usize,
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         lib: &L,
     ) -> Result<(), TensorNetworkError<K, FK>>
     where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
         K: Clone + Debug + Display,
         FK: Debug + Display,
         Aind: AbsInd,
@@ -371,7 +373,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
-        self.materialize_libraries::<LT, T, L, Sc, FK>(executor, graph, lib)?;
+        self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
 
         let left_tensor = self
             .local_tensor_index(left)
@@ -379,9 +381,10 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         let right_tensor = self
             .local_tensor_index(right)
             .ok_or(TensorNetworkError::SlotEdgeToScalarNode)?;
-        let contracted = executor.tensors[left_tensor].contract(&executor.tensors[right_tensor])?;
-        let index = executor.tensors.len();
-        executor.tensors.push(contracted);
+        let contracted = executor
+            .tensor(left_tensor)
+            .contract(executor.tensor(right_tensor))?;
+        let index = executor.push_tensor(contracted);
 
         let mut positions = [left, right];
         positions.sort_unstable();
@@ -405,13 +408,15 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Sc,
         CStrat,
         FK,
+        Store,
     >(
         &mut self,
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         lib: &L,
     ) -> Result<bool, TensorNetworkError<K, FK>>
     where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
         K: Clone + Debug + Display,
         FK: Debug + Display,
         Aind: AbsInd,
@@ -423,8 +428,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
-        self.materialize_libraries::<LT, T, L, Sc, FK>(executor, graph, lib)?;
-        let Some((left, right, _degree)) = self.best_degree_pair::<T, Sc, LARGEST>(executor) else {
+        self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        let Some((left, right, _degree)) = self.best_degree_pair::<Store, LARGEST>(executor) else {
             return Ok(false);
         };
 
@@ -433,40 +438,42 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             let right_tensor = self.local_tensor_index(right).unwrap();
             println!(
                 "Contracting {} with {}",
-                executor.tensors[left_tensor].structure(),
-                executor.tensors[right_tensor].structure()
+                executor.tensor(left_tensor).structure(),
+                executor.tensor(right_tensor).structure()
             );
         }
 
-        self.contract_pair::<LT, T, L, Sc, CStrat, FK>(left, right, executor, graph, lib)?;
+        self.contract_pair::<LT, T, L, Sc, CStrat, FK, Store>(left, right, executor, graph, lib)?;
 
         if DEBUG && let NetworkLeaf::LocalTensor(index) = self.operands[left.min(right)].leaf {
-            println!("Obtained {}", executor.tensors[index].structure());
+            println!("Obtained {}", executor.tensor(index).structure());
         }
 
         Ok(true)
     }
 
-    pub fn best_degree_pair<T, Sc, const LARGEST: bool>(
+    pub fn best_degree_pair<Store, const LARGEST: bool>(
         &self,
-        executor: &NetworkStore<T, Sc>,
+        executor: &Store,
     ) -> Option<(usize, usize, u32)>
     where
-        T: HasStructure,
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure,
     {
-        self.best_tensor_pair_by::<T, Sc, _, LARGEST>(executor, |_, _, degree, _, _| {
+        self.best_tensor_pair_by::<Store, _, LARGEST>(executor, |_, _, degree, _, _| {
             if degree == 0 { u32::MAX } else { degree }
         })
         .map(|(left, right, degree, _)| (left, right, degree))
     }
 
-    pub fn best_tensor_pair_by<T, Sc, Score: Ord, const LARGEST: bool>(
+    pub fn best_tensor_pair_by<Store, Score: Ord, const LARGEST: bool>(
         &self,
-        executor: &NetworkStore<T, Sc>,
-        mut score: impl FnMut(usize, usize, u32, &T, &T) -> Score,
+        executor: &Store,
+        mut score: impl FnMut(usize, usize, u32, &Store::Tensor, &Store::Tensor) -> Score,
     ) -> Option<(usize, usize, u32, Score)>
     where
-        T: HasStructure,
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure,
     {
         let tensors = self
             .operands
@@ -481,8 +488,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         let mut best = None;
         for (left_position, (left_operand, left_tensor)) in tensors.iter().enumerate() {
             for (right_operand, right_tensor) in &tensors[left_position + 1..] {
-                let left = &executor.tensors[*left_tensor];
-                let right = &executor.tensors[*right_tensor];
+                let left = executor.tensor(*left_tensor);
+                let right = executor.tensor(*right_tensor);
                 let degree = matching_degree(left.structure(), right.structure());
                 let candidate_score = score(*left_operand, *right_operand, degree, left, right);
 
@@ -507,13 +514,14 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn finish<LT, T, L, Sc, FK>(
+    pub fn finish<LT, T, L, Sc, FK, Store>(
         mut self,
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         lib: &L,
     ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
     where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
         K: Clone + Debug + Display,
         FK: Debug + Display,
         Aind: AbsInd,
@@ -529,7 +537,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
-        while self.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)? {}
+        while self.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)? {}
 
         if self.operands.len() == 1 {
             Ok(self.operands.remove(0).leaf)
@@ -576,10 +584,11 @@ impl<
         + for<'a> MulAssign<T::ScalarRef<'a>>
         + From<T::Scalar>
         + Ref,
+    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
-> ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind> for ContractScalars<CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for ContractScalars<CStrat>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -588,7 +597,7 @@ where
         IsAbstractSlot<Aind = Aind>,
 {
     fn contract(
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         operation: &NetworkOperation<FK>,
         lib: &L,
@@ -598,8 +607,8 @@ where
         FK: Display,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
-        product.finish::<LT, T, L, Sc, FK>(executor, graph, lib)
+        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
     }
 }
 
@@ -619,10 +628,11 @@ impl<
         + for<'a> MulAssign<T::ScalarRef<'a>>
         + From<T::Scalar>
         + Ref,
+    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
-> ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind> for SmallestDegree<CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SmallestDegree<CStrat>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -633,7 +643,7 @@ where
         IsAbstractSlot<Aind = Aind>,
 {
     fn contract(
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         operation: &NetworkOperation<FK>,
         lib: &L,
@@ -643,13 +653,13 @@ where
         FK: Display,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
-        while product.contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, FK>(
+        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        while product.contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, FK, Store>(
             executor, graph, lib,
         )? {
-            product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
+            product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         }
-        product.finish::<LT, T, L, Sc, FK>(executor, graph, lib)
+        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
     }
 }
 
@@ -669,11 +679,12 @@ impl<
         + for<'a> MulAssign<T::ScalarRef<'a>>
         + From<T::Scalar>
         + Ref,
+    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
     const N: usize,
-> ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind> for SmallestDegreeIter<N, CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SmallestDegreeIter<N, CStrat>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -684,7 +695,7 @@ where
         IsAbstractSlot<Aind = Aind>,
 {
     fn contract(
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         operation: &NetworkOperation<FK>,
         lib: &L,
@@ -694,16 +705,16 @@ where
         FK: Display,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
+        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         for _ in 0..N {
-            if !product.contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, FK>(
+            if !product.contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, FK, Store>(
                 executor, graph, lib,
             )? {
                 break;
             }
-            product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
+            product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         }
-        product.finish::<LT, T, L, Sc, FK>(executor, graph, lib)
+        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
     }
 }
 
@@ -723,11 +734,12 @@ impl<
         + for<'a> MulAssign<T::ScalarRef<'a>>
         + From<T::Scalar>
         + Ref,
+    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
     const D: bool,
-> ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind> for SingleSmallestDegree<D, CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SingleSmallestDegree<D, CStrat>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -738,7 +750,7 @@ where
         IsAbstractSlot<Aind = Aind>,
 {
     fn contract(
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         operation: &NetworkOperation<FK>,
         lib: &L,
@@ -748,10 +760,11 @@ where
         FK: Display,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
-        product
-            .contract_one_by_degree::<D, false, LT, T, L, Sc, CStrat, FK>(executor, graph, lib)?;
-        product.finish::<LT, T, L, Sc, FK>(executor, graph, lib)
+        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        product.contract_one_by_degree::<D, false, LT, T, L, Sc, CStrat, FK, Store>(
+            executor, graph, lib,
+        )?;
+        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
     }
 }
 
@@ -771,11 +784,12 @@ impl<
         + for<'a> MulAssign<T::ScalarRef<'a>>
         + From<T::Scalar>
         + Ref,
+    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
     const D: bool,
-> ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind> for SingleLargestDegree<D, CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SingleLargestDegree<D, CStrat>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -786,7 +800,7 @@ where
         IsAbstractSlot<Aind = Aind>,
 {
     fn contract(
-        executor: &mut NetworkStore<T, Sc>,
+        executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
         operation: &NetworkOperation<FK>,
         lib: &L,
@@ -796,9 +810,10 @@ where
         FK: Display,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_scalars::<LT, T, L, Sc, FK>(executor, graph, lib)?;
-        product
-            .contract_one_by_degree::<D, true, LT, T, L, Sc, CStrat, FK>(executor, graph, lib)?;
-        product.finish::<LT, T, L, Sc, FK>(executor, graph, lib)
+        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        product.contract_one_by_degree::<D, true, LT, T, L, Sc, CStrat, FK, Store>(
+            executor, graph, lib,
+        )?;
+        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
     }
 }

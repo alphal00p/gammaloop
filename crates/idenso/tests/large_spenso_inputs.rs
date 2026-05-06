@@ -6,10 +6,14 @@ use std::{
 use idenso::{
     parsing_ind::Parsind,
     representations::initialize,
-    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
+    tensor::{SymbolicNet, SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 use spenso::{
-    network::parsing::{ParseSettings, StructureFromAtom},
+    network::{
+        ExecutionResult, Sequential, SmallestDegree, TensorOrScalarOrKey,
+        library::{DummyLibrary, function_lib::Wrap},
+        parsing::{ParseSettings, StructureFromAtom},
+    },
     structure::{
         TensorStructure,
         representation::LibraryRep,
@@ -212,6 +216,74 @@ fn time_symbolic_network_parse_and_execute(label: &str, expr: &Atom, settings: &
     spenso::network::profile::report(&format!("{label} after_symbolic_execute"));
 }
 
+fn symbolic_network_result_atom(net: &SymbolicNet<Parsind>) -> Atom {
+    match net.result().unwrap() {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => scalar.clone(),
+        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
+            tensor.expression.clone()
+        }
+        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
+            panic!("unexpected library key result")
+        }
+    }
+}
+
+fn time_symbolic_network_execute_sequential(
+    label: &str,
+    mut net: SymbolicNet<Parsind>,
+    expr: &Atom,
+) -> Atom {
+    spenso::network::profile::reset();
+    let lib = DummyLibrary::<_>::new();
+    let start = Instant::now();
+    net.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &Wrap {})
+        .unwrap();
+    let result = symbolic_network_result_atom(&net);
+    eprintln!(
+        "{label} symbolic_execute result stats: terms={} bytes={}",
+        result.nterms(),
+        result.as_view().get_byte_size()
+    );
+    let same_as_input = result == *expr;
+    eprintln!("{label} symbolic_execute same_as_input={same_as_input}");
+    assert!(
+        same_as_input,
+        "{label} symbolic execution changed the input"
+    );
+    report(&format!("{label} symbolic_execute"), start);
+    spenso::network::profile::report(&format!("{label} after_symbolic_execute"));
+    result
+}
+
+fn time_symbolic_network_execute_parallel(
+    label: &str,
+    mut net: SymbolicNet<Parsind>,
+    expr: &Atom,
+) -> Atom {
+    spenso::network::profile::reset();
+    let lib = DummyLibrary::<_>::new();
+    let start = Instant::now();
+    net.execute_parallel::<SmallestDegree, _, _, _>(&lib, &Wrap {})
+        .unwrap();
+    let result = symbolic_network_result_atom(&net);
+    eprintln!(
+        "{label} symbolic_execute result stats: terms={} bytes={}",
+        result.nterms(),
+        result.as_view().get_byte_size()
+    );
+    let same_as_input = result == *expr;
+    eprintln!("{label} symbolic_execute same_as_input={same_as_input}");
+    assert!(
+        same_as_input,
+        "{label} symbolic execution changed the input"
+    );
+    report(&format!("{label} symbolic_execute"), start);
+    spenso::network::profile::report(&format!("{label} after_symbolic_execute"));
+    result
+}
+
 fn collect_common_factors(expr: &Atom) -> Atom {
     let start = Instant::now();
     let collected = expr.collect_factors();
@@ -242,6 +314,32 @@ fn smallest_root_input_symbolic_network_parse_default() {
     let expr = parse_smallest_input();
     let settings = ParseSettings::default();
     time_symbolic_network_parse_and_execute("default", &expr, &settings);
+}
+
+#[test]
+#[ignore = "diagnostic timing for sequential vs parallel symbolic execution"]
+fn smallest_root_input_symbolic_network_execute_sequential_vs_parallel() {
+    let expr = parse_smallest_input();
+    let settings = ParseSettings::default();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    let net = expr
+        .parse_to_symbolic_net::<Parsind>(&settings)
+        .expect("failed to parse expression into symbolic network");
+    eprintln!(
+        "compare symbolic_net stats: graph_nodes={} graph_edges={} tensors={} scalars={}",
+        net.graph.graph.n_nodes(),
+        net.graph.graph.n_edges(),
+        net.store.tensors.len(),
+        net.store.scalar.len(),
+    );
+    report("compare symbolic_network_parse", start);
+    spenso::network::profile::report("compare after_symbolic_network_parse");
+
+    let sequential = time_symbolic_network_execute_sequential("sequential", net.clone(), &expr);
+    let parallel = time_symbolic_network_execute_parallel("parallel", net, &expr);
+
+    assert_eq!(parallel, sequential);
 }
 
 #[test]
