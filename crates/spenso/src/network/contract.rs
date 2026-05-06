@@ -552,18 +552,21 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         };
 
         let profile_pair = profile::enabled();
+        let log_pair = profile_pair && (self.operands.len() > 4 || degree > 1);
         let pair_start = if profile_pair {
             let left_tensor = self.local_tensor_index(left).unwrap();
             let right_tensor = self.local_tensor_index(right).unwrap();
-            eprintln!(
-                "spenso_profile product.result_rank_pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
-                self.operands.len(),
-                left,
-                right,
-                degree,
-                executor.tensor(left_tensor).structure(),
-                executor.tensor(right_tensor).structure(),
-            );
+            if log_pair {
+                eprintln!(
+                    "spenso_profile product.result_rank_pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
+                    self.operands.len(),
+                    left,
+                    right,
+                    degree,
+                    executor.tensor(left_tensor).structure(),
+                    executor.tensor(right_tensor).structure(),
+                );
+            }
             Some(std::time::Instant::now())
         } else {
             None
