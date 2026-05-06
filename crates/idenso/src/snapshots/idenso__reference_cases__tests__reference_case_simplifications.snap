@@ -53,7 +53,7 @@ CA*g(coad(8,a),coad(8,b))
 color_feyncalc_structure_times_open_chain_id4 [ColorSu3, ColorDefault, enabled]
 1𝑖/2*CA*chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out))
 
-color_feyncalc_delta_closes_doubled_two_generator_chain_id18 [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize repeated open color-chain endpoint contractions]
+color_feyncalc_delta_closes_doubled_two_generator_chain_id18 [ColorSu3, ColorDefault, enabled]
 2*TR*g(coad(8,i),coad(8,j))
 
 color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet materialize length-three color traces reliably]
