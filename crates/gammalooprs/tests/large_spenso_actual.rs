@@ -271,6 +271,38 @@ fn execute_actual_net_min_result_rank(label: &str, mut net: ParsingNet) -> Atom 
     result
 }
 
+fn execute_actual_net_min_result_rank_parallel(label: &str, mut net: ParsingNet) -> Atom {
+    let lib = TENSORLIB.read().unwrap();
+    let start = Instant::now();
+    net.execute_parallel::<MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
+        .unwrap_or_else(|error| {
+            panic!("{label} parallel min-result-rank actual execution failed: {error}")
+        });
+    report(
+        &format!("{label} parallel_min_result_rank_actual_execute"),
+        start,
+    );
+    report_actual_net_stats(
+        &format!("{label} parallel_min_result_rank_after_execute"),
+        &net,
+    );
+
+    let result = net.result_scalar().unwrap_or_else(|error| {
+        panic!("{label} parallel min-result-rank scalar result failed: {error}")
+    });
+    let result = match result {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(value) => value.into_owned(),
+    };
+    eprintln!(
+        "{label} parallel_min_result_rank_actual_result stats: terms={} bytes={}",
+        result.nterms(),
+        result.as_view().get_byte_size()
+    );
+    result
+}
+
 fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
     let lib = TENSORLIB.read().unwrap();
     for step in 0..steps {
@@ -377,6 +409,15 @@ fn symbolica_expression_input_actual_network_min_result_rank_execute() {
     let expr = parse_root_input("symbolica_expression.txt");
     let net = parse_actual_net("raw_min_result_rank", &expr);
     let _ = execute_actual_net_min_result_rank("raw_min_result_rank", net);
+}
+
+#[test]
+#[ignore = "diagnostic timing for GammaLoop's concrete/mixed tensor evaluator path with parallel MinResultRank"]
+fn symbolica_expression_input_actual_network_parallel_min_result_rank_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("symbolica_expression.txt");
+    let net = parse_actual_net("raw_parallel_min_result_rank", &expr);
+    let _ = execute_actual_net_min_result_rank_parallel("raw_parallel_min_result_rank", net);
 }
 
 #[test]
