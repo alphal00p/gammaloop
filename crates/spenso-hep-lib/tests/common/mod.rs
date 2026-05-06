@@ -2,6 +2,7 @@ use idenso::{
     dirac::AGS,
     metric::{MetricSimplifier, PermuteWithMetric},
     representations::{Bispinor, initialize},
+    tensor::SymbolicTensor,
 };
 use spenso::{
     network::{
