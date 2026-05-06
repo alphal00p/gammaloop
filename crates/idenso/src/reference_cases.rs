@@ -393,9 +393,7 @@ pub static REFERENCE_CASES: &[ReferenceCase] = &[
         domain: ReferenceDomain::Dirac4,
         expression: dirac_gamma5_four_gamma_trace_is_epsilon,
         simplification: ReferenceSimplification::GammaDefault,
-        validation: ReferenceValidation::Blocked(
-            "hep-lib validation library does not yet provide epsilon/cind evaluation",
-        ),
+        validation: ReferenceValidation::Enabled,
     },
     ReferenceCase {
         name: "color_form_one_generator_trace",

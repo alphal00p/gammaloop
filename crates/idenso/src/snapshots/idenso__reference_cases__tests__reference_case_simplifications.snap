@@ -32,7 +32,7 @@ g(bis(4,a),bis(4,b))
 dirac_gamma0_conjugates_gamma5 [Dirac4, GammaDefault, enabled]
 -1*chain(bis(4,a),bis(4,b),gamma5(in,out))
 
-dirac_gamma5_four_gamma_trace_is_epsilon [Dirac4, GammaDefault, blocked: hep-lib validation library does not yet provide epsilon/cind evaluation]
+dirac_gamma5_four_gamma_trace_is_epsilon [Dirac4, GammaDefault, enabled]
 4*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))
 
 color_form_one_generator_trace [ColorSu3, ColorDefault, blocked: hep-lib parser cannot yet close single-factor color traces]
