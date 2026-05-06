@@ -400,9 +400,7 @@ pub static REFERENCE_CASES: &[ReferenceCase] = &[
         domain: ReferenceDomain::ColorSu3,
         expression: color_form_one_generator_trace,
         simplification: ReferenceSimplification::ColorDefault,
-        validation: ReferenceValidation::Blocked(
-            "hep-lib parser cannot yet close single-factor color traces",
-        ),
+        validation: ReferenceValidation::Enabled,
     },
     ReferenceCase {
         name: "color_form_two_generator_trace",

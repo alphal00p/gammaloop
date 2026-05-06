@@ -234,7 +234,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
 
-        let perm = Permutation::sort(&slots);
+        let perm = Permutation::sort(&ord);
         perm.apply_slice_in_place(&mut slots);
         slots
     }
@@ -252,8 +252,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
     pub fn sync_order(&mut self) {
         for (_, n, _) in self.graph.iter_nodes() {
+            let slot_hedges = n
+                .clone()
+                .filter(|c| matches!(self.graph[[c]], NetworkEdge::Slot(_)))
+                .collect::<Vec<_>>();
+            if slot_hedges.iter().any(|h| self.slot_order[h.0] != 0) {
+                continue;
+            }
+
             let mut slots: BTreeMap<NetworkEdge<Aind>, Vec<Hedge>> = BTreeMap::new();
-            for c in n {
+            for c in slot_hedges {
                 slots
                     .entry(self.graph[self.graph[&c]])
                     .and_modify(|curr| curr.push(c))
@@ -275,15 +283,12 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             for n in self.graph.iter_crown(nodeid) {
                 if let NetworkEdge::Slot(s) = self.graph[[&n]] {
                     slots.push(s.aind);
-                    // ord.push(self.slot_order[n.0]);
-                    ord.push(s);
+                    ord.push(self.slot_order[n.0]);
                 }
             }
         }
 
         let perm = Permutation::sort(&ord);
-        // perm.apply_slice_in_place(&mut ord);
-        // println!("Inds:{:?}", ord);
         perm.apply_slice_in_place(&mut slots);
         slots
     }
