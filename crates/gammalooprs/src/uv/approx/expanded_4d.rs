@@ -148,7 +148,7 @@ fn expanded_4d_uv_rescaled(
         }
     }
     let series = atomarg
-        .series(GS.rescale, Atom::Zero, 0.into(), true)
+        .series(GS.rescale, Atom::Zero, 0)
         .map_err(|error| eyre!("expanded 4D local UV series expansion failed: {error}"))?;
     let result = series.to_atom().replace(GS.rescale).with(Atom::num(1));
     if let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_RESCALING") {

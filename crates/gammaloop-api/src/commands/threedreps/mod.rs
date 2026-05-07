@@ -656,6 +656,16 @@ struct ThreeDrepProfileRecord {
     total_timing_seconds: f64,
     timing_per_sample: String,
     timing_per_sample_seconds: f64,
+    #[serde(default)]
+    timing_per_sample_variance_seconds2: f64,
+    #[serde(default)]
+    timing_per_sample_stddev: String,
+    #[serde(default)]
+    timing_per_sample_stddev_seconds: f64,
+    #[serde(default)]
+    timing_per_sample_standard_error: String,
+    #[serde(default)]
+    timing_per_sample_standard_error_seconds: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -3832,6 +3842,7 @@ impl DiagnosticExternalSource {
             (
                 _,
                 ParamBuilderInputGroup::Runtime
+                | ParamBuilderInputGroup::SymbolicaConstant
                 | ParamBuilderInputGroup::Model
                 | ParamBuilderInputGroup::Polarization
                 | ParamBuilderInputGroup::LocalCounterterm,
@@ -4904,7 +4915,9 @@ fn profile_component_evaluator_for_precision(
     };
 
     let profile_start = Instant::now();
+    let mut sample_timings = Vec::with_capacity(calls);
     for _ in 0..calls {
+        let sample_start = Instant::now();
         evaluate_component_dot_for_precision_discard(
             numerator_evaluator,
             orientation_evaluator,
@@ -4917,23 +4930,21 @@ fn profile_component_evaluator_for_precision(
                 evaluation_metadata: &mut *request.evaluation_metadata,
             },
         )?;
+        sample_timings.push(sample_start.elapsed().as_secs_f64());
     }
     let total_timing = profile_start.elapsed();
     let timing_per_sample_seconds = total_timing.as_secs_f64() / calls as f64;
-    Ok(ThreeDrepProfileRecord {
-        target_timing: format_duration_dynamic(request.target),
-        target_timing_seconds: target_seconds,
-        warmup_calls: WARMUP_CALLS,
-        warmup_timing: format_duration_dynamic(warmup_timing),
-        warmup_timing_seconds: warmup_seconds,
+    Ok(profile_record_from_timings(
+        request.target,
+        target_seconds,
+        WARMUP_CALLS,
+        warmup_timing,
+        warmup_seconds,
         calls,
-        total_timing: format_duration_dynamic(total_timing),
-        total_timing_seconds: total_timing.as_secs_f64(),
-        timing_per_sample: format_duration_dynamic(Duration::from_secs_f64(
-            timing_per_sample_seconds,
-        )),
+        total_timing,
         timing_per_sample_seconds,
-    })
+        &sample_timings,
+    ))
 }
 
 fn profile_evaluator_for_precision(
@@ -4963,7 +4974,9 @@ fn profile_evaluator_for_precision(
     };
 
     let profile_start = Instant::now();
+    let mut sample_timings = Vec::with_capacity(calls);
     for _ in 0..calls {
+        let sample_start = Instant::now();
         evaluate_for_precision_discard(
             evaluator,
             &mut *request.param_builder,
@@ -4973,13 +4986,45 @@ fn profile_evaluator_for_precision(
             request.runtime_settings,
             &mut *request.evaluation_metadata,
         )?;
+        sample_timings.push(sample_start.elapsed().as_secs_f64());
     }
     let total_timing = profile_start.elapsed();
     let timing_per_sample_seconds = total_timing.as_secs_f64() / calls as f64;
-    Ok(ThreeDrepProfileRecord {
-        target_timing: format_duration_dynamic(request.target),
+    Ok(profile_record_from_timings(
+        request.target,
+        target_seconds,
+        WARMUP_CALLS,
+        warmup_timing,
+        warmup_seconds,
+        calls,
+        total_timing,
+        timing_per_sample_seconds,
+        &sample_timings,
+    ))
+}
+
+fn profile_record_from_timings(
+    target: Duration,
+    target_seconds: f64,
+    warmup_calls: usize,
+    warmup_timing: Duration,
+    warmup_seconds: f64,
+    calls: usize,
+    total_timing: Duration,
+    timing_per_sample_seconds: f64,
+    sample_timings: &[f64],
+) -> ThreeDrepProfileRecord {
+    let variance = profile_sample_variance(sample_timings, timing_per_sample_seconds);
+    let stddev = variance.sqrt();
+    let standard_error = if calls > 0 {
+        stddev / (calls as f64).sqrt()
+    } else {
+        0.0
+    };
+    ThreeDrepProfileRecord {
+        target_timing: format_duration_dynamic(target),
         target_timing_seconds: target_seconds,
-        warmup_calls: WARMUP_CALLS,
+        warmup_calls,
         warmup_timing: format_duration_dynamic(warmup_timing),
         warmup_timing_seconds: warmup_seconds,
         calls,
@@ -4989,7 +5034,28 @@ fn profile_evaluator_for_precision(
             timing_per_sample_seconds,
         )),
         timing_per_sample_seconds,
-    })
+        timing_per_sample_variance_seconds2: variance,
+        timing_per_sample_stddev: format_duration_dynamic(Duration::from_secs_f64(stddev)),
+        timing_per_sample_stddev_seconds: stddev,
+        timing_per_sample_standard_error: format_duration_dynamic(Duration::from_secs_f64(
+            standard_error,
+        )),
+        timing_per_sample_standard_error_seconds: standard_error,
+    }
+}
+
+fn profile_sample_variance(sample_timings: &[f64], mean: f64) -> f64 {
+    if sample_timings.len() < 2 {
+        return 0.0;
+    }
+    let sum_squared_deviations = sample_timings
+        .iter()
+        .map(|timing| {
+            let deviation = timing - mean;
+            deviation * deviation
+        })
+        .sum::<f64>();
+    sum_squared_deviations / (sample_timings.len() - 1) as f64
 }
 
 fn select_graph<'a>(state: &'a State, selection: &GraphSelectorArgs) -> Result<SelectedGraph<'a>> {
@@ -5593,12 +5659,12 @@ fn symbolica_expression_raw_rust_script() -> String {
 //! color-eyre = "0.6"
 //! serde = { version = "1.0", features = ["derive"] }
 //! serde_json = "1"
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
 //!
 //! [patch.crates-io]
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
 //! ```
 
 #![allow(dead_code)]
@@ -5616,7 +5682,7 @@ use color_eyre::{
 };
 use serde::Deserialize;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
+    atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
     domains::{
         float::Complex,
         integer::IntegerRing,
@@ -5626,6 +5692,17 @@ use symbolica::{
     id::{MatchSettings, Replacement},
     parse_lit, symbol, try_parse,
 };
+
+fn add_archive_constant(
+    fn_map: &mut FunctionMap,
+    name: Atom,
+    value: Complex<Rational>,
+) -> Result<()> {
+    let name = Indeterminate::try_from(name).map_err(|error| eyre!(error))?;
+    fn_map
+        .add_function(name, Vec::<Symbol>::new(), Atom::num(value))
+        .map_err(|error| eyre!(error))
+}
 
 #[derive(Debug, Deserialize)]
 struct Archive {
@@ -5746,25 +5823,21 @@ fn parse_fn_map_entries(entries: &[FunctionMapEntryRecord]) -> Result<Vec<Parsed
 
 fn build_function_map(entries: Vec<ParsedFnMapEntry>) -> Result<FunctionMap> {
     let mut fn_map = FunctionMap::new();
-    fn_map.add_constant(
+    add_archive_constant(
+        &mut fn_map,
         parse_lit!(gammalooprs::x),
         Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
-    );
+    )?;
 
     for (lhs, rhs, tags, args) in entries {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(value) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map.add_constant(lhs, value);
+                add_archive_constant(&mut fn_map, lhs, value)?;
             }
         } else if let AtomView::Fun(function) = lhs.as_view() {
             if tags.is_empty() {
                 fn_map
-                    .add_function(
-                        function.get_symbol(),
-                        function.get_symbol().get_name().into(),
-                        args.clone(),
-                        rhs.clone(),
-                    )
+                    .add_function(function.get_symbol(), args.clone(), rhs.clone())
                     .map_err(|error| eyre!(error))?;
 
                 let wildcards = args
@@ -5784,13 +5857,7 @@ fn build_function_map(entries: Vec<ParsedFnMapEntry>) -> Result<FunctionMap> {
                 let _ = lhs.replace_multiple(&wildcards);
             } else {
                 fn_map
-                    .add_tagged_function(
-                        function.get_symbol(),
-                        tags,
-                        function.get_symbol().get_name().into(),
-                        args,
-                        rhs,
-                    )
+                    .add_tagged_function(function.get_symbol(), tags, args, rhs)
                     .map_err(|error| eyre!(error))?;
             }
         }

@@ -414,7 +414,7 @@ fn nested_bubble_soft_ct() {
     let s = series
         .replace(t)
         .with(Atom::var(t).pow(-1))
-        .series(t, Atom::Zero, 0.into(), true)
+        .series(t, Atom::Zero, 0)
         .unwrap();
     println!("Series: {:>}", s);
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
@@ -427,22 +427,30 @@ fn nested_bubble_soft_ct() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("MH")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("mUV")),
         symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("ZERO")),
         symbolica::domains::float::Complex::new((0.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -618,7 +626,7 @@ fn nested_bubble_scalar_quad() {
     let s = series
         .replace(t)
         .with(Atom::var(t).pow(-1))
-        .series(t, Atom::Zero, 0.into(), true)
+        .series(t, Atom::Zero, 0)
         .unwrap();
     println!("Series: {:>}", s);
     println!(
@@ -636,18 +644,24 @@ fn nested_bubble_scalar_quad() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("MH")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("mUV")),
         symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -800,7 +814,7 @@ fn nested_bubble_scalar() {
     let s = series
         .replace(t)
         .with(Atom::var(t).pow(-1))
-        .series(t, Atom::Zero, 0.into(), true)
+        .series(t, Atom::Zero, 0)
         .unwrap();
     println!("Series: {}", s);
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
@@ -813,18 +827,24 @@ fn nested_bubble_scalar() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("MH")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("mUV")),
         symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -957,10 +977,12 @@ fn disconnect_forest_scalar() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,

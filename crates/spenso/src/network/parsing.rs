@@ -48,7 +48,7 @@ pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::ne
     lower: tag!("lower"),
     bracket: symbol!("bracket"),
     pure_scalar: symbol!("pure_scalar"),
-    dot: symbol!("dot";Symmetric,Linear; print = |a,opt|{
+    dot: symbol!("dot";Symmetric,Linear; print = |a, opt, _state|{
     match opt.custom_print_mode {
         Some(("spenso",i))=>{
             let SpensoPrintSettings{
@@ -1171,16 +1171,16 @@ pub mod test {
 
           0	 [label = "∏"];
           1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*(g(cof(3,hedge_1),dind(cof(3,hedge_2))))^2*1𝑖/27*u(1,bis(4,hedge_1))*vbar(2,bis(4,hedge_2))"];
-          2	 [label = "T:Q(5,mink(4,edge_5_1))"];
-          3	 [label = "T:Q(6,mink(4,edge_6_1))"];
-          4	 [label = "T:ebar(0,mink(4,hedge_0))"];
-          5	 [label = "T:ebar(3,mink(4,hedge_3))"];
-          6	 [label = "T:ebar(4,mink(4,hedge_4))"];
-          7	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
-          8	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
-          9	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
-          10	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
-          11	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
+          2	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
+          3	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
+          4	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
+          5	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
+          6	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
+          7	 [label = "T:Q(5,mink(4,edge_5_1))"];
+          8	 [label = "T:Q(6,mink(4,edge_6_1))"];
+          9	 [label = "T:ebar(0,mink(4,hedge_0))"];
+          10	 [label = "T:ebar(3,mink(4,hedge_3))"];
+          11	 [label = "T:ebar(4,mink(4,hedge_4))"];
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
           11:31:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
@@ -1194,11 +1194,11 @@ pub mod test {
           3:15:s	-> 0:9:s	 [id=9  color="red:blue;0.5"];
           2:13:s	-> 0:10:s	 [id=10  color="red:blue;0.5"];
           1:12:s	-> 0:11:s	 [id=11  color="red:blue;0.5"];
-          2:14:s	-> 9:28:s	 [id=12 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
-          3:16:s	-> 11:32:s	 [id=13 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
-          4:18:s	-> 7:24:s	 [id=14 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
-          5:20:s	-> 8:26:s	 [id=15 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
-          6:22:s	-> 10:30:s	 [id=16 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
+          2:14:s	-> 9:28:s	 [id=12 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
+          3:16:s	-> 10:30:s	 [id=13 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
+          4:18:s	-> 7:24:s	 [id=14 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
+          5:20:s	-> 11:32:s	 [id=15 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
+          6:22:s	-> 8:26:s	 [id=16 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
         }
         "#);
         assert_eq!(net.simple_execute(), expr);
@@ -1722,11 +1722,11 @@ pub mod test {
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
           ext1	 [style=invis];
-          0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
+          0:2:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_1"];
           ext2	 [style=invis];
-          0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_1"];
+          0:3:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
           ext3	 [style=invis];
-          0:3:s	-> ext3	 [id=3 dir=none color="red" label="mink4|l_4"];
+          0:1:s	-> ext3	 [id=3 dir=none color="red" label="mink4|l_0"];
         }
         "#
         );

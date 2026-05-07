@@ -328,6 +328,7 @@ impl<
     ) -> EvalTreeTensorNetworkSet<T2, S, K, FK, Aind, Store>
     where
         T: Clone + PartialEq,
+        T2: symbolica::evaluate::EvaluationDomain,
     {
         EvalTreeTensorNetworkSet {
             networks: self.networks.clone(),

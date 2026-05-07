@@ -67,7 +67,6 @@ use linnet::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
-    domains::rational::Rational,
     evaluate::FunctionMap,
     function,
 };
@@ -1549,11 +1548,7 @@ pub(crate) fn threshold_counterterm_helper(
     evaluator_settings: &EvaluatorSettings,
 ) -> GenericEvaluator {
     let atom = threshold_counterterm_helper_atom(order, loop_number);
-    let mut fn_map = FunctionMap::default();
-    fn_map.add_constant(
-        GS.pi.into(),
-        Rational::try_from(std::f64::consts::PI).unwrap().into(),
-    );
+    let fn_map = FunctionMap::default();
 
     let mut params = params_for_derivative_order(order)
         .into_iter()

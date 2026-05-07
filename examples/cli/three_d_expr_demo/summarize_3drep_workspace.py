@@ -46,6 +46,17 @@ def human_sig(value: float | None, scale: float, suffix: str) -> str:
     return f"{value * scale:.3g} {suffix}"
 
 
+def human_sig_with_error(
+    value: float | None, error: float | None, scale: float, suffix: str
+) -> str:
+    if value is None or not math.isfinite(value):
+        return "-"
+    scaled_value = value * scale
+    if error is None or not math.isfinite(error):
+        return f"{scaled_value:.3g} {suffix}"
+    return f"{scaled_value:.3g} ± {error * scale:.3g} {suffix}"
+
+
 def human_bytes(value: int | None) -> str:
     if value is None:
         return "-"
@@ -63,8 +74,9 @@ def with_ratio(
     scale: float,
     suffix: str,
     use_color: bool,
+    error: float | None = None,
 ) -> str:
-    formatted = human_sig(value, scale, suffix)
+    formatted = human_sig_with_error(value, error, scale, suffix)
     if (
         value is None
         or baseline is None
@@ -268,6 +280,7 @@ class Entry:
     parametric_numerator_bytes: int | None
     build_seconds: float | None
     sample_seconds: float | None
+    sample_error_seconds: float | None
     details: dict[str, str]
     manifest_basename: str
 
@@ -338,6 +351,7 @@ def read_manifest(path: Path, workspace: Path) -> Entry | None:
     sample_seconds = profile.get("timing_per_sample_seconds") or evaluation.get(
         "sample_evaluation_timing_seconds"
     )
+    sample_error_seconds = profile.get("timing_per_sample_standard_error_seconds")
     build_seconds = evaluation.get("evaluator_build_timing_seconds")
     graph_name = str(manifest.get("graph_name") or "-")
     expression_path = resolve_artifact_path(
@@ -369,6 +383,9 @@ def read_manifest(path: Path, workspace: Path) -> Entry | None:
         parametric_numerator_bytes=parametric_numerator_bytes,
         build_seconds=float(build_seconds) if build_seconds is not None else None,
         sample_seconds=float(sample_seconds) if sample_seconds is not None else None,
+        sample_error_seconds=(
+            float(sample_error_seconds) if sample_error_seconds is not None else None
+        ),
         details=detail_fields(manifest, path, workspace),
         manifest_basename=path.name,
     )
@@ -528,7 +545,12 @@ def render_table(entries: list[Entry], use_color: bool, show_duplicates: bool) -
             color(human_bytes(entry.parametric_numerator_bytes), YELLOW, use_color),
             with_ratio(entry.build_seconds, build_baseline, 1.0, "s", use_color),
             with_ratio(
-                entry.sample_seconds, sample_baseline, 1_000_000.0, "µs", use_color
+                entry.sample_seconds,
+                sample_baseline,
+                1_000_000.0,
+                "µs",
+                use_color,
+                error=entry.sample_error_seconds,
             ),
         ]
         if include_details:

@@ -221,7 +221,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
                 expr /= Atom::var(expansion).pow(3);
             }
 
-            let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
+            let series = expr.series(expansion, Atom::Zero, 0).unwrap();
 
             // expr = series.to_atom().expand();
 

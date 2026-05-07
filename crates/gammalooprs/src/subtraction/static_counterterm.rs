@@ -35,6 +35,7 @@ use crate::{
     utils, IntegrableSingularityDampener, IntegratedCounterTermRange,
     IntegratedCounterTermSettings, UVLocalisationSettings,
 };
+use crate::settings::runtime::UVLocalisationFunction;
 
 use super::overlap::{OverlapGroup, OverlapStructure};
 
@@ -787,6 +788,10 @@ fn evaluate_uv_localisation<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> F<T> {
+    if settings.function == UVLocalisationFunction::Unit {
+        return radius.one();
+    }
+
     let normalizing_scale = match settings.dynamic_width {
         true => radius_star,
         false => e_cm,

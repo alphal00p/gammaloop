@@ -2,7 +2,7 @@ use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::symbolica_ext::{DOD, Replaces};
+use crate::utils::symbolica_ext::{DOD, Replaces, add_numeric_constant_to_fn_map};
 use crate::utils::{self, F, W_};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
@@ -48,12 +48,10 @@ use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
-use symbolica::domains::float::Real;
 use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
 
-type ExternalFunctionMap = HashMap<String, Box<dyn ExternalFunction<Complex<F<f64>>>>, RandomState>;
-use symbolica::evaluate::{ExternalFunction, FunctionMap, OptimizationSettings};
+use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica::id::Replacement;
 use tracing::info;
 
@@ -301,7 +299,7 @@ where
             } else {
                 UFOSymbol(symbol!(
                     &name,
-                    print = |a, opt| {
+                    print = |a, opt, _state| {
                         let AtomView::Var(a) = a else {
                             return None;
                         };
@@ -2087,10 +2085,9 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             expr.push(function!(key));
 
             fn_map
-                .add_function::<Symbol>(
+                .add_function(
                     key,
-                    c.name.namespaceless_string().into(),
-                    vec![],
+                    Vec::<Symbol>::new(),
                     c.expression.replace_multiple(&reps),
                 )
                 .map_err(|e| eyre!(" {}", e))?;
@@ -2116,63 +2113,37 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                     expr.push(key.clone());
                     if let Some(body) = p.expression.clone() {
                         fn_map
-                            .add_function::<Symbol>(
-                                n.0.0,
-                                p.name.namespaceless_string().into(),
-                                vec![],
-                                body.replace_multiple(&reps),
-                            )
+                            .add_function(n.0.0, Vec::<Symbol>::new(), body.replace_multiple(&reps))
                             .map_err(|e| eyre!(" {}", e))?;
                     } else {
                         let value = p
                             .value
                             .ok_or(eyre!("internal param {} has no expression or value", key))?;
-                        let value_rat = (
+                        let value_rat: symbolica::domains::float::Complex<Rational> = (
                             Fraction::<IntegerRing>::try_from(value.re.0).unwrap(),
                             Fraction::<IntegerRing>::try_from(value.im.0).unwrap(),
                         )
                             .into();
-                        fn_map.add_constant(key, value_rat);
+                        add_numeric_constant_to_fn_map(&mut fn_map, key, value_rat)
+                            .map_err(|e| eyre!(" {}", e))?;
                     }
                 }
             }
         }
 
-        fn_map
-            .add_external_function(
-                UFOSymbol::from("complexconjugate").0,
-                "complexconjugate".into(),
-            )
-            .unwrap();
-
-        // fn_map.add_external_function(name, rename)
-
-        fn_map.add_constant(
-            Atom::var(Symbol::PI),
-            (Rational::try_from(0.0.pi()).unwrap(), Rational::zero()).into(),
-        );
-
-        let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params)
-            .unwrap()
-            .linearize(&OptimizationSettings {
+        let evaluator = Atom::evaluator_multiple(
+            &expr,
+            &fn_map,
+            &params,
+            OptimizationSettings {
                 cpe_iterations: Some(1),
                 verbose: false,
                 ..OptimizationSettings::default()
-            });
-        let mut ext: ExternalFunctionMap = HashMap::default();
-        ext.insert(
-            "complexconjugate".to_string(),
-            Box::new(|a| {
-                if a.len() > 1 {
-                    panic!("complex_conjugate takes one argument, got {}", a.len());
-                };
-                a[0].conj()
-            }),
-        );
-        let mut evaluator = evaluator
-            .map_coeff(&|f| Complex::new(F(f.re.to_f64()), F(f.im.to_f64())))
-            .with_external_functions(ext)
-            .unwrap();
+            },
+        )
+        .unwrap();
+        let mut evaluator =
+            evaluator.map_coeff(&|f| Complex::new(F(f.re.to_f64()), F(f.im.to_f64())));
 
         let mut new_values = vec![Complex::new(F(0.0), F(0.0)); new_values_len];
         evaluator.evaluate(&param_values, &mut new_values);
@@ -2727,6 +2698,23 @@ mod tests {
         .0;
 
         assert_eq!(particle, particle_decoded);
+    }
+
+    #[test]
+    fn scalars_model_evaluates_builtin_pi_in_internal_parameters() {
+        let model = load_generic_model("scalars");
+        let g = model
+            .get_symbol_value(UFOSymbol::from("G"))
+            .expect("G should be evaluated");
+        let expected_g = 2.0 * (0.118 * std::f64::consts::PI).sqrt();
+        assert!((g.re.0 - expected_g).abs() < 1.0e-15);
+        assert!(g.im.0.abs() < 1.0e-15);
+
+        let coupling = model
+            .get_symbol_value(UFOSymbol::from("SCALAR_COUPLING"))
+            .expect("SCALAR_COUPLING should be evaluated");
+        assert!(coupling.re.0.abs() < 1.0e-15);
+        assert!((coupling.im.0 - 1.0).abs() < 1.0e-15);
     }
 
     #[test]

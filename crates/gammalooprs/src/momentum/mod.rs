@@ -3312,7 +3312,10 @@ impl<T: FloatLike> Rotatable for FourMomentum<F<T>> {
     }
 }
 
-impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>> {
+impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>>
+where
+    F<T>: symbolica::evaluate::EvaluationDomain,
+{
     fn rotate(&self, rotation: &Rotation) -> Self {
         let rotated = match self.pol_type {
             PolType::Epsilon | PolType::EpsilonBar => rotation

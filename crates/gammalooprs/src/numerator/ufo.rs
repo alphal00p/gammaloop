@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
+use crate::utils::{ArbPrec, F, GS, QuadFloat, W_, f128, symbolica_ext::CallSymbol};
 use idenso::color::CS;
 use idenso::gamma::AGS;
 use idenso::representations::{
@@ -11,8 +11,9 @@ use spenso::network::library::symbolic::ETS;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::slot::{IsAbstractSlot, Slot};
 use spenso::structure::{OrderedStructure, TensorStructure};
-use symbolica::atom::FunctionBuilder;
 use symbolica::atom::{AtomCore, AtomView};
+use symbolica::atom::{EvaluationInfo, FunctionBuilder};
+use symbolica::domains::float::{Complex as SymbolicaComplex, Float as SymbolicaFloat};
 use symbolica::domains::rational::Rational;
 use symbolica::symbol;
 use symbolica::{
@@ -61,10 +62,25 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
         norm = |f, out| {
             if let AtomView::Fun(ff) = f
                 && ff.get_nargs() == 1
+                && matches!(ff.iter().next().unwrap(), AtomView::Num(_))
             {
                 **out = ff.iter().next().unwrap().conj();
             }
-        }
+        },
+        eval = EvaluationInfo::new()
+            .register(|args: &[SymbolicaComplex<Rational>]| {
+                SymbolicaComplex::new(args[0].re.clone(), -args[0].im.clone())
+            })
+            .register(|args: &[SymbolicaComplex<SymbolicaFloat>]| {
+                SymbolicaComplex::new(args[0].re.clone(), -args[0].im.clone())
+            })
+            .register(|args: &[SymbolicaComplex<f64>]| {
+                SymbolicaComplex::new(args[0].re, -args[0].im)
+            })
+            .register(|args: &[spenso::algebra::complex::Complex<F<f64>>]| args[0].conj())
+            .register(|args: &[spenso::algebra::complex::Complex<F<f128>>]| args[0].conj())
+            .register(|args: &[spenso::algebra::complex::Complex<F<QuadFloat>>]| args[0].conj())
+            .register(|args: &[spenso::algebra::complex::Complex<F<ArbPrec>>]| args[0].conj())
     ),
     idx: symbol!("UFO::idx"),
     dummy: symbol!("UFO::dummy"),

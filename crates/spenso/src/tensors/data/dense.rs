@@ -44,7 +44,7 @@ use std::{
 };
 
 #[cfg(feature = "shadowing")]
-use symbolica::{atom::Atom, atom::Symbol};
+use symbolica::atom::{Atom, Indeterminate, Symbol};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode, Decode)]
 pub struct DenseTensor<T, S = OrderedStructure> {
@@ -189,12 +189,11 @@ where
 }
 
 #[cfg(feature = "shadowing")]
-impl<T: Clone, S: TensorStructure, R> ShadowMapping<R> for DenseTensor<T, S>
+impl<T: Clone + Into<Atom>, S: TensorStructure> ShadowMapping for DenseTensor<T, S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
     S::Args: IntoArgs,
-    R: From<T>,
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
     // fn shadow_with_map<'a, U>(
@@ -223,14 +222,21 @@ where
 
     fn append_map<U>(
         &self,
-        fn_map: &mut symbolica::evaluate::FunctionMap<R>,
+        fn_map: &mut symbolica::evaluate::FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> U,
     ) where
         U: TensorCoefficient,
     {
         for (i, d) in self.flat_iter() {
             let labeled_coef = index_to_atom(self.structure(), i).to_atom().unwrap();
-            fn_map.add_constant(labeled_coef.clone(), d.clone().into());
+            let name = Indeterminate::try_from(labeled_coef.clone()).unwrap_or_else(|err| {
+                panic!("invalid tensor coefficient label {labeled_coef}: {err}")
+            });
+            fn_map
+                .add_function(name, Vec::<Symbol>::new(), d.clone().into())
+                .unwrap_or_else(|err| {
+                    panic!("failed to register tensor coefficient {labeled_coef}: {err}")
+                });
         }
     }
 }

@@ -112,7 +112,7 @@ impl ColorSymbols {
 }
 
 pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
-    t: symbol!("spenso::t";Real;print = |a, opt| {
+    t: symbol!("spenso::t";Real;print = |a, opt, _state| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{
@@ -185,7 +185,7 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
             _=>None}
 
     }),
-    f: symbol!("spenso::f";Real;print = |a, opt| {
+    f: symbol!("spenso::f";Real;print = |a, opt, _state| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{

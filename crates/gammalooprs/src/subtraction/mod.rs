@@ -23,7 +23,8 @@ use crate::{
     },
     processes::EvaluatorSettings,
     settings::runtime::{
-        IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
+        IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationFunction,
+        UVLocalisationSettings,
     },
     utils::{
         self, F, FloatLike, GS,
@@ -42,6 +43,10 @@ fn evaluate_uv_damper<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> F<T> {
+    if settings.function == UVLocalisationFunction::Unit {
+        return radius.one();
+    }
+
     let normalizing_scale = match settings.dynamic_width {
         true => radius_star,
         false => e_cm,
@@ -66,6 +71,10 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> HyperDual<F<T>> {
+    if settings.function == UVLocalisationFunction::Unit {
+        return new_constant(radius, &radius.values[0].one());
+    }
+
     let normalizing_scale = if settings.dynamic_width {
         radius_star.clone()
     } else {
@@ -295,6 +304,7 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
     let t = GS.rescale;
 
     let e_surface = parse!("η(r_star(t), t)");
+    let eta = parse!("η");
     let rstar = parse!("r_star(t)");
 
     let mut rstar_derivatives = vec![];
@@ -335,6 +345,10 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
     }
 
     // dual shape is for e-surface derivatives, implict function theorem should NOT be dualized with this
+    // Keep the historical derivative-counter convention used by the LU threshold
+    // construction. Newer Symbolica versions spell derivative atoms as
+    // `der(order..., function_head, args...)`, but the parameter order must
+    // remain aligned with the old e-surface dual-shape order.
     let mut dual_shape = vec![vec![0, 0]];
     let mut params = vec![];
     for i in 1..=num_t_derivatives {
@@ -345,14 +359,16 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
 
         loop {
             dual_shape.push(vec![
-                current_r_derivative_counter,
                 current_t_derivative_counter,
+                current_r_derivative_counter,
             ]);
             let eta_derivative = function!(
                 symbolica::atom::Symbol::DERIVATIVE,
                 current_r_derivative_counter,
                 current_t_derivative_counter,
-                e_surface.clone()
+                eta.clone(),
+                rstar.clone(),
+                t
             );
 
             eta_derivatives_at_this_order.push(eta_derivative);
@@ -362,10 +378,6 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
             }
             current_r_derivative_counter += 1;
             current_t_derivative_counter -= 1;
-        }
-
-        for param in &eta_derivatives_at_this_order {
-            println!("  {}", param);
         }
 
         params.extend(eta_derivatives_at_this_order);

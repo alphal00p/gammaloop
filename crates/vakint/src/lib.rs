@@ -2038,7 +2038,6 @@ impl LoopNormalizationFactor {
             vk_symbol!(settings.epsilon_symbol.as_str()),
             Atom::Zero.as_atom_view(),
             Rational::from(settings.number_of_terms_in_epsilon_expansion - 1),
-            true,
         ) {
             Ok(a) => a,
             Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
@@ -3745,7 +3744,6 @@ Evaluated (n_loops=1, mu_r=1) :
                     Rational::from(
                         settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64),
                     ),
-                    true,
                 )
                 .unwrap()
                 .to_atom();
@@ -4079,7 +4077,6 @@ Evaluated (n_loops=1, mu_r=1) :
                                 - (integral.n_loops as i64)
                                 - 1,
                         ),
-                        true,
                     ) {
                         Ok(a) => a,
                         Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
@@ -4434,7 +4431,6 @@ Evaluated (n_loops=1, mu_r=1) :
             Rational::from(
                 settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64) - 1,
             ),
-            true,
         ) {
             Ok(a) => a,
             Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),

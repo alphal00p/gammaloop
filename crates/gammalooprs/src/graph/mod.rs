@@ -508,7 +508,7 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].mass == self[*e].mass
+                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
                 })
             });
 

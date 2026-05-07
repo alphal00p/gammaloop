@@ -733,7 +733,7 @@ impl LibraryRep {
             symbol!(
                 &name,
                 tag = SPENSO_TAG.upper,
-                print = move |a, opt| {
+                print = move |a, opt, _state| {
                     match opt.custom_print_mode {
                         Some(("typst", 1)) => Some(body.clone()),
 

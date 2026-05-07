@@ -159,9 +159,7 @@ impl Integrated<'_> {
         let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
 
         debug_tags!(#uv,#integrated;res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, 1.into(), true)
-            .unwrap();
+        let a = atomarg.series(GS.rescale, Atom::Zero, 1).unwrap();
 
         let mut a = a.to_atom();
 
@@ -301,12 +299,7 @@ impl Integrated<'_> {
 
         let n_loops = graph.n_loops(&graph.full_filter());
         let series = res
-            .series(
-                GS.dim_epsilon,
-                Atom::Zero,
-                (n_loops as i64 + 1).into(),
-                true,
-            )
+            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
             .unwrap();
 
         debug_tags!(#uv, #integrated, #inspect;

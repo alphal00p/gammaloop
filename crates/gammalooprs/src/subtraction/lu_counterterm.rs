@@ -1007,7 +1007,6 @@ impl LUCounterTerm {
                         None,
                         Some(&lu_cut_params),
                     );
-
                     let result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
                         [left_threshold_id][order]
                         .evaluate(
@@ -1020,7 +1019,6 @@ impl LUCounterTerm {
                         .unwrap()
                         .pop()
                         .unwrap();
-
                     left_evaluations += multiply_dual_or_not_complex(
                         result_of_this_ct,
                         &sample.value_of_multi_channeling_factor,
@@ -1051,7 +1049,6 @@ impl LUCounterTerm {
                         Some(&right_threshold_params),
                         Some(&lu_cut_params),
                     );
-
                     let result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
                         [right_threshold_id][order]
                         .evaluate(
@@ -1108,7 +1105,6 @@ impl LUCounterTerm {
                                 Some(&right_threshold_params),
                                 Some(&lu_cut_params),
                             );
-
                             let result_of_this_ct = self.evaluators[cut_id].iterated_evaluator
                                 [iterated_index][order]
                                 .evaluate(

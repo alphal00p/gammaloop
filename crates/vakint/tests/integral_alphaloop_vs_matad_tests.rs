@@ -285,7 +285,6 @@ pub fn evaluate_expression_with_matad(
             vakint_symbol!("ep"),
             Atom::Zero.as_view(),
             Rational::from(vakint.settings.number_of_terms_in_epsilon_expansion - 3),
-            true,
         )
         .unwrap()
         .to_atom();

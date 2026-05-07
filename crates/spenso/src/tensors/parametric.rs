@@ -33,7 +33,7 @@ use to_param::ToAtom;
 
 use crate::{
     algebra::algebraic_traits::{IsZero, RefZero},
-    algebra::complex::{Complex, RealOrComplex},
+    algebra::complex::Complex,
     algebra::upgrading_arithmetic::{
         FallibleAddAssign, FallibleMul, FallibleSubAssign, TrySmallestUpgrade,
     },
@@ -57,7 +57,6 @@ use bincode::{Decode, Encode};
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, KeyLookup, Symbol},
-    coefficient::Coefficient,
     domains::{
         InternalOrdering,
         float::{FloatLike, Real, SingleFloat},
@@ -91,17 +90,13 @@ pub trait TensorCoefficient: Display {
     fn to_atom(&self) -> Option<Atom>;
     fn to_atom_re(&self) -> Option<Atom>;
     fn to_atom_im(&self) -> Option<Atom>;
-    fn add_tagged_function<T>(
-        &self,
-        fn_map: &mut FunctionMap<T>,
-        body: Atom,
-    ) -> Result<(), String> {
-        let (name, cooked_name) = self
+    fn add_tagged_function(&self, fn_map: &mut FunctionMap, body: Atom) -> Result<(), String> {
+        let (name, _cooked_name) = self
             .name()
             .zip(self.cooked_name())
             .ok_or(format!("unnamed {}", self))?;
 
-        fn_map.add_tagged_function::<Symbol>(name, self.tags(), cooked_name, vec![], body)
+        fn_map.add_tagged_function::<Symbol>(name, self.tags(), vec![], body)
     }
 }
 
@@ -692,7 +687,7 @@ where
 {
 }
 
-impl<S: TensorStructure, Const> ShadowMapping<Const> for ParamTensor<S>
+impl<S: TensorStructure> ShadowMapping for ParamTensor<S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
@@ -701,7 +696,7 @@ where
 {
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,
@@ -926,10 +921,9 @@ where
 }
 
 impl<
-    U,
-    C: HasStructure<Structure = S> + Clone + ShadowMapping<U>,
+    C: HasStructure<Structure = S> + Clone + ShadowMapping,
     S: TensorStructure + Clone + HasName<Args: IntoArgs, Name: IntoSymbol>,
-> ShadowMapping<U> for ParamOrConcrete<C, S>
+> ShadowMapping for ParamOrConcrete<C, S>
 where
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
@@ -949,7 +943,7 @@ where
 
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<U>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,
@@ -1478,19 +1472,6 @@ impl<T: Into<Atom>> From<ConcreteOrParam<T>> for Atom {
         match value {
             ConcreteOrParam::Concrete(x) => x.into(),
             ConcreteOrParam::Param(x) => x,
-        }
-    }
-}
-
-impl<T: Into<Coefficient>> From<RealOrComplex<T>> for Atom {
-    fn from(value: RealOrComplex<T>) -> Self {
-        match value {
-            RealOrComplex::Real(x) => Atom::num(x),
-            RealOrComplex::Complex(x) => {
-                let (re, im) = (Atom::num(x.re), Atom::num(x.im));
-                let i = Atom::i();
-                re + im * i
-            }
         }
     }
 }
@@ -2088,6 +2069,7 @@ impl<T, S: TensorStructure> EvalTreeTensorSet<T, S> {
     where
         T: Clone + PartialEq,
         S: Clone,
+        T2: symbolica::evaluate::EvaluationDomain,
     {
         EvalTreeTensorSet {
             eval: (self.eval.0.map_coeff(f), None),
@@ -2216,6 +2198,7 @@ impl<S: Clone, T> EvalTreeTensor<T, S> {
     pub fn map_coeff<T2, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensor<T2, S>
     where
         T: Clone + PartialEq,
+        T2: symbolica::evaluate::EvaluationDomain,
     {
         EvalTreeTensor {
             eval: self.eval.map_coeff(f),
@@ -2481,6 +2464,7 @@ impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
     where
         T: Clone + PartialEq + Default,
         S: Clone,
+        T2: symbolica::evaluate::EvaluationDomain,
     {
         LinearizedEvalTensor {
             eval: self.eval.map_coeff(f),
@@ -2567,6 +2551,7 @@ impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
     where
         T: Clone + PartialEq + Default,
         S: Clone,
+        T2: symbolica::evaluate::EvaluationDomain,
     {
         LinearizedEvalTensorSet {
             eval: (self.eval.0.map_coeff(f), None),

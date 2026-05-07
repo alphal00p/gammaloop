@@ -2504,12 +2504,7 @@ pub(crate) fn build_derivative_structure_atom(
     let f = symbol!("f");
 
     let expansion = parse!("η(t)")
-        .series(
-            GS.rescale,
-            Atom::var(GS.rescale_star),
-            (order, 1).into(),
-            true,
-        )
+        .series(GS.rescale, Atom::var(GS.rescale_star), (order, 1))
         .unwrap()
         .to_atom()
         .replace(function!(symbol!("η"), GS.rescale_star))
@@ -2529,7 +2524,7 @@ pub(crate) fn build_derivative_structure_atom(
         .with(parse!("delta_t"));
 
     let polynomial_in_delta_t = expression_to_derive
-        .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
+        .series(symbol!("delta_t"), Atom::num(0), (0, 1))
         .unwrap();
 
     let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();

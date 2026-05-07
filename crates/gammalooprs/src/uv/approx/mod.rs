@@ -966,7 +966,7 @@ fn finite_integrated_part(integrated_4d: &ApproxOp) -> Result<Atom> {
         .map(|t4| t4_sign * t4)
         .ok_or_else(|| eyre!("expected one integrated 4D approximation term"))?;
     Ok(finite_term
-        .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
+        .series(vakint_symbol!("ε"), Atom::Zero, 0)
         .map_err(|error| eyre!("finite integrated UV epsilon expansion failed: {error}"))?
         .coefficient((0, 1).into())
         .replace(GS.m_uv_int)

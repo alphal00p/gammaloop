@@ -76,10 +76,7 @@ where
         }
     }
 
-    pub fn contract<R>(&mut self, depth: usize, fn_map: &mut FunctionMap<R>) -> ParamTensor<S>
-    where
-        R: From<T>,
-    {
+    pub fn contract(&mut self, depth: usize, fn_map: &mut FunctionMap) -> ParamTensor<S> {
         self.initial
             .contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(depth))
             .unwrap();
@@ -105,10 +102,7 @@ where
         }
     }
 
-    fn generate_fn_map<R>(&self, fn_map: &mut FunctionMap<R>)
-    where
-        R: From<T>,
-    {
+    fn generate_fn_map(&self, fn_map: &mut FunctionMap) {
         self.initial.append_map(fn_map);
         for l in &self.levels {
             l.append_map(fn_map);
@@ -160,7 +154,7 @@ where
         }
     }
 
-    pub fn contract<R>(&mut self, depth: usize, fn_map: &mut FunctionMap<R>) -> ParamTensor<S> {
+    pub fn contract(&mut self, depth: usize, fn_map: &mut FunctionMap) -> ParamTensor<S> {
         self.initial
             .contract_algo(|tn| tn.edge_to_min_degree_node_with_depth(depth))
             .unwrap();
@@ -186,7 +180,7 @@ where
         }
     }
 
-    fn generate_fn_map<R>(&self, fn_map: &mut FunctionMap<R>) {
+    fn generate_fn_map(&self, fn_map: &mut FunctionMap) {
         self.initial.append_map(fn_map);
         for l in &self.levels {
             l.append_map(fn_map);

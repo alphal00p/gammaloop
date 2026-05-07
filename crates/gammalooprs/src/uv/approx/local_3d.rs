@@ -21,6 +21,17 @@ use color_eyre::Result;
 
 pub struct Local3DApproximation;
 
+fn resolve_ose_derivative_markers(atom: Atom) -> Atom {
+    atom.replace(parse!("der(0,0,0,1, OSE(y__))"))
+        .with(Atom::num(1))
+        .replace(parse!("der(0,0,0,1, OSE, y__)"))
+        .with(Atom::num(1))
+        .replace(parse!("der(x__, OSE(y__))"))
+        .with(Atom::num(0))
+        .replace(parse!("der(x__, OSE, y__)"))
+        .with(Atom::num(0))
+}
+
 impl Local3DApproximation {
     pub(crate) fn dependent(
         graph: &mut Graph,
@@ -122,9 +133,7 @@ impl Local3DApproximation {
         );
 
         atomarg = atomarg.replace_multiple(&mom_reps);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, (-1).into(), true)
-            .unwrap();
+        let a = atomarg.series(GS.rescale, Atom::Zero, -1).unwrap();
 
         let mut a = a
             .to_atom()
@@ -203,16 +212,12 @@ impl Local3DApproximation {
             * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, 0.into(), true)
+
+        let a = resolve_ose_derivative_markers(atomarg)
+            .series(GS.rescale, Atom::Zero, 0)
             .unwrap();
 
-        let mut a = a
-            .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
-            .with(Atom::num(1))
-            .replace(parse!("der(x__, OSE(y__))"))
-            .with(Atom::num(0));
+        let mut a = resolve_ose_derivative_markers(a.to_atom());
         a = a.replace(GS.rescale).with(Atom::num(1));
         debug!("a: {}", a);
         Ok(a)

@@ -24,7 +24,6 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Indeterminate, Symbol},
-    domains::rational::Rational,
     evaluate::FunctionMap,
     id::Replacement,
     parse_lit, symbol,
@@ -62,6 +61,7 @@ pub struct ParamValuePairs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamBuilderInputGroup {
     Runtime,
+    SymbolicaConstant,
     Model,
     ExternalEnergy,
     ExternalSpatial,
@@ -139,6 +139,7 @@ pub trait ParamBuilderGraph {
 pub struct GammaLoopPairs {
     m_uv: ParamValuePairs,
     idenso_vars: ParamValuePairs,
+    symbolica_constants: ParamValuePairs,
     mu_r_sq: ParamValuePairs,
     numerator_sampling_scale: ParamValuePairs,
     orientations: ParamValuePairs,
@@ -168,7 +169,7 @@ pub struct GammaLoopPairs {
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 27>;
+    type IntoIter = std::array::IntoIter<Self::Item, 28>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -176,6 +177,7 @@ impl IntoIterator for GammaLoopPairs {
             self.mu_r_sq,
             self.numerator_sampling_scale,
             self.idenso_vars,
+            self.symbolica_constants,
             self.model_parameters,
             self.external_energies,
             self.external_spatial,
@@ -206,7 +208,7 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 27>;
+    type IntoIter = std::array::IntoIter<Self::Item, 28>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -214,6 +216,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.mu_r_sq,
             &self.numerator_sampling_scale,
             &self.idenso_vars,
+            &self.symbolica_constants,
             &self.model_parameters,
             &self.external_energies,
             &self.external_spatial,
@@ -244,7 +247,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 27>;
+    type IntoIter = std::array::IntoIter<Self::Item, 28>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -252,6 +255,7 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.mu_r_sq,
             &mut self.numerator_sampling_scale,
             &mut self.idenso_vars,
+            &mut self.symbolica_constants,
             &mut self.model_parameters,
             &mut self.external_energies,
             &mut self.external_spatial,
@@ -296,6 +300,8 @@ impl GammaLoopPairs {
         self.mu_r_sq.validate();
         debug!("Validating numerator_sampling_scale");
         self.numerator_sampling_scale.validate();
+        debug!("Validating symbolica_constants");
+        self.symbolica_constants.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -350,6 +356,7 @@ impl GammaLoopPairs {
             numerator_sampling_scale: ParamValuePairs::default_from_symbol(
                 GS.numerator_sampling_scale,
             ),
+            symbolica_constants: [Atom::var(GS.pi)].into_iter().collect(),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -1195,7 +1202,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         &mut self,
         name: Symbol,
         tags: Vec<Atom>,
-        rename: String,
+        _rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1212,8 +1219,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             args: args.clone(),
         });
 
-        self.fn_map
-            .add_tagged_function(name, tags, rename, args, body)
+        self.fn_map.add_tagged_function(name, tags, args, body)
 
         // body.evaluate(coeff_map, const_map, function_map)
     }
@@ -1221,7 +1227,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub fn add_function<A: Into<Indeterminate> + Clone>(
         &mut self,
         name: Symbol,
-        rename: String,
+        _rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1234,7 +1240,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             args: args.clone(),
         });
 
-        self.fn_map.add_function(name, rename, args, body)
+        self.fn_map.add_function(name, args, body)
     }
 
     pub fn initialize_t_derivatives(&mut self, num_derivatives: usize) {
@@ -1293,6 +1299,10 @@ impl<T: FloatLike> ParamBuilder<T> {
                 ParamBuilderInputGroup::Runtime,
             ),
             (&self.pairs.idenso_vars, ParamBuilderInputGroup::Model),
+            (
+                &self.pairs.symbolica_constants,
+                ParamBuilderInputGroup::SymbolicaConstant,
+            ),
             (&self.pairs.model_parameters, ParamBuilderInputGroup::Model),
             (
                 &self.pairs.external_energies,
@@ -1383,17 +1393,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         .collect()
     }
 
-    pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
-        self.reps.push(FnMapEntry {
-            lhs: key.clone(),
-            rhs: Atom::num(value.clone()),
-            tags: vec![],
-            args: vec![],
-        });
-
-        self.fn_map.add_constant(key, value)
-    }
-
     pub(crate) fn new_empty() -> Self {
         Self {
             polarization_cache: ParamCache::default(),
@@ -1438,11 +1437,11 @@ impl<T: FloatLike> ParamBuilder<T> {
                 .iter()
                 .any(|sign| sign.is_sign())
             {
-                new.add_tagged_function::<Symbol>(
+                new.add_tagged_function(
                     GS.ose,
                     vec![Atom::num(e.0 as i64)],
                     format!("OSE{e}"),
-                    vec![],
+                    Vec::<Symbol>::new(),
                     graph.explicit_ose_atom(e),
                 )
                 .unwrap();
@@ -1458,14 +1457,14 @@ impl<T: FloatLike> ParamBuilder<T> {
                 0
             };
             for i in start..4 {
-                new.add_tagged_function::<Symbol>(
+                new.add_tagged_function(
                     GS.emr_mom,
                     vec![
                         Atom::num(edge_id.0 as i64),
                         Atom::from(ExpandedIndex::from_iter([i])),
                     ],
                     format!("Q({edge_id}, {i})"),
-                    vec![],
+                    Vec::<Symbol>::new(),
                     lmb.loop_atom(
                         edge_id,
                         GS.emr_mom,
@@ -1489,11 +1488,9 @@ impl<T: FloatLike> ParamBuilder<T> {
             parse_lit!(sqrt(x)),
         )
         .unwrap();
-        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
-
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(GS.pi.into(), pi_rational.into());
         new.values = vec![vec![Complex::new_re(F(T::new_zero())); len]];
+        new.update_symbolica_constant_values();
         new.update_model_values(model);
         new.update_idenso_values();
 
@@ -1546,6 +1543,23 @@ impl<T: FloatLike> ParamBuilder<T> {
                 tr_value.clone();
             values[self.pairs.idenso_vars.value_range.start * multiplicative_offset
                 + multiplicative_offset] = nc_value.clone();
+        }
+    }
+
+    pub(crate) fn update_symbolica_constant_values(&mut self) {
+        debug_assert_eq!(
+            self.pairs.symbolica_constants.params.as_slice(),
+            &[Atom::var(GS.pi)]
+        );
+        debug_assert!(self.pairs.symbolica_constants.value_range.len() == 1);
+
+        let zero = F(T::new_zero());
+        let pi_value = Complex::new_re(zero.PI());
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.symbolica_constants.value_range.start * multiplicative_offset] =
+                pi_value.clone();
         }
     }
 
@@ -1629,6 +1643,17 @@ impl<T: FloatLike> ParamBuilder<T> {
             let multiplicative_offset = value_index + 1;
             self.pairs.add_external_four_mom_impl(
                 ext,
+                &mut self.values[value_index],
+                multiplicative_offset,
+            );
+        }
+    }
+
+    pub(crate) fn add_additional_params_all_derivatives(&mut self, additional_params: &[F<T>]) {
+        for value_index in 0..self.values.len() {
+            let multiplicative_offset = value_index + 1;
+            self.pairs.add_additional_params(
+                additional_params,
                 &mut self.values[value_index],
                 multiplicative_offset,
             );

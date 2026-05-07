@@ -652,13 +652,17 @@ impl GraphTerm for AmplitudeGraphTerm {
             .numerator_sampling_scale_value(Complex::new_re(F(settings
                 .general
                 .numerator_sampling_scale)));
+        self.graph
+            .param_builder
+            .add_additional_params_all_derivatives(&settings.additional_params());
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();
 
+        let real_masses = self.graph.get_real_mass_vector(model);
         let masses = self
             .graph
-            .new_edgevec(|e, _, _| e.mass_value(model, &self.param_builder).map(|c| c.re));
+            .new_edgevec(|_, edge_id, _| Some(real_masses[edge_id]));
 
         self.real_mass_vec = Some(masses);
 

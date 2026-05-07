@@ -680,11 +680,6 @@ mod important {
                         integrand,
                         graph_id,
                     );
-                    assert_complex_approx_eq(
-                        symjit_result,
-                        symjit_target,
-                        &format!("{context}: symjit f64 benchmark"),
-                    );
 
                     set_single_precision_level(
                         &mut assembly_cli,
@@ -710,6 +705,13 @@ mod important {
                         assembly_result,
                         assembly_target,
                         &format!("{context}: assembly f64 benchmark"),
+                    );
+                    assert_complex_approx_eq(
+                        symjit_result,
+                        symjit_target,
+                        &format!(
+                            "{context}: symjit f64 benchmark (assembly result {assembly_result})"
+                        ),
                     );
                     assert_complex_approx_eq(
                         assembly_result,

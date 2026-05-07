@@ -45,7 +45,7 @@ use spenso::{
 use structure::{ConvertibleToStructure, SpensoIndices};
 use symbolica::{
     api::python::SymbolicaCommunityModule,
-    atom::Atom,
+    atom::{Atom, Indeterminate, Symbol},
     domains::{float::Complex as SymComplex, rational::Rational},
     evaluate::{CompileOptions, ExportSettings, FunctionMap, InlineASM, OptimizationSettings},
     poly::PolyVariable,
@@ -534,8 +534,21 @@ impl Spensor {
         let mut fn_map = FunctionMap::new();
 
         for (k, v) in &constants {
-            if let Ok(r) = v.expr.clone().try_into() {
-                fn_map.add_constant(k.expr.clone(), r);
+            if let Ok(r) = SymComplex::<Rational>::try_from(v.expr.as_view()) {
+                let name = Indeterminate::try_from(k.expr.clone()).map_err(|e| {
+                    exceptions::PyValueError::new_err(format!(
+                        "Bad constant name {}: {}",
+                        k.expr, e
+                    ))
+                })?;
+                fn_map
+                    .add_function(name, Vec::<Symbol>::new(), Atom::num(r))
+                    .map_err(|e| {
+                        exceptions::PyValueError::new_err(format!(
+                            "Could not add constant {}: {}",
+                            k.expr, e
+                        ))
+                    })?;
             } else {
                 Err(exceptions::PyValueError::new_err(
                     "Constants must be rationals. If this is not possible, pass the value as a parameter",
@@ -543,7 +556,7 @@ impl Spensor {
             }
         }
 
-        for ((symbol, rename, args), body) in &funs {
+        for ((symbol, _rename, args), body) in &funs {
             let symbol = symbol
                 .get_id()
                 .ok_or(exceptions::PyValueError::new_err(format!(
@@ -561,7 +574,7 @@ impl Spensor {
                 .collect::<Result<_, _>>()?;
 
             fn_map
-                .add_function(symbol, rename.clone(), args, body.expr.clone())
+                .add_function(symbol, args, body.expr.clone())
                 .map_err(|e| {
                     exceptions::PyValueError::new_err(format!("Could not add function: {}", e))
                 })?;
