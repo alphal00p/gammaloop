@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    Ref, TensorNetworkError,
+    FastTensorSum, Ref, TensorNetworkError,
     graph::NetworkGraph,
     library::{Library, LibraryTensor},
     profile,
@@ -406,7 +406,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     fn tensor_sum_leaf<T, Store>(executor: &mut Store, indices: Vec<usize>) -> NetworkLeaf<K, Aind>
     where
         Store: NetworkStoreAccess<Tensor = T>,
-        T: HasStructure + Clone + Ref + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        T: HasStructure + Clone + Ref + FastTensorSum + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     {
         debug_assert!(!indices.is_empty());
 
@@ -435,9 +435,19 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     fn materialize_tensor_sum<T, Store>(executor: &mut Store, indices: &[usize]) -> usize
     where
         Store: NetworkStoreAccess<Tensor = T>,
-        T: Clone + Ref + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        T: Clone + Ref + FastTensorSum + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     {
         debug_assert!(!indices.is_empty());
+
+        if let Some(materialized) = {
+            let terms = indices
+                .iter()
+                .map(|index| executor.tensor(*index))
+                .collect::<Vec<_>>();
+            T::fast_tensor_sum(&terms, None)
+        } {
+            return executor.push_tensor(materialized);
+        }
 
         let mut iter = indices.iter();
         let first = *iter
@@ -470,6 +480,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Contract<T, CStrat, LCM = T>
             + Clone
             + Ref
+            + FastTensorSum
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
@@ -560,6 +571,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Contract<T, CStrat, LCM = T>
             + Clone
             + Ref
+            + FastTensorSum
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
@@ -668,6 +680,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Contract<T, CStrat, LCM = T>
             + Clone
             + Ref
+            + FastTensorSum
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
@@ -878,6 +891,7 @@ impl<
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
         + Ref
+        + FastTensorSum
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -924,6 +938,7 @@ impl<
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
         + Ref
+        + FastTensorSum
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -977,6 +992,7 @@ impl<
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
         + Ref
+        + FastTensorSum
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -1034,6 +1050,7 @@ impl<
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
         + Ref
+        + FastTensorSum
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -1087,6 +1104,7 @@ impl<
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
         + Ref
+        + FastTensorSum
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -1139,6 +1157,7 @@ impl<
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
         + Ref
+        + FastTensorSum
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>

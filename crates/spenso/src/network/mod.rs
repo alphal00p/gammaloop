@@ -17,12 +17,16 @@ use crate::contraction::{Contract, Trace};
 use crate::iterators::IteratableTensor;
 use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 use crate::structure::abstract_index::AbstractIndex;
+#[cfg(feature = "shadowing")]
+use crate::structure::concrete_index::FlatIndex;
 use crate::structure::permuted::PermuteTensor;
 // use crate::shadowing::Concretize;
 use crate::structure::representation::LibrarySlot;
 use crate::structure::slot::{AbsInd, IsAbstractSlot};
-use crate::structure::{HasName, PermutedStructure, StructureError};
+use crate::structure::{HasName, PermutedStructure, StructureError, TensorShell};
 use std::borrow::Cow;
+#[cfg(feature = "shadowing")]
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 use store::{
@@ -35,7 +39,11 @@ use thiserror::Error;
 #[cfg(feature = "shadowing")]
 use crate::algebra::complex::RealOrComplexRef;
 #[cfg(feature = "shadowing")]
-use crate::tensors::parametric::AtomViewOrConcrete;
+use crate::tensors::parametric::{AtomViewOrConcrete, ParamOrConcrete, ParamTensor};
+use crate::tensors::{
+    complex::RealOrComplexTensor,
+    data::{DataTensor, DenseTensor, SparseTensor},
+};
 use crate::{
     contraction::ContractionError,
     structure::{CastStructure, HasStructure, ScalarTensor, TensorStructure},
@@ -53,6 +61,121 @@ use std::{convert::Infallible, fmt::Debug};
 
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
 const MIN_LAZY_TENSOR_SUM_TERMS: usize = 8;
+
+pub trait FastTensorSum: Sized {
+    fn fast_tensor_sum(_terms: &[&Self], _sum_start: Option<std::time::Instant>) -> Option<Self> {
+        None
+    }
+}
+
+impl<T, S> FastTensorSum for DenseTensor<T, S> {}
+impl<T, S> FastTensorSum for SparseTensor<T, S> {}
+impl<T, S> FastTensorSum for DataTensor<T, S> {}
+impl<T, S: TensorStructure> FastTensorSum for RealOrComplexTensor<T, S> {}
+impl<S> FastTensorSum for TensorShell<S> {}
+
+#[cfg(feature = "shadowing")]
+impl<S> FastTensorSum for ParamTensor<S>
+where
+    S: TensorStructure + Clone + Sync,
+{
+    fn fast_tensor_sum(terms: &[&Self], sum_start: Option<std::time::Instant>) -> Option<Self> {
+        if terms.len() < 2 {
+            return None;
+        }
+
+        let first = *terms.first()?;
+        let structure = first.tensor.structure().clone();
+        let mut entries = HashMap::<FlatIndex, Vec<AtomView<'_>>>::new();
+        let mut input_entries = 0usize;
+
+        for term in terms {
+            let DataTensor::Sparse(sparse) = &term.tensor else {
+                return None;
+            };
+            if !sparse.zero.as_view().is_zero() {
+                return None;
+            }
+
+            input_entries += sparse.elements.len();
+            for (index, atom) in &sparse.elements {
+                if !atom.as_view().is_zero() {
+                    entries.entry(*index).or_default().push(atom.as_view());
+                }
+            }
+        }
+
+        let log_fast_sum = profile::verbose() || sum_start.is_some();
+        let fast_start = log_fast_sum.then(std::time::Instant::now);
+        if log_fast_sum && let Some(sum_start) = sum_start {
+            eprintln!(
+                "spenso_profile execute.fast_tensor_sum_start terms={} input_entries={} grouped_entries={} elapsed_ms={:.3}",
+                terms.len(),
+                input_entries,
+                entries.len(),
+                sum_start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+
+        let merged = entries
+            .into_iter()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .filter_map(|(index, atoms)| {
+                let atom = match atoms.len() {
+                    0 => Atom::Zero,
+                    1 => atoms
+                        .into_iter()
+                        .next()
+                        .expect("single atom exists")
+                        .to_owned(),
+                    _ => Atom::add_many(&atoms),
+                };
+                (!atom.as_view().is_zero()).then_some((index, atom))
+            })
+            .collect::<Vec<_>>();
+
+        let mut elements = HashMap::with_capacity(merged.len());
+        for (index, atom) in merged {
+            elements.insert(index, atom);
+        }
+
+        if let Some(start) = fast_start {
+            eprintln!(
+                "spenso_profile execute.fast_tensor_sum_done terms={} input_entries={} output_entries={} elapsed_ms={:.3}",
+                terms.len(),
+                input_entries,
+                elements.len(),
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+
+        Some(ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+            elements,
+            zero: Atom::Zero,
+            structure,
+        })))
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<C, S> FastTensorSum for ParamOrConcrete<C, S>
+where
+    S: TensorStructure + Clone + Sync,
+{
+    fn fast_tensor_sum(terms: &[&Self], sum_start: Option<std::time::Instant>) -> Option<Self> {
+        let param_terms = terms
+            .iter()
+            .map(|term| match term {
+                ParamOrConcrete::Param(param) => Some(param),
+                ParamOrConcrete::Concrete(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+
+        <ParamTensor<S> as FastTensorSum>::fast_tensor_sum(&param_terms, sum_start)
+            .map(ParamOrConcrete::Param)
+    }
+}
 
 #[derive(
     Debug,
@@ -1516,6 +1639,7 @@ where
         + TensorStructure
         + Clone
         + Ref
+        + FastTensorSum
         + From<LT::WithIndices>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
     LT: LibraryTensor + Clone,
@@ -1578,8 +1702,18 @@ fn materialize_tensor_sum<K, Aind, Store>(
 ) -> NetworkLeaf<K, Aind>
 where
     Store: NetworkStoreAccess,
-    Store::Tensor: Clone + Ref + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
+    Store::Tensor: Clone + Ref + FastTensorSum + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
 {
+    if let Some(result) = {
+        let terms = indices
+            .iter()
+            .map(|index| store.tensor(*index))
+            .collect::<Vec<_>>();
+        Store::Tensor::fast_tensor_sum(&terms, sum_start)
+    } {
+        return NetworkLeaf::LocalTensor(store.push_tensor(result));
+    }
+
     let terms = indices
         .iter()
         .map(|index| store.tensor(*index).clone())
@@ -1618,6 +1752,18 @@ where
         return None;
     }
 
+    let atoms = targets
+        .iter()
+        .map(|(_, leaf)| {
+            let NetworkLeaf::Scalar(index) = leaf else {
+                return None;
+            };
+            (store.scalar(*index) as &dyn Any)
+                .downcast_ref::<Atom>()
+                .cloned()
+        })
+        .collect::<Option<Vec<_>>>()?;
+
     let start = profile::enabled().then(std::time::Instant::now);
 
     let result = if targets.len() >= MIN_STREAMED_SUM_LEAVES {
@@ -1634,12 +1780,8 @@ where
             ..Default::default()
         });
 
-        for (_, leaf) in targets {
-            let NetworkLeaf::Scalar(index) = leaf else {
-                return None;
-            };
-            let atom = (store.scalar(*index) as &dyn Any).downcast_ref::<Atom>()?;
-            stream.push(atom.clone());
+        for atom in atoms {
+            stream.push(atom);
         }
 
         let result = stream.to_expression();
@@ -1659,15 +1801,6 @@ where
                 "spenso_profile execute.sum_atom_add_many_start leaves={}",
                 targets.len(),
             );
-        }
-
-        let mut atoms = Vec::with_capacity(targets.len());
-        for (_, leaf) in targets {
-            let NetworkLeaf::Scalar(index) = leaf else {
-                return None;
-            };
-            let atom = (store.scalar(*index) as &dyn Any).downcast_ref::<Atom>()?;
-            atoms.push(atom.clone());
         }
 
         let result = Atom::add_many(&atoms);
@@ -2311,6 +2444,7 @@ where
         + Clone
         + Trace
         + Ref
+        + FastTensorSum
         + Contract<LCM = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
         + for<'a> AddAssign<LT::WithIndices>
