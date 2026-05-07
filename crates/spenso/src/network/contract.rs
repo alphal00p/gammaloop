@@ -9,7 +9,7 @@ use linnet::half_edge::NodeIndex;
 use crate::{
     algebra::ScalarMul,
     contraction::Contract,
-    network::graph::{NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation},
+    network::graph::{NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation, TensorTerm},
     structure::{
         HasStructure, PermutedStructure, TensorStructure,
         permuted::PermuteTensor,
@@ -18,7 +18,8 @@ use crate::{
 };
 
 use super::{
-    FastTensorSum, Ref, TensorNetworkError,
+    FastTensorSum, FastTensorSumContract, FastTensorSumContractible, Ref, TensorCommonFactor,
+    TensorNetworkError,
     graph::NetworkGraph,
     library::{Library, LibraryTensor},
     profile,
@@ -150,11 +151,14 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     pub fn local_tensor_index(&self, operand: usize) -> Option<usize> {
-        match self.operands.get(operand)?.leaf {
-            NetworkLeaf::LocalTensor(index) => Some(index),
-            NetworkLeaf::TensorSum(_) | NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {
-                None
-            }
+        match &self.operands.get(operand)?.leaf {
+            NetworkLeaf::LocalTensor(index) => Some(*index),
+            NetworkLeaf::TensorTerm(term) if term.scalar.is_none() => Some(term.tensor),
+            NetworkLeaf::TensorSum(_)
+            | NetworkLeaf::TensorTerm(_)
+            | NetworkLeaf::TensorTermSum(_)
+            | NetworkLeaf::LibraryKey { .. }
+            | NetworkLeaf::Scalar(_) => None,
         }
     }
 
@@ -170,6 +174,10 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         match &self.operands.get(operand)?.leaf {
             NetworkLeaf::LocalTensor(index) => Some(executor.tensor(*index).structure()),
             NetworkLeaf::TensorSum(indices) => Some(executor.tensor(*indices.first()?).structure()),
+            NetworkLeaf::TensorTerm(term) => Some(executor.tensor(term.tensor).structure()),
+            NetworkLeaf::TensorTermSum(terms) => {
+                Some(executor.tensor(terms.first()?.tensor).structure())
+            }
             NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => None,
         }
     }
@@ -223,6 +231,47 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(())
     }
 
+    fn multiply_scalar_indices<Sc, Store>(
+        executor: &mut Store,
+        left: Option<usize>,
+        right: Option<usize>,
+    ) -> Option<usize>
+    where
+        Store: NetworkStoreAccess<Scalar = Sc>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+    {
+        match (left, right) {
+            (None, None) => None,
+            (Some(index), None) | (None, Some(index)) => Some(index),
+            (Some(left), Some(right)) => {
+                let mut scalar = executor.scalar(left).clone();
+                scalar *= executor.scalar(right).refer();
+                Some(executor.push_scalar(scalar))
+            }
+        }
+    }
+
+    fn multiply_scalar_value_with_term<Sc, Store>(
+        executor: &mut Store,
+        scalar: &Sc,
+        term: &TensorTerm,
+    ) -> TensorTerm
+    where
+        Store: NetworkStoreAccess<Scalar = Sc>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+    {
+        let scalar = match term.scalar {
+            Some(index) => {
+                let mut combined = scalar.clone();
+                combined *= executor.scalar(index).refer();
+                executor.push_scalar(combined)
+            }
+            None => executor.push_scalar(scalar.clone()),
+        };
+
+        TensorTerm::scaled(term.tensor, scalar)
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn contract_scalars<LT, T, L, Sc, FK, Store>(
         &mut self,
@@ -252,29 +301,53 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         let mut tensor_positions = Vec::new();
 
         for (position, operand) in self.operands.iter().enumerate() {
-            let is_scalar = match operand.leaf {
+            let is_scalar = match &operand.leaf {
                 NetworkLeaf::Scalar(index) => {
                     if let Some(accumulator) = &mut accumulator {
-                        *accumulator *= executor.scalar(index).refer();
+                        *accumulator *= executor.scalar(*index).refer();
                     } else {
-                        accumulator = Some(executor.scalar(index).clone());
+                        accumulator = Some(executor.scalar(*index).clone());
                     }
                     true
                 }
                 NetworkLeaf::LocalTensor(index) => {
-                    if let Some(scalar) = executor.tensor(index).scalar_ref() {
+                    if let Some(scalar) = executor.tensor(*index).scalar_ref() {
                         if let Some(accumulator) = &mut accumulator {
                             *accumulator *= scalar;
                         } else {
                             accumulator =
-                                Some(Sc::from(executor.tensor(index).clone().scalar().unwrap()));
+                                Some(Sc::from(executor.tensor(*index).clone().scalar().unwrap()));
                         }
                         true
                     } else {
                         false
                     }
                 }
-                NetworkLeaf::TensorSum(_) | NetworkLeaf::LibraryKey { .. } => false,
+                NetworkLeaf::TensorTerm(term) => {
+                    if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
+                        if let Some(term_scalar) = term.scalar {
+                            if let Some(accumulator) = &mut accumulator {
+                                *accumulator *= executor.scalar(term_scalar).refer();
+                            } else {
+                                accumulator = Some(executor.scalar(term_scalar).clone());
+                            }
+                        }
+
+                        if let Some(accumulator) = &mut accumulator {
+                            *accumulator *= tensor_scalar;
+                        } else {
+                            accumulator = Some(Sc::from(
+                                executor.tensor(term.tensor).clone().scalar().unwrap(),
+                            ));
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                NetworkLeaf::TensorSum(_)
+                | NetworkLeaf::TensorTermSum(_)
+                | NetworkLeaf::LibraryKey { .. } => false,
             };
 
             if is_scalar {
@@ -358,22 +431,31 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         LT::WithIndices: ScalarMul<Sc, Output = T> + PermuteTensor<Permuted = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
     {
         let leaf = match &self.operands[operand].leaf {
-            NetworkLeaf::LocalTensor(index) => executor
-                .tensor(*index)
-                .scalar_mul(&scalar)
-                .ok_or(TensorNetworkError::FailedScalarMul)?,
+            NetworkLeaf::LocalTensor(index) => {
+                let scalar = executor.push_scalar(scalar);
+                return Ok(NetworkLeaf::TensorTerm(TensorTerm::scaled(*index, scalar)));
+            }
             NetworkLeaf::TensorSum(indices) => {
+                let scalar = executor.push_scalar(scalar);
                 let mut scaled = Vec::with_capacity(indices.len());
                 for index in indices {
-                    let tensor = executor
-                        .tensor(*index)
-                        .scalar_mul(&scalar)
-                        .ok_or(TensorNetworkError::FailedScalarMul)?;
-                    scaled.push(executor.push_tensor(tensor));
+                    scaled.push(TensorTerm::scaled(*index, scalar));
                 }
-                return Ok(NetworkLeaf::TensorSum(scaled));
+                return Ok(NetworkLeaf::TensorTermSum(scaled));
+            }
+            NetworkLeaf::TensorTerm(term) => {
+                let term = Self::multiply_scalar_value_with_term(executor, &scalar, term);
+                return Ok(NetworkLeaf::TensorTerm(term));
+            }
+            NetworkLeaf::TensorTermSum(terms) => {
+                let scaled = terms
+                    .iter()
+                    .map(|term| Self::multiply_scalar_value_with_term(executor, &scalar, term))
+                    .collect();
+                return Ok(NetworkLeaf::TensorTermSum(scaled));
             }
             NetworkLeaf::LibraryKey { .. } => {
                 let source = self.operands[operand].source.ok_or_else(|| {
@@ -395,41 +477,88 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(NetworkLeaf::LocalTensor(index))
     }
 
-    fn tensor_term_indices(&self, operand: usize) -> Option<Vec<usize>> {
+    fn tensor_terms(&self, operand: usize) -> Option<Vec<TensorTerm>> {
         match &self.operands.get(operand)?.leaf {
-            NetworkLeaf::LocalTensor(index) => Some(vec![*index]),
-            NetworkLeaf::TensorSum(indices) => Some(indices.clone()),
+            NetworkLeaf::LocalTensor(index) => Some(vec![TensorTerm::tensor(*index)]),
+            NetworkLeaf::TensorSum(indices) => {
+                Some(indices.iter().copied().map(TensorTerm::tensor).collect())
+            }
+            NetworkLeaf::TensorTerm(term) => Some(vec![term.clone()]),
+            NetworkLeaf::TensorTermSum(terms) => Some(terms.clone()),
             NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => None,
         }
     }
 
-    fn tensor_sum_leaf<T, Store>(executor: &mut Store, indices: Vec<usize>) -> NetworkLeaf<K, Aind>
+    fn tensor_sum_leaf<T, Store>(
+        executor: &mut Store,
+        terms: Vec<TensorTerm>,
+    ) -> NetworkLeaf<K, Aind>
     where
         Store: NetworkStoreAccess<Tensor = T>,
         T: HasStructure + Clone + Ref + FastTensorSum + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     {
-        debug_assert!(!indices.is_empty());
+        debug_assert!(!terms.is_empty());
 
-        if indices.len() == 1 {
-            return NetworkLeaf::LocalTensor(indices[0]);
+        if terms.len() == 1 {
+            let term = terms.into_iter().next().expect("single tensor term");
+            return match term.scalar {
+                Some(_) => NetworkLeaf::TensorTerm(term),
+                None => NetworkLeaf::LocalTensor(term.tensor),
+            };
         }
 
-        if indices
-            .iter()
-            .all(|index| executor.tensor(*index).scalar_ref().is_some())
+        if terms.iter().all(|term| term.scalar.is_none())
+            && terms
+                .iter()
+                .all(|term| executor.tensor(term.tensor).scalar_ref().is_some())
         {
-            let mut iter = indices.into_iter();
+            let mut iter = terms.into_iter();
             let first = iter
                 .next()
-                .expect("tensor sum with at least one term has first term");
+                .expect("tensor sum with at least one term has first term")
+                .tensor;
             let mut materialized = executor.tensor(first).clone();
-            for index in iter {
-                materialized += executor.tensor(index).refer();
+            for term in iter {
+                materialized += executor.tensor(term.tensor).refer();
             }
             NetworkLeaf::LocalTensor(executor.push_tensor(materialized))
+        } else if terms.iter().all(|term| term.scalar.is_none()) {
+            NetworkLeaf::TensorSum(terms.into_iter().map(|term| term.tensor).collect())
         } else {
-            NetworkLeaf::TensorSum(indices)
+            NetworkLeaf::TensorTermSum(terms)
         }
+    }
+
+    fn materialize_tensor_terms<T, Sc, Store>(executor: &mut Store, terms: &[TensorTerm]) -> usize
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        T: Clone
+            + Ref
+            + FastTensorSum
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        Sc: Clone,
+    {
+        debug_assert!(!terms.is_empty());
+
+        if terms.iter().all(|term| term.scalar.is_none()) {
+            let indices = terms.iter().map(|term| term.tensor).collect::<Vec<_>>();
+            return Self::materialize_tensor_sum(executor, &indices);
+        }
+
+        let mut materialized_terms = Vec::with_capacity(terms.len());
+        for term in terms {
+            let tensor = match term.scalar {
+                Some(scalar) => executor
+                    .tensor(term.tensor)
+                    .scalar_mul(executor.scalar(scalar))
+                    .expect("scaled tensor term should support scalar multiplication"),
+                None => executor.tensor(term.tensor).clone(),
+            };
+            materialized_terms.push(executor.push_tensor(tensor));
+        }
+
+        Self::materialize_tensor_sum(executor, &materialized_terms)
     }
 
     fn materialize_tensor_sum<T, Store>(executor: &mut Store, indices: &[usize]) -> usize
@@ -460,6 +589,118 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         executor.push_tensor(materialized)
     }
 
+    fn split_common_tensor_factor<T, Sc, Store>(
+        executor: &mut Store,
+        term: TensorTerm,
+    ) -> TensorTerm
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        T: TensorCommonFactor<Sc>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+    {
+        let Some((reduced, factor)) = executor.tensor(term.tensor).split_common_factor() else {
+            return term;
+        };
+
+        let tensor = executor.push_tensor(reduced);
+        let factor = executor.push_scalar(factor);
+        let scalar = Self::multiply_scalar_indices(executor, term.scalar, Some(factor));
+
+        TensorTerm { tensor, scalar }
+    }
+
+    fn try_fast_tensor_sum_contract<T, Sc, Store, CStrat, FK>(
+        executor: &mut Store,
+        left_terms: &[TensorTerm],
+        right_terms: &[TensorTerm],
+    ) -> Result<Option<NetworkLeaf<K, Aind>>, TensorNetworkError<K, FK>>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        T: HasStructure
+            + Clone
+            + Ref
+            + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        Sc: Clone,
+        K: Display,
+        FK: Display,
+    {
+        if left_terms.len() > 1
+            && right_terms.len() == 1
+            && left_terms.iter().all(|term| term.scalar.is_none())
+            && right_terms[0].scalar.is_none()
+        {
+            let terms = left_terms
+                .iter()
+                .map(|term| executor.tensor(term.tensor))
+                .collect::<Vec<_>>();
+            if let Some(result) = T::fast_tensor_sum_contract::<CStrat>(
+                &terms,
+                executor.tensor(right_terms[0].tensor),
+                true,
+            ) {
+                return result
+                    .map(|result| Some(Self::fast_tensor_sum_contract_leaf(executor, result)))
+                    .map_err(|error| TensorNetworkError::Other(error.into()));
+            }
+        }
+
+        if right_terms.len() > 1
+            && left_terms.len() == 1
+            && right_terms.iter().all(|term| term.scalar.is_none())
+            && left_terms[0].scalar.is_none()
+        {
+            let terms = right_terms
+                .iter()
+                .map(|term| executor.tensor(term.tensor))
+                .collect::<Vec<_>>();
+            if let Some(result) = T::fast_tensor_sum_contract::<CStrat>(
+                &terms,
+                executor.tensor(left_terms[0].tensor),
+                false,
+            ) {
+                return result
+                    .map(|result| Some(Self::fast_tensor_sum_contract_leaf(executor, result)))
+                    .map_err(|error| TensorNetworkError::Other(error.into()));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn fast_tensor_sum_contract_leaf<T, Sc, Store>(
+        executor: &mut Store,
+        result: FastTensorSumContract<T, Sc>,
+    ) -> NetworkLeaf<K, Aind>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        T: HasStructure + Clone + Ref + FastTensorSum + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+    {
+        match result {
+            FastTensorSumContract::Materialized(tensor) => {
+                NetworkLeaf::LocalTensor(executor.push_tensor(tensor))
+            }
+            FastTensorSumContract::Terms(terms) => {
+                let terms = terms
+                    .into_iter()
+                    .map(|tensor| TensorTerm::tensor(executor.push_tensor(tensor)))
+                    .collect::<Vec<_>>();
+                Self::tensor_sum_leaf(executor, terms)
+            }
+            FastTensorSumContract::ScaledTerms(terms) => {
+                let terms = terms
+                    .into_iter()
+                    .map(|term| TensorTerm {
+                        tensor: executor.push_tensor(term.tensor),
+                        scalar: term.scalar.map(|scalar| executor.push_scalar(scalar)),
+                    })
+                    .collect::<Vec<_>>();
+                Self::tensor_sum_leaf(executor, terms)
+            }
+        }
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn contract_pair<LT, T, L, Sc, CStrat, FK, Store>(
         &mut self,
@@ -481,8 +722,13 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Clone
             + Ref
             + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + TensorCommonFactor<Sc>
+            + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+        T::Structure: Display,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
@@ -490,16 +736,23 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
 
         let mut left_terms = self
-            .tensor_term_indices(left)
+            .tensor_terms(left)
             .ok_or(TensorNetworkError::SlotEdgeToScalarNode)?;
         let mut right_terms = self
-            .tensor_term_indices(right)
+            .tensor_terms(right)
             .ok_or(TensorNetworkError::SlotEdgeToScalarNode)?;
+        left_terms = left_terms
+            .into_iter()
+            .map(|term| Self::split_common_tensor_factor::<T, Sc, Store>(executor, term))
+            .collect();
+        right_terms = right_terms
+            .into_iter()
+            .map(|term| Self::split_common_tensor_factor::<T, Sc, Store>(executor, term))
+            .collect();
         let distributed_terms = left_terms.len() * right_terms.len();
 
-        if left_terms.len() > 1
-            && right_terms.len() > 1
-            && distributed_terms > MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS
+        if distributed_terms > MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS
+            && (left_terms.len() > 1 || right_terms.len() > 1)
         {
             if profile::enabled() {
                 eprintln!(
@@ -511,31 +764,68 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 );
             }
             if left_terms.len() > 1 {
-                left_terms = vec![Self::materialize_tensor_sum(executor, &left_terms)];
+                left_terms = vec![TensorTerm::tensor(Self::materialize_tensor_terms(
+                    executor,
+                    &left_terms,
+                ))];
             }
             if right_terms.len() > 1 {
-                right_terms = vec![Self::materialize_tensor_sum(executor, &right_terms)];
+                right_terms = vec![TensorTerm::tensor(Self::materialize_tensor_terms(
+                    executor,
+                    &right_terms,
+                ))];
             }
         }
 
         if profile::enabled() && (left_terms.len() > 1 || right_terms.len() > 1) {
             eprintln!(
-                "spenso_profile product.lazy_tensor_sum left_terms={} right_terms={} distributed_terms={}",
+                "spenso_profile product.lazy_tensor_sum left_terms={} right_terms={} distributed_terms={} left_structure={} right_structure={}",
                 left_terms.len(),
                 right_terms.len(),
                 left_terms.len() * right_terms.len(),
+                self.tensor_structure(executor, left)
+                    .map(|structure| structure.to_string())
+                    .unwrap_or_else(|| "<none>".to_string()),
+                self.tensor_structure(executor, right)
+                    .map(|structure| structure.to_string())
+                    .unwrap_or_else(|| "<none>".to_string()),
             );
         }
-        let mut contracted_indices = Vec::with_capacity(left_terms.len() * right_terms.len());
-        for left_tensor in &left_terms {
+
+        if let Some(leaf) = Self::try_fast_tensor_sum_contract::<T, Sc, Store, CStrat, FK>(
+            executor,
+            &left_terms,
+            &right_terms,
+        )? {
+            let mut positions = [left, right];
+            positions.sort_unstable();
+            self.replace_operands(&positions, ProductOperand { leaf, source: None });
+            return Ok(());
+        }
+
+        let mut contracted_terms = Vec::with_capacity(left_terms.len() * right_terms.len());
+        for left_tensor in left_terms {
             for right_tensor in &right_terms {
                 let contracted = executor
-                    .tensor(*left_tensor)
-                    .contract(executor.tensor(*right_tensor))?;
-                contracted_indices.push(executor.push_tensor(contracted));
+                    .tensor(left_tensor.tensor)
+                    .contract(executor.tensor(right_tensor.tensor))?;
+                let (contracted, extra_scalar) =
+                    if let Some((reduced, factor)) = contracted.split_common_factor() {
+                        (reduced, Some(executor.push_scalar(factor)))
+                    } else {
+                        (contracted, None)
+                    };
+                let tensor = executor.push_tensor(contracted);
+                let scalar = Self::multiply_scalar_indices(
+                    executor,
+                    left_tensor.scalar,
+                    right_tensor.scalar,
+                );
+                let scalar = Self::multiply_scalar_indices(executor, scalar, extra_scalar);
+                contracted_terms.push(TensorTerm { tensor, scalar });
             }
         }
-        let leaf = Self::tensor_sum_leaf(executor, contracted_indices);
+        let leaf = Self::tensor_sum_leaf(executor, contracted_terms);
 
         let mut positions = [left, right];
         positions.sort_unstable();
@@ -572,9 +862,13 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Clone
             + Ref
             + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + TensorCommonFactor<Sc>
+            + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
@@ -681,9 +975,13 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Clone
             + Ref
             + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + TensorCommonFactor<Sc>
+            + ScalarMul<Sc, Output = T>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         T::Structure: Display,
         L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
@@ -892,6 +1190,8 @@ impl<
         + From<LT::WithIndices>
         + Ref
         + FastTensorSum
+        + FastTensorSumContractible<Sc>
+        + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -939,6 +1239,8 @@ impl<
         + From<LT::WithIndices>
         + Ref
         + FastTensorSum
+        + FastTensorSumContractible<Sc>
+        + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -993,6 +1295,8 @@ impl<
         + From<LT::WithIndices>
         + Ref
         + FastTensorSum
+        + FastTensorSumContractible<Sc>
+        + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -1051,6 +1355,8 @@ impl<
         + From<LT::WithIndices>
         + Ref
         + FastTensorSum
+        + FastTensorSumContractible<Sc>
+        + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -1105,6 +1411,8 @@ impl<
         + From<LT::WithIndices>
         + Ref
         + FastTensorSum
+        + FastTensorSumContractible<Sc>
+        + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
@@ -1158,6 +1466,8 @@ impl<
         + From<LT::WithIndices>
         + Ref
         + FastTensorSum
+        + FastTensorSumContractible<Sc>
+        + TensorCommonFactor<Sc>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
     Sc: for<'a> MulAssign<Sc::Ref<'a>>
