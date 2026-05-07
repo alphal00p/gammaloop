@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::Cursor,
+    io::{BufWriter, Cursor, Write},
     ops::Deref,
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -62,6 +62,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, Symbol},
+    id::AliasedAtom,
     state::State as SymbolicaState,
 };
 use tabled::{builder::Builder, settings::Style};
@@ -84,6 +85,8 @@ pub enum ThreeDRep {
     Validate(Validate),
     Build(Build),
     Evaluate(Evaluate),
+    #[command(name = "alias-growth")]
+    AliasGrowth(AliasGrowth),
     #[command(name = "test-cff-ltd", alias = "test", alias = "compare")]
     TestCffLtd(TestCffLtd),
     #[command(name = "graph-from-signatures")]
@@ -105,6 +108,7 @@ impl ThreeDRep {
             Self::Evaluate(command) => {
                 command.run(state, global_cli_settings, default_runtime_settings)
             }
+            Self::AliasGrowth(command) => command.run(state, global_cli_settings),
             Self::TestCffLtd(command) => {
                 command.run(state, global_cli_settings, default_runtime_settings)
             }
@@ -302,6 +306,48 @@ pub struct Evaluate {
 
     #[arg(long, default_value_t = false)]
     pub clean: bool,
+}
+
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+pub struct AliasGrowth {
+    #[command(flatten)]
+    pub selection: OptionalGraphSelectorArgs,
+
+    /// Explicit oriented-expression JSON to analyze. Takes precedence over representation lookup.
+    #[arg(long, value_hint = clap::ValueHint::FilePath)]
+    pub json_in: Option<PathBuf>,
+
+    /// Cached representation to analyze when --json-in is not supplied.
+    #[arg(long, value_enum)]
+    pub representation: Option<CliRepresentationMode>,
+
+    /// Cached numerator-sampling normalization variant to analyze with --representation.
+    #[arg(
+        long = "numerator-samples-normalization",
+        alias = "numerator-sampling-scale-mode",
+        value_enum
+    )]
+    pub numerator_samples_normalization: Option<CliNumeratorSamplesNormalization>,
+
+    /// 3Drep artifact workspace containing the oriented expression JSON.
+    #[arg(long, value_hint = clap::ValueHint::DirPath)]
+    pub workspace_path: Option<PathBuf>,
+
+    /// Skip the physical numerator and scan only Orientation(i).
+    #[arg(long, default_value_t = false)]
+    pub without_numerator: bool,
+
+    /// Only scan the first N orientations.
+    #[arg(long)]
+    pub max_orientations: Option<usize>,
+
+    /// Minimum serialized byte size for a repeated subexpression to be aliased.
+    #[arg(long, default_value_t = 32)]
+    pub alias_min_bytes: usize,
+
+    /// Output CSV path. Defaults inside the selected artifact directory.
+    #[arg(long, value_hint = clap::ValueHint::FilePath)]
+    pub csv_out: Option<PathBuf>,
 }
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -888,6 +934,35 @@ struct DiagnosticComponentAtoms {
     processed_numerator: Atom,
     numerator_atoms: Vec<Atom>,
     orientation_atoms: Vec<Atom>,
+}
+
+struct AliasGrowthScanRequest<'a> {
+    components: &'a DiagnosticComponentAtoms,
+    component_limit: usize,
+    alias_min_bytes: usize,
+    csv_path: &'a Path,
+    graph_name: &'a str,
+    graph_id: usize,
+    representation: RepresentationMode,
+    with_numerator: bool,
+}
+
+struct AliasGrowthScan {
+    last_record: Option<AliasGrowthRecord>,
+}
+
+struct AliasGrowthRecord {
+    j: usize,
+    atom_terms: usize,
+    atom_add_ops: usize,
+    atom_mul_ops: usize,
+    atom_ops: usize,
+    atom_bytes: usize,
+    aliased_add_ops: usize,
+    aliased_mul_ops: usize,
+    aliased_ops: usize,
+    aliased_bytes: usize,
+    alias_count: usize,
 }
 
 #[derive(Clone)]
@@ -1729,6 +1804,117 @@ impl Evaluate {
         } else {
             read_latest_expression_path(workspace)
         }
+    }
+}
+
+impl AliasGrowth {
+    fn run(&self, state: &State, global_cli_settings: &CLISettings) -> Result<()> {
+        let workspace = self
+            .workspace_path
+            .clone()
+            .unwrap_or_else(|| default_workspace_path(global_cli_settings));
+        let evaluate_input = Evaluate {
+            selection: self.selection.clone(),
+            json_in: self.json_in.clone(),
+            representation: self.representation,
+            numerator_samples_normalization: self.numerator_samples_normalization,
+            workspace_path: self.workspace_path.clone(),
+            precision: None,
+            seed: 1,
+            scale: 1.0,
+            profile: None,
+            eager: false,
+            numerator_only: false,
+            numerator_q0: Vec::new(),
+            manifest_name: "alias_growth_unused.json".to_string(),
+            no_show_parameters: true,
+            standalone_rust_only: false,
+            iterative: false,
+            clean: false,
+        };
+        let input = evaluate_input.resolve_input(state, global_cli_settings, &workspace)?;
+        let expression_path = input
+            .expression_path
+            .as_ref()
+            .ok_or_else(|| eyre!("3Drep alias-growth requires an oriented expression JSON"))?;
+        println!(
+            "Loading 3Drep oriented expression from {}",
+            relative_display(expression_path)
+        );
+        let artifact = input
+            .artifact
+            .as_ref()
+            .ok_or_else(|| eyre!("3Drep alias-growth requires an oriented expression artifact"))?;
+
+        let selected = input.selected;
+        let components = if self.without_numerator {
+            diagnostic_orientation_only_component_atoms_for_evaluator(&artifact.expression)
+        } else {
+            diagnostic_component_atoms_for_evaluator(&artifact.expression, selected.graph)?
+        };
+        let total_components = components.numerator_atoms.len();
+        if total_components != components.orientation_atoms.len() {
+            return Err(eyre!(
+                "Alias-growth component mismatch: {} numerator components but {} orientation components",
+                components.numerator_atoms.len(),
+                components.orientation_atoms.len()
+            ));
+        }
+        let component_limit = self
+            .max_orientations
+            .unwrap_or(total_components)
+            .min(total_components);
+        if component_limit == 0 {
+            return Err(eyre!("3Drep alias-growth found no orientation components"));
+        }
+
+        let csv_path = self.csv_out.clone().unwrap_or_else(|| {
+            input.artifact_dir.join(format!(
+                "alias_growth_{}.csv",
+                if self.without_numerator {
+                    "without_numerator"
+                } else {
+                    "with_numerator"
+                }
+            ))
+        });
+        if let Some(parent) = csv_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Could not create {}", parent.display()))?;
+            }
+        }
+
+        println!(
+            "Streaming 3Drep alias-growth scan to {}",
+            relative_display(&csv_path)
+        );
+        let scan = scan_alias_growth(AliasGrowthScanRequest {
+            components: &components,
+            component_limit,
+            alias_min_bytes: self.alias_min_bytes,
+            csv_path: &csv_path,
+            graph_name: &selected.graph.name,
+            graph_id: selected.graph_id,
+            representation: artifact.family,
+            with_numerator: !self.without_numerator,
+        })?;
+        println!(
+            "Finished 3Drep alias-growth scan at {}",
+            relative_display(&csv_path)
+        );
+        if let Some(last) = scan.last_record.as_ref() {
+            println!(
+                "Final partial sum j={} atom_ops={} atom_bytes={} aliased_ops={} aliased_bytes={} aliases={}",
+                last.j,
+                last.atom_ops,
+                last.atom_bytes,
+                last.aliased_ops,
+                last.aliased_bytes,
+                last.alias_count
+            );
+        }
+        Ok(())
     }
 }
 
@@ -3659,12 +3845,218 @@ fn diagnostic_component_atoms_for_evaluator(
     })
 }
 
+fn diagnostic_orientation_only_component_atoms_for_evaluator(
+    expression: &ThreeDExpression<OrientationID>,
+) -> DiagnosticComponentAtoms {
+    let mut numerator_atoms = Vec::with_capacity(expression.orientations.len());
+    let mut orientation_atoms = Vec::with_capacity(expression.orientations.len());
+
+    for orientation in &expression.orientations {
+        let orientation_atom = expression
+            .surfaces
+            .substitute_energies_gs(&orientation.to_atom_gs(), &[]);
+        numerator_atoms.push(Atom::num(1));
+        orientation_atoms.push(orientation_atom);
+    }
+
+    DiagnosticComponentAtoms {
+        processed_numerator: Atom::num(1),
+        numerator_atoms,
+        orientation_atoms,
+    }
+}
+
 fn numerator_only_component_atoms_for_evaluator(graph: &Graph) -> DiagnosticComponentAtoms {
     let numerator = numerator_only_parametric_atom_for_evaluator(graph);
     DiagnosticComponentAtoms {
         processed_numerator: numerator.clone(),
         numerator_atoms: vec![numerator],
         orientation_atoms: vec![Atom::num(1)],
+    }
+}
+
+fn scan_alias_growth(request: AliasGrowthScanRequest<'_>) -> Result<AliasGrowthScan> {
+    let mut writer = BufWriter::new(
+        fs::File::create(request.csv_path)
+            .with_context(|| format!("Could not create {}", request.csv_path.display()))?,
+    );
+    writeln!(writer, "{}", alias_growth_csv_header())
+        .with_context(|| format!("Could not write {}", request.csv_path.display()))?;
+    writer
+        .flush()
+        .with_context(|| format!("Could not flush {}", request.csv_path.display()))?;
+
+    let bar = component_build_progress_bar(
+        &format!(
+            "alias-growth {} {} {}",
+            request.graph_name,
+            request.representation_label(),
+            if request.with_numerator {
+                "with numerator"
+            } else {
+                "without numerator"
+            }
+        ),
+        request.component_limit,
+    );
+    let mut partial_sum = Atom::Zero;
+    let mut last_record = None;
+    for index in 0..request.component_limit {
+        let term = request.components.numerator_atoms[index].clone()
+            * request.components.orientation_atoms[index].clone();
+        partial_sum = partial_sum + term;
+        let (atom_add_ops, atom_mul_ops) = atom_operation_counts(&partial_sum);
+        let atom_bytes = partial_sum.as_view().get_byte_size();
+        let aliased = alias_atom_for_growth(&partial_sum, request.alias_min_bytes);
+        let (aliased_add_ops, aliased_mul_ops) = aliased.count_operations();
+        let aliased_bytes = aliased_atom_byte_size(&aliased);
+        let record = AliasGrowthRecord {
+            j: index + 1,
+            atom_terms: atom_top_level_term_count(&partial_sum),
+            atom_add_ops,
+            atom_mul_ops,
+            atom_ops: atom_add_ops + atom_mul_ops,
+            atom_bytes,
+            aliased_add_ops,
+            aliased_mul_ops,
+            aliased_ops: aliased_add_ops + aliased_mul_ops,
+            aliased_bytes,
+            alias_count: aliased.get_aliases().len(),
+        };
+        writeln!(
+            writer,
+            "{}",
+            alias_growth_csv_row(
+                request.graph_id,
+                request.graph_name,
+                request.representation,
+                request.with_numerator,
+                request.component_limit,
+                request.alias_min_bytes,
+                &record,
+            )
+        )
+        .with_context(|| format!("Could not write {}", request.csv_path.display()))?;
+        writer
+            .flush()
+            .with_context(|| format!("Could not flush {}", request.csv_path.display()))?;
+        last_record = Some(record);
+        bar.set_position((index + 1) as u64);
+    }
+    bar.finish_and_clear();
+
+    Ok(AliasGrowthScan { last_record })
+}
+
+impl AliasGrowthScanRequest<'_> {
+    fn representation_label(&self) -> &'static str {
+        match self.representation {
+            RepresentationMode::Ltd => "LTD",
+            RepresentationMode::Cff => "CFF",
+            RepresentationMode::PureLtd => "pure-LTD",
+        }
+    }
+}
+
+fn atom_operation_counts(atom: &Atom) -> (usize, usize) {
+    let (mut add, mut mul) = (0, 0);
+    atom.visitor(&mut |view| match view {
+        AtomView::Mul(m) => {
+            mul += m.get_nargs() - 1;
+            true
+        }
+        AtomView::Add(a) => {
+            add += a.get_nargs() - 1;
+            true
+        }
+        AtomView::Pow(p) => {
+            if let Ok(i) = isize::try_from(p.get_exp()) {
+                mul += i.unsigned_abs().saturating_sub(1);
+            }
+            true
+        }
+        _ => true,
+    });
+    (add, mul)
+}
+
+fn atom_top_level_term_count(atom: &Atom) -> usize {
+    match atom.as_view() {
+        AtomView::Add(a) => a.get_nargs(),
+        _ => 1,
+    }
+}
+
+fn alias_atom_for_growth(atom: &Atom, min_bytes: usize) -> AliasedAtom {
+    AliasedAtom::from(atom.clone()).alias_subexpressions(|view, _count, index| {
+        (view.get_byte_size() >= min_bytes)
+            .then(|| Atom::var(symbolica::symbol!(format!("agCse{index}"))))
+    })
+}
+
+fn aliased_atom_byte_size(atom: &AliasedAtom) -> usize {
+    atom.get_root().as_view().get_byte_size()
+        + atom
+            .get_aliases()
+            .iter()
+            .map(|(alias, original)| {
+                alias.as_view().get_byte_size() + original.as_view().get_byte_size()
+            })
+            .sum::<usize>()
+}
+
+fn alias_growth_csv_header() -> &'static str {
+    "graph_id,graph_name,representation,with_numerator,component_count,alias_min_bytes,j,atom_terms,atom_add_ops,atom_mul_ops,atom_ops,atom_bytes,aliased_add_ops,aliased_mul_ops,aliased_ops,aliased_bytes,alias_count,ops_ratio,bytes_ratio"
+}
+
+fn alias_growth_csv_row(
+    graph_id: usize,
+    graph_name: &str,
+    representation: RepresentationMode,
+    with_numerator: bool,
+    component_count: usize,
+    alias_min_bytes: usize,
+    record: &AliasGrowthRecord,
+) -> String {
+    let ops_ratio = ratio_cell(record.atom_ops, record.aliased_ops);
+    let bytes_ratio = ratio_cell(record.atom_bytes, record.aliased_bytes);
+    format!(
+        "{},{},{:?},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+        graph_id,
+        csv_cell(graph_name),
+        representation,
+        with_numerator,
+        component_count,
+        alias_min_bytes,
+        record.j,
+        record.atom_terms,
+        record.atom_add_ops,
+        record.atom_mul_ops,
+        record.atom_ops,
+        record.atom_bytes,
+        record.aliased_add_ops,
+        record.aliased_mul_ops,
+        record.aliased_ops,
+        record.aliased_bytes,
+        record.alias_count,
+        ops_ratio,
+        bytes_ratio,
+    )
+}
+
+fn ratio_cell(numerator: usize, denominator: usize) -> String {
+    if denominator == 0 {
+        String::new()
+    } else {
+        format!("{:.16e}", numerator as f64 / denominator as f64)
+    }
+}
+
+fn csv_cell(value: &str) -> String {
+    if value.contains([',', '"', '\n']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
     }
 }
 
