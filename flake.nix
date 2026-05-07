@@ -347,6 +347,16 @@
           '';
         });
 
+      drawingTypstBundleAssets = ''
+        mkdir -p crates/linnest/typst/src crates/kurvst/typst/src
+        cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
+        cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
+        cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+      '';
+
       gammaloop-cli = craneLib.buildPackage (ciArgs
         // {
           inherit cargoArtifacts;
@@ -356,6 +366,7 @@
           inherit (apiMeta) version;
           cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
+          preBuild = drawingTypstBundleAssets;
         });
 
       clinnetArgs = commonArgs
@@ -372,21 +383,13 @@
       clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
         // {
           pname = "clinnet-deps";
+          preBuild = drawingTypstBundleAssets;
         });
-
-      clinnetBundleTypstAssets = ''
-        cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
-        cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
-        cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
-        cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
-        cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
-        cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
-      '';
 
       clinnet-cli = craneLib.buildPackage (clinnetArgs
         // {
           cargoArtifacts = clinnetCargoArtifacts;
-          preBuild = clinnetBundleTypstAssets;
+          preBuild = drawingTypstBundleAssets;
         });
 
       rscls = pkgs.rustPlatform.buildRustPackage rec {

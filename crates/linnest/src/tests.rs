@@ -308,7 +308,8 @@ struct TestPlacedEdgeSpec {
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct TestPlacementSpec {
-    mode: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     x: Option<TestPlacementCoord>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -527,7 +528,7 @@ fn test_graph_spec_uses_first_class_placements() {
             TestPlacedNodeSpec {
                 name: "a".to_string(),
                 pos: Some(TestPlacementSpec {
-                    mode: "pin",
+                    mode: Some("pin"),
                     x: Some(TestPlacementCoord::Number(1.0)),
                     y: Some(TestPlacementCoord::Number(2.0)),
                     reference: None,
@@ -539,7 +540,7 @@ fn test_graph_spec_uses_first_class_placements() {
             TestPlacedNodeSpec {
                 name: "b".to_string(),
                 pos: Some(TestPlacementSpec {
-                    mode: "pin",
+                    mode: Some("pin"),
                     x: None,
                     y: None,
                     reference: Some(0),
@@ -561,7 +562,7 @@ fn test_graph_spec_uses_first_class_placements() {
                 statement: None,
             }),
             pos: Some(TestPlacementSpec {
-                mode: "pin",
+                mode: Some("pin"),
                 x: Some(TestPlacementCoord::Group(TestPlacementGroup {
                     kind: "group",
                     name: "edge-column",
@@ -601,6 +602,37 @@ fn test_graph_spec_uses_first_class_placements() {
     assert_eq!(
         laid_out_nodes[1].pos,
         Some(crate::TypstPoint { x: 4.0, y: 1.0 })
+    );
+}
+
+#[test]
+fn test_graph_spec_placement_defaults_to_pin() {
+    let spec = TestPlacementGraphSpec {
+        name: "placed-default".to_string(),
+        nodes: vec![TestPlacedNodeSpec {
+            name: "a".to_string(),
+            pos: Some(TestPlacementSpec {
+                mode: None,
+                x: Some(TestPlacementCoord::Number(1.0)),
+                y: Some(TestPlacementCoord::Number(2.0)),
+                reference: None,
+                dx: None,
+                dy: None,
+            }),
+            statements: BTreeMap::new(),
+        }],
+        edges: Vec::new(),
+    };
+
+    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    assert_eq!(nodes[0].pos, Some(crate::TypstPoint { x: 1.0, y: 2.0 }));
+
+    let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
+    let laid_out_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    assert_eq!(
+        laid_out_nodes[0].pos,
+        Some(crate::TypstPoint { x: 1.0, y: 2.0 })
     );
 }
 
@@ -1391,6 +1423,51 @@ fn gammaloop_external_edge_pins_align_by_group_and_side() {
     assert!(left1.x < 0.0, "{left1:?}");
     assert!((right0.y - left0.y).abs() < 1e-9, "{right0:?} {left0:?}");
     assert!((right1.y - left1.y).abs() < 1e-9, "{right1:?} {left1:?}");
+}
+
+#[test]
+fn gammaloop_external_edge_pos_aligns_by_group_and_side() {
+    let figment = test_figment();
+    let mut typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            "layout-algo" = "force"
+            steps = 10
+            epochs = 2
+            ext_l0 [style=invis]
+            ext_l1 [style=invis]
+            ext_r0 [style=invis]
+            ext_r1 [style=invis]
+            a
+            b
+            ext_l0 -> a [id=0 pos="x:@-left!,y:@edgee0!"]
+            ext_l1 -> a [id=1 pos="x:@-left!,y:@edgee1!"]
+            b -> ext_r0 [id=2 pos="x:@+right!,y:@edgee0!"]
+            b -> ext_r1 [id=3 pos="x:@+right!,y:@edgee1!"]
+            a -> b
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    typst_graph.layout();
+
+    let mut edge_positions = BTreeMap::new();
+    for (_, edge_index, edge_data) in typst_graph.iter_edges() {
+        let edge = edge_data.data;
+        edge_positions.insert(edge_index.0, edge.pos);
+    }
+
+    let left0 = edge_positions.get(&0).unwrap();
+    let left1 = edge_positions.get(&1).unwrap();
+    let right0 = edge_positions.get(&2).unwrap();
+    let right1 = edge_positions.get(&3).unwrap();
+
+    assert!(left0.x < 0.0, "{left0:?}");
+    assert!(left1.x < 0.0, "{left1:?}");
+    assert!(right0.x > 0.0, "{right0:?}");
+    assert!(right1.x > 0.0, "{right1:?}");
+    assert!((left0.y - right0.y).abs() < 1e-9, "{left0:?} {right0:?}");
+    assert!((left1.y - right1.y).abs() < 1e-9, "{left1:?} {right1:?}");
 }
 
 #[test]

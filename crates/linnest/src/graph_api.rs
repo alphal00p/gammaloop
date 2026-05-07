@@ -49,8 +49,8 @@ pub struct TypstPoint {
 )]
 #[serde(rename_all = "lowercase")]
 enum PlacementMode {
-    #[default]
     Start,
+    #[default]
     Pin,
 }
 
