@@ -21,7 +21,7 @@ use crate::{
     layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes,
     subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph,
     DotPlacementExpr, PinConstraint, TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode,
-    TypstGraph,
+    TypstGraph, TypstPoint,
 };
 
 fn test_figment() -> Figment {
@@ -53,6 +53,11 @@ fn decode_cbor<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> T {
 
 fn one_statement(key: &str, value: &str) -> BTreeMap<String, String> {
     BTreeMap::from([(key.to_string(), value.to_string())])
+}
+
+fn assert_point_close(left: &TypstPoint, right: &TypstPoint) {
+    assert!((left.x - right.x).abs() < 1e-9, "{left:?} != {right:?}");
+    assert!((left.y - right.y).abs() < 1e-9, "{left:?} != {right:?}");
 }
 
 #[test]
@@ -924,6 +929,195 @@ fn test_single_graph_layout_mutates_graph_bytes() {
         ciborium::de::from_reader(graph_nodes_bytes(&laid_out).unwrap().as_slice()).unwrap();
     assert_eq!(nodes.len(), 2);
     assert!(nodes.iter().all(|node| node.pos.is_some()));
+}
+
+#[test]
+fn test_dot_layout_layers_directed_graph() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "dot".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "c".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "d".to_string(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![
+            TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 2,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 3,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 2,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 3,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+        ],
+    }))
+    .unwrap();
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!(by_name["a"].y < by_name["b"].y);
+    assert_eq!(by_name["b"].y, by_name["c"].y);
+    assert!(by_name["b"].y < by_name["d"].y);
+}
+
+#[test]
+fn test_partial_tree_layout_keeps_non_tree_edges_straight() {
+    let parsed =
+        parse_dot_graphs_bytes(br#"digraph partial { a -> b; b -> c; c -> d; d -> a; a -> c }"#)
+            .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let forests: Vec<Vec<u8>> = decode_cbor(&graph_spanning_forests_bytes(&graph).unwrap());
+    let forest_label: String = decode_cbor(&subgraph_label_bytes(&forests[0]).unwrap());
+    let forest_hedges: Vec<usize> = decode_cbor(&subgraph_hedges_bytes(&forests[0]).unwrap());
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("subgraph".to_string(), forest_label),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let non_tree_edge = edges
+        .iter()
+        .find(|edge| {
+            let source = edge.source.as_ref().unwrap().hedge;
+            let sink = edge.sink.as_ref().unwrap().hedge;
+            !(forest_hedges.contains(&source) && forest_hedges.contains(&sink))
+        })
+        .unwrap();
+    let source = nodes[non_tree_edge.source.as_ref().unwrap().node]
+        .pos
+        .as_ref()
+        .unwrap();
+    let sink = nodes[non_tree_edge.sink.as_ref().unwrap().node]
+        .pos
+        .as_ref()
+        .unwrap();
+    let expected_midpoint = TypstPoint {
+        x: 0.5 * (source.x + sink.x),
+        y: 0.5 * (source.y + sink.y),
+    };
+
+    assert_point_close(non_tree_edge.pos.as_ref().unwrap(), &expected_midpoint);
+}
+
+#[test]
+fn test_partial_iterative_layout_preserves_complement_positions() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph partial {
+            a [pos="0,0"]
+            b [pos="1,0"]
+            c [pos="4,4"]
+            a -> b [pos="0.5,0"]
+            b -> c [pos="4,5"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let selected_label: String = decode_cbor(
+        &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false])).unwrap(),
+    );
+
+    for algo in ["force", "anneal"] {
+        let laid_out = layout_parsed_graph_bytes(
+            &graph,
+            &encode_cbor(&BTreeMap::from([
+                ("layout-algo".to_string(), algo.to_string()),
+                ("subgraph".to_string(), selected_label.clone()),
+                ("label-steps".to_string(), "0".to_string()),
+                ("steps".to_string(), "4".to_string()),
+                ("epochs".to_string(), "2".to_string()),
+            ])),
+        )
+        .unwrap();
+
+        let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+
+        assert_point_close(
+            nodes[2].pos.as_ref().unwrap(),
+            &TypstPoint { x: 4.0, y: 4.0 },
+        );
+        assert_point_close(
+            edges[1].pos.as_ref().unwrap(),
+            &TypstPoint { x: 4.0, y: 5.0 },
+        );
+    }
 }
 
 #[test]
