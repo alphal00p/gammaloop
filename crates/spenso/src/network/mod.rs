@@ -382,7 +382,7 @@ where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
     S::Slot: Send + Sync,
 {
-    if terms.len() < 2 {
+    if terms.is_empty() {
         return None;
     }
 
@@ -421,7 +421,10 @@ where
             terms_on_left,
         )?;
 
-        if terms.len() >= MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS {
+        if terms.len() == 1 {
+            plan.contract_term(terms[0])
+                .map(|term| FastTensorSumContract::ScaledTerms(vec![term]))
+        } else if terms.len() >= MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS {
             let start = profile::enabled().then(std::time::Instant::now);
             let contracted_terms = terms
                 .par_iter()
