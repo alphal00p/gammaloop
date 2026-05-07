@@ -803,6 +803,40 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             return Ok(());
         }
 
+        if left_terms.len() == 1
+            && right_terms.len() == 1
+            && left_terms[0].scalar.is_none()
+            && right_terms[0].scalar.is_none()
+        {
+            if let Some(result) = T::fast_tensor_sum_contract::<CStrat>(
+                &[executor.tensor(left_terms[0].tensor)],
+                executor.tensor(right_terms[0].tensor),
+                true,
+            ) {
+                let leaf = result
+                    .map(|result| Self::fast_tensor_sum_contract_leaf(executor, result))
+                    .map_err(|error| TensorNetworkError::Other(error.into()))?;
+                let mut positions = [left, right];
+                positions.sort_unstable();
+                self.replace_operands(&positions, ProductOperand { leaf, source: None });
+                return Ok(());
+            }
+
+            if let Some(result) = T::fast_tensor_sum_contract::<CStrat>(
+                &[executor.tensor(right_terms[0].tensor)],
+                executor.tensor(left_terms[0].tensor),
+                false,
+            ) {
+                let leaf = result
+                    .map(|result| Self::fast_tensor_sum_contract_leaf(executor, result))
+                    .map_err(|error| TensorNetworkError::Other(error.into()))?;
+                let mut positions = [left, right];
+                positions.sort_unstable();
+                self.replace_operands(&positions, ProductOperand { leaf, source: None });
+                return Ok(());
+            }
+        }
+
         let mut contracted_terms = Vec::with_capacity(left_terms.len() * right_terms.len());
         for left_tensor in left_terms {
             for right_tensor in &right_terms {
