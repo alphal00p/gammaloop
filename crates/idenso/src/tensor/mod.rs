@@ -161,6 +161,8 @@ impl<Aind: AbsInd> Ref for SymbolicTensor<Aind> {
     }
 }
 
+impl<Aind: AbsInd> spenso::network::FastTensorSum for SymbolicTensor<Aind> {}
+
 impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<Aind> {
     fn new_scalar(scalar: Self::Scalar) -> Self {
         SymbolicTensor {
