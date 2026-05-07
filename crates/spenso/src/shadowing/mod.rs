@@ -1,3 +1,5 @@
+use std::env;
+
 use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
@@ -72,6 +74,10 @@ pub trait Concretize<T> {
     fn concretize(self, perm: Option<Permutation>) -> T;
 }
 
+fn sparse_shadow_tensors() -> bool {
+    env::var_os("SPENSO_SPARSE_SHADOW_TENSORS").is_some()
+}
+
 impl<S: Shadowable> Concretize<DenseTensor<Atom, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
@@ -94,7 +100,12 @@ where
     fn concretize(self, perm: Option<Permutation>) -> DataTensor<Atom, S::Structure> {
         // self.flat_s
         // todo!()
-        <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize(self, perm).into()
+        let dense = <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize(self, perm);
+        if sparse_shadow_tensors() {
+            dense.to_sparse().into()
+        } else {
+            dense.into()
+        }
     }
 }
 
