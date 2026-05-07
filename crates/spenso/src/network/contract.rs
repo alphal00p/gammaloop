@@ -1,6 +1,8 @@
 use std::{
+    env,
     fmt::{Debug, Display},
     ops::{AddAssign, MulAssign},
+    sync::OnceLock,
 };
 
 use eyre::eyre;
@@ -27,6 +29,16 @@ use super::{
 };
 
 const MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS: usize = 96;
+
+fn max_lazy_tensor_sum_distributed_terms() -> usize {
+    static VALUE: OnceLock<usize> = OnceLock::new();
+    *VALUE.get_or_init(|| {
+        env::var("SPENSO_NETWORK_MAX_LAZY_DISTRIBUTED_TERMS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS)
+    })
+}
 
 pub struct SmallestDegree<CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
@@ -751,7 +763,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             .collect();
         let distributed_terms = left_terms.len() * right_terms.len();
 
-        if distributed_terms > MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS
+        let max_distributed_terms = max_lazy_tensor_sum_distributed_terms();
+        if distributed_terms > max_distributed_terms
             && (left_terms.len() > 1 || right_terms.len() > 1)
         {
             if profile::enabled() {
@@ -760,7 +773,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     left_terms.len(),
                     right_terms.len(),
                     distributed_terms,
-                    MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS,
+                    max_distributed_terms,
                 );
             }
             if left_terms.len() > 1 {
