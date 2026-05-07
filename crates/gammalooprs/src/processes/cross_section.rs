@@ -15,14 +15,15 @@ use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::algebra::algebraic_traits::IsZero;
+use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
+use statrs::function;
 use tracing::info;
 use vakint::Vakint;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
+        esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{CFFExpression, OrientationID},
     },
     debug_tags, define_index,
@@ -44,7 +45,7 @@ use crate::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
     },
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{GS, hyperdual_utils::simple_n_deriv_shape},
+    utils::{GS, W_, hyperdual_utils::simple_n_deriv_shape},
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
 };
 use eyre::{Context, eyre};
@@ -58,7 +59,9 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     evaluate::FunctionMap,
-    function, parse, symbol,
+    function,
+    id::Replacement,
+    parse, symbol,
 };
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
@@ -125,8 +128,8 @@ impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermData {
-    pub left_thresholds: TiVec<LeftThresholdId, EsurfaceID>,
-    pub right_thresholds: TiVec<RightThresholdId, EsurfaceID>,
+    pub left_thresholds: TiVec<LeftThresholdId, RaisedEsurfaceGroup>,
+    pub right_thresholds: TiVec<RightThresholdId, RaisedEsurfaceGroup>,
     pub left_atoms: TiVec<LeftThresholdId, ParametricIntegrands>,
     pub right_atoms: TiVec<RightThresholdId, ParametricIntegrands>,
     pub iterated: IteratedCtCollection<ParametricIntegrands>,
@@ -991,12 +994,17 @@ impl CrossSectionGraph {
         tsrat_pow * hfunction / factors_of_pi
     }
 
-    fn th_prefactor_helper(
+    fn single_th_prefactor_helper_atom(
         &self,
+        order: u8,
         subspace_loop_count: usize,
         is_on_right: bool,
         include_integrated: bool,
     ) -> Atom {
+        let loop_3 = subspace_loop_count as i64 * 3;
+
+        let i = Atom::i();
+
         let radius = if is_on_right {
             Atom::var(GS.radius_right)
         } else {
@@ -1008,11 +1016,102 @@ impl CrossSectionGraph {
         } else {
             Atom::var(GS.radius_star_left)
         };
-
-        let grad_eta = if is_on_right {
-            Atom::var(GS.deta_right_th)
+        let uv_damp_plus = if is_on_right {
+            Atom::var(GS.uv_damp_plus_right)
         } else {
-            Atom::var(GS.deta_left_th)
+            Atom::var(GS.uv_damp_plus_left)
+        };
+        let uv_damp_minus = if is_on_right {
+            Atom::var(GS.uv_damp_minus_right)
+        } else {
+            Atom::var(GS.uv_damp_minus_left)
+        };
+        let hfunction = if is_on_right {
+            Atom::var(GS.hfunction_right_th)
+        } else {
+            Atom::var(GS.hfunction_left_th)
+        };
+
+        let laurent_coeff_indices = (1..=order).map(|i| -(i as i8));
+
+        let mut laurent_coeffs = laurent_coeff_indices.map(|laurent_coeff_index| {
+            build_derivative_structure_atom(order, laurent_coeff_index)
+                .replace(GS.rescale_star)
+                .with(radius_star.clone())
+        });
+
+        let delta_r_plus = &radius - &radius_star;
+        let delta_r_minus = -&radius - &radius_star;
+
+        let jacobian_ratio = (Atom::one() / &radius).pow(loop_3 - 1);
+
+        let local_prefactor =
+            &jacobian_ratio * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
+
+        let integrated_prefactor = if include_integrated {
+            if is_on_right {
+                -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction
+            } else {
+                i * Atom::var(GS.pi) * &jacobian_ratio * hfunction
+            }
+        } else {
+            Atom::zero()
+        };
+
+        let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
+
+        for pow in 2..=order {
+            result += laurent_coeffs.next().unwrap()
+                * &jacobian_ratio
+                * (Atom::one() / delta_r_plus.pow(pow as i64)
+                    + Atom::one() / delta_r_minus.pow(pow as i64));
+        }
+
+        debug!(
+            "Threshold counterterm helper atom for order {} and loop number {}: {}",
+            order, subspace_loop_count, result
+        );
+
+        result
+    }
+
+    fn iterated_th_prefactor_helper_atom(
+        &self,
+        left_order: u8,
+        right_order: u8,
+        left_subspace_loop_count: usize,
+        right_subspace_loop_count: usize,
+        include_integrated: bool,
+    ) -> Atom {
+        let left_prefactor = self.single_th_prefactor_helper_atom(
+            left_order,
+            left_subspace_loop_count,
+            false,
+            include_integrated,
+        );
+        let right_prefactor = self.single_th_prefactor_helper_atom(
+            right_order,
+            right_subspace_loop_count,
+            true,
+            include_integrated,
+        );
+
+        let mut product = left_prefactor * right_prefactor;
+
+        product = product.replace_multiple(&Self::fuse_left_right_replacement());
+        product
+    }
+
+    fn single_th_prefactor_helper_params(
+        &self,
+        order: u8,
+        subspace_loop_count: usize,
+        is_on_right: bool,
+    ) -> Vec<Atom> {
+        let radius_star = if is_on_right {
+            Atom::var(GS.radius_star_right)
+        } else {
+            Atom::var(GS.radius_star_left)
         };
 
         let uv_damp_plus = if is_on_right {
@@ -1020,42 +1119,159 @@ impl CrossSectionGraph {
         } else {
             Atom::var(GS.uv_damp_plus_left)
         };
-
         let uv_damp_minus = if is_on_right {
             Atom::var(GS.uv_damp_minus_right)
         } else {
             Atom::var(GS.uv_damp_minus_left)
         };
-
-        let h_function = if is_on_right {
+        let hfunction = if is_on_right {
             Atom::var(GS.hfunction_right_th)
         } else {
             Atom::var(GS.hfunction_left_th)
         };
 
-        let i = if is_on_right { -Atom::i() } else { Atom::i() };
-        let pi = Atom::var(GS.pi);
-
-        let jacobian_ratio = (&radius_star / &radius).pow(subspace_loop_count as i64 * 3 - 1);
-
-        let local_prefactor = (&uv_damp_plus / (&radius - &radius_star)
-            + &uv_damp_minus / (-&radius - &radius_star))
-            / &grad_eta
-            * &jacobian_ratio;
-
-        let integrated_prefactor = if include_integrated {
-            &h_function * &i * &pi * &jacobian_ratio / &grad_eta
+        let radius = if is_on_right {
+            Atom::var(GS.radius_right)
         } else {
-            Atom::new()
+            Atom::var(GS.radius_left)
         };
 
-        debug!(
-            "th prefactor local: {}, integrated: {}",
-            local_prefactor, integrated_prefactor
-        );
+        let mut params = params_for_derivative_order(order)
+            .into_iter()
+            .map(|param| param.replace(GS.rescale_star).with(radius_star.clone()))
+            .collect_vec();
 
-        local_prefactor + integrated_prefactor
+        params.push(radius);
+        params.push(radius_star);
+        params.push(uv_damp_plus);
+        params.push(uv_damp_minus);
+        params.push(hfunction);
+        params
     }
+
+    fn fuse_left_right_replacement() -> Vec<Replacement> {
+        let f = symbol!("f");
+
+        vec![
+            Replacement::new(
+                (function!(f, GS.radius_star_left) * function!(f, GS.radius_star_right))
+                    .to_pattern(),
+                function!(f, GS.radius_star_left, GS.radius_star_right),
+            ),
+            Replacement::new(
+                (function!(f, GS.radius_star_left)
+                    * function!(
+                        symbolica::atom::Symbol::DERIVATIVE,
+                        W_.x_,
+                        function!(f, GS.radius_star_right)
+                    ))
+                .to_pattern(),
+                function!(
+                    symbolica::atom::Symbol::DERIVATIVE,
+                    0,
+                    W_.x_,
+                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                ),
+            ),
+            Replacement::new(
+                (function!(
+                    symbolica::atom::Symbol::DERIVATIVE,
+                    W_.x_,
+                    function!(f, GS.radius_star_left)
+                ) * function!(f, GS.radius_star_right))
+                .to_pattern(),
+                function!(
+                    symbolica::atom::Symbol::DERIVATIVE,
+                    W_.x_,
+                    0,
+                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                ),
+            ),
+            Replacement::new(
+                (function!(
+                    symbolica::atom::Symbol::DERIVATIVE,
+                    W_.x_,
+                    function!(f, GS.radius_star_left)
+                ) * function!(
+                    symbolica::atom::Symbol::DERIVATIVE,
+                    W_.y_,
+                    function!(f, GS.radius_star_right)
+                ))
+                .to_pattern(),
+                function!(
+                    symbolica::atom::Symbol::DERIVATIVE,
+                    W_.x_,
+                    W_.y_,
+                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                ),
+            ),
+        ]
+    }
+    //fn th_prefactor_helper(
+    //    &self,
+    //    subspace_loop_count: usize,
+    //    is_on_right: bool,
+    //    include_integrated: bool,
+    //) -> Atom {
+    //    let radius = if is_on_right {
+    //        Atom::var(GS.radius_right)
+    //    } else {
+    //        Atom::var(GS.radius_left)
+    //    };
+
+    //    let radius_star = if is_on_right {
+    //        Atom::var(GS.radius_star_right)
+    //    } else {
+    //        Atom::var(GS.radius_star_left)
+    //    };
+
+    //    let grad_eta = if is_on_right {
+    //        Atom::var(GS.deta_right_th)
+    //    } else {
+    //        Atom::var(GS.deta_left_th)
+    //    };
+
+    //    let uv_damp_plus = if is_on_right {
+    //        Atom::var(GS.uv_damp_plus_right)
+    //    } else {
+    //        Atom::var(GS.uv_damp_plus_left)
+    //    };
+
+    //    let uv_damp_minus = if is_on_right {
+    //        Atom::var(GS.uv_damp_minus_right)
+    //    } else {
+    //        Atom::var(GS.uv_damp_minus_left)
+    //    };
+
+    //    let h_function = if is_on_right {
+    //        Atom::var(GS.hfunction_right_th)
+    //    } else {
+    //        Atom::var(GS.hfunction_left_th)
+    //    };
+
+    //    let i = if is_on_right { -Atom::i() } else { Atom::i() };
+    //    let pi = Atom::var(GS.pi);
+
+    //    let jacobian_ratio = (&radius_star / &radius).pow(subspace_loop_count as i64 * 3 - 1);
+
+    //    let local_prefactor = (&uv_damp_plus / (&radius - &radius_star)
+    //        + &uv_damp_minus / (-&radius - &radius_star))
+    //        / &grad_eta
+    //        * &jacobian_ratio;
+
+    //    let integrated_prefactor = if include_integrated {
+    //        &h_function * &i * &pi * &jacobian_ratio / &grad_eta
+    //    } else {
+    //        Atom::new()
+    //    };
+
+    //    debug!(
+    //        "th prefactor local: {}, integrated: {}",
+    //        local_prefactor, integrated_prefactor
+    //    );
+
+    //    local_prefactor + integrated_prefactor
+    //}
 
     fn build_lmbs(&mut self) -> Result<()> {
         let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
@@ -1314,34 +1530,71 @@ impl CrossSectionGraph {
             }
         }
 
+        let threshold_raised_data = self.graph.determine_raised_esurfaces_from_expression(
+            self.derived_data
+                .global_cff_expression
+                .as_ref()
+                .expect("global_cff_expression should have been created"),
+        );
+        let mut raised_threshold_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
+            ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
+
+        for (raised_threshold_id, raised_group) in
+            threshold_raised_data.raised_groups.iter_enumerated()
+        {
+            for &esurface_id in &raised_group.esurface_ids {
+                raised_threshold_ids[esurface_id] = Some(raised_threshold_id);
+            }
+        }
+
+        let raised_threshold_ids: TiVec<EsurfaceID, RaisedEsurfaceId> = raised_threshold_ids
+            .into_iter()
+            .map(|raised_threshold_id| {
+                raised_threshold_id
+                    .expect("every esurface should belong to exactly one raised threshold group")
+            })
+            .collect();
+
+        let collect_raised_threshold_groups = |threshold_ids: Vec<EsurfaceID>| {
+            let mut groups = Vec::new();
+            for esurface_id in threshold_ids.into_iter().sorted().dedup() {
+                let raised_threshold_id = raised_threshold_ids[esurface_id];
+                let raised_group = threshold_raised_data.raised_groups[raised_threshold_id].clone();
+                if !groups.contains(&raised_group) {
+                    groups.push(raised_group);
+                }
+            }
+            groups
+        };
+
         let mut left_raised_cut_threshold_data: TiVec<
             RaisedCutId,
-            TiVec<LeftThresholdId, EsurfaceID>,
+            TiVec<LeftThresholdId, RaisedEsurfaceGroup>,
         > = TiVec::new();
 
         let mut right_raised_cut_threshold_data: TiVec<
             RaisedCutId,
-            TiVec<RightThresholdId, EsurfaceID>,
+            TiVec<RightThresholdId, RaisedEsurfaceGroup>,
         > = TiVec::new();
 
         for raised_cut_group in self.derived_data.raised_data.raised_cut_groups.iter() {
-            let left_thresholds: Vec<EsurfaceID> = raised_cut_group
-                .cuts
-                .iter()
-                .flat_map(|cut_id| left_cut_threshold_data[*cut_id].clone())
-                .sorted()
-                .dedup()
-                .collect();
+            let left_thresholds = collect_raised_threshold_groups(
+                raised_cut_group
+                    .cuts
+                    .iter()
+                    .flat_map(|cut_id| left_cut_threshold_data[*cut_id].iter().copied())
+                    .collect(),
+            );
 
-            let mut right_thresholds: Vec<EsurfaceID> = raised_cut_group
-                .cuts
-                .iter()
-                .flat_map(|cut_id| right_cut_threshold_data[*cut_id].clone())
-                .sorted()
-                .dedup()
-                .collect();
+            let mut right_thresholds = collect_raised_threshold_groups(
+                raised_cut_group
+                    .cuts
+                    .iter()
+                    .flat_map(|cut_id| right_cut_threshold_data[*cut_id].iter().copied())
+                    .collect(),
+            );
 
-            right_thresholds.retain(|esurface_id| !left_thresholds.contains(esurface_id));
+            right_thresholds.retain(|raised_group| !left_thresholds.contains(raised_group));
 
             left_raised_cut_threshold_data.push(left_thresholds.into());
             right_raised_cut_threshold_data.push(right_thresholds.into());
@@ -1365,19 +1618,23 @@ impl CrossSectionGraph {
                 .reduce(|a, b| a.union(&b))
                 .unwrap_or(self.graph.empty_subgraph());
 
-            for esurface_id in left_thresholds {
-                let raised_esurface_group = RaisedEsurfaceGroup {
-                    esurface_ids: vec![*esurface_id],
-                    max_occurence: 1,
+            let add_threshold_group_to_union =
+                |base: SuBitGraph, raised_group: &RaisedEsurfaceGroup| {
+                    let representative_esurface =
+                        &self.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]];
+
+                    representative_esurface
+                        .energies
+                        .iter()
+                        .map(|edge_id| self.graph.get_edge_subgraph(*edge_id))
+                        .fold(base, |acc, subgraph| acc.union(&subgraph))
                 };
 
-                let esurface_cut_union = self.graph.surface_cache.esurface_cache[*esurface_id]
-                    .energies
-                    .iter()
-                    .map(|edge_id| self.graph.get_edge_subgraph(*edge_id))
-                    .fold(cutcosky_cut_untion.clone(), |acc, subgraph| {
-                        acc.union(&subgraph)
-                    });
+            for raised_esurface_group in left_thresholds {
+                let esurface_cut_union = add_threshold_group_to_union(
+                    cutcosky_cut_untion.clone(),
+                    raised_esurface_group,
+                );
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
@@ -1389,19 +1646,11 @@ impl CrossSectionGraph {
                 });
             }
 
-            for esurface_id in right_thresholds {
-                let raised_esurface_group = RaisedEsurfaceGroup {
-                    esurface_ids: vec![*esurface_id],
-                    max_occurence: 1,
-                };
-
-                let esurface_cut_union = self.graph.surface_cache.esurface_cache[*esurface_id]
-                    .energies
-                    .iter()
-                    .map(|edge_id| self.graph.get_edge_subgraph(*edge_id))
-                    .fold(cutcosky_cut_untion.clone(), |acc, subgraph| {
-                        acc.union(&subgraph)
-                    });
+            for raised_esurface_group in right_thresholds {
+                let esurface_cut_union = add_threshold_group_to_union(
+                    cutcosky_cut_untion.clone(),
+                    raised_esurface_group,
+                );
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
@@ -1413,37 +1662,17 @@ impl CrossSectionGraph {
                 });
             }
 
-            for (left_esurface_id, right_esurface_id) in left_thresholds
+            for (left_raised_esurface_group, right_raised_esurface_group) in left_thresholds
                 .iter()
                 .cartesian_product(right_thresholds.iter())
             {
-                let left_raised_esurface_group = RaisedEsurfaceGroup {
-                    esurface_ids: vec![*left_esurface_id],
-                    max_occurence: 1,
-                };
-
-                let right_raised_esurface_group = RaisedEsurfaceGroup {
-                    esurface_ids: vec![*right_esurface_id],
-                    max_occurence: 1,
-                };
-
-                let esurface_cut_union = self.graph.surface_cache.esurface_cache[*left_esurface_id]
-                    .energies
-                    .iter()
-                    .map(|edge_id| self.graph.get_edge_subgraph(*edge_id))
-                    .fold(cutcosky_cut_untion.clone(), |acc, subgraph| {
-                        acc.union(&subgraph)
-                    })
-                    .union(
-                        &self.graph.surface_cache.esurface_cache[*right_esurface_id]
-                            .energies
-                            .iter()
-                            .map(|edge_id| self.graph.get_edge_subgraph(*edge_id))
-                            .fold(
-                                self.graph.empty_subgraph::<SuBitGraph>(),
-                                |acc, subgraph| acc.union(&subgraph),
-                            ),
-                    );
+                let esurface_cut_union = add_threshold_group_to_union(
+                    add_threshold_group_to_union(
+                        cutcosky_cut_untion.clone(),
+                        left_raised_esurface_group,
+                    ),
+                    right_raised_esurface_group,
+                );
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
@@ -1495,19 +1724,11 @@ impl CrossSectionGraph {
         {
             let (left_subspace, right_subspace) = &self.derived_data.subspace_data[raised_cut_id];
 
-            let th_prefactor_left = self.th_prefactor_helper(
-                left_subspace.loopcount(),
-                false,
-                !settings.threshold_subtraction.disable_integrated_ct,
-            );
+            let left_rstar_pow =
+                Atom::var(GS.radius_star_left).pow(left_subspace.loopcount() as i32 * 3 - 1);
 
-            let th_prefactor_right = self.th_prefactor_helper(
-                right_subspace.loopcount(),
-                true,
-                !settings.threshold_subtraction.disable_integrated_ct,
-            );
-
-            let iterated_prefactor = &th_prefactor_left * &th_prefactor_right;
+            let right_rstar_pow =
+                Atom::var(GS.radius_star_right).pow(right_subspace.loopcount() as i32 * 3 - 1);
 
             let mut left_atoms = TiVec::<LeftThresholdId, _>::new();
             let mut right_atoms = TiVec::<RightThresholdId, _>::new();
@@ -1518,7 +1739,7 @@ impl CrossSectionGraph {
                     threshold_counterterms
                         .next()
                         .unwrap()
-                        .map(|x| x * &th_prefactor_left * &lu_prefactor),
+                        .map(|x| x * &lu_prefactor * &left_rstar_pow),
                 );
             }
 
@@ -1527,7 +1748,7 @@ impl CrossSectionGraph {
                     threshold_counterterms
                         .next()
                         .unwrap()
-                        .map(|x| x * &th_prefactor_right * &lu_prefactor),
+                        .map(|x| x * &lu_prefactor * &right_rstar_pow),
                 );
             }
 
@@ -1538,7 +1759,7 @@ impl CrossSectionGraph {
                     threshold_counterterms
                         .next()
                         .unwrap()
-                        .map(|x| x * &iterated_prefactor * &lu_prefactor),
+                        .map(|x| x * &lu_prefactor * &left_rstar_pow * &right_rstar_pow),
                 );
             }
 
@@ -1872,7 +2093,7 @@ pub(crate) fn build_derivative_structure(
     .into_eager_only()
 }
 
-pub(crate) fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
+pub(crate) fn params_for_derivative_order(singularity_order: u8) -> Vec<Atom> {
     let f = symbol!("f");
     let eta = symbol!("η");
 
@@ -1882,7 +2103,7 @@ pub(crate) fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     let mut f_parameters = vec![f_0.clone()];
     let mut eta_params = vec![eta_1.clone()];
 
-    for _ in 2..=derivative_order {
+    for _ in 2..=singularity_order {
         let next_f = f_parameters.last().unwrap().derivative(GS.rescale_star);
         f_parameters.push(next_f);
 
@@ -1893,6 +2114,60 @@ pub(crate) fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     let mut result = vec![];
     result.extend(f_parameters);
     result.extend(eta_params);
+    result
+}
+
+pub(crate) fn params_for_iterated_threshold_ct(
+    left_singularit_order: u8,
+    right_singularity_order: u8,
+) -> Vec<Atom> {
+    let f = symbol!("f");
+    let eta_left = symbol!("η_left");
+    let eta_right = symbol!("η_right");
+
+    let f_left = function!(f, GS.radius_star_left);
+    let f_right = function!(f, GS.radius_star_right);
+
+    let eta_left_d1 = function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left);
+    let eta_right_d1 = function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right);
+
+    let mut f_left = vec![f_left.clone()];
+    let mut f_right = vec![f_right.clone()];
+    let mut eta_left_params = vec![eta_left_d1.clone()];
+    let mut eta_right_params = vec![eta_right_d1.clone()];
+
+    for _ in 2..=left_singularit_order {
+        let next_eta_left = eta_left_params
+            .last()
+            .unwrap()
+            .derivative(GS.radius_star_left);
+
+        let next_f_left = f_left.last().unwrap().derivative(GS.radius_star_left);
+
+        eta_left_params.push(next_eta_left);
+        f_left.push(next_f_left);
+    }
+
+    for _ in 2..=right_singularity_order {
+        let next_eta_right = eta_right_params
+            .last()
+            .unwrap()
+            .derivative(GS.radius_star_right);
+        eta_right_params.push(next_eta_right);
+    }
+
+    let replacements = CrossSectionGraph::fuse_left_right_replacement();
+
+    let mut f_product = f_left
+        .iter()
+        .cartesian_product(f_right)
+        .map(|(left, right)| (left * right).replace_multiple(&replacements))
+        .collect_vec();
+
+    let mut result = vec![];
+    result.extend(f_product);
+    result.extend(eta_left_params);
+    result.extend(eta_right_params);
     result
 }
 

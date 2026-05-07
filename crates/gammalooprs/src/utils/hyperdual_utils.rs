@@ -246,3 +246,34 @@ pub(crate) fn extract_t_derivatives<T: FloatLike>(dual: HyperDual<F<T>>) -> Vec<
 
     result
 }
+
+pub(crate) fn dualize_dual_t_to_dual_r_t<T: FloatLike>(
+    t_dual: HyperDual<F<T>>,
+    target_shape: HyperDual<F<T>>,
+    variable: usize,
+) -> HyperDual<F<T>> {
+    let mut new_dual = target_shape.variable(variable, t_dual.values[0].clone());
+    let n_variables_of_target_shape = target_shape.get_shape()[0].len();
+
+    for (i, value) in t_dual.values.iter().enumerate().skip(1) {
+        let dual_shape_to_find = {
+            let mut shape = vec![0; n_variables_of_target_shape];
+            shape[0] = i;
+            shape
+        };
+
+        let index_of_derivative = target_shape
+            .get_shape() 
+            .iter()
+            .position(|shape| shape == &dual_shape_to_find)
+            .expect(&format!(
+                "Could not find derivative shape: {:?} in {:?}",
+                dual_shape_to_find,
+                target_shape.get_shape()
+            ));
+
+        new_dual.values[index_of_derivative] = value.clone();
+    }
+
+    new_dual
+}

@@ -586,17 +586,23 @@ impl CrossSectionGraphTerm {
             let left_active: TiVec<_, bool> = counterterm_data
                 .left_thresholds
                 .iter()
-                .map(|esurface_id| {
+                .map(|raised_group| {
                     active_cuts[raised_cut_id]
-                        && selected_generation_esurfaces.contains(esurface_id)
+                        && raised_group
+                            .esurface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
                 })
                 .collect();
             let right_active: TiVec<_, bool> = counterterm_data
                 .right_thresholds
                 .iter()
-                .map(|esurface_id| {
+                .map(|raised_group| {
                     active_cuts[raised_cut_id]
-                        && selected_generation_esurfaces.contains(esurface_id)
+                        && raised_group
+                            .esurface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
                 })
                 .collect();
             let mut iterated_active = counterterm_data.iterated.map_ref(|_| false);
@@ -645,7 +651,7 @@ impl CrossSectionGraphTerm {
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
-                let dual_shape = shape_from_cut_cff_index( cut_cff_index);
+                let dual_shape = shape_from_cut_cff_index(cut_cff_index);
 
                 let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
                     slice::from_ref(integrand_for_subset),
@@ -701,15 +707,17 @@ impl CrossSectionGraphTerm {
                 ct_data
                     .left_thresholds
                     .iter()
-                    .map(|esurface_id| {
-                        graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]]
+                            .clone()
                     })
                     .collect(),
                 ct_data
                     .right_thresholds
                     .iter()
-                    .map(|esurface_id| {
-                        graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]]
+                            .clone()
                     })
                     .collect(),
             ));
