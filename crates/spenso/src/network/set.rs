@@ -11,6 +11,7 @@ use crate::{
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
+    ops::{AddAssign, MulAssign},
 };
 
 #[cfg(feature = "shadowing")]
@@ -171,7 +172,12 @@ impl<
     where
         T: Clone + ScalarTensor + 'a,
         T::Scalar: Into<S>,
-        S: One + Zero + Clone,
+        S: One
+            + Zero
+            + Clone
+            + super::Ref
+            + for<'b> AddAssign<<S as super::Ref>::Ref<'b>>
+            + for<'b> MulAssign<<S as super::Ref>::Ref<'b>>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
         self.networks.iter().map(|n| n.result_scalar()).collect()

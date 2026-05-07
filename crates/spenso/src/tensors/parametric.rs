@@ -1,9 +1,11 @@
 extern crate derive_more;
 
 use std::{
+    env,
     fmt::{Debug, Display},
     io::Cursor,
     path::Path,
+    sync::OnceLock,
 };
 
 use crate::structure::{IndexLess, SlotIndex, slot::IsAbstractSlot};
@@ -58,7 +60,7 @@ use crate::{
 use bincode::{Decode, Encode};
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, KeyLookup, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
     coefficient::Coefficient,
     domains::{
         InternalOrdering,
@@ -75,6 +77,47 @@ use symbolica::{
     symbol,
     utils::BorrowedOrOwned,
 };
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_entries_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| env::var_os("SPENSO_NETWORK_HORNER_CONTRACT_ENTRIES").is_some())
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_atom(atom: Atom) -> Atom {
+    if atom.as_view().get_byte_size() < 4096 && !matches!(atom.as_view(), AtomView::Add(_)) {
+        return atom;
+    }
+
+    atom.collect_horner::<Indeterminate>(None)
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_tensor<I>(tensor: DataTensor<Atom, I>) -> DataTensor<Atom, I>
+where
+    I: TensorStructure,
+{
+    if !horner_contract_entries_enabled() {
+        return tensor;
+    }
+
+    match tensor {
+        DataTensor::Dense(mut dense) => {
+            dense.data = dense.data.into_iter().map(horner_contract_atom).collect();
+            DataTensor::Dense(dense)
+        }
+        DataTensor::Sparse(mut sparse) => {
+            sparse.zero = horner_contract_atom(sparse.zero);
+            sparse.elements = sparse
+                .elements
+                .into_iter()
+                .map(|(index, atom)| (index, horner_contract_atom(atom)))
+                .collect();
+            DataTensor::Sparse(sparse)
+        }
+    }
+}
 
 use std::hash::Hash;
 
@@ -1982,6 +2025,7 @@ where
         } else {
             self.tensor.contract(&other.tensor)?
         };
+        let s = horner_contract_tensor(s);
 
         match (self.param_type, other.param_type) {
             (ParamOrComposite::Param, ParamOrComposite::Param) => Ok(ParamTensor::param(s)),

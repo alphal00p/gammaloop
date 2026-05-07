@@ -30,7 +30,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, Indeterminate, Symbol},
+    atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
     parser::ParseSettings as SymbolicaParseSettings,
     wrap_input,
 };
@@ -322,7 +322,30 @@ fn summarize_expr_subtree(net: &ParsingNet, root: NodeIndex) -> BoundarySideSumm
                             summary.tensor_flat_entries += tensor.iter_flat().count();
                         }
                     }
-                    NetworkLeaf::LibraryKey(key) => {
+                    NetworkLeaf::TensorTerm(term) => {
+                        summary.tensor_leaves += 1;
+                        let tensor = &net.store.tensors[term.tensor];
+                        summary.tensor_logical_entries += tensor.structure().size().unwrap_or(0);
+                        summary.tensor_flat_entries += tensor.iter_flat().count();
+                        if let Some(scalar) = term.scalar {
+                            summary.scalar_bytes +=
+                                net.store.scalar[scalar].as_view().get_byte_size();
+                        }
+                    }
+                    NetworkLeaf::TensorTermSum(terms) => {
+                        summary.tensor_leaves += terms.len();
+                        for term in terms {
+                            let tensor = &net.store.tensors[term.tensor];
+                            summary.tensor_logical_entries +=
+                                tensor.structure().size().unwrap_or(0);
+                            summary.tensor_flat_entries += tensor.iter_flat().count();
+                            if let Some(scalar) = term.scalar {
+                                summary.scalar_bytes +=
+                                    net.store.scalar[scalar].as_view().get_byte_size();
+                            }
+                        }
+                    }
+                    NetworkLeaf::LibraryKey { key, .. } => {
                         summary.tensor_leaves += 1;
                         summary.tensor_logical_entries += key.structure.size().unwrap_or(0);
                     }
@@ -523,7 +546,13 @@ fn apply_graph_boundary_disconnect(
             NetworkLeaf::TensorSum(indices) => {
                 changed_tensors.extend(indices.iter().copied());
             }
-            NetworkLeaf::LibraryKey(_) | NetworkLeaf::Scalar(_) => {}
+            NetworkLeaf::TensorTerm(term) => {
+                changed_tensors.insert(term.tensor);
+            }
+            NetworkLeaf::TensorTermSum(terms) => {
+                changed_tensors.extend(terms.iter().map(|term| term.tensor));
+            }
+            NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {}
         }
     }
 
@@ -786,6 +815,108 @@ fn parse_inline_expression(input: &str) -> Atom {
         .expect("inline diagnostic expression should parse")
 }
 
+fn collect_adds_with_arity(view: AtomView<'_>, arity: usize, out: &mut Vec<Atom>) {
+    match view {
+        AtomView::Add(add) => {
+            if add.get_nargs() == arity {
+                out.push(add.as_view().to_owned());
+            }
+            for term in add.iter() {
+                collect_adds_with_arity(term, arity, out);
+            }
+        }
+        AtomView::Mul(mul) => {
+            for factor in mul.iter() {
+                collect_adds_with_arity(factor, arity, out);
+            }
+        }
+        AtomView::Fun(fun) => {
+            for arg in fun.iter() {
+                collect_adds_with_arity(arg, arity, out);
+            }
+        }
+        AtomView::Pow(pow) => {
+            let (base, exp) = pow.get_base_exp();
+            collect_adds_with_arity(base, arity, out);
+            collect_adds_with_arity(exp, arity, out);
+        }
+        AtomView::Num(_) | AtomView::Var(_) => {}
+    }
+}
+
+fn add_terms(expr: &Atom) -> Vec<Atom> {
+    match expr.as_view() {
+        AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
+        _ => panic!("expected an add expression"),
+    }
+}
+
+fn execute_actual_net_min_result_rank_parallel_summary(
+    label: &str,
+    mut net: ParsingNet,
+) -> std::time::Duration {
+    let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    net.execute_parallel::<MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
+        .unwrap_or_else(|error| {
+            panic!("{label} parallel min-result-rank actual execution failed: {error}")
+        });
+    let elapsed = start.elapsed();
+
+    if let Ok(result) = net.result_scalar() {
+        let result = match result {
+            ExecutionResult::One => Atom::num(1),
+            ExecutionResult::Zero => Atom::Zero,
+            ExecutionResult::Val(value) => value.into_owned(),
+        };
+        eprintln!(
+            "{label} summary kind=scalar execute={elapsed:.3?} result_terms={} result_bytes={}",
+            result.nterms(),
+            result.as_view().get_byte_size()
+        );
+        return elapsed;
+    }
+
+    let result = net
+        .result_tensor(&*lib)
+        .unwrap_or_else(|error| panic!("{label} tensor result failed after execution: {error}"));
+    let tensor = match result {
+        ExecutionResult::Val(value) => value.into_owned(),
+        ExecutionResult::One => {
+            eprintln!("{label} summary kind=tensor_one execute={elapsed:.3?}");
+            return elapsed;
+        }
+        ExecutionResult::Zero => {
+            eprintln!("{label} summary kind=tensor_zero execute={elapsed:.3?}");
+            return elapsed;
+        }
+    };
+
+    eprintln!(
+        "{label} summary kind=tensor execute={elapsed:.3?} order={} logical_entries={} flat_entries={}",
+        tensor.structure().order(),
+        tensor.structure().size().unwrap_or(0),
+        tensor.iter_flat().count()
+    );
+    elapsed
+}
+
+fn parse_actual_net_quiet(label: &str, expr: &Atom) -> ParsingNet {
+    let lib = TENSORLIB.read().unwrap();
+    let start = Instant::now();
+    let net = ParsingNet::try_from_view(expr.as_view(), &*lib, &actual_parse_settings())
+        .unwrap_or_else(|error| panic!("{label} actual parse failed: {error}"));
+    eprintln!(
+        "{label} quiet_parse elapsed={:.3?} graph_nodes={} tensors={} scalars={}",
+        start.elapsed(),
+        net.graph.graph.n_nodes(),
+        net.store.tensors.len(),
+        net.store.scalar.len()
+    );
+    net
+}
+
 fn gamma_ladder_order_mwe_expr() -> Atom {
     parse_inline_expression(
         r#"
@@ -902,6 +1033,132 @@ fn spenso_eval_input_0_actual_network_parallel_min_result_rank_execute() {
     let _ = execute_actual_net_min_result_rank_parallel(
         "spenso_eval_input_0_parallel_min_result_rank",
         net,
+    );
+}
+
+#[test]
+#[ignore = "diagnostic timing for each branch of the largest 46-way sum in spenso_eval_input_0.txt"]
+fn spenso_eval_input_0_sum46_individual_term_execute() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+
+    let mut candidates = Vec::new();
+    collect_adds_with_arity(expr.as_view(), 46, &mut candidates);
+    assert!(
+        !candidates.is_empty(),
+        "expected at least one 46-way sum in spenso_eval_input_0.txt"
+    );
+
+    eprintln!("sum46 candidates={}", candidates.len());
+    for (candidate_index, candidate) in candidates.iter().enumerate() {
+        let terms = add_terms(candidate);
+        let min_bytes = terms
+            .iter()
+            .map(|term| term.as_view().get_byte_size())
+            .min()
+            .unwrap_or(0);
+        let max_bytes = terms
+            .iter()
+            .map(|term| term.as_view().get_byte_size())
+            .max()
+            .unwrap_or(0);
+        let total_bytes = terms
+            .iter()
+            .map(|term| term.as_view().get_byte_size())
+            .sum::<usize>();
+        eprintln!(
+            "sum46 candidate={candidate_index} bytes={} terms={} child_bytes_min={} child_bytes_max={} child_bytes_total={}",
+            candidate.as_view().get_byte_size(),
+            candidate.nterms(),
+            min_bytes,
+            max_bytes,
+            total_bytes
+        );
+    }
+
+    let selected_candidate = std::env::var("SPENSO_SUM46_CANDIDATE")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            candidates
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, candidate)| candidate.as_view().get_byte_size())
+                .map(|(candidate_index, _)| candidate_index)
+                .expect("non-empty candidates")
+        });
+    let add_expr = candidates
+        .get(selected_candidate)
+        .unwrap_or_else(|| panic!("SPENSO_SUM46_CANDIDATE={selected_candidate} is out of range"));
+    let terms = add_terms(add_expr);
+    let add_pattern = add_expr.to_pattern();
+    eprintln!(
+        "sum46 selected_candidate={selected_candidate} selected_bytes={} selected_terms={} selected_children={}",
+        add_expr.as_view().get_byte_size(),
+        add_expr.nterms(),
+        terms.len()
+    );
+
+    let start_index = std::env::var("SPENSO_SUM46_START")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0)
+        .min(terms.len());
+    let end_index = std::env::var("SPENSO_SUM46_END")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            std::env::var("SPENSO_SUM46_LIMIT")
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+                .map(|limit| start_index.saturating_add(limit))
+                .unwrap_or(terms.len())
+        })
+        .min(terms.len())
+        .max(start_index);
+    eprintln!("sum46 selected_range start={start_index} end={end_index}");
+
+    let mut execute_times = Vec::with_capacity(end_index - start_index);
+    for (term_index, term) in terms
+        .iter()
+        .enumerate()
+        .skip(start_index)
+        .take(end_index - start_index)
+    {
+        let label = format!("sum46_term_{term_index:02}");
+        let total_start = Instant::now();
+        let replace_start = Instant::now();
+        let branch_expr = expr.replace(&add_pattern).once().with(term.to_pattern());
+        let replace_elapsed = replace_start.elapsed();
+        eprintln!(
+            "{label} branch_expr terms={} bytes={} selected_term_terms={} selected_term_bytes={} replace={replace_elapsed:.3?}",
+            branch_expr.nterms(),
+            branch_expr.as_view().get_byte_size(),
+            term.nterms(),
+            term.as_view().get_byte_size()
+        );
+
+        let net = parse_actual_net_quiet(&label, &branch_expr);
+        let execute_elapsed = execute_actual_net_min_result_rank_parallel_summary(&label, net);
+        execute_times.push(execute_elapsed);
+        eprintln!("{label} total={:.3?}", total_start.elapsed());
+    }
+
+    if execute_times.is_empty() {
+        eprintln!("sum46 execution_summary terms=0");
+        return;
+    }
+
+    execute_times.sort();
+    let sum = execute_times
+        .iter()
+        .copied()
+        .fold(std::time::Duration::ZERO, |sum, elapsed| sum + elapsed);
+    let max = execute_times.last().copied().unwrap_or_default();
+    let median = execute_times[execute_times.len() / 2];
+    eprintln!(
+        "sum46 execution_summary terms={} sum={sum:.3?} median={median:.3?} max={max:.3?}",
+        execute_times.len()
     );
 }
 

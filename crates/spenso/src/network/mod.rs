@@ -1,5 +1,6 @@
 use graph::{
     NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation,
+    TensorTerm,
 };
 use linnet::half_edge::{
     NodeIndex,
@@ -11,16 +12,18 @@ use serde::{Deserialize, Serialize};
 
 use library::{Library, LibraryError};
 
-use crate::algebra::algebraic_traits::RefOne;
+use crate::algebra::{ScalarMul, algebraic_traits::RefOne};
 use crate::contraction::{Contract, Trace};
 #[cfg(feature = "shadowing")]
 use crate::iterators::IteratableTensor;
 use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 use crate::structure::abstract_index::AbstractIndex;
 #[cfg(feature = "shadowing")]
-use crate::structure::concrete_index::FlatIndex;
+use crate::structure::concrete_index::{ConcreteIndex, FlatIndex};
 use crate::structure::permuted::PermuteTensor;
 // use crate::shadowing::Concretize;
+#[cfg(feature = "shadowing")]
+use crate::structure::StructureContract;
 use crate::structure::representation::LibrarySlot;
 use crate::structure::slot::{AbsInd, IsAbstractSlot};
 use crate::structure::{HasName, PermutedStructure, StructureError, TensorShell};
@@ -51,7 +54,7 @@ use crate::{
 use eyre::eyre;
 
 #[cfg(feature = "shadowing")]
-use symbolica::atom::{Atom, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
 #[cfg(feature = "shadowing")]
 pub mod tags;
@@ -60,7 +63,43 @@ pub mod tags;
 use std::{convert::Infallible, fmt::Debug};
 
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
-const MIN_LAZY_TENSOR_SUM_TERMS: usize = 8;
+const MIN_LAZY_TENSOR_SUM_TERMS: usize = 2;
+#[cfg(feature = "shadowing")]
+const MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS: usize = 8;
+
+pub struct FastTensorSumContractTerm<T, Sc> {
+    pub tensor: T,
+    pub scalar: Option<Sc>,
+}
+
+pub enum FastTensorSumContract<T, Sc> {
+    Materialized(T),
+    Terms(Vec<T>),
+    ScaledTerms(Vec<FastTensorSumContractTerm<T, Sc>>),
+}
+
+impl<T, Sc> FastTensorSumContract<T, Sc> {
+    #[cfg(feature = "shadowing")]
+    fn map<U>(self, mut f: impl FnMut(T) -> U) -> FastTensorSumContract<U, Sc> {
+        match self {
+            FastTensorSumContract::Materialized(tensor) => {
+                FastTensorSumContract::Materialized(f(tensor))
+            }
+            FastTensorSumContract::Terms(terms) => {
+                FastTensorSumContract::Terms(terms.into_iter().map(f).collect())
+            }
+            FastTensorSumContract::ScaledTerms(terms) => FastTensorSumContract::ScaledTerms(
+                terms
+                    .into_iter()
+                    .map(|term| FastTensorSumContractTerm {
+                        tensor: f(term.tensor),
+                        scalar: term.scalar,
+                    })
+                    .collect(),
+            ),
+        }
+    }
+}
 
 pub trait FastTensorSum: Sized {
     fn fast_tensor_sum(_terms: &[&Self], _sum_start: Option<std::time::Instant>) -> Option<Self> {
@@ -68,11 +107,37 @@ pub trait FastTensorSum: Sized {
     }
 }
 
+pub trait FastTensorSumContractible<Sc>: Sized {
+    fn fast_tensor_sum_contract<CStrat>(
+        _terms: &[&Self],
+        _other: &Self,
+        _terms_on_left: bool,
+    ) -> Option<Result<FastTensorSumContract<Self, Sc>, ContractionError>> {
+        None
+    }
+}
+
+pub trait TensorCommonFactor<Sc>: Sized {
+    fn split_common_factor(&self) -> Option<(Self, Sc)> {
+        None
+    }
+}
+
 impl<T, S> FastTensorSum for DenseTensor<T, S> {}
+impl<T, S, Sc> FastTensorSumContractible<Sc> for DenseTensor<T, S> {}
+impl<T, S, Sc> TensorCommonFactor<Sc> for DenseTensor<T, S> {}
 impl<T, S> FastTensorSum for SparseTensor<T, S> {}
+impl<T, S, Sc> FastTensorSumContractible<Sc> for SparseTensor<T, S> {}
+impl<T, S, Sc> TensorCommonFactor<Sc> for SparseTensor<T, S> {}
 impl<T, S> FastTensorSum for DataTensor<T, S> {}
+impl<T, S, Sc> FastTensorSumContractible<Sc> for DataTensor<T, S> {}
+impl<T, S, Sc> TensorCommonFactor<Sc> for DataTensor<T, S> {}
 impl<T, S: TensorStructure> FastTensorSum for RealOrComplexTensor<T, S> {}
+impl<T, S: TensorStructure, Sc> FastTensorSumContractible<Sc> for RealOrComplexTensor<T, S> {}
+impl<T, S: TensorStructure, Sc> TensorCommonFactor<Sc> for RealOrComplexTensor<T, S> {}
 impl<S> FastTensorSum for TensorShell<S> {}
+impl<S, Sc> FastTensorSumContractible<Sc> for TensorShell<S> {}
+impl<S, Sc> TensorCommonFactor<Sc> for TensorShell<S> {}
 
 #[cfg(feature = "shadowing")]
 impl<S> FastTensorSum for ParamTensor<S>
@@ -159,6 +224,64 @@ where
 }
 
 #[cfg(feature = "shadowing")]
+impl<S> FastTensorSumContractible<Atom> for ParamTensor<S>
+where
+    S: TensorStructure + Clone + Send + Sync + StructureContract,
+    S::Slot: Send + Sync,
+{
+    fn fast_tensor_sum_contract<CStrat>(
+        terms: &[&Self],
+        other: &Self,
+        terms_on_left: bool,
+    ) -> Option<Result<FastTensorSumContract<Self, Atom>, ContractionError>> {
+        fused_numeric_tensor_sum_contract(terms, other, terms_on_left)
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<S> TensorCommonFactor<Atom> for ParamTensor<S>
+where
+    S: TensorStructure + Clone,
+{
+    fn split_common_factor(&self) -> Option<(Self, Atom)> {
+        let DataTensor::Sparse(sparse) = &self.tensor else {
+            return None;
+        };
+        if !sparse.zero.as_view().is_zero() {
+            return None;
+        }
+
+        let common_factors = common_sparse_atom_factors(sparse);
+        if common_factors.is_empty() {
+            return None;
+        }
+
+        let factor = atom_product(common_factors.iter().cloned());
+        if factor == Atom::num(1) {
+            return None;
+        }
+
+        let elements = sparse
+            .elements
+            .iter()
+            .filter_map(|(index, atom)| {
+                let reduced = atom_without_factors(atom.as_view(), &common_factors);
+                (!reduced.as_view().is_zero()).then_some((*index, reduced))
+            })
+            .collect::<HashMap<_, _>>();
+
+        Some((
+            ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+                elements,
+                zero: Atom::Zero,
+                structure: sparse.structure.clone(),
+            })),
+            factor,
+        ))
+    }
+}
+
+#[cfg(feature = "shadowing")]
 impl<C, S> FastTensorSum for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Sync,
@@ -174,6 +297,737 @@ where
 
         <ParamTensor<S> as FastTensorSum>::fast_tensor_sum(&param_terms, sum_start)
             .map(ParamOrConcrete::Param)
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<C, S> FastTensorSumContractible<Atom> for ParamOrConcrete<C, S>
+where
+    S: TensorStructure + Clone + Send + Sync + StructureContract,
+    S::Slot: Send + Sync,
+{
+    fn fast_tensor_sum_contract<CStrat>(
+        terms: &[&Self],
+        other: &Self,
+        terms_on_left: bool,
+    ) -> Option<Result<FastTensorSumContract<Self, Atom>, ContractionError>> {
+        let param_terms = terms
+            .iter()
+            .map(|term| match term {
+                ParamOrConcrete::Param(param) => Some(param),
+                ParamOrConcrete::Concrete(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let ParamOrConcrete::Param(other) = other else {
+            return None;
+        };
+
+        <ParamTensor<S> as FastTensorSumContractible<Atom>>::fast_tensor_sum_contract::<CStrat>(
+            &param_terms,
+            other,
+            terms_on_left,
+        )
+        .map(|result| result.map(|contract| contract.map(ParamOrConcrete::Param)))
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<C, S> TensorCommonFactor<Atom> for ParamOrConcrete<C, S>
+where
+    S: TensorStructure + Clone,
+{
+    fn split_common_factor(&self) -> Option<(Self, Atom)> {
+        match self {
+            ParamOrConcrete::Param(param) => param
+                .split_common_factor()
+                .map(|(tensor, factor)| (ParamOrConcrete::Param(tensor), factor)),
+            ParamOrConcrete::Concrete(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+struct NumericContractEntry {
+    index: Vec<ConcreteIndex>,
+    coefficient: Atom,
+    coefficient_class: usize,
+    left_metric_negative: bool,
+}
+
+#[cfg(feature = "shadowing")]
+struct FusedNumericContractPlan<S>
+where
+    S: TensorStructure,
+{
+    terms_on_left: bool,
+    result_structure: S,
+    sum_structure: S,
+    numeric_entries: Vec<NumericContractEntry>,
+    coefficient_classes: Vec<Atom>,
+    numeric_by_key: HashMap<Vec<ConcreteIndex>, Vec<usize>>,
+    sum_match_axes: Vec<usize>,
+    left_slots: Vec<S::Slot>,
+    right_slots: Vec<S::Slot>,
+    left_match_flags: Vec<bool>,
+    right_match_flags: Vec<bool>,
+}
+
+#[cfg(feature = "shadowing")]
+fn fused_numeric_tensor_sum_contract<S>(
+    terms: &[&ParamTensor<S>],
+    numeric: &ParamTensor<S>,
+    terms_on_left: bool,
+) -> Option<Result<FastTensorSumContract<ParamTensor<S>, Atom>, ContractionError>>
+where
+    S: TensorStructure + Clone + Send + Sync + StructureContract,
+    S::Slot: Send + Sync,
+{
+    if terms.len() < 2 {
+        return None;
+    }
+
+    let first = *terms.first()?;
+    let DataTensor::Sparse(first_sparse) = &first.tensor else {
+        return None;
+    };
+    if !first_sparse.zero.as_view().is_zero() {
+        return None;
+    }
+    let DataTensor::Sparse(numeric_sparse) = &numeric.tensor else {
+        return None;
+    };
+    if !numeric_sparse.zero.as_view().is_zero()
+        || !numeric_sparse
+            .elements
+            .values()
+            .all(|atom| matches!(atom.as_view(), AtomView::Num(_)))
+    {
+        return None;
+    }
+
+    let sum_structure = first_sparse.structure.clone();
+    let sum_slots = sum_structure.external_structure();
+    if terms
+        .iter()
+        .any(|term| term.tensor.structure().external_structure() != sum_slots)
+    {
+        return None;
+    }
+
+    Some((|| {
+        let plan = FusedNumericContractPlan::new(
+            first_sparse.structure.clone(),
+            numeric_sparse,
+            terms_on_left,
+        )?;
+
+        if terms.len() >= MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS {
+            let start = profile::enabled().then(std::time::Instant::now);
+            let contracted_terms = terms
+                .par_iter()
+                .map(|term| plan.contract_term(term))
+                .collect::<Result<Vec<_>, _>>()?;
+            if let Some(start) = start {
+                let output_entries = contracted_terms
+                    .iter()
+                    .map(|term| term.tensor.tensor.actual_size())
+                    .sum::<usize>();
+                let scaled_terms = contracted_terms
+                    .iter()
+                    .filter(|term| term.scalar.is_some())
+                    .count();
+                eprintln!(
+                    "spenso_profile product.fused_numeric_tensor_sum_lazy_contract terms={} numeric_entries={} output_terms={} scaled_terms={} output_entries={} elapsed_ms={:.3}",
+                    terms.len(),
+                    plan.numeric_entries.len(),
+                    contracted_terms.len(),
+                    scaled_terms,
+                    output_entries,
+                    start.elapsed().as_secs_f64() * 1000.0,
+                );
+            }
+            Ok(FastTensorSumContract::ScaledTerms(contracted_terms))
+        } else {
+            fused_numeric_tensor_sum_contract_impl(terms, plan)
+                .map(FastTensorSumContract::Materialized)
+        }
+    })())
+}
+
+#[cfg(feature = "shadowing")]
+fn fused_numeric_tensor_sum_contract_impl<S>(
+    terms: &[&ParamTensor<S>],
+    plan: FusedNumericContractPlan<S>,
+) -> Result<ParamTensor<S>, ContractionError>
+where
+    S: TensorStructure + Clone + Send + Sync + StructureContract,
+    S::Slot: Send + Sync,
+{
+    let mut groups = HashMap::<(FlatIndex, usize, bool), Vec<AtomView<'_>>>::new();
+
+    for term in terms {
+        let DataTensor::Sparse(sum_sparse) = &term.tensor else {
+            return Err(eyre!("fused tensor sum term is not sparse").into());
+        };
+        plan.collect_borrowed_groups(sum_sparse, &mut groups)?;
+    }
+
+    if profile::enabled() {
+        eprintln!(
+            "spenso_profile product.fused_numeric_tensor_sum_contract terms={} numeric_entries={} coefficient_classes={} groups={}",
+            terms.len(),
+            plan.numeric_entries.len(),
+            plan.coefficient_classes.len(),
+            groups.len(),
+        );
+    }
+
+    plan.finish_groups(groups)
+}
+
+#[cfg(feature = "shadowing")]
+impl<S> FusedNumericContractPlan<S>
+where
+    S: TensorStructure + Clone + Send + Sync + StructureContract,
+    S::Slot: Send + Sync,
+{
+    fn new(
+        sum_structure: S,
+        numeric: &SparseTensor<Atom, S>,
+        terms_on_left: bool,
+    ) -> Result<Self, ContractionError> {
+        let numeric_structure = numeric.structure.clone();
+        let (left_structure, right_structure) = if terms_on_left {
+            (&sum_structure, &numeric_structure)
+        } else {
+            (&numeric_structure, &sum_structure)
+        };
+        let (result_structure, left_matches, right_matches, _) =
+            left_structure.merge(right_structure)?;
+        if left_matches.n_included() == 0 {
+            return Err(
+                eyre!("fused tensor sum contract requires at least one shared slot").into(),
+            );
+        }
+
+        let left_match_axes = left_matches
+            .included_iter()
+            .map(|axis| axis.0)
+            .collect::<Vec<_>>();
+        let right_match_axes = right_matches
+            .included_iter()
+            .map(|axis| axis.0)
+            .collect::<Vec<_>>();
+        let (sum_match_axes, numeric_match_axes) = if terms_on_left {
+            (left_match_axes.clone(), right_match_axes.clone())
+        } else {
+            (right_match_axes.clone(), left_match_axes.clone())
+        };
+
+        let mut numeric_entries = collect_numeric_contract_entries(
+            numeric,
+            &numeric_match_axes,
+            if terms_on_left {
+                None
+            } else {
+                Some(&left_match_axes)
+            },
+        )?;
+        let mut numeric_by_key = HashMap::<Vec<ConcreteIndex>, Vec<usize>>::new();
+        for (entry_index, entry) in numeric_entries.iter().enumerate() {
+            numeric_by_key
+                .entry(component_key(&entry.index, &numeric_match_axes))
+                .or_default()
+                .push(entry_index);
+        }
+        let mut coefficient_classes = Vec::<Atom>::new();
+        for entry in &mut numeric_entries {
+            let coefficient_class = coefficient_classes
+                .iter()
+                .position(|coefficient| coefficient == &entry.coefficient)
+                .unwrap_or_else(|| {
+                    coefficient_classes.push(entry.coefficient.clone());
+                    coefficient_classes.len() - 1
+                });
+            entry.coefficient_class = coefficient_class;
+        }
+
+        let left_slots = left_structure.external_structure();
+        let right_slots = right_structure.external_structure();
+        let left_match_flags = match_flags(left_structure.order(), &left_match_axes);
+        let right_match_flags = match_flags(right_structure.order(), &right_match_axes);
+
+        Ok(Self {
+            terms_on_left,
+            result_structure,
+            sum_structure,
+            numeric_entries,
+            coefficient_classes,
+            numeric_by_key,
+            sum_match_axes,
+            left_slots,
+            right_slots,
+            left_match_flags,
+            right_match_flags,
+        })
+    }
+
+    fn contract_term(
+        &self,
+        term: &ParamTensor<S>,
+    ) -> Result<FastTensorSumContractTerm<ParamTensor<S>, Atom>, ContractionError> {
+        let DataTensor::Sparse(sum_sparse) = &term.tensor else {
+            return Err(eyre!("fused tensor sum term is not sparse").into());
+        };
+
+        let common_factors = common_sparse_atom_factors(sum_sparse);
+        if !common_factors.is_empty() {
+            return self.contract_factored_term(sum_sparse, common_factors);
+        }
+
+        let mut groups = HashMap::<(FlatIndex, usize, bool), Vec<AtomView<'_>>>::new();
+        self.collect_borrowed_groups(sum_sparse, &mut groups)?;
+
+        Ok(FastTensorSumContractTerm {
+            tensor: self.finish_groups(groups)?,
+            scalar: None,
+        })
+    }
+
+    fn collect_borrowed_groups<'a>(
+        &self,
+        sum_sparse: &'a SparseTensor<Atom, S>,
+        groups: &mut HashMap<(FlatIndex, usize, bool), Vec<AtomView<'a>>>,
+    ) -> Result<(), ContractionError> {
+        for (sum_index, atom) in sum_sparse.iter_expanded() {
+            if atom.as_view().is_zero() {
+                continue;
+            }
+            let key = component_key(&sum_index.indices, &self.sum_match_axes);
+            let Some(matching_numeric_entries) = self.numeric_by_key.get(&key) else {
+                continue;
+            };
+            let sum_left_metric_negative = if self.terms_on_left {
+                metric_negative(
+                    &self.sum_structure,
+                    &self.sum_match_axes,
+                    &sum_index.indices,
+                )?
+            } else {
+                false
+            };
+
+            for numeric_entry_index in matching_numeric_entries {
+                let numeric_entry = &self.numeric_entries[*numeric_entry_index];
+                let (left_index, right_index, left_negative) = if self.terms_on_left {
+                    (
+                        sum_index.indices.as_slice(),
+                        numeric_entry.index.as_slice(),
+                        sum_left_metric_negative,
+                    )
+                } else {
+                    (
+                        numeric_entry.index.as_slice(),
+                        sum_index.indices.as_slice(),
+                        numeric_entry.left_metric_negative,
+                    )
+                };
+                let flat_index = self.contract_flat_index(left_index, right_index)?;
+                groups
+                    .entry((flat_index, numeric_entry.coefficient_class, left_negative))
+                    .or_default()
+                    .push(atom.as_view());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn contract_factored_term(
+        &self,
+        sum_sparse: &SparseTensor<Atom, S>,
+        common_factors: Vec<Atom>,
+    ) -> Result<FastTensorSumContractTerm<ParamTensor<S>, Atom>, ContractionError> {
+        let factor = atom_product(common_factors.iter().cloned());
+        let mut groups = HashMap::<(FlatIndex, usize, bool), Vec<Atom>>::new();
+        for (sum_index, atom) in sum_sparse.iter_expanded() {
+            if atom.as_view().is_zero() {
+                continue;
+            }
+            let key = component_key(&sum_index.indices, &self.sum_match_axes);
+            let Some(matching_numeric_entries) = self.numeric_by_key.get(&key) else {
+                continue;
+            };
+            let reduced_atom = atom_without_factors(atom.as_view(), &common_factors);
+            let sum_left_metric_negative = if self.terms_on_left {
+                metric_negative(
+                    &self.sum_structure,
+                    &self.sum_match_axes,
+                    &sum_index.indices,
+                )?
+            } else {
+                false
+            };
+
+            for numeric_entry_index in matching_numeric_entries {
+                let numeric_entry = &self.numeric_entries[*numeric_entry_index];
+                let (left_index, right_index, left_negative) = if self.terms_on_left {
+                    (
+                        sum_index.indices.as_slice(),
+                        numeric_entry.index.as_slice(),
+                        sum_left_metric_negative,
+                    )
+                } else {
+                    (
+                        numeric_entry.index.as_slice(),
+                        sum_index.indices.as_slice(),
+                        numeric_entry.left_metric_negative,
+                    )
+                };
+                let flat_index = self.contract_flat_index(left_index, right_index)?;
+                groups
+                    .entry((flat_index, numeric_entry.coefficient_class, left_negative))
+                    .or_default()
+                    .push(reduced_atom.clone());
+            }
+        }
+
+        Ok(FastTensorSumContractTerm {
+            tensor: self.finish_owned_groups(groups)?,
+            scalar: (factor != Atom::num(1)).then_some(factor),
+        })
+    }
+
+    fn contract_flat_index(
+        &self,
+        left_index: &[ConcreteIndex],
+        right_index: &[ConcreteIndex],
+    ) -> Result<FlatIndex, ContractionError> {
+        let result_index = contract_result_index(
+            &self.result_structure,
+            &self.left_slots,
+            &self.right_slots,
+            &self.left_match_flags,
+            &self.right_match_flags,
+            left_index,
+            right_index,
+        )?;
+        Ok(self.result_structure.flat_index(&result_index)?)
+    }
+
+    fn finish_groups(
+        &self,
+        groups: HashMap<(FlatIndex, usize, bool), Vec<AtomView<'_>>>,
+    ) -> Result<ParamTensor<S>, ContractionError> {
+        let contributions = groups
+            .into_iter()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .filter_map(|((flat_index, coefficient_class, left_negative), atoms)| {
+                let mut contribution = match atoms.len() {
+                    0 => Atom::Zero,
+                    1 => atoms
+                        .into_iter()
+                        .next()
+                        .expect("single grouped atom exists")
+                        .to_owned(),
+                    _ => Atom::add_many(&atoms),
+                };
+                if left_negative {
+                    contribution = -contribution;
+                }
+                contribution = multiply_atom_by_numeric_coefficient(
+                    contribution,
+                    &self.coefficient_classes[coefficient_class],
+                );
+                (!contribution.as_view().is_zero()).then_some((flat_index, contribution))
+            })
+            .collect::<Vec<_>>();
+
+        Ok(ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+            elements: self.collect_output_groups(contributions),
+            zero: Atom::Zero,
+            structure: self.result_structure.clone(),
+        })))
+    }
+
+    fn finish_owned_groups(
+        &self,
+        groups: HashMap<(FlatIndex, usize, bool), Vec<Atom>>,
+    ) -> Result<ParamTensor<S>, ContractionError> {
+        let contributions = groups
+            .into_iter()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .filter_map(|((flat_index, coefficient_class, left_negative), atoms)| {
+                let mut contribution = match atoms.len() {
+                    0 => Atom::Zero,
+                    1 => atoms
+                        .into_iter()
+                        .next()
+                        .expect("single grouped atom exists"),
+                    _ => Atom::add_many(&atoms),
+                };
+                if left_negative {
+                    contribution = -contribution;
+                }
+                contribution = multiply_atom_by_numeric_coefficient(
+                    contribution,
+                    &self.coefficient_classes[coefficient_class],
+                );
+                (!contribution.as_view().is_zero()).then_some((flat_index, contribution))
+            })
+            .collect::<Vec<_>>();
+
+        Ok(ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+            elements: self.collect_output_groups(contributions),
+            zero: Atom::Zero,
+            structure: self.result_structure.clone(),
+        })))
+    }
+
+    fn collect_output_groups(
+        &self,
+        contributions: Vec<(FlatIndex, Atom)>,
+    ) -> HashMap<FlatIndex, Atom> {
+        let mut output_groups = HashMap::<FlatIndex, Vec<Atom>>::new();
+        for (flat_index, contribution) in contributions {
+            output_groups
+                .entry(flat_index)
+                .or_default()
+                .push(contribution);
+        }
+
+        output_groups
+            .into_iter()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .filter_map(|(flat_index, atoms)| {
+                let atom = match atoms.len() {
+                    0 => Atom::Zero,
+                    1 => atoms.into_iter().next().expect("single output atom exists"),
+                    _ => Atom::add_many(&atoms),
+                };
+                (!atom.as_view().is_zero()).then_some((flat_index, atom))
+            })
+            .collect::<HashMap<_, _>>()
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn common_sparse_atom_factors<S>(sum_sparse: &SparseTensor<Atom, S>) -> Vec<Atom>
+where
+    S: TensorStructure,
+{
+    let mut entries = sum_sparse
+        .iter_expanded()
+        .filter(|(_, atom)| !atom.as_view().is_zero());
+    let Some((_, first)) = entries.next() else {
+        return Vec::new();
+    };
+
+    let mut common = atom_factors(first.as_view())
+        .into_iter()
+        .filter(|factor| !matches!(factor.as_view(), AtomView::Num(_)) && factor != &Atom::num(1))
+        .collect::<Vec<_>>();
+
+    for (_, atom) in entries {
+        common.retain(|factor| atom_contains_factor(atom.as_view(), factor));
+        if common.is_empty() {
+            break;
+        }
+    }
+
+    common
+}
+
+#[cfg(feature = "shadowing")]
+fn atom_factors(atom: AtomView<'_>) -> Vec<Atom> {
+    match atom {
+        AtomView::Mul(mul) => mul
+            .iter()
+            .map(|factor| factor.as_atom_view().to_owned())
+            .collect(),
+        _ => vec![atom.to_owned()],
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn atom_contains_factor(atom: AtomView<'_>, factor: &Atom) -> bool {
+    match atom {
+        AtomView::Mul(mul) => mul
+            .iter()
+            .any(|candidate| candidate.as_atom_view() == factor.as_view()),
+        _ => atom == factor.as_view(),
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn atom_without_factors(atom: AtomView<'_>, factors: &[Atom]) -> Atom {
+    match atom {
+        AtomView::Mul(mul) => {
+            let mut used = vec![false; factors.len()];
+            let kept = mul
+                .iter()
+                .filter_map(|candidate| {
+                    let candidate = candidate.as_atom_view();
+                    if let Some((position, _)) =
+                        factors.iter().enumerate().find(|(position, factor)| {
+                            !used[*position] && candidate == factor.as_view()
+                        })
+                    {
+                        used[position] = true;
+                        None
+                    } else {
+                        Some(candidate.to_owned())
+                    }
+                })
+                .collect::<Vec<_>>();
+            atom_product(kept)
+        }
+        _ if factors.len() == 1 && atom == factors[0].as_view() => Atom::num(1),
+        _ => atom.to_owned(),
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn atom_product(factors: impl IntoIterator<Item = Atom>) -> Atom {
+    factors
+        .into_iter()
+        .fold(Atom::num(1), |product, factor| product * factor)
+}
+
+#[cfg(feature = "shadowing")]
+fn collect_numeric_contract_entries<S>(
+    numeric: &SparseTensor<Atom, S>,
+    numeric_match_axes: &[usize],
+    left_match_axes: Option<&[usize]>,
+) -> Result<Vec<NumericContractEntry>, ContractionError>
+where
+    S: TensorStructure,
+{
+    let mut entries = Vec::with_capacity(numeric.elements.len());
+    for (index, coefficient) in numeric.iter_expanded() {
+        if coefficient.as_view().is_zero() {
+            continue;
+        }
+        let left_metric_negative = if let Some(left_match_axes) = left_match_axes {
+            metric_negative(&numeric.structure, left_match_axes, &index.indices)?
+        } else {
+            false
+        };
+        if !numeric_match_axes
+            .iter()
+            .all(|axis| index.indices.get(*axis).is_some())
+        {
+            return Err(eyre!("numeric contraction axis out of bounds").into());
+        }
+        entries.push(NumericContractEntry {
+            index: index.indices,
+            coefficient: coefficient.clone(),
+            coefficient_class: 0,
+            left_metric_negative,
+        });
+    }
+    Ok(entries)
+}
+
+#[cfg(feature = "shadowing")]
+fn component_key(index: &[ConcreteIndex], axes: &[usize]) -> Vec<ConcreteIndex> {
+    axes.iter().map(|axis| index[*axis]).collect()
+}
+
+#[cfg(feature = "shadowing")]
+fn match_flags(order: usize, axes: &[usize]) -> Vec<bool> {
+    let mut flags = vec![false; order];
+    for axis in axes {
+        flags[*axis] = true;
+    }
+    flags
+}
+
+#[cfg(feature = "shadowing")]
+fn metric_negative<S>(
+    structure: &S,
+    matched_axes: &[usize],
+    index: &[ConcreteIndex],
+) -> Result<bool, ContractionError>
+where
+    S: TensorStructure,
+{
+    let slots = structure.external_structure();
+    let mut negative = false;
+    for axis in matched_axes {
+        let slot = slots
+            .get(*axis)
+            .ok_or_else(|| eyre!("matched axis out of bounds"))?;
+        let component = *index
+            .get(*axis)
+            .ok_or_else(|| eyre!("matched component out of bounds"))?;
+        negative ^= *slot
+            .rep()
+            .negative()?
+            .get(component)
+            .ok_or_else(|| eyre!("matched component out of representation bounds"))?;
+    }
+    Ok(negative)
+}
+
+#[cfg(feature = "shadowing")]
+fn contract_result_index<S>(
+    result_structure: &S,
+    left_slots: &[S::Slot],
+    right_slots: &[S::Slot],
+    left_match_flags: &[bool],
+    right_match_flags: &[bool],
+    left_index: &[ConcreteIndex],
+    right_index: &[ConcreteIndex],
+) -> Result<Vec<ConcreteIndex>, ContractionError>
+where
+    S: TensorStructure,
+{
+    result_structure
+        .external_structure_iter()
+        .map(|slot| {
+            if let Some((position, _)) = left_slots
+                .iter()
+                .enumerate()
+                .find(|(position, left_slot)| !left_match_flags[*position] && **left_slot == slot)
+            {
+                return left_index
+                    .get(position)
+                    .copied()
+                    .ok_or_else(|| eyre!("left result component out of bounds"));
+            }
+            if let Some((position, _)) =
+                right_slots
+                    .iter()
+                    .enumerate()
+                    .find(|(position, right_slot)| {
+                        !right_match_flags[*position] && **right_slot == slot
+                    })
+            {
+                return right_index
+                    .get(position)
+                    .copied()
+                    .ok_or_else(|| eyre!("right result component out of bounds"));
+            }
+            Err(eyre!(
+                "result slot does not map to either contraction operand"
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(ContractionError::from)
+}
+
+#[cfg(feature = "shadowing")]
+fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom {
+    if coefficient == &Atom::num(1) {
+        atom
+    } else if coefficient == &Atom::num(-1) {
+        -atom
+    } else {
+        atom * coefficient.clone()
     }
 }
 
@@ -990,6 +1844,12 @@ where
                 NetworkLeaf::TensorSum(_) => Err(TensorNetworkError::Other(eyre!(
                     "result is an unmaterialized tensor sum"
                 ))),
+                NetworkLeaf::TensorTerm(_) => Err(TensorNetworkError::Other(eyre!(
+                    "result is an unmaterialized scaled tensor"
+                ))),
+                NetworkLeaf::TensorTermSum(_) => Err(TensorNetworkError::Other(eyre!(
+                    "result is an unmaterialized scaled tensor sum"
+                ))),
                 NetworkLeaf::Scalar(t) => Ok(ExecutionResult::Val(TensorOrScalarOrKey::Scalar(
                     self.store.get_scalar(*t),
                 ))),
@@ -1044,8 +1904,47 @@ where
         T::Scalar: Into<S>,
         K: Display,
         FK: Display + Clone,
-        S: Clone,
+        S: Clone
+            + Ref
+            + for<'b> AddAssign<<S as Ref>::Ref<'b>>
+            + for<'b> MulAssign<<S as Ref>::Ref<'b>>,
     {
+        let tensor_term_scalar = |term: &TensorTerm| -> Result<S, TensorNetworkError<K, FK>> {
+            let mut scalar: S = self
+                .store
+                .get_tensor(term.tensor)
+                .clone()
+                .scalar()
+                .ok_or(TensorNetworkError::NoScalar)?
+                .into();
+            if let Some(factor) = term.scalar {
+                scalar *= self.store.get_scalar(factor).refer();
+            }
+            Ok(scalar)
+        };
+
+        let (node, _, _) = self.graph.result()?;
+        if let NetworkNode::Leaf(leaf) = node {
+            match leaf {
+                NetworkLeaf::TensorTerm(term) => {
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor_term_scalar(term)?)));
+                }
+                NetworkLeaf::TensorTermSum(terms) => {
+                    let mut iter = terms.iter();
+                    let Some(first) = iter.next() else {
+                        return Ok(ExecutionResult::Zero);
+                    };
+                    let mut accumulator = tensor_term_scalar(first)?;
+                    for term in iter {
+                        let term_scalar = tensor_term_scalar(term)?;
+                        accumulator += term_scalar.refer();
+                    }
+                    return Ok(ExecutionResult::Val(Cow::Owned(accumulator)));
+                }
+                _ => {}
+            }
+        }
+
         Ok(match self.result()? {
             ExecutionResult::One => ExecutionResult::One,
             ExecutionResult::Zero => ExecutionResult::Zero,
@@ -1156,6 +2055,20 @@ impl<T, S, FK: Debug, K: Debug, Aind: AbsInd> Network<NetworkStore<T, S>, K, FK,
                     )),
                     NetworkLeaf::TensorSum(terms) => {
                         Some(format!("label = \"TS:{}\"", terms.len()))
+                    }
+                    NetworkLeaf::TensorTerm(term) => Some(match term.scalar {
+                        Some(scalar) => format!(
+                            "label = \"TT:{}*{}\"",
+                            tensor_disp(self.store.get_tensor(term.tensor)),
+                            scalar_disp(self.store.get_scalar(scalar))
+                        ),
+                        None => format!(
+                            "label = \"TT:{}\"",
+                            tensor_disp(self.store.get_tensor(term.tensor))
+                        ),
+                    }),
+                    NetworkLeaf::TensorTermSum(terms) => {
+                        Some(format!("label = \"TTS:{}\"", terms.len()))
                     }
                     NetworkLeaf::Scalar(s) => Some(format!(
                         "label = \"S:{}\"",
@@ -1454,6 +2367,35 @@ fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
                 }
                 ("tensor_sum", stats)
             }
+            NetworkLeaf::TensorTerm(term) => {
+                let mut stats = store
+                    .tensor(term.tensor)
+                    .atom_sum_shape_stats(include_bytes);
+                if let Some(scalar) = term.scalar {
+                    stats.merge(
+                        scalar_atom_sum_shape_stats(store.scalar(scalar), include_bytes)
+                            .unwrap_or_default(),
+                    );
+                }
+                ("tensor_term", stats)
+            }
+            NetworkLeaf::TensorTermSum(terms) => {
+                let mut stats = AtomSumShapeStats::default();
+                for term in terms {
+                    stats.merge(
+                        store
+                            .tensor(term.tensor)
+                            .atom_sum_shape_stats(include_bytes),
+                    );
+                    if let Some(scalar) = term.scalar {
+                        stats.merge(
+                            scalar_atom_sum_shape_stats(store.scalar(scalar), include_bytes)
+                                .unwrap_or_default(),
+                        );
+                    }
+                }
+                ("tensor_term_sum", stats)
+            }
             NetworkLeaf::LibraryKey { .. } => {
                 let tensor = Store::Tensor::from(
                     graph
@@ -1641,7 +2583,9 @@ where
         + Ref
         + FastTensorSum
         + From<LT::WithIndices>
+        + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
+    Store::Scalar: Clone,
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
     K: Display + Debug,
@@ -1656,23 +2600,25 @@ where
         match leaf {
             NetworkLeaf::Scalar(_) => return None,
             NetworkLeaf::LocalTensor(index) => {
-                terms.push(*index);
+                terms.push(TensorTerm::tensor(*index));
             }
             NetworkLeaf::TensorSum(indices) => {
                 for index in indices {
-                    terms.push(*index);
+                    terms.push(TensorTerm::tensor(*index));
                 }
             }
+            NetworkLeaf::TensorTerm(term) => terms.push(term.clone()),
+            NetworkLeaf::TensorTermSum(indices) => terms.extend(indices.iter().cloned()),
             NetworkLeaf::LibraryKey { .. } => {
                 let tensor = Store::Tensor::from(graph.get_lib_data::<_, LT, L>(lib, *node_id)?);
-                terms.push(store.push_tensor(tensor));
+                terms.push(TensorTerm::tensor(store.push_tensor(tensor)));
             }
         }
     }
 
     let all_scalar_terms = terms
         .iter()
-        .all(|index| store.tensor(*index).scalar_ref().is_some());
+        .all(|term| store.tensor(term.tensor).scalar_ref().is_some());
     let keep_lazy = profile::lazy_tensor_sums()
         && !all_scalar_terms
         && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS;
@@ -1689,10 +2635,62 @@ where
     }
 
     if !keep_lazy {
-        Some(materialize_tensor_sum(store, &terms, sum_start))
+        Some(materialize_tensor_terms(store, &terms, sum_start))
     } else {
-        Some(NetworkLeaf::TensorSum(terms))
+        Some(tensor_term_sum_leaf(&terms))
     }
+}
+
+fn tensor_term_sum_leaf<K, Aind>(terms: &[TensorTerm]) -> NetworkLeaf<K, Aind> {
+    debug_assert!(!terms.is_empty());
+
+    if terms.len() == 1 {
+        let term = terms[0].clone();
+        return match term.scalar {
+            Some(_) => NetworkLeaf::TensorTerm(term),
+            None => NetworkLeaf::LocalTensor(term.tensor),
+        };
+    }
+
+    if terms.iter().all(|term| term.scalar.is_none()) {
+        NetworkLeaf::TensorSum(terms.iter().map(|term| term.tensor).collect())
+    } else {
+        NetworkLeaf::TensorTermSum(terms.to_vec())
+    }
+}
+
+fn materialize_tensor_terms<K, Aind, Store>(
+    store: &mut Store,
+    terms: &[TensorTerm],
+    sum_start: Option<std::time::Instant>,
+) -> NetworkLeaf<K, Aind>
+where
+    Store: NetworkStoreAccess,
+    Store::Tensor: Clone
+        + Ref
+        + FastTensorSum
+        + ScalarMul<Store::Scalar, Output = Store::Tensor>
+        + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
+    Store::Scalar: Clone,
+{
+    if terms.iter().all(|term| term.scalar.is_none()) {
+        let indices = terms.iter().map(|term| term.tensor).collect::<Vec<_>>();
+        return materialize_tensor_sum(store, &indices, sum_start);
+    }
+
+    let mut materialized_terms = Vec::with_capacity(terms.len());
+    for term in terms {
+        let tensor = match term.scalar {
+            Some(scalar) => store
+                .tensor(term.tensor)
+                .scalar_mul(store.scalar(scalar))
+                .expect("scaled tensor term should support scalar multiplication"),
+            None => store.tensor(term.tensor).clone(),
+        };
+        materialized_terms.push(store.push_tensor(tensor));
+    }
+
+    materialize_tensor_sum(store, &materialized_terms, sum_start)
 }
 
 fn materialize_tensor_sum<K, Aind, Store>(
@@ -2170,6 +3168,28 @@ fn remap_parallel_replacement<K, Aind>(
                 }
             }
         }
+        NetworkLeaf::TensorTerm(term) => {
+            if term.tensor >= base_tensors {
+                term.tensor = tensor_offset + (term.tensor - base_tensors);
+            }
+            if let Some(index) = &mut term.scalar
+                && *index >= base_scalars
+            {
+                *index = scalar_offset + (*index - base_scalars);
+            }
+        }
+        NetworkLeaf::TensorTermSum(terms) => {
+            for term in terms {
+                if term.tensor >= base_tensors {
+                    term.tensor = tensor_offset + (term.tensor - base_tensors);
+                }
+                if let Some(index) = &mut term.scalar
+                    && *index >= base_scalars
+                {
+                    *index = scalar_offset + (*index - base_scalars);
+                }
+            }
+        }
         NetworkLeaf::Scalar(index) if *index >= base_scalars => {
             *index = scalar_offset + (*index - base_scalars);
         }
@@ -2341,59 +3361,88 @@ where
     }
 }
 
-impl<T, Sc> NetworkStore<T, Sc> {
-    fn execute_next_self_loop_trace<LT, L, K, FK, Aind>(
-        &mut self,
-        graph: &mut NetworkGraph<K, FK, Aind>,
-        lib: &L,
-    ) -> Result<bool, TensorNetworkError<K, FK>>
-    where
-        LT: LibraryTensor + Clone,
-        T: HasStructure + TensorStructure + Clone + Trace + From<LT::WithIndices>,
-        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
-        K: Display + Debug,
-        FK: Display + Debug,
-        Aind: AbsInd,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
-        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
-            IsAbstractSlot<Aind = Aind>,
-    {
-        let Some(node) = graph.graph.iter_nodes().find_map(|(node, crown, data)| {
-            if !matches!(data, NetworkNode::Leaf(_)) {
-                return None;
-            }
+fn execute_next_self_loop_trace<LT, L, K, FK, Aind, Store>(
+    store: &mut Store,
+    graph: &mut NetworkGraph<K, FK, Aind>,
+    lib: &L,
+) -> Result<bool, TensorNetworkError<K, FK>>
+where
+    Store: NetworkStoreAccess,
+    Store::Tensor: HasStructure
+        + TensorStructure
+        + Clone
+        + Trace
+        + Ref
+        + FastTensorSum
+        + ScalarMul<Store::Scalar, Output = Store::Tensor>
+        + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
+        + From<LT::WithIndices>,
+    Store::Scalar: Clone,
+    LT: LibraryTensor + Clone,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    K: Display + Debug,
+    FK: Display + Debug,
+    Aind: AbsInd,
+    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+        IsAbstractSlot<Aind = Aind>,
+{
+    let Some(node) = graph.graph.iter_nodes().find_map(|(node, crown, data)| {
+        if !matches!(data, NetworkNode::Leaf(_)) {
+            return None;
+        }
 
-            crown
-                .clone()
-                .any(|hedge| graph.graph[[&hedge]].is_slot() && graph.graph.is_self_loop(hedge))
-                .then_some(node)
-        }) else {
-            return Ok(false);
-        };
+        crown
+            .clone()
+            .any(|hedge| graph.graph[[&hedge]].is_slot() && graph.graph.is_self_loop(hedge))
+            .then_some(node)
+    }) else {
+        return Ok(false);
+    };
 
-        let traced = match &graph.graph[node] {
-            NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
-                self.tensors[*local].internal_contract()
-            }
-            NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => T::from(
-                graph
-                    .get_lib_data(lib, node)
-                    .expect("library node selected for trace must have library data"),
-            )
-            .internal_contract(),
-            NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => return Ok(false),
-            NetworkNode::Op(_) => unreachable!("self-loop trace search only selects tensor leaves"),
-        };
+    let traced = match &graph.graph[node] {
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
+            store.tensor(*local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => Store::Tensor::from(
+            graph
+                .get_lib_data(lib, node)
+                .expect("library node selected for trace must have library data"),
+        )
+        .internal_contract(),
+        NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
+            let materialized = materialize_tensor_sum::<K, Aind, Store>(store, indices, None);
+            let NetworkLeaf::LocalTensor(local) = materialized else {
+                unreachable!("materialized tensor sum is a local tensor")
+            };
+            store.tensor(local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::TensorTerm(term)) => {
+            let materialized =
+                materialize_tensor_terms::<K, Aind, Store>(store, std::slice::from_ref(term), None);
+            let NetworkLeaf::LocalTensor(local) = materialized else {
+                unreachable!("materialized tensor term is a local tensor")
+            };
+            store.tensor(local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::TensorTermSum(terms)) => {
+            let materialized = materialize_tensor_terms::<K, Aind, Store>(store, terms, None);
+            let NetworkLeaf::LocalTensor(local) = materialized else {
+                unreachable!("materialized tensor terms are a local tensor")
+            };
+            store.tensor(local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => return Ok(false),
+        NetworkNode::Op(_) => unreachable!("self-loop trace search only selects tensor leaves"),
+    };
 
-        let traced_position = self.tensors.len();
-        self.tensors.push(traced);
-        graph.replace_node_deleting_self_loop_slots(
-            node,
-            NetworkNode::Leaf(NetworkLeaf::LocalTensor(traced_position)),
-        );
+    let traced_position = store.push_tensor(traced);
+    graph.replace_node_deleting_self_loop_slots(
+        node,
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(traced_position)),
+    );
 
-        Ok(true)
-    }
+    Ok(true)
 }
 
 impl<S, T, Sc, K, FK, Aind: AbsInd> Network<NetworkStore<T, Sc>, K, FK, Aind>
@@ -2446,6 +3495,7 @@ where
         + Ref
         + FastTensorSum
         + Contract<LCM = Store::Tensor>
+        + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
         + for<'a> AddAssign<LT::WithIndices>
         + From<LT::WithIndices>
@@ -2475,7 +3525,7 @@ where
         lib: &L,
     ) -> Result<bool, TensorNetworkError<K, FK>> {
         let mut did_trace = false;
-        while self.execute_next_self_loop_trace(graph, lib)? {
+        while execute_next_self_loop_trace::<LT, L, K, FK, Aind, Self>(self, graph, lib)? {
             did_trace = true;
             graph.sync_order();
         }
@@ -2549,6 +3599,32 @@ where
                             }
                             NetworkLeaf::TensorSum(negated)
                         }
+                        NetworkLeaf::TensorTerm(term) => {
+                            let term = if let Some(scalar) = term.scalar {
+                                let scalar = self.scalar(scalar).clone().neg();
+                                TensorTerm::scaled(term.tensor, self.push_scalar(scalar))
+                            } else {
+                                let tensor = self.tensor(term.tensor).clone().neg();
+                                TensorTerm::tensor(self.push_tensor(tensor))
+                            };
+                            NetworkLeaf::TensorTerm(term)
+                        }
+                        NetworkLeaf::TensorTermSum(terms) => {
+                            let mut negated = Vec::with_capacity(terms.len());
+                            for term in terms {
+                                if let Some(scalar) = term.scalar {
+                                    let scalar = self.scalar(scalar).clone().neg();
+                                    negated.push(TensorTerm::scaled(
+                                        term.tensor,
+                                        self.push_scalar(scalar),
+                                    ));
+                                } else {
+                                    let tensor = self.tensor(term.tensor).clone().neg();
+                                    negated.push(TensorTerm::tensor(self.push_tensor(tensor)));
+                                }
+                            }
+                            NetworkLeaf::TensorTermSum(negated)
+                        }
                     };
                     Ok(new_node)
                 } else {
@@ -2581,9 +3657,10 @@ where
                     if let NetworkNode::Leaf(l) = &graph.graph[*node] {
                         match l {
                             NetworkLeaf::Scalar(_) => scalar_targets += 1,
-                            NetworkLeaf::LocalTensor(_) | NetworkLeaf::TensorSum(_) => {
-                                tensor_targets += 1
-                            }
+                            NetworkLeaf::LocalTensor(_)
+                            | NetworkLeaf::TensorSum(_)
+                            | NetworkLeaf::TensorTerm(_)
+                            | NetworkLeaf::TensorTermSum(_) => tensor_targets += 1,
                             NetworkLeaf::LibraryKey { .. } => library_targets += 1,
                         }
                         targets.push((*node, l));
@@ -2674,6 +3751,38 @@ where
                                         }
                                     }
                                 }
+                                NetworkLeaf::TensorTerm(term) => {
+                                    let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                        self,
+                                        std::slice::from_ref(term),
+                                        None,
+                                    );
+                                    let NetworkLeaf::LocalTensor(index) = materialized else {
+                                        unreachable!("materialized tensor term is a local tensor")
+                                    };
+                                    if let Some(s) = self.tensor(index).scalar_ref() {
+                                        accumulator += s;
+                                    } else {
+                                        return Err(TensorNetworkError::NotAllScalars(
+                                            "".to_string(),
+                                        ));
+                                    }
+                                }
+                                NetworkLeaf::TensorTermSum(terms) => {
+                                    let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                        self, terms, None,
+                                    );
+                                    let NetworkLeaf::LocalTensor(index) = materialized else {
+                                        unreachable!("materialized tensor terms are a local tensor")
+                                    };
+                                    if let Some(s) = self.tensor(index).scalar_ref() {
+                                        accumulator += s;
+                                    } else {
+                                        return Err(TensorNetworkError::NotAllScalars(
+                                            "".to_string(),
+                                        ));
+                                    }
+                                }
                                 NetworkLeaf::LibraryKey { .. } => {
                                     return Err(TensorNetworkError::ScalarLibSum("".to_string()));
                                 }
@@ -2716,6 +3825,42 @@ where
                                             }
                                         }
                                     }
+                                    NetworkLeaf::TensorTerm(term) => {
+                                        let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                            self,
+                                            std::slice::from_ref(term),
+                                            None,
+                                        );
+                                        let NetworkLeaf::LocalTensor(index) = materialized else {
+                                            unreachable!(
+                                                "materialized tensor term is a local tensor"
+                                            )
+                                        };
+                                        if let Some(s) = self.tensor(index).scalar_ref() {
+                                            accumulator += s;
+                                        } else {
+                                            return Err(TensorNetworkError::NotAllScalars(
+                                                "".to_string(),
+                                            ));
+                                        }
+                                    }
+                                    NetworkLeaf::TensorTermSum(terms) => {
+                                        let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                            self, terms, None,
+                                        );
+                                        let NetworkLeaf::LocalTensor(index) = materialized else {
+                                            unreachable!(
+                                                "materialized tensor terms are a local tensor"
+                                            )
+                                        };
+                                        if let Some(s) = self.tensor(index).scalar_ref() {
+                                            accumulator += s;
+                                        } else {
+                                            return Err(TensorNetworkError::NotAllScalars(
+                                                "".to_string(),
+                                            ));
+                                        }
+                                    }
                                     NetworkLeaf::LibraryKey { .. } => {
                                         return Err(TensorNetworkError::ScalarLibSum(
                                             "".to_string(),
@@ -2743,6 +3888,30 @@ where
                                         for index in indices {
                                             accumulator += self.tensor(*index).refer();
                                         }
+                                    }
+                                    NetworkLeaf::TensorTerm(term) => {
+                                        let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                            self,
+                                            std::slice::from_ref(term),
+                                            None,
+                                        );
+                                        let NetworkLeaf::LocalTensor(index) = materialized else {
+                                            unreachable!(
+                                                "materialized tensor term is a local tensor"
+                                            )
+                                        };
+                                        accumulator += self.tensor(index).refer();
+                                    }
+                                    NetworkLeaf::TensorTermSum(terms) => {
+                                        let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                            self, terms, None,
+                                        );
+                                        let NetworkLeaf::LocalTensor(index) = materialized else {
+                                            unreachable!(
+                                                "materialized tensor terms are a local tensor"
+                                            )
+                                        };
+                                        accumulator += self.tensor(index).refer();
                                     }
                                     NetworkLeaf::LibraryKey { .. } => {
                                         let with_index = graph.get_lib_data(lib, *nid).unwrap();
@@ -2777,6 +3946,26 @@ where
                                         accumulator += self.tensor(*index).refer();
                                     }
                                 }
+                                NetworkLeaf::TensorTerm(term) => {
+                                    let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                        self,
+                                        std::slice::from_ref(term),
+                                        None,
+                                    );
+                                    let NetworkLeaf::LocalTensor(index) = materialized else {
+                                        unreachable!("materialized tensor term is a local tensor")
+                                    };
+                                    accumulator += self.tensor(index).refer();
+                                }
+                                NetworkLeaf::TensorTermSum(terms) => {
+                                    let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                        self, terms, None,
+                                    );
+                                    let NetworkLeaf::LocalTensor(index) = materialized else {
+                                        unreachable!("materialized tensor terms are a local tensor")
+                                    };
+                                    accumulator += self.tensor(index).refer();
+                                }
                                 NetworkLeaf::LibraryKey { .. } => {
                                     let with = graph.get_lib_data(lib, *nid).unwrap();
                                     accumulator += with;
@@ -2789,7 +3978,9 @@ where
 
                         NetworkLeaf::LocalTensor(pos)
                     }
-                    NetworkLeaf::TensorSum(_) => {
+                    NetworkLeaf::TensorSum(_)
+                    | NetworkLeaf::TensorTerm(_)
+                    | NetworkLeaf::TensorTermSum(_) => {
                         return Err(TensorNetworkError::SumScalarTensor(
                             "lazy tensor sum mixed with scalar sum terms".to_string(),
                         ));
@@ -2838,6 +4029,31 @@ where
                                 materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
                             let NetworkLeaf::LocalTensor(index) = materialized else {
                                 unreachable!("materialized tensor sum is a local tensor")
+                            };
+                            let t = self.tensor(index).clone();
+                            let t = fn_lib.apply(&f, t)?;
+                            let pos = self.push_tensor(t);
+                            NetworkLeaf::LocalTensor(pos)
+                        }
+                        NetworkLeaf::TensorTerm(term) => {
+                            let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                self,
+                                std::slice::from_ref(term),
+                                None,
+                            );
+                            let NetworkLeaf::LocalTensor(index) = materialized else {
+                                unreachable!("materialized tensor term is a local tensor")
+                            };
+                            let t = self.tensor(index).clone();
+                            let t = fn_lib.apply(&f, t)?;
+                            let pos = self.push_tensor(t);
+                            NetworkLeaf::LocalTensor(pos)
+                        }
+                        NetworkLeaf::TensorTermSum(terms) => {
+                            let materialized =
+                                materialize_tensor_terms::<K, Aind, Self>(self, terms, None);
+                            let NetworkLeaf::LocalTensor(index) = materialized else {
+                                unreachable!("materialized tensor terms are a local tensor")
                             };
                             let t = self.tensor(index).clone();
                             let t = fn_lib.apply(&f, t)?;
@@ -2997,6 +4213,125 @@ where
                                 materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
                             let NetworkLeaf::LocalTensor(ti) = materialized else {
                                 unreachable!("materialized tensor sum is a local tensor")
+                            };
+                            let mut t = self.tensor(ti).clone();
+                            match pow {
+                                0 => {
+                                    let one = self.scalar(0).ref_one();
+                                    let pos = self.push_scalar(one);
+                                    NetworkLeaf::Scalar(pos)
+                                }
+                                1 => NetworkLeaf::LocalTensor(ti),
+                                _ => {
+                                    let squares = n / 2;
+                                    let mut square = t.contract(&t)?;
+
+                                    if n % 2 == 1 {
+                                        if n != 1 {
+                                            for _ in 0..squares {
+                                                square = square.contract(&square)?;
+                                            }
+                                            t = square.contract(&t)?;
+                                        }
+                                        if pow < 0 {
+                                            if !t.is_scalar() {
+                                                return Err(
+                                                    TensorNetworkError::NegativeExponentNonScalar(
+                                                        "".to_string(),
+                                                    ),
+                                                );
+                                            } else {
+                                                let mut s =
+                                                    Store::Scalar::from(t.scalar().unwrap());
+                                                s = s.ref_one() / s;
+                                                let pos = self.push_scalar(s);
+                                                NetworkLeaf::Scalar(pos)
+                                            }
+                                        } else {
+                                            let pos = self.push_tensor(t);
+                                            NetworkLeaf::LocalTensor(pos)
+                                        }
+                                    } else {
+                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
+                                        let sc = s.clone();
+                                        for _ in 1..squares {
+                                            s *= sc.refer();
+                                        }
+                                        if pow < 0 {
+                                            s = s.ref_one() / s;
+                                        }
+                                        let pos = self.push_scalar(s);
+                                        NetworkLeaf::Scalar(pos)
+                                    }
+                                }
+                            }
+                        }
+                        NetworkLeaf::TensorTerm(term) => {
+                            let materialized = materialize_tensor_terms::<K, Aind, Self>(
+                                self,
+                                std::slice::from_ref(term),
+                                None,
+                            );
+                            let NetworkLeaf::LocalTensor(ti) = materialized else {
+                                unreachable!("materialized tensor term is a local tensor")
+                            };
+                            let mut t = self.tensor(ti).clone();
+                            match pow {
+                                0 => {
+                                    let one = self.scalar(0).ref_one();
+                                    let pos = self.push_scalar(one);
+                                    NetworkLeaf::Scalar(pos)
+                                }
+                                1 => NetworkLeaf::LocalTensor(ti),
+                                _ => {
+                                    let squares = n / 2;
+                                    let mut square = t.contract(&t)?;
+
+                                    if n % 2 == 1 {
+                                        if n != 1 {
+                                            for _ in 0..squares {
+                                                square = square.contract(&square)?;
+                                            }
+                                            t = square.contract(&t)?;
+                                        }
+                                        if pow < 0 {
+                                            if !t.is_scalar() {
+                                                return Err(
+                                                    TensorNetworkError::NegativeExponentNonScalar(
+                                                        "".to_string(),
+                                                    ),
+                                                );
+                                            } else {
+                                                let mut s =
+                                                    Store::Scalar::from(t.scalar().unwrap());
+                                                s = s.ref_one() / s;
+                                                let pos = self.push_scalar(s);
+                                                NetworkLeaf::Scalar(pos)
+                                            }
+                                        } else {
+                                            let pos = self.push_tensor(t);
+                                            NetworkLeaf::LocalTensor(pos)
+                                        }
+                                    } else {
+                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
+                                        let sc = s.clone();
+                                        for _ in 1..squares {
+                                            s *= sc.refer();
+                                        }
+                                        if pow < 0 {
+                                            s = s.ref_one() / s;
+                                        }
+                                        let pos = self.push_scalar(s);
+                                        NetworkLeaf::Scalar(pos)
+                                    }
+                                }
+                            }
+                        }
+                        NetworkLeaf::TensorTermSum(terms) => {
+                            let materialized =
+                                materialize_tensor_terms::<K, Aind, Self>(self, terms, None);
+                            let NetworkLeaf::LocalTensor(ti) = materialized else {
+                                unreachable!("materialized tensor terms are a local tensor")
                             };
                             let mut t = self.tensor(ti).clone();
                             match pow {

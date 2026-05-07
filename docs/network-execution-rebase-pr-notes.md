@@ -342,3 +342,45 @@ How it works:
 Validation run:
 
 - `cargo fmt`
+- `cargo check --package spenso --tests --profile dev-optim`
+- `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
+- `cargo check --package gammalooprs --tests --profile dev-optim`
+
+### Scalar-Preserving Tensor Sum Terms
+
+Trace commit: `spwmxtox`.
+
+What this adds:
+
+- Extends lazy tensor sums from plain tensor indices to tensor terms that can
+  carry an optional scalar factor.
+- Keeps scalar factors outside numeric tensor addition and contraction for as
+  long as possible.
+- Adds fast-sum hooks and common-factor extraction hooks so parametric tensors
+  can avoid materializing large scalar-expanded entries before contraction.
+
+How it works:
+
+- `TensorTerm { tensor, scalar }` records a local tensor plus an optional local
+  scalar factor.
+- `NetworkLeaf::TensorTerm` represents one scaled tensor term, and
+  `NetworkLeaf::TensorTermSum` represents a sum whose terms may have different
+  scalar factors.
+- Product contraction now converts tensor-like operands into `TensorTerm`
+  lists, combines scalar factors separately, contracts tensor payloads, and
+  attaches the scalar product back to the resulting term.
+- Pure unscaled term lists still use `TensorSum(Vec<usize>)`; scaled term lists
+  use `TensorTermSum(Vec<TensorTerm>)`.
+- Fallback paths materialize term sums only when an operation needs a concrete
+  tensor, such as functions, powers, scalar result extraction, or over-large
+  distributed products.
+- The rebase keeps the generic leaf shape `NetworkLeaf<K, Aind>` and the
+  structured library variant `LibraryKey { key, indices }`.
+
+Validation run:
+
+- `cargo fmt`
+- `cargo check --package spenso --tests --profile dev-optim`
+- `cargo check --package idenso --tests --profile dev-optim`
+- `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
+- `cargo check --package gammalooprs --tests --profile dev-optim`
