@@ -109,7 +109,7 @@
 ///
 /// `side: "+"` keeps the solved coordinate non-negative and `side: "-"`
 /// keeps it non-positive. Groups are layout constraints and therefore require
-/// `graph.pos(..., mode: "pin")`.
+/// pin placement, which is the `graph.pos` default.
 ///
 /// ```example
 /// #graph.group("right", side: "+")
@@ -124,8 +124,10 @@
 
 /// Create a first-class graph placement.
 ///
-/// `mode: "start"` uses the coordinate as the layout starting point. `mode:
-/// "pin"` turns numeric and grouped coordinates into layout constraints.
+/// The default `mode: "pin"` turns numeric and grouped coordinates into layout
+/// constraints and also makes the coordinates immediately drawable without a
+/// layout pass. Use `mode: "start"` when the coordinate should only seed the
+/// layout.
 /// `ref` may reference a previously created node index and combines with `dx`
 /// and `dy`.
 ///
@@ -133,7 +135,7 @@
 /// #graph.pos(x: 0, y: graph.group("row"), mode: "pin")
 /// ```
 /// -> dictionary
-#let pos(x: none, y: none, ref: none, dx: none, dy: none, mode: "start") = {
+#let pos(x: none, y: none, ref: none, dx: none, dy: none, mode: "pin") = {
   if mode != "start" and mode != "pin" {
     panic("graph.pos: mode must be \"start\" or \"pin\"")
   }
