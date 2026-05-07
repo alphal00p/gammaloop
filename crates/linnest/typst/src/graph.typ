@@ -21,6 +21,18 @@
 
 #let _statement-value(value) = if type(value) == str { value } else { str(value) }
 
+#let _point-statement(point) = {
+  if type(point) == str {
+    point
+  } else if type(point) == dictionary and point.keys().contains("x") and point.keys().contains("y") {
+    str(point.x) + "," + str(point.y)
+  } else if type(point) == array and point.len() == 2 {
+    str(point.at(0)) + "," + str(point.at(1))
+  } else {
+    panic("graph position values must be strings, (x:, y:) dictionaries, or two-item arrays")
+  }
+}
+
 #let _statements-with-pin(statements, pin) = {
   if pin == none {
     statements
@@ -29,30 +41,91 @@
   }
 }
 
+#let _statements-with-point(statements, key, point) = {
+  let result = statements
+  if point != none {
+    result.insert(key, _point-statement(point))
+  }
+  result
+}
+
+#let _statements-with-value(statements, key, value) = {
+  let result = statements
+  if value != none {
+    result.insert(key, _statement-value(value))
+  }
+  result
+}
+
 #let _node-spec(node) = {
-  let statements = _statements-with-pin(
-    node.at("statements", default: (:)),
-    node.at("pin", default: none),
+  let statements = _statements-with-point(
+    _statements-with-point(
+      _statements-with-pin(
+        node.at("statements", default: (:)),
+        node.at("pin", default: none),
+      ),
+      "pos",
+      node.at("pos", default: none),
+    ),
+    "shift",
+    node.at("shift", default: none),
   )
   let clean = node
-  if clean.keys().contains("pin") {
-    let _ = clean.remove("pin")
+  for key in ("pin", "pos", "shift") {
+    if clean.keys().contains(key) {
+      let _ = clean.remove(key)
+    }
   }
   clean + (statements: statements)
 }
 
-#let _edge-spec(edge) = {
-  let statements = _edge-render-statements(
-    _statements-with-pin(
-      edge.at("statements", default: (:)),
-      edge.at("pin", default: none),
+#let _edge-statements(edge) = {
+  let statements = _statements-with-value(
+    _statements-with-value(
+      _statements-with-point(
+        _statements-with-point(
+          _statements-with-point(
+            _statements-with-pin(
+              edge.at("statements", default: (:)),
+              edge.at("pin", default: none),
+            ),
+            "pos",
+            edge.at("pos", default: none),
+          ),
+          "shift",
+          edge.at("shift", default: none),
+        ),
+        "label-pos",
+        edge.at("label-pos", default: none),
+      ),
+      "label-angle",
+      edge.at("label-angle", default: none),
     ),
+    "bend",
+    edge.at("bend", default: none),
+  )
+  _edge-render-statements(
+    statements,
     source-style-eval: edge.at("source-style-eval", default: none),
     sink-style-eval: edge.at("sink-style-eval", default: none),
     label-eval: edge.at("label-eval", default: none),
   )
+}
+
+#let _edge-spec(edge) = {
+  let statements = _edge-statements(edge)
   let clean = edge
-  for key in ("pin", "source-style-eval", "sink-style-eval", "label-eval") {
+  for key in (
+    "pin",
+    "pos",
+    "shift",
+    "label-pos",
+    "label-angle",
+    "bend",
+    "source-style-eval",
+    "sink-style-eval",
+    "label-eval",
+  ) {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -166,15 +239,17 @@
   /// Default DOT statements for nodes. -> dictionary
   node-statements: (:),
 
-  /// Node specifications. Each node may define `name`, `index`, `pin`, and
-  /// `statements`. This matches the per-node parameters accepted by @node.
+  /// Node specifications. Each node may define `name`, `index`, `pos`, `shift`,
+  /// `pin`, and `statements`. This matches the per-node parameters accepted by
+  /// @node.
   /// -> array
   nodes: (),
 
-  /// Edge specifications. Each edge may define `source`, `sink`,
-  /// `orientation`, `flow`, `id`, `pin`, `statements`, `source-style-eval`,
-  /// `sink-style-eval`, and `label-eval`. The `source` and `sink` fields use
-  /// the same half-edge dictionaries accepted by @edge. -> array
+  /// Edge specifications. Each edge may define `source`, `sink`, `orientation`,
+  /// `flow`, `id`, `pos`, `shift`, `label-pos`, `label-angle`, `bend`, `pin`,
+  /// `statements`, `source-style-eval`, `sink-style-eval`, and `label-eval`.
+  /// The `source` and `sink` fields use the same half-edge dictionaries accepted
+  /// by @edge. -> array
   edges: (),
 ) = {
   let edge-statements = _edge-render-statements(
@@ -249,13 +324,21 @@
 /// #repr((a, c))
 /// ```
 /// -> dictionary
-#let node(builder, name: none, index: none, pin: none, statements: (:)) = {
+#let node(builder, name: none, index: none, pos: none, shift: none, pin: none, statements: (:)) = {
   cbor(_plugin.graph_builder_add_node(
     bytes(builder),
     cbor.encode((
       name: name,
       index: index,
-      statements: _statements-with-pin(statements, pin),
+      statements: _statements-with-point(
+        _statements-with-point(
+          _statements-with-pin(statements, pin),
+          "pos",
+          pos,
+        ),
+        "shift",
+        shift,
+      ),
     )),
   ))
 }
@@ -286,6 +369,11 @@
   orientation: "default",
   flow: none,
   id: none,
+  pos: none,
+  shift: none,
+  label-pos: none,
+  label-angle: none,
+  bend: none,
   pin: none,
   statements: (:),
   source-style-eval: none,
@@ -293,7 +381,27 @@
   label-eval: none,
 ) = {
   let statements = _edge-render-statements(
-    _statements-with-pin(statements, pin),
+    _statements-with-value(
+      _statements-with-value(
+        _statements-with-point(
+          _statements-with-point(
+            _statements-with-point(
+              _statements-with-pin(statements, pin),
+              "pos",
+              pos,
+            ),
+            "shift",
+            shift,
+          ),
+          "label-pos",
+          label-pos,
+        ),
+        "label-angle",
+        label-angle,
+      ),
+      "bend",
+      bend,
+    ),
     source-style-eval: source-style-eval,
     sink-style-eval: sink-style-eval,
     label-eval: label-eval,
