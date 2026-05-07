@@ -3,11 +3,11 @@
 #set page(width: 120mm, height: 75mm, margin: 10mm)
 
 #let b = graph.builder(name: "parallel demo")
-#let (node: a, builder: b) = graph.node(b, name: "a", pin: graph.pin(x: -2.0, y: 0))
-#let (node: c, builder: b) = graph.node(b, name: "c", pin: graph.pin(x: 2.0, y: 0))
-#let b = graph.edge(b, source: (node: a), sink: (node: c), pin: graph.pin(x: 0, y: 1.25))
-#let b = graph.edge(b, source: (node: a), sink: (node: c), pin: graph.pin(x: 0, y: 1.25))
-#let b = graph.edge(b, source: (node: a), sink: (node: c), pin: graph.pin(x: 0, y: 1.25))
+#let (node: a, builder: b) = graph.node(b, name: "a", pos: graph.pos(x: -2.0, y: 0, mode: "pin"))
+#let (node: c, builder: b) = graph.node(b, name: "c", pos: graph.pos(ref: a, dx: 4.0, dy: 0, mode: "pin"))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))
 
 #let offsets = (-0.16, 0, 0.16)
 #let colors = (rgb("#d72638"), gray, rgb("#355c9a"))

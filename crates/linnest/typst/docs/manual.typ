@@ -137,35 +137,71 @@ the per-edge `label` statement:
 )
 ```
 
-== Layout Pins
+== Placements
 
-`graph.pin` formats the `pin` statement consumed by layout. Numeric `x` and
-`y` values fix coordinates for nodes or edge control points:
+`graph.pos` creates a first-class placement. `mode: "start"` uses a coordinate
+as the layout starting point, while `mode: "pin"` turns it into a fixed layout
+constraint:
 
 ```typ
-#let (node: a, builder: b) = graph.node(b, name: "a", pin: graph.pin(x: -2, y: 0))
-#let (node: c, builder: b) = graph.node(b, name: "c", pin: graph.pin(x: 2, y: 0))
-#let b = graph.edge(b, source: (node: a), sink: (node: c), pin: graph.pin(x: 0, y: 1.2))
+#let (node: a, builder: b) = graph.node(b, name: "a", pos: graph.pos(x: -2, y: 0, mode: "pin"))
+#let (node: c, builder: b) = graph.node(b, name: "c", pos: graph.pos(ref: a, dx: 4, dy: 0, mode: "pin"))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.2, mode: "pin"))
 ```
 
-`graph.pin-group` links one coordinate across several nodes or edge control
-points. A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it
-negative. GammaLoop external-edge columns use this to keep incoming and outgoing
-external legs on opposite sides while pairing rows by a shared `y` group:
+`graph.group` links one coordinate across several nodes or edge control points.
+A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it negative.
+GammaLoop external-edge columns use this to keep incoming and outgoing external
+legs on opposite sides while pairing rows by a shared `y` group:
 
 ```typ
 #let b = graph.edge(
   b,
   source: (node: right-ext),
   sink: (node: center),
-  pin: graph.pin(x: graph.pin-group("right", side: "+"), y: graph.pin-group("edgee0")),
+  pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0"), mode: "pin"),
 )
 #let b = graph.edge(
   b,
   source: (node: center),
   sink: (node: left-ext),
-  pin: graph.pin(x: graph.pin-group("left", side: "-"), y: graph.pin-group("edgee0")),
+  pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0"), mode: "pin"),
 )
+```
+
+Raw DOT input uses the same placement model through the `pos` attribute. The
+standard Graphviz subset is preserved: `pos="x,y"` is a starting coordinate and
+`pos="x,y!"` is pinned. Linnest extends the value with explicit id references
+and axis entries. In axis entries, `!` belongs to that axis: numeric entries
+without `!` are starting coordinates, numeric entries with `!` are fixed
+constraints, and grouped entries must use `!` because groups are constraints.
+
+```dot
+digraph {
+  a [id=0 pos="0,0!"]
+  b [id=1 pos="ref(node:0)+4,0!"]
+  a -> b [id=0 pos="ref(node:1)+0,1!"]
+  b -> c [id=1 pos="ref(edge:0)+1,0!"]
+  c [id=2 pos="x:2!"]
+  d [id=3 pos="x:2!,y:1"]
+  ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
+}
+```
+
+The DOT grammar is intentionally id-based: `ref(node:0)` uses a node `id` and
+`ref(edge:0)` uses an edge `id`. Bare names and implicit edge order are not
+placement references. The `@` syntax denotes grouped coordinate constraints;
+`@+name` and `@-name` keep the grouped coordinate on the positive or negative
+side respectively.
+
+```text
+pos="x,y"                   // start x and y
+pos="x,y!"                  // pin x and y
+pos="x:<coord>"             // start numeric x
+pos="x:<coord>!"            // pin x
+pos="y:<coord>!"            // pin y
+pos="x:<coord>!,y:<coord>"  // pin x, start numeric y
+pos="x:<coord>,y:<coord>!"  // start numeric x, pin y
 ```
 
 Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge

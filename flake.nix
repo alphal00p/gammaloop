@@ -374,10 +374,87 @@
           pname = "clinnet-deps";
         });
 
+      clinnetBundleTypstAssets = ''
+        cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
+        cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
+        cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+      '';
+
       clinnet-cli = craneLib.buildPackage (clinnetArgs
         // {
           cargoArtifacts = clinnetCargoArtifacts;
+          preBuild = clinnetBundleTypstAssets;
         });
+
+      rscls = pkgs.rustPlatform.buildRustPackage rec {
+        pname = "rscls";
+        version = "0.2.3";
+        src = pkgs.fetchCrate {
+          inherit pname version;
+          sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+        };
+        cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+      };
+
+      devShellPackages = with pkgs; [
+        tdf
+        cargo-flamegraph
+        yaml-language-server
+        just
+        dot-language-server
+        cargo-insta
+        cargo-udeps
+        cargo-machete
+        openssl
+        pyright
+        gmp
+        mpfr
+        libmpc
+        form
+        gnum4
+        nickel
+        nls
+        typst
+        cargo-nextest
+        pkg-config
+        cargo-deny
+        cargo-edit
+        cargo-watch
+        bacon
+        gfortran
+        gcc
+        rust-script
+        uv
+        graphviz
+        mupdf
+        tinymist
+        typstyle
+        poppler-utils
+        rust-analyzer
+        maturin
+        virtualenv
+      ];
+
+      mkDevShell = extraPackages:
+        craneLib.devShell {
+          # checks = self.checks.${system};
+
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+
+          CC = nixCc;
+          CXX = nixCxx;
+          "${cargoLinkerVar}" = nixCc;
+          RUSTFLAGS = "-C linker=${nixCc}";
+
+          LD_LIBRARY_PATH = runtimeLibPath;
+          DYLD_LIBRARY_PATH = runtimeLibPath;
+
+          packages = devShellPackages ++ extraPackages;
+        };
 
       impureCheckRunnerTargets = [
         {
@@ -511,74 +588,10 @@
         };
       };
 
-      devShells.default = craneLib.devShell {
-        # checks = self.checks.${system};
-
-        RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-        GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
-
-        CC = nixCc;
-        CXX = nixCxx;
-        "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
-
-        LD_LIBRARY_PATH = runtimeLibPath;
-        DYLD_LIBRARY_PATH = runtimeLibPath;
-
-        # shellHook = ''
-        #   export CC="${nixCc}"
-        #   export CXX="${nixCxx}"
-        #   export ${cargoLinkerVar}="${nixCc}"
-        # '';
-
-        packages = with pkgs; [
-          tdf
-          cargo-flamegraph
-          yaml-language-server
-          just
-          dot-language-server
-          cargo-insta
-          cargo-udeps
-          cargo-machete
-          openssl
-          pyright
-          gmp
-          mpfr
-          libmpc
-          form
-          gnum4
-          nickel
-          nls
-          typst
-          cargo-nextest
-          pkg-config
-          cargo-deny
-          cargo-edit
-          cargo-watch
-          bacon
-          gfortran
-          gcc
-          rust-script
-          uv
-          graphviz
-          mupdf
-          tinymist
-          typstyle
-          poppler-utils
-          rust-analyzer
-          maturin
-          virtualenv
-          clinnet-cli
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "rscls";
-            version = "0.2.3";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
-            };
-            cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
-          })
-        ];
+      devShells = {
+        default = mkDevShell [];
+        full = mkDevShell [clinnet-cli rscls];
+        clinnet = mkDevShell [clinnet-cli];
       };
     });
 }

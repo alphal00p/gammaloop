@@ -666,12 +666,12 @@
 /// #let positioned = graph.build(
 ///   name: "positioned",
 ///   nodes: (
-///     (name: "left", pos: (x: 0, y: 0)),
-///     (name: "right", pos: (x: 2.5, y: 0)),
+///     (name: "left", pos: graph.pos(x: 0, y: 0)),
+///     (name: "right", pos: graph.pos(ref: 0, dx: 2.5, dy: 0)),
 ///   ),
 ///   edges: (
 ///     (source: (node: 0), sink: (node: 1)),
-///     (source: (node: 1), sink: none, pos: (x: 3.4, y: 0.7)),
+///     (source: (node: 1), sink: none, pos: graph.pos(ref: 1, dx: 0.9, dy: 0.7)),
 ///   ),
 /// )
 /// #draw(positioned, source-style: (stroke: black + 0.7pt), sink-style: (stroke: black + 0.7pt))
@@ -745,7 +745,7 @@
 /// #let (node: c, builder: b) = graph.node(b, name: "c")
 /// #let (node: d, builder: b) = graph.node(b, name: "d")
 /// #let (node: e, builder: b) = graph.node(b, name: "e")
-/// #let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (pin: "x:0,y:0.75"))
+/// #let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 0.75, mode: "pin"))
 /// #let b = graph.edge(b, source: (node: c), sink: (node: a, compass: "e"))
 /// #let b = graph.edge(b, source: (node: c), sink: (node: d, compass: "e"))
 /// #let b = graph.edge(b, source: (node: e), sink: (node: d, compass: "e"))
@@ -760,10 +760,10 @@
 ///
 /// #example(`
 /// #let p = graph.builder(name: "parallel demo")
-/// #let (node: pa, builder: p) = graph.node(p, name: "a", statements: (pin: "y:0"))
-/// #let (node: pc, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
-/// #let (node: pc1, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
-/// #let (node: pc2, builder: p) = graph.node(p, name: "c", statements: (pin: "y:0"))
+/// #let (node: pa, builder: p) = graph.node(p, name: "a", pos: graph.pos(y: 0, mode: "pin"))
+/// #let (node: pc, builder: p) = graph.node(p, name: "c", pos: graph.pos(y: 0, mode: "pin"))
+/// #let (node: pc1, builder: p) = graph.node(p, name: "c", pos: graph.pos(y: 0, mode: "pin"))
+/// #let (node: pc2, builder: p) = graph.node(p, name: "c", pos: graph.pos(y: 0, mode: "pin"))
 /// #let p = graph.edge(p, source: (node: pa), sink: (node: pc))
 /// #let p = graph.edge(p, source: (node: pc2), sink: (node: pc1))
 /// #let parallel-edge-style(edge) = (
@@ -790,9 +790,9 @@
 ///
 /// #example(`
 /// #let b = graph.builder(name: "oriented marks")
-/// #let (node: a, builder: b) = graph.node(b, name: "a", statements: (pin: "x:0,y:0"))
-/// #let (node: c, builder: b) = graph.node(b, name: "c", statements: (pin: "x:3,y:0"))
-/// #let (node: d, builder: b) = graph.node(b, name: "d", statements: (pin: "x:3,y:-1"))
+/// #let (node: a, builder: b) = graph.node(b, name: "a", pos: graph.pos(x: 0, y: 0, mode: "pin"))
+/// #let (node: c, builder: b) = graph.node(b, name: "c", pos: graph.pos(x: 3, y: 0, mode: "pin"))
+/// #let (node: d, builder: b) = graph.node(b, name: "d", pos: graph.pos(x: 3, y: -1, mode: "pin"))
 /// #let b = graph.edge(b, source: (node: a), sink: (node: c), orientation: "default")
 /// #let b = graph.edge(b, source: (node: a), sink: (node: d), orientation: "reversed")
 /// #let arrow = (

@@ -48,9 +48,10 @@ use linnet::{
 use rand::rngs::SmallRng;
 use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::io::BufWriter;
+use std::ops::Deref;
 use std::path::Path;
-use std::{collections::BTreeMap, io::BufWriter};
-use std::{collections::HashMap, ops::Deref};
 use std::{f64, fs::File};
 
 #[cfg(target_arch = "wasm32")]
@@ -201,6 +202,8 @@ pub struct TypstNode {
     index: Option<NodeIndex>,
     #[with(Point2Rkyv)]
     pos: Point2<f64>,
+    start_x: bool,
+    start_y: bool,
     constraints: PointConstraint,
     #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
@@ -214,6 +217,8 @@ impl Default for TypstNode {
             name: None,
             index: None,
             pos: Point2::origin(),
+            start_x: false,
+            start_y: false,
             constraints: PointConstraint::default(),
             shift: None,
             statements: BTreeMap::new(),
@@ -284,12 +289,15 @@ impl TypstNode {
         });
 
         let (pos, constraints) = init_points[nid];
+        let (start_x, start_y) = Self::parse_position_flags(&data.statements);
 
         Self {
             name: data.name,
             index: data.index,
             statements: data.statements,
             pos,
+            start_x,
+            start_y,
             constraints,
             shift,
             eval,
@@ -321,6 +329,27 @@ impl TypstNode {
         }
         None
     }
+
+    fn parse_position_flags(
+        statements: &std::collections::BTreeMap<String, String>,
+    ) -> (bool, bool) {
+        if !statements.contains_key("pos") {
+            return (false, false);
+        }
+        (
+            Self::parse_bool_statement(statements, "pos-x-set").unwrap_or(true),
+            Self::parse_bool_statement(statements, "pos-y-set").unwrap_or(true),
+        )
+    }
+
+    fn parse_bool_statement(
+        statements: &std::collections::BTreeMap<String, String>,
+        key: &str,
+    ) -> Option<bool> {
+        statements
+            .get(key)
+            .and_then(|value| value.trim().trim_matches('"').parse::<bool>().ok())
+    }
 }
 
 #[derive(
@@ -333,6 +362,8 @@ pub struct TypstEdge {
     bend: Result<Rad<f64>, GeomError>,
     #[with(Point2Rkyv)]
     pos: Point2<f64>,
+    start_x: bool,
+    start_y: bool,
     #[with(rkyv::with::Map<Point2Rkyv>)]
     label_pos: Option<Point2<f64>>,
     label_angle: Option<f64>,
@@ -368,6 +399,8 @@ impl Default for TypstEdge {
             to: None,
             bend: Err(GeomError::NotComputed),
             pos: Point2::origin(),
+            start_x: false,
+            start_y: false,
             label_pos: None,
             label_angle: None,
             shift: None,
@@ -473,11 +506,14 @@ impl TypstEdge {
             }
 
             let (pos, constraints) = pin_constaints[eid];
+            let (start_x, start_y) = TypstNode::parse_position_flags(&d.statements);
 
             Self {
                 from,
                 to,
                 pos,
+                start_x,
+                start_y,
                 constraints,
                 label_pos,
                 label_angle,
@@ -637,44 +673,515 @@ impl Deref for TypstGraph {
     }
 }
 
+#[derive(Debug, Clone)]
+enum DotPlacementExpr {
+    Point {
+        point: Point2<f64>,
+        pinned: bool,
+    },
+    Ref {
+        target: DotPlacementRef,
+        offset: Vector2<f64>,
+        pinned: bool,
+    },
+    Axes {
+        x: Option<DotAxisPlacement>,
+        y: Option<DotAxisPlacement>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct DotAxisPlacement {
+    coord: DotAxisCoord,
+    pinned: bool,
+}
+
+#[derive(Debug, Clone)]
+enum DotAxisCoord {
+    Number(f64),
+    Group(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DotPlacementRef {
+    Node(usize),
+    Edge(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DotPlacementTarget {
+    Node(usize),
+    Edge(usize),
+}
+
+#[derive(Debug, Clone)]
+struct DotResolvedPlacement {
+    point: Point2<f64>,
+    x_set: bool,
+    y_set: bool,
+    pin: Option<PinConstraint>,
+}
+
+struct DotPlacementContext {
+    node_exprs: HashMap<usize, DotPlacementExpr>,
+    edge_exprs: HashMap<usize, DotPlacementExpr>,
+    node_id_map: HashMap<usize, usize>,
+    edge_id_map: HashMap<usize, usize>,
+    memo: HashMap<DotPlacementTarget, Option<DotResolvedPlacement>>,
+    visiting: HashSet<DotPlacementTarget>,
+}
+
+impl DotPlacementContext {
+    fn new(dot: &DotGraph) -> Self {
+        let mut node_exprs = HashMap::new();
+        let mut edge_exprs = HashMap::new();
+        let mut node_id_map = HashMap::new();
+        let mut edge_id_map = HashMap::new();
+
+        for (node_id, _, node) in dot.graph.iter_nodes() {
+            if let Some(index) = node.index {
+                node_id_map.insert(index.0, node_id.0);
+            }
+            if let Some(expr) = node.statements.get("pos").and_then(|value| {
+                DotPlacementExpr::parse(value)
+                    .unwrap_or_else(|err| panic!("invalid DOT node pos {value:?}: {err}"))
+            }) {
+                node_exprs.insert(node_id.0, expr);
+            }
+        }
+
+        for (_, edge_id, edge) in dot.graph.iter_edges() {
+            if let Some(index) = edge.data.edge_id {
+                edge_id_map.insert(index.0, edge_id.0);
+            }
+            if let Some(expr) = edge.data.statements.get("pos").and_then(|value| {
+                DotPlacementExpr::parse(value)
+                    .unwrap_or_else(|err| panic!("invalid DOT edge pos {value:?}: {err}"))
+            }) {
+                edge_exprs.insert(edge_id.0, expr);
+            }
+        }
+
+        Self {
+            node_exprs,
+            edge_exprs,
+            node_id_map,
+            edge_id_map,
+            memo: HashMap::new(),
+            visiting: HashSet::new(),
+        }
+    }
+
+    fn resolve_node(&mut self, node_id: NodeIndex) -> Option<DotResolvedPlacement> {
+        self.resolve_target(DotPlacementTarget::Node(node_id.0))
+            .unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    fn resolve_edge(&mut self, edge_id: EdgeIndex) -> Option<DotResolvedPlacement> {
+        self.resolve_target(DotPlacementTarget::Edge(edge_id.0))
+            .unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    fn resolve_target(
+        &mut self,
+        target: DotPlacementTarget,
+    ) -> Result<Option<DotResolvedPlacement>, String> {
+        if let Some(resolved) = self.memo.get(&target) {
+            return Ok(resolved.clone());
+        }
+
+        if !self.visiting.insert(target) {
+            return Err(format!("cyclic DOT pos reference involving {target:?}"));
+        }
+
+        let expr = match target {
+            DotPlacementTarget::Node(index) => self.node_exprs.get(&index).cloned(),
+            DotPlacementTarget::Edge(index) => self.edge_exprs.get(&index).cloned(),
+        };
+
+        let resolved = expr
+            .as_ref()
+            .map(|expr| self.resolve_expr(expr))
+            .transpose()?;
+
+        self.visiting.remove(&target);
+        self.memo.insert(target, resolved.clone());
+        Ok(resolved)
+    }
+
+    fn resolve_expr(&mut self, expr: &DotPlacementExpr) -> Result<DotResolvedPlacement, String> {
+        match expr {
+            DotPlacementExpr::Point { point, pinned } => Ok(DotResolvedPlacement {
+                point: *point,
+                x_set: true,
+                y_set: true,
+                pin: pinned.then_some(PinConstraint::Fixed(point.x, point.y)),
+            }),
+            DotPlacementExpr::Ref {
+                target,
+                offset,
+                pinned,
+            } => {
+                let reference_target = self.resolve_ref(*target)?;
+                let reference = self
+                    .resolve_target(reference_target)?
+                    .ok_or_else(|| format!("DOT pos reference {target:?} has no position"))?;
+                let point = reference.point + *offset;
+                Ok(DotResolvedPlacement {
+                    point,
+                    x_set: true,
+                    y_set: true,
+                    pin: pinned.then_some(PinConstraint::Fixed(point.x, point.y)),
+                })
+            }
+            DotPlacementExpr::Axes { x, y } => {
+                let mut point = Point2::new(0.0, 0.0);
+                let mut x_pin = None;
+                let mut y_pin = None;
+
+                if let Some(axis) = x {
+                    point.x = axis.coord.point_value();
+                    if axis.pinned {
+                        x_pin = Some(axis.coord.x_pin());
+                    }
+                }
+
+                if let Some(axis) = y {
+                    point.y = axis.coord.point_value();
+                    if axis.pinned {
+                        y_pin = Some(axis.coord.y_pin());
+                    }
+                }
+
+                let pin = combine_axis_pins(x_pin, y_pin);
+                Ok(DotResolvedPlacement {
+                    point,
+                    x_set: x.is_some(),
+                    y_set: y.is_some(),
+                    pin,
+                })
+            }
+        }
+    }
+
+    fn resolve_ref(&self, target: DotPlacementRef) -> Result<DotPlacementTarget, String> {
+        match target {
+            DotPlacementRef::Node(index) => self
+                .node_id_map
+                .get(&index)
+                .copied()
+                .map(DotPlacementTarget::Node)
+                .ok_or_else(|| {
+                    format!("DOT pos references node id {index}, but it does not exist")
+                }),
+            DotPlacementRef::Edge(index) => self
+                .edge_id_map
+                .get(&index)
+                .copied()
+                .map(DotPlacementTarget::Edge)
+                .ok_or_else(|| {
+                    format!("DOT pos references edge id {index}, but it does not exist")
+                }),
+        }
+    }
+}
+
+impl DotPlacementExpr {
+    fn parse(input: &str) -> Result<Option<Self>, String> {
+        let input = strip_dot_quotes(input);
+        if input.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(expr) = Self::parse_axes(input)? {
+            return Ok(Some(expr));
+        }
+
+        let (input, pinned) = input
+            .strip_suffix('!')
+            .map(|input| (input.trim(), true))
+            .unwrap_or((input, false));
+
+        if let Some(expr) = Self::parse_ref(input, pinned) {
+            return Ok(Some(expr));
+        }
+
+        if let Some((x, y)) = parse_dot_point(input) {
+            return Ok(Some(DotPlacementExpr::Point {
+                point: Point2::new(x, y),
+                pinned,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    fn parse_axes(input: &str) -> Result<Option<Self>, String> {
+        if !input
+            .split(',')
+            .any(|part| part.trim().starts_with("x:") || part.trim().starts_with("y:"))
+        {
+            return Ok(None);
+        }
+
+        let mut x = None;
+        let mut y = None;
+
+        for part in input.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                return Err("empty axis entry in DOT pos".into());
+            }
+
+            let (axis, value) = part.split_once(':').ok_or_else(|| {
+                format!("axis entry {part:?} must be written as x:<coord> or y:<coord>")
+            })?;
+            let target = match axis.trim() {
+                "x" => &mut x,
+                "y" => &mut y,
+                other => return Err(format!("unknown DOT pos axis {other:?}")),
+            };
+
+            if target.is_some() {
+                return Err(format!("duplicate DOT pos axis {axis:?}"));
+            }
+
+            *target = Some(parse_dot_axis_placement(value.trim())?);
+        }
+
+        Ok(Some(DotPlacementExpr::Axes { x, y }))
+    }
+
+    fn parse_ref(input: &str, pinned: bool) -> Option<Self> {
+        let rest = input.strip_prefix("ref(")?;
+        let close = rest.find(')')?;
+        let target = Self::parse_ref_target(&rest[..close])?;
+        let offset = parse_ref_offset(rest[close + 1..].trim())?;
+        Some(DotPlacementExpr::Ref {
+            target,
+            offset,
+            pinned,
+        })
+    }
+
+    fn parse_ref_target(input: &str) -> Option<DotPlacementRef> {
+        let (kind, index) = input.split_once(':')?;
+        let index = index.trim().parse::<usize>().ok()?;
+        match kind.trim() {
+            "node" => Some(DotPlacementRef::Node(index)),
+            "edge" => Some(DotPlacementRef::Edge(index)),
+            _ => None,
+        }
+    }
+}
+
+impl DotAxisCoord {
+    fn point_value(&self) -> f64 {
+        match self {
+            DotAxisCoord::Number(value) => *value,
+            DotAxisCoord::Group(_) => 0.0,
+        }
+    }
+
+    fn x_pin(&self) -> PinConstraint {
+        match self {
+            DotAxisCoord::Number(value) => PinConstraint::FixX(*value),
+            DotAxisCoord::Group(group) => PinConstraint::LinkX(group.clone()),
+        }
+    }
+
+    fn y_pin(&self) -> PinConstraint {
+        match self {
+            DotAxisCoord::Number(value) => PinConstraint::FixY(*value),
+            DotAxisCoord::Group(group) => PinConstraint::LinkY(group.clone()),
+        }
+    }
+}
+
+fn parse_dot_axis_placement(input: &str) -> Result<DotAxisPlacement, String> {
+    let (input, pinned) = input
+        .strip_suffix('!')
+        .map(|input| (input.trim(), true))
+        .unwrap_or((input, false));
+
+    if let Some(group) = parse_dot_link_group(input) {
+        if !pinned {
+            return Err(format!(
+                "group coordinate {input:?} in DOT pos axis syntax must be pinned with !"
+            ));
+        }
+        return Ok(DotAxisPlacement {
+            coord: DotAxisCoord::Group(group),
+            pinned,
+        });
+    }
+
+    let value = input
+        .parse::<f64>()
+        .map_err(|_| format!("DOT pos axis coordinate {input:?} is not a number or group"))?;
+    Ok(DotAxisPlacement {
+        coord: DotAxisCoord::Number(value),
+        pinned,
+    })
+}
+
+fn parse_dot_link_group(input: &str) -> Option<String> {
+    if let Some(group) = input.strip_prefix('@') {
+        Some(group.to_string())
+    } else if let Some(group) = input.strip_prefix("+@") {
+        Some(format!("+{group}"))
+    } else {
+        input.strip_prefix("-@").map(|group| format!("-{group}"))
+    }
+}
+
+fn combine_axis_pins(
+    x_pin: Option<PinConstraint>,
+    y_pin: Option<PinConstraint>,
+) -> Option<PinConstraint> {
+    match (x_pin, y_pin) {
+        (Some(x_pin), Some(y_pin)) => {
+            Some(PinConstraint::Combined(Box::new(x_pin), Box::new(y_pin)))
+        }
+        (Some(pin), None) | (None, Some(pin)) => Some(pin),
+        (None, None) => None,
+    }
+}
+
+fn parse_ref_offset(input: &str) -> Option<Vector2<f64>> {
+    if input.is_empty() {
+        return Some(Vector2::zero());
+    }
+
+    let input = input.strip_prefix('+').unwrap_or(input);
+    let (dx, dy) = parse_dot_point(input)?;
+    Some(Vector2::new(dx, dy))
+}
+
+fn strip_dot_quotes(input: &str) -> &str {
+    input.trim().trim_matches('"').trim()
+}
+
+fn parse_dot_point(input: &str) -> Option<(f64, f64)> {
+    let cleaned = strip_dot_quotes(input)
+        .trim_matches(|c| c == '(' || c == ')')
+        .trim();
+    let parts: Vec<&str> = cleaned
+        .split([',', ' '])
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    if parts.len() != 2 {
+        return None;
+    }
+
+    Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
+}
+
+fn apply_dot_placement_statements(
+    statements: &mut BTreeMap<String, String>,
+    placement: &DotResolvedPlacement,
+) {
+    statements.insert(
+        "pos".to_string(),
+        format!("{},{}", placement.point.x, placement.point.y),
+    );
+    statements.insert("pos-x-set".to_string(), placement.x_set.to_string());
+    statements.insert("pos-y-set".to_string(), placement.y_set.to_string());
+    statements.insert(
+        "pos-mode".to_string(),
+        if placement.pin.is_some() {
+            "pin"
+        } else {
+            "start"
+        }
+        .to_string(),
+    );
+}
+
+fn initial_point_constraint(
+    index: usize,
+    statements: &BTreeMap<String, String>,
+    placement: Option<&DotResolvedPlacement>,
+    group_map: &mut HashMap<String, usize>,
+) -> (Point2<f64>, PointConstraint) {
+    let explicit_pin = statements
+        .get("pin")
+        .and_then(|value| PinConstraint::parse(value));
+    let pin = explicit_pin.or_else(|| placement.and_then(|placement| placement.pin.clone()));
+
+    if let Some(pin) = pin {
+        let (mut point, constraints) = pin.point_constraint(index, group_map);
+        if let Some(placement) = placement {
+            if matches!(constraints.x, Constraint::Free) && placement.x_set {
+                point.x = placement.point.x;
+            }
+            if matches!(constraints.y, Constraint::Free) && placement.y_set {
+                point.y = placement.point.y;
+            }
+        } else if let Some((x, y)) = TypstNode::parse_position(statements, "pos") {
+            if matches!(constraints.x, Constraint::Free) {
+                point.x = x;
+            }
+            if matches!(constraints.y, Constraint::Free) {
+                point.y = y;
+            }
+        }
+        (point, constraints)
+    } else if let Some(placement) = placement {
+        (placement.point, PointConstraint::default())
+    } else if let Some((x, y)) = TypstNode::parse_position(statements, "pos") {
+        (Point2::new(x, y), PointConstraint::default())
+    } else {
+        (Point2::new(0., 0.), PointConstraint::default())
+    }
+}
+
 impl TypstGraph {
     pub fn from_dot(dot: DotGraph, _figment: &Figment) -> Self {
+        let mut placement_context = DotPlacementContext::new(&dot);
+        let node_placements = dot
+            .graph
+            .new_nodevec(|nid, _, _| placement_context.resolve_node(nid));
+        let edge_placements = dot
+            .graph
+            .new_edgevec(|_, eid, _| placement_context.resolve_edge(eid));
+
         let mut group_map = HashMap::new();
         let edge_pin_constrains: EdgeVec<(Point2<f64>, PointConstraint)> =
             dot.graph.new_edgevec(|e, eid, _| {
-                let a = e
-                    .get::<_, String>("pin")
-                    .transpose()
-                    .unwrap()
-                    .and_then(|a| PinConstraint::parse(&a));
-
-                if let Some(a) = a {
-                    a.point_constraint(eid.0, &mut group_map)
-                } else {
-                    (Point2::new(0., 0.), PointConstraint::default())
-                }
+                initial_point_constraint(
+                    eid.0,
+                    &e.statements,
+                    edge_placements[eid].as_ref(),
+                    &mut group_map,
+                )
             });
 
         let mut group_map = HashMap::new();
 
         let node_pin_constrains: NodeVec<(Point2<f64>, PointConstraint)> =
             dot.graph.new_nodevec(|nid, _, n| {
-                let a = n
-                    .get::<_, String>("pin")
-                    .transpose()
-                    .unwrap()
-                    .and_then(|a| PinConstraint::parse(&a));
-
-                if let Some(a) = a {
-                    a.point_constraint(nid.0, &mut group_map)
-                } else {
-                    (Point2::new(0., 0.), PointConstraint::default())
-                }
+                initial_point_constraint(
+                    nid.0,
+                    &n.statements,
+                    node_placements[nid].as_ref(),
+                    &mut group_map,
+                )
             });
 
         let graph = dot.graph.map(
-            |inv, nid, data| TypstNode::parse(inv, nid, data, &node_pin_constrains),
+            |inv, nid, mut data| {
+                if let Some(placement) = &node_placements[nid] {
+                    apply_dot_placement_statements(&mut data.statements, placement);
+                }
+                TypstNode::parse(inv, nid, data, &node_pin_constrains)
+            },
             |inv, store, p, eid, data| {
+                let mut data = data;
+                if let Some(placement) = &edge_placements[eid] {
+                    apply_dot_placement_statements(&mut data.data.statements, placement);
+                }
                 TypstEdge::parse(inv, store, p, eid, data, &edge_pin_constrains)
             },
             TypstHedge::parse,
@@ -1739,22 +2246,33 @@ impl TypstGraph {
                 // Handle constraints with proper absolute positioning for directional constraints
                 match (&self[i].constraints.x, &self[i].constraints.y) {
                     (Constraint::Free, Constraint::Free) => {
-                        pos_v[i] = tree_position;
+                        if !self[i].start_x {
+                            pos_v[i].x = tree_position.x;
+                        }
+                        if !self[i].start_y {
+                            pos_v[i].y = tree_position.y;
+                        }
                     }
                     (Constraint::Fixed, Constraint::Fixed) => {
                         // Keep original position - no change needed
                     }
                     (Constraint::Free, Constraint::Fixed) => {
-                        pos_v[i].x = tree_position.x;
+                        if !self[i].start_x {
+                            pos_v[i].x = tree_position.x;
+                        }
                         // y stays as original constraint position
                     }
                     (Constraint::Fixed, Constraint::Free) => {
-                        pos_v[i].y = tree_position.y;
+                        if !self[i].start_y {
+                            pos_v[i].y = tree_position.y;
+                        }
                         // x stays as original constraint position
                     }
                     (Constraint::Grouped(_, x_dir), Constraint::Free) => {
                         // For grouped x with direction, ensure absolute position respects direction
-                        pos_v[i].y = tree_position.y;
+                        if !self[i].start_y {
+                            pos_v[i].y = tree_position.y;
+                        }
                         match x_dir {
                             ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
                                 let target_x =
@@ -1774,7 +2292,9 @@ impl TypstGraph {
                     }
                     (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
                         // For grouped y with direction, ensure absolute position respects direction
-                        pos_v[i].x = tree_position.x;
+                        if !self[i].start_x {
+                            pos_v[i].x = tree_position.x;
+                        }
                         match y_dir {
                             ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
                                 let target_y =
@@ -1830,19 +2350,30 @@ impl TypstGraph {
                     // Handle edge constraints with proper absolute positioning for directional constraints
                     match (&self[eid].constraints.x, &self[eid].constraints.y) {
                         (Constraint::Free, Constraint::Free) => {
-                            pos_e[eid] = mid;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = mid.x;
+                            }
+                            if !self[eid].start_y {
+                                pos_e[eid].y = mid.y;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Fixed) => {
                             // Keep original position
                         }
                         (Constraint::Free, Constraint::Fixed) => {
-                            pos_e[eid].x = mid.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = mid.x;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Free) => {
-                            pos_e[eid].y = mid.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = mid.y;
+                            }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                            pos_e[eid].y = mid.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = mid.y;
+                            }
                             match x_dir {
                                 ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
                                     let target_x =
@@ -1863,7 +2394,9 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                            pos_e[eid].x = mid.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = mid.x;
+                            }
                             match y_dir {
                                 ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
                                     let target_y =
@@ -1913,19 +2446,30 @@ impl TypstGraph {
                     // Handle unpaired edge constraints with proper absolute positioning for directional constraints
                     match (&self[eid].constraints.x, &self[eid].constraints.y) {
                         (Constraint::Free, Constraint::Free) => {
-                            pos_e[eid] = default_pos;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = default_pos.x;
+                            }
+                            if !self[eid].start_y {
+                                pos_e[eid].y = default_pos.y;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Fixed) => {
                             // Keep original position
                         }
                         (Constraint::Free, Constraint::Fixed) => {
-                            pos_e[eid].x = default_pos.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = default_pos.x;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Free) => {
-                            pos_e[eid].y = default_pos.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = default_pos.y;
+                            }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                            pos_e[eid].y = default_pos.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = default_pos.y;
+                            }
                             match x_dir {
                                 ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
                                     let target_x = Self::directional_target(
@@ -1949,7 +2493,9 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                            pos_e[eid].x = default_pos.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = default_pos.x;
+                            }
                             match y_dir {
                                 ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
                                     let target_y = Self::directional_target(

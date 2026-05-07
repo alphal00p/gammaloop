@@ -35,6 +35,81 @@ pub struct TypstPoint {
     pub y: f64,
 }
 
+#[derive(
+    Debug,
+    Deserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+enum PlacementMode {
+    #[default]
+    Start,
+    Pin,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypstPlacementSpec {
+    #[serde(default)]
+    mode: PlacementMode,
+    #[serde(default)]
+    x: Option<TypstPlacementCoord>,
+    #[serde(default)]
+    y: Option<TypstPlacementCoord>,
+    #[serde(default, rename = "ref")]
+    reference: Option<usize>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
+    dx: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
+    dy: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+enum TypstPlacementCoord {
+    Number(TypstNumber),
+    Group(TypstPlacementGroup),
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(untagged)]
+enum TypstNumber {
+    Float(f64),
+    Signed(i64),
+    Unsigned(u64),
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "kebab-case")]
+struct TypstPlacementGroup {
+    kind: String,
+    name: String,
+    #[serde(default)]
+    side: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct ResolvedPoint {
+    x: f64,
+    y: f64,
+    x_set: bool,
+    y_set: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedPlacement {
+    point: ResolvedPoint,
+    pin: Option<String>,
+    mode: PlacementMode,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TypstDotNode {
     pub node: usize,
@@ -106,6 +181,8 @@ pub struct TypstNodeSpec {
     #[serde(default)]
     pub index: Option<usize>,
     #[serde(default)]
+    pub pos: Option<TypstPlacementSpec>,
+    #[serde(default)]
     pub statements: BTreeMap<String, String>,
 }
 
@@ -122,6 +199,8 @@ pub struct TypstEdgeSpec {
     pub flow: Option<String>,
     #[serde(default)]
     pub id: Option<usize>,
+    #[serde(default)]
+    pub pos: Option<TypstPlacementSpec>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
@@ -153,6 +232,7 @@ pub struct TypstDotGraphBuilder {
     pub global_data: GlobalData,
     pub builder: DotBuilder,
     pub node_count: usize,
+    pub node_positions: Vec<ResolvedPoint>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -245,18 +325,27 @@ pub fn builder_new_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
         ),
         builder: HedgeGraphBuilder::new(),
         node_count: 0,
+        node_positions: Vec::new(),
     })
 }
 
 pub fn builder_add_node_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let mut graph_builder = decode_builder(arg)?;
     let node: TypstNodeSpec = decode_cbor(arg2, "node spec")?;
-    let node_index = graph_builder.builder.add_node(node_data_from_spec(
+    let placement = resolve_placement(node.pos.as_ref(), &graph_builder.node_positions, "node")?;
+    let node_data = node_data_from_spec(
         &graph_builder.global_data,
         node,
         graph_builder.node_count,
-    ));
+        placement.as_ref(),
+    );
+    let node_position = placement
+        .as_ref()
+        .map(|placement| placement.point)
+        .unwrap_or_else(|| resolved_point_from_statements(&node_data.statements));
+    let node_index = graph_builder.builder.add_node(node_data);
     graph_builder.node_count += 1;
+    graph_builder.node_positions.push(node_position);
 
     encode_cbor(&TypstBuilderNodeResult {
         builder: encode_builder(&graph_builder)?,
@@ -271,6 +360,7 @@ pub fn builder_add_edge_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String
         &graph_builder.global_data,
         &mut graph_builder.builder,
         graph_builder.node_count,
+        &graph_builder.node_positions,
         edge,
     )?;
     encode_builder(&graph_builder)
@@ -530,6 +620,7 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
 fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, String> {
     let node_count = spec.nodes.len();
     let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
+    let mut node_positions = Vec::with_capacity(node_count);
     let edge_statements = edge_render_statements(
         spec.edge_statements,
         spec.source_style_eval,
@@ -544,17 +635,32 @@ fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, Strin
     );
 
     for (node_index, node) in spec.nodes.into_iter().enumerate() {
-        builder.add_node(node_data_from_spec(&global_data, node, node_index));
+        let placement = resolve_placement(node.pos.as_ref(), &node_positions, "node")?;
+        let node_data = node_data_from_spec(&global_data, node, node_index, placement.as_ref());
+        node_positions.push(
+            placement
+                .as_ref()
+                .map(|placement| placement.point)
+                .unwrap_or_else(|| resolved_point_from_statements(&node_data.statements)),
+        );
+        builder.add_node(node_data);
     }
 
     for edge in spec.edges {
-        add_edge_to_builder(&global_data, &mut builder, node_count, edge)?;
+        add_edge_to_builder(
+            &global_data,
+            &mut builder,
+            node_count,
+            &node_positions,
+            edge,
+        )?;
     }
 
     Ok(TypstDotGraphBuilder {
         global_data,
         builder,
         node_count,
+        node_positions,
     })
 }
 
@@ -562,6 +668,7 @@ fn add_edge_to_builder(
     global_data: &GlobalData,
     builder: &mut DotBuilder,
     node_count: usize,
+    node_positions: &[ResolvedPoint],
     edge: TypstEdgeSpec,
 ) -> Result<(), String> {
     let orientation = edge
@@ -570,8 +677,10 @@ fn add_edge_to_builder(
         .map(parse_orientation)
         .transpose()?
         .unwrap_or(Orientation::Default);
+    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?;
+    let local_statements = apply_placement_statements(edge.statements, placement.as_ref());
     let local_statements = edge_render_statements(
-        edge.statements,
+        local_statements,
         edge.source_style_eval,
         edge.sink_style_eval,
         edge.label_eval,
@@ -646,15 +755,233 @@ fn edge_render_statements(
     statements
 }
 
+fn resolve_placement(
+    placement: Option<&TypstPlacementSpec>,
+    references: &[ResolvedPoint],
+    context: &str,
+) -> Result<Option<ResolvedPlacement>, String> {
+    placement
+        .map(|placement| placement.resolve(references, context))
+        .transpose()
+}
+
+fn apply_placement_statements(
+    mut statements: BTreeMap<String, String>,
+    placement: Option<&ResolvedPlacement>,
+) -> BTreeMap<String, String> {
+    let Some(placement) = placement else {
+        return statements;
+    };
+
+    if placement.point.x_set || placement.point.y_set {
+        statements.insert(
+            "pos".to_string(),
+            format!("{},{}", placement.point.x, placement.point.y),
+        );
+        statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
+        statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
+        statements.insert(
+            "pos-mode".to_string(),
+            match placement.mode {
+                PlacementMode::Start => "start",
+                PlacementMode::Pin => "pin",
+            }
+            .to_string(),
+        );
+    }
+
+    if let Some(pin) = &placement.pin {
+        statements.insert("pin".to_string(), pin.clone());
+    }
+
+    statements
+}
+
+fn resolved_point_from_statements(statements: &BTreeMap<String, String>) -> ResolvedPoint {
+    parse_statement_point(statements, "pos").unwrap_or_default()
+}
+
+fn parse_statement_point(
+    statements: &BTreeMap<String, String>,
+    attr: &str,
+) -> Option<ResolvedPoint> {
+    let value = statements.get(attr)?;
+    let unquoted = value.trim().trim_matches('"');
+    let cleaned = unquoted.trim().trim_matches(|c| c == '(' || c == ')');
+    let parts: Vec<&str> = cleaned
+        .split([',', ' '])
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let x = parts[0].trim().parse::<f64>().ok()?;
+    let y = parts[1].trim().parse::<f64>().ok()?;
+    Some(ResolvedPoint {
+        x,
+        y,
+        x_set: parse_bool_statement(statements, "pos-x-set").unwrap_or(true),
+        y_set: parse_bool_statement(statements, "pos-y-set").unwrap_or(true),
+    })
+}
+
+fn parse_bool_statement(statements: &BTreeMap<String, String>, key: &str) -> Option<bool> {
+    statements
+        .get(key)
+        .and_then(|value| value.trim().trim_matches('"').parse::<bool>().ok())
+}
+
+impl TypstPlacementSpec {
+    fn resolve(
+        &self,
+        references: &[ResolvedPoint],
+        context: &str,
+    ) -> Result<ResolvedPlacement, String> {
+        let mut point = if let Some(reference) = self.reference {
+            let reference = references.get(reference).ok_or_else(|| {
+                format!("{context} placement references node {reference}, but it is not available")
+            })?;
+            ResolvedPoint {
+                x: reference.x + self.dx.unwrap_or(0.0),
+                y: reference.y + self.dy.unwrap_or(0.0),
+                x_set: true,
+                y_set: true,
+            }
+        } else {
+            ResolvedPoint {
+                x: self.dx.unwrap_or(0.0),
+                y: self.dy.unwrap_or(0.0),
+                x_set: self.dx.is_some(),
+                y_set: self.dy.is_some(),
+            }
+        };
+
+        let x_pin = self
+            .x
+            .as_ref()
+            .map(|coord| coord.resolve("x", self.mode, &mut point))
+            .transpose()?;
+        let y_pin = self
+            .y
+            .as_ref()
+            .map(|coord| coord.resolve("y", self.mode, &mut point))
+            .transpose()?;
+
+        let pin = if self.mode == PlacementMode::Pin {
+            let mut parts = Vec::new();
+            if let Some(x_pin) = x_pin {
+                parts.push(x_pin);
+            } else if point.x_set {
+                parts.push(format!("x:{}", point.x));
+            }
+            if let Some(y_pin) = y_pin {
+                parts.push(y_pin);
+            } else if point.y_set {
+                parts.push(format!("y:{}", point.y));
+            }
+            if parts.is_empty() {
+                return Err(format!(
+                    "{context} pin placement must constrain x, y, or ref"
+                ));
+            }
+            Some(parts.join(","))
+        } else {
+            None
+        };
+
+        Ok(ResolvedPlacement {
+            point,
+            pin,
+            mode: self.mode,
+        })
+    }
+}
+
+impl TypstPlacementCoord {
+    fn resolve(
+        &self,
+        axis: &str,
+        mode: PlacementMode,
+        point: &mut ResolvedPoint,
+    ) -> Result<String, String> {
+        match self {
+            TypstPlacementCoord::Number(value) => {
+                let value = value.as_f64();
+                if axis == "x" {
+                    point.x = value;
+                    point.x_set = true;
+                } else {
+                    point.y = value;
+                    point.y_set = true;
+                }
+                Ok(format!("{axis}:{value}"))
+            }
+            TypstPlacementCoord::Group(group) => {
+                if group.kind != "group" {
+                    return Err(format!(
+                        "placement {axis} coordinate expected graph.group(...), got kind {:?}",
+                        group.kind
+                    ));
+                }
+                if mode != PlacementMode::Pin {
+                    return Err("group coordinates require graph.pos(..., mode: \"pin\")".into());
+                }
+                if axis == "x" {
+                    point.x_set = true;
+                } else {
+                    point.y_set = true;
+                }
+                Ok(format!("{axis}:{}", group.pin_token()?))
+            }
+        }
+    }
+}
+
+impl TypstNumber {
+    fn as_f64(self) -> f64 {
+        match self {
+            TypstNumber::Float(value) => value,
+            TypstNumber::Signed(value) => value as f64,
+            TypstNumber::Unsigned(value) => value as f64,
+        }
+    }
+}
+
+impl TypstPlacementGroup {
+    fn pin_token(&self) -> Result<String, String> {
+        match self.side.as_deref() {
+            None => Ok(format!("@{}", self.name)),
+            Some("+") | Some("positive") => Ok(format!("@+{}", self.name)),
+            Some("-") | Some("negative") => Ok(format!("@-{}", self.name)),
+            Some(side) => Err(format!(
+                "graph.group side must be none, \"+\", \"-\", \"positive\", or \"negative\", got {side:?}"
+            )),
+        }
+    }
+}
+
+fn deserialize_optional_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<TypstNumber>::deserialize(deserializer).map(|value| value.map(TypstNumber::as_f64))
+}
+
 fn node_data_from_spec(
     global_data: &GlobalData,
     node: TypstNodeSpec,
     default_index: usize,
+    placement: Option<&ResolvedPlacement>,
 ) -> DotVertexData {
     DotVertexData {
         name: node.name,
         index: node.index.map(NodeIndex).or(Some(NodeIndex(default_index))),
-        statements: merged_expanded_statements(&global_data.node_statements, &node.statements),
+        statements: merged_expanded_statements(
+            &global_data.node_statements,
+            &apply_placement_statements(node.statements, placement),
+        ),
     }
 }
 
@@ -738,7 +1065,7 @@ fn hedge_value(data: &DotHedgeData, key: &str) -> Option<String> {
 }
 
 fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
-    let statements = vertex
+    let raw_statements = vertex
         .data
         .statements
         .iter()
@@ -757,10 +1084,10 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
             .index
             .as_ref()
             .map(|value| value.0.try_into().unwrap()),
-        pos: parse_point(&statements, "pos"),
-        shift: parse_point(&statements, "shift"),
-        eval: statements.get("eval").cloned(),
-        statements,
+        pos: parse_point(&raw_statements, "pos"),
+        shift: parse_point(&raw_statements, "shift"),
+        eval: raw_statements.get("eval").cloned(),
+        statements: public_statements(raw_statements),
     }
 }
 
@@ -768,7 +1095,7 @@ fn edge_view_to_output(
     graph: &ArchivedDotGraphView<'_>,
     edge: ArchivedDotEdgeView<'_>,
 ) -> TypstDotEdge {
-    let statements = edge
+    let raw_statements = edge
         .data
         .statements
         .iter()
@@ -781,17 +1108,24 @@ fn edge_view_to_output(
         orientation: orientation_to_string(edge.orientation).to_string(),
         source: endpoints.source.map(endpoint_to_output),
         sink: endpoints.sink.map(endpoint_to_output),
-        pos: parse_point(&statements, "pos"),
-        shift: parse_point(&statements, "shift"),
-        label_pos: parse_point(&statements, "label-pos"),
-        label_angle: parse_rad(&statements, "label-angle"),
-        bend: parse_rad(&statements, "bend"),
-        sink_style_eval: statements.get("sink-style-eval").cloned(),
-        source_style_eval: statements.get("source-style-eval").cloned(),
-        label_eval: statements.get("label-eval").cloned(),
-        mom_eval: statements.get("mom-eval").cloned(),
-        statements,
+        pos: parse_point(&raw_statements, "pos"),
+        shift: parse_point(&raw_statements, "shift"),
+        label_pos: parse_point(&raw_statements, "label-pos"),
+        label_angle: parse_rad(&raw_statements, "label-angle"),
+        bend: parse_rad(&raw_statements, "bend"),
+        sink_style_eval: raw_statements.get("sink-style-eval").cloned(),
+        source_style_eval: raw_statements.get("source-style-eval").cloned(),
+        label_eval: raw_statements.get("label-eval").cloned(),
+        mom_eval: raw_statements.get("mom-eval").cloned(),
+        statements: public_statements(raw_statements),
     }
+}
+
+fn public_statements(mut statements: BTreeMap<String, String>) -> BTreeMap<String, String> {
+    for key in ["pos", "pos-x-set", "pos-y-set", "pos-mode", "pin"] {
+        statements.remove(key);
+    }
+    statements
 }
 
 fn endpoint_to_output(endpoint: ArchivedDotEndpointView<'_>) -> TypstDotEndpoint {
