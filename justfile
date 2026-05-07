@@ -6,6 +6,26 @@ mod linnet 'crates/linnet/Justfile'
 
 alias sync-draw-assets := sync-drawing-assets
 
+drawing_asset_sync := "none"
+
+_sync-drawing-assets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{drawing_asset_sync}}" in
+      nix)
+        just sync-drawing-assets
+        ;;
+      cargo)
+        just sync-drawing-assets-cargo
+        ;;
+      none|off|false)
+        ;;
+      *)
+        echo "unknown drawing_asset_sync={{drawing_asset_sync}}; expected nix, cargo, or none" >&2
+        exit 2
+        ;;
+    esac
+
 # Sync drawing Typst templates and Nix-built WASM bundles for development.
 sync-drawing-assets:
     #!/usr/bin/env bash
@@ -89,56 +109,144 @@ sync-drawing-assets:
     cmp result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
     cmp result/linnest.wasm crates/linnest/typst/linnest.wasm
 
+# Sync drawing Typst templates and Cargo-built WASM bundles for non-Nix development.
+sync-drawing-assets-cargo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    root="{{ justfile_directory() }}"
+    cd "$root"
+
+    wasm_target="wasm32-unknown-unknown"
+    wasm_profile="release"
+    wasm_dir="target/$wasm_target/$wasm_profile"
+
+    install_asset() {
+      local src="$1"
+      local dest="$2"
+      rm -f "$dest"
+      install -m 0644 "$src" "$dest"
+    }
+
+    install_assets() {
+      local target="$1"
+      shift
+      local src
+      for src in "$@"; do
+        install_asset "$src" "$target/$(basename "$src")"
+      done
+    }
+
+    copy_gammaloop_templates() {
+      local target="$1"
+      mkdir -p "$target"
+      install_assets "$target" assets/embedded/drawing/templates/*.typ
+    }
+
+    clean_old_flat_bundle() {
+      local target="$1"
+      rm -f \
+        "$target/curve.typ" \
+        "$target/draw.typ" \
+        "$target/graph.typ" \
+        "$target/linnest.typ" \
+        "$target/physics-edge-style.typ" \
+        "$target/subgraph.typ" \
+        "$target/kurvst.wasm" \
+        "$target/linnest.wasm" \
+        "$target/crates/linnest/typst/kurvst.wasm"
+    }
+
+    copy_package_sources() {
+      local target="$1"
+      mkdir -p \
+        "$target/crates/linnest/typst/src" \
+        "$target/crates/kurvst/typst/src"
+      install_asset crates/linnest/typst/typst.toml "$target/crates/linnest/typst/typst.toml"
+      install_assets "$target/crates/linnest/typst/src" crates/linnest/typst/src/*.typ
+      install_asset crates/kurvst/typst/typst.toml "$target/crates/kurvst/typst/typst.toml"
+      install_assets "$target/crates/kurvst/typst/src" crates/kurvst/typst/src/*.typ
+    }
+
+    copy_wasm_bundles() {
+      local target="$1"
+      mkdir -p \
+        "$target/crates/linnest/typst" \
+        "$target/crates/kurvst/typst"
+      install_asset "$wasm_dir/linnest.wasm" "$target/crates/linnest/typst/linnest.wasm"
+      install_asset "$wasm_dir/kurvst.wasm" "$target/crates/kurvst/typst/kurvst.wasm"
+    }
+
+    if command -v rustup >/dev/null 2>&1; then
+      rustup target add "$wasm_target"
+    fi
+
+    cargo build --release -p linnest -p kurvst --features linnest/custom --target "$wasm_target"
+
+    install_asset "$wasm_dir/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
+    install_asset "$wasm_dir/linnest.wasm" crates/linnest/typst/linnest.wasm
+
+    if [ -d gammaloop_state/drawings/templates ]; then
+      clean_old_flat_bundle gammaloop_state/drawings/templates
+      copy_gammaloop_templates gammaloop_state/drawings/templates
+      install_asset assets/embedded/drawing/justfile gammaloop_state/justfile
+      copy_package_sources gammaloop_state/drawings/templates
+      copy_wasm_bundles gammaloop_state/drawings/templates
+    fi
+
+    cmp "$wasm_dir/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
+    cmp "$wasm_dir/linnest.wasm" crates/linnest/typst/linnest.wasm
+
 # Build gammaloop Python CLI with UFO support and dev-optim profile
-build-cli:
+build-cli: _sync-drawing-assets
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
 
 # Build gammaloop CLI without Python (no pyo3)
-build-cli-no-pyo3:
+build-cli-no-pyo3: _sync-drawing-assets
     cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli,no_pyo3 --profile dev-optim
 
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
-build-cli-abi:
+build-cli-abi: _sync-drawing-assets
 	cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim
 
 # Build gammaloop Python CLI in release mode
-build-cli-release:
+build-cli-release: _sync-drawing-assets
 	cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
 
 # Build gammaloop Python CLI in release mode with stable ABI
-build-cli-release-abi:
+build-cli-release-abi: _sync-drawing-assets
 	cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
 
 # Build gammaloop Python API with UFO support and dev-optim profile
-build-api:
+build-api: _sync-drawing-assets
 	maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
-build-api-abi:
+build-api-abi: _sync-drawing-assets
     maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and dev-optim profile
-build-api-wheel:
+build-api-wheel: _sync-drawing-assets
 	maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
-build-api-abi-weel:
+build-api-abi-weel: _sync-drawing-assets
     maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and release profile
-build-api-release:
+build-api-release: _sync-drawing-assets
 	maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
 
 # Build gammaloop Python API with UFO support and stable ABI (release profile)
-build-api-abi-release:
+build-api-abi-release: _sync-drawing-assets
     maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
 
 # Build gammaloop Python API wheel with UFO support and release profile
-build-api-release-wheel:
+build-api-release-wheel: _sync-drawing-assets
 	maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
 
 # Build gammaloop Python API weel with UFO support and stable ABI (release profile)
-build-api-abi-release-wheel:
+build-api-abi-release-wheel: _sync-drawing-assets
     maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
 
 # Build all workspace packages

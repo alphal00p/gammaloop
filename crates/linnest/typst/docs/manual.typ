@@ -139,14 +139,14 @@ the per-edge `label` statement:
 
 == Placements
 
-`graph.pos` creates a first-class placement. `mode: "start"` uses a coordinate
-as the layout starting point, while `mode: "pin"` turns it into a fixed layout
-constraint:
+`graph.pos` creates a first-class placement. The default `mode: "pin"` turns a
+coordinate into a fixed layout constraint and a drawable position. Use
+`mode: "start"` when the coordinate should only seed the layout:
 
 ```typ
-#let (node: a, builder: b) = graph.node(b, name: "a", pos: graph.pos(x: -2, y: 0, mode: "pin"))
-#let (node: c, builder: b) = graph.node(b, name: "c", pos: graph.pos(ref: a, dx: 4, dy: 0, mode: "pin"))
-#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.2, mode: "pin"))
+#let (node: a, builder: b) = graph.node(b, name: "a", pos: graph.pos(x: -2, y: 0))
+#let (node: c, builder: b) = graph.node(b, name: "c", pos: graph.pos(ref: a, dx: 4, dy: 0))
+#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.2))
 ```
 
 `graph.group` links one coordinate across several nodes or edge control points.
@@ -159,13 +159,13 @@ legs on opposite sides while pairing rows by a shared `y` group:
   b,
   source: (node: right-ext),
   sink: (node: center),
-  pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0"), mode: "pin"),
+  pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0")),
 )
 #let b = graph.edge(
   b,
   source: (node: center),
   sink: (node: left-ext),
-  pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0"), mode: "pin"),
+  pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0")),
 )
 ```
 

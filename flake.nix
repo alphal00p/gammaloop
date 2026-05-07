@@ -1401,9 +1401,8 @@
           doCheck = false;
           postPatch = workspaceMissingCargoTargetsScript;
         };
-      clinnetCargoArtifacts = craneLib.buildDepsOnly clinnetArgs;
-
-      clinnetBundleTypstAssets = ''
+      drawingTypstBundleAssets = ''
+        mkdir -p crates/linnest/typst/src crates/kurvst/typst/src
         cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
         cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
         cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
@@ -1412,11 +1411,16 @@
         cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
       '';
 
+      clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
+        // {
+          preBuild = drawingTypstBundleAssets;
+        });
+
       clinnet-cli = craneLib.buildPackage (clinnetArgs
         // {
           cargoArtifacts = clinnetCargoArtifacts;
           doNotLinkInheritedArtifacts = true;
-          preBuild = clinnetBundleTypstAssets;
+          preBuild = drawingTypstBundleAssets;
         });
 
       rscls = pkgs.rustPlatform.buildRustPackage rec {
@@ -2272,6 +2276,7 @@
                 cargoExtraArgs =
                   cargoPackageCiArgsFor package
                   + lib.optionalString (package == "gammaloop-api") " --lib --bins";
+                preBuild = lib.optionalString (package == "gammaloop-api") drawingTypstBundleAssets;
                 postPatch = workspaceMissingCargoTargetsScript;
               })));
 
