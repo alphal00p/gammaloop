@@ -328,7 +328,9 @@ fn compact_rep_pattern_match(arg: AtomView<'_>) -> Option<Representation<Library
     Representation::<LibraryRep>::try_from(rep.as_view()).ok()
 }
 
-fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
+fn compact_tensor_rep_arg<Aind: AbsInd + ParseableAind>(
+    value: FunView<'_>,
+) -> Option<(usize, Representation<LibraryRep>)> {
     if value.get_symbol() == ETS.metric || value.get_symbol() == SPENSO_TAG.dot {
         return None;
     }
@@ -340,7 +342,7 @@ fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<L
     let args = value.iter().collect::<Vec<_>>();
     if args
         .iter()
-        .any(|arg| Slot::<LibraryRep, AbstractIndex>::try_from(*arg).is_ok())
+        .any(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
     {
         return None;
     }
@@ -358,11 +360,13 @@ fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<L
     Some((*position, *rep))
 }
 
-fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
+fn compact_vector_rep<Aind: AbsInd + ParseableAind>(
+    value: AtomView<'_>,
+) -> Option<Representation<LibraryRep>> {
     match value {
-        AtomView::Fun(fun) => compact_tensor_rep_arg(fun).map(|(_, rep)| rep),
+        AtomView::Fun(fun) => compact_tensor_rep_arg::<Aind>(fun).map(|(_, rep)| rep),
         AtomView::Add(add) => {
-            let mut reps = add.iter().map(compact_vector_rep);
+            let mut reps = add.iter().map(compact_vector_rep::<Aind>);
             let rep = reps.next()??;
             reps.all(|candidate| candidate == Some(rep)).then_some(rep)
         }
@@ -370,14 +374,14 @@ fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>>
     }
 }
 
-fn materialize_compact_vector_with_slot(
+fn materialize_compact_vector_with_slot<Aind: AbsInd + ParseableAind>(
     value: AtomView<'_>,
     rep: &Representation<LibraryRep>,
     slot: &Atom,
 ) -> Option<Atom> {
     match value {
         AtomView::Fun(fun) => {
-            let (position, matched_rep) = compact_tensor_rep_arg(fun)?;
+            let (position, matched_rep) = compact_tensor_rep_arg::<Aind>(fun)?;
             if matched_rep != *rep {
                 return None;
             }
@@ -395,7 +399,7 @@ fn materialize_compact_vector_with_slot(
         AtomView::Add(add) => {
             let mut terms = add
                 .iter()
-                .map(|term| materialize_compact_vector_with_slot(term, rep, slot));
+                .map(|term| materialize_compact_vector_with_slot::<Aind>(term, rep, slot));
             let first = terms.next()??;
             let rest = terms.collect::<Option<Vec<_>>>()?;
             Some(rest.into_iter().fold(first, |sum, term| sum + term))
@@ -404,7 +408,7 @@ fn materialize_compact_vector_with_slot(
     }
 }
 
-fn compact_scalar_product(
+fn compact_scalar_product<Aind: AbsInd + ParseableAind>(
     value: FunView<'_>,
     state: &ParseState,
 ) -> Option<SchoonschipMaterialization> {
@@ -417,14 +421,14 @@ fn compact_scalar_product(
         return None;
     };
 
-    let rep = compact_vector_rep(*lhs)?;
-    if rep != compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
+    let rep = compact_vector_rep::<Aind>(*lhs)?;
+    if rep != compact_vector_rep::<Aind>(*rhs)? || !rep.rep.is_self_dual() {
         return None;
     }
 
     let slot = state.slot(&rep).to_atom();
-    let lhs = materialize_compact_vector_with_slot(*lhs, &rep, &slot)?;
-    let rhs = materialize_compact_vector_with_slot(*rhs, &rep, &slot)?;
+    let lhs = materialize_compact_vector_with_slot::<Aind>(*lhs, &rep, &slot)?;
+    let rhs = materialize_compact_vector_with_slot::<Aind>(*rhs, &rep, &slot)?;
 
     Some(SchoonschipMaterialization {
         replacement: Atom::num(1),
@@ -433,12 +437,15 @@ fn compact_scalar_product(
     })
 }
 
-fn materialize_compact_vector_product(value: MulView<'_>, state: &ParseState) -> Option<Atom> {
+fn materialize_compact_vector_product<Aind: AbsInd + ParseableAind>(
+    value: MulView<'_>,
+    state: &ParseState,
+) -> Option<Atom> {
     let args = value.iter().collect::<Vec<_>>();
     let compact_positions = args
         .iter()
         .enumerate()
-        .filter_map(|(position, arg)| compact_vector_rep(*arg).map(|rep| (position, rep)))
+        .filter_map(|(position, arg)| compact_vector_rep::<Aind>(*arg).map(|rep| (position, rep)))
         .collect::<Vec<_>>();
     let [(left_position, rep), (right_position, right_rep)] = compact_positions.as_slice() else {
         return None;
@@ -452,7 +459,7 @@ fn materialize_compact_vector_product(value: MulView<'_>, state: &ParseState) ->
     let mut materialized = Atom::num(1);
     for (position, arg) in args.into_iter().enumerate() {
         let factor = if position == *left_position || position == *right_position {
-            materialize_compact_vector_with_slot(arg, rep, &slot)?
+            materialize_compact_vector_with_slot::<Aind>(arg, rep, &slot)?
         } else {
             arg.to_owned()
         };
@@ -464,11 +471,11 @@ fn materialize_compact_vector_product(value: MulView<'_>, state: &ParseState) ->
 
 /// Turns compact Schoonschip notation such as `p(mink(4))` into an indexed
 /// tensor factor and returns the fresh slot that should replace it in context.
-fn compact_schoonschip_tensor(
+fn compact_schoonschip_tensor<Aind: AbsInd + ParseableAind>(
     value: FunView<'_>,
     state: &ParseState,
 ) -> Option<SchoonschipMaterialization> {
-    let (position, rep) = compact_tensor_rep_arg(value)?;
+    let (position, rep) = compact_tensor_rep_arg::<Aind>(value)?;
     let args = value.iter().collect::<Vec<_>>();
 
     let slot = state.slot(&rep);
@@ -489,7 +496,7 @@ fn compact_schoonschip_tensor(
     })
 }
 
-fn compact_dot_as_metric(value: AtomView<'_>) -> Option<Atom> {
+fn compact_dot_as_metric<Aind: AbsInd + ParseableAind>(value: AtomView<'_>) -> Option<Atom> {
     let AtomView::Fun(fun) = value else {
         return None;
     };
@@ -501,7 +508,7 @@ fn compact_dot_as_metric(value: AtomView<'_>) -> Option<Atom> {
     let args = fun.iter().collect::<Vec<_>>();
     if args
         .iter()
-        .all(|arg| Slot::<LibraryRep, AbstractIndex>::try_from(*arg).is_ok())
+        .all(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
     {
         Some(
             FunctionBuilder::new(ETS.metric)
@@ -514,7 +521,7 @@ fn compact_dot_as_metric(value: AtomView<'_>) -> Option<Atom> {
     }
 }
 
-fn materialize_schoonschip_arg(
+fn materialize_schoonschip_arg<Aind: AbsInd + ParseableAind>(
     value: AtomView<'_>,
     state: &ParseState,
 ) -> Option<SchoonschipMaterialization> {
@@ -522,11 +529,11 @@ fn materialize_schoonschip_arg(
         return None;
     };
 
-    if let Some(materialized) = compact_scalar_product(fun, state) {
+    if let Some(materialized) = compact_scalar_product::<Aind>(fun, state) {
         return Some(materialized);
     }
 
-    if let Some(materialized) = compact_schoonschip_tensor(fun, state) {
+    if let Some(materialized) = compact_schoonschip_tensor::<Aind>(fun, state) {
         return Some(materialized);
     }
 
@@ -535,7 +542,7 @@ fn materialize_schoonschip_arg(
     let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
 
     for arg in fun.iter() {
-        if let Some(materialized) = materialize_schoonschip_arg(arg, state) {
+        if let Some(materialized) = materialize_schoonschip_arg::<Aind>(arg, state) {
             changed = true;
             rebuilt = rebuilt.add_arg(&materialized.replacement);
             factors.extend(materialized.factors);
@@ -547,15 +554,19 @@ fn materialize_schoonschip_arg(
     changed.then(|| {
         let replacement = rebuilt.finish();
         SchoonschipMaterialization {
-            replacement: compact_dot_as_metric(replacement.as_view()).unwrap_or(replacement),
+            replacement: compact_dot_as_metric::<Aind>(replacement.as_view())
+                .unwrap_or(replacement),
             factors,
             compact_self: false,
         }
     })
 }
 
-fn materialize_schoonschip(value: AtomView<'_>, state: &ParseState) -> Option<Atom> {
-    let materialized = materialize_schoonschip_arg(value, state)?;
+fn materialize_schoonschip<Aind: AbsInd + ParseableAind>(
+    value: AtomView<'_>,
+    state: &ParseState,
+) -> Option<Atom> {
+    let materialized = materialize_schoonschip_arg::<Aind>(value, state)?;
     let mut expression = if materialized.compact_self {
         Atom::num(1)
     } else {
@@ -629,7 +640,7 @@ impl<
     K: Clone + Display + Debug,
     // FK: Clone + Display + Debug,
     Str: TensorScalarStore<Tensor = T, Scalar = Sc> + Clone,
-    Aind: AbsInd,
+    Aind: AbsInd + ParseableAind,
 > Network<Str, K, Symbol, Aind>
 where
     Sc: for<'r> TryFrom<AtomView<'r>> + Clone,
@@ -719,7 +730,7 @@ where
             return Self::as_leaf::<S>(value.as_view(), settings);
         }
 
-        if let Some(materialized) = materialize_compact_vector_product(value, &state) {
+        if let Some(materialized) = materialize_compact_vector_product::<Aind>(value, &state) {
             return Self::try_from_view_impl(materialized.as_view(), state, library, settings);
         }
 
@@ -818,7 +829,8 @@ where
             }
 
             Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?))
-        } else if let Some(materialized) = materialize_schoonschip(value.as_view(), &state) {
+        } else if let Some(materialized) = materialize_schoonschip::<Aind>(value.as_view(), &state)
+        {
             Self::try_from_view_impl(materialized.as_view(), state, library, settings)
         } else if symbol.has_tag(&SPENSO_TAG.tag) {
             if value.get_nargs() != 1 {
@@ -885,7 +897,7 @@ where
 
         let start = args[0].to_owned();
         let end = args[1].to_owned();
-        let start_slot = Slot::<LibraryRep, AbstractIndex>::try_from(args[0])
+        let start_slot = Slot::<LibraryRep, Aind>::try_from(args[0])
             .map_err(|err| eyre!("invalid chain start `{}`: {err}", args[0]))?;
 
         let factors = &args[2..];
@@ -905,13 +917,13 @@ where
             let (right, next_left) = if position + 1 == factors.len() {
                 (end.clone(), None)
             } else {
-                let link = start_slot.reindex(state.next());
+                let link: Slot<LibraryRep, AbstractIndex> = start_slot.rep.slot(state.next());
                 (link.dual().to_atom(), Some(link.to_atom()))
             };
 
             let factor = replace_chain_placeholders(*factor, &left, &right);
             materialized_factors
-                .push(materialize_schoonschip(factor.as_view(), &state).unwrap_or(factor));
+                .push(materialize_schoonschip::<Aind>(factor.as_view(), &state).unwrap_or(factor));
             if let Some(next_left) = next_left {
                 left = next_left;
             }
@@ -969,7 +981,7 @@ where
             let materialized_factor =
                 replace_chain_placeholders(*factor, &left.to_atom(), &right.dual().to_atom());
             let materialized_factor =
-                materialize_schoonschip(materialized_factor.as_view(), &state)
+                materialize_schoonschip::<Aind>(materialized_factor.as_view(), &state)
                     .unwrap_or(materialized_factor);
             let left_closure = FunctionBuilder::new(ETS.metric)
                 .add_arg(bridge.to_atom())
@@ -1010,7 +1022,7 @@ where
                 let left = links[position].to_atom();
                 let right = links[(position + 1) % factors.len()].dual().to_atom();
                 let factor = replace_chain_placeholders(*factor, &left, &right);
-                materialize_schoonschip(factor.as_view(), &state).unwrap_or(factor)
+                materialize_schoonschip::<Aind>(factor.as_view(), &state).unwrap_or(factor)
             })
             .collect::<Vec<_>>();
 
@@ -1432,7 +1444,7 @@ mod tests {
         };
 
         let state = ParseState::default();
-        let materialized = compact_schoonschip_tensor(fun, &state).unwrap();
+        let materialized = compact_schoonschip_tensor::<AbstractIndex>(fun, &state).unwrap();
 
         assert!(
             Slot::<LibraryRep, AbstractIndex>::try_from(materialized.replacement.as_view()).is_ok()
@@ -1452,7 +1464,7 @@ mod tests {
         };
 
         let state = ParseState::default();
-        assert!(compact_schoonschip_tensor(fun, &state).is_none());
+        assert!(compact_schoonschip_tensor::<AbstractIndex>(fun, &state).is_none());
     }
 
     #[test]
