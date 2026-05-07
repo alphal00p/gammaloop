@@ -32,6 +32,7 @@ use atomcore::{ReplaceBuilderGeneric, TensorAtomMaps};
 
 use enum_try_as_inner::EnumTryAsInner;
 use log::trace;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use to_param::ToAtom;
 
@@ -46,8 +47,8 @@ use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     shadowing::{ShadowMapping, Shadowable},
     structure::{
-        CastStructure, HasName, HasStructure, NamedStructure, OrderedStructure, ScalarStructure,
-        ScalarTensor, StructureContract, TensorStructure, TracksCount,
+        CastStructure, HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure,
+        ScalarStructure, ScalarTensor, StructureContract, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, DualConciousExpandedIndex, ExpandedIndex, FlatIndex},
         slot::Slot,
     },
@@ -2014,6 +2015,245 @@ where
     Ok(Some(DataTensor::Sparse(result)))
 }
 
+fn grouped_atom_sum(terms: Vec<Atom>) -> Atom {
+    match terms.len() {
+        0 => Atom::Zero,
+        1 => terms
+            .into_iter()
+            .next()
+            .expect("single grouped atom exists"),
+        _ => Atom::add_many(&terms),
+    }
+}
+
+fn grouped_sparse_atom_contract<I>(
+    left: &DataTensor<Atom, I>,
+    right: &DataTensor<Atom, I>,
+) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+        return Ok(None);
+    };
+    if !left.zero.as_view().is_zero() || !right.zero.as_view().is_zero() {
+        return Ok(None);
+    }
+
+    let (resulting_structure, pos_left, pos_right, merge_info) =
+        left.structure().merge(right.structure())?;
+    let common_count = pos_left.n_included();
+
+    match (common_count, merge_info) {
+        (0, _) | (_, MergeInfo::Interleaved(_)) => Ok(None),
+        (1, MergeInfo::FirstBeforeSecond) => {
+            let left_axis = pos_left
+                .included_iter()
+                .next()
+                .expect("single left contraction axis");
+            let right_axis = pos_right
+                .included_iter()
+                .next()
+                .expect("single right contraction axis");
+            grouped_sparse_atom_single_contract(
+                left,
+                right,
+                resulting_structure,
+                left_axis,
+                right_axis,
+            )
+            .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (1, MergeInfo::SecondBeforeFirst) => {
+            let left_axis = pos_left
+                .included_iter()
+                .next()
+                .expect("single left contraction axis");
+            let right_axis = pos_right
+                .included_iter()
+                .next()
+                .expect("single right contraction axis");
+            grouped_sparse_atom_single_contract(
+                right,
+                left,
+                resulting_structure,
+                right_axis,
+                left_axis,
+            )
+            .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (_, MergeInfo::FirstBeforeSecond) => {
+            grouped_sparse_atom_multi_contract(left, right, resulting_structure)
+                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (_, MergeInfo::SecondBeforeFirst) => {
+            grouped_sparse_atom_multi_contract(right, left, resulting_structure)
+                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+    }
+}
+
+fn grouped_sparse_atom_single_contract<I>(
+    left: &SparseTensor<Atom, I>,
+    right: &SparseTensor<Atom, I>,
+    final_structure: I,
+    left_axis: SlotIndex,
+    right_axis: SlotIndex,
+) -> Result<SparseTensor<Atom, I>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let metric = left.external_structure()[left_axis.0].rep().negative()?;
+    let mut grouped = Vec::<(FlatIndex, Vec<Atom>)>::new();
+    let mut result_index = 0usize;
+
+    let self_iter = left.fiber_class(left_axis.into()).iter();
+    let mut other_iter = right.fiber_class(right_axis.into()).iter();
+
+    for mut fiber_a in self_iter {
+        for mut fiber_b in other_iter.by_ref() {
+            let mut items = fiber_a
+                .next()
+                .map(|(a, skip, _)| (a, skip))
+                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
+            let mut terms = Vec::new();
+
+            while let Some(((a, skip_a), (b, skip_b))) = items {
+                if skip_a > skip_b {
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    items = Some((a, skip_a)).zip(b);
+                } else if skip_b > skip_a {
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, _)| (a, skip + skip_a + 1));
+                    items = a.zip(Some((b, skip_b)));
+                } else {
+                    let mut product = a.mul_fallible(b).unwrap();
+                    if metric[skip_a] {
+                        product = -product;
+                    }
+                    terms.push(product);
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, _)| (a, skip + skip_a + 1));
+                    items = a.zip(b);
+                }
+            }
+
+            if !terms.is_empty() {
+                grouped.push((result_index.into(), terms));
+            }
+            result_index += 1;
+            fiber_a.reset();
+        }
+        other_iter.reset();
+    }
+
+    let elements = grouped
+        .into_par_iter()
+        .filter_map(|(index, terms)| {
+            let value = grouped_atom_sum(terms);
+            (!value.as_view().is_zero()).then_some((index, value))
+        })
+        .collect();
+
+    Ok(SparseTensor {
+        zero: Atom::Zero,
+        elements,
+        structure: final_structure,
+    })
+}
+
+fn grouped_sparse_atom_multi_contract<I>(
+    left: &SparseTensor<Atom, I>,
+    right: &SparseTensor<Atom, I>,
+    final_structure: I,
+) -> Result<SparseTensor<Atom, I>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let (permutation, self_matches, other_matches) =
+        left.structure().match_indices(right.structure()).unwrap();
+    let mut grouped = Vec::<(FlatIndex, Vec<Atom>)>::new();
+    let mut result_index = 0usize;
+
+    let self_iter = left
+        .fiber_class(self_matches.as_slice().into())
+        .iter_perm_metric(permutation);
+    let mut other_iter = right.fiber_class(other_matches.as_slice().into()).iter();
+
+    for mut fiber_a in self_iter {
+        for mut fiber_b in other_iter.by_ref() {
+            let mut items = fiber_a
+                .next()
+                .map(|(a, skip, (neg, _))| (a, skip, neg))
+                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
+            let mut terms = Vec::new();
+
+            while let Some(((a, skip_a, neg), (b, skip_b))) = items {
+                if skip_a > skip_b {
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    items = Some((a, skip_a, neg)).zip(b);
+                } else if skip_b > skip_a {
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                    items = a.zip(Some((b, skip_b)));
+                } else {
+                    let mut product = a.mul_fallible(b).unwrap();
+                    if neg {
+                        product = -product;
+                    }
+                    terms.push(product);
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                    items = a.zip(b);
+                }
+            }
+
+            if !terms.is_empty() {
+                grouped.push((result_index.into(), terms));
+            }
+            result_index += 1;
+            fiber_a.reset();
+        }
+        other_iter.reset();
+    }
+
+    let elements = grouped
+        .into_par_iter()
+        .filter_map(|(index, terms)| {
+            let value = grouped_atom_sum(terms);
+            (!value.as_view().is_zero()).then_some((index, value))
+        })
+        .collect();
+
+    Ok(SparseTensor {
+        zero: Atom::Zero,
+        elements,
+        structure: final_structure,
+    })
+}
+
 impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
 where
     I: TensorStructure + Clone + StructureContract,
@@ -2021,6 +2261,8 @@ where
     type LCM = ParamTensor<I>;
     fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
         let s = if let Some(s) = self.one_hot_selector_contract(other)? {
+            s
+        } else if let Some(s) = grouped_sparse_atom_contract(&self.tensor, &other.tensor)? {
             s
         } else {
             self.tensor.contract(&other.tensor)?
