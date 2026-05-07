@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.3.4" as cetz
+#import "@preview/cetz:0.5.1" as cetz
 #import "../src/lib.typ" as kurvst
 #import "common.typ": count, samples-per-period, spacing, amplitude, wavelength, stroke, straight-segment
 

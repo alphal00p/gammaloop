@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.3.4" as cetz
+#import "@preview/cetz:0.5.1" as cetz
 #import "common.typ": count, turns, width, spacing, amplitude, stroke
 
 #set page(width: 120mm, height: auto, margin: 8mm)

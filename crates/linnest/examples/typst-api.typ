@@ -66,6 +66,22 @@ This example imports the canonical Linnest Typst package source, builds a graph 
 
 #draw(g, node-style: node-style, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 
+== Positioned Graph Without Layout
+
+#let positioned = graph.build(
+  name: "positioned",
+  nodes: (
+    (name: "left", pos: (x: 0, y: 0)),
+    (name: "right", pos: (x: 2.5, y: 0)),
+  ),
+  edges: (
+    (source: (node: 0), sink: (node: 1)),
+    (source: (node: 1), sink: none, pos: (x: 3.4, y: 0.7)),
+  ),
+)
+
+#draw(positioned, source-style: (stroke: black + 0.7pt), sink-style: (stroke: black + 0.7pt))
+
 #table(
   columns: (auto, 1fr),
   inset: 6pt,
