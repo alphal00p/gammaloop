@@ -9,6 +9,10 @@ use gammalooprs::{
     numerator::{ParsingNet, aind::Aind},
     utils::{F, FUN_LIB, TENSORLIB},
 };
+use idenso::{
+    metric::MetricSimplifier,
+    schoonschip::{Schoonschip, SchoonschipSettings},
+};
 use linnet::half_edge::{
     NodeIndex,
     involution::{EdgeData, Hedge, HedgePair, Orientation},
@@ -26,7 +30,7 @@ use spenso::{
     structure::{HasName, HasStructure, TensorStructure},
     tensors::{
         data::DataTensor,
-        parametric::{MixedTensor, ParamOrConcrete},
+        parametric::{AtomViewOrConcrete, MixedTensor, ParamOrConcrete},
     },
 };
 use symbolica::{
@@ -161,6 +165,39 @@ fn collect_horner(expr: &Atom) -> Atom {
     collected
 }
 
+fn apply_sum46_prepass(label: &str, expr: Atom) -> Atom {
+    let Ok(prepass) = std::env::var("SPENSO_SUM46_PREPASS") else {
+        return expr;
+    };
+    if prepass.is_empty() || prepass == "none" {
+        return expr;
+    }
+
+    let start = Instant::now();
+    let simplified = match prepass.as_str() {
+        "metrics" => expr.simplify_metrics(),
+        "schoonschip" | "schoonschip_partial" => {
+            expr.schoonschip_with_net::<false, true, Aind>(&SchoonschipSettings::partial())
+        }
+        "schoonschip_full" => {
+            expr.schoonschip_with_net::<false, true, Aind>(&SchoonschipSettings::full())
+        }
+        "schoonschip_expand" => expr.schoonschip_with_net::<true, true, Aind>(
+            &SchoonschipSettings::partial().with_expanded_contracted_sums(),
+        ),
+        other => panic!("unknown SPENSO_SUM46_PREPASS={other}"),
+    };
+    eprintln!(
+        "{label} prepass={prepass} elapsed={:.3?} before_terms={} before_bytes={} after_terms={} after_bytes={}",
+        start.elapsed(),
+        expr.nterms(),
+        expr.as_view().get_byte_size(),
+        simplified.nterms(),
+        simplified.as_view().get_byte_size(),
+    );
+    simplified
+}
+
 fn report_actual_net_stats(label: &str, net: &ParsingNet) {
     let mut concrete_tensors = 0usize;
     let mut param_tensors = 0usize;
@@ -221,6 +258,292 @@ fn report_actual_net_stats(label: &str, net: &ParsingNet) {
         order_counts,
         top_names,
     );
+}
+
+fn accumulate_actual_tensor_reference(
+    tensor: &ActualTensor,
+    refs: &mut usize,
+    logical_entries: &mut usize,
+    flat_entries: &mut usize,
+    nonzero_entries: &mut usize,
+    orders: &mut BTreeMap<usize, usize>,
+    names: &mut BTreeMap<String, usize>,
+    nonzeros_by_name: &mut BTreeMap<String, usize>,
+) {
+    *refs += 1;
+    *logical_entries += tensor.structure().size().unwrap_or(0);
+    *flat_entries += tensor.iter_flat().count();
+    *orders.entry(tensor.structure().order()).or_default() += 1;
+
+    let name = tensor
+        .name()
+        .map(|name| name.to_string())
+        .unwrap_or_else(|| "<anonymous>".to_owned());
+    *names.entry(name.clone()).or_default() += 1;
+
+    let tensor_nonzeros = tensor
+        .iter_flat()
+        .filter(|(_, value)| match value {
+            AtomViewOrConcrete::Atom(atom) => !atom.is_zero(),
+            AtomViewOrConcrete::Concrete(_) => true,
+        })
+        .count();
+    *nonzero_entries += tensor_nonzeros;
+    *nonzeros_by_name.entry(name).or_default() += tensor_nonzeros;
+}
+
+fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
+    let mut leaf_nodes = 0usize;
+    let mut sum_ops = 0usize;
+    let mut product_ops = 0usize;
+    let mut neg_ops = 0usize;
+    let mut power_ops = 0usize;
+    let mut function_ops = 0usize;
+    let mut sum_children = 0usize;
+    let mut product_children = 0usize;
+    let mut max_sum_children = 0usize;
+    let mut max_product_children = 0usize;
+
+    let mut local_tensor_leaves = 0usize;
+    let mut tensor_sum_leaves = 0usize;
+    let mut tensor_sum_terms = 0usize;
+    let mut tensor_term_leaves = 0usize;
+    let mut tensor_term_scaled = 0usize;
+    let mut tensor_term_sum_leaves = 0usize;
+    let mut tensor_term_sum_terms = 0usize;
+    let mut tensor_term_sum_scaled = 0usize;
+    let mut library_leaves = 0usize;
+    let mut scalar_leaves = 0usize;
+
+    let mut tensor_refs = 0usize;
+    let mut tensor_ref_logical_entries = 0usize;
+    let mut tensor_ref_flat_entries = 0usize;
+    let mut tensor_ref_nonzero_entries = 0usize;
+    let mut library_logical_entries = 0usize;
+    let mut scalar_bytes = 0usize;
+    let mut tensor_ref_orders = BTreeMap::<usize, usize>::new();
+    let mut tensor_ref_names = BTreeMap::<String, usize>::new();
+    let mut tensor_ref_nonzeros_by_name = BTreeMap::<String, usize>::new();
+
+    for (node_index, _neigh, node) in net.graph.graph.iter_nodes() {
+        match node {
+            NetworkNode::Leaf(leaf) => {
+                leaf_nodes += 1;
+                match leaf {
+                    NetworkLeaf::LocalTensor(index) => {
+                        local_tensor_leaves += 1;
+                        accumulate_actual_tensor_reference(
+                            &net.store.tensors[*index],
+                            &mut tensor_refs,
+                            &mut tensor_ref_logical_entries,
+                            &mut tensor_ref_flat_entries,
+                            &mut tensor_ref_nonzero_entries,
+                            &mut tensor_ref_orders,
+                            &mut tensor_ref_names,
+                            &mut tensor_ref_nonzeros_by_name,
+                        );
+                    }
+                    NetworkLeaf::TensorSum(indices) => {
+                        tensor_sum_leaves += 1;
+                        tensor_sum_terms += indices.len();
+                        for index in indices {
+                            accumulate_actual_tensor_reference(
+                                &net.store.tensors[*index],
+                                &mut tensor_refs,
+                                &mut tensor_ref_logical_entries,
+                                &mut tensor_ref_flat_entries,
+                                &mut tensor_ref_nonzero_entries,
+                                &mut tensor_ref_orders,
+                                &mut tensor_ref_names,
+                                &mut tensor_ref_nonzeros_by_name,
+                            );
+                        }
+                    }
+                    NetworkLeaf::TensorTerm(term) => {
+                        tensor_term_leaves += 1;
+                        if let Some(scalar) = term.scalar {
+                            tensor_term_scaled += 1;
+                            scalar_bytes += net.store.scalar[scalar].as_view().get_byte_size();
+                        }
+                        accumulate_actual_tensor_reference(
+                            &net.store.tensors[term.tensor],
+                            &mut tensor_refs,
+                            &mut tensor_ref_logical_entries,
+                            &mut tensor_ref_flat_entries,
+                            &mut tensor_ref_nonzero_entries,
+                            &mut tensor_ref_orders,
+                            &mut tensor_ref_names,
+                            &mut tensor_ref_nonzeros_by_name,
+                        );
+                    }
+                    NetworkLeaf::TensorTermSum(terms) => {
+                        tensor_term_sum_leaves += 1;
+                        tensor_term_sum_terms += terms.len();
+                        for term in terms {
+                            if let Some(scalar) = term.scalar {
+                                tensor_term_sum_scaled += 1;
+                                scalar_bytes += net.store.scalar[scalar].as_view().get_byte_size();
+                            }
+                            accumulate_actual_tensor_reference(
+                                &net.store.tensors[term.tensor],
+                                &mut tensor_refs,
+                                &mut tensor_ref_logical_entries,
+                                &mut tensor_ref_flat_entries,
+                                &mut tensor_ref_nonzero_entries,
+                                &mut tensor_ref_orders,
+                                &mut tensor_ref_names,
+                                &mut tensor_ref_nonzeros_by_name,
+                            );
+                        }
+                    }
+                    NetworkLeaf::LibraryKey(key) => {
+                        library_leaves += 1;
+                        library_logical_entries += key.structure.size().unwrap_or(0);
+                    }
+                    NetworkLeaf::Scalar(index) => {
+                        scalar_leaves += 1;
+                        scalar_bytes += net.store.scalar[*index].as_view().get_byte_size();
+                    }
+                }
+            }
+            NetworkNode::Op(op) => {
+                let child_count = net.graph.cached_expr_children(node_index).len();
+                match op {
+                    NetworkOp::Sum => {
+                        sum_ops += 1;
+                        sum_children += child_count;
+                        max_sum_children = max_sum_children.max(child_count);
+                    }
+                    NetworkOp::Product => {
+                        product_ops += 1;
+                        product_children += child_count;
+                        max_product_children = max_product_children.max(child_count);
+                    }
+                    NetworkOp::Neg => neg_ops += 1,
+                    NetworkOp::Power(_) => power_ops += 1,
+                    NetworkOp::Function(_) => function_ops += 1,
+                }
+            }
+        }
+    }
+
+    let mut top_tensor_ref_names = tensor_ref_names.into_iter().collect::<Vec<_>>();
+    top_tensor_ref_names
+        .sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    top_tensor_ref_names.truncate(8);
+    let mut top_tensor_ref_nonzeros = tensor_ref_nonzeros_by_name.into_iter().collect::<Vec<_>>();
+    top_tensor_ref_nonzeros
+        .sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    top_tensor_ref_nonzeros.truncate(8);
+
+    eprintln!(
+        "{label} actual_net leaves: leaf_nodes={} sum_ops={} product_ops={} neg_ops={} power_ops={} function_ops={} sum_children={} product_children={} max_sum_children={} max_product_children={} local_tensor_leaves={} tensor_sum_leaves={} tensor_sum_terms={} tensor_term_leaves={} tensor_term_scaled={} tensor_term_sum_leaves={} tensor_term_sum_terms={} tensor_term_sum_scaled={} library_leaves={} scalar_leaves={} tensor_refs={} tensor_ref_logical_entries={} tensor_ref_flat_entries={} tensor_ref_nonzero_entries={} library_logical_entries={} scalar_bytes={} tensor_ref_orders={:?} top_tensor_ref_names={:?} top_tensor_ref_nonzeros={:?}",
+        leaf_nodes,
+        sum_ops,
+        product_ops,
+        neg_ops,
+        power_ops,
+        function_ops,
+        sum_children,
+        product_children,
+        max_sum_children,
+        max_product_children,
+        local_tensor_leaves,
+        tensor_sum_leaves,
+        tensor_sum_terms,
+        tensor_term_leaves,
+        tensor_term_scaled,
+        tensor_term_sum_leaves,
+        tensor_term_sum_terms,
+        tensor_term_sum_scaled,
+        library_leaves,
+        scalar_leaves,
+        tensor_refs,
+        tensor_ref_logical_entries,
+        tensor_ref_flat_entries,
+        tensor_ref_nonzero_entries,
+        library_logical_entries,
+        scalar_bytes,
+        tensor_ref_orders,
+        top_tensor_ref_names,
+        top_tensor_ref_nonzeros,
+    );
+}
+
+fn leaf_brief(net: &ParsingNet, node: NodeIndex) -> String {
+    match &net.graph.graph[node] {
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => net.store.tensors[*index]
+            .name()
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| format!("tensor#{index}")),
+        NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
+            format!("TensorSum({})", indices.len())
+        }
+        NetworkNode::Leaf(NetworkLeaf::TensorTerm(term)) => match term.scalar {
+            Some(_) => net.store.tensors[term.tensor]
+                .name()
+                .map(|name| format!("{name}*s"))
+                .unwrap_or_else(|| format!("tensor#{}*s", term.tensor)),
+            None => net.store.tensors[term.tensor]
+                .name()
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("tensor#{}", term.tensor)),
+        },
+        NetworkNode::Leaf(NetworkLeaf::TensorTermSum(terms)) => {
+            format!("TensorTermSum({})", terms.len())
+        }
+        NetworkNode::Leaf(NetworkLeaf::LibraryKey(key)) => key
+            .structure
+            .name()
+            .map(|name| format!("lib:{name}"))
+            .unwrap_or_else(|| "lib:<anonymous>".to_owned()),
+        NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => "scalar".to_owned(),
+        NetworkNode::Op(NetworkOp::Sum) => "sum".to_owned(),
+        NetworkNode::Op(NetworkOp::Product) => "product".to_owned(),
+        NetworkNode::Op(NetworkOp::Neg) => "neg".to_owned(),
+        NetworkNode::Op(NetworkOp::Power(power)) => format!("pow({power})"),
+        NetworkNode::Op(NetworkOp::Function(function)) => format!("fun:{function}"),
+    }
+}
+
+fn report_product_interleaving(label: &str, net: &ParsingNet, limit: usize) {
+    let mut products = net
+        .graph
+        .cached_expr_preorder_nodes()
+        .into_iter()
+        .filter_map(|node| match &net.graph.graph[node] {
+            NetworkNode::Op(NetworkOp::Product) => {
+                let children = net.graph.cached_expr_children(node);
+                Some((node, children))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    products.sort_by(|left, right| {
+        right
+            .1
+            .len()
+            .cmp(&left.1.len())
+            .then_with(|| left.0.cmp(&right.0))
+    });
+
+    for (rank, (node, children)) in products.into_iter().take(limit).enumerate() {
+        let sequence = children
+            .iter()
+            .map(|child| leaf_brief(net, *child))
+            .collect::<Vec<_>>();
+        let mut counts = BTreeMap::<String, usize>::new();
+        for item in &sequence {
+            *counts.entry(item.clone()).or_default() += 1;
+        }
+        eprintln!(
+            "{label} product_interleave rank={rank} node={node} children={} counts={:?} sequence={:?}",
+            sequence.len(),
+            counts,
+            sequence,
+        );
+    }
 }
 
 fn report_concrete_net_stats(label: &str, net: &ConcreteParsingNet) {
@@ -844,6 +1167,31 @@ fn collect_adds_with_arity(view: AtomView<'_>, arity: usize, out: &mut Vec<Atom>
     }
 }
 
+fn count_function_occurrences(view: AtomView<'_>, name: &str) -> usize {
+    match view {
+        AtomView::Fun(fun) => {
+            usize::from(fun.get_symbol().get_stripped_name() == name)
+                + fun
+                    .iter()
+                    .map(|arg| count_function_occurrences(arg, name))
+                    .sum::<usize>()
+        }
+        AtomView::Add(add) => add
+            .iter()
+            .map(|term| count_function_occurrences(term, name))
+            .sum(),
+        AtomView::Mul(mul) => mul
+            .iter()
+            .map(|factor| count_function_occurrences(factor, name))
+            .sum(),
+        AtomView::Pow(pow) => {
+            let (base, exp) = pow.get_base_exp();
+            count_function_occurrences(base, name) + count_function_occurrences(exp, name)
+        }
+        AtomView::Num(_) | AtomView::Var(_) => 0,
+    }
+}
+
 fn add_terms(expr: &Atom) -> Vec<Atom> {
     match expr.as_view() {
         AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
@@ -1137,8 +1485,23 @@ fn spenso_eval_input_0_sum46_individual_term_execute() {
             term.nterms(),
             term.as_view().get_byte_size()
         );
+        eprintln!(
+            "{label} function_counts selected_delta={} branch_delta={} selected_q3={} branch_q3={}",
+            count_function_occurrences(term.as_view(), "δ"),
+            count_function_occurrences(branch_expr.as_view(), "δ"),
+            count_function_occurrences(term.as_view(), "Q3"),
+            count_function_occurrences(branch_expr.as_view(), "Q3"),
+        );
 
+        let branch_expr = apply_sum46_prepass(&label, branch_expr);
         let net = parse_actual_net_quiet(&label, &branch_expr);
+        if std::env::var_os("SPENSO_SUM46_NETWORK_ONLY").is_some() {
+            report_actual_net_stats(&label, &net);
+            report_actual_net_leaf_stats(&label, &net);
+            report_product_interleaving(&label, &net, 5);
+            continue;
+        }
+
         let execute_elapsed = execute_actual_net_min_result_rank_parallel_summary(&label, net);
         execute_times.push(execute_elapsed);
         eprintln!("{label} total={:.3?}", total_start.elapsed());
