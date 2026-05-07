@@ -386,6 +386,29 @@ $lambda$ is `length-scale`, $W$ is `viewport-w`, $H$ is `viewport-h`, $tau_x$
 is `tree-dx`, and $tau_y$ is `tree-dy`. These fields set the geometry scale for
 both layout modes.
 
+For deterministic, non-iterative placement, use `layout-algo: "tree"` or
+`layout-algo: "dot"`. `"tree"` places a traversal forest by levels. `"dot"`
+uses a directed layered placement for acyclic inputs, falling back to tree
+placement when the selected edges contain a cycle. Both modes also work on a
+subgraph:
+
+```typ
+#let g = graph.parse("digraph partial { a -> b; b -> c; c -> d; d -> a }").at(0)
+#let tree = graph.forests(g).at(0)
+#let g = layout(g, layout-algo: "tree", subgraph: tree)
+#draw(g)
+```
+
+Only nodes touched by the selected subgraph are placed. Edge control points are
+then resolved from the current node positions, so edges outside the selected
+subgraph are drawn as straight lines unless their own position constraints say
+otherwise.
+
+`layout-algo: "force"` and `layout-algo: "anneal"` also accept `subgraph`.
+For these iterative modes, nodes and edge control points outside the selected
+subgraph stay fixed and act as boundary points while the selected subgraph is
+optimized.
+
 The shared spring/charge model uses the following coefficients:
 
 $ c_("vv") = beta L^2 $

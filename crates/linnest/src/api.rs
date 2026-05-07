@@ -1,4 +1,5 @@
 use figment::{providers::Serialized, Figment, Profile};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::parser::{set::DotGraphSet, DotGraph};
 
 use crate::{
@@ -15,6 +16,34 @@ fn decode_cbor_map(arg: &[u8]) -> Result<ciborium::Value, String> {
     ciborium::de::from_reader(arg).map_err(|e| format!("Failed to deserialize CBOR value: {e}"))
 }
 
+fn take_layout_subgraph(cbor_map: &mut ciborium::Value) -> Result<Option<String>, String> {
+    let ciborium::Value::Map(entries) = cbor_map else {
+        return Ok(None);
+    };
+
+    let mut subgraph = None;
+    entries.retain(|(key, value)| {
+        let is_subgraph = matches!(key, ciborium::Value::Text(key) if key == "subgraph");
+        if is_subgraph {
+            subgraph = Some(value.clone());
+        }
+        !is_subgraph
+    });
+
+    let Some(value) = subgraph else {
+        return Ok(None);
+    };
+
+    match value {
+        ciborium::Value::Null => Ok(None),
+        ciborium::Value::Text(label) if label == "none" => Ok(None),
+        ciborium::Value::Text(label) => Ok(Some(label)),
+        other => Err(format!(
+            "layout subgraph must be a base62 string or none, got {other:?}"
+        )),
+    }
+}
+
 fn decode_dot_string(arg: &[u8]) -> Result<&str, String> {
     std::str::from_utf8(arg).map_err(|_| "Invalid UTF-8".to_string())
 }
@@ -27,15 +56,27 @@ pub fn parse_dot_graphs_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let cbor_map = decode_cbor_map(arg2)?;
+    let mut cbor_map = decode_cbor_map(arg2)?;
+    let subgraph_label = take_layout_subgraph(&mut cbor_map)?;
     let figment = Figment::from(Serialized::from(cbor_map, Profile::Default));
 
     let mut graph = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(arg) }
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
     graph.global_data.set_figment(figment);
+    let subgraph = subgraph_label
+        .as_deref()
+        .map(|label| {
+            SuBitGraph::from_base62(label, graph.n_hedges()).ok_or_else(|| {
+                format!(
+                    "Invalid subgraph label {label:?} for graph with {} half edges",
+                    graph.n_hedges()
+                )
+            })
+        })
+        .transpose()?;
 
     let mut typst_graph = TypstGraph::from_dot(graph, &Figment::new());
-    typst_graph.layout();
+    typst_graph.layout_with_subgraph(subgraph.as_ref())?;
     typst_graph
         .to_dot_graph()
         .to_rkyv_bytes::<4096>()

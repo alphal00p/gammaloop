@@ -40,6 +40,7 @@ use linnet::{
             },
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
+        subgraph::{SuBitGraph, SubSetLike},
         EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
@@ -50,7 +51,7 @@ use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::BufWriter;
-use std::ops::Deref;
+use std::ops::{Deref, IndexMut};
 use std::path::Path;
 use std::{f64, fs::File};
 
@@ -1229,6 +1230,7 @@ impl From<(DotGraph, Figment)> for TypstGraph {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct TreeInitCfg {
     pub dy: f64, // ≈ 1.2 * L
     pub dx: f64, // ≈ 0.9 * L
@@ -1240,11 +1242,24 @@ pub struct TreeInitCfg {
 #[serde(rename_all = "lowercase")]
 enum LayoutAlgo {
     Anneal,
+    Dot,
     Force,
+    Tree,
 }
 
 fn default_layout_algo() -> LayoutAlgo {
     LayoutAlgo::Force
+}
+
+impl LayoutAlgo {
+    fn as_str(self) -> &'static str {
+        match self {
+            LayoutAlgo::Anneal => "anneal",
+            LayoutAlgo::Dot => "dot",
+            LayoutAlgo::Force => "force",
+            LayoutAlgo::Tree => "tree",
+        }
+    }
 }
 
 #[derive(
@@ -1377,13 +1392,7 @@ impl LayoutConfig {
         insert!("label-spring", self.label_spring);
         insert!("label-early-tol", self.label_early_tol);
         insert!("label-max-delta-scale", self.label_max_delta_scale);
-        insert!(
-            "layout-algo",
-            match self.layout_algo {
-                LayoutAlgo::Anneal => "anneal",
-                LayoutAlgo::Force => "force",
-            }
-        );
+        insert!("layout-algo", self.layout_algo.as_str());
         global_data.statements.insert(
             "incremental-energy".to_string(),
             self.incremental_energy.to_string(),
@@ -1802,57 +1811,50 @@ where
 
 impl TypstGraph {
     pub fn layout(&mut self) {
+        self.layout_with_subgraph(None)
+            .expect("full graph layout should not fail");
+    }
+
+    pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
 
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
-        let (pos_n, pos_e) = self.new_positions(tree_cfg);
-        let mut state = self.graph.new_layout_state(
-            pos_n,
-            pos_e,
-            self.layout_config.delta,
-            self.layout_config.directional_force,
-            self.layout_config.incremental_energy,
-        );
+        if let Some(subgraph) = subgraph {
+            let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
+                LayoutAlgo::Tree | LayoutAlgo::Dot => self.partial_layout_positions(
+                    tree_cfg,
+                    self.layout_config.layout_algo,
+                    subgraph,
+                ),
+                LayoutAlgo::Anneal | LayoutAlgo::Force => {
+                    self.partial_optimized_positions(tree_cfg, subgraph, &energy)
+                }
+            };
+            self.apply_grouped_constraints(&mut vertex_points, &mut edge_points);
+            self.update_positions(vertex_points, edge_points);
+            self.layout_edge_labels(energy.spring_length);
+            return Ok(());
+        }
 
-        let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
-            LayoutAlgo::Anneal => {
-                let mut schedule = GeoSchedule::from(&self.layout_config.schedule);
-                let (out, _stats) = anneal::<_, _, _, _, SmallRng>(
-                    state,
-                    SAConfig {
-                        temp: self.layout_config.temp,
-                        step: self.layout_config.step,
-                        seed: self.layout_config.seed,
-                    },
-                    &PinnedLayoutNeighbor,
-                    &energy,
-                    &mut schedule,
-                );
-                (out.vertex_points, out.edge_points)
-            }
-            LayoutAlgo::Force => {
-                force_directed_layout(
-                    &mut state,
-                    &energy,
-                    ForceLayoutConfig {
-                        steps: self.layout_config.schedule.steps,
-                        epochs: self.layout_config.schedule.epochs,
-                        step: self.layout_config.step,
-                        cool: self.layout_config.schedule.cool,
-                        max_delta: self.layout_config.delta,
-                        early_tol: self.layout_config.schedule.early_tol,
-                        seed: self.layout_config.seed,
-                        z_spring: self.layout_config.z_spring,
-                        z_spring_growth: self.layout_config.z_spring_growth,
-                    },
-                );
-                (state.vertex_points, state.edge_points)
-            }
-        };
+        if matches!(
+            self.layout_config.layout_algo,
+            LayoutAlgo::Tree | LayoutAlgo::Dot
+        ) {
+            let (mut vertex_points, mut edge_points) =
+                self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo);
+            self.apply_grouped_constraints(&mut vertex_points, &mut edge_points);
+            self.update_positions(vertex_points, edge_points);
+            self.layout_edge_labels(energy.spring_length);
+            return Ok(());
+        }
+
+        let (pos_n, pos_e) = self.new_positions(tree_cfg);
+        let (mut vertex_points, mut edge_points) = self.optimized_positions(pos_n, pos_e, &energy);
 
         self.apply_grouped_constraints(&mut vertex_points, &mut edge_points);
         self.update_positions(vertex_points, edge_points);
         self.layout_edge_labels(energy.spring_length);
+        Ok(())
     }
 
     pub fn layout_energy_state(
@@ -1952,6 +1954,58 @@ impl TypstGraph {
                 *value = -value.abs().max(f64::EPSILON);
             }
             _ => {}
+        }
+    }
+
+    fn optimized_positions(
+        &self,
+        pos_n: NodeVec<Point2<f64>>,
+        pos_e: EdgeVec<Point2<f64>>,
+        energy: &SpringChargeEnergy,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let mut state = self.graph.new_layout_state(
+            pos_n,
+            pos_e,
+            self.layout_config.delta,
+            self.layout_config.directional_force,
+            self.layout_config.incremental_energy,
+        );
+
+        match self.layout_config.layout_algo {
+            LayoutAlgo::Anneal => {
+                let mut schedule = GeoSchedule::from(&self.layout_config.schedule);
+                let (out, _stats) = anneal::<_, _, _, _, SmallRng>(
+                    state,
+                    SAConfig {
+                        temp: self.layout_config.temp,
+                        step: self.layout_config.step,
+                        seed: self.layout_config.seed,
+                    },
+                    &PinnedLayoutNeighbor,
+                    energy,
+                    &mut schedule,
+                );
+                (out.vertex_points, out.edge_points)
+            }
+            LayoutAlgo::Force => {
+                force_directed_layout(
+                    &mut state,
+                    energy,
+                    ForceLayoutConfig {
+                        steps: self.layout_config.schedule.steps,
+                        epochs: self.layout_config.schedule.epochs,
+                        step: self.layout_config.step,
+                        cool: self.layout_config.schedule.cool,
+                        max_delta: self.layout_config.delta,
+                        early_tol: self.layout_config.schedule.early_tol,
+                        seed: self.layout_config.seed,
+                        z_spring: self.layout_config.z_spring,
+                        z_spring_growth: self.layout_config.z_spring_growth,
+                    },
+                );
+                (state.vertex_points, state.edge_points)
+            }
+            LayoutAlgo::Dot | LayoutAlgo::Tree => unreachable!(),
         }
     }
 
@@ -2158,26 +2212,216 @@ impl TypstGraph {
         angle
     }
 
-    /// Generate new positions based on tree layout while respecting constraints.
-    /// This method:
-    /// 1. Computes a tree-based layout with proper level spacing
-    /// 2. Only applies tree positions to coordinates that are free to move
-    /// 3. Respects Fixed and Grouped constraints by leaving them unchanged
-    /// 4. For directional constraints (+/-), ensures absolute positioning:
-    ///    - `+@group` constraints result in positive positions
-    ///    - `-@group` constraints result in negative positions
-    ///    - This overrides tree layout if necessary to maintain directional requirements
-    pub fn new_positions(&self, cfg: TreeInitCfg) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
-        let mut pos_v = self.new_nodevec(|_, _, n| n.pos);
-        let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
+    fn apply_target_point<I, R>(
+        constraints: &PointConstraint,
+        start_x: bool,
+        start_y: bool,
+        target: Point2<f64>,
+        fallback: Vector2<f64>,
+        index: I,
+        points: &mut R,
+    ) where
+        I: From<usize> + PartialEq + Copy,
+        R: IndexMut<I, Output = Point2<f64>>,
+    {
+        match (constraints.x, constraints.y) {
+            (Constraint::Free, Constraint::Free) => {
+                if !start_x {
+                    points[index].x = target.x;
+                }
+                if !start_y {
+                    points[index].y = target.y;
+                }
+            }
+            (Constraint::Fixed, Constraint::Fixed) => {}
+            (Constraint::Free, Constraint::Fixed) => {
+                if !start_x {
+                    points[index].x = target.x;
+                }
+            }
+            (Constraint::Fixed, Constraint::Free) => {
+                if !start_y {
+                    points[index].y = target.y;
+                }
+            }
+            (Constraint::Grouped(_, x_dir), Constraint::Free) => {
+                if !start_y {
+                    points[index].y = target.y;
+                }
+                let target_x = Self::directional_target(target.x, x_dir, fallback.x);
+                constraints.shift((target_x, 0.0).into(), index, points);
+            }
+            (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
+                if !start_x {
+                    points[index].x = target.x;
+                }
+                let target_y = Self::directional_target(target.y, y_dir, fallback.y);
+                constraints.shift((0.0, target_y).into(), index, points);
+            }
+            (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
+                let target_x = Self::directional_target(target.x, x_dir, fallback.x);
+                let target_y = Self::directional_target(target.y, y_dir, fallback.y);
+                constraints.shift((target_x, target_y).into(), index, points);
+            }
+            (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
+                let target_y = Self::directional_target(target.y, y_dir, fallback.y);
+                constraints.shift((0.0, target_y).into(), index, points);
+            }
+            (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
+                let target_x = Self::directional_target(target.x, x_dir, fallback.x);
+                constraints.shift((target_x, 0.0).into(), index, points);
+            }
+        }
+    }
 
-        let forest = self
-            .all_spanning_forests_of(&self.full_filter())
+    fn selected_layout_nodes(
+        &self,
+        subgraph: &SuBitGraph,
+        include_all_nodes: bool,
+    ) -> NodeVec<bool> {
+        let mut included = self.new_nodevec(|_, _, _| include_all_nodes);
+        if !include_all_nodes {
+            for hedge in subgraph.included_iter() {
+                included[self.node_id(hedge)] = true;
+            }
+        }
+        included
+    }
+
+    fn spanning_forest_of(&self, subgraph: &SuBitGraph) -> SuBitGraph {
+        self.all_spanning_forests_of(subgraph)
             .into_iter()
             .next()
-            .unwrap_or_else(|| self.empty_subgraph());
+            .unwrap_or_else(|| self.empty_subgraph())
+    }
+
+    fn direct_layout_positions(
+        &self,
+        cfg: TreeInitCfg,
+        algo: LayoutAlgo,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let full = self.full_filter();
+        let layout_subgraph = match algo {
+            LayoutAlgo::Tree => self.spanning_forest_of(&full),
+            LayoutAlgo::Dot => full.clone(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+        };
+        self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, &full, true)
+    }
+
+    fn partial_layout_positions(
+        &self,
+        cfg: TreeInitCfg,
+        algo: LayoutAlgo,
+        subgraph: &SuBitGraph,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let layout_subgraph = match algo {
+            LayoutAlgo::Tree => self.spanning_forest_of(subgraph),
+            LayoutAlgo::Dot => subgraph.clone(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+        };
+        self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, subgraph, false)
+    }
+
+    fn partial_optimized_positions(
+        &mut self,
+        cfg: TreeInitCfg,
+        subgraph: &SuBitGraph,
+        energy: &SpringChargeEnergy,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let (selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
+        let (mut pos_n, mut pos_e) = self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph);
+
+        for (node, selected) in selected_nodes.iter() {
+            if !selected {
+                pos_n[node] = self.graph[node].pos;
+            }
+        }
+        for (edge, selected) in selected_edges.iter() {
+            if !selected {
+                pos_e[edge] = self.graph[edge].pos;
+            }
+        }
+
+        let saved_node_constraints = self.new_nodevec(|_, _, node| node.constraints);
+        let saved_edge_constraints = self.new_edgevec(|edge, _, _| edge.constraints);
+        self.freeze_unselected_layout_items(&selected_nodes, &selected_edges);
+        let positions = self.optimized_positions(pos_n, pos_e, energy);
+        self.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
+        positions
+    }
+
+    fn selected_layout_items(&self, subgraph: &SuBitGraph) -> (NodeVec<bool>, EdgeVec<bool>) {
+        let nodes = self.selected_layout_nodes(subgraph, false);
+        let mut edges = self.new_edgevec(|_, _, _| false);
+        for (pair, _, _) in self.iter_edges_of(subgraph) {
+            edges[self[&pair.any_hedge()]] = true;
+        }
+        (nodes, edges)
+    }
+
+    fn freeze_unselected_layout_items(
+        &mut self,
+        selected_nodes: &NodeVec<bool>,
+        selected_edges: &EdgeVec<bool>,
+    ) {
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        for (node, selected) in selected_nodes.iter() {
+            if !selected {
+                self.graph[node].constraints = fixed;
+            }
+        }
+        for (edge, selected) in selected_edges.iter() {
+            if !selected {
+                self.graph[edge].constraints = fixed;
+            }
+        }
+    }
+
+    fn restore_layout_constraints(
+        &mut self,
+        node_constraints: NodeVec<PointConstraint>,
+        edge_constraints: EdgeVec<PointConstraint>,
+    ) {
+        for (node, constraints) in node_constraints.into_iter() {
+            self.graph[node].constraints = constraints;
+        }
+        for (edge, constraints) in edge_constraints.into_iter() {
+            self.graph[edge].constraints = constraints;
+        }
+    }
+
+    fn layout_positions_for_subgraph(
+        &self,
+        cfg: TreeInitCfg,
+        algo: LayoutAlgo,
+        subgraph: &SuBitGraph,
+        node_subgraph: &SuBitGraph,
+        include_all_nodes: bool,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let targets = match algo {
+            LayoutAlgo::Tree => {
+                self.tree_layout_targets(cfg, subgraph, node_subgraph, include_all_nodes)
+            }
+            LayoutAlgo::Dot => self.dot_layout_targets(cfg, subgraph, include_all_nodes),
+            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+        };
+        self.positions_from_node_targets(cfg, targets)
+    }
+
+    fn tree_layout_targets(
+        &self,
+        cfg: TreeInitCfg,
+        subgraph: &SuBitGraph,
+        node_subgraph: &SuBitGraph,
+        include_all_nodes: bool,
+    ) -> NodeVec<Option<Point2<f64>>> {
+        let included = self.selected_layout_nodes(node_subgraph, include_all_nodes);
         let mut adjacency = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
-        for (pair, _, _) in self.iter_edges_of(&forest) {
+        for (pair, _, _) in self.iter_edges_of(subgraph) {
             match pair {
                 HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
                     let source_node = self.node_id(source);
@@ -2193,8 +2437,8 @@ impl TypstGraph {
 
         let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
         let mut n_per_level: Vec<usize> = vec![];
-        for (root_node, _) in adjacency.iter() {
-            if level[root_node] >= 0 {
+        for (root_node, &is_included) in included.iter() {
+            if !is_included || level[root_node] >= 0 {
                 continue;
             }
 
@@ -2218,338 +2462,180 @@ impl TypstGraph {
                         } else {
                             panic!("Level out of bounds");
                         }
-
                         q.push_back(u);
                     }
                 }
             }
         }
 
+        self.targets_from_levels(cfg, &included, &level, &n_per_level)
+    }
+
+    fn dot_layout_targets(
+        &self,
+        cfg: TreeInitCfg,
+        subgraph: &SuBitGraph,
+        include_all_nodes: bool,
+    ) -> NodeVec<Option<Point2<f64>>> {
+        let included = self.selected_layout_nodes(subgraph, include_all_nodes);
+        let mut outgoing = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
+        let mut indegree = self.new_nodevec(|_, _, _| 0usize);
+        let mut included_count = 0usize;
+
+        for (_, &is_included) in included.iter() {
+            if is_included {
+                included_count += 1;
+            }
+        }
+
+        for (pair, _, _) in self.iter_edges_of(subgraph) {
+            match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let source_node = self.node_id(source);
+                    let sink_node = self.node_id(sink);
+                    if source_node != sink_node && included[source_node] && included[sink_node] {
+                        outgoing[source_node].push(sink_node);
+                        indegree[sink_node] += 1;
+                    }
+                }
+                HedgePair::Unpaired { .. } => {}
+            }
+        }
+
+        let mut rank: NodeVec<usize> = self.new_nodevec(|_, _, _| 0);
+        let mut queue = std::collections::VecDeque::new();
+        for (node, &is_included) in included.iter() {
+            if is_included && indegree[node] == 0 {
+                queue.push_back(node);
+            }
+        }
+
+        let mut visited = 0usize;
+        while let Some(node) = queue.pop_front() {
+            visited += 1;
+            let next_rank = rank[node] + 1;
+            for child in outgoing[node].clone() {
+                if rank[child] < next_rank {
+                    rank[child] = next_rank;
+                }
+                indegree[child] -= 1;
+                if indegree[child] == 0 {
+                    queue.push_back(child);
+                }
+            }
+        }
+
+        if visited != included_count {
+            let forest = self.spanning_forest_of(subgraph);
+            return self.tree_layout_targets(cfg, &forest, subgraph, include_all_nodes);
+        }
+
+        let max_rank = rank
+            .iter()
+            .filter_map(|(node, rank)| included[node].then_some(*rank))
+            .max()
+            .unwrap_or(0);
+        let mut n_per_rank = vec![0usize; max_rank + 1];
+        for (node, &is_included) in included.iter() {
+            if is_included {
+                n_per_rank[rank[node]] += 1;
+            }
+        }
+
+        let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
+        for (node, &is_included) in included.iter() {
+            if is_included {
+                level[node] = rank[node] as i32;
+            }
+        }
+
+        self.targets_from_levels(cfg, &included, &level, &n_per_rank)
+    }
+
+    fn targets_from_levels(
+        &self,
+        cfg: TreeInitCfg,
+        included: &NodeVec<bool>,
+        level: &NodeVec<i32>,
+        n_per_level: &[usize],
+    ) -> NodeVec<Option<Point2<f64>>> {
+        let mut targets = self.new_nodevec(|_, _, _| None);
         let mut level_counters: Vec<usize> = vec![0; n_per_level.len()];
 
         for (cl, &n) in n_per_level.iter().enumerate() {
-            // place on a horizontal line
             let k = n as f64;
             let width = (k - 1.0) * cfg.dx;
             let y = (cl as f64) * cfg.dy;
-            for (i, &l) in level.iter() {
-                if l != (cl as i32) {
+            for (node, &node_level) in level.iter() {
+                if !included[node] || node_level != cl as i32 {
                     continue;
                 }
                 let position_in_level = level_counters[cl];
                 let x = -0.5 * width + (position_in_level as f64) * cfg.dx;
                 level_counters[cl] += 1;
-
-                // Calculate desired tree position
-                let tree_position = Point2::new(x, y);
-
-                // Handle constraints with proper absolute positioning for directional constraints
-                match (&self[i].constraints.x, &self[i].constraints.y) {
-                    (Constraint::Free, Constraint::Free) => {
-                        if !self[i].start_x {
-                            pos_v[i].x = tree_position.x;
-                        }
-                        if !self[i].start_y {
-                            pos_v[i].y = tree_position.y;
-                        }
-                    }
-                    (Constraint::Fixed, Constraint::Fixed) => {
-                        // Keep original position - no change needed
-                    }
-                    (Constraint::Free, Constraint::Fixed) => {
-                        if !self[i].start_x {
-                            pos_v[i].x = tree_position.x;
-                        }
-                        // y stays as original constraint position
-                    }
-                    (Constraint::Fixed, Constraint::Free) => {
-                        if !self[i].start_y {
-                            pos_v[i].y = tree_position.y;
-                        }
-                        // x stays as original constraint position
-                    }
-                    (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                        // For grouped x with direction, ensure absolute position respects direction
-                        if !self[i].start_y {
-                            pos_v[i].y = tree_position.y;
-                        }
-                        match x_dir {
-                            ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-                                let target_x =
-                                    Self::directional_target(tree_position.x, *x_dir, cfg.dx);
-                                self[i]
-                                    .constraints
-                                    .shift((target_x, 0.0).into(), i, &mut pos_v);
-                            }
-                            ShiftDirection::Any => {
-                                self[i].constraints.shift(
-                                    (tree_position.x, 0.0).into(),
-                                    i,
-                                    &mut pos_v,
-                                );
-                            }
-                        }
-                    }
-                    (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                        // For grouped y with direction, ensure absolute position respects direction
-                        if !self[i].start_x {
-                            pos_v[i].x = tree_position.x;
-                        }
-                        match y_dir {
-                            ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-                                let target_y =
-                                    Self::directional_target(tree_position.y, *y_dir, cfg.dy);
-                                self[i]
-                                    .constraints
-                                    .shift((0.0, target_y).into(), i, &mut pos_v);
-                            }
-                            ShiftDirection::Any => {
-                                self[i].constraints.shift(
-                                    (0.0, tree_position.y).into(),
-                                    i,
-                                    &mut pos_v,
-                                );
-                            }
-                        }
-                    }
-                    (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                        // For both coordinates grouped with direction
-                        let target_x = Self::directional_target(tree_position.x, *x_dir, cfg.dx);
-                        let target_y = Self::directional_target(tree_position.y, *y_dir, cfg.dy);
-                        self[i]
-                            .constraints
-                            .shift((target_x, target_y).into(), i, &mut pos_v);
-                    }
-                    (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                        let target_y = Self::directional_target(tree_position.y, *y_dir, cfg.dy);
-                        self[i]
-                            .constraints
-                            .shift((0.0, target_y).into(), i, &mut pos_v);
-                    }
-                    (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                        let target_x = Self::directional_target(tree_position.x, *x_dir, cfg.dx);
-                        self[i]
-                            .constraints
-                            .shift((target_x, 0.0).into(), i, &mut pos_v);
-                    }
-                }
+                targets[node] = Some(Point2::new(x, y));
             }
         }
 
-        // 4) edge control points
+        targets
+    }
+
+    fn positions_from_node_targets(
+        &self,
+        cfg: TreeInitCfg,
+        targets: NodeVec<Option<Point2<f64>>>,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let mut pos_v = self.new_nodevec(|_, _, n| n.pos);
+        let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
+
+        for (node, target) in targets.iter() {
+            let Some(target) = *target else {
+                continue;
+            };
+            Self::apply_target_point(
+                &self[node].constraints,
+                self[node].start_x,
+                self[node].start_y,
+                target,
+                Vector2::new(cfg.dx, cfg.dy),
+                node,
+                &mut pos_v,
+            );
+        }
+
         for (pair, _, _) in self.iter_edges() {
-            let h = pair.any_hedge();
-            let eid = self[&h];
-            match pair {
-                // internal edge: midpoint + perpendicular bulge
+            let eid = self[&pair.any_hedge()];
+            let target = match pair {
                 HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
                     let a = pos_v[self.node_id(source)];
                     let b = pos_v[self.node_id(sink)];
-                    let mid = a.midpoint(b);
-
-                    // Handle edge constraints with proper absolute positioning for directional constraints
-                    match (&self[eid].constraints.x, &self[eid].constraints.y) {
-                        (Constraint::Free, Constraint::Free) => {
-                            if !self[eid].start_x {
-                                pos_e[eid].x = mid.x;
-                            }
-                            if !self[eid].start_y {
-                                pos_e[eid].y = mid.y;
-                            }
-                        }
-                        (Constraint::Fixed, Constraint::Fixed) => {
-                            // Keep original position
-                        }
-                        (Constraint::Free, Constraint::Fixed) => {
-                            if !self[eid].start_x {
-                                pos_e[eid].x = mid.x;
-                            }
-                        }
-                        (Constraint::Fixed, Constraint::Free) => {
-                            if !self[eid].start_y {
-                                pos_e[eid].y = mid.y;
-                            }
-                        }
-                        (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                            if !self[eid].start_y {
-                                pos_e[eid].y = mid.y;
-                            }
-                            match x_dir {
-                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-                                    let target_x =
-                                        Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
-                                    self[eid].constraints.shift(
-                                        (target_x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::Any => {
-                                    self[eid].constraints.shift(
-                                        (mid.x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                            }
-                        }
-                        (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                            if !self[eid].start_x {
-                                pos_e[eid].x = mid.x;
-                            }
-                            match y_dir {
-                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-                                    let target_y =
-                                        Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
-                                    self[eid].constraints.shift(
-                                        (0.0, target_y).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::Any => {
-                                    self[eid].constraints.shift(
-                                        (0.0, mid.y).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                            }
-                        }
-                        (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                            let target_x = Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
-                            let target_y = Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
-                            self[eid].constraints.shift(
-                                (target_x, target_y).into(),
-                                eid,
-                                &mut pos_e,
-                            );
-                        }
-                        (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                            let target_y = Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
-                            self[eid]
-                                .constraints
-                                .shift((0.0, target_y).into(), eid, &mut pos_e);
-                        }
-                        (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                            let target_x = Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
-                            self[eid]
-                                .constraints
-                                .shift((target_x, 0.0).into(), eid, &mut pos_e);
-                        }
-                    }
+                    a.midpoint(b)
                 }
                 HedgePair::Unpaired { hedge, .. } => {
-                    let v = self.node_id(hedge);
-                    let default_pos = Point2::new(pos_v[v].x + 1., pos_v[v].y + 1.);
-
-                    // Handle unpaired edge constraints with proper absolute positioning for directional constraints
-                    match (&self[eid].constraints.x, &self[eid].constraints.y) {
-                        (Constraint::Free, Constraint::Free) => {
-                            if !self[eid].start_x {
-                                pos_e[eid].x = default_pos.x;
-                            }
-                            if !self[eid].start_y {
-                                pos_e[eid].y = default_pos.y;
-                            }
-                        }
-                        (Constraint::Fixed, Constraint::Fixed) => {
-                            // Keep original position
-                        }
-                        (Constraint::Free, Constraint::Fixed) => {
-                            if !self[eid].start_x {
-                                pos_e[eid].x = default_pos.x;
-                            }
-                        }
-                        (Constraint::Fixed, Constraint::Free) => {
-                            if !self[eid].start_y {
-                                pos_e[eid].y = default_pos.y;
-                            }
-                        }
-                        (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                            if !self[eid].start_y {
-                                pos_e[eid].y = default_pos.y;
-                            }
-                            match x_dir {
-                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-                                    let target_x = Self::directional_target(
-                                        default_pos.x,
-                                        *x_dir,
-                                        cfg.dx * 0.5,
-                                    );
-                                    self[eid].constraints.shift(
-                                        (target_x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::Any => {
-                                    self[eid].constraints.shift(
-                                        (default_pos.x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                            }
-                        }
-                        (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                            if !self[eid].start_x {
-                                pos_e[eid].x = default_pos.x;
-                            }
-                            match y_dir {
-                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-                                    let target_y = Self::directional_target(
-                                        default_pos.y,
-                                        *y_dir,
-                                        cfg.dy * 0.5,
-                                    );
-                                    self[eid].constraints.shift(
-                                        (0.0, target_y).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::Any => {
-                                    self[eid].constraints.shift(
-                                        (0.0, default_pos.y).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                            }
-                        }
-                        (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                            let target_x =
-                                Self::directional_target(default_pos.x, *x_dir, cfg.dx * 0.5);
-                            let target_y =
-                                Self::directional_target(default_pos.y, *y_dir, cfg.dy * 0.5);
-                            self[eid].constraints.shift(
-                                (target_x, target_y).into(),
-                                eid,
-                                &mut pos_e,
-                            );
-                        }
-                        (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                            let target_y =
-                                Self::directional_target(default_pos.y, *y_dir, cfg.dy * 0.5);
-                            self[eid]
-                                .constraints
-                                .shift((0.0, target_y).into(), eid, &mut pos_e);
-                        }
-                        (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                            let target_x =
-                                Self::directional_target(default_pos.x, *x_dir, cfg.dx * 0.5);
-                            self[eid]
-                                .constraints
-                                .shift((target_x, 0.0).into(), eid, &mut pos_e);
-                        }
-                    }
+                    let node = self.node_id(hedge);
+                    pos_v[node] + Vector2::new(1.0, 1.0)
                 }
-            }
+            };
+            Self::apply_target_point(
+                &self[eid].constraints,
+                self[eid].start_x,
+                self[eid].start_y,
+                target,
+                Vector2::new(cfg.dx * 0.5, cfg.dy * 0.5),
+                eid,
+                &mut pos_e,
+            );
         }
 
         self.apply_grouped_constraints(&mut pos_v, &mut pos_e);
         (pos_v, pos_e)
+    }
+
+    /// Generate new positions based on the default traversal-tree placement.
+    pub fn new_positions(&self, cfg: TreeInitCfg) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let full = self.full_filter();
+        let forest = self.spanning_forest_of(&full);
+        self.layout_positions_for_subgraph(cfg, LayoutAlgo::Tree, &forest, &full, true)
     }
 
     pub fn parse<'a>(dot_str: &str) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {

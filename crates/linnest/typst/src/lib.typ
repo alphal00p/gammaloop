@@ -10,14 +10,24 @@
 ///
 /// This is intentionally a second step: construct or parse a graph first, then
 /// call `layout`. Set `layout-algo` to `"force"` for deterministic force
-/// integration or `"anneal"` for simulated annealing.
+/// integration, `"anneal"` for simulated annealing, `"tree"` for a traversal
+/// tree placement, or `"dot"` for a layered directed placement.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0), sink: (node: 1)),),
-/// )
-/// #let g = layout(g)
+/// #let g = graph.parse("digraph partial { a -> b;a -> b;a -> b; b -> c; c -> d; d -> a }").at(0)
+/// #let gf = layout(g, layout-algo: "force")
+/// #let ga = layout(g, layout-algo: "anneal")
+/// #let gt = layout( layout(g, layout-algo: "tree"), layout-algo: "force")
+/// #draw(gf)
+/// #draw(ga)
+/// #draw(gt)
+///
+/// ```
+///
+/// ```example
+/// #let g = graph.parse("digraph partial { a -> b; b -> c; c -> d; d -> a }").at(0)
+/// #let tree = graph.forests(g).at(0)
+/// #let g = layout(g, layout-algo: "tree", subgraph: tree)
 /// #graph.edges(g).map(edge => edge.pos)
 /// ```
 /// -> bytes
@@ -26,6 +36,12 @@
   /// `graph.parse`.
   /// -> bytes
   graph,
+  /// Optional subgraph object to lay out. With `"tree"` and `"dot"`, other
+  /// edges are drawn from the resulting node positions as straight lines. With
+  /// `"force"` and `"anneal"`, nodes and edges outside the subgraph are fixed
+  /// boundary points during optimization.
+  /// -> none | bytes
+  subgraph: none,
   /// Width of the layout viewport used to derive the natural spring length.
   /// Applies to both `"force"` and `"anneal"`. -> float
   viewport-w: 10.0,
@@ -121,8 +137,10 @@
   /// anneal-only; force mode computes direct forces instead of energies.
   /// -> bool
   incremental-energy: true,
-  /// Layout algorithm. Use `"force"` for direct force integration or `"anneal"`
-  /// for simulated annealing against the spring energy. -> string
+  /// Layout algorithm. Use `"force"` for direct force integration, `"anneal"`
+  /// for simulated annealing against the spring energy, `"tree"` for a
+  /// traversal-tree placement, or `"dot"` for a layered directed placement.
+  /// -> string
   layout-algo: "force",
   /// Force-only spring pulling temporary z coordinates back toward the layout
   /// plane. Use with `z-spring-growth` to help separate overlapping
@@ -172,6 +190,9 @@
     z-spring-growth: str(z-spring-growth),
     length-scale: str(length-scale),
   )
+  if subgraph != none {
+    settings.insert("subgraph", subgraph-module.to-label(subgraph))
+  }
   _plugin.layout_parsed_graph(bytes(graph), cbor.encode(settings))
 }
 
