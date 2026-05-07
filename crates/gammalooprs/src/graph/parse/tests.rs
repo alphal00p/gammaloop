@@ -1682,18 +1682,20 @@ mod failing {
             .find(|line| line.contains("sink=") && line.contains("is_cut="))
             .unwrap_or_else(|| panic!("missing incoming cut edge in split DOT:\n{split}"));
         assert!(
-            incoming_edge.contains("pin=\"x:@-left,y:@edge"),
+            incoming_edge.contains("pos=\"x:@-left!,y:@edge"),
             "{incoming_edge}"
         );
+        assert!(incoming_edge.contains("!\""), "{incoming_edge}");
 
         let outgoing_edge = split
             .lines()
             .find(|line| line.contains("source=") && line.contains("is_cut="))
             .unwrap_or_else(|| panic!("missing outgoing cut edge in split DOT:\n{split}"));
         assert!(
-            outgoing_edge.contains("pin=\"x:@+right,y:@edge"),
+            outgoing_edge.contains("pos=\"x:@+right!,y:@edge"),
             "{outgoing_edge}"
         );
+        assert!(outgoing_edge.contains("!\""), "{outgoing_edge}");
     }
 
     #[test]

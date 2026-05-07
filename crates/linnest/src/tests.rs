@@ -20,7 +20,8 @@ use crate::{
     graph_nodes_of_bytes, graph_spanning_forests_bytes, graph_subgraph_bytes, layout_graph_bytes,
     layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes,
     subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph,
-    PinConstraint, TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph,
+    DotPlacementExpr, PinConstraint, TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode,
+    TypstGraph,
 };
 
 fn test_figment() -> Figment {
@@ -72,6 +73,135 @@ fn test_pin_direction_syntaxes_parse() {
         PinConstraint::parse("y:-@edge0"),
         Some(PinConstraint::LinkY(group)) if group == "-edge0"
     ));
+}
+
+#[test]
+fn dot_pos_refs_resolve_by_explicit_node_and_edge_ids() {
+    let figment = test_figment();
+    let typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            a [id=0 pos="1,2!"]
+            b [id=1 pos="ref(node:0)+3,-1!"]
+            c [id=2]
+            a -> b [id=0 pos="ref(node:1)+0,2!"]
+            b -> c [id=1 pos="ref(edge:0)+1,0!"]
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    let mut node_positions = BTreeMap::new();
+    for (_, _, node) in typst_graph.iter_nodes() {
+        node_positions.insert(node.index.unwrap().0, node.pos);
+    }
+
+    assert_eq!(node_positions[&0].x, 1.0);
+    assert_eq!(node_positions[&0].y, 2.0);
+    assert_eq!(node_positions[&1].x, 4.0);
+    assert_eq!(node_positions[&1].y, 1.0);
+
+    let mut edge_positions = BTreeMap::new();
+    for (_, edge_index, edge) in typst_graph.iter_edges() {
+        edge_positions.insert(edge_index.0, edge.data.pos);
+    }
+
+    assert_eq!(edge_positions[&0].x, 4.0);
+    assert_eq!(edge_positions[&0].y, 3.0);
+    assert_eq!(edge_positions[&1].x, 5.0);
+    assert_eq!(edge_positions[&1].y, 3.0);
+}
+
+#[test]
+fn dot_pos_constraint_value_replaces_external_pin_attribute() {
+    let figment = test_figment();
+    let typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            ext [style=invis]
+            a
+            ext -> a [id=0 pos="x:@-left!,y:@edge0!"]
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    let (_, _, edge) = typst_graph.iter_edges().next().unwrap();
+    assert!(matches!(
+        edge.data.constraints.x,
+        Constraint::Grouped(_, ShiftDirection::NegativeOnly)
+    ));
+    assert!(matches!(
+        edge.data.constraints.y,
+        Constraint::Grouped(_, ShiftDirection::Any)
+    ));
+    assert_eq!(
+        edge.data.statements.get("pos").map(String::as_str),
+        Some("0,0")
+    );
+    assert!(!edge.data.statements.contains_key("pin"));
+}
+
+#[test]
+fn dot_pos_axis_constraints_support_numeric_partial_pins() {
+    let figment = test_figment();
+    let typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            a [id=0 pos="x:2!"]
+            b [id=1 pos="y:-1!"]
+            a -> b
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    let mut nodes = BTreeMap::new();
+    for (_, _, node) in typst_graph.iter_nodes() {
+        nodes.insert(node.index.unwrap().0, node);
+    }
+
+    assert_eq!(nodes[&0].pos.x, 2.0);
+    assert_eq!(nodes[&0].pos.y, 0.0);
+    assert!(matches!(nodes[&0].constraints.x, Constraint::Fixed));
+    assert!(matches!(nodes[&0].constraints.y, Constraint::Free));
+
+    assert_eq!(nodes[&1].pos.x, 0.0);
+    assert_eq!(nodes[&1].pos.y, -1.0);
+    assert!(matches!(nodes[&1].constraints.x, Constraint::Free));
+    assert!(matches!(nodes[&1].constraints.y, Constraint::Fixed));
+}
+
+#[test]
+fn dot_pos_axis_bangs_apply_per_axis() {
+    let figment = test_figment();
+    let typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            a [id=0 pos="x:2!,y:3"]
+            b [id=1 pos="x:4,y:-1!"]
+            a -> b
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    let mut nodes = BTreeMap::new();
+    for (_, _, node) in typst_graph.iter_nodes() {
+        nodes.insert(node.index.unwrap().0, node);
+    }
+
+    assert_eq!(nodes[&0].pos.x, 2.0);
+    assert_eq!(nodes[&0].pos.y, 3.0);
+    assert!(matches!(nodes[&0].constraints.x, Constraint::Fixed));
+    assert!(matches!(nodes[&0].constraints.y, Constraint::Free));
+
+    assert_eq!(nodes[&1].pos.x, 4.0);
+    assert_eq!(nodes[&1].pos.y, -1.0);
+    assert!(matches!(nodes[&1].constraints.x, Constraint::Free));
+    assert!(matches!(nodes[&1].constraints.y, Constraint::Fixed));
+}
+
+#[test]
+fn dot_pos_group_axis_requires_axis_bang() {
+    let err = DotPlacementExpr::parse("x:@left,y:0").unwrap_err();
+    assert!(err.contains("must be pinned with !"));
 }
 
 #[test]
@@ -145,6 +275,65 @@ struct TestEdgeSpec {
     sink: Option<TestEndpointSpec>,
     #[serde(default)]
     statements: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct TestPlacementGraphSpec {
+    name: String,
+    nodes: Vec<TestPlacedNodeSpec>,
+    edges: Vec<TestPlacedEdgeSpec>,
+}
+
+#[derive(Serialize)]
+struct TestPlacedNodeSpec {
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pos: Option<TestPlacementSpec>,
+    #[serde(default)]
+    statements: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct TestPlacedEdgeSpec {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<TestEndpointSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sink: Option<TestEndpointSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pos: Option<TestPlacementSpec>,
+    #[serde(default)]
+    statements: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct TestPlacementSpec {
+    mode: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    x: Option<TestPlacementCoord>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    y: Option<TestPlacementCoord>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ref")]
+    reference: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dx: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dy: Option<f64>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum TestPlacementCoord {
+    Number(f64),
+    Group(TestPlacementGroup),
+}
+
+#[derive(Serialize)]
+struct TestPlacementGroup {
+    kind: &'static str,
+    name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    side: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -328,6 +517,91 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
     )
     .unwrap();
     assert_eq!(internal_nodes.len(), 2);
+}
+
+#[test]
+fn test_graph_spec_uses_first_class_placements() {
+    let spec = TestPlacementGraphSpec {
+        name: "placed".to_string(),
+        nodes: vec![
+            TestPlacedNodeSpec {
+                name: "a".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: "pin",
+                    x: Some(TestPlacementCoord::Number(1.0)),
+                    y: Some(TestPlacementCoord::Number(2.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: one_statement("label", "left"),
+            },
+            TestPlacedNodeSpec {
+                name: "b".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: "pin",
+                    x: None,
+                    y: None,
+                    reference: Some(0),
+                    dx: Some(3.0),
+                    dy: Some(-1.0),
+                }),
+                statements: one_statement("label", "right"),
+            },
+        ],
+        edges: vec![TestPlacedEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: 1,
+                compass: None,
+                statement: None,
+            }),
+            pos: Some(TestPlacementSpec {
+                mode: "pin",
+                x: Some(TestPlacementCoord::Group(TestPlacementGroup {
+                    kind: "group",
+                    name: "edge-column",
+                    side: Some("+"),
+                })),
+                y: Some(TestPlacementCoord::Number(0.5)),
+                reference: None,
+                dx: None,
+                dy: None,
+            }),
+            statements: BTreeMap::new(),
+        }],
+    };
+
+    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+
+    assert_eq!(nodes[0].pos, Some(crate::TypstPoint { x: 1.0, y: 2.0 }));
+    assert_eq!(nodes[1].pos, Some(crate::TypstPoint { x: 4.0, y: 1.0 }));
+    assert_eq!(
+        nodes[0].statements.get("label").map(String::as_str),
+        Some("left")
+    );
+    assert!(!nodes[0].statements.contains_key("pos"));
+    assert!(!nodes[0].statements.contains_key("pin"));
+    assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 0.0, y: 0.5 }));
+    assert!(!edges[0].statements.contains_key("pos"));
+    assert!(!edges[0].statements.contains_key("pin"));
+
+    let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
+    let laid_out_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    assert_eq!(
+        laid_out_nodes[0].pos,
+        Some(crate::TypstPoint { x: 1.0, y: 2.0 })
+    );
+    assert_eq!(
+        laid_out_nodes[1].pos,
+        Some(crate::TypstPoint { x: 4.0, y: 1.0 })
+    );
 }
 
 #[test]

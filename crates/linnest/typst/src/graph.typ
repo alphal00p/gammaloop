@@ -33,14 +33,6 @@
   }
 }
 
-#let _statements-with-pin(statements, pin) = {
-  if pin == none {
-    statements
-  } else {
-    statements + (pin: _statement-value(pin))
-  }
-}
-
 #let _statements-with-point(statements, key, point) = {
   let result = statements
   if point != none {
@@ -58,20 +50,9 @@
 }
 
 #let _node-spec(node) = {
-  let statements = _statements-with-point(
-    _statements-with-point(
-      _statements-with-pin(
-        node.at("statements", default: (:)),
-        node.at("pin", default: none),
-      ),
-      "pos",
-      node.at("pos", default: none),
-    ),
-    "shift",
-    node.at("shift", default: none),
-  )
+  let statements = _statements-with-point(node.at("statements", default: (:)), "shift", node.at("shift", default: none))
   let clean = node
-  for key in ("pin", "pos", "shift") {
+  for key in ("shift",) {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -84,14 +65,7 @@
     _statements-with-value(
       _statements-with-point(
         _statements-with-point(
-          _statements-with-point(
-            _statements-with-pin(
-              edge.at("statements", default: (:)),
-              edge.at("pin", default: none),
-            ),
-            "pos",
-            edge.at("pos", default: none),
-          ),
+          edge.at("statements", default: (:)),
           "shift",
           edge.at("shift", default: none),
         ),
@@ -116,8 +90,6 @@
   let statements = _edge-statements(edge)
   let clean = edge
   for key in (
-    "pin",
-    "pos",
     "shift",
     "label-pos",
     "label-angle",
@@ -133,58 +105,55 @@
   clean + (statements: statements)
 }
 
-/// Format a layout pin statement.
+/// Create a grouped placement coordinate.
 ///
-/// Pins constrain node positions or edge control-point positions during
-/// layout. Numeric `x` and `y` values fix coordinates. Use @pin-group for
-/// grouped constraints such as shared external-edge columns.
+/// `side: "+"` keeps the solved coordinate non-negative and `side: "-"`
+/// keeps it non-positive. Groups are layout constraints and therefore require
+/// `graph.pos(..., mode: "pin")`.
 ///
 /// ```example
-/// #graph.pin(x: -2, y: 0)
+/// #graph.group("right", side: "+")
 /// ```
-/// -> string
-#let pin(x: none, y: none, group: none) = {
-  if group != none {
-    if x != none or y != none {
-      panic("graph.pin: group cannot be combined with x or y")
-    }
-    _statement-value(group)
-  } else {
-    let parts = ()
-    if x != none {
-      parts.push("x:" + _statement-value(x))
-    }
-    if y != none {
-      parts.push("y:" + _statement-value(y))
-    }
-    if parts.len() == 0 {
-      panic("graph.pin requires x, y, or group")
-    }
-    parts.join(",")
+/// -> dictionary
+#let group(name, side: none) = {
+  if side != none and not (side == "+" or side == "-" or side == "positive" or side == "negative") {
+    panic("graph.group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
   }
+  (kind: "group", name: _statement-value(name), side: side)
 }
 
-/// Format a grouped layout-pin reference.
+/// Create a first-class graph placement.
 ///
-/// `side: "+"` keeps the final coordinate non-negative and `side: "-"`
-/// keeps it non-positive. Omit `side` to link the coordinate without a sign
-/// constraint.
+/// `mode: "start"` uses the coordinate as the layout starting point. `mode:
+/// "pin"` turns numeric and grouped coordinates into layout constraints.
+/// `ref` may reference a previously created node index and combines with `dx`
+/// and `dy`.
 ///
 /// ```example
-/// #graph.pin(x: graph.pin-group("right", side: "+"), y: graph.pin-group("row-1"))
+/// #graph.pos(x: 0, y: graph.group("row"), mode: "pin")
 /// ```
-/// -> string
-#let pin-group(name, side: none) = {
-  let prefix = if side == none {
-    "@"
-  } else if side == "+" or side == "positive" {
-    "@+"
-  } else if side == "-" or side == "negative" {
-    "@-"
-  } else {
-    panic("graph.pin-group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
+/// -> dictionary
+#let pos(x: none, y: none, ref: none, dx: none, dy: none, mode: "start") = {
+  if mode != "start" and mode != "pin" {
+    panic("graph.pos: mode must be \"start\" or \"pin\"")
   }
-  prefix + _statement-value(name)
+  let result = (mode: mode)
+  if x != none {
+    result.insert("x", x)
+  }
+  if y != none {
+    result.insert("y", y)
+  }
+  if ref != none {
+    result.insert("ref", ref)
+  }
+  if dx != none {
+    result.insert("dx", dx)
+  }
+  if dy != none {
+    result.insert("dy", dy)
+  }
+  result
 }
 
 /// Parse one or more DOT digraphs into graph objects.
@@ -240,13 +209,12 @@
   node-statements: (:),
 
   /// Node specifications. Each node may define `name`, `index`, `pos`, `shift`,
-  /// `pin`, and `statements`. This matches the per-node parameters accepted by
-  /// @node.
+  /// and `statements`. This matches the per-node parameters accepted by @node.
   /// -> array
   nodes: (),
 
   /// Edge specifications. Each edge may define `source`, `sink`, `orientation`,
-  /// `flow`, `id`, `pos`, `shift`, `label-pos`, `label-angle`, `bend`, `pin`,
+  /// `flow`, `id`, `pos`, `shift`, `label-pos`, `label-angle`, `bend`,
   /// `statements`, `source-style-eval`, `sink-style-eval`, and `label-eval`.
   /// The `source` and `sink` fields use the same half-edge dictionaries accepted
   /// by @edge. -> array
@@ -324,18 +292,15 @@
 /// #repr((a, c))
 /// ```
 /// -> dictionary
-#let node(builder, name: none, index: none, pos: none, shift: none, pin: none, statements: (:)) = {
+#let node(builder, name: none, index: none, pos: none, shift: none, statements: (:)) = {
   cbor(_plugin.graph_builder_add_node(
     bytes(builder),
     cbor.encode((
       name: name,
       index: index,
+      pos: pos,
       statements: _statements-with-point(
-        _statements-with-point(
-          _statements-with-pin(statements, pin),
-          "pos",
-          pos,
-        ),
+        statements,
         "shift",
         shift,
       ),
@@ -374,7 +339,6 @@
   label-pos: none,
   label-angle: none,
   bend: none,
-  pin: none,
   statements: (:),
   source-style-eval: none,
   sink-style-eval: none,
@@ -384,15 +348,7 @@
     _statements-with-value(
       _statements-with-value(
         _statements-with-point(
-          _statements-with-point(
-            _statements-with-point(
-              _statements-with-pin(statements, pin),
-              "pos",
-              pos,
-            ),
-            "shift",
-            shift,
-          ),
+          _statements-with-point(statements, "shift", shift),
           "label-pos",
           label-pos,
         ),
@@ -414,6 +370,7 @@
       orientation: orientation,
       flow: flow,
       id: id,
+      pos: pos,
       statements: statements,
     )),
   )

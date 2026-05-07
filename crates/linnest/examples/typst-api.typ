@@ -71,12 +71,12 @@ This example imports the canonical Linnest Typst package source, builds a graph 
 #let positioned = graph.build(
   name: "positioned",
   nodes: (
-    (name: "left", pos: (x: 0, y: 0)),
-    (name: "right", pos: (x: 2.5, y: 0)),
+    (name: "left", pos: graph.pos(x: 0, y: 0)),
+    (name: "right", pos: graph.pos(ref: 0, dx: 2.5, dy: 0)),
   ),
   edges: (
     (source: (node: 0), sink: (node: 1)),
-    (source: (node: 1), sink: none, pos: (x: 3.4, y: 0.7)),
+    (source: (node: 1), sink: none, pos: graph.pos(ref: 1, dx: 0.9, dy: 0.7)),
   ),
 )
 
