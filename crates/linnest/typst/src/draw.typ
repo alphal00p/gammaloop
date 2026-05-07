@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.3.4" as cetz
+#import "@preview/cetz:0.5.1" as cetz
 #import "curve.typ" as curve-api
 #import "graph.typ" as graph-api
 #import "subgraph.typ" as subgraph-api
@@ -632,10 +632,50 @@
   hedges != none and half-edge != none and hedges.contains(half-edge.hedge)
 }
 
-/// Draw a laid-out graph object with CeTZ.
+#let _node-pos(node) = {
+  if node.pos == none {
+    panic("draw: graph node has no position; call layout(...) or pass pos: to graph.node/build")
+  }
+  node.pos
+}
+
+#let _midpoint(a, b) = (
+  x: (a.x + b.x) / 2,
+  y: (a.y + b.y) / 2,
+)
+
+#let _edge-pos(edge, nodes) = {
+  if edge.pos != none {
+    edge.pos
+  } else if edge.source != none and edge.sink != none {
+    _midpoint(_node-pos(nodes.at(edge.source.node)), _node-pos(nodes.at(edge.sink.node)))
+  } else {
+    panic("draw: dangling graph edge has no position; call layout(...) or pass pos: to graph.edge/build")
+  }
+}
+
+/// Draw a graph object with CeTZ.
 ///
-/// The graph must already have positions, so call `layout` first. Node and edge
-/// Typst style dictionaries or callbacks are evaluated and forwarded to CeTZ.
+/// The graph must already have positions, either from `layout` or from explicit
+/// `pos` values passed to `graph.node`, `graph.edge`, or `graph.build`. Paired
+/// edges without an explicit edge position use the midpoint of their endpoint
+/// nodes. Node and edge Typst style dictionaries or callbacks are evaluated and
+/// forwarded to CeTZ.
+///
+/// #example(`
+/// #let positioned = graph.build(
+///   name: "positioned",
+///   nodes: (
+///     (name: "left", pos: (x: 0, y: 0)),
+///     (name: "right", pos: (x: 2.5, y: 0)),
+///   ),
+///   edges: (
+///     (source: (node: 0), sink: (node: 1)),
+///     (source: (node: 1), sink: none, pos: (x: 3.4, y: 0.7)),
+///   ),
+/// )
+/// #draw(positioned, source-style: (stroke: black + 0.7pt), sink-style: (stroke: black + 0.7pt))
+/// `,dir:ttb)
 ///
 /// #example(`
 /// #let b = graph.builder(name: "demo")
@@ -769,7 +809,7 @@
 /// `,dir:ttb)
 /// -> content
 #let draw(
-  /// Laid-out graph object returned by `layout`. -> bytes
+  /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> bytes
   graph,
   /// Additional values merged into node and edge callback dictionaries.
   /// -> dictionary
@@ -880,17 +920,18 @@
         let subgraph-hedges = if subgraph == none { none } else { subgraph-api.hedges(subgraph) }
 
         for (i, v) in nodes.enumerate() {
-          let pos = v.pos
+          let pos = _node-pos(v)
+          let node = v + (pos: pos)
           let node-data = (
             scope
               + v.statements
               + (
                 vid: i,
-                node: v,
-                name: v.name,
+                node: node,
+                name: node.name,
               )
           )
-          let default-label = if v.name == none { none } else { [#v.name] }
+          let default-label = if node.name == none { none } else { [#node.name] }
           let label = _content(node-label, node-data, default: default-label)
           let node-style-value = (
             (
@@ -920,19 +961,21 @@
         }
 
         for (i, e) in edges.enumerate() {
-          let source-half-edge = e.source
-          let sink-half-edge = e.sink
+          let edge-pos = _edge-pos(e, nodes)
+          let edge = e + (pos: edge-pos)
+          let source-half-edge = edge.source
+          let sink-half-edge = edge.sink
           let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
           let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
           let ext = source-half-edge == none or sink-half-edge == none
-          let data = e.statements
-          let orientation = e.orientation
+          let data = edge.statements
+          let orientation = edge.orientation
           let edge-data = (
             scope
               + data
               + (
                 eid: i,
-                edge: e,
+                edge: edge,
                 source-statement: source-statement,
                 sink-statement: sink-statement,
                 source-half-edge: source-half-edge,
@@ -956,7 +999,7 @@
           let sink-style-layers = _style-layers(sink-style, edge-data)
           let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
           let ev-label = _content(edge-label, edge-data, default: none)
-          let label-pos = if e.label-pos == none { e.pos } else { e.label-pos }
+          let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
 
           for layer-index in range(0, layer-count) {
             let source-layer = _style-layer(source-style-layers, layer-index)
@@ -994,7 +1037,7 @@
               let source-geometry-style = if source-style-value == none { sink-style-value } else { source-style-value }
               let sink-geometry-style = if sink-style-value == none { source-style-value } else { sink-style-value }
               let halves = _edge-geometry-halves(
-                e,
+                edge,
                 nodes,
                 source-geometry-style,
                 sink-geometry-style,
@@ -1039,14 +1082,14 @@
               }
             } else if source-half-edge != none {
               let line-start = curve-api.outset-point(
-                nodes.at(source-half-edge.node).pos,
-                e.pos,
+                _node-pos(nodes.at(source-half-edge.node)),
+                edge.pos,
                 distance: node-outsets.at(source-half-edge.node),
               )
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-line(
                   line-start,
-                  e.pos,
+                  edge.pos,
                   _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-edge-style,
                   label-pos: label-pos,
                 ) {
@@ -1054,19 +1097,19 @@
                 }
               }
               if source-style-value != none {
-                for element in _pattern-line(line-start, e.pos, _dangling-mark-style(source-draw-style), label-pos: label-pos) {
+                for element in _pattern-line(line-start, edge.pos, _dangling-mark-style(source-draw-style), label-pos: label-pos) {
                   elements.push(element)
                 }
               }
             } else if sink-half-edge != none {
               let line-end = curve-api.outset-point(
-                nodes.at(sink-half-edge.node).pos,
-                e.pos,
+                _node-pos(nodes.at(sink-half-edge.node)),
+                edge.pos,
                 distance: node-outsets.at(sink-half-edge.node),
               )
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-line(
-                  e.pos,
+                  edge.pos,
                   line-end,
                   _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-edge-style,
                   label-pos: label-pos,
@@ -1075,7 +1118,7 @@
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-line(e.pos, line-end, _dangling-mark-style(sink-draw-style), label-pos: label-pos) {
+                for element in _pattern-line(edge.pos, line-end, _dangling-mark-style(sink-draw-style), label-pos: label-pos) {
                   elements.push(element)
                 }
               }
@@ -1088,13 +1131,13 @@
 
           if debug-level >= 2 {
             elements.push(cetz.draw.circle(
-              _point(e.pos),
+              _point(edge.pos),
               radius: debug-edge-radius,
               fill: debug-edge-fill,
               stroke: debug-edge-stroke,
             ))
             elements.push(cetz.draw.content(
-              _point(e.pos),
+              _point(edge.pos),
               text(size: 0.65em, fill: debug-edge-label-fill)[e#i],
               padding: 0,
             ))

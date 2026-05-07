@@ -46,6 +46,7 @@ use linnet::{
 };
 
 use rand::rngs::SmallRng;
+use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::{collections::BTreeMap, io::BufWriter};
@@ -69,12 +70,139 @@ use crate::geom::{tangent_angle_toward_c_side, GeomError};
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Point2Rkyv;
+
+impl ArchiveWith<Point2<f64>> for Point2Rkyv {
+    type Archived = rkyv::Archived<(f64, f64)>;
+    type Resolver = rkyv::Resolver<(f64, f64)>;
+
+    unsafe fn resolve_with(
+        field: &Point2<f64>,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        rkyv::Archive::resolve(&(field.x, field.y), pos, resolver, out);
+    }
+}
+
+impl<S: rkyv::Fallible + ?Sized> SerializeWith<Point2<f64>, S> for Point2Rkyv
+where
+    (f64, f64): rkyv::Serialize<S>,
+{
+    fn serialize_with(field: &Point2<f64>, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&(field.x, field.y), serializer)
+    }
+}
+
+impl<D: rkyv::Fallible + ?Sized> DeserializeWith<rkyv::Archived<(f64, f64)>, Point2<f64>, D>
+    for Point2Rkyv
+where
+    rkyv::Archived<(f64, f64)>: rkyv::Deserialize<(f64, f64), D>,
+{
+    fn deserialize_with(
+        field: &rkyv::Archived<(f64, f64)>,
+        deserializer: &mut D,
+    ) -> Result<Point2<f64>, D::Error> {
+        let (x, y) = rkyv::Deserialize::deserialize(field, deserializer)?;
+        Ok(Point2::new(x, y))
+    }
+}
+
+struct Vector2Rkyv;
+
+impl ArchiveWith<Vector2<f64>> for Vector2Rkyv {
+    type Archived = rkyv::Archived<(f64, f64)>;
+    type Resolver = rkyv::Resolver<(f64, f64)>;
+
+    unsafe fn resolve_with(
+        field: &Vector2<f64>,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        rkyv::Archive::resolve(&(field.x, field.y), pos, resolver, out);
+    }
+}
+
+impl<S: rkyv::Fallible + ?Sized> SerializeWith<Vector2<f64>, S> for Vector2Rkyv
+where
+    (f64, f64): rkyv::Serialize<S>,
+{
+    fn serialize_with(
+        field: &Vector2<f64>,
+        serializer: &mut S,
+    ) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&(field.x, field.y), serializer)
+    }
+}
+
+impl<D: rkyv::Fallible + ?Sized> DeserializeWith<rkyv::Archived<(f64, f64)>, Vector2<f64>, D>
+    for Vector2Rkyv
+where
+    rkyv::Archived<(f64, f64)>: rkyv::Deserialize<(f64, f64), D>,
+{
+    fn deserialize_with(
+        field: &rkyv::Archived<(f64, f64)>,
+        deserializer: &mut D,
+    ) -> Result<Vector2<f64>, D::Error> {
+        let (x, y) = rkyv::Deserialize::deserialize(field, deserializer)?;
+        Ok(Vector2::new(x, y))
+    }
+}
+
+struct BendRkyv;
+
+impl ArchiveWith<Result<Rad<f64>, GeomError>> for BendRkyv {
+    type Archived = rkyv::Archived<Result<f64, GeomError>>;
+    type Resolver = rkyv::Resolver<Result<f64, GeomError>>;
+
+    unsafe fn resolve_with(
+        field: &Result<Rad<f64>, GeomError>,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        rkyv::Archive::resolve(&field.map(|angle| angle.0), pos, resolver, out);
+    }
+}
+
+impl<S: rkyv::Fallible + ?Sized> SerializeWith<Result<Rad<f64>, GeomError>, S> for BendRkyv
+where
+    Result<f64, GeomError>: rkyv::Serialize<S>,
+{
+    fn serialize_with(
+        field: &Result<Rad<f64>, GeomError>,
+        serializer: &mut S,
+    ) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&field.map(|angle| angle.0), serializer)
+    }
+}
+
+impl<D: rkyv::Fallible + ?Sized>
+    DeserializeWith<rkyv::Archived<Result<f64, GeomError>>, Result<Rad<f64>, GeomError>, D>
+    for BendRkyv
+where
+    rkyv::Archived<Result<f64, GeomError>>: rkyv::Deserialize<Result<f64, GeomError>, D>,
+{
+    fn deserialize_with(
+        field: &rkyv::Archived<Result<f64, GeomError>>,
+        deserializer: &mut D,
+    ) -> Result<Result<Rad<f64>, GeomError>, D::Error> {
+        Ok(rkyv::Deserialize::deserialize(field, deserializer)?.map(Rad))
+    }
+}
+
+#[derive(
+    Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TypstNode {
     name: Option<String>,
     index: Option<NodeIndex>,
+    #[with(Point2Rkyv)]
     pos: Point2<f64>,
     constraints: PointConstraint,
+    #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
     statements: BTreeMap<String, String>,
     eval: Option<String>,
@@ -195,18 +323,24 @@ impl TypstNode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TypstEdge {
     from: Option<(NodeIndex, Hedge)>,
     to: Option<(NodeIndex, Hedge)>,
+    #[with(BendRkyv)]
     bend: Result<Rad<f64>, GeomError>,
+    #[with(Point2Rkyv)]
     pos: Point2<f64>,
+    #[with(rkyv::with::Map<Point2Rkyv>)]
     label_pos: Option<Point2<f64>>,
     label_angle: Option<f64>,
     sink_style_eval: Option<String>,
     source_style_eval: Option<String>,
     label_eval: Option<String>,
     mom_eval: Option<String>,
+    #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
     statements: BTreeMap<String, String>,
     pub constraints: PointConstraint,
@@ -407,7 +541,9 @@ impl TypstEdge {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TypstHedge {
     from: usize,
     to: usize,
@@ -485,7 +621,7 @@ fn hedge_compass_to_string(compass: CompassPt) -> String {
     .to_string()
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TypstGraph {
     graph: HedgeGraph<TypstEdge, TypstNode, TypstHedge>,
     global_eval: Option<String>,
@@ -591,7 +727,9 @@ pub struct TreeInitCfg {
     pub dx: f64, // ≈ 0.9 * L
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 enum LayoutAlgo {
     Anneal,
@@ -602,7 +740,9 @@ fn default_layout_algo() -> LayoutAlgo {
     LayoutAlgo::Force
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[serde(rename_all = "kebab-case")]
 struct LayoutConfig {
     #[serde(default = "default_viewport_w", deserialize_with = "deserialize_f64")]
@@ -836,7 +976,9 @@ fn default_crossing_penalty() -> f64 {
     30.0
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[serde(rename_all = "kebab-case")]
 struct SpringConfig {
     #[serde(default = "default_length_scale", deserialize_with = "deserialize_f64")]
@@ -897,7 +1039,9 @@ impl From<&SpringConfig> for ParamTuning {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[serde(rename_all = "kebab-case")]
 struct ScheduleConfig {
     #[serde(default = "default_steps", deserialize_with = "deserialize_usize")]

@@ -1,6 +1,6 @@
 #import "@preview/tidy:0.4.3"
 #import "../src/lib.typ" as kurvst
-#import "@preview/cetz:0.3.4" as cetz
+#import "@preview/cetz:0.5.1" as cetz
 
 #set document(title: "kurvst Typst API")
 #set page(margin: 22mm)

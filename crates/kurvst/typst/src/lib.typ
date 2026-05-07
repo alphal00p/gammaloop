@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.3.4" as cetz
+#import "@preview/cetz:0.5.1" as cetz
 
 #let _plugin = plugin("../kurvst.wasm")
 

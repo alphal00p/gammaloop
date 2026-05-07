@@ -839,6 +839,31 @@ fn test_typst_graph_convenience_serialization() {
 }
 
 #[test]
+fn typst_graph_rkyv_roundtrip() {
+    let figment = test_figment();
+    let mut graph = TypstGraph::from_dot(
+        dot!(digraph {
+            a [pin="x:1,y:-2"];
+            b;
+            a -> b [pin="@edge", "label-pos"="0.4,0.2", "label-angle"="0.3rad"];
+        })
+        .unwrap(),
+        &figment,
+    );
+    graph.layout();
+
+    let bytes = rkyv::to_bytes::<_, 4096>(&graph).expect("failed to archive TypstGraph");
+    let restored = unsafe {
+        rkyv::from_bytes_unchecked::<TypstGraph>(&bytes).expect("failed to restore TypstGraph")
+    };
+
+    assert_eq!(
+        graph.to_dot_graph().debug_dot(),
+        restored.to_dot_graph().debug_dot()
+    );
+}
+
+#[test]
 fn test_pin_parsing() {
     let figment = test_figment();
     let mut g = TypstGraph::from_dot(

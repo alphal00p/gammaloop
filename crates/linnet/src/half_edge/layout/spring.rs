@@ -18,6 +18,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct PointConstraint {
     pub x: Constraint,
     pub y: Constraint,
@@ -33,6 +37,10 @@ impl Default for PointConstraint {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum ShiftDirection {
     Any,
     PositiveOnly,
@@ -40,6 +48,10 @@ pub enum ShiftDirection {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Constraint {
     Fixed,
     #[default]
