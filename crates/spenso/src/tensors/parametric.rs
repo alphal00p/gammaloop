@@ -21,6 +21,7 @@ use crate::{
 };
 use ahash::HashMap;
 use delegate::delegate;
+use linnet::half_edge::subgraph::SubSetLike;
 
 use eyre::Result;
 use eyre::eyre;
@@ -1868,13 +1869,119 @@ where
     }
 }
 
+impl<I> ParamTensor<I>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    fn one_hot_selector_contract(
+        &self,
+        other: &ParamTensor<I>,
+    ) -> Result<Option<DataTensor<Atom, I>>, ContractionError> {
+        let (resulting_structure, pos_self, pos_other, _) =
+            self.tensor.structure().merge(other.tensor.structure())?;
+
+        if pos_self.n_included() != 1 || pos_other.n_included() != 1 {
+            return Ok(None);
+        }
+
+        let self_axis = pos_self
+            .included_iter()
+            .next()
+            .expect("one included self slot")
+            .0;
+        let other_axis = pos_other
+            .included_iter()
+            .next()
+            .expect("one included other slot")
+            .0;
+
+        if let Some(result) = contract_one_hot_selector_data(
+            &self.tensor,
+            &other.tensor,
+            resulting_structure.clone(),
+            other_axis,
+        )? {
+            return Ok(Some(result));
+        }
+
+        contract_one_hot_selector_data(&other.tensor, &self.tensor, resulting_structure, self_axis)
+    }
+}
+
+fn one_hot_component<I>(tensor: &DataTensor<Atom, I>) -> Option<(ConcreteIndex, Atom)>
+where
+    I: TensorStructure,
+{
+    if tensor.order() != 1 {
+        return None;
+    }
+
+    let mut nonzero = tensor.iter_expanded().filter(|(_, value)| !value.is_zero());
+    let (index, value) = nonzero.next()?;
+    if nonzero.next().is_some() {
+        return None;
+    }
+
+    Some((index.indices[0], value.clone()))
+}
+
+fn contract_one_hot_selector_data<I>(
+    selector: &DataTensor<Atom, I>,
+    target: &DataTensor<Atom, I>,
+    resulting_structure: I,
+    target_axis: usize,
+) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
+where
+    I: TensorStructure + Clone,
+{
+    let Some((selected_component, selector_value)) = one_hot_component(selector) else {
+        return Ok(None);
+    };
+
+    let target_slot = target
+        .structure()
+        .external_structure()
+        .get(target_axis)
+        .copied()
+        .ok_or_else(|| eyre!("matched selector target axis out of bounds"))?;
+    let negative_metric_component = target_slot
+        .rep()
+        .negative()?
+        .get(selected_component)
+        .copied()
+        .ok_or_else(|| eyre!("selector component out of target representation bounds"))?;
+
+    let mut result = SparseTensor::empty(resulting_structure, Atom::Zero);
+    for (mut index, value) in target.iter_expanded() {
+        if value.is_zero() || index.indices[target_axis] != selected_component {
+            continue;
+        }
+
+        index.indices.remove(target_axis);
+        let mut value = value.clone();
+        if selector_value != Atom::num(1) {
+            value = value * selector_value.clone();
+        }
+        if negative_metric_component {
+            value = -value;
+        }
+        result.smart_set(&index.indices, value)?;
+    }
+
+    Ok(Some(DataTensor::Sparse(result)))
+}
+
 impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
 where
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = ParamTensor<I>;
     fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
-        let s = self.tensor.contract(&other.tensor)?;
+        let s = if let Some(s) = self.one_hot_selector_contract(other)? {
+            s
+        } else {
+            self.tensor.contract(&other.tensor)?
+        };
 
         match (self.param_type, other.param_type) {
             (ParamOrComposite::Param, ParamOrComposite::Param) => Ok(ParamTensor::param(s)),
