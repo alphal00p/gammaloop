@@ -16,13 +16,13 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
-use statrs::function;
 use tracing::info;
 use vakint::Vakint;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
+        CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{CFFExpression, OrientationID},
     },
@@ -45,7 +45,10 @@ use crate::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
     },
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{GS, W_, hyperdual_utils::simple_n_deriv_shape},
+    utils::{
+        GS, W_,
+        hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
+    },
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
 };
 use eyre::{Context, eyre};
@@ -57,8 +60,9 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore},
-    evaluate::FunctionMap,
+    atom::{Atom, AtomCore, Symbol},
+    domains::rational::Rational,
+    evaluate::{FunctionMap, OptimizationSettings},
     function,
     id::Replacement,
     parse, symbol,
@@ -85,6 +89,13 @@ pub struct IteratedCtCollection<T> {
 }
 
 impl<T> IteratedCtCollection<T> {
+    pub(crate) fn new(data: Vec<T>, num_left_thresholds: usize) -> Self {
+        Self {
+            data,
+            num_left_thresholds,
+        }
+    }
+
     pub fn map_ref<U, F>(&self, f: F) -> IteratedCtCollection<U>
     where
         F: Fn(&T) -> U,
@@ -1105,7 +1116,7 @@ impl CrossSectionGraph {
     fn single_th_prefactor_helper_params(
         &self,
         order: u8,
-        subspace_loop_count: usize,
+        _subspace_loop_count: usize,
         is_on_right: bool,
     ) -> Vec<Atom> {
         let radius_star = if is_on_right {
@@ -1147,6 +1158,114 @@ impl CrossSectionGraph {
         params.push(uv_damp_minus);
         params.push(hfunction);
         params
+    }
+
+    fn iterated_th_prefactor_helper_params(&self, left_order: u8, right_order: u8) -> Vec<Atom> {
+        let mut iterated_params = params_for_iterated_threshold_ct(left_order, right_order);
+        let left_radius_star = Atom::var(GS.radius_star_left);
+        let right_radius_star = Atom::var(GS.radius_star_right);
+        let left_radius = Atom::var(GS.radius_left);
+        let right_radius = Atom::var(GS.radius_right);
+        let left_uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+        let left_uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+        let right_uv_damp_plus = Atom::var(GS.uv_damp_plus_right);
+        let right_uv_damp_minus = Atom::var(GS.uv_damp_minus_right);
+        let left_hfunction = Atom::var(GS.hfunction_left_th);
+        let right_hfunction = Atom::var(GS.hfunction_right_th);
+
+        iterated_params.push(left_radius);
+        iterated_params.push(left_radius_star);
+        iterated_params.push(left_uv_damp_plus);
+        iterated_params.push(left_uv_damp_minus);
+        iterated_params.push(left_hfunction);
+        iterated_params.push(right_radius);
+        iterated_params.push(right_radius_star);
+        iterated_params.push(right_uv_damp_plus);
+        iterated_params.push(right_uv_damp_minus);
+        iterated_params.push(right_hfunction);
+        iterated_params
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn single_th_helper(
+        &self,
+        order: u8,
+        subspace_loop_count: usize,
+        is_on_right: bool,
+        include_integrated: bool,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        optimization_settings: OptimizationSettings,
+        evaluator_settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        let atom = self.single_th_prefactor_helper_atom(
+            order,
+            subspace_loop_count,
+            is_on_right,
+            include_integrated,
+        );
+        let params =
+            self.single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
+
+        let mut fn_map = FunctionMap::new();
+        fn_map.add_constant(
+            GS.pi.into(),
+            Rational::try_from(std::f64::consts::PI).unwrap().into(),
+        );
+
+        let evaluator = GenericEvaluator::new_from_raw_params(
+            [atom],
+            &params,
+            &fn_map,
+            vec![],
+            optimization_settings,
+            dual_shape,
+            evaluator_settings,
+        )?
+        .into_eager_only();
+
+        Ok(evaluator)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn iterated_th_helper(
+        &self,
+        left_order: u8,
+        right_order: u8,
+        left_subspace_loop_count: usize,
+        right_subspace_loop_count: usize,
+        include_integrated: bool,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        optimization_settings: OptimizationSettings,
+        evaluator_settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        let atom = self.iterated_th_prefactor_helper_atom(
+            left_order,
+            right_order,
+            left_subspace_loop_count,
+            right_subspace_loop_count,
+            include_integrated,
+        );
+
+        let params = self.iterated_th_prefactor_helper_params(left_order, right_order);
+
+        let mut fn_map = FunctionMap::new();
+        fn_map.add_constant(
+            GS.pi.into(),
+            Rational::try_from(std::f64::consts::PI).unwrap().into(),
+        );
+
+        let evaluator = GenericEvaluator::new_from_raw_params(
+            [atom],
+            &params,
+            &fn_map,
+            vec![],
+            optimization_settings,
+            dual_shape,
+            evaluator_settings,
+        )?
+        .into_eager_only();
+
+        Ok(evaluator)
     }
 
     fn fuse_left_right_replacement() -> Vec<Replacement> {
@@ -2093,6 +2212,30 @@ pub(crate) fn build_derivative_structure(
     .into_eager_only()
 }
 
+fn ordered_f_derivative_params(
+    base: Atom,
+    derivative_vars: &[Symbol],
+    derivative_shape: Option<&Vec<Vec<usize>>>,
+) -> Vec<Atom> {
+    derivative_shape
+        .cloned()
+        .unwrap_or_else(|| vec![vec![0; derivative_vars.len()]])
+        .into_iter()
+        .map(|orders| {
+            debug_assert_eq!(orders.len(), derivative_vars.len());
+
+            let mut param = base.clone();
+            for (derivative_var, order) in derivative_vars.iter().zip(orders) {
+                for _ in 0..order {
+                    param = param.derivative(*derivative_var);
+                }
+            }
+
+            param
+        })
+        .collect()
+}
+
 pub(crate) fn params_for_derivative_order(singularity_order: u8) -> Vec<Atom> {
     let f = symbol!("f");
     let eta = symbol!("η");
@@ -2100,13 +2243,17 @@ pub(crate) fn params_for_derivative_order(singularity_order: u8) -> Vec<Atom> {
     let f_0 = function!(f, GS.rescale_star);
     let eta_1 = function!(eta, GS.rescale_star).derivative(GS.rescale_star);
 
-    let mut f_parameters = vec![f_0.clone()];
+    let f_derivative_shape = shape_from_cut_cff_index(&CutCFFIndex {
+        left_threshold_order: None,
+        right_threshold_order: None,
+        lu_cut_order: Some(singularity_order as usize),
+    });
+
+    let f_parameters =
+        ordered_f_derivative_params(f_0, &[GS.rescale_star], f_derivative_shape.as_ref());
     let mut eta_params = vec![eta_1.clone()];
 
     for _ in 2..=singularity_order {
-        let next_f = f_parameters.last().unwrap().derivative(GS.rescale_star);
-        f_parameters.push(next_f);
-
         let next_eta = eta_params.last().unwrap().derivative(GS.rescale_star);
         eta_params.push(next_eta);
     }
@@ -2125,14 +2272,24 @@ pub(crate) fn params_for_iterated_threshold_ct(
     let eta_left = symbol!("η_left");
     let eta_right = symbol!("η_right");
 
-    let f_left = function!(f, GS.radius_star_left);
-    let f_right = function!(f, GS.radius_star_right);
+    let cut_cff_index = CutCFFIndex {
+        left_threshold_order: Some(left_singularit_order as usize),
+        right_threshold_order: Some(right_singularity_order as usize),
+        lu_cut_order: None,
+    };
+    let f_derivative_shape = shape_from_cut_cff_index(&cut_cff_index);
+
+    let f_base = function!(f, GS.radius_star_left, GS.radius_star_right);
+    let derivative_vars = match (left_singularit_order > 1, right_singularity_order > 1) {
+        (true, true) => vec![GS.radius_star_left, GS.radius_star_right],
+        (true, false) => vec![GS.radius_star_left],
+        (false, true) => vec![GS.radius_star_right],
+        (false, false) => vec![],
+    };
 
     let eta_left_d1 = function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left);
     let eta_right_d1 = function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right);
 
-    let mut f_left = vec![f_left.clone()];
-    let mut f_right = vec![f_right.clone()];
     let mut eta_left_params = vec![eta_left_d1.clone()];
     let mut eta_right_params = vec![eta_right_d1.clone()];
 
@@ -2142,10 +2299,7 @@ pub(crate) fn params_for_iterated_threshold_ct(
             .unwrap()
             .derivative(GS.radius_star_left);
 
-        let next_f_left = f_left.last().unwrap().derivative(GS.radius_star_left);
-
         eta_left_params.push(next_eta_left);
-        f_left.push(next_f_left);
     }
 
     for _ in 2..=right_singularity_order {
@@ -2153,16 +2307,12 @@ pub(crate) fn params_for_iterated_threshold_ct(
             .last()
             .unwrap()
             .derivative(GS.radius_star_right);
+
         eta_right_params.push(next_eta_right);
     }
 
-    let replacements = CrossSectionGraph::fuse_left_right_replacement();
-
-    let mut f_product = f_left
-        .iter()
-        .cartesian_product(f_right)
-        .map(|(left, right)| (left * right).replace_multiple(&replacements))
-        .collect_vec();
+    let f_product =
+        ordered_f_derivative_params(f_base, &derivative_vars, f_derivative_shape.as_ref());
 
     let mut result = vec![];
     result.extend(f_product);
@@ -2178,6 +2328,10 @@ mod tests {
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    use symbolica::{atom::AtomCore, function, symbol};
+
+    use crate::utils::GS;
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -2199,5 +2353,114 @@ mod tests {
 
         assert_eq!(cross_section.storage_path(&temp), temp.join("NLO"));
         fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn single_threshold_params_follow_effective_f_then_eta_contract() {
+        let params = super::params_for_derivative_order(3);
+        let f = symbol!("f");
+        let eta = symbol!("η");
+        let f_base = function!(f, GS.rescale_star);
+        let eta_base = function!(eta, GS.rescale_star);
+
+        let expected = [
+            f_base.clone(),
+            f_base.clone().derivative(GS.rescale_star),
+            f_base
+                .derivative(GS.rescale_star)
+                .derivative(GS.rescale_star),
+            eta_base.clone().derivative(GS.rescale_star),
+            eta_base
+                .clone()
+                .derivative(GS.rescale_star)
+                .derivative(GS.rescale_star),
+            eta_base
+                .derivative(GS.rescale_star)
+                .derivative(GS.rescale_star)
+                .derivative(GS.rescale_star),
+        ]
+        .into_iter()
+        .map(|atom| atom.to_string())
+        .collect::<Vec<_>>();
+
+        let actual = params
+            .iter()
+            .map(|atom| atom.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn iterated_threshold_f_params_follow_mixed_left_right_shape_order() {
+        let params = super::params_for_iterated_threshold_ct(2, 2);
+        let f = symbol!("f");
+        let base = function!(f, GS.radius_star_left, GS.radius_star_right);
+        let expected = [
+            base.clone(),
+            base.clone().derivative(GS.radius_star_left),
+            base.clone().derivative(GS.radius_star_right),
+            base.derivative(GS.radius_star_left)
+                .derivative(GS.radius_star_right),
+        ]
+        .into_iter()
+        .map(|atom| atom.to_string())
+        .collect::<Vec<_>>();
+        let actual = params[..expected.len()]
+            .iter()
+            .map(|atom| atom.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn iterated_threshold_params_append_left_then_right_eta_families() {
+        let params = super::params_for_iterated_threshold_ct(2, 2);
+        let eta_left = symbol!("η_left");
+        let eta_right = symbol!("η_right");
+
+        let expected = [
+            function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left),
+            function!(eta_left, GS.radius_star_left)
+                .derivative(GS.radius_star_left)
+                .derivative(GS.radius_star_left),
+            function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right),
+            function!(eta_right, GS.radius_star_right)
+                .derivative(GS.radius_star_right)
+                .derivative(GS.radius_star_right),
+        ]
+        .into_iter()
+        .map(|atom| atom.to_string())
+        .collect::<Vec<_>>();
+
+        let actual = params[4..]
+            .iter()
+            .map(|atom| atom.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn iterated_threshold_f_params_follow_active_single_axis_shape_order() {
+        let params = super::params_for_iterated_threshold_ct(1, 3);
+        let f = symbol!("f");
+        let base = function!(f, GS.radius_star_left, GS.radius_star_right);
+        let expected = [
+            base.clone(),
+            base.clone().derivative(GS.radius_star_right),
+            base.derivative(GS.radius_star_right)
+                .derivative(GS.radius_star_right),
+        ]
+        .into_iter()
+        .map(|atom| atom.to_string())
+        .collect::<Vec<_>>();
+        let actual = params[..expected.len()]
+            .iter()
+            .map(|atom| atom.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
     }
 }

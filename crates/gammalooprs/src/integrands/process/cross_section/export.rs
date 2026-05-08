@@ -11,6 +11,7 @@ use super::{
         STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive, StandaloneCrossSectionArchive,
         StandaloneCrossSectionGraphTermArchive, StandaloneCutCFFIndex,
         StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
+        StandaloneIndexedGenericEvaluatorArchive,
         StandaloneIndexedEvaluatorStackArchive, StandaloneIteratedCollectionArchive,
     },
 };
@@ -117,6 +118,20 @@ fn export_evaluator_map<T: ExportAtomTo>(
         .collect()
 }
 
+fn export_generic_evaluator_map<T: ExportAtomTo>(
+    evaluators: &BTreeMap<CutCFFIndex, GenericEvaluator>,
+) -> Result<Vec<StandaloneIndexedGenericEvaluatorArchive<T>>> {
+    evaluators
+        .iter()
+        .map(|(cut_cff_index, evaluator)| {
+            Ok(StandaloneIndexedGenericEvaluatorArchive {
+                cut_cff_index: export_cut_cff_index(cut_cff_index),
+                evaluator: export_generic_evaluator(evaluator)?,
+            })
+        })
+        .collect()
+}
+
 fn export_iterated_collection<U, V, F>(
     collection: &IteratedCtCollection<U>,
     export_item: F,
@@ -150,6 +165,22 @@ fn export_counterterm<T: ExportAtomTo>(
         iterated_evaluator: export_iterated_collection(
             &evaluators.iterated_evaluator,
             export_evaluator_map,
+        )?,
+        left_threshold_helpers: evaluators
+            .threshold_helpers
+            .left_thresholds
+            .iter()
+            .map(export_generic_evaluator_map)
+            .collect::<Result<Vec<_>>>()?,
+        right_threshold_helpers: evaluators
+            .threshold_helpers
+            .right_thresholds
+            .iter()
+            .map(export_generic_evaluator_map)
+            .collect::<Result<Vec<_>>>()?,
+        iterated_helpers: export_iterated_collection(
+            &evaluators.threshold_helpers.iterated,
+            export_generic_evaluator_map,
         )?,
         pass_two_evaluator: evaluators
             .residue_from_e_surface_evaluators

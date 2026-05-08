@@ -26,14 +26,17 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, RaisedCutData, RaisedCutId,
+        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, IteratedCtCollection,
+        RaisedCutData, RaisedCutId,
     },
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
     },
     subtraction::{
         generate_rstar_t_dependence_evaluator,
-        lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
+        lu_counterterm::{
+            LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUThresholdHelperEvaluators,
+        },
     },
     utils::{
         F, FloatLike, Length, h, h_dual,
@@ -681,11 +684,137 @@ impl CrossSectionGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
+
+            let (left_subspace, right_subspace) = &graph.derived_data.subspace_data[raised_cut_id];
+            let include_integrated = !settings
+                .generation
+                .threshold_subtraction
+                .disable_integrated_ct;
+            let optimization_settings = settings.generation.evaluator.optimization_settings();
+
+            let build_single_helpers = |integrands: &crate::uv::forest::ParametricIntegrands,
+                                        is_on_right: bool,
+                                        loop_count: usize| {
+                integrands
+                    .integrands
+                    .keys()
+                    .map(|cut_cff_index| {
+                        let lu_order = cut_cff_index.lu_cut_order.ok_or_else(|| {
+                            eyre!("LU threshold counterterm helper index is missing lu_cut_order")
+                        })?;
+                        let threshold_order = if is_on_right {
+                            cut_cff_index.right_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Right LU threshold helper index is missing right_threshold_order"
+                                )
+                            })?
+                        } else {
+                            cut_cff_index.left_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Left LU threshold helper index is missing left_threshold_order"
+                                )
+                            })?
+                        };
+
+                        let dual_shape = if lu_order > 1 {
+                            Some(simple_n_deriv_shape(lu_order - 1))
+                        } else {
+                            None
+                        };
+
+                        let evaluator = graph.single_th_helper(
+                            threshold_order as u8,
+                            loop_count,
+                            is_on_right,
+                            include_integrated,
+                            dual_shape,
+                            optimization_settings.clone(),
+                            &settings.generation.evaluator,
+                        )?;
+                        Ok((*cut_cff_index, evaluator))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+            };
+
+            let build_iterated_helpers = |integrands: &crate::uv::forest::ParametricIntegrands| {
+                integrands
+                    .integrands
+                    .keys()
+                    .map(|cut_cff_index| {
+                        let lu_order = cut_cff_index.lu_cut_order.ok_or_else(|| {
+                            eyre!(
+                                "Iterated LU threshold counterterm helper index is missing lu_cut_order"
+                            )
+                        })?;
+                        let left_threshold_order =
+                            cut_cff_index.left_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Iterated LU threshold helper index is missing left_threshold_order"
+                                )
+                            })?;
+                        let right_threshold_order =
+                            cut_cff_index.right_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Iterated LU threshold helper index is missing right_threshold_order"
+                                )
+                            })?;
+
+
+                        let dual_shape = if lu_order > 1 {
+                            Some(simple_n_deriv_shape(lu_order - 1))
+                        } else {
+                            None
+                        };
+                        
+                        let evaluator = graph.iterated_th_helper(
+                            left_threshold_order as u8,
+                            right_threshold_order as u8,
+                            left_subspace.loopcount(),
+                            right_subspace.loopcount(),
+                            include_integrated,
+                            dual_shape,
+                            optimization_settings.clone(),
+                            &settings.generation.evaluator,
+                        )?;
+                        Ok((*cut_cff_index, evaluator))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+            };
+
+            let left_thresholds = ct_data
+                .left_atoms
+                .iter()
+                .map(|integrands| {
+                    build_single_helpers(integrands, false, left_subspace.loopcount())
+                })
+                .collect::<Result<TiVec<_, _>>>()?;
+            let right_thresholds = ct_data
+                .right_atoms
+                .iter()
+                .map(|integrands| {
+                    build_single_helpers(integrands, true, right_subspace.loopcount())
+                })
+                .collect::<Result<TiVec<_, _>>>()?;
+            let iterated = IteratedCtCollection::new(
+                ct_data
+                    .iterated
+                    .iter()
+                    .map(build_iterated_helpers)
+                    .collect::<Result<Vec<_>>>()?,
+                ct_data.iterated.num_left_thresholds(),
+            );
+            let threshold_helpers = LUThresholdHelperEvaluators {
+                left_thresholds,
+                right_thresholds,
+                iterated,
+            };
+
             let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
                 graph.derived_data.raised_data.raised_cut_groups[raised_cut_id]
                     .related_esurface_group
                     .max_occurence,
+                threshold_helpers,
                 &graph.graph.param_builder,
                 settings,
                 &orientations,
