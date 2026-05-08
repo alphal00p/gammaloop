@@ -82,6 +82,9 @@ use symbolica::{
 
 pub mod symbolica_ext;
 
+#[cfg(test)]
+mod spensotests;
+
 use symbolica::{evaluate::FunctionMap, id::Replacement};
 pub mod aind;
 pub mod ufo;
