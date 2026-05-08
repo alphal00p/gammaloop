@@ -1,5 +1,4 @@
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::owo_colors::colors::xterm::HollywoodCerise;
 use eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -15,7 +14,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::{CutCFFIndex, esurface::Esurface},
+    cff::esurface::Esurface,
     graph::{LmbIndex, LoopMomentumBasis},
     integrands::process::GenericEvaluator,
     momentum::{
@@ -28,7 +27,7 @@ use crate::{
     },
     utils::{
         self, F, FloatLike,
-        hyperdual_utils::{DualOrNot, new_constant, shape_from_cut_cff_index},
+        hyperdual_utils::{DualOrNot, new_constant, simple_n_deriv_shape},
     },
 };
 
@@ -265,8 +264,7 @@ impl RstarTDependenceEvaluator {
             }
         }
 
-        todo!("construct hyperdual with t derivatives and r_star componenents")
-        //       HyperDual::from_values(shape_for_t_derivatives(dual_values.len() - 1), dual_values)
+        HyperDual::from_values(simple_n_deriv_shape(dual_values.len() - 1), dual_values)
     }
 }
 
@@ -399,54 +397,38 @@ fn test_rstar_t_dependence_evaluator_zero_derivatives() {
 
 #[test]
 fn verify_dual_behaviour() {
-    fn test_fn<T: FloatLike>(x: HyperDual<F<T>>, y: HyperDual<F<T>>) -> HyperDual<F<T>> {
-        x.clone() * x + y.clone() * y
+    fn test_fn(t: HyperDual<F<f64>>, r: HyperDual<F<f64>>) -> HyperDual<F<f64>> {
+        t.clone() * t + r.clone() * r
     }
 
-    let cut_cff_index = CutCFFIndex {
-        left_threshold_order: Some(3),
-        right_threshold_order: Some(3),
-        lu_cut_order: Some(3),
+    fn r_func(t: HyperDual<F<f64>>) -> HyperDual<F<f64>> {
+        t.log()
+    }
+
+    let cut_cff_index = crate::cff::CutCFFIndex {
+        left_threshold_order: Some(2),
+        right_threshold_order: None,
+        lu_cut_order: Some(2),
     };
 
-    println!(
-        "Shape from cut cff index: {:#?}",
-        shape_from_cut_cff_index(&cut_cff_index)
+    let shape_from_cut_cff_index =
+        utils::hyperdual_utils::shape_from_cut_cff_index(&cut_cff_index).unwrap();
+    let dual_shape = HyperDual::new(shape_from_cut_cff_index.clone());
+
+    let t_deriv_shape = simple_n_deriv_shape(1);
+    let t_deriv_dual_shape = HyperDual::new(t_deriv_shape);
+
+    let t = t_deriv_dual_shape.variable(0, F(3.0_f64));
+    let r = r_func(t.clone());
+
+    let t_in_complex_shape = dual_shape.variable(0, F(3.0_f64));
+    let r_in_complex_shape = utils::hyperdual_utils::dualize_dual_t_to_dual_r_t(
+        r.clone(),
+        t_in_complex_shape.clone(),
+        1,
     );
 
-    let shape_1 = vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]];
-    let shape_2 = vec![vec![0, 0], vec![0, 1], vec![1, 0], vec![1, 1]];
-    let shape_3 = vec![vec![0, 0], vec![1, 0], vec![1, 1], vec![0, 1]];
+    let test_fn_result = test_fn(t_in_complex_shape.clone(), r_in_complex_shape.clone());
 
-    let dual_shape_1: HyperDual<f64> = HyperDual::new(shape_1);
-    let dual_shape_2: HyperDual<f64> = HyperDual::new(shape_2);
-    let dual_shape_3: HyperDual<f64> = HyperDual::new(shape_3);
-
-    let x_shape_1 = dual_shape_1.variable(0, 3.0);
-    let y_shape_1 = dual_shape_1.variable(1, 4.0);
-    let x_shape_3 = dual_shape_3.variable(0, 3.0);
-    let y_shape_3 = dual_shape_3.variable(1, 4.0);
-
-    let x_shape_2 = dual_shape_2.variable(0, 3.0);
-    let y_shape_2 = dual_shape_2.variable(1, 4.0);
-
-    println!("x_shape_1: {}", x_shape_1);
-    println!("y_shape_1: {}", y_shape_1);
-
-    println!("x_shape_2: {}", x_shape_2);
-    println!("y_shape_2: {}", y_shape_2);
-
-    println!("x_shape_3: {}", x_shape_3);
-    println!("y_shape_3: {}", y_shape_3);
-
-    let dual_cut_index: HyperDual<f64> =
-        HyperDual::new(shape_from_cut_cff_index(&cut_cff_index).unwrap());
-
-    let x_cut = dual_cut_index.variable(0, 3.0);
-    let y_cut = dual_cut_index.variable(1, 4.0);
-    let z_cut = dual_cut_index.variable(2, 5.0);
-
-    println!("x_cut: {}", x_cut);
-    println!("y_cut: {}", y_cut);
-    println!("z_cut: {}", z_cut);
+    println!("Test function result: {}", test_fn_result);
 }

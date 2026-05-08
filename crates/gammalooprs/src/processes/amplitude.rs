@@ -681,9 +681,7 @@ impl AmplitudeGraph {
                 .max()
                 .unwrap_or(0);
             if max_order > 1 {
-                self.graph
-                    .param_builder
-                    .initialize_t_derivatives(max_order - 1);
+                self.graph.param_builder.initialize_duals(max_order);
             }
             raised_data.pass_two_evaluator = Some(
                 (1..=max_order)

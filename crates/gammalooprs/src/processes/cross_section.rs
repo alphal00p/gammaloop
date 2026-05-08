@@ -46,7 +46,7 @@ use crate::{
     },
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{
-        GS, W_,
+        F, GS, W_,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
     },
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
@@ -61,6 +61,7 @@ use linnet::half_edge::{
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
+    domains::dual::HyperDual,
     domains::rational::Rational,
     evaluate::{FunctionMap, OptimizationSettings},
     function,
@@ -144,6 +145,19 @@ pub struct LUCounterTermData {
     pub left_atoms: TiVec<LeftThresholdId, ParametricIntegrands>,
     pub right_atoms: TiVec<RightThresholdId, ParametricIntegrands>,
     pub iterated: IteratedCtCollection<ParametricIntegrands>,
+}
+
+fn max_dual_size_for_cut_cff_indices<'a>(
+    cut_cff_indices: impl Iterator<Item = &'a CutCFFIndex>,
+) -> usize {
+    cut_cff_indices
+        .map(|cut_cff_index| {
+            shape_from_cut_cff_index(cut_cff_index)
+                .map(|shape| HyperDual::<F<f64>>::new(shape).values.len())
+                .unwrap_or(1)
+        })
+        .max()
+        .unwrap_or(1)
 }
 
 define_index! {pub struct GlobalThresholdId;}
@@ -935,9 +949,7 @@ impl CrossSectionGraph {
             .max()
             .unwrap();
 
-        self.graph
-            .param_builder
-            .initialize_t_derivatives(max_order - 1);
+        self.graph.param_builder.initialize_duals(max_order);
 
         let cuts = self
             .derived_data
@@ -1897,6 +1909,17 @@ impl CrossSectionGraph {
             result.push(counterterm_data);
         }
 
+        let max_dual_size =
+            max_dual_size_for_cut_cff_indices(result.iter().flat_map(|counterterm_data| {
+                counterterm_data
+                    .left_atoms
+                    .iter()
+                    .chain(counterterm_data.right_atoms.iter())
+                    .chain(counterterm_data.iterated.iter())
+                    .flat_map(|integrands| integrands.integrands.keys())
+            }));
+        self.graph.param_builder.initialize_duals(max_dual_size);
+
         self.derived_data.threshold_counterterms = result;
 
         Ok(())
@@ -2331,7 +2354,7 @@ mod tests {
 
     use symbolica::{atom::AtomCore, function, symbol};
 
-    use crate::utils::GS;
+    use crate::{cff::CutCFFIndex, utils::GS};
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -2353,6 +2376,27 @@ mod tests {
 
         assert_eq!(cross_section.storage_path(&temp), temp.join("NLO"));
         fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn max_dual_size_for_cut_cff_indices_tracks_mixed_threshold_shapes() {
+        let cut_cff_indices = [
+            CutCFFIndex {
+                left_threshold_order: None,
+                right_threshold_order: None,
+                lu_cut_order: Some(2),
+            },
+            CutCFFIndex {
+                left_threshold_order: Some(2),
+                right_threshold_order: Some(2),
+                lu_cut_order: Some(2),
+            },
+        ];
+
+        assert_eq!(
+            super::max_dual_size_for_cut_cff_indices(cut_cff_indices.iter()),
+            8
+        );
     }
 
     #[test]
