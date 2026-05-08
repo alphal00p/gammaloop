@@ -125,9 +125,9 @@ impl Integrated<'_> {
             .get_single_atom()
             .unwrap();
 
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg without denoms");
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
         t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg
             .replace(GS.dim)

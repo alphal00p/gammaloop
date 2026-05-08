@@ -29,7 +29,6 @@ use tracing_subscriber::{
     },
     layer::SubscriberExt,
     registry::LookupSpan,
-    reload,
     util::SubscriberInitExt,
 };
 
@@ -711,8 +710,8 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
         //     STDERR_LOG_SPEC.lock().unwrap().as_str()
         // );
 
-        let (file_filter_layer, file_handle) = reload::Layer::new(file_filter.clone());
-        let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter.clone());
+        let (file_filter_layer, file_handle) = file_filter.clone().reloadable();
+        let (stderr_filter_layer, stderr_handle) = stderr_filter.clone().reloadable();
 
         // e.g. "2025-08-26T21-05-33.123"
         let ts = Local::now()
@@ -790,16 +789,13 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
             return detached_filter_handles(!file_state.hard_disabled());
         }
 
-        let stderr_handle = stderr_handle.clone();
         let file_reload = (!file_state.hard_disabled()).then_some(Box::new(move |filter| {
-            file_handle
-                .modify(|f| *f = filter)
-                .map_err(color_eyre::Report::from)
+            file_handle.reload(filter);
+            Ok(())
         }) as ReloadFilterFn);
         let stderr_reload = Box::new(move |filter| {
-            stderr_handle
-                .modify(|f| *f = filter)
-                .map_err(color_eyre::Report::from)
+            stderr_handle.reload(filter);
+            Ok(())
         }) as ReloadFilterFn;
 
         FilterHandles {

@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, RwLock},
+};
 
 use thiserror::Error;
 use tracing::{Event, Metadata, Subscriber, field::Visit, level_filters::LevelFilter};
@@ -9,6 +12,16 @@ use tracing_subscriber::registry::LookupSpan;
 pub struct GammaLogFilter {
     directives: Vec<Directive>,
     max_level_hint: LevelFilter,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReloadableGammaLogFilter {
+    filter: Arc<RwLock<GammaLogFilter>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GammaLogFilterReloadHandle {
+    filter: Arc<RwLock<GammaLogFilter>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +106,16 @@ impl GammaLogFilter {
         Some(self.max_level_hint)
     }
 
+    pub fn reloadable(self) -> (ReloadableGammaLogFilter, GammaLogFilterReloadHandle) {
+        let filter = Arc::new(RwLock::new(self));
+        (
+            ReloadableGammaLogFilter {
+                filter: Arc::clone(&filter),
+            },
+            GammaLogFilterReloadHandle { filter },
+        )
+    }
+
     pub fn is_effectively_off(user_spec: &str) -> bool {
         let Ok(parts) = split_directives(user_spec) else {
             return false;
@@ -145,12 +168,13 @@ impl GammaLogFilter {
             .map(|directive| directive.level)
     }
 
-    fn candidate_level(&self, target: &str) -> Option<LevelFilter> {
+    fn metadata_level(&self, metadata: &Metadata<'_>) -> Option<LevelFilter> {
         self.directives
             .iter()
-            .filter(|directive| directive.matches_target(target))
+            .filter(|directive| directive.matches_target(metadata.target()))
+            .filter(|directive| directive.fields_can_match(metadata))
+            .max_by_key(|directive| directive.specificity())
             .map(|directive| directive.level)
-            .max_by_key(|level| level_rank(*level))
     }
 
     fn callsite_interest(
@@ -209,7 +233,7 @@ impl Directive {
         })
     }
 
-    fn matches_metadata_fields(&self, metadata: &'static Metadata<'static>) -> bool {
+    fn matches_metadata_fields(&self, metadata: &Metadata<'_>) -> bool {
         self.tags.iter().all(|requirement| match requirement {
             TagRequirement::Present(name) => metadata.fields().field(name).is_some(),
             TagRequirement::Absent(name) => metadata.fields().field(name).is_none(),
@@ -217,12 +241,16 @@ impl Directive {
         })
     }
 
-    fn could_match_dynamically(&self, metadata: &'static Metadata<'static>) -> bool {
+    fn fields_can_match(&self, metadata: &Metadata<'_>) -> bool {
         self.tags.iter().all(|requirement| match requirement {
             TagRequirement::Present(name) => metadata.fields().field(name).is_some(),
             TagRequirement::Absent(name) => metadata.fields().field(name).is_none(),
             TagRequirement::Value { name, .. } => metadata.fields().field(name).is_some(),
-        }) && self.tags.iter().any(TagRequirement::is_value_match)
+        })
+    }
+
+    fn could_match_dynamically(&self, metadata: &'static Metadata<'static>) -> bool {
+        self.fields_can_match(metadata) && self.tags.iter().any(TagRequirement::is_value_match)
     }
 
     fn specificity(&self) -> Specificity {
@@ -289,7 +317,7 @@ where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
 {
     fn enabled(&self, metadata: &Metadata<'_>, _cx: &Context<'_, S>) -> bool {
-        self.candidate_level(metadata.target())
+        self.metadata_level(metadata)
             .is_some_and(|selected| event_level_enabled(metadata, selected))
     }
 
@@ -313,6 +341,39 @@ where
 
     fn max_level_hint(&self) -> Option<LevelFilter> {
         self.max_level_hint()
+    }
+}
+
+impl GammaLogFilterReloadHandle {
+    pub fn reload(&self, filter: GammaLogFilter) {
+        {
+            *self.filter.write().unwrap() = filter;
+        }
+        tracing::callsite::rebuild_interest_cache();
+    }
+}
+
+impl<S> Filter<S> for ReloadableGammaLogFilter
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+{
+    fn enabled(&self, metadata: &Metadata<'_>, cx: &Context<'_, S>) -> bool {
+        self.filter.read().unwrap().enabled(metadata, cx)
+    }
+
+    fn event_enabled(&self, event: &Event<'_>, cx: &Context<'_, S>) -> bool {
+        self.filter.read().unwrap().event_enabled(event, cx)
+    }
+
+    fn callsite_enabled(
+        &self,
+        metadata: &'static Metadata<'static>,
+    ) -> tracing::subscriber::Interest {
+        <GammaLogFilter as Filter<S>>::callsite_enabled(&self.filter.read().unwrap(), metadata)
+    }
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        self.filter.read().unwrap().max_level_hint()
     }
 }
 
@@ -563,10 +624,39 @@ mod tests {
         collections::{BTreeMap, BTreeSet},
         fs,
         path::{Path, PathBuf},
+        sync::{Arc, Mutex},
     };
 
     use super::GammaLogFilter;
-    use tracing::level_filters::LevelFilter;
+    use tracing::{Event, Subscriber, level_filters::LevelFilter};
+    use tracing_subscriber::{
+        layer::{Context, Layer},
+        prelude::*,
+        registry::LookupSpan,
+    };
+
+    #[derive(Clone, Default)]
+    struct EventRecorder {
+        targets: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl EventRecorder {
+        fn targets(&self) -> Vec<String> {
+            self.targets.lock().unwrap().clone()
+        }
+    }
+
+    impl<S> Layer<S> for EventRecorder
+    where
+        S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+    {
+        fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+            self.targets
+                .lock()
+                .unwrap()
+                .push(event.metadata().target().to_string());
+        }
+    }
 
     #[test]
     fn parses_documented_examples() {
@@ -702,6 +792,71 @@ mod tests {
                     Some(&tags),
                 )
                 .is_some_and(|level| level == LevelFilter::DEBUG)
+        );
+    }
+
+    #[test]
+    fn reloadable_filter_applies_event_value_tags() {
+        let (filter, handle) = GammaLogFilter::parse("gammalooprs=info")
+            .unwrap()
+            .reloadable();
+        let recorder = EventRecorder::default();
+        let subscriber = tracing_subscriber::registry().with(
+            tracing_subscriber::filter::Filtered::new(recorder.clone(), filter),
+        );
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!(
+                target: "gammalooprs::uv::forest",
+                generation = true,
+                uv = true,
+                term = true,
+                "Terms"
+            );
+            handle.reload(
+                GammaLogFilter::parse("gammalooprs=info,gammalooprs::uv[{#algebra}]=debug")
+                    .unwrap(),
+            );
+            tracing::debug!(
+                target: "gammalooprs::uv::forest",
+                generation = true,
+                uv = true,
+                term = true,
+                "Terms"
+            );
+            tracing::debug!(
+                target: "gammalooprs::uv::approx::integrated",
+                uv = true,
+                integrated = true,
+                algebra = true,
+                "Algebra"
+            );
+            handle.reload(
+                GammaLogFilter::parse("gammalooprs=info,gammalooprs::uv[{#!inspect}]=debug")
+                    .unwrap(),
+            );
+            tracing::debug!(
+                target: "gammalooprs::uv::approx::integrated",
+                uv = true,
+                integrated = true,
+                inspect = true,
+                "Inspect true"
+            );
+            tracing::debug!(
+                target: "gammalooprs::uv::approx::integrated",
+                uv = true,
+                integrated = true,
+                inspect = false,
+                "Inspect false"
+            );
+        });
+
+        assert_eq!(
+            recorder.targets(),
+            vec![
+                "gammalooprs::uv::approx::integrated".to_string(),
+                "gammalooprs::uv::approx::integrated".to_string(),
+            ]
         );
     }
 
