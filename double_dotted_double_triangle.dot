@@ -1,0 +1,33 @@
+digraph double_dotted_double_triangle {
+    num = 1
+    edge [
+        pdg=1001
+    ]
+    ext0 [style=invis, is_cut=0]
+    ext0 -> v1 [id=0]
+    v1 -> v2 [lmb_id=0, id=1]
+    v2 -> v3 [id=2]
+    v1 -> v4 [id=3]
+    v3 -> v4 [id=4]
+    v3 -> v5 [id=5, lmb_id=1]
+    v5 -> v6 [id=6]
+    v4 -> v6 [id=7]
+    v6 -> ext0
+}
+
+digraph double_dotted_double_triangle {
+    num = -1
+    edge [
+        pdg=1001
+    ]
+    ext0 [style=invis, is_cut=0]
+    ext0 -> v1 [id=0]
+    v1 -> v2 [lmb_id=0, id=1]
+    v2 -> v3 [pdg=1002, id=2]
+    v1 -> v4 [id=3]
+    v3 -> v4 [id=4]
+    v3 -> v5 [id=5, lmb_id=1]
+    v5 -> v6 [pdg=1002, id=6]
+    v4 -> v6 [id=7]
+    v6 -> ext0
+}

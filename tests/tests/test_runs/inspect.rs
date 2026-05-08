@@ -125,7 +125,7 @@ fn test_mass_approach_scalar_self_energy() -> Result<()> {
             use_arb_prec: true,
             ..Default::default()
         }
-        .run(&mut cli)?;
+        .run(&mut cli.state)?;
 
         let magnitude = (inspect.re * inspect.re + inspect.im * inspect.im).sqrt();
         inspect_magnitudes.push(magnitude);
@@ -166,7 +166,7 @@ fn test_mass_approach_threshold_subtraction() -> Result<()> {
             use_arb_prec: true,
             ..Default::default()
         }
-        .run(&mut cli)?;
+        .run(&mut cli.state)?;
 
         let magnitude = (inspect.re * inspect.re + inspect.im * inspect.im).sqrt();
         inspect_magnitudes.push(magnitude);
@@ -225,19 +225,44 @@ fn test_mass_approach_threshold_subtraction_reversed() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
-    let mut cli = get_test_cli(
-        Some("generate_threshold_subtraction_mass_approach_dotted.toml".into()),
-        get_tests_workspace_path().join("threshold_subtraction_mass_approach_dotted"),
-        None,
-        true,
-    )?;
+#[derive(Debug)]
+struct OrientationMassApproachOutcome {
+    orientation_id: usize,
+    pattern: String,
+    magnitudes: Vec<f64>,
+    monotonic: bool,
+    final_small: bool,
+}
 
-    let mass_values = [2.1, 2.05, 2.01, 2.001, 2.0001];
+impl OrientationMassApproachOutcome {
+    fn passed(&self) -> bool {
+        self.monotonic && self.final_small
+    }
+}
+
+fn orientation_pattern_from_signature(signature: &[i8]) -> Result<String> {
+    let entries = signature
+        .iter()
+        .map(|sign| match sign {
+            1 => Ok("+"),
+            -1 => Ok("-"),
+            0 => Ok("0"),
+            other => Err(eyre::eyre!(
+                "Unexpected orientation signature entry {other}; expected one of -1, 0, 1"
+            )),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(format!("({})", entries.join(",")))
+}
+
+fn inspect_magnitudes_for_mass_values(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    mass_values: &[f64],
+) -> Result<Vec<f64>> {
     let mut inspect_magnitudes = Vec::with_capacity(mass_values.len());
 
-    for mass in mass_values {
+    for &mass in mass_values {
         cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
 
         let (_, inspect) = Inspect {
@@ -248,20 +273,129 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
             use_arb_prec: true,
             ..Default::default()
         }
-        .run(&mut cli)?;
+        .run(&mut cli.state)?;
 
         let magnitude = (inspect.re * inspect.re + inspect.im * inspect.im).sqrt();
         inspect_magnitudes.push(magnitude);
     }
 
-    assert!(
-        inspect_magnitudes.windows(2).all(|pair| pair[1] <= pair[0]),
-        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
-    );
-    assert!(
-        inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 4.0e-10,
-        "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
-    );
+    Ok(inspect_magnitudes)
+}
+
+#[test]
+fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_threshold_subtraction_mass_approach_dotted.toml".into()),
+        get_tests_workspace_path().join("threshold_subtraction_mass_approach_dotted"),
+        None,
+        true,
+    )?;
+
+    let mass_values = [2.1, 2.05, 2.01, 2.001, 2.0001];
+    let info = cli.state.get_integrand_info(None, None)?;
+    let canonical_group = info
+        .graph_groups
+        .first()
+        .ok_or_else(|| eyre::eyre!("Generated integrand has no graph groups to classify"))?;
+    let canonical_signature_set = canonical_group
+        .orientations
+        .iter()
+        .map(|orientation| orientation.signature.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+
+    for group in info.graph_groups.iter().skip(1) {
+        let signature_set = group
+            .orientations
+            .iter()
+            .map(|orientation| orientation.signature.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        if signature_set != canonical_signature_set {
+            return Err(eyre::eyre!(
+                "Per-orientation dotted threshold test requires all graph groups to share the same orientation signatures; group {} has {:?}, canonical group {} has {:?}",
+                group.group_id,
+                signature_set,
+                canonical_group.group_id,
+                canonical_signature_set,
+            ));
+        }
+    }
+
+    let mut outcomes = Vec::with_capacity(canonical_group.orientations.len());
+    for orientation in &canonical_group.orientations {
+        let pattern = orientation_pattern_from_signature(&orientation.signature)?;
+        cli.run_command(&format!(
+            "set process -p {} -i {} string '\n[general.orientation_pat]\npat = \"{}\"\n'",
+            info.process_id, info.integrand_name, pattern
+        ))?;
+
+        let magnitudes = inspect_magnitudes_for_mass_values(&mut cli, &mass_values)?;
+        let monotonic = magnitudes.windows(2).all(|pair| pair[1] <= pair[0]);
+        let final_small = magnitudes.last().copied().unwrap_or(f64::INFINITY) < 4.0e-10;
+
+        outcomes.push(OrientationMassApproachOutcome {
+            orientation_id: orientation.orientation_id,
+            pattern,
+            magnitudes,
+            monotonic,
+            final_small,
+        });
+    }
+
+    let passed = outcomes
+        .iter()
+        .filter(|outcome| outcome.passed())
+        .map(|outcome| format!("#{} {}", outcome.orientation_id, outcome.pattern))
+        .collect_vec();
+    let failed = outcomes
+        .iter()
+        .filter(|outcome| !outcome.passed())
+        .collect_vec();
+
+    let mut report = String::new();
+    writeln!(
+        &mut report,
+        "Per-orientation threshold-subtraction mass-approach summary for {}:{}",
+        info.process_name, info.integrand_name
+    )
+    .unwrap();
+    writeln!(
+        &mut report,
+        "Passed orientations: {}",
+        if passed.is_empty() {
+            "<none>".to_string()
+        } else {
+            passed.join(", ")
+        }
+    )
+    .unwrap();
+    writeln!(
+        &mut report,
+        "Failed orientations: {}",
+        if failed.is_empty() {
+            "<none>".to_string()
+        } else {
+            failed
+                .iter()
+                .map(|outcome| format!("#{} {}", outcome.orientation_id, outcome.pattern))
+                .join(", ")
+        }
+    )
+    .unwrap();
+    for outcome in &failed {
+        writeln!(
+            &mut report,
+            "  #{} {} monotonic={} final_small={} magnitudes={:?}",
+            outcome.orientation_id,
+            outcome.pattern,
+            outcome.monotonic,
+            outcome.final_small,
+            outcome.magnitudes,
+        )
+        .unwrap();
+    }
+
+    println!("{report}");
+    assert!(failed.is_empty(), "{report}");
 
     Ok(())
 }
