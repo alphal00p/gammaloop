@@ -28,14 +28,6 @@ pub(super) fn trace_direct_sum_terms() -> bool {
 pub(super) fn trace_direct_sum_term_expressions() -> bool {
     std::env::var_os("IDENSO_TRACE_DIRECT_SUM_TERM_EXPRESSIONS").is_some()
 }
-
-pub(super) fn trace_schoonschip_patterns() -> bool {
-    std::env::var_os("IDENSO_TRACE_SCHOONSCHIP_PATTERNS").is_some()
-}
-
-pub(super) fn trace_schoonschip_pattern_misses() -> bool {
-    std::env::var_os("IDENSO_TRACE_SCHOONSCHIP_PATTERN_MISSES").is_some()
-}
 fn distribute_expanded_left_sum(expanded_left: &Atom, right: &Atom) -> Atom {
     expanded_left.terms().fold(Atom::Zero, |sum, term| {
         let term = term.to_owned();
