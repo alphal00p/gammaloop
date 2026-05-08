@@ -778,26 +778,23 @@ impl CrossSectionGraph {
             .cut_esurface
             .iter()
             .map(|esurface| {
-                self.graph
+                if let Some(pos) = self
+                    .graph
                     .surface_cache
                     .esurface_cache
                     .iter()
                     .position(|e_sf| e_sf == esurface)
-                    .unwrap_or_else(|| {
-                        println!("esurfaces corruped");
-
-                        println!("cut esurfaces: {:?}", self.cut_esurface);
-                        println!(
-                            "graph esurfaces: {:?}",
-                            self.graph.surface_cache.esurface_cache
-                        );
-                        println!(
-                            "graph hsurfaces: {:?}",
-                            self.graph.surface_cache.hsurface_cache
-                        );
-                        panic!()
-                    })
-                    .into()
+                    .map(Into::<EsurfaceID>::into)
+                {
+                    pos
+                } else {
+                    let pos = self.graph.surface_cache.esurface_cache.len();
+                    self.graph
+                        .surface_cache
+                        .esurface_cache
+                        .push(esurface.clone());
+                    EsurfaceID(pos)
+                }
             })
             .collect();
 

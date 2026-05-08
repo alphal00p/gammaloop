@@ -727,7 +727,7 @@ impl CrossSectionGraphTerm {
             .iter()
             .map(|raised_cut_group| {
                 generate_rstar_t_dependence_evaluator(
-                    raised_cut_group.related_esurface_group.max_occurence - 1,
+                    raised_cut_group.related_esurface_group.max_occurence.max(1) - 1,
                 )
             })
             .collect::<Result<TiVec<RaisedCutId, _>>>()?;
