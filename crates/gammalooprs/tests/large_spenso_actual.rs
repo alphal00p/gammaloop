@@ -1212,14 +1212,16 @@ fn execute_actual_net_min_result_rank_parallel_summary(
         });
     let elapsed = start.elapsed();
 
+    let result_start = Instant::now();
     if let Ok(result) = net.result_scalar() {
         let result = match result {
             ExecutionResult::One => Atom::num(1),
             ExecutionResult::Zero => Atom::Zero,
             ExecutionResult::Val(value) => value.into_owned(),
         };
+        let result_elapsed = result_start.elapsed();
         eprintln!(
-            "{label} summary kind=scalar execute={elapsed:.3?} result_terms={} result_bytes={}",
+            "{label} summary kind=scalar execute={elapsed:.3?} result={result_elapsed:.3?} result_terms={} result_bytes={}",
             result.nterms(),
             result.as_view().get_byte_size()
         );
@@ -1232,17 +1234,38 @@ fn execute_actual_net_min_result_rank_parallel_summary(
     let tensor = match result {
         ExecutionResult::Val(value) => value.into_owned(),
         ExecutionResult::One => {
-            eprintln!("{label} summary kind=tensor_one execute={elapsed:.3?}");
+            let result_elapsed = result_start.elapsed();
+            eprintln!(
+                "{label} summary kind=tensor_one execute={elapsed:.3?} result={result_elapsed:.3?}"
+            );
             return elapsed;
         }
         ExecutionResult::Zero => {
-            eprintln!("{label} summary kind=tensor_zero execute={elapsed:.3?}");
+            let result_elapsed = result_start.elapsed();
+            eprintln!(
+                "{label} summary kind=tensor_zero execute={elapsed:.3?} result={result_elapsed:.3?}"
+            );
             return elapsed;
         }
     };
 
+    if tensor.structure().order() == 0 {
+        let result: Atom = tensor
+            .scalar()
+            .unwrap_or_else(|| panic!("{label} rank-0 tensor result did not expose a scalar"))
+            .into();
+        let result_elapsed = result_start.elapsed();
+        eprintln!(
+            "{label} summary kind=scalar_from_tensor execute={elapsed:.3?} result={result_elapsed:.3?} result_terms={} result_bytes={}",
+            result.nterms(),
+            result.as_view().get_byte_size()
+        );
+        return elapsed;
+    }
+
+    let result_elapsed = result_start.elapsed();
     eprintln!(
-        "{label} summary kind=tensor execute={elapsed:.3?} order={} logical_entries={} flat_entries={}",
+        "{label} summary kind=tensor execute={elapsed:.3?} result={result_elapsed:.3?} order={} logical_entries={} flat_entries={}",
         tensor.structure().order(),
         tensor.structure().size().unwrap_or(0),
         tensor.iter_flat().count()

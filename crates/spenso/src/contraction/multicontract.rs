@@ -315,7 +315,6 @@ where
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
 
         let pos_self_inv = !&pos_self;
-        let pos_other_inv = !&pos_other;
         // println!("Interleaving dense dense multi"); // Initialize result tensor with default values
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
 
