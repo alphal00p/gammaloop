@@ -132,7 +132,7 @@ pub trait IndexTooling {
     ///
     /// # Returns
     /// A new [`Atom`] with only dummy indices wrapped.
-    fn wrap_dummies<Aind: AbsInd + ParseableAind>(&self, header: Symbol) -> Atom;
+    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom;
 
     /// Simplifies structured indices within function arguments into flattened variable symbols.
     ///
@@ -177,7 +177,7 @@ pub trait IndexTooling {
     ///
     /// # Returns
     /// A `Vec<Atom>` where each `Atom` represents a dangling index.
-    fn list_dangling<Aind: AbsInd + ParseableAind>(&self) -> Vec<Atom>;
+    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom>;
 }
 
 impl IndexTooling for Atom {
@@ -201,7 +201,7 @@ impl IndexTooling for Atom {
     fn wrap_indices(&self, header: Symbol) -> Atom {
         self.as_view().wrap_indices(header)
     }
-    fn wrap_dummies<Aind: AbsInd + ParseableAind>(&self, header: Symbol) -> Atom {
+    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom {
         self.as_view().wrap_dummies::<Aind>(header)
     }
     fn cook_indices(&self) -> Atom {
@@ -219,7 +219,7 @@ impl IndexTooling for Atom {
     fn conjugate_transpose(&self, rep: impl RepName) -> Atom {
         self.as_view().conjugate_transpose(rep)
     }
-    fn list_dangling<Aind: AbsInd + ParseableAind>(&self) -> Vec<Atom> {
+    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom> {
         self.as_view().list_dangling::<Aind>()
     }
 }
@@ -448,10 +448,10 @@ impl IndexTooling for AtomView<'_> {
     fn cook_indices(&self) -> Atom {
         cook_indices_impl(*self)
     }
-    fn wrap_dummies<Aind: AbsInd + ParseableAind>(&self, header: Symbol) -> Atom {
+    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom {
         wrap_dummies_impl::<Aind>(*self, header)
     }
-    fn list_dangling<Aind: AbsInd + ParseableAind>(&self) -> Vec<Atom> {
+    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom> {
         list_dangling_impl::<Aind>(*self)
     }
 }

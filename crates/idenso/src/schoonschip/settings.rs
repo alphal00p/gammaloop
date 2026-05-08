@@ -92,6 +92,10 @@ impl SchoonschipSettings {
         Self::single_pass(None)
     }
 
+    pub fn default_network() -> Self {
+        Self::breadth_first(Some(1))
+    }
+
     pub fn with_expanded_contracted_sums(mut self) -> Self {
         self.expand_contracted_sums = true;
         self
@@ -114,6 +118,11 @@ impl SchoonschipSettings {
 
     pub(super) fn without_parse_inner_products(mut self) -> Self {
         self.parse_inner_products = false;
+        self
+    }
+
+    pub fn into_single_pass(mut self) -> Self {
+        self.mode = SchoonschipMode::SinglePass;
         self
     }
 }

@@ -28,12 +28,12 @@ fn run_network_informed() {
     let settings = SchoonschipSettings::full();
 
     let metric_vector = parse!("spenso::mink(4, mu1, mu2)*k1(spenso::mink(4, mu1))")
-        .schoonschip_with_net::<false, true, AbstractIndex>(&settings)
+        .schoonschip_with_net::<false, AbstractIndex>(&settings)
         .to_bare_ordered_string();
     assert_eq!(metric_vector, "k1(mink(4,mu2))");
 
     let metric_metric = parse!("spenso::mink(4, mu1, mu2)*spenso::mink(4, mu2, mu3)")
-        .schoonschip_with_net::<false, true, AbstractIndex>(&settings)
+        .schoonschip_with_net::<false, AbstractIndex>(&settings)
         .to_bare_ordered_string();
     assert_eq!(metric_metric, "g(mink(4,mu1),mink(4,mu3))");
 
@@ -42,7 +42,7 @@ fn run_network_informed() {
             * spenso::mink(4, mu2, mu3)
             * k1(spenso::mink(4, mu3))"
     )
-    .schoonschip_with_net::<false, true, AbstractIndex>(&settings)
+    .schoonschip_with_net::<false, AbstractIndex>(&settings)
     .to_bare_ordered_string();
     assert_eq!(metric_chain, "k1(mink(4,mu1))");
     assert!(!contains_index(&metric_chain, "mu2"));
@@ -52,7 +52,7 @@ fn run_network_informed() {
         "spenso::mink(4, mu1, mu2)
             * vx(3, -k2, k3, k2-k3, spenso::mink(4, mu1), spenso::mink(4, mu3), spenso::mink(4, mu10))"
     )
-    .schoonschip_with_net::<false, true, AbstractIndex>(&settings)
+    .schoonschip_with_net::<false, AbstractIndex>(&settings)
     .to_bare_ordered_string();
 
     assert!(!contains_index(&metric_into_vertex, "mu1"));
@@ -134,8 +134,10 @@ fn spenso_bare_symb_vertex_substitution() {
     settings.max_line_length = Some(80);
     println!("in:{}", r.printer(settings));
 
-    let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
-        &SchoonschipSettings::partial().with_expanded_contracted_sums(),
+    let out = r.schoonschip_with_net::<false, AbstractIndex>(
+        &SchoonschipSettings::partial()
+            .into_single_pass()
+            .with_expanded_contracted_sums(),
     );
 
     println!("out:{}", out.printer(settings));
@@ -228,10 +230,11 @@ fn print_three_vertex_method(name: &str, out: Atom, dummies: &[(&str, Atom)]) {
 
 fn cleanup_with_smallest_degree(mut result: Atom) -> Atom {
     let cleanup_settings = SchoonschipSettings::partial()
+        .into_single_pass()
         .with_expanded_contracted_sums()
         .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
     for _ in 0..4 {
-        let next = result.schoonschip_with_net::<false, false, AbstractIndex>(&cleanup_settings);
+        let next = result.schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings);
         if next == result {
             break;
         }
@@ -248,8 +251,9 @@ fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
 #[test]
 fn min_product_terms_three_vertex_still_has_residual_after_boundary_cleanup() {
     let (r, dummies) = substituted_three_vertex_reproducer();
-    let out = r.schoonschip_with_net::<false, false, AbstractIndex>(
+    let out = r.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial()
+            .into_single_pass()
             .with_expanded_contracted_sums()
             .with_contraction_order(SchoonschipContractionOrder::MinProductTerms),
     );
@@ -268,6 +272,7 @@ fn compare_two_slot_boundary_shapes() {
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
     let settings = SchoonschipSettings::partial()
+        .into_single_pass()
         .with_expanded_contracted_sums()
         .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
 
@@ -335,14 +340,14 @@ fn compare_two_slot_boundary_shapes() {
         );
         print_two_dummy_method(
             &format!("{name} / network"),
-            expr.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            expr.schoonschip_with_net::<false, AbstractIndex>(&settings),
             &mu1,
             &mu9,
         );
         print_two_dummy_method(
             &format!("{name} / expanded-input network"),
             expr.expand()
-                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+                .schoonschip_with_net::<false, AbstractIndex>(&settings),
             &mu1,
             &mu9,
         );
@@ -361,6 +366,7 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
     let mu9: Atom = mu9.into();
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
     let settings = SchoonschipSettings::partial()
+        .into_single_pass()
         .with_expanded_contracted_sums()
         .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
 
@@ -380,7 +386,7 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
     assert!(
         residual_dummy_names(
             &target_after_metric_identification
-                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+                .schoonschip_with_net::<false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
@@ -396,7 +402,7 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
     );
     assert!(
         residual_dummy_names(
-            &boundary_expression.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &boundary_expression.schoonschip_with_net::<false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
@@ -405,7 +411,7 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
         residual_dummy_names(
             &boundary_expression
                 .expand()
-                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+                .schoonschip_with_net::<false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
@@ -424,6 +430,7 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
     let mu9: Atom = mu9.into();
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
     let settings = SchoonschipSettings::partial()
+        .into_single_pass()
         .with_expanded_contracted_sums()
         .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
 
@@ -450,7 +457,7 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
 
     assert!(
         residual_dummy_names(
-            &boundary_expression.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &boundary_expression.schoonschip_with_net::<false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
@@ -459,7 +466,7 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
         residual_dummy_names(
             &boundary_expression
                 .expand()
-                .schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+                .schoonschip_with_net::<false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
@@ -476,7 +483,9 @@ fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
 
     let mu9: Atom = mu9.into();
     let dummies = [("mu9", mu9.clone())];
-    let settings = SchoonschipSettings::partial().with_expanded_contracted_sums();
+    let settings = SchoonschipSettings::partial()
+        .into_single_pass()
+        .with_expanded_contracted_sums();
     let expr = parse!(
         "spenso::g(spenso::mink(4,mu7), spenso::mink(4,mu9))
          * spenso::g(k(0)-k(1), spenso::mink(4,mu9))"
@@ -485,7 +494,7 @@ fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
     assert!(residual_dummy_names(&expr.schoonschip(), &dummies).is_empty());
     assert!(
         residual_dummy_names(
-            &expr.schoonschip_with_net::<false, false, AbstractIndex>(&settings),
+            &expr.schoonschip_with_net::<false, AbstractIndex>(&settings),
             &dummies
         )
         .is_empty()
@@ -537,8 +546,9 @@ fn compare_three_vertex_residual_methods() {
     );
 
     for (name, order) in orders {
-        let one_pass = r.schoonschip_with_net::<false, false, AbstractIndex>(
+        let one_pass = r.schoonschip_with_net::<false, AbstractIndex>(
             &SchoonschipSettings::partial()
+                .into_single_pass()
                 .with_expanded_contracted_sums()
                 .with_contraction_order(order),
         );
@@ -553,33 +563,30 @@ fn compare_three_vertex_residual_methods() {
             &dummies,
         );
 
-        let expanded_input = r
-            .expand()
-            .schoonschip_with_net::<false, false, AbstractIndex>(
-                &SchoonschipSettings::partial()
-                    .with_expanded_contracted_sums()
-                    .with_contraction_order(order),
-            );
+        let expanded_input = r.expand().schoonschip_with_net::<false, AbstractIndex>(
+            &SchoonschipSettings::partial()
+                .into_single_pass()
+                .with_expanded_contracted_sums()
+                .with_contraction_order(order),
+        );
         print_three_vertex_method(
             &format!("expanded-input net one-pass partial {name}"),
             expanded_input,
             &dummies,
         );
 
-        let expanded_input_full = r
-            .expand()
-            .schoonschip_with_net::<false, true, AbstractIndex>(
-                &SchoonschipSettings::full()
-                    .with_expanded_contracted_sums()
-                    .with_contraction_order(order),
-            );
+        let expanded_input_full = r.expand().schoonschip_with_net::<false, AbstractIndex>(
+            &SchoonschipSettings::full()
+                .with_expanded_contracted_sums()
+                .with_contraction_order(order),
+        );
         print_three_vertex_method(
             &format!("expanded-input net full {name}"),
             expanded_input_full,
             &dummies,
         );
 
-        let full = r.schoonschip_with_net::<false, true, AbstractIndex>(
+        let full = r.schoonschip_with_net::<false, AbstractIndex>(
             &SchoonschipSettings::full()
                 .with_expanded_contracted_sums()
                 .with_contraction_order(order),

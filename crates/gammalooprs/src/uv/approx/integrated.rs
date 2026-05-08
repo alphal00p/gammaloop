@@ -1,7 +1,7 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{dirac::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{dirac::GammaSimplifier, metric::MetricSimplifier, schoonschip::Schoonschip};
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
@@ -25,6 +25,7 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 use crate::{
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
+    numerator::aind::Aind,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
@@ -126,7 +127,11 @@ impl Integrated<'_> {
             .unwrap();
 
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
-        t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
+        t_arg = t_arg
+            .simplify_metrics()
+            .simplify_gamma()
+            .schoonschip_net::<Aind>()
+            / graph.denominator(&reduced, |_| 1);
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg

@@ -538,14 +538,14 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> SymbolicNetExt<Aind>
 
 pub trait SymbolicNetParse {
     #[allow(clippy::result_large_err)]
-    fn parse_to_symbolic_net<Aind: AbsInd + ParseableAind>(
+    fn parse_to_symbolic_net<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
         settings: &ParseSettings,
     ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>>;
 }
 
 impl SymbolicNetParse for Atom {
-    fn parse_to_symbolic_net<Aind: AbsInd + ParseableAind>(
+    fn parse_to_symbolic_net<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
         settings: &ParseSettings,
     ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>> {
@@ -554,7 +554,7 @@ impl SymbolicNetParse for Atom {
 }
 
 impl SymbolicNetParse for AtomView<'_> {
-    fn parse_to_symbolic_net<Aind: AbsInd + ParseableAind>(
+    fn parse_to_symbolic_net<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
         settings: &ParseSettings,
     ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>> {

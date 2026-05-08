@@ -290,7 +290,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
     expr
 }
 
-pub fn list_dangling_impl<Aind: ParseableAind + AbsInd>(view: AtomView) -> Vec<Atom> {
+pub fn list_dangling_impl<Aind: ParseableAind + AbsInd + DummyAind>(view: AtomView) -> Vec<Atom> {
     let a = view
         .parse_to_symbolic_net::<Aind>(&ParseSettings {
             take_first_term_from_sum: true,
@@ -305,7 +305,10 @@ pub fn list_dangling_impl<Aind: ParseableAind + AbsInd>(view: AtomView) -> Vec<A
         .collect()
 }
 
-pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd>(view: AtomView, header: Symbol) -> Atom {
+pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
+    view: AtomView,
+    header: Symbol,
+) -> Atom {
     let externals: HashSet<_> = list_dangling_impl::<Aind>(view).into_iter().collect();
 
     let mut expr = view.to_owned();

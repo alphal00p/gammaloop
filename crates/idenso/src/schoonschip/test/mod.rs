@@ -47,8 +47,8 @@ fn simple_dot() {
     let q3 = function!(q, 3, slot!(mink, 1).to_atom());
     let q3_2 = function!(q, 3, slot!(mink, 2).to_atom());
 
-    let result = (&p1 * &q2)
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
+    let result =
+        (&p1 * &q2).schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
     assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
     let result = (&p1 * &p1).schoonschip();
@@ -76,27 +76,26 @@ fn simple_dot() {
     assert_snapshot!(result.to_bare_ordered_string(), @"D*g(mink(D,1),mink(D,2))");
 
     let result = (&p1 * (&q2 + &p2 * &q3_2 * &q2_2))
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::partial());
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial());
     assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),P(2,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
     let result = (&p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2)))
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
     assert_snapshot!(result.to_bare_ordered_string(),@"(g(P(2,mink(D)),Q(2,bla,mink(D)))+g(Q(2,bla,mink(D)),Q(3,mink(D))))*g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
 
     let expr = (p1 + q3 * p1_2 * q2_2) * (q2 + p2);
 
-    let result =
-        expr.schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full());
+    let result = expr.schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
     assert_snapshot!(result.to_bare_ordered_string(),@"(P(1,mink(D,1))+Q(3,mink(D,1))*g(P(1,mink(D)),Q(2,bla,mink(D))))*(P(2,mink(D,1))+Q(2,bla,mink(D,1)))");
 
-    let result = expr.schoonschip_with_net::<false, true, AbstractIndex>(
+    let result = expr.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::full().with_expanded_contracted_sums(),
     );
     let result = result.to_bare_ordered_string();
     assert_snapshot!(result, @"g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(P(2,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))");
     assert!(!result.contains("mink(D,1)"));
 
-    let result = expr.schoonschip_with_net::<false, true, AbstractIndex>(
+    let result = expr.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial().with_expanded_contracted_sums(),
     );
     let result = result.to_bare_ordered_string();
@@ -259,22 +258,18 @@ fn benchmark_modes_output() {
 
     let single_pass_depth_one = expr
         .clone()
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::single_pass(
-            Some(1),
-        ))
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::single_pass(Some(1)))
         .to_bare_ordered_string();
     let depth_first_depth_one = expr
         .clone()
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::partial())
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial())
         .to_bare_ordered_string();
     let breadth_first_depth_one = expr
         .clone()
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::breadth_first(
-            Some(1),
-        ))
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::breadth_first(Some(1)))
         .to_bare_ordered_string();
     let full_top = expr
-        .schoonschip_with_net::<false, true, AbstractIndex>(&SchoonschipSettings::full())
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full())
         .to_bare_ordered_string();
 
     assert_ne!(single_pass_depth_one, full_top);
