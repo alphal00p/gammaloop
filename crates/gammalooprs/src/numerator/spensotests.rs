@@ -1,4 +1,4 @@
-use idenso::schoonschip::{Schoonschip, SchoonschipSettings};
+use idenso::schoonschip::Schoonschip;
 use symbolica::parse_lit;
 
 use crate::{
@@ -49,11 +49,5 @@ fn algebra() {
 
     println!("{}", expr.schoonschip().log_print(Some(120)));
     println!("{}", expr.schoonschip().schoonschip().log_print(Some(120)));
-    println!(
-        "{}",
-        expr.schoonschip_with_net::<true, false, Aind>(&SchoonschipSettings::breadth_first(Some(
-            1
-        )))
-        .log_print(Some(120))
-    );
+    println!("{}", expr.schoonschip_net::<Aind>().log_print(Some(120)));
 }

@@ -17,10 +17,12 @@ use super::{
     settings::SchoonschipSettings,
 };
 
-static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
+static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 4]> = LazyLock::new(|| {
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
+    let dualizable_j = T.dualizable_::<0, _>([W_.d_, W_.j_]);
     let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
+    let dualizable_dual_j = T.dualizable_dual_::<0, _>([W_.d_, W_.j_]);
     let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
 
     [
@@ -41,6 +43,12 @@ static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(
                 * function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
             .to_pattern(),
             function_with_replacement.clone(),
+        ),
+        Replacement::new(
+            (function!(ETS.metric, &dualizable, &dualizable_dual_j)
+                * function!(W_.a_, W_.a___, &dualizable_j, W_.b___))
+            .to_pattern(),
+            function!(W_.a_, W_.a___, &dualizable, W_.b___),
         ),
     ]
 });
@@ -184,10 +192,6 @@ impl SchoonschipWithSettings<'_> {
     }
 
     fn apply_once(&self, view: AtomView<'_>) -> Atom {
-        // The broad bare-symbolic pass may use product patterns over plain
-        // functions; the network path deliberately calls `normalize_dots()`
-        // instead so these broad patterns do not pre-empt network-backed
-        // contractions.
         let metric_simplified = view
             .to_owned()
             .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS);

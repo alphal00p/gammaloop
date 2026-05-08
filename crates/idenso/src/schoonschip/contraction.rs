@@ -378,13 +378,14 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
             SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
         } else {
             SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
-        };
+        }
+        .into_single_pass();
 
         for tensor in &mut executor.tensors {
             if tensor.structure.is_scalar() && tensor.is_composite {
                 tensor.expression = tensor
                     .expression
-                    .schoonschip_with_net::<EXPANDSUMS, true, Aind>(&settings);
+                    .schoonschip_with_net::<EXPANDSUMS, Aind>(&settings);
                 tensor.is_composite = false;
                 tensor.is_metric = false;
             }
@@ -746,9 +747,9 @@ fn recursive_schoonschip<
 >(
     expr: &Atom,
 ) -> Atom {
-    expr.schoonschip_with_net::<EXPANDSUMS, true, Aind>(&recursive_schoonschip_settings::<
-        DEPTH_FIRST,
-    >())
+    expr.schoonschip_with_net::<EXPANDSUMS, Aind>(
+        &recursive_schoonschip_settings::<DEPTH_FIRST>().into_single_pass(),
+    )
 }
 
 fn finish_contract<
@@ -1019,10 +1020,9 @@ impl<
                 result
             } else {
                 let fallback_start = trace.then(Instant::now);
+                let settings = recursive_schoonschip_settings::<DEPTH_FIRST>().into_single_pass();
                 let result = distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
-                    .schoonschip_with_net::<false, false, Aind>(&recursive_schoonschip_settings::<
-                        DEPTH_FIRST,
-                    >());
+                    .schoonschip_with_net::<false, Aind>(&settings);
                 if let Some(start) = fallback_start {
                     let residual_removed = removed_slots_still_in_expression(
                         self, other, &pos_self, &pos_other, &structure, &result,
