@@ -84,11 +84,12 @@ impl Scalar3LGraphCase {
 
     fn subtract_uv(self) -> bool {
         if self.disable_uv_subtraction {
-            assert!(
-                ALLOW_DISABLING_UV_SUBTRACTION,
-                "{} requests UV-subtraction fallback, but ALLOW_DISABLING_UV_SUBTRACTION is false",
-                self.graph
-            );
+            if !ALLOW_DISABLING_UV_SUBTRACTION {
+                panic!(
+                    "{} requests UV-subtraction fallback, but ALLOW_DISABLING_UV_SUBTRACTION is false",
+                    self.graph
+                );
+            }
             false
         } else {
             true
@@ -97,11 +98,12 @@ impl Scalar3LGraphCase {
 
     fn enable_thresholds(self) -> bool {
         if self.disable_threshold_subtraction {
-            assert!(
-                ALLOW_DISABLING_THRESHOLD_SUBTRACTION,
-                "{} requests threshold-subtraction fallback, but ALLOW_DISABLING_THRESHOLD_SUBTRACTION is false",
-                self.graph
-            );
+            if !ALLOW_DISABLING_THRESHOLD_SUBTRACTION {
+                panic!(
+                    "{} requests threshold-subtraction fallback, but ALLOW_DISABLING_THRESHOLD_SUBTRACTION is false",
+                    self.graph
+                );
+            }
             false
         } else {
             true

@@ -1926,7 +1926,6 @@ impl TestCffLtd {
         let mut parametric_atom: Option<Atom> = None;
         let mut component_atoms: Option<DiagnosticComponentAtoms> = None;
         let atom_build_start = Instant::now();
-        let atom_build_timing;
         if run_settings.build_strategy.is_iterative() {
             component_atoms = Some(diagnostic_component_atoms_for_evaluator(
                 &expression,
@@ -1939,7 +1938,7 @@ impl TestCffLtd {
                 &evaluator_settings,
             )?);
         }
-        atom_build_timing = atom_build_start.elapsed();
+        let atom_build_timing = atom_build_start.elapsed();
         write_path(
             &expression_path,
             &serde_json::to_string_pretty(&expression)?,
@@ -3842,7 +3841,6 @@ impl DiagnosticExternalSource {
             (
                 _,
                 ParamBuilderInputGroup::Runtime
-                | ParamBuilderInputGroup::SymbolicaConstant
                 | ParamBuilderInputGroup::Model
                 | ParamBuilderInputGroup::Polarization
                 | ParamBuilderInputGroup::LocalCounterterm,
@@ -5003,6 +5001,7 @@ fn profile_evaluator_for_precision(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn profile_record_from_timings(
     target: Duration,
     target_seconds: f64,

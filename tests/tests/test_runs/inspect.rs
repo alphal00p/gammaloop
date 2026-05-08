@@ -228,6 +228,7 @@ fn setup_generated_scalar_forward_cross_sections_cli(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn setup_generated_scalar_forward_cross_sections_cli_with_commands(
     test_name: &str,
     representation: &str,
@@ -251,6 +252,7 @@ fn setup_generated_scalar_forward_cross_sections_cli_with_commands(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn setup_generated_scalar_forward_cross_sections_cli_with_commands_and_local_uv_mode(
     test_name: &str,
     representation: &str,
@@ -1539,7 +1541,8 @@ fn ltd_generated_gl11_simple_cut_inspect_matches_cff() -> Result<()> {
     )?;
 
     let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-    for process in ["scalar_xs_rep_gl11"] {
+    {
+        let process = "scalar_xs_rep_gl11";
         let cff_result =
             evaluate_xspace_process_with_events(&mut cff, process, "no_numerator", &point, &[])?;
         let ltd_result =

@@ -729,12 +729,13 @@ impl CrossSectionGraph {
     ) -> Result<GraphGenerationStats> {
         global_settings.ensure_step_iii_pending_options_are_supported()?;
         let settings = &global_settings.generation;
-        if global_settings.three_d_representation == ThreeDRepresentation::Ltd {
-            if settings.uv.subtract_uv && !settings.uv.local_uv_cts_from_expanded_4d_integrands {
-                return Err(eyre!(
-                    "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported for cross-section supergraphs; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
-                ));
-            }
+        if global_settings.three_d_representation == ThreeDRepresentation::Ltd
+            && settings.uv.subtract_uv
+            && !settings.uv.local_uv_cts_from_expanded_4d_integrands
+        {
+            return Err(eyre!(
+                "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported for cross-section supergraphs; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
+            ));
         }
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
@@ -1823,7 +1824,7 @@ impl CrossSectionGraph {
         };
         let root_expression = threshold_root_expression
             .as_ref()
-            .or_else(|| self.derived_data.global_cff_expression.as_ref());
+            .or(self.derived_data.global_cff_expression.as_ref());
         let projected_raised_cut_groups = if threshold_projection_representation != representation {
             let expression = root_expression
                 .as_ref()

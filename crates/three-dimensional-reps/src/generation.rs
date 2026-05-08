@@ -827,6 +827,9 @@ struct DenominatorTerm {
     chain: Vec<HybridSurfaceID>,
 }
 
+type DenominatorTermKey = (Vec<usize>, Vec<usize>, Vec<HybridSurfaceID>);
+type DenominatorTermAccumulator = BTreeMap<DenominatorTermKey, Rational>;
+
 #[derive(Debug, Clone)]
 struct ContactComponent {
     sample: i32,
@@ -1626,7 +1629,7 @@ impl<'a> DenominatorDerivativeExpander<'a> {
         }
 
         let total_factor = multi_factorial(gamma);
-        let mut accum = BTreeMap::<(Vec<usize>, Vec<usize>, Vec<HybridSurfaceID>), Rational>::new();
+        let mut accum = DenominatorTermAccumulator::new();
         self.accumulate_terms(
             0,
             gamma.to_vec(),
@@ -1662,7 +1665,7 @@ impl<'a> DenominatorDerivativeExpander<'a> {
         chain: Vec<HybridSurfaceID>,
         denom_factorial: Rational,
         total_factor: Rational,
-        accum: &mut BTreeMap<(Vec<usize>, Vec<usize>, Vec<HybridSurfaceID>), Rational>,
+        accum: &mut DenominatorTermAccumulator,
     ) {
         if factor_index == self.factors.len() {
             if remaining.iter().any(|order| *order != 0) {

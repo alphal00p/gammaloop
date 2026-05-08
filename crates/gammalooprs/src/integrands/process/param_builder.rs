@@ -61,7 +61,6 @@ pub struct ParamValuePairs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamBuilderInputGroup {
     Runtime,
-    SymbolicaConstant,
     Model,
     ExternalEnergy,
     ExternalSpatial,
@@ -139,7 +138,6 @@ pub trait ParamBuilderGraph {
 pub struct GammaLoopPairs {
     m_uv: ParamValuePairs,
     idenso_vars: ParamValuePairs,
-    symbolica_constants: ParamValuePairs,
     mu_r_sq: ParamValuePairs,
     numerator_sampling_scale: ParamValuePairs,
     orientations: ParamValuePairs,
@@ -169,7 +167,7 @@ pub struct GammaLoopPairs {
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 28>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -177,7 +175,6 @@ impl IntoIterator for GammaLoopPairs {
             self.mu_r_sq,
             self.numerator_sampling_scale,
             self.idenso_vars,
-            self.symbolica_constants,
             self.model_parameters,
             self.external_energies,
             self.external_spatial,
@@ -208,7 +205,7 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 28>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -216,7 +213,6 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.mu_r_sq,
             &self.numerator_sampling_scale,
             &self.idenso_vars,
-            &self.symbolica_constants,
             &self.model_parameters,
             &self.external_energies,
             &self.external_spatial,
@@ -247,7 +243,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 28>;
+    type IntoIter = std::array::IntoIter<Self::Item, 27>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -255,7 +251,6 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.mu_r_sq,
             &mut self.numerator_sampling_scale,
             &mut self.idenso_vars,
-            &mut self.symbolica_constants,
             &mut self.model_parameters,
             &mut self.external_energies,
             &mut self.external_spatial,
@@ -300,8 +295,6 @@ impl GammaLoopPairs {
         self.mu_r_sq.validate();
         debug!("Validating numerator_sampling_scale");
         self.numerator_sampling_scale.validate();
-        debug!("Validating symbolica_constants");
-        self.symbolica_constants.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -356,7 +349,6 @@ impl GammaLoopPairs {
             numerator_sampling_scale: ParamValuePairs::default_from_symbol(
                 GS.numerator_sampling_scale,
             ),
-            symbolica_constants: [Atom::var(GS.pi)].into_iter().collect(),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -1299,10 +1291,6 @@ impl<T: FloatLike> ParamBuilder<T> {
                 ParamBuilderInputGroup::Runtime,
             ),
             (&self.pairs.idenso_vars, ParamBuilderInputGroup::Model),
-            (
-                &self.pairs.symbolica_constants,
-                ParamBuilderInputGroup::SymbolicaConstant,
-            ),
             (&self.pairs.model_parameters, ParamBuilderInputGroup::Model),
             (
                 &self.pairs.external_energies,
@@ -1490,7 +1478,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         .unwrap();
         // new.fn_map.add_conditional(GS.orientation_if);
         new.values = vec![vec![Complex::new_re(F(T::new_zero())); len]];
-        new.update_symbolica_constant_values();
         new.update_model_values(model);
         new.update_idenso_values();
 
@@ -1543,23 +1530,6 @@ impl<T: FloatLike> ParamBuilder<T> {
                 tr_value.clone();
             values[self.pairs.idenso_vars.value_range.start * multiplicative_offset
                 + multiplicative_offset] = nc_value.clone();
-        }
-    }
-
-    pub(crate) fn update_symbolica_constant_values(&mut self) {
-        debug_assert_eq!(
-            self.pairs.symbolica_constants.params.as_slice(),
-            &[Atom::var(GS.pi)]
-        );
-        debug_assert!(self.pairs.symbolica_constants.value_range.len() == 1);
-
-        let zero = F(T::new_zero());
-        let pi_value = Complex::new_re(zero.PI());
-
-        for (index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = index + 1;
-            values[self.pairs.symbolica_constants.value_range.start * multiplicative_offset] =
-                pi_value.clone();
         }
     }
 

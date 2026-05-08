@@ -309,7 +309,7 @@ impl GammaLoopOrientationExpression for OrientationExpression {
     }
 
     fn numerator_atom_gs(&self, graph: &Graph, numerator: &Atom) -> Atom {
-        numerator.replace_multiple(&self.energy_replacements_gs(graph))
+        numerator.replace_multiple(self.energy_replacements_gs(graph))
     }
 
     fn parametric_atom_without_orientation_thetas_gs<E, H>(
@@ -461,13 +461,13 @@ where
 pub fn numerator_with_positive_internal_ose_gs(graph: &Graph) -> Atom {
     graph
         .full_numerator_atom()
-        .replace_multiple(&positive_internal_ose_energy_replacements_gs(graph))
+        .replace_multiple(positive_internal_ose_energy_replacements_gs(graph))
 }
 
 pub fn numerator_with_internal_energy_parameters_gs(graph: &Graph) -> Atom {
     graph
         .full_numerator_atom()
-        .replace_multiple(&internal_energy_parameter_replacements_gs(graph))
+        .replace_multiple(internal_energy_parameter_replacements_gs(graph))
 }
 
 pub fn internal_energy_parameter_atom_gs(edge_id: EdgeIndex) -> Atom {

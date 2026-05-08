@@ -104,6 +104,7 @@ fn setup_repeated_bubble_model_cli(
     Ok(cli)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn setup_repeated_bubble_cli_impl(
     test_name: &str,
     process: &str,
@@ -351,7 +352,7 @@ fn event_weight_summary(evaluation: GenericEvaluationResultOutput<ArbPrec>) -> E
         if let Some(original) =
             scaled_additional_weight_precise(event, &AdditionalWeightKey::Original)
         {
-            summary.original = summary.original + original;
+            summary.original += original;
         }
         for (key, value) in &event.additional_weights.weights {
             if matches!(
@@ -366,8 +367,7 @@ fn event_weight_summary(evaluation: GenericEvaluationResultOutput<ArbPrec>) -> E
                     .cloned()
                     .unwrap_or_else(one_complex::<ArbPrec>);
                 let scaled_value = value.clone() * full_factor;
-                summary.threshold_counterterms =
-                    summary.threshold_counterterms + scaled_value.clone();
+                summary.threshold_counterterms += scaled_value.clone();
                 summary
                     .threshold_counterterm_entries
                     .push((key.to_string(), scaled_value));
@@ -446,6 +446,7 @@ fn event_summary_for_delta(
     Ok(event_weight_summary(result))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn event_comparison_row(
     case_a: &mut gammaloop_integration_tests::CLIState,
     case_b: &mut gammaloop_integration_tests::CLIState,

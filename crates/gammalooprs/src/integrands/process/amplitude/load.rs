@@ -7,10 +7,10 @@
 //! rand = "0.9"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "460822f51949f12c58dbfe0352cbee97c17a9e6c", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "460822f51949f12c58dbfe0352cbee97c17a9e6c" }
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "460822f51949f12c58dbfe0352cbee97c17a9e6c" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
 //! ```
 
 #![allow(dead_code)]
@@ -441,7 +441,7 @@ impl Default for StandaloneCliOptions {
 enum StandaloneRuntimeEvaluator<'a> {
     Eager(&'a mut ExpressionEvaluator<Complex<f64>>),
     Compiled(CompiledComplexEvaluator),
-    Symjit(JITCompiledEvaluator<Complex<f64>>),
+    Symjit(Box<JITCompiledEvaluator<Complex<f64>>>),
 }
 
 impl<'a> StandaloneRuntimeEvaluator<'a> {
@@ -479,9 +479,9 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .map_err(|err| eyre!(err))?;
                 Ok(Self::Compiled(compiled))
             }
-            StandaloneBackend::Symjit => Ok(Self::Symjit(
+            StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
                 evaluator.jit_compile().map_err(|err| eyre!(err))?,
-            )),
+            ))),
         }
     }
 

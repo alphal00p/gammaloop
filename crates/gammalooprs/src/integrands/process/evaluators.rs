@@ -2230,6 +2230,39 @@ mod tests {
     }
 
     #[test]
+    fn iterative_evaluator_merges_pi_free_and_builtin_pi_outputs() {
+        let params = vec![parse!("x")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![parse!("x"), Atom::var(Symbol::PI) * parse!("x")],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        let input = [Complex::new_re(F(2.0))];
+        let mut eager_out = [Complex::<F<f64>>::default(); 2];
+        evaluator.f64_eager.evaluate(&input, &mut eager_out);
+        assert_eq!(eager_out[0], Complex::new_re(F(2.0)));
+        assert!((eager_out[1].re.0 - 2.0 * std::f64::consts::PI).abs() < 1.0e-15);
+        assert!(eager_out[1].im.0.abs() < 1.0e-15);
+
+        evaluator.activate_symjit().unwrap();
+        let mut symjit_out = [Complex::<F<f64>>::default(); 2];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&input, &mut symjit_out);
+        assert_eq!(symjit_out, eager_out);
+    }
+
+    #[test]
     fn symbolica_pi_spellings_parse_as_builtin_constant() {
         let builtin = Atom::var(Symbol::PI);
         assert_eq!(

@@ -633,7 +633,7 @@ fn expanded_expression_parametric_atom(
         if !pattern.filter_orientation(orientation.orientation()) {
             continue;
         }
-        let mut atom = numerator.replace_multiple(&orientation.energy_replacements_gs(graph));
+        let mut atom = numerator.replace_multiple(orientation.energy_replacements_gs(graph));
         atom *= orientation
             .variants
             .iter()

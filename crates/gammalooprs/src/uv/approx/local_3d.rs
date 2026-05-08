@@ -115,7 +115,7 @@ impl Local3DApproximation {
                         .with(
                             FunctionBuilder::new(GS.emr_vec)
                                 .add_arg(W_.x_)
-                                .add_args(&[W_.x___])
+                                .add_args([W_.x___])
                                 .finish(),
                         )
                         + externals * GS.rescale)

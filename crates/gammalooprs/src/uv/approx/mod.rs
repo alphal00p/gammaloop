@@ -399,6 +399,7 @@ impl Approximation {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn final_integrand_from_root_expression(
         &self,
         graph: &Graph,

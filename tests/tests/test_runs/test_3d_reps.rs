@@ -1055,6 +1055,7 @@ fn run_threedrep_test_cff_ltd_manifest(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_threedrep_test_cff_ltd_manifest_for_graph(
     cli: &mut gammaloop_integration_tests::CLIState,
     workspace_path: &Path,
@@ -2641,7 +2642,14 @@ fn cli_multiloop_high_power_energy_sectors_match_ltd_inner() -> Result<()> {
     let test_name = "threedreps_multiloop_high_power_sectors";
     clean_test(get_tests_workspace_path().join(test_name));
 
-    let cases: [(&str, &str, &[(usize, usize)], u64, f64); 3] = [
+    type HighPowerSectorCase = (
+        &'static str,
+        &'static str,
+        &'static [(usize, usize)],
+        u64,
+        f64,
+    );
+    let cases: [HighPowerSectorCase; 3] = [
         (
             "sunrise_pow4_free_lower_sector_quintic",
             "sunrise_pow4.dot",
@@ -3031,7 +3039,8 @@ fn cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches() -> R
     let mut cli = import_aa_aa_threedrep_graphs(test_name, process_name)?;
     set_threedrep_compile_backend(&mut cli, None)?;
 
-    for (graph_id, graph_label) in [(0usize, "box")] {
+    {
+        let (graph_id, graph_label) = (0usize, "box");
         let standard_workspace = workspace_path.join(format!("graph_{graph_id}_standard"));
         cli.run_command(&format!(
             "3Drep build -p {process_name} -i default -g {graph_id} --representation cff --numerator-samples-normalization M_for_beyond_quadratic_only --workspace-path {} --no-pretty --clean",

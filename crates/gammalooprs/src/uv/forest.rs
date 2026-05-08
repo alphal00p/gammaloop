@@ -165,6 +165,7 @@ pub(crate) fn cff_explicit_sum_needs_outer_orientation_projection(
 }
 
 impl CutForests {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
