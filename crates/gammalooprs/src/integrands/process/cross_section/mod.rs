@@ -765,7 +765,6 @@ impl CrossSectionGraphTerm {
                         } else {
                             None
                         };
-                        
                         let evaluator = graph.iterated_th_helper(
                             left_threshold_order as u8,
                             right_threshold_order as u8,

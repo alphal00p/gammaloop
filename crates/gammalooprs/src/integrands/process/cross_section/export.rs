@@ -11,8 +11,8 @@ use super::{
         STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive, StandaloneCrossSectionArchive,
         StandaloneCrossSectionGraphTermArchive, StandaloneCutCFFIndex,
         StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
-        StandaloneIndexedGenericEvaluatorArchive,
-        StandaloneIndexedEvaluatorStackArchive, StandaloneIteratedCollectionArchive,
+        StandaloneIndexedEvaluatorStackArchive, StandaloneIndexedGenericEvaluatorArchive,
+        StandaloneIteratedCollectionArchive,
     },
 };
 use crate::{
