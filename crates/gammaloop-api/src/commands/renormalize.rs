@@ -70,6 +70,8 @@ impl Renormalize {
 
         let mut renormalization_part: Vec<Atom> = Vec::new();
         let output_dir = if let Some(path) = self.result_path.clone() {
+            global_cli_settings
+                .ensure_write_target_outside_active_state(&path, "write renormalization output")?;
             fs::create_dir_all(&path)?;
             Some(path)
         } else {

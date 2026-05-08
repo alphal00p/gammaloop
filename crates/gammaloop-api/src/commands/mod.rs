@@ -218,15 +218,23 @@ impl Commands {
             )?,
             Commands::Set(s) => s.run(state, global_cli_settings, default_runtime_settings)?,
             Commands::Generate(g) => {
+                let only_generates_diagrams = matches!(
+                    g.mode.as_ref(),
+                    Some(generate::GenerateCmd::Amp(args) | generate::GenerateCmd::Xs(args))
+                        if args.only_diagrams
+                );
                 let would_compile_into_active_state = global_cli_settings.session.read_only_state
                     && global_cli_settings.global.generation.evaluator.compile
-                    && matches!(
-                        g.mode.as_ref(),
-                        None | Some(generate::GenerateCmd::Existing(_))
-                    );
+                    && global_cli_settings
+                        .global
+                        .generation
+                        .compile
+                        .requires_external_compilation()
+                    && !only_generates_diagrams;
                 if would_compile_into_active_state {
                     return Err(Report::msg(format!(
-                        "Cannot compile generated integrands into '{}' because this session was started with --read-only-state. Disable `global.generation.evaluator.compile`, restart without --read-only-state, or save the state elsewhere first.",
+                        "Cannot compile generated integrands with the '{}' backend into '{}' because this session was started with --read-only-state. Disable `global.generation.evaluator.compile`, use the `symjit` backend, generate diagrams only, restart without --read-only-state, or save the state elsewhere first.",
+                        global_cli_settings.global.generation.compile.compilation_mode,
                         global_cli_settings.state.folder.display()
                     )));
                 }
@@ -306,7 +314,7 @@ mod tests {
         state::{RunHistory, State},
         CLISettings,
     };
-    use gammalooprs::settings::RuntimeSettings;
+    use gammalooprs::settings::{global::CompilationMode, RuntimeSettings};
 
     #[test]
     fn generate_rejects_compilation_into_active_state_in_read_only_mode() {
@@ -316,6 +324,7 @@ mod tests {
         let mut runtime_settings = RuntimeSettings::default();
         cli_settings.session.read_only_state = true;
         cli_settings.global.generation.evaluator.compile = true;
+        cli_settings.global.generation.compile.compilation_mode = CompilationMode::Assembly;
 
         let err = Commands::Generate(Generate {
             keep_sources: false,

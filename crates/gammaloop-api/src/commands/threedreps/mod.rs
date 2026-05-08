@@ -98,7 +98,7 @@ impl ThreeDRep {
         default_runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
         match self {
-            Self::Validate(command) => command.run(state),
+            Self::Validate(command) => command.run(state, global_cli_settings),
             Self::Build(command) => {
                 command.run(state, global_cli_settings, default_runtime_settings)
             }
@@ -108,7 +108,7 @@ impl ThreeDRep {
             Self::TestCffLtd(command) => {
                 command.run(state, global_cli_settings, default_runtime_settings)
             }
-            Self::GraphFromSignatures(command) => command.run(),
+            Self::GraphFromSignatures(command) => command.run(global_cli_settings),
         }
     }
 }
@@ -1134,7 +1134,7 @@ impl<'a> GraphCatalog<'a> {
 }
 
 impl Validate {
-    fn run(&self, state: &State) -> Result<()> {
+    fn run(&self, state: &State, global_cli_settings: &CLISettings) -> Result<()> {
         let selected = select_graph(state, &self.selection)?;
         let parsed = selected.graph.to_three_d_parsed_graph()?;
         let output = ValidateOutput {
@@ -1145,6 +1145,10 @@ impl Validate {
             graph: graph_info(&parsed),
             validation: validate_parsed_graph(&parsed),
         };
+        if let Some(path) = &self.json_out {
+            global_cli_settings
+                .ensure_write_target_outside_active_state(path, "write 3Drep validation JSON")?;
+        }
         write_or_print(
             self.json_out.as_deref(),
             &serde_json::to_string_pretty(&output)?,
@@ -1181,6 +1185,8 @@ impl Build {
             .energy_degree_bounds
             .clone_from(&energy_degree_bounds);
         let workspace = self.workspace_path(global_cli_settings);
+        global_cli_settings
+            .ensure_write_target_outside_active_state(&workspace, "write 3Drep workspace")?;
         let artifact_dir = build_artifact_dir(
             &workspace,
             &selected,
@@ -1191,6 +1197,10 @@ impl Build {
             .json_out
             .clone()
             .unwrap_or_else(|| artifact_dir.join("oriented_expression.json"));
+        global_cli_settings.ensure_write_target_outside_active_state(
+            &json_path,
+            "write 3Drep oriented expression",
+        )?;
         let numerator_interpolation_scale =
             definite_numerator_interpolation_scale(default_runtime_settings);
         let cached_output = if !self.clean && json_path.exists() {
@@ -1302,6 +1312,8 @@ impl Evaluate {
             .workspace_path
             .clone()
             .unwrap_or_else(|| default_workspace_path(global_cli_settings));
+        global_cli_settings
+            .ensure_write_target_outside_active_state(&workspace, "write 3Drep workspace")?;
         let input = self.resolve_input(state, global_cli_settings, &workspace)?;
         if let Some(expression_path) = &input.expression_path {
             println!(
@@ -1355,6 +1367,10 @@ impl Evaluate {
             .then(|| numerator_only_orientation(selected.graph));
         let expression = input.artifact.as_ref().map(|artifact| &artifact.expression);
         let artifact_dir = input.artifact_dir;
+        global_cli_settings.ensure_write_target_outside_active_state(
+            &artifact_dir,
+            "write 3Drep evaluate artifacts",
+        )?;
         let symbolica_expression_path = artifact_dir.join("symbolica_expression.txt");
         let symbolica_expression_pretty_path = artifact_dir.join("symbolica_expression_pretty.txt");
         let symbolica_expression_raw_path = artifact_dir.join("symbolica_expression_raw.json");
@@ -1644,10 +1660,18 @@ impl Evaluate {
         let artifact_dir = if self.numerator_only {
             graph_workspace_dir(workspace, &selected).join("numerator_only")
         } else {
-            expression_path
+            let expression_artifact_dir = expression_path
                 .parent()
                 .map(Path::to_path_buf)
-                .unwrap_or_else(|| workspace.to_path_buf())
+                .unwrap_or_else(|| workspace.to_path_buf());
+            if global_cli_settings.session.read_only_state
+                && global_cli_settings
+                    .write_target_lies_within_active_state(&expression_artifact_dir)?
+            {
+                graph_workspace_dir(workspace, &selected).join("evaluate_from_json")
+            } else {
+                expression_artifact_dir
+            }
         };
         let numerator_sampling_scale_mode = artifact.numerator_sampling_scale_mode;
         Ok(EvaluateInput {
@@ -1756,6 +1780,10 @@ impl TestCffLtd {
             .workspace_path
             .clone()
             .unwrap_or_else(|| default_workspace_path(global_cli_settings));
+        global_cli_settings.ensure_write_target_outside_active_state(
+            &workspace,
+            "write 3Drep comparison workspace",
+        )?;
         let graph_workspace = graph_workspace_dir(&workspace, &selected);
         let manifest_path = graph_workspace.join("test_cff_ltd_manifest.json");
         let automatic_energy_degree_bounds = selected
@@ -2252,7 +2280,7 @@ impl TestCffLtd {
 }
 
 impl GraphFromSignatures {
-    fn run(&self) -> Result<()> {
+    fn run(&self, global_cli_settings: &CLISettings) -> Result<()> {
         let expression = if let Some(path) = &self.signatures_file {
             fs::read_to_string(path)
                 .with_context(|| format!("Could not read signatures from {}", path.display()))?
@@ -2287,6 +2315,10 @@ impl GraphFromSignatures {
             print!("{dot}");
             Ok(())
         } else {
+            global_cli_settings.ensure_write_target_outside_active_state(
+                &self.dot_output,
+                "write reconstructed graph DOT",
+            )?;
             write_path(&self.dot_output, &dot)
         }
     }
@@ -5164,15 +5196,7 @@ fn merge_energy_degree_bounds(
 
 fn default_workspace_path(global_cli_settings: &CLISettings) -> PathBuf {
     if global_cli_settings.session.read_only_state {
-        let workspace_name = global_cli_settings
-            .state
-            .name
-            .as_deref()
-            .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .map(|name| format!("threed_workspace_{name}"))
-            .unwrap_or_else(|| "threed_workspace".to_string());
-        PathBuf::from(".").join(workspace_name)
+        global_cli_settings.cwd_output_path_with_state_name("threed_workspace")
     } else {
         global_cli_settings.state.folder.join("threed_workspace")
     }

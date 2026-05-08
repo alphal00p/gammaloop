@@ -1173,6 +1173,10 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("threshold_counterterm:{subset_index}")
         }
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("amplitude_threshold_counterterm:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -1688,6 +1692,7 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
     }
 }
 
+#[allow(dead_code)]
 fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     if let Ok(process_id) = process.extract::<usize>() {
         return Ok(ProcessRef::Id(process_id));
@@ -1701,6 +1706,7 @@ fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
 }
 
+#[allow(dead_code)]
 fn py_complex_target_from_any(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
@@ -1723,6 +1729,7 @@ fn py_complex_target_from_any(
     ))
 }
 
+#[allow(dead_code)]
 fn resolve_python_slot_key(
     state: &State,
     process: &ProcessRef,
@@ -1742,6 +1749,7 @@ fn resolve_python_slot_key(
     ))
 }
 
+#[allow(dead_code)]
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2182,6 +2190,29 @@ impl GammaLoopAPI {
             default_runtime_settings,
             session_state,
         })
+    }
+
+    #[getter]
+    pub(crate) fn read_only_state(&self) -> bool {
+        self.cli_settings.session.read_only_state
+    }
+
+    #[pyo3(name = "is_read_only_state", signature = ())]
+    pub(crate) fn is_read_only_state_python(&self) -> bool {
+        self.cli_settings.session.read_only_state
+    }
+
+    #[pyo3(name = "state_access_mode", signature = ())]
+    pub(crate) fn state_access_mode_python(&self) -> &'static str {
+        match self.cli_settings.session.state_access_mode() {
+            crate::StateAccessMode::ReadWrite => "read_write",
+            crate::StateAccessMode::ReadOnly => "read_only",
+        }
+    }
+
+    #[getter]
+    pub(crate) fn active_state_folder(&self) -> String {
+        self.cli_settings.state.folder.display().to_string()
     }
 
     #[pyo3(

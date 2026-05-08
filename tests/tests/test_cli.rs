@@ -11,7 +11,7 @@ use std::{
 
 use color_eyre::Result;
 use gammaloop_api::{
-    CLISettings, OneShot, StateLoadOption,
+    CLISettings, OneShot, StateAccessMode, StateLoadOption,
     state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
@@ -625,6 +625,34 @@ fn boot_mismatch_uses_conflicting_boot_blocks_read_only() -> Result<()> {
             .startup_warnings
             .iter()
             .any(|warning| warning.contains("will use the boot card command block definitions"))
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn state_load_option_read_only_sets_loaded_state_access_mode() -> Result<()> {
+    let test_name = "state_load_option_read_only_sets_loaded_state_access_mode";
+    let mut cli = new_cli(test_name)?;
+
+    cli.run_history.commands.push(command("quit -n"));
+    cli.save_state()?;
+
+    let loaded = StateLoadOption::read_only(cli.cli_settings.state.folder.clone()).load()?;
+
+    assert_eq!(loaded.state_access_mode(), StateAccessMode::ReadOnly);
+    assert!(loaded.is_read_only_state());
+    assert_eq!(
+        loaded.active_state_folder(),
+        cli.cli_settings.state.folder.as_path()
+    );
+    assert!(
+        loaded
+            .ensure_write_target_allowed(
+                &cli.cli_settings.state.folder.join("nested"),
+                "write test artifact",
+            )
+            .is_err()
     );
     Ok(())
 }
