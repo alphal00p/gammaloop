@@ -5013,12 +5013,14 @@ fn profile_record_from_timings(
     timing_per_sample_seconds: f64,
     sample_timings: &[f64],
 ) -> ThreeDrepProfileRecord {
-    let variance = profile_sample_variance(sample_timings, timing_per_sample_seconds);
+    let sample_mean_seconds =
+        profile_sample_mean(sample_timings).unwrap_or(timing_per_sample_seconds);
+    let variance = profile_sample_variance(sample_timings, sample_mean_seconds);
     let stddev = variance.sqrt();
-    let standard_error = if calls > 0 {
-        stddev / (calls as f64).sqrt()
-    } else {
+    let standard_error = if sample_timings.is_empty() {
         0.0
+    } else {
+        stddev / (sample_timings.len() as f64).sqrt()
     };
     ThreeDrepProfileRecord {
         target_timing: format_duration_dynamic(target),
@@ -5041,6 +5043,11 @@ fn profile_record_from_timings(
         )),
         timing_per_sample_standard_error_seconds: standard_error,
     }
+}
+
+fn profile_sample_mean(sample_timings: &[f64]) -> Option<f64> {
+    (!sample_timings.is_empty())
+        .then(|| sample_timings.iter().sum::<f64>() / sample_timings.len() as f64)
 }
 
 fn profile_sample_variance(sample_timings: &[f64], mean: f64) -> f64 {

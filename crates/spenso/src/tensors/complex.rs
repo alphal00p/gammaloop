@@ -384,7 +384,7 @@ where
                             .add_function(name_re, Vec::<Symbol>::new(), c.re.clone().into())
                             .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_re}: {err}"));
                             fn_map
-                            .add_function(name_im, Vec::<Symbol>::new(), c.re.clone().into())
+                            .add_function(name_im, Vec::<Symbol>::new(), c.im.clone().into())
                             .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_im}: {err}"));
                         }
                     }
@@ -410,7 +410,7 @@ where
                             .add_function(name_re, Vec::<Symbol>::new(), c.re.clone().into())
                             .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_re}: {err}"));
                             fn_map
-                            .add_function(name_im, Vec::<Symbol>::new(), c.re.clone().into())
+                            .add_function(name_im, Vec::<Symbol>::new(), c.im.clone().into())
                             .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_im}: {err}"));
                         }
                     }

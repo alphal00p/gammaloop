@@ -222,8 +222,12 @@ pub enum EvaluatorBackendPolicy {
     EagerOnly,
 }
 
-#[derive(Clone, Encode, Decode)]
-pub struct SymjitComplexEvaluatorGL(JITCompiledEvaluator<SymComplex<f64>>);
+#[derive(Clone)]
+pub struct SymjitComplexEvaluatorGL {
+    evaluator: JITCompiledEvaluator<SymComplex<f64>>,
+    args_scratch: Vec<SymComplex<f64>>,
+    out_scratch: Vec<SymComplex<f64>>,
+}
 
 impl std::fmt::Debug for SymjitComplexEvaluatorGL {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -232,17 +236,48 @@ impl std::fmt::Debug for SymjitComplexEvaluatorGL {
 }
 
 impl SymjitComplexEvaluatorGL {
-    pub fn evaluate(&mut self, args: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
-        let args = args
-            .iter()
-            .map(|z| SymComplex::new(z.re.0, z.im.0))
-            .collect::<Vec<_>>();
-        let mut symjit_out = vec![SymComplex::new(0.0, 0.0); out.len()];
-        self.0.evaluate(&args, &mut symjit_out);
+    fn new(evaluator: JITCompiledEvaluator<SymComplex<f64>>) -> Self {
+        Self {
+            evaluator,
+            args_scratch: Vec::new(),
+            out_scratch: Vec::new(),
+        }
+    }
 
-        for (out, value) in out.iter_mut().zip(symjit_out) {
+    pub fn evaluate(&mut self, args: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
+        self.args_scratch.clear();
+        self.args_scratch
+            .extend(args.iter().map(|z| SymComplex::new(z.re.0, z.im.0)));
+        self.out_scratch
+            .resize(out.len(), SymComplex::new(0.0, 0.0));
+        self.evaluator
+            .evaluate(&self.args_scratch, &mut self.out_scratch);
+
+        for (out, value) in out.iter_mut().zip(self.out_scratch.iter()) {
             *out = Complex::new(F(value.re), F(value.im));
         }
+    }
+}
+
+impl bincode::Encode for SymjitComplexEvaluatorGL {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        self.evaluator.encode(encoder)
+    }
+}
+
+impl<Context> bincode::Decode<Context> for SymjitComplexEvaluatorGL
+where
+    JITCompiledEvaluator<SymComplex<f64>>: bincode::Decode<Context>,
+{
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        Ok(Self::new(JITCompiledEvaluator::<SymComplex<f64>>::decode(
+            decoder,
+        )?))
     }
 }
 #[cfg_attr(
@@ -1272,8 +1307,9 @@ impl GenericEvaluator {
             let symjit_ready = rational
                 .clone()
                 .map_coeff_with_prec(&|r| SymComplex::new(r.re.to_f64(), r.im.to_f64()), 53);
-            let evaluator =
-                SymjitComplexEvaluatorGL(symjit_ready.jit_compile().map_err(|err| eyre!(err))?);
+            let evaluator = SymjitComplexEvaluatorGL::new(
+                symjit_ready.jit_compile().map_err(|err| eyre!(err))?,
+            );
             self.symjit_f64_compiled = Some(evaluator.clone());
             evaluator
         };
