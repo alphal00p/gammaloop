@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    algebra::algebraic_traits::{One, Zero},
+    algebra::{
+        ScalarMul,
+        algebraic_traits::{One, Zero},
+    },
     structure::{
         PermutedStructure,
         permuted::PermuteTensor,
@@ -51,7 +54,7 @@ use super::{
     library::LibraryTensor,
     store::{NetworkStore, TensorScalarStore},
 };
-use super::{Library, Network, TensorNetworkError, TensorOrScalarOrKey};
+use super::{FastTensorSum, Library, Network, Ref, TensorNetworkError, TensorOrScalarOrKey};
 
 #[derive(
     Debug,
@@ -153,7 +156,14 @@ impl<
     ) -> Result<Vec<ExecutionResult<Cow<'a, T>>>, TensorNetworkError<K, FK>>
     where
         S: 'a,
-        T: Clone + ScalarTensor + HasStructure,
+        T: Clone
+            + ScalarTensor
+            + HasStructure
+            + Ref
+            + FastTensorSum
+            + ScalarMul<S, Output = T>
+            + for<'b> AddAssign<<T as Ref>::Ref<'b>>,
+        S: Clone,
         T::Scalar: One + Zero,
         for<'b> &'b S: Into<T::Scalar>,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,

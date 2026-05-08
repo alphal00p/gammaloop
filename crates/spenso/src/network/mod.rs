@@ -42,7 +42,9 @@ use thiserror::Error;
 #[cfg(feature = "shadowing")]
 use crate::algebra::complex::RealOrComplexRef;
 #[cfg(feature = "shadowing")]
-use crate::tensors::parametric::{AtomViewOrConcrete, ParamOrConcrete, ParamTensor};
+use crate::tensors::parametric::{
+    AtomViewOrConcrete, ConcreteOrParam, ParamOrConcrete, ParamTensor,
+};
 use crate::tensors::{
     complex::RealOrComplexTensor,
     data::{DataTensor, DenseTensor, SparseTensor},
@@ -332,6 +334,55 @@ where
 }
 
 #[cfg(feature = "shadowing")]
+impl<C, S, CSc> FastTensorSumContractible<ConcreteOrParam<CSc>> for ParamOrConcrete<C, S>
+where
+    S: TensorStructure + Clone + Send + Sync + StructureContract,
+    S::Slot: Send + Sync,
+{
+    fn fast_tensor_sum_contract<CStrat>(
+        terms: &[&Self],
+        other: &Self,
+        terms_on_left: bool,
+    ) -> Option<Result<FastTensorSumContract<Self, ConcreteOrParam<CSc>>, ContractionError>> {
+        let param_terms = terms
+            .iter()
+            .map(|term| match term {
+                ParamOrConcrete::Param(param) => Some(param),
+                ParamOrConcrete::Concrete(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let ParamOrConcrete::Param(other) = other else {
+            return None;
+        };
+
+        <ParamTensor<S> as FastTensorSumContractible<Atom>>::fast_tensor_sum_contract::<CStrat>(
+            &param_terms,
+            other,
+            terms_on_left,
+        )
+        .map(|result| {
+            result.map(|contract| match contract {
+                FastTensorSumContract::Materialized(tensor) => {
+                    FastTensorSumContract::Materialized(ParamOrConcrete::Param(tensor))
+                }
+                FastTensorSumContract::Terms(terms) => FastTensorSumContract::Terms(
+                    terms.into_iter().map(ParamOrConcrete::Param).collect(),
+                ),
+                FastTensorSumContract::ScaledTerms(terms) => FastTensorSumContract::ScaledTerms(
+                    terms
+                        .into_iter()
+                        .map(|term| FastTensorSumContractTerm {
+                            tensor: ParamOrConcrete::Param(term.tensor),
+                            scalar: term.scalar.map(ConcreteOrParam::Param),
+                        })
+                        .collect(),
+                ),
+            })
+        })
+    }
+}
+
+#[cfg(feature = "shadowing")]
 impl<C, S> TensorCommonFactor<Atom> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone,
@@ -341,6 +392,24 @@ where
             ParamOrConcrete::Param(param) => param
                 .split_common_factor()
                 .map(|(tensor, factor)| (ParamOrConcrete::Param(tensor), factor)),
+            ParamOrConcrete::Concrete(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<C, S, CSc> TensorCommonFactor<ConcreteOrParam<CSc>> for ParamOrConcrete<C, S>
+where
+    S: TensorStructure + Clone,
+{
+    fn split_common_factor(&self) -> Option<(Self, ConcreteOrParam<CSc>)> {
+        match self {
+            ParamOrConcrete::Param(param) => param.split_common_factor().map(|(tensor, factor)| {
+                (
+                    ParamOrConcrete::Param(tensor),
+                    ConcreteOrParam::Param(factor),
+                )
+            }),
             ParamOrConcrete::Concrete(_) => None,
         }
     }
@@ -410,6 +479,18 @@ where
     if terms
         .iter()
         .any(|term| term.tensor.structure().external_structure() != sum_slots)
+    {
+        return None;
+    }
+
+    let numeric_structure = numeric_sparse.structure.clone();
+    let (left_structure, right_structure) = if terms_on_left {
+        (&sum_structure, &numeric_structure)
+    } else {
+        (&numeric_structure, &sum_structure)
+    };
+    if let Ok((_, left_matches, _, _)) = left_structure.merge(right_structure)
+        && left_matches.n_included() == 0
     {
         return None;
     }
@@ -1874,7 +1955,14 @@ where
     ) -> Result<ExecutionResult<Cow<'a, T>>, TensorNetworkError<K, FK>>
     where
         S: 'a,
-        T: Clone + ScalarTensor + HasStructure,
+        T: Clone
+            + ScalarTensor
+            + HasStructure
+            + Ref
+            + FastTensorSum
+            + ScalarMul<S, Output = T>
+            + for<'b> AddAssign<<T as Ref>::Ref<'b>>,
+        S: Clone,
         K: Display + Debug,
         FK: Display + Debug + Clone,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
@@ -1883,6 +1971,57 @@ where
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
+        let tensor_term_owned = |term: &TensorTerm| -> Result<T, TensorNetworkError<K, FK>> {
+            let tensor = self.store.get_tensor(term.tensor);
+            match term.scalar {
+                Some(scalar) => tensor
+                    .scalar_mul(self.store.get_scalar(scalar))
+                    .ok_or(TensorNetworkError::FailedScalarMul),
+                None => Ok(tensor.clone()),
+            }
+        };
+
+        let tensor_terms_owned = |terms: &[TensorTerm]| -> Result<T, TensorNetworkError<K, FK>> {
+            let materialized = terms
+                .iter()
+                .map(tensor_term_owned)
+                .collect::<Result<Vec<_>, _>>()?;
+            if let Some(result) = {
+                let refs = materialized.iter().collect::<Vec<_>>();
+                T::fast_tensor_sum(&refs, None)
+            } {
+                return Ok(result);
+            }
+            Ok(balanced_ref_sum(materialized, None))
+        };
+
+        let (node, nodeid, _) = self.graph.result()?;
+        if let NetworkNode::Leaf(leaf) = node {
+            match leaf {
+                NetworkLeaf::TensorSum(indices) => {
+                    let terms = indices
+                        .iter()
+                        .copied()
+                        .map(TensorTerm::tensor)
+                        .collect::<Vec<_>>();
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor_terms_owned(
+                        &terms,
+                    )?)));
+                }
+                NetworkLeaf::TensorTerm(term) => {
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor_term_owned(term)?)));
+                }
+                NetworkLeaf::TensorTermSum(terms) => {
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor_terms_owned(terms)?)));
+                }
+                NetworkLeaf::LibraryKey(_) => {
+                    let less = self.graph.get_lib_data(lib, nodeid).unwrap();
+                    return Ok(ExecutionResult::Val(Cow::Owned(less)));
+                }
+                NetworkLeaf::LocalTensor(_) | NetworkLeaf::Scalar(_) => {}
+            }
+        }
+
         Ok(match self.result()? {
             ExecutionResult::One => ExecutionResult::One,
             ExecutionResult::Zero => ExecutionResult::Zero,
@@ -1912,38 +2051,61 @@ where
             + for<'b> AddAssign<<S as Ref>::Ref<'b>>
             + for<'b> MulAssign<<S as Ref>::Ref<'b>>,
     {
-        let tensor_term_scalar = |term: &TensorTerm| -> Result<S, TensorNetworkError<K, FK>> {
-            let mut scalar: S = self
-                .store
-                .get_tensor(term.tensor)
+        let tensor_scalar = |tensor: usize| -> Result<S, TensorNetworkError<K, FK>> {
+            self.store
+                .get_tensor(tensor)
                 .clone()
                 .scalar()
-                .ok_or(TensorNetworkError::NoScalar)?
-                .into();
+                .ok_or(TensorNetworkError::NoScalar)
+                .map(Into::into)
+        };
+
+        let tensor_term_scalar = |term: &TensorTerm| -> Result<S, TensorNetworkError<K, FK>> {
+            let mut scalar: S = tensor_scalar(term.tensor)?;
             if let Some(factor) = term.scalar {
                 scalar *= self.store.get_scalar(factor).refer();
             }
             Ok(scalar)
         };
 
+        let tensor_sum_scalar =
+            |indices: &[usize]| -> Result<ExecutionResult<Cow<'a, S>>, TensorNetworkError<K, FK>> {
+                let mut iter = indices.iter();
+                let Some(first) = iter.next() else {
+                    return Ok(ExecutionResult::Zero);
+                };
+                let mut accumulator = tensor_scalar(*first)?;
+                for tensor in iter {
+                    let term_scalar = tensor_scalar(*tensor)?;
+                    accumulator += term_scalar.refer();
+                }
+                Ok(ExecutionResult::Val(Cow::Owned(accumulator)))
+            };
+
+        let tensor_term_sum_scalar = |terms: &[TensorTerm]| -> Result<
+            ExecutionResult<Cow<'a, S>>,
+            TensorNetworkError<K, FK>,
+        > {
+            let mut iter = terms.iter();
+            let Some(first) = iter.next() else {
+                return Ok(ExecutionResult::Zero);
+            };
+            let mut accumulator = tensor_term_scalar(first)?;
+            for term in iter {
+                let term_scalar = tensor_term_scalar(term)?;
+                accumulator += term_scalar.refer();
+            }
+            Ok(ExecutionResult::Val(Cow::Owned(accumulator)))
+        };
+
         let (node, _, _) = self.graph.result()?;
         if let NetworkNode::Leaf(leaf) = node {
             match leaf {
+                NetworkLeaf::TensorSum(indices) => return tensor_sum_scalar(indices),
                 NetworkLeaf::TensorTerm(term) => {
                     return Ok(ExecutionResult::Val(Cow::Owned(tensor_term_scalar(term)?)));
                 }
-                NetworkLeaf::TensorTermSum(terms) => {
-                    let mut iter = terms.iter();
-                    let Some(first) = iter.next() else {
-                        return Ok(ExecutionResult::Zero);
-                    };
-                    let mut accumulator = tensor_term_scalar(first)?;
-                    for term in iter {
-                        let term_scalar = tensor_term_scalar(term)?;
-                        accumulator += term_scalar.refer();
-                    }
-                    return Ok(ExecutionResult::Val(Cow::Owned(accumulator)));
-                }
+                NetworkLeaf::TensorTermSum(terms) => return tensor_term_sum_scalar(terms),
                 _ => {}
             }
         }

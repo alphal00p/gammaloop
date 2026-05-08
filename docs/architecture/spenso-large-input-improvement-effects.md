@@ -5,14 +5,14 @@ This note summarizes the effects of the local improvements stacked on top of
 input is still too slow for a broad full-expression matrix, so the measurements
 below use term 18 of the 46-way sum, as a representative heavy branch.
 
-Unless stated otherwise, commands used:
+Unless stated otherwise, commands used a five minute cap:
 
 ```bash
-SPENSO_SUM46_START=18 SPENSO_SUM46_LIMIT=1 \
-cargo test --profile dev-optim --package gammalooprs \
-  --test large_spenso_actual \
-  spenso_eval_input_0_sum46_individual_term_execute \
-  -- --ignored --nocapture
+timeout 300s env SPENSO_SUM46_START=18 SPENSO_SUM46_LIMIT=1 \
+  cargo test --profile dev-optim --package gammalooprs \
+    --test large_spenso_actual \
+    spenso_eval_input_0_sum46_individual_term_execute \
+    -- --ignored --nocapture
 ```
 
 Timings are `dev-optim` diagnostics, not release benchmarks. They are useful for
@@ -40,6 +40,29 @@ scalar * sum * sum * g * g * g * gamma^6
 That is important: the remaining problem is not raw parsing. It is late tensor
 sums interacting with small tensor products and scalar atom growth.
 
+## Five Minute Timing Matrix
+
+The previous measurements were inconclusive because several configurations were
+only watched for about one minute. With a `300s` timeout and the fast-path bugs
+fixed, term 18 now gives a useful matrix:
+
+| Mode | Parse | Execute | Total | Result |
+| --- | ---: | ---: | ---: | --- |
+| dense shadows, no lazy sums | `360.8 ms` | `>300s` | timeout | did not finish |
+| sparse shadows | `361.7 ms` | `99.405s` | `113.159s` | scalar, `9.25 GB` atom payload |
+| sparse shadows + lazy sums, cap `1` | `365.2 ms` | `108.211s` | `119.691s` | scalar, `9.46 GB` atom payload |
+| sparse shadows + lazy sums, cap `96` | `363.8 ms` | `101.374s` | `112.171s` | scalar, `8.99 GB` atom payload |
+| sparse shadows + lazy sums, cap `100000` | `363.2 ms` | `57.842s` | `60.156s` | scalar from rank-0 tensor, `2966` terms, `252 MB` atom payload |
+| sparse shadows + metric prepass | `363.5 ms` | `116.344s` | `128.772s` | scalar, `10.00 GB` atom payload |
+| sparse shadows + Horner contract entries | `363.6 ms` | `151.539s` | `160.749s` | scalar, `9.25 GB` atom payload |
+
+Two bugs had to be fixed to get this matrix:
+
+- unsupported fused tensor-sum/numeric contractions with no shared slot now
+  decline the fast path instead of erroring
+- result extraction now materializes `TensorSum`, `TensorTerm`, and
+  `TensorTermSum` leaves when lazy terms survive to the result boundary
+
 ## Individual Improvements
 
 ### Sparse Shadow Tensors
@@ -57,16 +80,10 @@ This is a clean storage win: stored param entries drop by about `46%`, while the
 graph shape does not change. It also exposes the real sparse structure of the
 `δ` and `Q3` tensors: `δ` has one nonzero entry, and `Q3` has three.
 
-Separate execution effect: not enough by itself. With sparse shadows but without
-lazy tensor sums, term 18 currently fails quickly:
-
-```text
-parallel min-result-rank actual execution failed:
-fused tensor sum contract requires at least one shared slot
-```
-
-That failure is from a fast path declining incorrectly by returning an error for
-a no-shared-slot pair.
+Separate execution effect: this is the main practical win so far. The dense
+shadow path did not finish within `300s`; sparse shadows complete term 18 in
+`99.405s` execution time. The stored-entry reduction also makes the one-hot and
+grouped sparse contraction paths visible to the executor.
 
 ### One-Hot Selector Contraction
 
@@ -102,10 +119,11 @@ Expected effect:
 - Avoids adding zeros and avoids repeated intermediate atom additions.
 - It is most useful after sparse shadows expose the real nonzero support.
 
-Measured separately: parse/network-only shape is unchanged. In full term 18 this
-is hit at late materialization points, but term 18 still does not complete within
-the current timeout because later pair selection and result materialization
-dominate.
+Measured separately: parse/network-only shape is unchanged and there is no clean
+standalone runtime knob for only this improvement. In the current stack, sparse
+shadows plus the always-on sparse sum materialization complete term 18 in
+`99.405s`; with high-cap lazy distribution the same branch completes in
+`57.842s`, plus `1.510s` to force the final atom.
 
 ### Lazy Scaled Tensor Terms
 
@@ -120,25 +138,11 @@ Expected effect:
 - Prevents scalar payload replication across many sparse tensor entries.
 - Enables lazy tensor sums to carry scaled terms forward.
 
-Observed effect with sparse shadows and lazy sums enabled:
-
-```bash
-SPENSO_SPARSE_SHADOW_TENSORS=1 \
-SPENSO_NETWORK_LAZY_TENSOR_SUMS=1 \
-SPENSO_NETWORK_PROFILE=1 \
-SPENSO_SUM46_START=18 SPENSO_SUM46_LIMIT=1 ...
-```
-
-The executor reaches much later stages and produces many lazy tensor sums, but
-term 18 still exceeded `60s`. The late profile showed expensive result-rank pair
-selection:
-
-```text
-product.result_rank_slow_pair elapsed_ms=28145
-product.result_rank_slow_pair elapsed_ms=20104
-```
-
-So this moves the bottleneck forward, but does not finish term 18 yet.
+Observed effect with sparse shadows and lazy sums enabled: default cap `96`
+completes, but is roughly neutral on execution time (`101.374s` versus
+`99.405s`). It does reduce final scalar payload size from about `9.25 GB` to
+about `8.99 GB`, so it is helping representation size without yet improving this
+branch's runtime.
 
 ### Fused Numeric Tensor-Sum Contraction
 
@@ -154,17 +158,11 @@ Positive effect:
 - It avoids constructing a huge intermediate tensor before a contraction that
   may shrink it.
 
-Current failure mode:
-
-With sparse shadows alone, and also with a very low lazy-distribution cap, term
-18 fails quickly with:
-
-```text
-fused tensor sum contract requires at least one shared slot
-```
-
-This should be a fast-path miss, not a hard error. The fast path needs to return
-`None` when the tensor pair has no shared contraction slot.
+Fixed failure mode: this used to error on tensor pairs with no shared slot. That
+case is now treated as a fast-path miss, so sparse-only and low-cap lazy
+execution both complete. The low cap `1` run is slower than sparse-only
+(`108.211s`), which suggests forced early materialization is not useful for term
+18.
 
 ### Grouped Sparse Atom Contraction
 
@@ -180,9 +178,10 @@ Expected effect:
 - Particularly relevant for small metric/`δ`/`Q3` products whose entries collide
   into the same output slot.
 
-Measured separately: no clean standalone timing yet, because the fused numeric
-fast path currently fails before a useful isolated sparse-only execution can
-complete.
+Measured separately: no clean standalone timing is available from a runtime knob,
+because this path is active once the code is present. In the current stack, the
+closest combined measurement is sparse shadows without lazy sums: `99.405s`
+execution time.
 
 ### Lazy Distribution Cap
 
@@ -197,22 +196,20 @@ product.lazy_tensor_sum_materialize left_terms=2 right_terms=583 distributed_ter
 ```
 
 The default cap prevents unconstrained distribution, but the forced
-materialization then leads into slow result-rank pair selection and term 18 does
-not finish quickly.
+materialization still leads into slow scalar growth. It now completes, but is not
+faster than sparse-only.
 
 Cap experiments:
 
 | Cap | Result |
 | ---: | --- |
-| `1` | Fails quickly with no-shared-slot fused contraction error |
-| `96` | Runs past `60s`; late `result_rank_slow_pair` calls around `20-28s` |
-| `100000` | Runs past `60s`, then fails with `result is an unmaterialized scaled tensor sum` |
+| `1` | completes in `108.211s`; scalar result payload about `9.46 GB` |
+| `96` | completes in `101.374s`; scalar result payload about `8.99 GB` |
+| `100000` | completes in `57.842s`; final rank-0 tensor extraction to an atom takes `1.510s`, producing `2966` terms and about `252 MB` |
 
-Conclusion: the cap is necessary, but the current strategy needs two fixes:
-
-- fused contraction must decline unsupported pairs instead of erroring
-- final/result extraction must materialize `TensorTermSum` when it remains at the
-  result boundary
+Conclusion: the high cap is the best timing here, even after forcing a final
+atom. Avoiding forced intermediate materialization matters much more than the
+`1.510s` final rank-0 tensor-to-atom extraction.
 
 ### Horner Contract Entries
 
@@ -223,10 +220,14 @@ This applies `collect_horner` to atom entries produced by tensor contractions.
 It does not affect parsing or network shape, only scalar payloads after
 contraction.
 
-Current status: not benchmarked to completion on term 18 because the execution
-path fails or exceeds the timeout before a stable final comparison can be made.
-It is still a plausible scalar-payload cleanup pass, but it is downstream of the
-current orchestration problems.
+Measured with sparse shadows enabled, this makes term 18 slower:
+
+```text
+execute=151.539s total=160.749s
+```
+
+It leaves final payload size roughly unchanged for this branch. This is not a
+low-hanging win in its current placement.
 
 ### Metric Prepass Diagnostic
 
@@ -239,9 +240,15 @@ Effect on term 18 in `NETWORK_ONLY` mode:
 | none | n/a | `2608` | `95` | `12` |
 | metrics | `60-70 ms` | `2605` | `92` | `9` |
 
+Full execution with sparse shadows enabled:
+
+```text
+prepass=60.859ms execute=116.344s total=128.772s
+```
+
 This removes three top-level metric library leaves and shortens the largest
-product, but it barely changes the overall branch. It is useful cleanup, not the
-main performance lever.
+product, but it makes term 18 slower. It is useful cleanup, not the main
+performance lever.
 
 ## Synergies
 
@@ -260,41 +267,42 @@ does unnecessary work.
 
 ### Sparse Shadows + Lazy Tensor Terms + Fused Numeric Contraction
 
-This is the main intended execution strategy. It reaches deeper than the default
-dense path, but the current implementation is incomplete:
+This is the main intended execution strategy. With the fast-path and result
+boundary bugs fixed, it completes. The cap matters:
 
-- unsupported no-shared-slot pairs currently error
-- high lazy caps can leave an unmaterialized scaled tensor sum at the result
-- default cap eventually materializes a large `2 * 583` lazy product and hits
-  expensive result-rank selection
+- cap `1`: `108.211s`
+- cap `96`: `101.374s`
+- cap `100000`: `57.842s` execution plus `1.510s` final atom extraction
 
-The direction is right, but term 18 still does not execute in reasonable time.
+The high-cap run is the first result here that is plausibly close to reasonable
+for one heavy branch. It also shows that premature materialization is currently
+more harmful than allowing a large lazy sum to survive until the result boundary,
+where it can be collapsed to an atom cheaply relative to the contraction.
 
 ### Metric Prepass + Sparse Shadows
 
 This combines cleanly but is only a small structural cleanup. It reduces library
 leaves from `95` to `92` and max product width from `12` to `9`; sparse storage
-effects are unchanged.
+effects are unchanged. Full execution is slower for term 18 (`116.344s` versus
+`99.405s` sparse-only).
 
 ## Current Conclusion
 
-The improvements do help, but not yet enough for the heavy large-input branch.
-The most concrete wins are:
+The improvements now make term 18 executable under a five minute cap. The most
+concrete wins are:
 
 - sparse shadows: `3088 -> 1678` stored param entries for term 18
-- metric prepass: small product/library cleanup
-- lazy scaled tensor terms: avoids immediate scalar replication and reaches much
-  later execution stages
+- sparse shadows alone: dense timeout `>300s` becomes `99.405s`
+- high-cap lazy distribution: `99.405s` becomes `57.842s`, with another
+  `1.510s` to force the final atom
 
-The current blockers are:
+The non-wins are also clear:
 
-- fused numeric tensor-sum contraction treats some fast-path misses as errors
-- `TensorTermSum` can survive to the result boundary without materialization
-- default lazy distribution still causes late large materializations
-- result-rank pair selection remains very expensive once large lazy sums survive
-  deep into execution
+- default lazy cap `96` is neutral/slightly slower than sparse-only
+- cap `1` is slower, so forced early materialization is bad here
+- metric prepass and Horner contract entries are both slower on term 18
 
-The next useful fix is to make fused tensor-sum contraction a true optional fast
-path: unsupported pairs should return `None`, not `Err`. After that, result
-boundary materialization for scaled tensor sums should be fixed so high lazy caps
-can be tested honestly.
+The next useful direction is not more scalar cleanup at the end. The strongest
+signal is that orchestration should preserve laziness through contraction
+boundaries for longer, and only materialize when the contraction has genuinely
+reduced the tensor/sum shape.
