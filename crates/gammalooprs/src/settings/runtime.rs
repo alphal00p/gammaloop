@@ -1515,6 +1515,8 @@ pub struct UVLocalisationSettings {
     pub dynamic_width: bool,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub gaussian_width: f64,
+    #[serde(skip_serializing_if = "is_false")]
+    pub force_uv_dampers_to_one: bool,
 }
 
 impl Default for UVLocalisationSettings {
@@ -1523,6 +1525,7 @@ impl Default for UVLocalisationSettings {
             sliver_width: 10.0,
             dynamic_width: false,
             gaussian_width: 1.0,
+            force_uv_dampers_to_one: false,
         }
     }
 }
