@@ -17,12 +17,10 @@ use symbolica::{
 
 use crate::{
     W_,
-    metric::not_slot,
     tensor::{SymbolicNetParse, SymbolicTensor},
 };
 
 use super::{
-    chain_like::simplify_chain_like_metric_products,
     contraction::{
         ORDER_MIN_LARGEST_OPERAND_BYTES, ORDER_MIN_PRODUCT_BYTES, ORDER_MIN_PRODUCT_TERMS,
         ORDER_SMALLEST_DEGREE_MIN_LARGEST_OPERAND_BYTES, ORDER_SMALLEST_DEGREE_MIN_PRODUCT_BYTES,
@@ -32,7 +30,7 @@ use super::{
     settings::{
         SchoonschipContractionOrder, SchoonschipMode, SchoonschipSettings, SchoonschipTraversal,
     },
-    utils::{TRACE_SCHOONSCHIP, trace_schoonschip_pattern_misses, trace_schoonschip_patterns},
+    utils::TRACE_SCHOONSCHIP,
 };
 
 fn positive_even_power(exp: AtomView<'_>) -> bool {
@@ -298,171 +296,7 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
-        let index_cond = T.index_fiter(W_.i_);
-        let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-        let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-        let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-        let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-        let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-        let metric_self_dual = function!(ETS.metric, W_.c_, &self_dual);
-        let metric_self_dual_reversed = function!(ETS.metric, &self_dual, W_.c_);
-        let function_with_self_dual = function!(W_.a_, W_.a___, &self_dual, W_.b___);
-        let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
-        let metric_dualizable = function!(ETS.metric, W_.c_, &dualizable);
-        let metric_dualizable_reversed = function!(ETS.metric, &dualizable, W_.c_);
-        let metric_dualizable_dual = function!(ETS.metric, W_.c_, &dualizable_dual);
-        let metric_dualizable_dual_reversed = function!(ETS.metric, &dualizable_dual, W_.c_);
-        let function_with_dualizable = function!(W_.a_, W_.a___, &dualizable, W_.b___);
-        let function_with_dualizable_dual = function!(W_.a_, W_.a___, &dualizable_dual, W_.b___);
-
-        // The broad bare-symbolic pass may use product
-        // patterns over plain functions; the network path deliberately calls
-        // `normalize_dots()` instead so these broad patterns do not pre-empt
-        // network-backed contractions.
-        let metric_simplified = self
-            .replace(metric_self_dual * function_with_self_dual.clone())
-            .repeat()
-            .with(function_with_replacement.clone())
-            .replace(metric_self_dual_reversed * function_with_self_dual)
-            .repeat()
-            .with(function_with_replacement.clone())
-            .replace(metric_dualizable * function_with_dualizable_dual.clone())
-            .repeat()
-            .with(function_with_replacement.clone())
-            .replace(metric_dualizable_reversed * function_with_dualizable_dual)
-            .repeat()
-            .with(function_with_replacement.clone())
-            .replace(metric_dualizable_dual * function_with_dualizable.clone())
-            .repeat()
-            .with(function_with_replacement.clone())
-            .replace(metric_dualizable_dual_reversed * function_with_dualizable)
-            .repeat()
-            .with(function_with_replacement);
-
-        let broad_self_dual_product_pattern =
-            function!(W_.f_, W_.a___, &self_dual) * function!(W_.g_, W_.b___, &self_dual);
-        let broad_self_dual_product_replacement = ETS.metric(
-            function!(W_.f_, W_.a___, &self_dual_stripped),
-            function!(W_.g_, W_.b___, &self_dual_stripped),
-        );
-        let after_broad_self_dual_product = metric_simplified
-            .replace(broad_self_dual_product_pattern.clone())
-            .when(index_cond.clone() & not_slot(W_.a___) & not_slot(W_.b___))
-            .with(broad_self_dual_product_replacement.clone());
-
-        let trace_patterns = trace_schoonschip_patterns();
-        let trace_pattern_misses = trace_schoonschip_pattern_misses();
-        if trace_patterns
-            && (after_broad_self_dual_product != metric_simplified || trace_pattern_misses)
-        {
-            eprintln!(
-                "schoonschip pattern=broad_self_dual_product changed={} pattern={} replacement={} before={} after={}",
-                after_broad_self_dual_product != metric_simplified,
-                broad_self_dual_product_pattern,
-                broad_self_dual_product_replacement,
-                metric_simplified,
-                after_broad_self_dual_product
-            );
-        }
-
-        let self_dual_power_pattern = function!(W_.f_, W_.a___, &self_dual).pow(Atom::num(2));
-        let self_dual_power_replacement = ETS.metric(
-            function!(W_.f_, W_.a___, &self_dual_stripped),
-            function!(W_.f_, W_.a___, &self_dual_stripped),
-        );
-        let after_self_dual_power = after_broad_self_dual_product
-            .replace(self_dual_power_pattern.clone())
-            .when(index_cond.clone() & not_slot(W_.a___))
-            .with(self_dual_power_replacement.clone());
-
-        if trace_patterns
-            && (after_self_dual_power != after_broad_self_dual_product || trace_pattern_misses)
-        {
-            eprintln!(
-                "schoonschip pattern=self_dual_power changed={} pattern={} replacement={} before={} after={}",
-                after_self_dual_power != after_broad_self_dual_product,
-                self_dual_power_pattern,
-                self_dual_power_replacement,
-                after_broad_self_dual_product,
-                after_self_dual_power
-            );
-        }
-
-        let simplified = after_self_dual_power
-            .replace(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
-                    * T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual]),
-            )
-            .when(&index_cond)
-            .with(ETS.metric(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual_stripped]),
-            ))
-            .replace(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
-                    .pow(Atom::num(2)),
-            )
-            .when(&index_cond)
-            .with(ETS.metric(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-            ))
-            .replace(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable])
-                    * T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_dual]),
-            )
-            .when(&index_cond)
-            .with(ETS.metric(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_stripped]),
-            ))
-            // Bare product contraction: vector(rep(d,i)) * T(..,rep(d,i),..)
-            // becomes T(..,vector(rep(d)),..). Network contraction has a more
-            // structured version of this rule and does not use this pass.
-            .replace(
-                function!(W_.a_, W_.a___, &self_dual, W_.b___)
-                    * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual]),
-            )
-            .when(&index_cond)
-            .repeat()
-            .with(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
-                W_.b___
-            ))
-            .replace(
-                function!(W_.a_, W_.a___, &dualizable, W_.b___)
-                    * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]),
-            )
-            .when(&index_cond)
-            .repeat()
-            .with(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
-                W_.b___
-            ))
-            .replace(
-                function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)
-                    * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]),
-            )
-            .repeat()
-            .with(function!(
-                W_.a_,
-                W_.a___,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
-                W_.b___
-            ));
-
-        let simplified = if settings.simplify_chain_like_functions {
-            simplify_chain_like_metric_products(simplified.as_view())
-        } else {
-            simplified
-        };
-
-        simplified.normalize_dots()
+        super::with_settings::schoonschip_with_settings(*self, settings)
     }
 
     fn schoonschip_once_with_net<

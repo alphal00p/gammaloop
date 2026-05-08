@@ -3,6 +3,7 @@ mod chain_like;
 mod contraction;
 mod settings;
 mod utils;
+mod with_settings;
 
 #[cfg(test)]
 mod test;

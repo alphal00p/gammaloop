@@ -489,7 +489,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()],
     ),
     edgeaind: symbol!(
         "edge",
@@ -518,7 +519,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()],
     ),
     vertexaind: symbol!(
         "vertex",
@@ -548,7 +550,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()],
     ),
     dummyaind: symbol!(
         "dummy",
@@ -577,7 +580,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()],
     ),
     hedgeaind: symbol!(
         "hedge",
@@ -612,7 +616,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()],
     ),
     override_if: symbol!("override_if"),
     if_sigma: symbol!("if_sigma"),
