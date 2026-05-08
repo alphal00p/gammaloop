@@ -319,6 +319,8 @@ impl Schoonschip for AtomView<'_> {
                 ..Default::default()
             })
             .unwrap();
+
+        println!("{}", net.dot_pretty());
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
 
         match settings.contraction_order {

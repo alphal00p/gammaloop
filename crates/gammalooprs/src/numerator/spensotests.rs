@@ -51,7 +51,7 @@ fn algebra() {
     println!("{}", expr.schoonschip().schoonschip().log_print(Some(120)));
     println!(
         "{}",
-        expr.schoonschip_with_net::<false, false, Aind>(&SchoonschipSettings::breadth_first(Some(
+        expr.schoonschip_with_net::<true, false, Aind>(&SchoonschipSettings::breadth_first(Some(
             1
         )))
         .log_print(Some(120))

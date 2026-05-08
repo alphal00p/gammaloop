@@ -17,19 +17,13 @@ use super::{
     settings::SchoonschipSettings,
 };
 
-static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
+static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
     let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
     let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
 
     [
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &self_dual)
-                * function!(W_.a_, W_.a___, &self_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
         Replacement::new(
             (function!(ETS.metric, &self_dual, W_.c_)
                 * function!(W_.a_, W_.a___, &self_dual, W_.b___))
@@ -48,22 +42,10 @@ static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 6]> = LazyLock::new(
             .to_pattern(),
             function_with_replacement.clone(),
         ),
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * function!(W_.a_, W_.a___, &dualizable, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        Replacement::new(
-            (function!(ETS.metric, &dualizable_dual, W_.c_)
-                * function!(W_.a_, W_.a___, &dualizable, W_.b___))
-            .to_pattern(),
-            function_with_replacement,
-        ),
     ]
 });
 
-static BROAD_SELF_DUAL_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+static DOT_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     let index_cond = T.index_fiter(W_.i_);
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
@@ -211,7 +193,7 @@ impl SchoonschipWithSettings<'_> {
             .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS);
 
         let simplified = metric_simplified
-            .replace_multiple(&*BROAD_SELF_DUAL_PRODUCT)
+            .replace_multiple(&*DOT_PRODUCT)
             .replace_multiple(&*SELF_DUAL_POWER)
             .replace_multiple(&*RANK_ONE_PRODUCT_REPLACEMENTS)
             // Bare product contraction: vector(rep(d,i)) * T(..,rep(d,i),..)
