@@ -248,11 +248,49 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
 
 #[derive(Clone, Debug)]
 pub struct ParseSettings {
+    /// Fold factors that parse as pure scalars into one scalar factor while
+    /// parsing a product.
+    ///
+    /// This keeps scalar-only subexpressions out of the tensor graph when they
+    /// cannot affect contraction topology. Disable it when the caller needs
+    /// every product factor to remain represented separately in the network.
     pub precontract_scalars: bool,
+
+    /// Parse only the first summand of an addition.
+    ///
+    /// This is meant for structure discovery paths where all summands are
+    /// expected to have the same external structure, for example listing
+    /// dangling indices without building a full sum network.
     pub take_first_term_from_sum: bool,
+
+    /// Stop recursive parsing once the current parse depth reaches this value.
+    ///
+    /// At the limit, the current expression is handed to `Parse::parse_with_settings`
+    /// as a leaf. `None` means there is no depth limit.
     pub depth_limit: Option<usize>,
+
+    /// Selects what contributes to `depth_limit`.
+    ///
+    /// When true, only product nesting increments parse depth. When false,
+    /// additions and powers also increment depth before their children are
+    /// parsed.
     pub depth_is_product_depth: bool,
+
+    /// Materialize compact inner-product notation during parsing.
+    ///
+    /// When enabled, expressions such as `dot(p(rep), q(rep))`,
+    /// `g(p(rep), q(rep))`, and `p(rep) * q(rep)` are expanded through a fresh
+    /// dummy slot so the network can contract them. When disabled, those
+    /// compact inner products are left for ordinary leaf parsing.
     pub parse_inner_products: bool,
+
+    /// Allow parser implementations to treat composite scalar expressions as
+    /// scalar-structured tensors.
+    ///
+    /// This flag is passed through to `Parse::parse_with_settings`. The
+    /// symbolic tensor parser uses it for additive or multiplicative scalar
+    /// composites so recursive contraction passes can inspect their internals
+    /// instead of storing them as opaque pure scalars.
     pub parse_composite_scalars_as_tensors: bool,
 }
 
@@ -470,8 +508,6 @@ fn materialize_compact_vector_product<Aind: AbsInd + DummyAind + ParseableAind>(
     Some(materialized)
 }
 
-/// Turns compact Schoonschip notation such as `p(mink(4))` into an indexed
-/// tensor factor and returns the fresh slot that should replace it in context.
 fn compact_dot_as_metric<Aind: AbsInd + ParseableAind>(value: AtomView<'_>) -> Option<Atom> {
     let AtomView::Fun(fun) = value else {
         return None;
@@ -1204,260 +1240,4 @@ impl NetworkParse for AtomView<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::network::NetworkState;
-    use crate::structure::representation::{Lorentz, Minkowski, RepName};
-    use crate::{chain, slot, trace};
-    use symbolica::{function, symbol};
-
-    fn mink4() -> Representation<Minkowski> {
-        Minkowski {}.new_rep(4)
-    }
-
-    fn chain_factor(name: Symbol) -> Atom {
-        FunctionBuilder::new(name)
-            .add_arg(Atom::var(SPENSO_TAG.chain_in))
-            .add_arg(Atom::var(SPENSO_TAG.chain_out))
-            .finish()
-    }
-
-    fn chain_factor_with_external(name: Symbol, external: Atom) -> Atom {
-        FunctionBuilder::new(name)
-            .add_arg(external)
-            .add_arg(Atom::var(SPENSO_TAG.chain_in))
-            .add_arg(Atom::var(SPENSO_TAG.chain_out))
-            .finish()
-    }
-
-    #[test]
-    fn parse_chain_as_opaque_tensor() {
-        let rep = mink4();
-        let expr = chain!(
-            slot!(rep, i),
-            slot!(rep, j),
-            chain_factor(symbol!("f")),
-            chain_factor(symbol!("g")),
-        );
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-        assert_eq!(parsed.graph.dangling_indices().len(), 2);
-    }
-
-    #[test]
-    fn parse_trace_materializes_closed_links() {
-        let rep = mink4();
-        let expr = trace!(&rep, chain_factor(symbol!("f")), chain_factor(symbol!("g")));
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(
-            parsed.state.is_scalar(),
-            "expected compact Schoonschip vector product `{expr}` to parse as a scalar; got state {:?} with dangling indices {:?}",
-            parsed.state,
-            parsed.graph.dangling_indices()
-        );
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_trace_closes_links_and_keeps_external_indices() {
-        let trace_rep = Lorentz {}.new_rep(4);
-        let external_rep = mink4();
-        let expr = trace!(
-            &trace_rep,
-            chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
-            chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
-            chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
-        );
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-        assert_eq!(parsed.graph.dangling_indices().len(), 3);
-    }
-
-    #[test]
-    fn parse_four_factor_trace_closes_links_and_keeps_external_indices() {
-        let trace_rep = Lorentz {}.new_rep(4);
-        let external_rep = mink4();
-        let expr = trace!(
-            &trace_rep,
-            chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
-            chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
-            chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
-            chain_factor_with_external(symbol!("q"), slot!(external_rep, d).to_atom()),
-        );
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-        assert_eq!(parsed.graph.dangling_indices().len(), 4);
-    }
-
-    #[test]
-    fn parse_single_factor_trace_closes_dualizable_links() {
-        let rep = Lorentz {}.new_rep(4);
-        let expr = trace!(&rep, chain_factor(symbol!("f")));
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(parsed.state.is_scalar());
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_empty_trace_unwraps_representation_dimension() {
-        let rep = mink4();
-        let expr = trace!(&rep);
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::PureScalar);
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_empty_chain_as_endpoint_metric() {
-        let rep = mink4();
-        let expr = chain!(slot!(rep, i), slot!(rep, j));
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-        assert_eq!(parsed.graph.dangling_indices().len(), 2);
-    }
-
-    #[test]
-    fn materialize_schoonschip_vectors_parse_as_dot_product() {
-        let rep = mink4();
-        let expr = function!(symbol!("p"), rep.to_symbolic([]))
-            * function!(symbol!("q"), rep.to_symbolic([]));
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(parsed.state.is_scalar());
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn three_argument_metric_inner_product_is_not_parser_syntax() {
-        let rep = mink4();
-        let expr = function!(
-            ETS.metric,
-            rep.to_symbolic([]),
-            Atom::var(symbol!("p")),
-            Atom::var(symbol!("q"))
-        );
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::PureScalar);
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_schoonschipped_metric_product() {
-        let rep = mink4();
-        let expr = function!(
-            ETS.metric,
-            function!(symbol!("p"), rep.to_symbolic([])),
-            function!(symbol!("q"), rep.to_symbolic([]))
-        );
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(parsed.state.is_scalar());
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_schoonschipped_metric_sum_product() {
-        let rep = mink4();
-        let k1 = function!(symbol!("k"), Atom::num(1), rep.to_symbolic([]));
-        let k2 = function!(symbol!("k"), Atom::num(2), rep.to_symbolic([]));
-        let p = function!(symbol!("p"), Atom::num(3), rep.to_symbolic([]));
-        let expr = function!(ETS.metric, k1 + k2, p);
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(parsed.state.is_scalar());
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_schoonschipped_dot_product() {
-        let rep = mink4();
-        let expr = function!(
-            SPENSO_TAG.dot,
-            function!(symbol!("p"), rep.to_symbolic([])),
-            function!(symbol!("q"), rep.to_symbolic([]))
-        );
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(parsed.state.is_scalar());
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_linear_schoonschipped_dot_product() {
-        let rep = mink4();
-        let p = function!(symbol!("p"), rep.to_symbolic([]));
-        let q = function!(symbol!("q"), rep.to_symbolic([]));
-        let r = function!(symbol!("r"), rep.to_symbolic([]));
-        let expr = function!(SPENSO_TAG.dot, p + q, r);
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert!(parsed.state.is_scalar());
-        assert!(parsed.graph.dangling_indices().is_empty());
-    }
-
-    #[test]
-    fn parse_chain_keeps_schoonschip_factor_arguments_opaque() {
-        let rep = mink4();
-        let compact_vector = function!(symbol!("p"), rep.to_symbolic([]));
-        let factor = FunctionBuilder::new(symbol!("f"))
-            .add_arg(Atom::var(SPENSO_TAG.chain_in))
-            .add_arg(Atom::var(SPENSO_TAG.chain_out))
-            .add_arg(&compact_vector)
-            .finish();
-        let expr = chain!(slot!(rep, i), slot!(rep, j), factor);
-
-        let parsed = expr
-            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-            .unwrap();
-
-        assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-        assert_eq!(parsed.graph.dangling_indices().len(), 2);
-    }
-}
+mod test;
