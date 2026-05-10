@@ -14,8 +14,8 @@ use symbolica::{
 use super::{NetworkParse, ParseSettings, ShadowedStructure, ShorthandParsing};
 use crate::network::tags::SPENSO_TAG;
 use crate::structure::{
-    NamedStructure, OrderedStructure, PermutedStructure, StructureContract, StructureError,
-    TensorStructure,
+    HasName, NamedStructure, OrderedStructure, PermutedStructure, StructureContract,
+    StructureError, TensorStructure,
     abstract_index::AIND_SYMBOLS,
     representation::LibraryRep,
     slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError},
@@ -343,6 +343,73 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
     ) -> Result<PermutedStructure<Self>, StructureError> {
         OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)
             .map(|structure| Self::from_ordered_atom(value, structure))
+    }
+}
+
+impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
+    for PermutedStructure<ShadowedStructure<Aind>>
+{
+    type Error = StructureError;
+
+    fn try_from(value: FunView<'a>) -> Result<Self, Self::Error> {
+        match value.get_symbol() {
+            s if s == AIND_SYMBOLS.aind => {
+                let mut structure = Vec::new();
+                for arg in value.iter() {
+                    structure.push(arg.try_into()?);
+                }
+
+                Ok(OrderedStructure::new(structure).map_structure(Into::into))
+            }
+            name => {
+                let mut args = Vec::new();
+                let mut slots = Vec::new();
+                let mut is_structure: Option<StructureError> =
+                    Some(SlotError::EmptyStructure.into());
+
+                for arg in value.iter() {
+                    match Slot::<LibraryRep, Aind>::try_from(arg) {
+                        Ok(slot) => {
+                            is_structure = None;
+                            slots.push(slot);
+                        }
+                        Err(err) => {
+                            if let AtomView::Fun(fun) = arg
+                                && fun.get_symbol() == AIND_SYMBOLS.aind
+                                && let Ok(structure) = Self::try_from(fun)
+                            {
+                                let mut internal_slots = structure.structure.structure.structure;
+                                structure
+                                    .index_permutation
+                                    .apply_slice_in_place_inv(&mut internal_slots);
+                                structure
+                                    .rep_permutation
+                                    .apply_slice_in_place_inv(&mut internal_slots);
+                                slots.extend(internal_slots);
+                                is_structure = None;
+                                continue;
+                            }
+                            if slots.is_empty() {
+                                is_structure = Some(err.into());
+                            }
+                            args.push(arg.to_owned());
+                        }
+                    }
+                }
+
+                if let Some(err) = is_structure {
+                    return Err(err);
+                }
+
+                let mut structure: PermutedStructure<ShadowedStructure<Aind>> =
+                    OrderedStructure::new(slots).map_structure(Into::into);
+                structure.structure.set_name(name);
+                if !args.is_empty() {
+                    structure.structure.additional_args = Some(args);
+                }
+                Ok(structure)
+            }
+        }
     }
 }
 

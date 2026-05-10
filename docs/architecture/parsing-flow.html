@@ -600,8 +600,6 @@ else -> scalar fallback</code></pre>
           <h4>Special syntax</h4>
           <ul>
             <li><code>bracket</code>: parse args and multiply.</li>
-            <li><code>chain</code>: expand chain links.</li>
-            <li><code>trace</code>: expand trace links.</li>
             <li>tag wrappers: parse inner, then apply tag.</li>
           </ul>
         </div>
@@ -613,11 +611,11 @@ else -> scalar fallback</code></pre>
       </div>
       <div class="vertical-flow">
         <div class="connector">&darr;</div>
-        <div class="flow-node decision"><strong>Decision</strong>Does <code>materialize_shorthand(fun)</code> return a network?</div>
+        <div class="flow-node"><strong>Boundary</strong><code>materialize_shorthand(fun)</code> returns a network.</div>
       </div>
       <div class="split">
         <div class="path-card">
-          <span class="path-label">Yes</span>
+          <span class="path-label">Topology</span>
           <h4>Materialized network</h4>
           <ol>
             <li><code>chain</code> and <code>trace</code> return parsed topology.</li>
@@ -626,9 +624,10 @@ else -> scalar fallback</code></pre>
           </ol>
         </div>
         <div class="path-card">
-          <span class="path-label">No</span>
+          <span class="path-label">Fixed point</span>
           <h4>Ordinary tensor leaf</h4>
           <ol>
+            <li>If the Schoonschip atom rewriter makes no change, do not recurse.</li>
             <li>Run <code>S::parse_with_settings</code>.</li>
             <li>Use a library tensor if a key exists.</li>
             <li>Otherwise concretize the parsed tensor shell.</li>
@@ -645,7 +644,7 @@ else -> scalar fallback</code></pre>
     <h3>Shorthand Materialization</h3>
     <div class="flowchart">
       <div class="vertical-flow">
-        <div class="flow-node start"><strong>Root</strong><code>materialize_shorthand(fun) -&gt; Option&lt;Network&gt;</code></div>
+        <div class="flow-node start"><strong>Root</strong><code>materialize_shorthand(fun) -&gt; Network</code></div>
         <div class="connector">&darr;</div>
         <div class="flow-node decision"><strong>Decision</strong>Root is <code>chain</code> or <code>trace</code>?</div>
       </div>
@@ -690,7 +689,7 @@ else -> scalar fallback</code></pre>
         <div class="path-card">
           <span class="path-label">No change</span>
           <h4>Ordinary leaf candidate</h4>
-          <p>Return <code>None</code>; ordinary tensor leaf parsing runs next.</p>
+          <p>Parse as an ordinary tensor leaf. This is the recursion stop.</p>
         </div>
       </div>
     </div>
@@ -746,14 +745,15 @@ else -> scalar fallback</code></pre>
         whole representation-bearing function as one inferred tensor leaf.
       </li>
       <li>
-        Handle special expand-mode syntax: <code>bracket</code>,
-        <code>chain</code>, <code>trace</code>, and tagged wrappers.
+        Handle special expand-mode syntax: <code>bracket</code> and tagged
+        wrappers. Chain and trace are handled by the shorthand materializer.
       </li>
       <li>
         For other functions in <code>Expand</code> mode, run shorthand
-        materialization before ordinary leaf parsing. This returns a network for
-        <code>chain</code>, <code>trace</code>, and any compact dot/Schoonschip
-        expression that rewrites to ordinary parser syntax.
+        materialization before ordinary leaf parsing. This always returns a
+        network: <code>chain</code> and <code>trace</code> materialize topology,
+        compact dot/Schoonschip expressions rewrite and recurse, and unchanged
+        functions parse as ordinary tensor leaves.
       </li>
       <li>
         Try <code>S::parse_with_settings</code>. If it succeeds, use a library
@@ -801,15 +801,13 @@ if !value.as_view().is_tensorial() {
         <p class="source-ref">
           <a href="../../crates/spenso/src/network/parsing/mod.rs#L604">crates/spenso/src/network/parsing/mod.rs:604</a>
         </p>
-        <pre><code>if let Some(materialized) = Self::materialize_shorthand(
+        <pre><code>Self::materialize_shorthand(
     value,
     state,
     library,
     function_library,
     settings,
-)? {
-    Ok(materialized)
-}</code></pre>
+)</code></pre>
       </div>
     </div>
     <div class="box">
@@ -956,10 +954,11 @@ Ok(tensor)</code></pre>
     <h2>Materialization</h2>
     <p>
       The parser's <code>materialize_shorthand</code> method is the expand-mode
-      shorthand boundary. It returns <code>Some(Network)</code> for
-      <code>chain</code>, <code>trace</code>, and compact dot/Schoonschip syntax
-      that rewrites to ordinary parser input. If nothing materializes, it returns
-      <code>None</code> and ordinary tensor-leaf parsing runs.
+      shorthand boundary. It always returns a network. For <code>chain</code>
+      and <code>trace</code>, it materializes topology directly. For compact
+      dot/Schoonschip syntax, it rewrites to ordinary parser input and recurses.
+      If the atom rewriter makes no change, it stops recursion and parses the
+      original function as an ordinary tensor leaf.
     </p>
     <p>
       <code>SchoonschipMaterializer</code> is the narrower atom rewriter used by
@@ -972,23 +971,29 @@ Ok(tensor)</code></pre>
     <div class="snippet-grid">
       <div class="box">
         <p class="source-ref">
-          <a href="../../crates/spenso/src/network/parsing/mod.rs#L618">crates/spenso/src/network/parsing/mod.rs:618</a>
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L362">crates/spenso/src/network/parsing/materialization.rs:362</a>
         </p>
         <pre><code>fn materialize_shorthand(...)
-    -&gt; Result&lt;Option&lt;Self&gt;, TensorNetworkError&lt;K, Symbol&gt;&gt;
+    -&gt; Result&lt;Self, TensorNetworkError&lt;K, Symbol&gt;&gt;
 {
     if symbol == SPENSO_TAG.chain {
-        return Self::materialize_chain_shorthand(...).map(Some);
+        return Self::materialize_chain_shorthand(...);
     }
     if symbol == SPENSO_TAG.trace {
-        return Self::materialize_trace_shorthand(...).map(Some);
+        return Self::materialize_trace_shorthand(...);
     }
-    ...
+
+    let materialized = SchoonschipMaterializer::new(&amp;state)
+        .materialize_shorthand(value.as_view());
+    if materialized == value.as_view().to_owned() {
+        return Self::parse_regular_function_leaf(...);
+    }
+    Self::try_from_view_impl(materialized.as_view(), ...)
 }</code></pre>
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L71">crates/spenso/src/network/parsing/materialization.rs:71</a>
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L91">crates/spenso/src/network/parsing/materialization.rs:91</a>
         </p>
         <pre><code>pub(super) fn materialize_shorthand(&self, value: AtomView&lt;'_&gt;) -&gt; Atom {
     self.materialize_shorthand_root(value)
@@ -998,7 +1003,7 @@ Ok(tensor)</code></pre>
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L171">crates/spenso/src/network/parsing/materialization.rs:171</a>
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L184">crates/spenso/src/network/parsing/materialization.rs:184</a>
         </p>
         <pre><code>let rep = Self::compact_vector_rep(*lhs)?;
 if rep != Self::compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
@@ -1075,7 +1080,7 @@ let slot = self.state.slot(&rep).to_atom();</code></pre>
 -> parse product into the chain network</code></pre>
     <div class="box">
       <p class="source-ref">
-        <a href="../../crates/spenso/src/network/parsing/mod.rs#L710">crates/spenso/src/network/parsing/mod.rs:710</a>
+        <a href="../../crates/spenso/src/network/parsing/materialization.rs#L417">crates/spenso/src/network/parsing/materialization.rs:417</a>
       </p>
       <pre><code>let start = Slot::try_from(args[0])?;
 let end = Slot::try_from(args[1])?;
@@ -1112,7 +1117,7 @@ let factor = SchoonschipMaterializer::new(&state)
    g(bridge, left*) * g(right, bridge*)</code></pre>
     <div class="box">
       <p class="source-ref">
-        <a href="../../crates/spenso/src/network/parsing/mod.rs#L782">crates/spenso/src/network/parsing/mod.rs:782</a>
+        <a href="../../crates/spenso/src/network/parsing/materialization.rs#L489">crates/spenso/src/network/parsing/materialization.rs:489</a>
       </p>
       <pre><code>let rep = Representation::try_from(*rep_view)?;
 ...
@@ -1218,13 +1223,7 @@ parse_fun(fun):
     infer structure
     return TensorFromExpression(original expression, inferred structure)
 
-  if let Some(network) = materialize_shorthand(fun):
-    return network
-
-  if ordinary structure parsing succeeds:
-    return library tensor or concretized shell
-
-  return scalar expression
+  return materialize_shorthand(fun)
 
 materialize_shorthand(fun):
   if fun is chain:
@@ -1252,7 +1251,10 @@ materialize_shorthand(fun):
   if the Schoonschip atom changed:
     parse rebuilt current multiplied by additional_factors
 
-  return None</code></pre>
+  if ordinary structure parsing succeeds:
+    return library tensor or concretized shell
+
+  return scalar expression</code></pre>
   </section>
 </main>
 </body>

@@ -1,4 +1,4 @@
-use symbolica::atom::{FunctionBuilder, Symbol};
+use symbolica::atom::Symbol;
 
 use super::*;
 
@@ -7,14 +7,12 @@ use crate::network::library::FunctionLibrary;
 use crate::network::library::panicing::ErroringLibrary;
 use crate::network::tags::SPENSO_TAG;
 
-use crate::network::library::symbolic::ETS;
 use crate::shadowing::Concretize;
-use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::representation::Representation;
-use crate::structure::slot::{DualSlotTo, DummyAind, ParseableAind, Slot, SlotError};
+use crate::structure::slot::{DummyAind, ParseableAind, Slot};
 use crate::structure::{
-    NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure, StructureError,
-    TensorShell,
+    NamedStructure, PermutedStructure, ScalarStructure, StructureError, TensorShell,
 };
 use crate::tensors::parametric::ParamTensor;
 
@@ -27,14 +25,14 @@ use symbolica::atom::{AddView, Atom, AtomView, MulView, PowView, representation:
 
 use crate::structure::{HasStructure, TensorStructure};
 
-use crate::{structure::HasName, structure::representation::LibraryRep};
+use crate::structure::representation::LibraryRep;
 
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
 mod structure_inference;
 pub use structure_inference::{AtomStructureExt, StructureFromAtom, StructureInferenceMode};
 mod materialization;
-use materialization::{ChainExpansion, SchoonschipMaterializer};
+use materialization::ChainExpansion;
 mod tensor_from_expression;
 pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
 
@@ -61,79 +59,6 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<&'a Atom>
     type Error = StructureError;
     fn try_from(value: &'a Atom) -> Result<Self, Self::Error> {
         ShadowedStructure::<Aind>::parse(value.as_view())
-    }
-}
-
-impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
-    for PermutedStructure<ShadowedStructure<Aind>>
-{
-    type Error = StructureError;
-    fn try_from(value: FunView<'a>) -> Result<Self, Self::Error> {
-        match value.get_symbol() {
-            s if s == AIND_SYMBOLS.aind => {
-                let mut structure: Vec<Slot<LibraryRep, Aind>> = vec![];
-
-                for arg in value.iter() {
-                    structure.push(arg.try_into()?);
-                }
-
-                let o = OrderedStructure::new(structure);
-                let p = o.map_structure(|s| s.into());
-
-                Ok(p)
-            }
-            name => {
-                let mut args = vec![];
-                let mut slots = vec![];
-                let mut is_structure: Option<StructureError> =
-                    Some(SlotError::EmptyStructure.into());
-
-                for arg in value.iter() {
-                    let slot: Result<Slot<LibraryRep, Aind>, _> = arg.try_into();
-
-                    match slot {
-                        Ok(slot) => {
-                            is_structure = None;
-                            slots.push(slot);
-                        }
-                        Err(e) => {
-                            if let AtomView::Fun(f) = arg
-                                && f.get_symbol() == AIND_SYMBOLS.aind
-                            {
-                                let internal_s = Self::try_from(f);
-
-                                if let Ok(s) = internal_s {
-                                    let p = s.index_permutation;
-                                    let mut v = s.structure.structure.structure;
-                                    p.apply_slice_in_place_inv(&mut v); //undo sorting
-                                    let p = s.rep_permutation;
-                                    p.apply_slice_in_place_inv(&mut v); //undo sorting
-                                    slots.extend(v);
-                                    is_structure = None;
-                                    continue;
-                                }
-                            }
-                            if slots.is_empty() {
-                                is_structure = Some(e.into());
-                            }
-                            args.push(arg.to_owned());
-                        }
-                    }
-                }
-
-                if let Some(e) = is_structure {
-                    Err(e)
-                } else {
-                    let mut structure: PermutedStructure<ShadowedStructure<Aind>> =
-                        OrderedStructure::new(slots).map_structure(Into::into);
-                    structure.structure.set_name(name);
-                    if !args.is_empty() {
-                        structure.structure.additional_args = Some(args);
-                    }
-                    Ok(structure)
-                }
-            }
-        }
     }
 }
 
@@ -613,56 +538,6 @@ where
     }
 
     #[allow(clippy::result_large_err)]
-    fn materialize_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
-        library: &Lib,
-        function_library: &FunLib,
-        settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
-    where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
-        S::Slot: IsAbstractSlot<Aind = Aind>,
-        T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
-        Lib: TensorLibraryFor<S, T, Key = K>,
-        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
-    {
-        let symbol = value.get_symbol();
-        if symbol == SPENSO_TAG.chain {
-            return Self::materialize_chain_shorthand(
-                value,
-                state,
-                library,
-                function_library,
-                settings,
-            );
-        }
-
-        if symbol == SPENSO_TAG.trace {
-            return Self::materialize_trace_shorthand(
-                value,
-                state,
-                library,
-                function_library,
-                settings,
-            );
-        }
-
-        let materialized =
-            SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(value.as_view());
-
-        Self::try_from_view_impl(
-            materialized.as_view(),
-            state,
-            library,
-            function_library,
-            settings,
-        )
-    }
-
-    #[allow(clippy::result_large_err)]
     fn parse_regular_function_leaf<S, Lib>(
         value: FunView<'a>,
         library: &Lib,
@@ -695,251 +570,6 @@ where
             }
         } else {
             Ok(Self::from_scalar(value.as_view().try_into()?))
-        }
-    }
-
-    #[allow(clippy::result_large_err)]
-    fn materialize_chain_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
-        library: &Lib,
-        function_library: &FunLib,
-        settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
-    where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
-        S::Slot: IsAbstractSlot<Aind = Aind>,
-        T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
-        Lib: TensorLibraryFor<S, T, Key = K>,
-        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
-    {
-        let args = value.iter().collect::<Vec<_>>();
-        if args.len() < 2 {
-            return Err(TensorNetworkError::TooManyArgsFunction(
-                value.as_view().to_plain_string(),
-            ));
-        }
-
-        let start = Slot::<LibraryRep, Aind>::try_from(args[0])
-            .map_err(|err| eyre!("invalid chain start `{}`: {err}", args[0]))?;
-        let end = Slot::<LibraryRep, Aind>::try_from(args[1])
-            .map_err(|err| eyre!("invalid chain end `{}`: {err}", args[1]))?;
-        let factors = &args[2..];
-
-        if factors.is_empty() {
-            let metric = FunctionBuilder::new(ETS.metric)
-                .add_arg(start.to_atom())
-                .add_arg(end.to_atom())
-                .finish();
-            return Self::try_from_view_impl(
-                metric.as_view(),
-                state,
-                library,
-                function_library,
-                settings,
-            );
-        }
-
-        let mut factor_networks = Vec::new();
-        let mut left = start;
-        for (position, factor) in factors.iter().enumerate() {
-            let right = if position + 1 == factors.len() {
-                end.dual()
-            } else {
-                state.slot(&left.rep)
-            };
-            let factor = ChainExpansion::replace_placeholders(
-                *factor,
-                &left.to_atom(),
-                &right.dual().to_atom(),
-            );
-            let factor = SchoonschipMaterializer::<Aind>::new(&state)
-                .materialize_shorthand(factor.as_view());
-            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
-                factor,
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?);
-            left = right;
-        }
-
-        Ok(Self::chain_like_network_product(factor_networks))
-    }
-
-    #[allow(clippy::result_large_err)]
-    fn materialize_trace_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
-        library: &Lib,
-        function_library: &FunLib,
-        settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
-    where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
-        S::Slot: IsAbstractSlot<Aind = Aind>,
-        T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
-        Lib: TensorLibraryFor<S, T, Key = K>,
-        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
-    {
-        let args = value.iter().collect::<Vec<_>>();
-        let Some(rep_view) = args.first() else {
-            return Err(TensorNetworkError::TooManyArgsFunction(
-                value.as_view().to_plain_string(),
-            ));
-        };
-
-        let rep = Representation::<LibraryRep>::try_from(*rep_view)
-            .map_err(|err| eyre!("invalid trace representation `{rep_view}`: {err}"))?;
-        let factors = &args[1..];
-
-        if factors.is_empty() {
-            return Self::try_from_view_impl(
-                rep.dim.to_symbolic().as_view(),
-                state,
-                library,
-                function_library,
-                settings,
-            );
-        }
-
-        if let [factor] = factors {
-            let left = state.slot(&rep);
-            let right = state.slot(&rep);
-            let bridge = state.slot(&rep);
-            let materialized_factor = ChainExpansion::replace_placeholders(
-                *factor,
-                &left.to_atom(),
-                &right.dual().to_atom(),
-            );
-            let materialized_factor = SchoonschipMaterializer::<Aind>::new(&state)
-                .materialize_shorthand(materialized_factor.as_view());
-            let left_closure = FunctionBuilder::new(ETS.metric)
-                .add_arg(bridge.to_atom())
-                .add_arg(left.dual().to_atom())
-                .finish();
-            let right_closure = FunctionBuilder::new(ETS.metric)
-                .add_arg(right.to_atom())
-                .add_arg(bridge.dual().to_atom())
-                .finish();
-            let factor_net = Self::try_from_view_impl(
-                materialized_factor.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?;
-            let left_net = Self::try_from_view_impl(
-                left_closure.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?;
-            let right_net = Self::try_from_view_impl(
-                right_closure.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?;
-            return Ok(factor_net.n_mul([right_net, left_net]));
-        }
-
-        let links = (0..factors.len())
-            .map(|_| state.slot(&rep))
-            .collect::<Vec<_>>();
-
-        let materialized_factors = factors
-            .iter()
-            .enumerate()
-            .map(|(position, factor)| {
-                let left = links[position].to_atom();
-                let right = links[(position + 1) % factors.len()].dual().to_atom();
-                let factor = ChainExpansion::replace_placeholders(*factor, &left, &right);
-                SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(factor.as_view())
-            })
-            .collect::<Vec<_>>();
-
-        let mut factor_networks = Vec::new();
-        for factor in materialized_factors {
-            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
-                factor,
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?);
-        }
-        Ok(Self::chain_like_network_product(factor_networks))
-    }
-
-    #[allow(clippy::result_large_err)]
-    fn parse_chain_like_factor_networks<S, Lib, FunLib>(
-        factor: Atom,
-        state: ParseState<Aind>,
-        library: &Lib,
-        function_library: &FunLib,
-        settings: &ParseSettings,
-    ) -> Result<Vec<Self>, TensorNetworkError<K, Symbol>>
-    where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
-        S::Slot: IsAbstractSlot<Aind = Aind>,
-        T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
-        Lib: TensorLibraryFor<S, T, Key = K>,
-        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
-    {
-        let AtomView::Mul(product) = factor.as_view() else {
-            return Ok(vec![Self::try_from_view_impl(
-                factor.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?]);
-        };
-
-        let mut scalars = Vec::new();
-        let mut tensors = Vec::new();
-        for arg in product.iter() {
-            let network =
-                Self::try_from_view_impl(arg, state.clone(), library, function_library, settings)?;
-            if network.state == NetworkState::PureScalar {
-                scalars.push(network);
-            } else {
-                tensors.push(network);
-            }
-        }
-
-        if scalars.is_empty() || tensors.len() != 1 {
-            return Ok(vec![Self::try_from_view_impl(
-                factor.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?]);
-        }
-
-        scalars.extend(tensors);
-        Ok(scalars)
-    }
-
-    fn chain_like_network_product(networks: Vec<Self>) -> Self {
-        let mut networks = networks.into_iter();
-        let first = networks.next().unwrap();
-        let rest = networks.collect::<Vec<_>>();
-        if rest.is_empty() {
-            first
-        } else {
-            first.n_mul(rest)
         }
     }
 
