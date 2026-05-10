@@ -52,7 +52,7 @@ pub fn nested_dot_expression() -> Atom {
 }
 
 pub fn run_schoonschip(expr: Atom, settings: &SchoonschipSettings) -> Atom {
-    expr.schoonschip_with_net::<false, true, AbstractIndex>(settings)
+    expr.schoonschip_with_net::<false, AbstractIndex>(settings)
 }
 
 pub fn assert_benchmark_outputs_match() {
@@ -305,7 +305,6 @@ pub fn network_parse_normalized(expr: Atom) -> SymbolicNet<AbstractIndex> {
     expr.parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
         depth_limit: Some(1),
         take_first_term_from_sum: false,
-        parse_inner_products: true,
         parse_composite_scalars_as_tensors: true,
         ..Default::default()
     })
@@ -320,7 +319,7 @@ pub fn network_schoonschip_substituted_with_order(
     expr: Atom,
     order: SchoonschipContractionOrder,
 ) -> Atom {
-    let mut result = expr.schoonschip_with_net::<false, false, AbstractIndex>(
+    let mut result = expr.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial()
             .with_expanded_contracted_sums()
             .with_contraction_order(order),
@@ -339,8 +338,7 @@ pub fn network_schoonschip_substituted_with_order(
             .with_expanded_contracted_sums()
             .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
         for _ in 0..4 {
-            let next =
-                result.schoonschip_with_net::<false, false, AbstractIndex>(&cleanup_settings);
+            let next = result.schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings);
             if next == result {
                 break;
             }

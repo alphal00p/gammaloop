@@ -998,10 +998,7 @@ fn dot_derivative() {
     println!("{}", e);
 
     let net = e
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
-            parse_inner_products: true,
-            ..Default::default()
-        })
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
 
     assert_snapshot!(net.snapshot_dot(),@r#"

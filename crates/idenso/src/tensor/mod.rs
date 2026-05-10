@@ -15,7 +15,9 @@ use spenso::{
             function_lib::Wrap,
             symbolic::{ETS, ExplicitKey, TensorLibrary},
         },
-        parsing::{Parse, ParseSettings, ShadowedStructure},
+        parsing::{
+            Parse, ParseSettings, ShadowedStructure, StructureFromAtom, StructureInferenceMode,
+        },
         store::NetworkStore,
     },
     shadowing::{
@@ -42,9 +44,7 @@ use spenso::structure::representation::Representation;
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
-    function,
-    id::Replacement,
-    symbol,
+    function, symbol,
 };
 
 #[cfg(test)]
@@ -74,9 +74,40 @@ impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
     }
 }
 
+impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTensor<Aind> {
+    fn structure_from_atom(
+        value: AtomView<'_>,
+        mode: StructureInferenceMode,
+    ) -> Result<PermutedStructure<Self>, StructureError> {
+        match mode {
+            StructureInferenceMode::Fast => {
+                let structure = OrderedStructure::from_syntactic_atom(value)?;
+                Ok(Self::from_parsed_atom(value, structure))
+            }
+            StructureInferenceMode::Expanded => {
+                let structure =
+                    OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)?;
+                Ok(structure.map_structure(|structure| {
+                    let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
+                        (false, f.get_symbol() == ETS.metric)
+                    } else {
+                        (true, false)
+                    };
+                    SymbolicTensor {
+                        structure,
+                        is_composite,
+                        is_metric,
+                        expression: value.to_owned(),
+                    }
+                }))
+            }
+        }
+    }
+}
+
 impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
     fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
-        let structure = OrderedStructure::from_atomcore_unchecked(value)?;
+        let structure = OrderedStructure::from_syntactic_atom(value)?;
         Ok(Self::from_parsed_atom(value, structure))
     }
 
@@ -84,7 +115,7 @@ impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
         value: AtomView,
         settings: &ParseSettings,
     ) -> Result<PermutedStructure<Self>, StructureError> {
-        let structure = match OrderedStructure::from_atomcore_unchecked(value) {
+        let structure = match OrderedStructure::from_syntactic_atom(value) {
             Ok(structure) => structure,
             Err(StructureError::EmptyStructure(_))
                 if settings.parse_composite_scalars_as_tensors

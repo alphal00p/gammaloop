@@ -2,7 +2,7 @@ use spenso::{
     network::{
         ExecutionResult, Sequential, TensorOrScalarOrKey,
         library::{DummyLibrary, function_lib::Wrap, symbolic::ETS},
-        parsing::ParseSettings,
+        parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
         tags::SPENSO_TAG as T,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
@@ -188,7 +188,13 @@ impl NetworkSchoonschip<'_> {
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 depth_limit: self.settings.depth_limit,
                 take_first_term_from_sum: false,
-                parse_inner_products: self.settings.parse_inner_products,
+                shorthand_parsing: if self.settings.parse_inner_products {
+                    ShorthandParsing::Expand
+                } else {
+                    ShorthandParsing::Opaque {
+                        inference: StructureInferenceMode::Fast,
+                    }
+                },
                 parse_composite_scalars_as_tensors: RECURSE,
                 ..Default::default()
             })
