@@ -792,7 +792,7 @@ pub trait StructureContract: Sized {
 #[derive(Error, Debug)]
 pub enum StructureError {
     #[error("SlotError: {0}")]
-    SlotError(#[from] SlotError),
+    SlotError(SlotError),
     #[error("empty structure {0}")]
     EmptyStructure(SlotError),
     #[error("wrong number of arguments {0}, expected {1}")]
@@ -801,6 +801,15 @@ pub enum StructureError {
     // NonTracedOut(#[from] DuplicateItemError),
     #[error("Parsing error: expected function view found {0}")]
     ParsingError(String),
+}
+
+impl From<SlotError> for StructureError {
+    fn from(error: SlotError) -> Self {
+        match error {
+            SlotError::EmptyStructure => StructureError::EmptyStructure(error),
+            _ => StructureError::SlotError(error),
+        }
+    }
 }
 
 pub trait HasName {
@@ -1030,6 +1039,20 @@ impl<S: TensorStructure, O: From<S> + TensorStructure> CastStructure<TensorShell
 impl<S: TensorStructure> From<S> for TensorShell<S> {
     fn from(structure: S) -> Self {
         Self::new(structure)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SlotError, StructureError};
+
+    #[test]
+    fn empty_slot_error_converts_to_empty_structure_error() {
+        let error = StructureError::from(SlotError::EmptyStructure);
+        assert!(matches!(
+            error,
+            StructureError::EmptyStructure(SlotError::EmptyStructure)
+        ));
     }
 }
 

@@ -105,16 +105,30 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// Infer an `OrderedStructure` from ordinary tensor syntax without shorthand semantics.
     ///
     /// The dispatcher is intentionally shallow: sums, products, powers, and
-    /// functions each have their own convention below. Anything without a
-    /// visible tensor slot reports `EmptyStructure`, so callers can treat it as
-    /// a scalar leaf.
+    /// functions each have their own convention below. Scalar syntax is carried
+    /// internally as `OrderedStructure::empty()` and converted to
+    /// `EmptyStructure` only at this public leaf boundary.
     pub fn from_syntactic_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
+        let structure = Self::syntactic_structure_from_atom(value)?;
+        if structure.is_scalar() {
+            Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
+        } else {
+            Ok(structure)
+        }
+    }
+
+    fn syntactic_structure_from_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
         match value {
-            AtomView::Add(add) => Self::from_syntactic_atom(add.iter().next().unwrap()),
+            AtomView::Add(add) => {
+                let Some(first) = add.iter().next() else {
+                    return Ok(OrderedStructure::empty());
+                };
+                Self::syntactic_structure_from_atom(first)
+            }
             AtomView::Pow(pow) => Self::from_power_atom(pow),
             AtomView::Mul(mul) => Self::from_product_atom(mul),
             AtomView::Fun(fun) => Self::from_function_atom(fun),
-            _ => Err(StructureError::EmptyStructure(SlotError::EmptyStructure)),
+            _ => Ok(OrderedStructure::empty()),
         }
     }
 
@@ -126,7 +140,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// rejected because their external structure is not well-defined here.
     fn from_power_atom(pow: PowView<'_>) -> Result<Self, StructureError> {
         let (base, exp) = pow.get_base_exp();
-        let base_structure = Self::from_syntactic_atom(base)?;
+        let base_structure = Self::syntactic_structure_from_atom(base)?;
 
         if base_structure.is_scalar() {
             Ok(base_structure)
@@ -153,22 +167,18 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
 
     /// Infer an `OrderedStructure` from a product by merging every factor that exposes slots.
     ///
-    /// Factors that return `EmptyStructure` are ignored as scalar factors. If no
-    /// factor exposes a slot, the whole product is reported as scalar.
+    /// Scalar factors are empty structures, so merging them is a no-op. If no
+    /// factor exposes a slot, the product remains an empty scalar structure.
     fn from_product_atom(product: MulView<'_>) -> Result<Self, StructureError> {
         let mut structure = OrderedStructure::empty();
 
         for factor in product {
-            if let Ok(factor_structure) = Self::from_syntactic_atom(factor) {
-                structure = structure.merge(&factor_structure)?.0;
-            }
+            structure = structure
+                .merge(&Self::syntactic_structure_from_atom(factor)?)?
+                .0;
         }
 
-        if structure.is_scalar() {
-            Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
-        } else {
-            Ok(structure)
-        }
+        Ok(structure)
     }
 
     /// Infer an `OrderedStructure` from a generic function's direct structural arguments.
@@ -186,31 +196,24 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         }
 
         let mut slots = Vec::new();
-        let mut is_structure: Option<StructureError> = Some(SlotError::EmptyStructure.into());
 
         for arg in fun.iter() {
             match Slot::<LibraryRep, Aind>::try_from(arg) {
                 Ok(slot) => {
-                    is_structure = None;
                     slots.push(slot);
                 }
                 Err(_) => {
                     if let AtomView::Fun(fun) = arg
                         && fun.get_symbol() == AIND_SYMBOLS.aind
-                        && let Ok(internal) = Self::from_function_atom(fun)
                     {
+                        let internal = Self::from_function_atom(fun)?;
                         slots.extend(internal.structure);
-                        is_structure = None;
                     }
                 }
             }
         }
 
-        if let Some(error) = is_structure {
-            Err(error)
-        } else {
-            Ok(OrderedStructure::new(slots).structure)
-        }
+        Ok(OrderedStructure::new(slots).structure)
     }
 
     /// Infer an `OrderedStructure` from expanded shorthand by reading graph dangling slots.
@@ -302,14 +305,8 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         value: AtomView<'_>,
         slots: &mut Vec<Slot<LibraryRep, Aind>>,
     ) -> Result<(), StructureError> {
-        match Self::from_syntactic_atom(value) {
-            Ok(structure) => {
-                slots.extend(structure.structure);
-                Ok(())
-            }
-            Err(StructureError::EmptyStructure(_)) => Ok(()),
-            Err(error) => Err(error),
-        }
+        slots.extend(Self::syntactic_structure_from_atom(value)?.structure);
+        Ok(())
     }
 }
 
