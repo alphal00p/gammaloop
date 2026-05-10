@@ -1,8 +1,9 @@
 use super::*;
 use crate::network::NetworkState;
+use crate::network::library::symbolic::ETS;
 use crate::structure::representation::{Lorentz, Minkowski, RepName};
 use crate::{chain, slot, trace};
-use symbolica::{function, symbol};
+use symbolica::{atom::FunctionBuilder, function, symbol};
 
 fn mink4() -> Representation<Minkowski> {
     Minkowski {}.new_rep(4)
