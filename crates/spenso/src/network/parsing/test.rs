@@ -23,6 +23,15 @@ fn chain_factor_with_external(name: Symbol, external: Atom) -> Atom {
         .finish()
 }
 
+fn opaque_fast_settings() -> ParseSettings {
+    ParseSettings {
+        shorthand_parsing: ShorthandParsing::Opaque {
+            inference: StructureInferenceMode::Fast,
+        },
+        ..Default::default()
+    }
+}
+
 #[test]
 fn parse_chain_as_opaque_tensor() {
     let rep = mink4();
@@ -34,7 +43,7 @@ fn parse_chain_as_opaque_tensor() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
@@ -72,6 +81,25 @@ fn parse_trace_closes_links_and_keeps_external_indices() {
 
     let parsed = expr
         .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 3);
+}
+
+#[test]
+fn parse_trace_as_opaque_tensor_with_fast_structure() {
+    let trace_rep = Lorentz {}.new_rep(4);
+    let external_rep = mink4();
+    let expr = trace!(
+        &trace_rep,
+        chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
+        chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
+        chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
@@ -148,6 +176,20 @@ fn materialize_schoonschip_vectors_parse_as_dot_product() {
         .unwrap();
 
     assert!(parsed.state.is_scalar());
+    assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn opaque_schoonschip_vectors_stay_scalar() {
+    let rep = mink4();
+    let expr =
+        function!(symbol!("p"), rep.to_symbolic([])) * function!(symbol!("q"), rep.to_symbolic([]));
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::PureScalar);
     assert!(parsed.graph.dangling_indices().is_empty());
 }
 

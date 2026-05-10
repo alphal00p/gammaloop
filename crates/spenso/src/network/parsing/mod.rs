@@ -1,5 +1,4 @@
 use symbolica::atom::{AtomCore, FunctionBuilder, Symbol};
-use symbolica::domains::rational::Rational;
 
 use super::*;
 
@@ -15,8 +14,7 @@ use crate::structure::representation::{RepName, Representation};
 // use crate::shadowing::Concretize;
 use crate::structure::slot::{DualSlotTo, DummyAind, ParseableAind, Slot, SlotError};
 use crate::structure::{
-    NamedStructure, OrderedStructure, PermutedStructure, StructureContract, StructureError,
-    TensorShell,
+    NamedStructure, OrderedStructure, PermutedStructure, StructureError, TensorShell,
 };
 use crate::tensors::parametric::ParamTensor;
 
@@ -34,127 +32,15 @@ use crate::{shadowing::Concretize, structure::HasName, structure::representation
 
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
+mod structure_inference;
+pub use structure_inference::{AtomStructureExt, StructureFromAtom, StructureInferenceMode};
+
 impl<Aind: ParseableAind + AbsInd> Parse for ShadowedStructure<Aind> {
     fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
         if let AtomView::Fun(f) = value {
             f.try_into()
         } else {
             Err(StructureError::ParsingError(value.to_plain_string()))
-        }
-    }
-}
-
-impl<Aind: ParseableAind + AbsInd> OrderedStructure<LibraryRep, Aind> {
-    pub fn from_atomcore_unchecked<A: AtomCore>(value: A) -> Result<Self, StructureError> {
-        // println!("HII");
-        let view = value.as_atom_view();
-        match view {
-            AtomView::Add(a) => {
-                // println!("Add{}", a.as_view());
-                Self::from_atomcore_unchecked(a.iter().next().unwrap())
-            }
-            AtomView::Pow(p) => {
-                // println!("Pow{}", p.as_view());
-                let (base, exp) = p.get_base_exp();
-
-                let base_strct = Self::from_atomcore_unchecked(base)?;
-
-                if base_strct.is_scalar() {
-                    Ok(base_strct)
-                } else if base_strct.is_fully_self_dual()
-                    && let Ok(r) = Rational::try_from(exp)
-                {
-                    if r.numerator() % 2 == 0 {
-                        Ok(OrderedStructure::empty())
-                    } else if r.denominator() == 1 {
-                        Ok(base_strct)
-                    } else {
-                        Err(StructureError::ParsingError(format!(
-                            "Invalid power of tensor {}",
-                            view
-                        )))
-                    }
-                } else {
-                    Err(StructureError::ParsingError(format!(
-                        "Invalid power of tensor {}",
-                        view
-                    )))
-                }
-            }
-            AtomView::Mul(f) => {
-                // println!("Mul{}", f.as_view());
-                let mut structure = OrderedStructure::empty();
-
-                for i in f.into_iter() {
-                    match Self::from_atomcore_unchecked(i) {
-                        Ok(s) => structure = structure.merge(&s)?.0,
-                        // Err(StructureError::EmptyStructure(SlotError::EmptyStructure)) => {
-                        //     continue;
-                        // }
-                        Err(_) => {
-                            continue;
-                        }
-                    }
-                }
-
-                if structure.is_scalar() {
-                    return Err(StructureError::EmptyStructure(SlotError::EmptyStructure));
-                }
-                Ok(structure)
-            }
-            AtomView::Fun(f) => match f.get_symbol() {
-                s if s == AIND_SYMBOLS.aind => {
-                    // println!("Fun{}", f.as_view());
-                    let mut structure: Vec<Slot<LibraryRep, Aind>> = vec![];
-
-                    for arg in f.iter() {
-                        structure.push(arg.try_into()?);
-                    }
-
-                    let o = OrderedStructure::new(structure);
-
-                    Ok(o.structure)
-                }
-                _ => {
-                    //     println!("Fun{}", f.as_view());
-                    let mut args = vec![];
-                    let mut slots = vec![];
-                    let mut is_structure: Option<StructureError> =
-                        Some(SlotError::EmptyStructure.into());
-
-                    for arg in f.iter() {
-                        let slot: Result<Slot<LibraryRep, Aind>, _> = arg.try_into();
-
-                        match slot {
-                            Ok(slot) => {
-                                is_structure = None;
-                                slots.push(slot);
-                            }
-                            Err(_) => {
-                                if let AtomView::Fun(f) = arg
-                                    && f.get_symbol() == AIND_SYMBOLS.aind
-                                {
-                                    let internal_s = Self::from_atomcore_unchecked(f.as_view());
-
-                                    if let Ok(s) = internal_s {
-                                        slots.extend(s.structure);
-                                        is_structure = None;
-                                        continue;
-                                    }
-                                }
-                                args.push(arg.to_owned());
-                            }
-                        }
-                    }
-
-                    if let Some(e) = is_structure {
-                        Err(e)
-                    } else {
-                        Ok(OrderedStructure::new(slots).structure)
-                    }
-                }
-            },
-            _ => Err(StructureError::EmptyStructure(SlotError::EmptyStructure)),
         }
     }
 }
@@ -224,7 +110,9 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
                                     continue;
                                 }
                             }
-                            is_structure = Some(e.into());
+                            if slots.is_empty() {
+                                is_structure = Some(e.into());
+                            }
                             args.push(arg.to_owned());
                         }
                     }
@@ -243,6 +131,32 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
                 }
             }
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShorthandParsing {
+    /// Expand shorthand notation into an explicit network.
+    Expand,
+    /// Keep shorthand notation as a leaf and infer its exposed structure.
+    Opaque { inference: StructureInferenceMode },
+}
+
+impl ShorthandParsing {
+    pub fn expands(self) -> bool {
+        matches!(self, Self::Expand)
+    }
+
+    fn opaque_inference_for(self, symbol: Symbol) -> Option<StructureInferenceMode> {
+        match self {
+            Self::Expand => None,
+            Self::Opaque { inference } if Self::is_shorthand_symbol(symbol) => Some(inference),
+            Self::Opaque { .. } => None,
+        }
+    }
+
+    fn is_shorthand_symbol(symbol: Symbol) -> bool {
+        symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace || symbol == SPENSO_TAG.dot
     }
 }
 
@@ -276,13 +190,16 @@ pub struct ParseSettings {
     /// parsed.
     pub depth_is_product_depth: bool,
 
-    /// Materialize compact inner-product notation during parsing.
+    /// Selects how shorthand notation is represented in the parsed network.
     ///
-    /// When enabled, expressions such as `dot(p(rep), q(rep))`,
-    /// `g(p(rep), q(rep))`, and `p(rep) * q(rep)` are expanded through a fresh
-    /// dummy slot so the network can contract them. When disabled, those
-    /// compact inner products are left for ordinary leaf parsing.
-    pub parse_inner_products: bool,
+    /// `Expand` turns shorthand such as compact dot products, chains, traces,
+    /// and Schoonschip vector notation into explicit graph structure. Fresh
+    /// dummies created by this lowering are local to the expansion.
+    ///
+    /// `Opaque` keeps shorthand as a leaf tensor or scalar. Its inference mode
+    /// controls whether the exposed structure comes from a fast syntactic walk
+    /// or from expanding the shorthand and reading the resulting dangling slots.
+    pub shorthand_parsing: ShorthandParsing,
 
     /// Allow parser implementations to treat composite scalar expressions as
     /// scalar-structured tensors.
@@ -301,7 +218,7 @@ impl Default for ParseSettings {
             take_first_term_from_sum: false,
             depth_limit: None,
             depth_is_product_depth: true,
-            parse_inner_products: true,
+            shorthand_parsing: ShorthandParsing::Expand,
             parse_composite_scalars_as_tensors: false,
         }
     }
@@ -354,295 +271,298 @@ struct SchoonschipMaterialization {
     compact_self: bool,
 }
 
-fn compact_rep_pattern_match(arg: AtomView<'_>) -> Option<Representation<LibraryRep>> {
-    let rep_pattern = Atom::var(SPENSO_TAG.rep_).to_pattern();
-    let settings = MatchSettings {
-        level_range: (0, Some(0)),
-        partial: false,
-        ..Default::default()
-    };
-    let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
-    let matched = matches.next_detailed()?;
-    let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);
-    Representation::<LibraryRep>::try_from(rep.as_view()).ok()
+struct ShorthandMaterializer<'a, Aind> {
+    state: &'a ParseState<Aind>,
+    settings: &'a ParseSettings,
 }
 
-fn compact_tensor_rep_arg<Aind: AbsInd + ParseableAind>(
-    value: FunView<'_>,
-) -> Option<(usize, Representation<LibraryRep>)> {
-    if value.get_symbol() == ETS.metric || value.get_symbol() == SPENSO_TAG.dot {
-        return None;
+impl<'a, Aind: AbsInd + DummyAind + ParseableAind> ShorthandMaterializer<'a, Aind> {
+    fn new(state: &'a ParseState<Aind>, settings: &'a ParseSettings) -> Self {
+        Self { state, settings }
     }
 
-    if Representation::<LibraryRep>::try_from(value.as_view()).is_ok() {
-        return None;
-    }
-
-    let args = value.iter().collect::<Vec<_>>();
-    if args
-        .iter()
-        .any(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
-    {
-        return None;
-    }
-
-    let rep_args = args
-        .iter()
-        .enumerate()
-        .filter_map(|(position, arg)| compact_rep_pattern_match(*arg).map(|rep| (position, rep)))
-        .collect::<Vec<_>>();
-
-    let [(position, rep)] = rep_args.as_slice() else {
-        return None;
-    };
-
-    Some((*position, *rep))
-}
-
-fn compact_vector_rep<Aind: AbsInd + ParseableAind>(
-    value: AtomView<'_>,
-) -> Option<Representation<LibraryRep>> {
-    match value {
-        AtomView::Fun(fun) => compact_tensor_rep_arg::<Aind>(fun).map(|(_, rep)| rep),
-        AtomView::Add(add) => {
-            let mut reps = add.iter().map(compact_vector_rep::<Aind>);
-            let rep = reps.next()??;
-            reps.all(|candidate| candidate == Some(rep)).then_some(rep)
-        }
-        _ => None,
-    }
-}
-
-fn materialize_compact_vector_with_slot<Aind: AbsInd + ParseableAind>(
-    value: AtomView<'_>,
-    rep: &Representation<LibraryRep>,
-    slot: &Atom,
-) -> Option<Atom> {
-    match value {
-        AtomView::Fun(fun) => {
-            let (position, matched_rep) = compact_tensor_rep_arg::<Aind>(fun)?;
-            if matched_rep != *rep {
-                return None;
-            }
-
-            let mut tensor = FunctionBuilder::new(fun.get_symbol());
-            for (arg_position, arg) in fun.iter().enumerate() {
-                if arg_position == position {
-                    tensor = tensor.add_arg(slot);
-                } else {
-                    tensor = tensor.add_arg(arg);
-                }
-            }
-            Some(tensor.finish())
-        }
-        AtomView::Add(add) => {
-            let mut terms = add
-                .iter()
-                .map(|term| materialize_compact_vector_with_slot::<Aind>(term, rep, slot));
-            let first = terms.next()??;
-            let rest = terms.collect::<Option<Vec<_>>>()?;
-            Some(rest.into_iter().fold(first, |sum, term| sum + term))
-        }
-        _ => None,
-    }
-}
-
-fn compact_scalar_product<Aind: AbsInd + DummyAind + ParseableAind>(
-    value: FunView<'_>,
-    state: &ParseState<Aind>,
-) -> Option<SchoonschipMaterialization> {
-    if value.get_symbol() != ETS.metric && value.get_symbol() != SPENSO_TAG.dot {
-        return None;
-    }
-
-    let args = value.iter().collect::<Vec<_>>();
-    let [lhs, rhs] = args.as_slice() else {
-        return None;
-    };
-
-    let rep = compact_vector_rep::<Aind>(*lhs)?;
-    if rep != compact_vector_rep::<Aind>(*rhs)? || !rep.rep.is_self_dual() {
-        return None;
-    }
-
-    let slot = state.slot(&rep).to_atom();
-    let lhs = materialize_compact_vector_with_slot::<Aind>(*lhs, &rep, &slot)?;
-    let rhs = materialize_compact_vector_with_slot::<Aind>(*rhs, &rep, &slot)?;
-
-    Some(SchoonschipMaterialization {
-        replacement: Atom::num(1),
-        factors: vec![lhs, rhs],
-        compact_self: true,
-    })
-}
-
-fn materialize_compact_vector_product<Aind: AbsInd + DummyAind + ParseableAind>(
-    value: MulView<'_>,
-    state: &ParseState<Aind>,
-) -> Option<Atom> {
-    let args = value.iter().collect::<Vec<_>>();
-    let compact_positions = args
-        .iter()
-        .enumerate()
-        .filter_map(|(position, arg)| compact_vector_rep::<Aind>(*arg).map(|rep| (position, rep)))
-        .collect::<Vec<_>>();
-    let [(left_position, rep), (right_position, right_rep)] = compact_positions.as_slice() else {
-        return None;
-    };
-
-    if rep != right_rep || !rep.rep.is_self_dual() {
-        return None;
-    }
-
-    let slot = state.slot(rep).to_atom();
-    let mut materialized = Atom::num(1);
-    for (position, arg) in args.into_iter().enumerate() {
-        let factor = if position == *left_position || position == *right_position {
-            materialize_compact_vector_with_slot::<Aind>(arg, rep, &slot)?
-        } else {
-            arg.to_owned()
+    fn materialize_compact_vector_product(&self, value: MulView<'_>) -> Option<Atom> {
+        let args = value.iter().collect::<Vec<_>>();
+        let compact_positions = args
+            .iter()
+            .enumerate()
+            .filter_map(|(position, arg)| Self::compact_vector_rep(*arg).map(|rep| (position, rep)))
+            .collect::<Vec<_>>();
+        let [(left_position, rep), (right_position, right_rep)] = compact_positions.as_slice()
+        else {
+            return None;
         };
-        materialized *= factor;
+
+        if rep != right_rep || !rep.rep.is_self_dual() {
+            return None;
+        }
+
+        let slot = self.state.slot(rep).to_atom();
+        let mut materialized = Atom::num(1);
+        for (position, arg) in args.into_iter().enumerate() {
+            let factor = if position == *left_position || position == *right_position {
+                Self::materialize_compact_vector_with_slot(arg, rep, &slot)?
+            } else {
+                arg.to_owned()
+            };
+            materialized *= factor;
+        }
+
+        Some(materialized)
     }
 
-    Some(materialized)
-}
-
-fn compact_dot_as_metric<Aind: AbsInd + ParseableAind>(value: AtomView<'_>) -> Option<Atom> {
-    let AtomView::Fun(fun) = value else {
-        return None;
-    };
-
-    if fun.get_symbol() != SPENSO_TAG.dot || fun.get_nargs() != 2 {
-        return None;
-    }
-
-    let args = fun.iter().collect::<Vec<_>>();
-    if args
-        .iter()
-        .all(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
-    {
-        Some(
-            FunctionBuilder::new(ETS.metric)
-                .add_arg(args[0])
-                .add_arg(args[1])
-                .finish(),
-        )
-    } else {
-        None
-    }
-}
-
-fn materialize_schoonschip_arg<Aind: AbsInd + DummyAind + ParseableAind>(
-    value: AtomView<'_>,
-    state: &ParseState<Aind>,
-    settings: &ParseSettings,
-) -> Option<SchoonschipMaterialization> {
-    let AtomView::Fun(fun) = value else {
-        return None;
-    };
-
-    if settings.parse_inner_products
-        && let Some(materialized) = compact_scalar_product::<Aind>(fun, state)
-    {
-        return Some(materialized);
-    }
-
-    let mut changed = false;
-    let mut factors = Vec::new();
-    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-
-    for arg in fun.iter() {
-        if let Some(materialized) = materialize_schoonschip_arg::<Aind>(arg, state, settings) {
-            changed = true;
-            rebuilt = rebuilt.add_arg(&materialized.replacement);
-            factors.extend(materialized.factors);
+    fn materialize_schoonschip(&self, value: AtomView<'_>) -> Option<Atom> {
+        let materialized = self.materialize_schoonschip_arg(value)?;
+        let mut expression = if materialized.compact_self {
+            Atom::num(1)
         } else {
-            rebuilt = rebuilt.add_arg(arg);
+            materialized.replacement
+        };
+
+        for factor in materialized.factors {
+            expression *= factor;
         }
+
+        Some(expression)
     }
 
-    changed.then(|| {
-        let replacement = rebuilt.finish();
-        SchoonschipMaterialization {
-            replacement: compact_dot_as_metric::<Aind>(replacement.as_view())
-                .unwrap_or(replacement),
-            factors,
-            compact_self: false,
+    fn materialize_schoonschip_arg(
+        &self,
+        value: AtomView<'_>,
+    ) -> Option<SchoonschipMaterialization> {
+        let AtomView::Fun(fun) = value else {
+            return None;
+        };
+
+        if self.settings.shorthand_parsing.expands()
+            && let Some(materialized) = self.compact_scalar_product(fun)
+        {
+            return Some(materialized);
         }
-    })
-}
 
-fn materialize_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
-    value: AtomView<'_>,
-    state: &ParseState<Aind>,
-    settings: &ParseSettings,
-) -> Option<Atom> {
-    let materialized = materialize_schoonschip_arg::<Aind>(value, state, settings)?;
-    let mut expression = if materialized.compact_self {
-        Atom::num(1)
-    } else {
-        materialized.replacement
-    };
+        let mut changed = false;
+        let mut factors = Vec::new();
+        let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
 
-    for factor in materialized.factors {
-        expression *= factor;
-    }
-
-    Some(expression)
-}
-
-fn replace_chain_placeholders(value: AtomView<'_>, chain_in: &Atom, chain_out: &Atom) -> Atom {
-    match value {
-        AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => chain_in.clone(),
-        AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => chain_out.clone(),
-        AtomView::Fun(fun) => {
-            let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-            for arg in fun.iter() {
-                rebuilt = rebuilt.add_arg(replace_chain_placeholders(arg, chain_in, chain_out));
+        for arg in fun.iter() {
+            if let Some(materialized) = self.materialize_schoonschip_arg(arg) {
+                changed = true;
+                rebuilt = rebuilt.add_arg(&materialized.replacement);
+                factors.extend(materialized.factors);
+            } else {
+                rebuilt = rebuilt.add_arg(arg);
             }
-            rebuilt.finish()
         }
-        AtomView::Add(add) => add.iter().fold(Atom::Zero, |sum, term| {
-            sum + replace_chain_placeholders(term, chain_in, chain_out)
-        }),
-        AtomView::Mul(mul) => mul.iter().fold(Atom::num(1), |product, factor| {
-            product * replace_chain_placeholders(factor, chain_in, chain_out)
-        }),
-        AtomView::Pow(pow) => {
-            let (base, exponent) = pow.get_base_exp();
-            replace_chain_placeholders(base, chain_in, chain_out).pow(exponent.to_owned())
+
+        changed.then(|| {
+            let replacement = rebuilt.finish();
+            SchoonschipMaterialization {
+                replacement: Self::compact_dot_as_metric(replacement.as_view())
+                    .unwrap_or(replacement),
+                factors,
+                compact_self: false,
+            }
+        })
+    }
+
+    fn compact_scalar_product(&self, value: FunView<'_>) -> Option<SchoonschipMaterialization> {
+        if value.get_symbol() != ETS.metric && value.get_symbol() != SPENSO_TAG.dot {
+            return None;
         }
-        _ => value.to_owned(),
+
+        let args = value.iter().collect::<Vec<_>>();
+        let [lhs, rhs] = args.as_slice() else {
+            return None;
+        };
+
+        let rep = Self::compact_vector_rep(*lhs)?;
+        if rep != Self::compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
+            return None;
+        }
+
+        let slot = self.state.slot(&rep).to_atom();
+        let lhs = Self::materialize_compact_vector_with_slot(*lhs, &rep, &slot)?;
+        let rhs = Self::materialize_compact_vector_with_slot(*rhs, &rep, &slot)?;
+
+        Some(SchoonschipMaterialization {
+            replacement: Atom::num(1),
+            factors: vec![lhs, rhs],
+            compact_self: true,
+        })
+    }
+
+    fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
+        match value {
+            AtomView::Fun(fun) => Self::compact_tensor_rep_arg(fun).map(|(_, rep)| rep),
+            AtomView::Add(add) => {
+                let mut reps = add.iter().map(Self::compact_vector_rep);
+                let rep = reps.next()??;
+                reps.all(|candidate| candidate == Some(rep)).then_some(rep)
+            }
+            _ => None,
+        }
+    }
+
+    fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
+        if value.get_symbol() == ETS.metric || value.get_symbol() == SPENSO_TAG.dot {
+            return None;
+        }
+
+        if Representation::<LibraryRep>::try_from(value.as_view()).is_ok() {
+            return None;
+        }
+
+        let args = value.iter().collect::<Vec<_>>();
+        if args
+            .iter()
+            .any(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
+        {
+            return None;
+        }
+
+        let rep_args = args
+            .iter()
+            .enumerate()
+            .filter_map(|(position, arg)| {
+                Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+            })
+            .collect::<Vec<_>>();
+
+        let [(position, rep)] = rep_args.as_slice() else {
+            return None;
+        };
+
+        Some((*position, *rep))
+    }
+
+    fn compact_rep_pattern_match(arg: AtomView<'_>) -> Option<Representation<LibraryRep>> {
+        let rep_pattern = Atom::var(SPENSO_TAG.rep_).to_pattern();
+        let settings = MatchSettings {
+            level_range: (0, Some(0)),
+            partial: false,
+            ..Default::default()
+        };
+        let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
+        let matched = matches.next_detailed()?;
+        let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);
+        Representation::<LibraryRep>::try_from(rep.as_view()).ok()
+    }
+
+    fn materialize_compact_vector_with_slot(
+        value: AtomView<'_>,
+        rep: &Representation<LibraryRep>,
+        slot: &Atom,
+    ) -> Option<Atom> {
+        match value {
+            AtomView::Fun(fun) => {
+                let (position, matched_rep) = Self::compact_tensor_rep_arg(fun)?;
+                if matched_rep != *rep {
+                    return None;
+                }
+
+                let mut tensor = FunctionBuilder::new(fun.get_symbol());
+                for (arg_position, arg) in fun.iter().enumerate() {
+                    if arg_position == position {
+                        tensor = tensor.add_arg(slot);
+                    } else {
+                        tensor = tensor.add_arg(arg);
+                    }
+                }
+                Some(tensor.finish())
+            }
+            AtomView::Add(add) => {
+                let mut terms = add
+                    .iter()
+                    .map(|term| Self::materialize_compact_vector_with_slot(term, rep, slot));
+                let first = terms.next()??;
+                let rest = terms.collect::<Option<Vec<_>>>()?;
+                Some(rest.into_iter().fold(first, |sum, term| sum + term))
+            }
+            _ => None,
+        }
+    }
+
+    fn compact_dot_as_metric(value: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Fun(fun) = value else {
+            return None;
+        };
+
+        if fun.get_symbol() != SPENSO_TAG.dot || fun.get_nargs() != 2 {
+            return None;
+        }
+
+        let args = fun.iter().collect::<Vec<_>>();
+        if args
+            .iter()
+            .all(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
+        {
+            Some(
+                FunctionBuilder::new(ETS.metric)
+                    .add_arg(args[0])
+                    .add_arg(args[1])
+                    .finish(),
+            )
+        } else {
+            None
+        }
     }
 }
 
-fn scale_first_chain_like_factor(value: AtomView<'_>, scalar: &Atom) -> Option<Atom> {
-    let AtomView::Fun(fun) = value else {
-        return None;
-    };
+struct ChainExpansion;
 
-    let offset = if fun.get_symbol() == SPENSO_TAG.chain {
-        2
-    } else if fun.get_symbol() == SPENSO_TAG.trace {
-        1
-    } else {
-        return None;
-    };
-
-    if fun.get_nargs() <= offset {
-        return None;
-    }
-
-    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-    for (position, arg) in fun.iter().enumerate() {
-        if position == offset {
-            rebuilt = rebuilt.add_arg(scalar.clone() * arg.to_owned());
-        } else {
-            rebuilt = rebuilt.add_arg(arg);
+impl ChainExpansion {
+    fn replace_placeholders(value: AtomView<'_>, chain_in: &Atom, chain_out: &Atom) -> Atom {
+        match value {
+            AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => chain_in.clone(),
+            AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => chain_out.clone(),
+            AtomView::Fun(fun) => {
+                let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+                for arg in fun.iter() {
+                    rebuilt = rebuilt.add_arg(Self::replace_placeholders(arg, chain_in, chain_out));
+                }
+                rebuilt.finish()
+            }
+            AtomView::Add(add) => add.iter().fold(Atom::Zero, |sum, term| {
+                sum + Self::replace_placeholders(term, chain_in, chain_out)
+            }),
+            AtomView::Mul(mul) => mul.iter().fold(Atom::num(1), |product, factor| {
+                product * Self::replace_placeholders(factor, chain_in, chain_out)
+            }),
+            AtomView::Pow(pow) => {
+                let (base, exponent) = pow.get_base_exp();
+                Self::replace_placeholders(base, chain_in, chain_out).pow(exponent.to_owned())
+            }
+            _ => value.to_owned(),
         }
     }
-    Some(rebuilt.finish())
+
+    fn scale_first_factor(value: AtomView<'_>, scalar: &Atom) -> Option<Atom> {
+        let AtomView::Fun(fun) = value else {
+            return None;
+        };
+
+        let offset = if fun.get_symbol() == SPENSO_TAG.chain {
+            2
+        } else if fun.get_symbol() == SPENSO_TAG.trace {
+            1
+        } else {
+            return None;
+        };
+
+        if fun.get_nargs() <= offset {
+            return None;
+        }
+
+        let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+        for (position, arg) in fun.iter().enumerate() {
+            if position == offset {
+                rebuilt = rebuilt.add_arg(scalar.clone() * arg.to_owned());
+            } else {
+                rebuilt = rebuilt.add_arg(arg);
+            }
+        }
+        Some(rebuilt.finish())
+    }
 }
 
 impl<
@@ -665,7 +585,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -682,7 +602,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -702,7 +622,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -721,6 +641,30 @@ where
         };
     }
 
+    #[allow(clippy::type_complexity, clippy::result_large_err)]
+    fn as_inferred_leaf<S>(
+        value: AtomView<'a>,
+        mode: StructureInferenceMode,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+    {
+        let s = S::structure_from_atom(value, mode);
+
+        if let Ok(s) = s {
+            Ok(Self::from_tensor(
+                s.structure
+                    .to_shell()
+                    .concretize(Some(s.index_permutation.inverse())),
+            ))
+        } else {
+            Ok(Self::from_scalar(value.try_into()?))
+        }
+    }
+
     #[allow(clippy::result_large_err)]
     fn try_from_mul<S, Lib: Library<S, Key = K>>(
         value: MulView<'a>,
@@ -729,7 +673,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -742,8 +686,9 @@ where
             return Self::as_leaf::<S>(value.as_view(), settings);
         }
 
-        if settings.parse_inner_products
-            && let Some(materialized) = materialize_compact_vector_product::<Aind>(value, &state)
+        if settings.shorthand_parsing.expands()
+            && let Some(materialized) = ShorthandMaterializer::<Aind>::new(&state, settings)
+                .materialize_compact_vector_product(value)
         {
             return Self::try_from_view_impl(materialized.as_view(), state, library, settings);
         }
@@ -787,7 +732,8 @@ where
                 Ok(Self::from_scalar(value.as_view().try_into()?))
             } else if scalars != Atom::num(1)
                 && res.len() == 1
-                && let Some(scaled) = scale_first_chain_like_factor(res[0].0.as_view(), &scalars)
+                && let Some(scaled) =
+                    ChainExpansion::scale_first_factor(res[0].0.as_view(), &scalars)
             {
                 Self::try_from_view_impl(scaled.as_view(), state.clone(), library, settings)
             } else {
@@ -816,13 +762,17 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
         // <PermutedStructure<S>>::Error: Debug,
     {
         let symbol = value.get_symbol();
+
+        if let Some(inference) = settings.shorthand_parsing.opaque_inference_for(symbol) {
+            return Self::as_inferred_leaf::<S>(value.as_view(), inference);
+        }
 
         if symbol == SPENSO_TAG.bracket {
             let mut n_muls = value
@@ -831,6 +781,8 @@ where
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(n_muls.pop().unwrap().n_mul(n_muls))
+        } else if symbol == SPENSO_TAG.chain {
+            Self::parse_chain(value, state, library, settings)
         } else if symbol == SPENSO_TAG.trace {
             Self::parse_trace(value, state, library, settings)
         } else if symbol == SPENSO_TAG.pure_scalar {
@@ -878,14 +830,77 @@ where
                             .concretize(Some(s.index_permutation.inverse())),
                     )),
                 }
-            } else if let Some(materialized) =
-                materialize_schoonschip::<Aind>(value.as_view(), &state, settings)
+            } else if settings.shorthand_parsing.expands()
+                && let Some(materialized) = ShorthandMaterializer::<Aind>::new(&state, settings)
+                    .materialize_schoonschip(value.as_view())
             {
                 Self::try_from_view_impl(materialized.as_view(), state, library, settings)
             } else {
                 Ok(Self::from_scalar(value.as_view().try_into()?))
             }
         }
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_chain<S, Lib: Library<S, Key = K>>(
+        value: FunView<'a>,
+        state: ParseState<Aind>,
+        library: &Lib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+    {
+        let args = value.iter().collect::<Vec<_>>();
+        if args.len() < 2 {
+            return Err(TensorNetworkError::TooManyArgsFunction(
+                value.as_view().to_plain_string(),
+            ));
+        }
+
+        let start = Slot::<LibraryRep, Aind>::try_from(args[0])
+            .map_err(|err| eyre!("invalid chain start `{}`: {err}", args[0]))?;
+        let end = Slot::<LibraryRep, Aind>::try_from(args[1])
+            .map_err(|err| eyre!("invalid chain end `{}`: {err}", args[1]))?;
+        let factors = &args[2..];
+
+        if factors.is_empty() {
+            let metric = FunctionBuilder::new(ETS.metric)
+                .add_arg(start.to_atom())
+                .add_arg(end.to_atom())
+                .finish();
+            return Self::try_from_view_impl(metric.as_view(), state, library, settings);
+        }
+
+        let mut factor_networks = Vec::new();
+        let mut left = start;
+        for (position, factor) in factors.iter().enumerate() {
+            let right = if position + 1 == factors.len() {
+                end.dual()
+            } else {
+                state.slot(&left.rep)
+            };
+            let factor = ChainExpansion::replace_placeholders(
+                *factor,
+                &left.to_atom(),
+                &right.dual().to_atom(),
+            );
+            let factor = ShorthandMaterializer::<Aind>::new(&state, settings)
+                .materialize_schoonschip(factor.as_view())
+                .unwrap_or(factor);
+            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib>(
+                factor,
+                state.clone(),
+                library,
+                settings,
+            )?);
+            left = right;
+        }
+
+        Ok(Self::chain_like_network_product(factor_networks))
     }
 
     #[allow(clippy::result_large_err)]
@@ -896,7 +911,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -925,11 +940,14 @@ where
             let left = state.slot(&rep);
             let right = state.slot(&rep);
             let bridge = state.slot(&rep);
-            let materialized_factor =
-                replace_chain_placeholders(*factor, &left.to_atom(), &right.dual().to_atom());
-            let materialized_factor =
-                materialize_schoonschip::<Aind>(materialized_factor.as_view(), &state, settings)
-                    .unwrap_or(materialized_factor);
+            let materialized_factor = ChainExpansion::replace_placeholders(
+                *factor,
+                &left.to_atom(),
+                &right.dual().to_atom(),
+            );
+            let materialized_factor = ShorthandMaterializer::<Aind>::new(&state, settings)
+                .materialize_schoonschip(materialized_factor.as_view())
+                .unwrap_or(materialized_factor);
             let left_closure = FunctionBuilder::new(ETS.metric)
                 .add_arg(bridge.to_atom())
                 .add_arg(left.dual().to_atom())
@@ -965,8 +983,9 @@ where
             .map(|(position, factor)| {
                 let left = links[position].to_atom();
                 let right = links[(position + 1) % factors.len()].dual().to_atom();
-                let factor = replace_chain_placeholders(*factor, &left, &right);
-                materialize_schoonschip::<Aind>(factor.as_view(), &state, settings)
+                let factor = ChainExpansion::replace_placeholders(*factor, &left, &right);
+                ShorthandMaterializer::<Aind>::new(&state, settings)
+                    .materialize_schoonschip(factor.as_view())
                     .unwrap_or(factor)
             })
             .collect::<Vec<_>>();
@@ -991,7 +1010,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Vec<Self>, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -1048,7 +1067,7 @@ where
         settings: &ParseSettings,
     ) -> std::result::Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -1112,7 +1131,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse,
+        S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
