@@ -8,7 +8,7 @@ use spenso::{
     network::{
         Network,
         library::DummyLibrary,
-        parsing::{Parse, ParseSettings, ShadowedStructure},
+        parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
         store::NetworkStore,
     },
     shadowing::symbolica_utils::AtomCoreExt,
@@ -188,10 +188,7 @@ fn parse() {
             ToString::to_string,
             |_| None,
             |a| {
-                if let Ok(a) = ShadowedStructure::<Aind>::parse_with_settings(
-                    a.expression.as_view(),
-                    &ParseSettings::default(),
-                ) {
+                if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
                     a.structure
                         .name()
                         .map(|s| {
@@ -1476,10 +1473,7 @@ mod failing {
                 ToString::to_string,
                 |_| None,
                 |a| {
-                    if let Ok(a) = ShadowedStructure::<Aind>::parse_with_settings(
-                        a.expression.as_view(),
-                        &ParseSettings::default(),
-                    ) {
+                    if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
                         a.structure
                             .name()
                             .map(|s| {
@@ -1600,10 +1594,7 @@ mod failing {
                 ToString::to_string,
                 |_| None,
                 |a| {
-                    if let Ok(a) = ShadowedStructure::<Aind>::parse_with_settings(
-                        a.expression.as_view(),
-                        &ParseSettings::default(),
-                    ) {
+                    if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
                         a.structure
                             .name()
                             .map(|s| {

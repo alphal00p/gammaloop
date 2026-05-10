@@ -10,7 +10,7 @@ use spenso::{
         contract::SingleLargestDegree,
         graph::{NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp},
         library::{DummyKey, DummyLibrary},
-        parsing::Parse,
+        parsing::StructureFromAtom,
         store::NetworkStore,
     },
     structure::{
@@ -64,7 +64,7 @@ fn tensor_slot_pos<Aind: AbsInd + ParseableAind>(
         })
 }
 
-fn parse_tensor_factor<Aind: AbsInd + ParseableAind>(
+fn parse_tensor_factor<Aind: AbsInd + DummyAind + ParseableAind>(
     factor: &Atom,
 ) -> Option<SymbolicTensor<Aind>> {
     SymbolicTensor::parse(factor.as_view())
@@ -104,7 +104,7 @@ fn direct_contract_factor_into_expr<Aind: AbsInd + ParseableAind>(
     None
 }
 
-fn direct_contract_expanded_sum_side<Aind: AbsInd + ParseableAind>(
+fn direct_contract_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind>(
     expanded_sum_side: &Atom,
     target_expr: &Atom,
     slot_pairs: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
@@ -313,7 +313,7 @@ fn removed_slots_still_in_expression<Aind: AbsInd + ParseableAind>(
     residual
 }
 
-fn direct_contract_smallest_expanded_sum_side<Aind: AbsInd + ParseableAind>(
+fn direct_contract_smallest_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind>(
     left: &SymbolicTensor<Aind>,
     right: &SymbolicTensor<Aind>,
     left_positions: &SubSet<SlotIndex>,

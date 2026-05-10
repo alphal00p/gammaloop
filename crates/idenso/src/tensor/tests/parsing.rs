@@ -1,4 +1,4 @@
-use spenso::network::parsing::{Parse, ParseSettings, ShadowedStructure};
+use spenso::network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom};
 use spenso::network::{
     ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
     Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,

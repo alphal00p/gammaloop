@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use symbolica::atom::{Atom, AtomView};
 
-use super::{Parse, ParseSettings, ShorthandParsing, StructureFromAtom};
+use super::{ParseSettings, ShorthandParsing, StructureFromAtom};
 use crate::{
     network::{
         ContractionStrategy, ExecuteOp, ExecutionResult, Network, Sequential, SmallestDegree,
@@ -84,7 +84,7 @@ impl<T, S> ExpandedTensorFromExpression for SparseTensor<T, S> {}
 impl<S, Sc, T, K, Aind, Lib, FunLib>
     TensorFromExpression<S, Sc, K, symbolica::atom::Symbol, Aind, Lib, FunLib> for T
 where
-    S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+    S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
     TensorShell<S>: Concretize<T>,
     S::Slot: IsAbstractSlot<Aind = Aind>,
     T::Slot: IsAbstractSlot<Aind = Aind>,
