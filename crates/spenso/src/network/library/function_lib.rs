@@ -34,7 +34,7 @@ impl Inbuilts {
 pub static INBUILTS: std::sync::LazyLock<Inbuilts> = std::sync::LazyLock::new(|| Inbuilts {
     conj: symbol!(
         "spenso::conj",
-        tag = SPENSO_TAG.tag,
+        tag = SPENSO_TAG.broadcast,
         norm = |view, out| {
             if let AtomView::Fun(dind1) = view
                 && dind1.get_nargs() == 1

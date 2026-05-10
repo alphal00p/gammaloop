@@ -214,7 +214,7 @@ fn parse_empty_chain_as_endpoint_metric() {
 }
 
 #[test]
-fn opaque_schoonschip_vectors_stay_scalar() {
+fn opaque_schoonschip_vectors_parse_as_tensor_scalar() {
     let rep = mink4();
     let expr =
         function!(symbol!("p"), rep.to_symbolic([])) * function!(symbol!("q"), rep.to_symbolic([]));
@@ -223,7 +223,7 @@ fn opaque_schoonschip_vectors_stay_scalar() {
         .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
         .unwrap();
 
-    assert_eq!(parsed.state, NetworkState::PureScalar);
+    assert_eq!(parsed.state, NetworkState::Scalar);
     assert!(parsed.graph.dangling_indices().is_empty());
 }
 
@@ -257,6 +257,23 @@ fn three_argument_metric_inner_product_is_not_parser_syntax() {
 
     assert_eq!(parsed.state, NetworkState::PureScalar);
     assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn three_argument_dot_is_invalid_parser_syntax() {
+    let rep = mink4();
+    let expr = function!(
+        SPENSO_TAG.dot,
+        rep.to_symbolic([]),
+        Atom::var(symbol!("p")),
+        Atom::var(symbol!("q"))
+    );
+
+    let err = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap_err();
+
+    assert!(matches!(err, TensorNetworkError::InvalidDotFunction(_)));
 }
 
 #[test]
@@ -312,7 +329,7 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
 }
 
 #[test]
-fn opaque_schoonschipped_metric_product_stays_scalar() {
+fn opaque_schoonschipped_metric_product_parses_as_tensor_scalar() {
     let rep = mink4();
     let expr = function!(
         ETS.metric,
@@ -324,7 +341,7 @@ fn opaque_schoonschipped_metric_product_stays_scalar() {
         .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
         .unwrap();
 
-    assert_eq!(parsed.state, NetworkState::PureScalar);
+    assert_eq!(parsed.state, NetworkState::Scalar);
     assert!(parsed.graph.dangling_indices().is_empty());
 }
 
@@ -362,7 +379,7 @@ fn parse_schoonschipped_dot_product() {
 }
 
 #[test]
-fn opaque_schoonschipped_dot_product_stays_scalar() {
+fn opaque_schoonschipped_dot_product_parses_as_tensor_scalar() {
     let rep = mink4();
     let expr = function!(
         SPENSO_TAG.dot,
@@ -374,7 +391,7 @@ fn opaque_schoonschipped_dot_product_stays_scalar() {
         .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
         .unwrap();
 
-    assert_eq!(parsed.state, NetworkState::PureScalar);
+    assert_eq!(parsed.state, NetworkState::Scalar);
     assert!(parsed.graph.dangling_indices().is_empty());
 }
 

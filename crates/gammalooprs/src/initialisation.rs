@@ -24,7 +24,7 @@ pub fn initialise() -> Result<()> {
         // println!("Initializing symbols");
         let _ = GS.delta_vec;
         let _ = INBUILTS.conj;
-        let _ = SPENSO_TAG.tag;
+        let _ = SPENSO_TAG.broadcast;
         let _ = UFO.complexconjugate;
 
         // let _ = Symbol::id();

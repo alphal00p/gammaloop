@@ -65,7 +65,7 @@ fn parse_scalar() {
 #[test]
 fn parse_pow() {
     test_initialize();
-    let _sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.tag);
+    let _sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.broadcast);
     let expr = parse!("ee^3*sqrt_scalar((m+d(spenso::mink(4,1))^2)^(-5))");
 
     let net = expr

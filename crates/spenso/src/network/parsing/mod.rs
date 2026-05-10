@@ -2,8 +2,6 @@ use symbolica::atom::{FunctionBuilder, Symbol};
 
 use super::*;
 
-use library::Library;
-
 use crate::network::library::DummyLibrary;
 use crate::network::library::FunctionLibrary;
 use crate::network::library::panicing::ErroringLibrary;
@@ -15,7 +13,8 @@ use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use crate::structure::representation::Representation;
 use crate::structure::slot::{DualSlotTo, DummyAind, ParseableAind, Slot, SlotError};
 use crate::structure::{
-    NamedStructure, OrderedStructure, PermutedStructure, StructureError, TensorShell,
+    NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure, StructureError,
+    TensorShell,
 };
 use crate::tensors::parametric::ParamTensor;
 
@@ -35,9 +34,9 @@ pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep,
 mod structure_inference;
 pub use structure_inference::{AtomStructureExt, StructureFromAtom, StructureInferenceMode};
 mod materialization;
-use materialization::{ChainExpansion, ShorthandMaterializer};
+use materialization::{ChainExpansion, SchoonschipMaterializer};
 mod tensor_from_expression;
-pub use tensor_from_expression::TensorFromExpression;
+pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
 
 impl<Aind: ParseableAind + AbsInd> Parse for ShadowedStructure<Aind> {
     fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
@@ -151,16 +150,11 @@ impl ShorthandParsing {
         matches!(self, Self::Expand)
     }
 
-    fn opaque_inference_for(self, symbol: Symbol) -> Option<StructureInferenceMode> {
+    fn opaque_inference(self) -> Option<StructureInferenceMode> {
         match self {
             Self::Expand => None,
-            Self::Opaque { inference } if Self::is_shorthand_symbol(symbol) => Some(inference),
-            Self::Opaque { .. } => None,
+            Self::Opaque { inference } => Some(inference),
         }
-    }
-
-    fn is_shorthand_symbol(symbol: Symbol) -> bool {
-        symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace || symbol == SPENSO_TAG.dot
     }
 }
 
@@ -283,17 +277,17 @@ where
     TensorNetworkError<K, Symbol>: for<'r> From<<Sc as TryFrom<AtomView<'r>>>::Error>,
 {
     #[allow(clippy::result_large_err)]
-    pub fn try_from_view<S, Lib: Library<S, Key = K>>(
+    pub fn try_from_view<S, Lib: TensorLibraryFor<S, T, Key = K>>(
         value: AtomView<'a>,
         library: &Lib,
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
     {
         Self::try_from_view_with_function_library(
             value,
@@ -311,12 +305,12 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let state = ParseState::<Aind>::default();
@@ -332,12 +326,12 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         match value {
@@ -355,7 +349,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -383,27 +377,29 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
-        let s = S::structure_from_atom(value, mode);
+        let structure = match S::structure_from_atom(value, mode) {
+            Ok(structure) => structure,
+            Err(StructureError::EmptyStructure(_)) => {
+                PermutedStructure::identity(S::scalar_structure())
+            }
+            Err(err) => return Err(err.into()),
+        };
 
-        if let Ok(s) = s {
-            Ok(Self::from_tensor(T::tensor_from_expression(
-                value,
-                s,
-                library,
-                function_library,
-                settings,
-            )?))
-        } else {
-            Ok(Self::from_scalar(value.try_into()?))
-        }
+        Ok(Self::from_tensor(T::tensor_from_expression(
+            value,
+            structure,
+            library,
+            function_library,
+            settings,
+        )?))
     }
 
     #[allow(clippy::result_large_err)]
@@ -415,12 +411,12 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         // println!("Mul");
@@ -521,18 +517,38 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
         // <PermutedStructure<S>>::Error: Debug,
     {
         let symbol = value.get_symbol();
 
-        if let Some(inference) = settings.shorthand_parsing.opaque_inference_for(symbol) {
+        if symbol == SPENSO_TAG.dot && value.get_nargs() != 2 {
+            return Err(TensorNetworkError::InvalidDotFunction(
+                value.as_view().to_plain_string(),
+            ));
+        }
+
+        if symbol == SPENSO_TAG.pure_scalar {
+            if value.get_nargs() != 1 {
+                return Err(TensorNetworkError::TooManyArgsFunction(
+                    value.as_view().to_plain_string(),
+                ));
+            }
+
+            return Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?));
+        }
+
+        if !value.as_view().is_tensorial() {
+            return Ok(Self::from_scalar(value.as_view().try_into()?));
+        }
+
+        if let Some(inference) = settings.shorthand_parsing.opaque_inference() {
             return Self::as_inferred_leaf::<S, _, _>(
                 value.as_view(),
                 inference,
@@ -541,6 +557,28 @@ where
                 settings,
             );
         }
+
+        Self::parse_expanded_function(value, state, library, function_library, settings)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_expanded_function<S, Lib, FunLib>(
+        value: FunView<'a>,
+        state: ParseState<Aind>,
+        library: &Lib,
+        function_library: &FunLib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
+    {
+        let symbol = value.get_symbol();
 
         if symbol == SPENSO_TAG.bracket {
             let mut n_muls = value
@@ -551,19 +589,7 @@ where
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(n_muls.pop().unwrap().n_mul(n_muls))
-        } else if symbol == SPENSO_TAG.chain {
-            Self::parse_chain(value, state, library, function_library, settings)
-        } else if symbol == SPENSO_TAG.trace {
-            Self::parse_trace(value, state, library, function_library, settings)
-        } else if symbol == SPENSO_TAG.pure_scalar {
-            if value.get_nargs() != 1 {
-                return Err(TensorNetworkError::TooManyArgsFunction(
-                    value.as_view().to_plain_string(),
-                ));
-            }
-
-            Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?))
-        } else if symbol.has_tag(&SPENSO_TAG.tag) {
+        } else if symbol.has_tag(&SPENSO_TAG.broadcast) {
             if value.get_nargs() != 1 {
                 return Err(TensorNetworkError::TooManyArgsFunction(
                     value.as_view().to_plain_string(),
@@ -576,52 +602,18 @@ where
 
             Ok(inner_tensor.fun(symbol))
         } else {
-            if settings.shorthand_parsing.expands()
-                && let Some(materialized) = ShorthandMaterializer::<Aind>::new(&state, settings)
-                    .materialize_shorthand(value.as_view())
-            {
-                return Self::try_from_view_impl(
-                    materialized.as_view(),
-                    state,
-                    library,
-                    function_library,
-                    settings,
-                );
-            }
-
-            let s: Result<PermutedStructure<S>, _> =
-                S::parse_with_settings(value.as_view(), settings);
-
-            if let Ok(s) = s {
-                // println!("Perm:{}", s.index_permutation);
-                // let s = s;
-                match library.key_for_structure(&s) {
-                    Ok(key) => {
-                        // println!("Adding lib");
-                        // let t = library.get(&key).unwrap();
-                        Ok(Self::library_tensor(
-                            &s.structure,
-                            PermutedStructure {
-                                structure: key,
-                                rep_permutation: s.rep_permutation,
-                                index_permutation: s.index_permutation,
-                            },
-                        ))
-                    }
-                    Err(_) => Ok(Self::from_tensor(
-                        s.structure
-                            .to_shell()
-                            .concretize(Some(s.index_permutation.inverse())),
-                    )),
-                }
-            } else {
-                Ok(Self::from_scalar(value.as_view().try_into()?))
-            }
+            Self::materialize_shorthand::<S, Lib, FunLib>(
+                value,
+                state,
+                library,
+                function_library,
+                settings,
+            )
         }
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_chain<S, Lib, FunLib>(
+    fn materialize_shorthand<S, Lib, FunLib>(
         value: FunView<'a>,
         state: ParseState<Aind>,
         library: &Lib,
@@ -629,12 +621,98 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
+    {
+        let symbol = value.get_symbol();
+        if symbol == SPENSO_TAG.chain {
+            return Self::materialize_chain_shorthand(
+                value,
+                state,
+                library,
+                function_library,
+                settings,
+            );
+        }
+
+        if symbol == SPENSO_TAG.trace {
+            return Self::materialize_trace_shorthand(
+                value,
+                state,
+                library,
+                function_library,
+                settings,
+            );
+        }
+
+        let materialized =
+            SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(value.as_view());
+
+        Self::try_from_view_impl(
+            materialized.as_view(),
+            state,
+            library,
+            function_library,
+            settings,
+        )
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_regular_function_leaf<S, Lib>(
+        value: FunView<'a>,
+        library: &Lib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
         S: TensorStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+    {
+        let s: Result<PermutedStructure<S>, _> = S::parse_with_settings(value.as_view(), settings);
+
+        if let Ok(s) = s {
+            match library.key_for_structure(&s) {
+                Ok(key) => Ok(Self::library_tensor(
+                    &s.structure,
+                    PermutedStructure {
+                        structure: key,
+                        rep_permutation: s.rep_permutation,
+                        index_permutation: s.index_permutation,
+                    },
+                )),
+                Err(_) => Ok(Self::from_tensor(
+                    s.structure
+                        .to_shell()
+                        .concretize(Some(s.index_permutation.inverse())),
+                )),
+            }
+        } else {
+            Ok(Self::from_scalar(value.as_view().try_into()?))
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn materialize_chain_shorthand<S, Lib, FunLib>(
+        value: FunView<'a>,
+        state: ParseState<Aind>,
+        library: &Lib,
+        function_library: &FunLib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let args = value.iter().collect::<Vec<_>>();
@@ -677,9 +755,8 @@ where
                 &left.to_atom(),
                 &right.dual().to_atom(),
             );
-            let factor = ShorthandMaterializer::<Aind>::new(&state, settings)
-                .materialize_shorthand(factor.as_view())
-                .unwrap_or(factor);
+            let factor = SchoonschipMaterializer::<Aind>::new(&state)
+                .materialize_shorthand(factor.as_view());
             factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
                 factor,
                 state.clone(),
@@ -694,7 +771,7 @@ where
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_trace<S, Lib, FunLib>(
+    fn materialize_trace_shorthand<S, Lib, FunLib>(
         value: FunView<'a>,
         state: ParseState<Aind>,
         library: &Lib,
@@ -702,12 +779,12 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let args = value.iter().collect::<Vec<_>>();
@@ -740,9 +817,8 @@ where
                 &left.to_atom(),
                 &right.dual().to_atom(),
             );
-            let materialized_factor = ShorthandMaterializer::<Aind>::new(&state, settings)
-                .materialize_shorthand(materialized_factor.as_view())
-                .unwrap_or(materialized_factor);
+            let materialized_factor = SchoonschipMaterializer::<Aind>::new(&state)
+                .materialize_shorthand(materialized_factor.as_view());
             let left_closure = FunctionBuilder::new(ETS.metric)
                 .add_arg(bridge.to_atom())
                 .add_arg(left.dual().to_atom())
@@ -786,9 +862,7 @@ where
                 let left = links[position].to_atom();
                 let right = links[(position + 1) % factors.len()].dual().to_atom();
                 let factor = ChainExpansion::replace_placeholders(*factor, &left, &right);
-                ShorthandMaterializer::<Aind>::new(&state, settings)
-                    .materialize_shorthand(factor.as_view())
-                    .unwrap_or(factor)
+                SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(factor.as_view())
             })
             .collect::<Vec<_>>();
 
@@ -814,12 +888,12 @@ where
         settings: &ParseSettings,
     ) -> Result<Vec<Self>, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let AtomView::Mul(product) = factor.as_view() else {
@@ -878,12 +952,12 @@ where
         settings: &ParseSettings,
     ) -> std::result::Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         if let Some(a) = settings.depth_limit
@@ -946,12 +1020,12 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind>,
-        Lib: Library<S, Key = K>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         if let Some(a) = settings.depth_limit
