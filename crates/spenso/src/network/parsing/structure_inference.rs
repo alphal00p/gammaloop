@@ -383,7 +383,7 @@ mod tests {
     };
     use symbolica::{
         atom::{Atom, FunctionBuilder, Symbol},
-        symbol,
+        function, symbol,
     };
 
     fn mink4() -> crate::structure::representation::Representation<Minkowski> {
@@ -427,6 +427,31 @@ mod tests {
             chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
             chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
         );
+
+        let fast = expr
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                StructureInferenceMode::Fast,
+            )
+            .unwrap();
+        let expanded = expr
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                StructureInferenceMode::Expanded,
+            )
+            .unwrap();
+
+        assert_eq!(fast.structure.order(), expanded.structure.order());
+    }
+
+    #[test]
+    fn chain_with_schoonschipped_term_fast_and_expanded_inference_agree() {
+        let rep = mink4();
+        let compact_vector = function!(symbol!("p"), rep.to_symbolic([]));
+        let schoonschipped_term = FunctionBuilder::new(symbol!("f"))
+            .add_arg(&compact_vector)
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .finish();
+        let expr = chain!(slot!(rep, i), slot!(rep, j), schoonschipped_term);
 
         let fast = expr
             .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(

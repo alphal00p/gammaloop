@@ -32,6 +32,15 @@ fn opaque_fast_settings() -> ParseSettings {
     }
 }
 
+fn opaque_expanded_settings() -> ParseSettings {
+    ParseSettings {
+        shorthand_parsing: ShorthandParsing::Opaque {
+            inference: StructureInferenceMode::Expanded,
+        },
+        ..Default::default()
+    }
+}
+
 #[test]
 fn parse_chain_as_opaque_tensor() {
     let rep = mink4();
@@ -47,6 +56,25 @@ fn parse_chain_as_opaque_tensor() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
+fn parse_chain_as_opaque_tensor_with_expanded_structure() {
+    let rep = mink4();
+    let expr = chain!(
+        slot!(rep, i),
+        slot!(rep, j),
+        chain_factor(symbol!("f")),
+        chain_factor(symbol!("g")),
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_expanded_settings())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.n_nodes(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -103,6 +131,26 @@ fn parse_trace_as_opaque_tensor_with_fast_structure() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 3);
+}
+
+#[test]
+fn parse_trace_as_opaque_tensor_with_expanded_structure() {
+    let trace_rep = Lorentz {}.new_rep(4);
+    let external_rep = mink4();
+    let expr = trace!(
+        &trace_rep,
+        chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
+        chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
+        chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_expanded_settings())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.n_nodes(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 3);
 }
 
@@ -194,6 +242,20 @@ fn opaque_schoonschip_vectors_stay_scalar() {
 }
 
 #[test]
+fn parse_slot_metric_as_tensor() {
+    let rep = mink4();
+    let expr = ETS.metric(slot!(rep, i).to_atom(), slot!(rep, j).to_atom());
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
 fn three_argument_metric_inner_product_is_not_parser_syntax() {
     let rep = mink4();
     let expr = function!(
@@ -229,6 +291,57 @@ fn parse_schoonschipped_metric_product() {
 }
 
 #[test]
+fn parse_schoonschipped_metric_with_open_slot() {
+    let rep = mink4();
+    let expr = ETS.metric(
+        slot!(rep, i).to_atom(),
+        function!(symbol!("p"), rep.to_symbolic([])),
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 1);
+}
+
+#[test]
+fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
+    let rep = mink4();
+    let expr = function!(
+        symbol!("F"),
+        slot!(rep, i).to_atom(),
+        function!(symbol!("p"), rep.to_symbolic([])),
+        slot!(rep, j).to_atom()
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
+fn opaque_schoonschipped_metric_product_stays_scalar() {
+    let rep = mink4();
+    let expr = function!(
+        ETS.metric,
+        function!(symbol!("p"), rep.to_symbolic([])),
+        function!(symbol!("q"), rep.to_symbolic([]))
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::PureScalar);
+    assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
 fn parse_schoonschipped_metric_sum_product() {
     let rep = mink4();
     let k1 = function!(symbol!("k"), Atom::num(1), rep.to_symbolic([]));
@@ -258,6 +371,23 @@ fn parse_schoonschipped_dot_product() {
         .unwrap();
 
     assert!(parsed.state.is_scalar());
+    assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn opaque_schoonschipped_dot_product_stays_scalar() {
+    let rep = mink4();
+    let expr = function!(
+        SPENSO_TAG.dot,
+        function!(symbol!("p"), rep.to_symbolic([])),
+        function!(symbol!("q"), rep.to_symbolic([]))
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::PureScalar);
     assert!(parsed.graph.dangling_indices().is_empty());
 }
 
