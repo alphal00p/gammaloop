@@ -10,7 +10,7 @@ use pyo3_stub_gen::{
 };
 
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
-use spenso::network::parsing::{SPENSO_TAG, ShadowedStructure};
+use spenso::network::{parsing::ShadowedStructure, tags::SPENSO_TAG};
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
 use spenso::{
@@ -128,13 +128,15 @@ impl SpensorFunctionLibrary {
             library: PanicMissingConcrete::new_lib(),
         };
 
-        a.library
-            .insert(symbol!("spenso::conj", tag = SPENSO_TAG.tag), |a| match a {
+        a.library.insert(
+            symbol!("spenso::conj", tag = SPENSO_TAG.broadcast),
+            |a| match a {
                 RealOrComplexTensor::Complex(c) => {
                     RealOrComplexTensor::Complex(c.map_data(|x| x.conj()))
                 }
                 RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
-            });
+            },
+        );
 
         a
     }
