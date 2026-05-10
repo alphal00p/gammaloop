@@ -14,6 +14,7 @@
 //! 2. the tensor `p(slot)` is multiplied next to the rebuilt function;
 //! 3. compact scalar products `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
 //!    share one fresh self-dual slot and become the product `p(slot) * q(slot)`.
+//!
 //! Additional factors are accumulated beside the current atom and are not
 //! recursively inspected by this materialization pass.
 //!
@@ -27,9 +28,7 @@ use symbolica::{
 
 use std::fmt::{Debug, Display};
 
-use super::{
-    Parse, ParseSettings, ParseState, StructureFromAtom, TensorFromExpression, TensorLibraryFor,
-};
+use super::{ParseSettings, ParseState, StructureFromAtom, TensorFromExpression, TensorLibraryFor};
 use crate::{
     network::{
         Network, NetworkState, TensorNetworkError,
@@ -368,7 +367,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -401,7 +400,7 @@ where
             SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(value.as_view());
         if materialized == value.as_view().to_owned() {
             // The atom rewriter is at a fixed point; recurse only after an actual rewrite.
-            return Self::parse_regular_function_leaf::<S, Lib>(value, library, settings);
+            return Self::parse_regular_function_leaf::<S, Lib>(value, library);
         }
 
         Self::try_from_view_impl(
@@ -422,7 +421,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -494,7 +493,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -603,7 +602,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Vec<Self>, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,

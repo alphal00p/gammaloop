@@ -360,8 +360,8 @@ mod tests {
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
     use spenso::{
-        network::parsing::{ParseSettings, ShadowedStructure},
-        structure::{PermutedStructure, TensorStructure, permuted::Perm},
+        network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
+        structure::{TensorStructure, permuted::Perm},
     };
     use symbolica::{
         atom::{Atom, AtomCore},
@@ -430,7 +430,7 @@ mod tests {
             spenso::mink(4, dummy(111)),
             spenso::mink(4, 1)
         ));
-        let structure = PermutedStructure::<ShadowedStructure<Aind>>::try_from(expr.clone());
+        let structure = ShadowedStructure::<Aind>::parse(expr.as_view());
 
         match structure {
             Ok(s) => {

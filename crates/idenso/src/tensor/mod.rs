@@ -16,7 +16,7 @@ use spenso::{
             symbolic::{ETS, ExplicitKey, TensorLibrary},
         },
         parsing::{
-            Parse, ParseSettings, ShadowedStructure, StructureFromAtom, StructureInferenceMode,
+            ParseSettings, ShadowedStructure, StructureFromAtom, StructureInferenceMode,
             TensorFromExpression, TensorLibraryFor,
         },
         store::NetworkStore,
@@ -146,30 +146,6 @@ where
     }
 }
 
-impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
-    fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
-        let structure = OrderedStructure::from_syntactic_atom(value)?;
-        Ok(Self::from_parsed_atom(value, structure))
-    }
-
-    fn parse_with_settings(
-        value: AtomView,
-        settings: &ParseSettings,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
-        let structure = match OrderedStructure::from_syntactic_atom(value) {
-            Ok(structure) => structure,
-            Err(StructureError::EmptyStructure(_))
-                if settings.parse_composite_scalars_as_tensors
-                    && matches!(value, AtomView::Add(_) | AtomView::Mul(_)) =>
-            {
-                OrderedStructure::scalar_structure()
-            }
-            Err(err) => return Err(err),
-        };
-
-        Ok(Self::from_parsed_atom(value, structure))
-    }
-}
 /// A fully symbolic tensor, with no concrete values.
 ///
 /// This tensor is used to represent the structure of a tensor, and is used to perform symbolic contraction.
@@ -752,10 +728,8 @@ pub mod test {
         let _ = ETS.metric;
         let expr = parse!("g(mink(4,6),mink(4,7))");
 
-        let structure = SymbolicTensor::from_permuted(
-            &PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(expr).unwrap(),
-        )
-        .unwrap();
+        let parsed = ShadowedStructure::<AbstractIndex>::parse(expr.as_view()).unwrap();
+        let structure = SymbolicTensor::from_permuted(&parsed).unwrap();
 
         Contract::<SymbolicTensor, ()>::contract(&structure, &structure).unwrap();
     }

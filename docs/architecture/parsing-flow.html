@@ -414,9 +414,9 @@
       <tr>
         <th><code>depth_limit = Some(1)</code></th>
         <td>
-          A nested product can be handed to <code>Parse::parse_with_settings</code>
-          as a leaf instead of recursively expanding every child. This is the
-          same leaf boundary used by opaque parsing.
+          A nested product can be handed to the opaque tensor-expression
+          boundary as a leaf instead of recursively expanding every child. This
+          is the same boundary used by opaque parsing.
         </td>
       </tr>
       <tr>
@@ -628,7 +628,7 @@ else -> scalar fallback</code></pre>
           <h4>Ordinary tensor leaf</h4>
           <ol>
             <li>If the Schoonschip atom rewriter makes no change, do not recurse.</li>
-            <li>Run <code>S::parse_with_settings</code>.</li>
+            <li>Run <code>S::parse</code> for fast structure inference.</li>
             <li>Use a library tensor if a key exists.</li>
             <li>Otherwise concretize the parsed tensor shell.</li>
           </ol>
@@ -756,8 +756,8 @@ else -> scalar fallback</code></pre>
         functions parse as ordinary tensor leaves.
       </li>
       <li>
-        Try <code>S::parse_with_settings</code>. If it succeeds, use a library
-        tensor when possible, otherwise concretize a tensor shell.
+        Try <code>S::parse</code>. If it succeeds, use a library tensor when
+        possible, otherwise concretize a tensor shell.
       </li>
       <li>
         If structure parsing fails, parse the function as a scalar expression.
@@ -1199,7 +1199,7 @@ let right_closure = FunctionBuilder::new(ETS.metric).add_arg(...).finish();</cod
       </tr>
       <tr>
         <th>Depth leaves</th>
-        <td>Depth leaves use <code>Parse::parse_with_settings</code> first and scalar fallback second. They do not run chain or trace expansion at that boundary.</td>
+        <td>Depth leaves use the opaque tensor-expression boundary. Non-tensorial expressions still fall back to pure scalars unless composite scalar tensor leaves are explicitly enabled.</td>
       </tr>
     </table>
   </section>

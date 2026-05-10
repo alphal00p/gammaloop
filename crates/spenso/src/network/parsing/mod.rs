@@ -36,32 +36,6 @@ use materialization::ChainExpansion;
 mod tensor_from_expression;
 pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
 
-impl<Aind: ParseableAind + AbsInd> Parse for ShadowedStructure<Aind> {
-    fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
-        if let AtomView::Fun(f) = value {
-            f.try_into()
-        } else {
-            Err(StructureError::ParsingError(value.to_plain_string()))
-        }
-    }
-}
-
-impl<Aind: ParseableAind + AbsInd> TryFrom<Atom> for PermutedStructure<ShadowedStructure<Aind>> {
-    type Error = StructureError;
-    fn try_from(value: Atom) -> Result<Self, Self::Error> {
-        ShadowedStructure::<Aind>::parse(value.as_view())
-    }
-}
-
-impl<'a, Aind: ParseableAind + AbsInd> TryFrom<&'a Atom>
-    for PermutedStructure<ShadowedStructure<Aind>>
-{
-    type Error = StructureError;
-    fn try_from(value: &'a Atom) -> Result<Self, Self::Error> {
-        ShadowedStructure::<Aind>::parse(value.as_view())
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShorthandParsing {
     /// Expand shorthand notation into an explicit network.
@@ -102,8 +76,8 @@ pub struct ParseSettings {
 
     /// Stop recursive parsing once the current parse depth reaches this value.
     ///
-    /// At the limit, the current expression is handed to `Parse::parse_with_settings`
-    /// as a leaf. `None` means there is no depth limit.
+    /// At the limit, the current expression is handed to the opaque tensor
+    /// expression boundary as a leaf. `None` means there is no depth limit.
     pub depth_limit: Option<usize>,
 
     /// Selects what contributes to `depth_limit`.
@@ -127,10 +101,10 @@ pub struct ParseSettings {
     /// Allow parser implementations to treat composite scalar expressions as
     /// scalar-structured tensors.
     ///
-    /// This flag is passed through to `Parse::parse_with_settings`. The
-    /// symbolic tensor parser uses it for additive or multiplicative scalar
-    /// composites so recursive contraction passes can inspect their internals
-    /// instead of storing them as opaque pure scalars.
+    /// Depth-limited additive or multiplicative scalar composites use this to
+    /// stay represented as scalar-structured tensor leaves, so recursive
+    /// contraction passes can inspect their internals instead of storing them
+    /// as pure scalars.
     pub parse_composite_scalars_as_tensors: bool,
 }
 
@@ -177,17 +151,6 @@ impl<Aind: DummyAind> ParseState<Aind> {
     }
 }
 
-pub trait Parse: Sized {
-    fn parse(view: AtomView) -> Result<PermutedStructure<Self>, StructureError>;
-
-    fn parse_with_settings(
-        view: AtomView,
-        _settings: &ParseSettings,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
-        Self::parse(view)
-    }
-}
-
 impl<
     'a,
     Sc,
@@ -208,7 +171,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -230,7 +193,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -251,7 +214,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -269,28 +232,34 @@ where
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    fn as_leaf<S>(
+    fn as_leaf<S, Lib, FunLib>(
         value: AtomView<'a>,
+        library: &Lib,
+        function_library: &FunLib,
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
-        let s: Result<PermutedStructure<S>, _> = S::parse_with_settings(value, settings);
+        let scalar_composite = settings.parse_composite_scalars_as_tensors
+            && matches!(value, AtomView::Add(_) | AtomView::Mul(_));
+        if !value.is_tensorial() && !scalar_composite {
+            return Ok(Self::from_scalar(value.try_into()?));
+        }
 
-        // println!("Looking at :{}", value);
-        return if let Ok(s) = s {
-            Ok(Self::from_tensor(
-                s.structure
-                    .to_shell()
-                    .concretize(Some(s.index_permutation.inverse())),
-            ))
-        } else {
-            Ok(Self::from_scalar(value.try_into()?))
-        };
+        Self::as_inferred_leaf::<S, Lib, FunLib>(
+            value,
+            StructureInferenceMode::Fast,
+            library,
+            function_library,
+            settings,
+        )
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
@@ -302,7 +271,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -336,7 +305,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -349,7 +318,12 @@ where
             && a <= state.depth
         {
             // println!("Mul leaf");
-            return Self::as_leaf::<S>(value.as_view(), settings);
+            return Self::as_leaf::<S, Lib, FunLib>(
+                value.as_view(),
+                library,
+                function_library,
+                settings,
+            );
         }
 
         state.depth += 1;
@@ -442,7 +416,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -495,7 +469,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -541,35 +515,37 @@ where
     fn parse_regular_function_leaf<S, Lib>(
         value: FunView<'a>,
         library: &Lib,
-        settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
         Lib: TensorLibraryFor<S, T, Key = K>,
     {
-        let s: Result<PermutedStructure<S>, _> = S::parse_with_settings(value.as_view(), settings);
-
-        if let Ok(s) = s {
-            match library.key_for_structure(&s) {
-                Ok(key) => Ok(Self::library_tensor(
-                    &s.structure,
-                    PermutedStructure {
-                        structure: key,
-                        rep_permutation: s.rep_permutation,
-                        index_permutation: s.index_permutation,
-                    },
-                )),
-                Err(_) => Ok(Self::from_tensor(
-                    s.structure
-                        .to_shell()
-                        .concretize(Some(s.index_permutation.inverse())),
-                )),
+        let structure = match S::parse(value.as_view()) {
+            Ok(structure) => structure,
+            Err(StructureError::EmptyStructure(_)) => {
+                return Ok(Self::from_scalar(value.as_view().try_into()?));
             }
-        } else {
-            Ok(Self::from_scalar(value.as_view().try_into()?))
+            Err(err) => return Err(err.into()),
+        };
+
+        match library.key_for_structure(&structure) {
+            Ok(key) => Ok(Self::library_tensor(
+                &structure.structure,
+                PermutedStructure {
+                    structure: key,
+                    rep_permutation: structure.rep_permutation,
+                    index_permutation: structure.index_permutation,
+                },
+            )),
+            Err(_) => Ok(Self::from_tensor(
+                structure
+                    .structure
+                    .to_shell()
+                    .concretize(Some(structure.index_permutation.inverse())),
+            )),
         }
     }
 
@@ -582,7 +558,7 @@ where
         settings: &ParseSettings,
     ) -> std::result::Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -593,7 +569,12 @@ where
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
-            return Self::as_leaf::<S>(value.as_view(), settings);
+            return Self::as_leaf::<S, Lib, FunLib>(
+                value.as_view(),
+                library,
+                function_library,
+                settings,
+            );
         }
 
         if !settings.depth_is_product_depth {
@@ -650,7 +631,7 @@ where
         settings: &ParseSettings,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
-        S: TensorStructure + ScalarStructure + Clone + Parse + StructureFromAtom,
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -661,7 +642,12 @@ where
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
-            return Self::as_leaf::<S>(value.as_view(), settings);
+            return Self::as_leaf::<S, Lib, FunLib>(
+                value.as_view(),
+                library,
+                function_library,
+                settings,
+            );
         }
 
         if !settings.depth_is_product_depth {

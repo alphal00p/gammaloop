@@ -1,4 +1,5 @@
 use insta::assert_snapshot;
+use spenso::network::parsing::StructureFromAtom;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
@@ -73,20 +74,16 @@ fn test_color_structures() {
 
     let f_p = f.clone().permute_inds();
 
-    let f_parsed = PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(
-        &f_p.expression.simplify_metrics(),
-    )
-    .unwrap();
+    let simplified = f_p.expression.simplify_metrics();
+    let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
     assert_eq!(f.index_permutation, f_parsed.index_permutation);
     assert!(f_parsed.rep_permutation.is_identity());
 
     let f_p = f.clone().permute_reps_wrapped().permute_inds();
 
-    let f_parsed = PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(
-        &f_p.expression.simplify_metrics(),
-    )
-    .unwrap();
+    let simplified = f_p.expression.simplify_metrics();
+    let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
     assert_eq!(f.index_permutation, f_parsed.index_permutation);
     assert_eq!(f.rep_permutation, f_parsed.rep_permutation);

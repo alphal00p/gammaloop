@@ -39,6 +39,11 @@ pub trait StructureFromAtom: Sized {
         value: AtomView<'_>,
         mode: StructureInferenceMode,
     ) -> Result<PermutedStructure<Self>, StructureError>;
+
+    /// Infer structure with the default fast syntactic mode.
+    fn parse(value: AtomView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
+        Self::structure_from_atom(value, StructureInferenceMode::Fast)
+    }
 }
 
 pub trait AtomStructureExt {
@@ -341,17 +346,37 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
         value: AtomView<'_>,
         mode: StructureInferenceMode,
     ) -> Result<PermutedStructure<Self>, StructureError> {
-        OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)
-            .map(|structure| Self::from_ordered_atom(value, structure))
+        match mode {
+            StructureInferenceMode::Fast => Self::from_fast_atom(value),
+            StructureInferenceMode::Expanded => {
+                OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)
+                    .map(|structure| Self::from_ordered_atom(value, structure))
+            }
+        }
     }
 }
 
-impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
-    for PermutedStructure<ShadowedStructure<Aind>>
-{
-    type Error = StructureError;
+impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind> {
+    /// Infer a named structure with the fast syntactic conventions.
+    fn from_fast_atom(value: AtomView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
+        match value {
+            AtomView::Fun(fun)
+                if fun.get_symbol() != SPENSO_TAG.chain && fun.get_symbol() != SPENSO_TAG.trace =>
+            {
+                OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value)?;
+                Self::from_fast_function(fun)
+            }
+            _ => OrderedStructure::<LibraryRep, Aind>::leaf_structure_from_atom(value)
+                .map(|structure| Self::from_ordered_atom(value, structure)),
+        }
+    }
 
-    fn try_from(value: FunView<'a>) -> Result<Self, Self::Error> {
+    /// Infer a named structure from an ordinary function leaf.
+    ///
+    /// Direct slot arguments define the exposed structure. Nested `aind(...)`
+    /// bundles are flattened, while non-structural arguments are retained as
+    /// metadata on the named leaf.
+    fn from_fast_function(value: FunView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
         match value.get_symbol() {
             s if s == AIND_SYMBOLS.aind => {
                 let mut structure = Vec::new();
@@ -376,7 +401,7 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
                         Err(err) => {
                             if let AtomView::Fun(fun) = arg
                                 && fun.get_symbol() == AIND_SYMBOLS.aind
-                                && let Ok(structure) = Self::try_from(fun)
+                                && let Ok(structure) = Self::from_fast_function(fun)
                             {
                                 let mut internal_slots = structure.structure.structure.structure;
                                 structure
@@ -401,7 +426,7 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
                     return Err(err);
                 }
 
-                let mut structure: PermutedStructure<ShadowedStructure<Aind>> =
+                let mut structure: PermutedStructure<Self> =
                     OrderedStructure::new(slots).map_structure(Into::into);
                 structure.structure.set_name(name);
                 if !args.is_empty() {
@@ -411,9 +436,7 @@ impl<'a, Aind: ParseableAind + AbsInd> TryFrom<FunView<'a>>
             }
         }
     }
-}
 
-impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind> {
     /// Wrap an inferred ordered structure with the original symbolic leaf name.
     fn from_ordered_atom(
         value: AtomView<'_>,

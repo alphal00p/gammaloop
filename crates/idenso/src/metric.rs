@@ -699,10 +699,10 @@ mod test {
     use super::*;
 
     use spenso::{
-        network::parsing::ShadowedStructure,
+        network::parsing::{ShadowedStructure, StructureFromAtom},
         shadowing::symbolica_utils::AtomCoreExt,
         structure::{
-            IndexlessNamedStructure, PermutedStructure,
+            IndexlessNamedStructure,
             abstract_index::AbstractIndex,
             permuted::Perm,
             representation::{Euclidean, Lorentz},
@@ -759,20 +759,16 @@ mod test {
 
         println!("{}\n", f_p.expression);
         println!("{}\n", f_p.expression.simplify_metrics());
-        let f_parsed = PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(
-            &f_p.expression.simplify_metrics(),
-        )
-        .unwrap();
+        let simplified = f_p.expression.simplify_metrics();
+        let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
         assert_eq!(f.index_permutation, f_parsed.index_permutation);
         assert!(f_parsed.rep_permutation.is_identity());
 
         let f_p = f.clone().permute_reps_wrapped().permute_inds();
 
-        let f_parsed = PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(
-            &f_p.expression.simplify_metrics(),
-        )
-        .unwrap();
+        let simplified = f_p.expression.simplify_metrics();
+        let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
         println!("{}\n", f_p.expression);
         println!("{}\n", f_p.expression.simplify_metrics());

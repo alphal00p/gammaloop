@@ -207,6 +207,7 @@ impl<Aind: AbsInd + ParseableAind> Contract<SymbolicTensor<Aind>, MetricSimplify
 pub mod test {
     use super::*;
     use spenso::network::library::symbolic::ETS;
+    use spenso::network::parsing::StructureFromAtom;
     use symbolica::parse;
 
     #[test]
@@ -214,10 +215,8 @@ pub mod test {
         let _ = ETS.metric;
         let expr = parse!("g(mink(4,6),mink(4,7))");
 
-        let structure = SymbolicTensor::from_permuted(
-            &PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(expr).unwrap(),
-        )
-        .unwrap();
+        let parsed = ShadowedStructure::<AbstractIndex>::parse(expr.as_view()).unwrap();
+        let structure = SymbolicTensor::from_permuted(&parsed).unwrap();
 
         Contract::<SymbolicTensor, ()>::contract(&structure, &structure).unwrap();
     }
