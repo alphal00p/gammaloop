@@ -93,6 +93,32 @@
 - Honor `--read-only-state` consistently. When it is enabled, do not write into the state folder and prefer cwd-based fallbacks for transient artifacts that would otherwise default into the state.
 - Ignore unrelated untracked local artifacts by default (editor swap files, scratch docs, local example edits, profiling outputs, etc.) unless the task clearly requires them; do not stop work solely because such untracked files are present.
 
+## Design / Refactor Preferences
+- Prefer one semantic boundary per concept. Before adding a trait, helper, mode, or adapter, look for the existing abstraction that already owns the behavior and extend that instead.
+- Collapse duplicate abstractions aggressively. If two names describe the same responsibility, merge them and update call sites rather than keeping compatibility shims.
+- Prefer methods, trait methods, or impl-associated functions over bare free functions. A helper should live on the type or trait whose invariant it uses.
+- Do not preserve internal API compatibility unless explicitly requested. Breaking internal Rust APIs is acceptable when it removes duplication or clarifies ownership.
+- Avoid compatibility fallbacks and "old path plus new path" designs. Pick the clearer model and migrate usages.
+
+## Implementation Style
+- Keep changes minimal but complete: remove obsolete code paths, imports, docs, and call sites in the same change.
+- Prefer concrete return types over sentinel-style APIs. Avoid `Option` where `None` means "nothing happened" if the caller always needs a usable result.
+- Make transformations explicit and idempotent. If recursive rewriting is involved, include a fixed-point check or another clear loop guard.
+- Avoid relying on fragile errors for control flow when a direct predicate or structural check would express the intent better.
+- Do not add broad helper layers just to avoid touching call sites. Update the call sites when the API should change.
+
+## Investigation Discipline
+- Before fixing a suspected bug, find the existing code path that should own the behavior.
+- When asked to identify failure modes, do not patch yet; report the concrete failing cases and where they enter the code.
+- When asked for a plan, do not make code changes until the plan is accepted.
+- If a requested change looks like only a rename, stop and check whether there is a deeper design change implied.
+
+## Tests And Docs
+- Put targeted unit tests next to the implementation they exercise. Use broader integration tests only for cross-module behavior.
+- Add tests for edge cases that motivated the change, especially when collapsing duplicated logic.
+- Documentation should explain conventions and algorithmic intent, not restate function names. Avoid tautological docs like "apply the convention"; say what the convention does.
+- Keep docs synchronized with API refactors; remove references to deleted traits, functions, and modes.
+
 ## Differential LU / Event Processing Notes
 - `differential_lu.md` is the detailed implementation log for the current differential LU stack; `docs/architecture/architecture-current.md` has the corresponding implemented-architecture summary. Keep both in sync when changing selectors, observables, event grouping, or sample-evaluation output.
 - Event grouping semantics are by graph-group, not just by graph: if multiple LU graphs share the same `group_id`, all accepted cuts from all of those graphs belong in the same retained `EventGroup`.
