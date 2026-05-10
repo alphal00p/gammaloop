@@ -760,7 +760,9 @@ mod test {
             parsing::{ParseSettings, ShadowedStructure},
             store::NetworkStore,
         },
+        p, q,
         shadowing::Concretize,
+        slot,
         structure::{
             ToSymbolic,
             abstract_index::AbstractIndex,
@@ -1027,7 +1029,8 @@ mod test {
         let lib =
             TensorLibrary::<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
 
-        let expr = parse!("p(1,mink(4,2))*q(2,mink(4,2))");
+        let mink = Minkowski {}.new_rep(4);
+        let expr = p!(1, slot!(mink, 2)) * q!(2, slot!(mink, 2));
         let mut net = Network::<
             NetworkStore<
                 MixedTensor<f64, ShadowedStructure<AbstractIndex>>,

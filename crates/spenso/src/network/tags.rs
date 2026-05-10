@@ -36,6 +36,156 @@ pub struct SpensoTags {
 
 pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::new(SpensoTags::new);
 
+/// Creates a tensor-head symbol tagged with Spenso's generic tensor tag.
+///
+/// This expands `symbolica::symbol!` at the call site, so the symbol keeps the
+/// caller's crate namespace while automatically receiving the Spenso tag.
+#[macro_export]
+macro_rules! tensor_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tag = &$crate::network::tags::SPENSO_TAG.tensor
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!($name, tag = &$crate::network::tags::SPENSO_TAG.tensor)
+    };
+}
+
+/// Creates a tensor-head symbol tagged as a Spenso vector.
+///
+/// This is the rank-one tensor head constructor. It expands
+/// `symbolica::symbol!` at the call site, so `vector_symbol!(p)` gets the
+/// caller's namespace plus the `tensor` and `rank1` tags.
+#[macro_export]
+macro_rules! vector_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.tensor,
+                &$crate::network::tags::SPENSO_TAG.rank1
+            ]
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!(
+            $name,
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.tensor,
+                &$crate::network::tags::SPENSO_TAG.rank1
+            ]
+        )
+    };
+}
+
+/// Creates a representation symbol tagged with Spenso's representation tag.
+///
+/// This expands `symbolica::symbol!` at the call site and adds only the generic
+/// representation tag.
+#[macro_export]
+macro_rules! representation_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tag = &$crate::network::tags::SPENSO_TAG.representation
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!(
+            $name,
+            tag = &$crate::network::tags::SPENSO_TAG.representation
+        )
+    };
+}
+
+/// Creates a self-dual representation symbol.
+///
+/// This expands `symbolica::symbol!` at the call site and adds the
+/// `representation` and `self_dual` tags.
+#[macro_export]
+macro_rules! self_dual_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.representation,
+                &$crate::network::tags::SPENSO_TAG.self_dual
+            ]
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!(
+            $name,
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.representation,
+                &$crate::network::tags::SPENSO_TAG.self_dual
+            ]
+        )
+    };
+}
+
+/// Creates a dualizable representation symbol.
+///
+/// This expands `symbolica::symbol!` at the call site and adds the
+/// `representation` and `dualizable` tags.
+#[macro_export]
+macro_rules! dualizable_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.representation,
+                &$crate::network::tags::SPENSO_TAG.dualizable
+            ]
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!(
+            $name,
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.representation,
+                &$crate::network::tags::SPENSO_TAG.dualizable
+            ]
+        )
+    };
+}
+
+/// Creates an abstract-index symbol tagged with Spenso's index tag.
+///
+/// This expands `symbolica::symbol!` at the call site and adds the Spenso
+/// index tag.
+#[macro_export]
+macro_rules! index_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tag = &$crate::network::tags::SPENSO_TAG.index
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!($name, tag = &$crate::network::tags::SPENSO_TAG.index)
+    };
+}
+
+/// Creates a function symbol tagged with Spenso's broadcast tag.
+///
+/// This expands `symbolica::symbol!` at the call site and adds the Spenso
+/// broadcast tag.
+#[macro_export]
+macro_rules! broadcast_symbol {
+    ($name:ident) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tag = &$crate::network::tags::SPENSO_TAG.broadcast
+        )
+    };
+    ($name:literal) => {
+        symbolica::symbol!($name, tag = &$crate::network::tags::SPENSO_TAG.broadcast)
+    };
+}
+
 impl SpensoTags {
     fn new() -> Self {
         let broadcast = tag!("broadcast");

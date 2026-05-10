@@ -51,6 +51,18 @@ impl IntoAtom for Symbol {
     }
 }
 
+impl IntoAtom for i64 {
+    fn into_atom(self) -> Atom {
+        Atom::num(self)
+    }
+}
+
+impl IntoAtom for i32 {
+    fn into_atom(self) -> Atom {
+        Atom::num(i64::from(self))
+    }
+}
+
 impl<R, A> IntoAtom for Slot<R, A>
 where
     R: RepName,
@@ -409,6 +421,92 @@ macro_rules! slot {
     };
     ($rep:expr, $index:expr) => {
         ($rep).slot::<$crate::structure::abstract_index::AbstractIndex, _>($index)
+    };
+}
+
+/// Builds a symbolic tensor function from a name and tensor arguments.
+///
+/// Identifier heads are created with [`tensor_symbol!`], so they keep the
+/// caller's symbol namespace and carry the generic Spenso tensor tag. Pass an
+/// explicit `Symbol` expression when the head was built elsewhere.
+///
+/// Arguments are converted through [`IntoAtom`], so callers can mix scalar
+/// arguments, atoms, slots, and stripped representations. Passing a
+/// representation, for example `tensor!(p, rep)`, emits compact Schoonschip
+/// syntax; passing a slot, for example `tensor!(p, slot!(rep, i))`, emits an
+/// explicitly indexed tensor.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::{p, q, slot, tensor};
+///
+/// let compact = tensor!(k, 1, mink4);
+/// let indexed = p!(1, slot!(mink4, mu)) * q!(2, slot!(mink4, mu));
+/// ```
+#[macro_export]
+macro_rules! tensor {
+    ($name:ident $(, $arg:expr)* $(,)?) => {{
+        let mut tensor = symbolica::atom::FunctionBuilder::new($crate::tensor_symbol!($name));
+        $(
+            tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
+        )*
+        tensor.finish()
+    }};
+    ($name:expr $(, $arg:expr)* $(,)?) => {{
+        let mut tensor = symbolica::atom::FunctionBuilder::new($name);
+        $(
+            tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
+        )*
+        tensor.finish()
+    }};
+}
+
+/// Builds a symbolic vector function from a name and tensor arguments.
+///
+/// The head is created with [`vector_symbol!`], so `vector!(p, ...)` is a
+/// rank-one tensor in the caller's symbol namespace.
+#[macro_export]
+macro_rules! vector {
+    ($name:ident $(, $arg:expr)* $(,)?) => {{
+        let mut tensor = symbolica::atom::FunctionBuilder::new($crate::vector_symbol!($name));
+        $(
+            tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
+        )*
+        tensor.finish()
+    }};
+    ($name:expr $(, $arg:expr)* $(,)?) => {{
+        let mut tensor = symbolica::atom::FunctionBuilder::new($name);
+        $(
+            tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
+        )*
+        tensor.finish()
+    }};
+}
+
+/// Builds a symbolic vector `p(...)`.
+///
+/// This is a convenience wrapper around [`vector!`] with a rank-one tensor head.
+#[macro_export]
+macro_rules! p {
+    () => {
+        $crate::vector!(p)
+    };
+    ($($arg:expr),+ $(,)?) => {
+        $crate::vector!(p, $($arg),+)
+    };
+}
+
+/// Builds a symbolic vector `q(...)`.
+///
+/// This is a convenience wrapper around [`vector!`] with a rank-one tensor head.
+#[macro_export]
+macro_rules! q {
+    () => {
+        $crate::vector!(q)
+    };
+    ($($arg:expr),+ $(,)?) => {
+        $crate::vector!(q, $($arg),+)
     };
 }
 
