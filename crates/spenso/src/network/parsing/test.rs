@@ -214,20 +214,6 @@ fn parse_empty_chain_as_endpoint_metric() {
 }
 
 #[test]
-fn materialize_schoonschip_vectors_parse_as_dot_product() {
-    let rep = mink4();
-    let expr =
-        function!(symbol!("p"), rep.to_symbolic([])) * function!(symbol!("q"), rep.to_symbolic([]));
-
-    let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-        .unwrap();
-
-    assert!(parsed.state.is_scalar());
-    assert!(parsed.graph.dangling_indices().is_empty());
-}
-
-#[test]
 fn opaque_schoonschip_vectors_stay_scalar() {
     let rep = mink4();
     let expr =
@@ -321,6 +307,7 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert!(parsed.graph.n_nodes() > 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -408,7 +395,7 @@ fn parse_linear_schoonschipped_dot_product() {
 }
 
 #[test]
-fn parse_chain_keeps_schoonschip_factor_arguments_opaque() {
+fn parse_chain_materializes_schoonschip_factor_argument() {
     let rep = mink4();
     let compact_vector = function!(symbol!("p"), rep.to_symbolic([]));
     let factor = FunctionBuilder::new(symbol!("f"))
@@ -424,4 +411,5 @@ fn parse_chain_keeps_schoonschip_factor_arguments_opaque() {
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
+    assert_eq!(parsed.store.tensors.len(), 2);
 }
