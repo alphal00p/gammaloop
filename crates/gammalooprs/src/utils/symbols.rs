@@ -661,7 +661,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     broadcasting_sqrt: symbol!(
         "broadcasting_sqrt",
-        tag = SPENSO_TAG.tag,
+        tag = SPENSO_TAG.broadcast,
         der = |a, _, out| {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }

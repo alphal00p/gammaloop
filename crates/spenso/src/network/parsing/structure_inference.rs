@@ -47,6 +47,14 @@ pub trait AtomStructureExt {
         &self,
         mode: StructureInferenceMode,
     ) -> Result<PermutedStructure<S>, StructureError>;
+
+    /// Return true when this expression contains tensor syntax.
+    ///
+    /// This is a cheap syntactic test for a symbol tagged with the Spenso
+    /// representation tag. It intentionally does not parse slots or infer
+    /// structure; callers use it only to distinguish scalar functions from
+    /// expressions that should enter the tensor parser boundary.
+    fn is_tensorial(&self) -> bool;
 }
 
 impl AtomStructureExt for Atom {
@@ -56,6 +64,10 @@ impl AtomStructureExt for Atom {
     ) -> Result<PermutedStructure<S>, StructureError> {
         self.as_view().infer_structure(mode)
     }
+
+    fn is_tensorial(&self) -> bool {
+        self.as_view().is_tensorial()
+    }
 }
 
 impl AtomStructureExt for AtomView<'_> {
@@ -64,6 +76,20 @@ impl AtomStructureExt for AtomView<'_> {
         mode: StructureInferenceMode,
     ) -> Result<PermutedStructure<S>, StructureError> {
         S::structure_from_atom(*self, mode)
+    }
+
+    fn is_tensorial(&self) -> bool {
+        match self {
+            AtomView::Fun(fun) => {
+                fun.get_symbol().has_attributes_of(SPENSO_TAG.rep_)
+                    || fun.iter().any(|arg| arg.is_tensorial())
+            }
+            AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
+            AtomView::Add(add) => add.iter().any(|arg| arg.is_tensorial()),
+            AtomView::Mul(mul) => mul.iter().any(|arg| arg.is_tensorial()),
+            AtomView::Pow(pow) => pow.get_base_exp().0.is_tensorial(),
+            _ => false,
+        }
     }
 }
 
@@ -379,7 +405,7 @@ mod tests {
         trace,
     };
     use symbolica::{
-        atom::{Atom, FunctionBuilder, Symbol},
+        atom::{Atom, AtomCore, FunctionBuilder, Symbol},
         function, symbol,
     };
 
@@ -393,6 +419,19 @@ mod tests {
             .add_arg(Atom::var(SPENSO_TAG.chain_in))
             .add_arg(Atom::var(SPENSO_TAG.chain_out))
             .finish()
+    }
+
+    #[test]
+    fn tensorial_syntax_detects_representation_tags() {
+        let rep = mink4();
+        let compact = function!(symbol!("p"), rep.to_symbolic([]));
+        let scalar = function!(symbol!("f"), Atom::num(1));
+        let nested = scalar.clone() + compact.clone().pow(2);
+
+        assert!(compact.is_tensorial());
+        assert!(compact.as_view().is_tensorial());
+        assert!(nested.is_tensorial());
+        assert!(!scalar.is_tensorial());
     }
 
     #[test]

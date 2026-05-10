@@ -17,6 +17,7 @@ use spenso::{
         },
         parsing::{
             Parse, ParseSettings, ShadowedStructure, StructureFromAtom, StructureInferenceMode,
+            TensorFromExpression, TensorLibraryFor,
         },
         store::NetworkStore,
     },
@@ -105,6 +106,46 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTen
     }
 }
 
+impl<Aind, K, Lib, FunLib>
+    TensorFromExpression<SymbolicTensor<Aind>, Atom, K, Symbol, Aind, Lib, FunLib>
+    for SymbolicTensor<Aind>
+where
+    Aind: AbsInd + DummyAind + ParseableAind,
+    K: std::fmt::Display,
+    Lib: TensorLibraryFor<SymbolicTensor<Aind>, SymbolicTensor<Aind>, Key = K>,
+    FunLib: FunctionLibrary<SymbolicTensor<Aind>, Atom, Key = Symbol>,
+{
+    fn tensor_from_expression(
+        expression: AtomView<'_>,
+        structure: PermutedStructure<SymbolicTensor<Aind>>,
+        _tensor_library: &Lib,
+        _function_library: &FunLib,
+        _settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        K: std::fmt::Display,
+        Symbol: std::fmt::Display,
+    {
+        let mut tensor = structure.structure;
+        if !structure.rep_permutation.is_identity() {
+            tensor = tensor.permute_reps(&structure.rep_permutation.inverse());
+        }
+        if !structure.index_permutation.is_identity() {
+            tensor = tensor.permute_inds(&structure.index_permutation.inverse());
+        }
+
+        let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression {
+            (false, fun.get_symbol() == ETS.metric)
+        } else {
+            (true, false)
+        };
+        tensor.expression = expression.to_owned();
+        tensor.is_composite = is_composite;
+        tensor.is_metric = is_metric;
+        Ok(tensor)
+    }
+}
+
 impl<Aind: ParseableAind + AbsInd> Parse for SymbolicTensor<Aind> {
     fn parse(value: AtomView) -> Result<PermutedStructure<Self>, StructureError> {
         let structure = OrderedStructure::from_syntactic_atom(value)?;
@@ -180,6 +221,17 @@ impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<Aind> {
             is_metric: false,
             is_composite: false,
             expression: scalar,
+        }
+    }
+}
+
+impl<Aind: AbsInd> ScalarStructure for SymbolicTensor<Aind> {
+    fn scalar_structure() -> Self {
+        SymbolicTensor {
+            structure: OrderedStructure::scalar_structure(),
+            is_metric: false,
+            is_composite: false,
+            expression: Atom::num(1),
         }
     }
 }

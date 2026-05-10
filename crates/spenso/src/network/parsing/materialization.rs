@@ -1,10 +1,12 @@
-//! Materialization for shorthand syntax before ordinary network parsing.
+//! Materialization helpers for shorthand syntax before ordinary network parsing.
 //!
-//! This pass is deliberately narrower than algebraic simplification. It takes
-//! compact parser syntax that cannot be parsed as an ordinary leaf yet and
-//! rewrites it into explicit slots plus ordinary tensor factors. The parser can
-//! then recurse on the resulting expression and build the same graph it would
-//! have built from fully expanded syntax.
+//! Network-level shorthand materialization lives on the parser implementation:
+//! it handles chain and trace topology and returns parsed networks. The helper
+//! in this module is deliberately narrower than algebraic simplification. It
+//! takes compact Schoonschip syntax that cannot be parsed as an ordinary leaf
+//! yet and rewrites it into explicit slots plus ordinary tensor factors. The
+//! parser can then recurse on the resulting expression and build the same graph
+//! it would have built from fully expanded syntax.
 //!
 //! The main Schoonschip convention is:
 //! 1. a compact rank-one tensor `p(rep)` used as a function argument becomes a
@@ -15,16 +17,15 @@
 //! Additional factors are accumulated beside the current atom and are not
 //! recursively inspected by this materialization pass.
 //!
-//! Chain and trace expansion is separate. It only replaces the symbolic
-//! `in`/`out` placeholders with the slots chosen by the chain parser, then lets
-//! the Schoonschip materializer handle any compact arguments inside each factor.
+//! Chain and trace materialization chooses the symbolic `in`/`out` replacements,
+//! then lets this Schoonschip helper expand compact arguments inside each factor.
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, representation::FunView},
     id::MatchSettings,
 };
 
-use super::{ParseSettings, ParseState, ShorthandParsing};
+use super::ParseState;
 use crate::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
@@ -57,31 +58,33 @@ impl SchoonschipMaterialization {
 /// The materializer owns no parse state. It borrows the parser's dummy allocator
 /// so every fresh slot it creates shares the same abstract-index namespace as
 /// the surrounding network parse.
-pub(super) struct ShorthandMaterializer<'a, Aind> {
+pub(super) struct SchoonschipMaterializer<'a, Aind> {
     state: &'a ParseState<Aind>,
-    settings: &'a ParseSettings,
 }
 
-impl<'a, Aind: AbsInd + DummyAind + ParseableAind> ShorthandMaterializer<'a, Aind> {
+impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, Aind> {
     /// Build a materializer for the current parse recursion.
-    pub(super) fn new(state: &'a ParseState<Aind>, settings: &'a ParseSettings) -> Self {
-        Self { state, settings }
+    pub(super) fn new(state: &'a ParseState<Aind>) -> Self {
+        Self { state }
     }
 
-    /// Materialize an expandable shorthand expression.
+    /// Materialize an expandable shorthand expression, or return it unchanged.
     ///
-    /// The root must be a function. A successful materialization returns one
-    /// expression where the rebuilt root is multiplied by all tensor factors
-    /// introduced while replacing compact vector arguments.
-    pub(super) fn materialize_shorthand(&self, value: AtomView<'_>) -> Option<Atom> {
+    /// The root must be a function for rewriting to occur. When rewriting is
+    /// possible, the result is one expression where the rebuilt root is
+    /// multiplied by all tensor factors introduced while replacing compact
+    /// vector arguments. If no shorthand is present, callers still get a valid
+    /// parser input: the original atom.
+    pub(super) fn materialize_shorthand(&self, value: AtomView<'_>) -> Atom {
         self.materialize_shorthand_root(value)
             .map(SchoonschipMaterialization::into_expression)
+            .unwrap_or_else(|| value.to_owned())
     }
 
     /// Materialize shorthand at a function root.
     ///
-    /// Expand mode first gives compact scalar products their special lowering.
-    /// Everything else is rebuilt by recursively scanning function arguments.
+    /// Compact scalar products get their special lowering first. Everything else
+    /// is rebuilt by recursively scanning function arguments.
     fn materialize_shorthand_root(
         &self,
         value: AtomView<'_>,
@@ -90,9 +93,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> ShorthandMaterializer<'a, Ain
             return None;
         };
 
-        if self.settings.shorthand_parsing.expands()
-            && let Some(materialized) = self.compact_scalar_product(fun)
-        {
+        if let Some(materialized) = self.compact_scalar_product(fun) {
             return Some(materialized);
         }
 
@@ -101,14 +102,11 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> ShorthandMaterializer<'a, Ain
 
     /// Materialize one function argument according to shorthand position rules.
     ///
-    /// A compact vector has special meaning only in argument position under
-    /// `ShorthandParsing::Expand`: it contributes a fresh slot at that position
-    /// and an extra rank-one tensor factor. Non-compact functions are scanned
-    /// recursively.
+    /// A compact vector has special meaning only in argument position: it
+    /// contributes a fresh slot at that position and an extra rank-one tensor
+    /// factor. Non-compact functions are scanned recursively.
     fn materialize_shorthand_arg(&self, value: AtomView<'_>) -> Option<SchoonschipMaterialization> {
-        if self.settings.shorthand_parsing == ShorthandParsing::Expand
-            && let Some(materialized) = self.materialize_compact_vector_arg(value)
-        {
+        if let Some(materialized) = self.materialize_compact_vector_arg(value) {
             return Some(materialized);
         }
 
@@ -431,22 +429,21 @@ mod tests {
 
     #[test]
     fn standalone_compact_vector_is_not_materialized() {
-        let settings = ParseSettings::default();
         let state = ParseState::<AbstractIndex>::default();
-        let materializer = ShorthandMaterializer::new(&state, &settings);
+        let materializer = SchoonschipMaterializer::new(&state);
 
-        assert!(
-            materializer
-                .materialize_shorthand(compact_vector(symbol!("p")).as_view())
-                .is_none()
+        let expression = compact_vector(symbol!("p"));
+
+        assert_eq!(
+            materializer.materialize_shorthand(expression.as_view()),
+            expression
         );
     }
 
     #[test]
     fn compact_vector_argument_becomes_slot_and_factor() {
-        let settings = ParseSettings::default();
         let state = ParseState::<AbstractIndex>::default();
-        let materializer = ShorthandMaterializer::new(&state, &settings);
+        let materializer = SchoonschipMaterializer::new(&state);
         let visible_slot = mink4()
             .slot::<AbstractIndex, _>(AbstractIndex::from(1))
             .to_atom();
@@ -455,9 +452,7 @@ mod tests {
             .add_arg(visible_slot.as_view())
             .finish();
 
-        let materialized = materializer
-            .materialize_shorthand(expression.as_view())
-            .unwrap();
+        let materialized = materializer.materialize_shorthand(expression.as_view());
         let AtomView::Mul(product) = materialized.as_view() else {
             panic!("expected product");
         };
@@ -490,18 +485,15 @@ mod tests {
 
     #[test]
     fn compact_scalar_product_still_materializes_to_two_factors() {
-        let settings = ParseSettings::default();
         let state = ParseState::<AbstractIndex>::default();
-        let materializer = ShorthandMaterializer::new(&state, &settings);
+        let materializer = SchoonschipMaterializer::new(&state);
         let expression = function!(
             ETS.metric,
             compact_vector(symbol!("p")),
             compact_vector(symbol!("q"))
         );
 
-        let materialized = materializer
-            .materialize_shorthand(expression.as_view())
-            .unwrap();
+        let materialized = materializer.materialize_shorthand(expression.as_view());
         let AtomView::Mul(product) = materialized.as_view() else {
             panic!("expected product");
         };

@@ -185,7 +185,7 @@ mod tests {
 
         let e = EdgeIndex(0);
 
-        let sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.tag);
+        let sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.broadcast);
 
         let a = function!(
             sqrt,

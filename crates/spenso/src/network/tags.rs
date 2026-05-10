@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub struct SpensoTags {
-    pub tag: String,
+    pub broadcast: String,
     pub rank1: String,
     pub rank1_: Symbol,
     pub chain_in: Symbol,
@@ -38,7 +38,7 @@ pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::ne
 
 impl SpensoTags {
     fn new() -> Self {
-        let tag = tag!("broadcast");
+        let broadcast = tag!("broadcast");
         let upper = tag!("upper");
         let lower = tag!("lower");
         let rank1 = tag!("rank1");
@@ -188,7 +188,7 @@ impl SpensoTags {
             rep_: symbol!("rep_", tag = &representation),
             self_dual_: symbol!("self_dual_", tags = [&representation, &self_dual]),
             dualizable_: symbol!("dualizable_", tags = [&representation, &dualizable]),
-            tag,
+            broadcast,
             upper,
             lower,
             rank1,
