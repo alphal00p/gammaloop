@@ -188,12 +188,8 @@ impl NetworkSchoonschip<'_> {
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 depth_limit: self.settings.depth_limit,
                 take_first_term_from_sum: false,
-                shorthand_parsing: if self.settings.parse_inner_products {
-                    ShorthandParsing::Expand
-                } else {
-                    ShorthandParsing::Opaque {
-                        inference: StructureInferenceMode::Fast,
-                    }
+                shorthand_parsing: ShorthandParsing::Opaque {
+                    inference: StructureInferenceMode::Fast,
                 },
                 parse_composite_scalars_as_tensors: RECURSE,
                 ..Default::default()
@@ -485,7 +481,6 @@ impl Schoonschip for AtomView<'_> {
 
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {
         self.schoonschip_with_net::<false, Aind>(&SchoonschipSettings::default_network())
-            .schoonschip()
     }
 
     fn schoonschip_with_net<

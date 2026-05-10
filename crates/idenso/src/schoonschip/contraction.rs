@@ -375,9 +375,9 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
         }
 
         let settings = if DEPTH_FIRST {
-            SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
+            SchoonschipSettings::depth_first(Some(1))
         } else {
-            SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
+            SchoonschipSettings::breadth_first(Some(1))
         }
         .into_single_pass();
 
@@ -734,9 +734,9 @@ where
 
 fn recursive_schoonschip_settings<const DEPTH_FIRST: bool>() -> SchoonschipSettings {
     if DEPTH_FIRST {
-        SchoonschipSettings::depth_first(Some(1)).without_parse_inner_products()
+        SchoonschipSettings::depth_first(Some(1))
     } else {
-        SchoonschipSettings::breadth_first(Some(1)).without_parse_inner_products()
+        SchoonschipSettings::breadth_first(Some(1))
     }
 }
 

@@ -1,7 +1,6 @@
 pub struct SchoonschipSettings {
     pub(super) depth_limit: Option<usize>,
     pub(super) mode: SchoonschipMode,
-    pub(super) parse_inner_products: bool,
     pub(super) expand_contracted_sums: bool,
     pub(super) simplify_chain_like_functions: bool,
     pub(super) contraction_order: SchoonschipContractionOrder,
@@ -47,7 +46,6 @@ impl SchoonschipSettings {
         Self {
             depth_limit,
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
-            parse_inner_products: true,
             expand_contracted_sums: false,
             simplify_chain_like_functions: false,
             contraction_order: SchoonschipContractionOrder::default(),
@@ -58,7 +56,6 @@ impl SchoonschipSettings {
         Self {
             depth_limit,
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
-            parse_inner_products: true,
             expand_contracted_sums: false,
             simplify_chain_like_functions: false,
             contraction_order: SchoonschipContractionOrder::default(),
@@ -69,7 +66,6 @@ impl SchoonschipSettings {
         Self {
             depth_limit,
             mode: SchoonschipMode::SinglePass,
-            parse_inner_products: true,
             expand_contracted_sums: false,
             simplify_chain_like_functions: false,
             contraction_order: SchoonschipContractionOrder::default(),
@@ -113,11 +109,6 @@ impl SchoonschipSettings {
 
     pub fn with_contraction_order(mut self, order: SchoonschipContractionOrder) -> Self {
         self.contraction_order = order;
-        self
-    }
-
-    pub(super) fn without_parse_inner_products(mut self) -> Self {
-        self.parse_inner_products = false;
         self
     }
 

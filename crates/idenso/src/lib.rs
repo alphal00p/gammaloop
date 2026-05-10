@@ -10,11 +10,7 @@ use metric::{
     wrap_indices_impl,
 };
 use spenso::{
-    network::{
-        graph::NetworkEdge,
-        library::function_lib::INBUILTS,
-        parsing::{NetworkParse, ParseSettings},
-    },
+    network::{graph::NetworkEdge, library::function_lib::INBUILTS, parsing::ParseSettings},
     structure::{
         HasName, TensorStructure,
         representation::RepName,
