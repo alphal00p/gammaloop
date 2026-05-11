@@ -22,8 +22,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomType, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    coefficient::CoefficientView,
+    atom::{Atom, AtomCore, AtomType, AtomView, FunctionBuilder, Symbol},
     function,
     id::{
         Condition, FilterFn, Match, MatchSettings, MatchStack, PatternRestriction, Replacement,
@@ -45,16 +44,6 @@ pub static MS: LazyLock<MetricSymbols> = LazyLock::new(|| MetricSymbols {
     dim: symbol!("spenso::dim"),
     dummy: symbol!("spenso::dummy"),
 });
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub enum CookingError {
-    Add,
-    Mul,
-    Pow,
-    RatCoeff,
-    FiniteField,
-    Float,
-}
 
 pub fn canonize_impl(view: AtomView) -> Atom {
     let lib = DummyLibrary::<SymbolicTensor>::new();
@@ -96,140 +85,6 @@ pub fn canonize_impl(view: AtomView) -> Atom {
         .unwrap()
         .canonical_form
         .replace_multiple(&redual_reps)
-}
-
-pub fn cook_function_view(view: AtomView) -> Result<Atom, CookingError> {
-    match view {
-        AtomView::Var(_) | AtomView::Num(_) => Ok(view.to_owned()),
-        AtomView::Mul(_) => Err(CookingError::Mul),
-        AtomView::Add(_) => Err(CookingError::Add),
-        AtomView::Pow(_) => Err(CookingError::Pow),
-        AtomView::Fun(f) => {
-            let s = cook_function_impl(f)?;
-            Ok(Atom::var(s))
-        }
-    }
-}
-
-pub fn cook_function_impl(fun: FunView) -> Result<Symbol, CookingError> {
-    let mut name = fun.get_symbol().get_name().to_string();
-
-    for arg in fun.iter() {
-        name.push('_');
-        match arg {
-            AtomView::Fun(f) => {
-                let arg_sym = cook_function_impl(f)?;
-                name.push_str(arg_sym.get_stripped_name());
-            }
-            AtomView::Num(n) => match n.get_coeff_view() {
-                CoefficientView::Indeterminate => name.push_str("ind"),
-                CoefficientView::Infinity(_) => name.push_str("inf"),
-                CoefficientView::FiniteField(_, _) => {
-                    return Err(CookingError::FiniteField);
-                }
-                CoefficientView::Natural(n, d, imnum, imden) => {
-                    name.push_str(&n.to_string());
-                    if d != 1 {
-                        name.push(':');
-                        name.push_str(&d.to_string());
-                    }
-                    if imnum != 0 {
-                        name.push('i');
-                        name.push_str(&imnum.to_string());
-                        if d != 1 {
-                            name.push(':');
-                            name.push_str(&imden.to_string());
-                        }
-                    }
-                }
-                CoefficientView::Float(_, _) => {
-                    return Err(CookingError::Float);
-                }
-                CoefficientView::Large(r, imr) => {
-                    let rat = r.to_rat();
-                    name.push_str(&rat.numerator().to_string());
-                    if !rat.is_integer() {
-                        name.push(':');
-                        name.push_str(&rat.denominator().to_string());
-                    }
-
-                    if !imr.is_zero() {
-                        let rat = imr.to_rat();
-                        name.push('i');
-                        name.push_str(&rat.numerator().to_string());
-                        if !rat.is_integer() {
-                            name.push(':');
-                            name.push_str(&rat.denominator().to_string());
-                        }
-                    }
-                }
-                CoefficientView::RationalPolynomial(_) => {
-                    return Err(CookingError::RatCoeff);
-                }
-            },
-            AtomView::Var(s) => {
-                name.push_str(s.get_symbol().get_stripped_name());
-            }
-            AtomView::Pow(_) => {
-                return Err(CookingError::Pow);
-            }
-            AtomView::Add(_) => {
-                return Err(CookingError::Add);
-            }
-            AtomView::Mul(_) => {
-                return Err(CookingError::Mul);
-            }
-        }
-    }
-
-    Ok(symbol!(&name))
-}
-
-pub fn cook_indices_impl(view: AtomView) -> Atom {
-    let mut expr = view.to_owned();
-
-    let settings = MatchSettings {
-        level_range: (0, Some(0)),
-        ..Default::default()
-    };
-
-    for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
-        let ipat = i.to_symbolic([RS.d_, RS.a_]).to_pattern();
-        expr = expr.replace_map(|term, ctx, out| {
-            if ctx.function_level < 2
-                && ctx.function_level > 0
-                && let Some(c) = term.pattern_match(&ipat, None, &settings).next()
-                && let Ok(aind) = cook_function_view(c[&RS.a_].as_view())
-            {
-                **out = i.to_symbolic([c[&RS.d_].clone(), aind]);
-            }
-        });
-    }
-
-    for i in LibraryRep::all_dualizables() {
-        let ipat = i.to_symbolic([RS.d_, RS.a_]).to_pattern();
-        // println!("{ipat}");
-        let ipat_dual = i.dual().to_symbolic([RS.d_, RS.a_]).to_pattern();
-        expr = expr.replace_map(|term, ctx, out| {
-            if ctx.function_level == 1
-                && let Some(c) = term.pattern_match(&ipat_dual, None, &settings).next()
-                && let Ok(aind) = cook_function_view(c[&RS.a_].as_view())
-            {
-                // println!("{aind}");
-                **out = i.dual().to_symbolic([c[&RS.d_].clone(), aind]);
-            }
-        });
-        expr = expr.replace_map(|term, ctx, out| {
-            if ctx.function_level == 1
-                && let Some(c) = term.pattern_match(&ipat, None, &settings).next()
-                && let Ok(aind) = cook_function_view(c[&RS.a_].as_view())
-            {
-                **out = i.to_symbolic([c[&RS.d_].clone(), aind]);
-            }
-        });
-    }
-
-    expr
 }
 
 pub fn not_wraped_aind(header: Symbol) -> impl FilterFn + 'static {
@@ -639,7 +494,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{IndexTooling, representations::Bispinor, test::test_initialize};
+    use crate::{Cookable, representations::Bispinor, test::test_initialize};
 
     use super::*;
 

@@ -13,7 +13,7 @@ use pyo3::{
 use spenso::structure::abstract_index::AbstractIndex;
 use symbolica::atom::Atom;
 
-use crate::IndexTooling;
+use crate::{Cookable, IndexTooling};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use symbolica::atom::Symbol;

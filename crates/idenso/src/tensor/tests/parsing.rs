@@ -186,13 +186,13 @@ fn parse_val() {
 
       0	 [label = "∏"];
       1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*1𝑖/27"];
-      2	 [label = "T:g(cof(3,hedge_1),dind(cof(3,hedge_2)))"];
-      3	 [label = "T:g(cof(3,hedge_2),dind(cof(3,hedge_1)))"];
+      2	 [label = "T:g(cof(3,hedge_2),dind(cof(3,hedge_1)))"];
+      3	 [label = "T:g(cof(3,hedge_1),dind(cof(3,hedge_2)))"];
       4	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
-      5	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
-      6	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
-      7	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
-      8	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
+      5	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
+      6	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
+      7	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
+      8	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
       9	 [label = "T:Q(5,mink(4,edge_5_1))"];
       10	 [label = "T:Q(6,mink(4,edge_6_1))"];
       11	 [label = "T:u(1,bis(4,hedge_1))"];
@@ -217,19 +217,19 @@ fn parse_val() {
       3:20:s	-> 0:13:s	 [id=13  color="red:blue;0.5"];
       2:17:s	-> 0:14:s	 [id=14  color="red:blue;0.5"];
       1:16:s	-> 0:15:s	 [id=15  color="red:blue;0.5"];
-      2:19:s	-> 3:21:s	 [id=16 dir=back  color="red:blue;0.5" label="cof🠓3|_hedge_2"];
-      2:18:s	-> 3:22:s	 [id=17  color="red:blue;0.5" label="cof🠑3|^hedge_1"];
+      2:19:s	-> 3:21:s	 [id=16 dir=back  color="red:blue;0.5" label="cof🠓3|_hedge_1"];
+      2:18:s	-> 3:22:s	 [id=17  color="red:blue;0.5" label="cof🠑3|^hedge_2"];
       4:26:s	-> 13:52:s	 [id=18 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
       4:24:s	-> 12:50:s	 [id=19 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
-      4:25:s	-> 8:41:s	 [id=20 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
-      5:30:s	-> 9:44:s	 [id=21 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
-      5:28:s	-> 6:32:s	 [id=22 dir=none  color="red:blue;0.5" label="bis4|hedge_6"];
-      5:29:s	-> 7:37:s	 [id=23 dir=none  color="red:blue;0.5" label="bis4|hedge_5"];
-      6:33:s	-> 8:40:s	 [id=24 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
-      6:34:s	-> 15:56:s	 [id=25 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
-      7:38:s	-> 14:54:s	 [id=26 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
-      7:36:s	-> 11:48:s	 [id=27 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
-      8:42:s	-> 10:46:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
+      4:25:s	-> 5:28:s	 [id=20 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
+      5:29:s	-> 8:41:s	 [id=21 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
+      5:30:s	-> 10:46:s	 [id=22 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
+      6:34:s	-> 14:54:s	 [id=23 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
+      6:32:s	-> 11:48:s	 [id=24 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
+      6:33:s	-> 7:36:s	 [id=25 dir=none  color="red:blue;0.5" label="bis4|hedge_5"];
+      7:37:s	-> 8:40:s	 [id=26 dir=none  color="red:blue;0.5" label="bis4|hedge_6"];
+      7:38:s	-> 9:44:s	 [id=27 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
+      8:42:s	-> 15:56:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
     }
     "#);
     assert_eq!(net.simple_execute::<()>(), expr);
@@ -289,16 +289,16 @@ fn parse_scalar_tensors_step_by() {
 
       0	 [label = "∏"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:d(mink(4,1))"];
-      3	 [label = "T:b(mink(4,1))"];
+      2	 [label = "T:b(mink(4,1))"];
+      3	 [label = "T:d(mink(4,1))"];
       4	 [label = "S:(d(mink(4,2)))^2"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      4:10:s	-> 0:2:s	 [id=1  color="red:blue;0.5"];
+      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
       1:5:s	-> 0:4:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      2:7:s	-> 3:8:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
-      3:9:s	-> 0:1:s	 [id=5  color="red:blue;0.5"];
+      2:7:s	-> 3:9:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
+      3:8:s	-> 0:2:s	 [id=5  color="red:blue;0.5"];
     }
     "#
     );
@@ -764,15 +764,15 @@ fn infinite_execution() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_4"];
+      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_1"];
       ext2	 [style=invis];
-      0:2:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_3"];
+      0:2:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_2"];
       ext3	 [style=invis];
-      0:3:s	-> ext3	 [id=3 dir=none color="red" label="mink4|l_0"];
+      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:4:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
+      0:5:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_4"];
       ext5	 [style=invis];
-      0:5:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
+      0:3:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_0"];
     }
     "#
     );

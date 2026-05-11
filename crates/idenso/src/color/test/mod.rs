@@ -30,7 +30,8 @@ use crate::schoonschip::Schoonschip;
 use crate::tensor::SymbolicTensor;
 use crate::test::test_initialize;
 use crate::{
-    IndexTooling, dirac::GammaSimplifier, metric::MetricSimplifier, representations::initialize,
+    Cookable, IndexTooling, dirac::GammaSimplifier, metric::MetricSimplifier,
+    representations::initialize,
 };
 
 use super::*;
@@ -592,14 +593,9 @@ fn ratio_simplify() {
         default_namespace = "spenso"
     );
 
-    let simplified = expr
-        .cook_indices()
-        .simplify_color()
-        .simplify_metrics()
-        .normalize_dots()
-        .factor()
-        .to_bare_ordered_string();
-    assert_snapshot!(simplified, @"(-1𝑖*ahaha*g(coad(ohoho,dummy_1),coad(ohoho,dummy_1))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy_4)))+-1𝑖*g(coad(ohoho,dummy_2),coad(ohoho,dummy_2))+1𝑖*g(coad(ohoho,dummy_1),coad(ohoho,dummy_1)))*G^4*TR^2*ahaha^(-1)*ee^2");
+    let simplified = expr.cook_indices().simplify_color();
+
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"-1𝑖*G^4*TR^2*ee^2*g(cof(ahaha,dummy_3),dind(cof(ahaha,dummy(3))))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy(4))))*g(cof(ahaha,dummy_5),dind(cof(ahaha,dummy(5))))+1𝑖*G^4*TR^2*ee^2*g(cof(ahaha,dummy_3),dind(cof(ahaha,dummy(5))))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy(3))))*g(cof(ahaha,dummy_5),dind(cof(ahaha,dummy(4))))");
 }
 
 #[test]

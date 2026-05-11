@@ -2,13 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use base64::{Engine, engine::general_purpose::URL_SAFE};
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
-use metric::{
-    CookingError, cook_function_view, cook_indices_impl, list_dangling_impl, wrap_dummies_impl,
-    wrap_indices_impl,
-};
+use metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
 use spenso::{
     network::{graph::NetworkEdge, library::function_lib::INBUILTS, parsing::ParseSettings},
     structure::{
@@ -18,10 +14,10 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, UserData},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
     id::Replacement,
-    symbol, tag,
+    symbol,
 };
 use thiserror::Error;
 
@@ -37,6 +33,7 @@ pub mod tensor;
 
 pub mod chain;
 pub mod color;
+pub mod cook;
 pub mod dirac;
 pub mod epsilon;
 pub mod metric;
@@ -50,6 +47,8 @@ pub mod representations;
 pub mod schoonschip;
 #[cfg(test)]
 pub(crate) mod test_support;
+
+pub use cook::{CookMode, CookSettings, Cookable, CookingError};
 
 #[macro_export]
 macro_rules!  symbol_set {
@@ -95,9 +94,8 @@ symbol_set!(Wildcards, W_;
 /// Defines operations related to manipulating abstract indices within symbolic expressions,
 /// particularly relevant for physics calculations involving tensor structures and diagrams.
 ///
-/// This trait provides methods for conjugating expressions, wrapping indices (both all and
-/// only dummy/contracted ones), simplifying indices ("cooking"), and identifying external
-/// ("dangling") indices.
+/// This trait provides methods for conjugating expressions, wrapping indices, and identifying
+/// external ("dangling") indices.
 pub trait IndexTooling {
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
@@ -130,30 +128,6 @@ pub trait IndexTooling {
     /// A new [`Atom`] with only dummy indices wrapped.
     fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom;
 
-    /// Simplifies structured indices within function arguments into flattened variable symbols.
-    ///
-    /// Replaces indices like `mink(4, mu)` inside function arguments (not top-level) with
-    /// unique variable symbols like `var_mink_4_mu`. This can aid pattern matching.
-    ///
-    /// # Returns
-    /// A new [`Atom`] with "cooked" indices.
-    fn cook_indices(&self) -> Atom;
-
-    /// Converts a single function [`Atom`] into a flattened variable symbol based on its name and arguments.
-    ///
-    /// Expects the input `Atom` to be a function. Returns a variable `Atom` whose symbol name
-    /// encodes the original function and its arguments (e.g., `f(a, b)` might become `var_f_a_b`).
-    /// Fails if the input is not a function or if arguments are not convertible (e.g., polynomials).
-    ///
-    /// # Returns
-    /// `Ok(Atom)` containing the new variable symbol on success.
-    /// `Err(CookingError)` if the input cannot be cooked.
-    fn cook_function(&self) -> Result<Atom, CookingError>;
-
-    fn cook(&self) -> Atom;
-
-    fn uncook(&self) -> Atom;
-
     /// Computes the physics-aware conjugate of the expression.
     ///
     /// Applies conjugation rules specific to physics objects like spinors, gamma matrices,
@@ -184,13 +158,6 @@ impl IndexTooling for Atom {
         self.as_view().canonize(new_dummy)
     }
 
-    fn cook(&self) -> Atom {
-        self.as_view().cook()
-    }
-
-    fn uncook(&self) -> Atom {
-        self.as_view().uncook()
-    }
     fn spenso_conj(&self) -> Atom {
         self.as_view().spenso_conj()
     }
@@ -200,14 +167,6 @@ impl IndexTooling for Atom {
     fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom {
         self.as_view().wrap_dummies::<Aind>(header)
     }
-    fn cook_indices(&self) -> Atom {
-        self.as_view().cook_indices()
-    }
-
-    fn cook_function(&self) -> Result<Atom, CookingError> {
-        self.as_view().cook_function()
-    }
-
     fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(&self) -> eyre::Result<Atom> {
         self.as_view().dirac_adjoint::<Aind>()
     }
@@ -227,33 +186,6 @@ pub enum AdjointError {
 }
 
 impl IndexTooling for AtomView<'_> {
-    fn cook(&self) -> Atom {
-        self.replace_map(|a, _, out| {
-            if let AtomView::Fun(f) = a {
-                let hash = blake3::hash(a.get_data());
-                let bytes12 = &hash.as_bytes()[..12];
-                let a = symbol!(
-                    URL_SAFE.encode(bytes12) + f.get_symbol().get_name(),
-                    data = UserData::Atom(a.to_owned()),
-                    tag = tag!("cooked")
-                );
-                **out = Atom::var(a);
-            }
-        })
-    }
-
-    fn uncook(&self) -> Atom {
-        self.replace_map(|a, _, out| {
-            if let AtomView::Var(s) = a {
-                let s = s.get_symbol();
-                if s.has_tag("idenso::cooked")
-                    && let UserData::Atom(a) = s.get_data()
-                {
-                    **out = a.clone();
-                }
-            }
-        })
-    }
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
@@ -435,14 +367,8 @@ impl IndexTooling for AtomView<'_> {
             .simplify_metrics())
     }
 
-    fn cook_function(&self) -> Result<Atom, CookingError> {
-        cook_function_view(*self)
-    }
     fn wrap_indices(&self, header: Symbol) -> Atom {
         wrap_indices_impl(*self, header)
-    }
-    fn cook_indices(&self) -> Atom {
-        cook_indices_impl(*self)
     }
     fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom {
         wrap_dummies_impl::<Aind>(*self, header)
@@ -487,7 +413,7 @@ pub mod test {
     };
 
     use crate::{
-        IndexTooling,
+        Cookable, IndexTooling,
         dirac::AGS,
         metric::PermuteWithMetric,
         representations::{Bispinor, initialize},
