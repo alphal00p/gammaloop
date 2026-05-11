@@ -1,9 +1,6 @@
 use std::ops::AddAssign;
 
-use linnet::{
-    half_edge::subgraph::{SubSetLike, subset::SubSet},
-    permutation::Permutation,
-};
+use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
 use spenso::{
     algebra::ScalarMul,
     contraction::{Contract, ContractionError},
@@ -45,7 +42,7 @@ use spenso::structure::representation::Representation;
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
-    function, symbol,
+    function,
 };
 
 #[cfg(test)]
