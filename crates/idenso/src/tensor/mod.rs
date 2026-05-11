@@ -20,7 +20,7 @@ use spenso::{
     },
     shadowing::{
         Concretize,
-        symbolica_utils::{AtomCoreExt, IntoArgs, IntoSymbol},
+        symbolica_utils::{AtomCoreExt, IntoArgs, IntoSymbol, SpensoPrintSettings},
     },
     structure::{
         HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
@@ -710,7 +710,13 @@ impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<Aind> {
 
 impl<Aind: AbsInd> std::fmt::Display for SymbolicTensor<Aind> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.expression)
+        write!(
+            f,
+            "{},{}",
+            self.structure,
+            self.expression
+                .printer(SpensoPrintSettings::compact().nice_symbolica())
+        )
     }
 }
 
