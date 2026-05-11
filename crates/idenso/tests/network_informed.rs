@@ -1,12 +1,7 @@
-use idenso::{
-    metric::MetricSimplifier,
-    representations::initialize,
-    tensor::{SymbolicNetParse, contract::MetricSimplify},
-};
-use spenso::{network::parsing::ParseSettings, structure::abstract_index::AbstractIndex};
+use idenso::{metric::MetricSimplifier, representations::initialize, schoonschip::Schoonschip};
+use spenso::structure::abstract_index::AbstractIndex;
 use symbolica::{atom::AtomCore, id::Pattern, parse, symbol, transformer::Transformer};
 
-use idenso::tensor::SymbolicNetExt;
 fn run_network_informed() {
     initialize();
     symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
@@ -53,15 +48,7 @@ fn run_network_informed() {
             .with(&rhs_subs);
     }
 
-    let a = r
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
-            depth_limit: Some(1),
-            take_first_term_from_sum: false,
-            ..Default::default()
-        })
-        .unwrap();
-
-    let _ = a.simple_execute::<MetricSimplify>();
+    let _ = r.schoonschip_net::<AbstractIndex>();
 }
 
 #[test]
