@@ -608,7 +608,7 @@ fn gamma_alg() {
     .simplify_gamma()
     .to_dots();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"(g(mink(d),p,q))^2*8+-4*g(mink(d),p,p)*g(mink(d),q,q)+4*g(mink(d),p,q)*g(mink(d),q,q)");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"(dot(p(mink(d)),q(mink(d))))^2*8+-4*dot(p(mink(d)),p(mink(d)))*dot(q(mink(d)),q(mink(d)))+4*dot(p(mink(d)),q(mink(d)))*dot(q(mink(d)),q(mink(d)))");
 
     let expr = (gamma!(slot!(mink_dim, mu), slot!(bis4, 1), slot!(bis4, 3))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))

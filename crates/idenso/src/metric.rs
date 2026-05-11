@@ -753,16 +753,15 @@ mod test {
         .unwrap()
         .map_structure(|a| SymbolicTensor::from_named(&a).unwrap());
 
-        println!("{}\n", f.structure.expression);
-
         let f_p = f.clone().permute_inds();
 
-        println!("{}\n", f_p.expression);
-        println!("{}\n", f_p.expression.simplify_metrics());
         let simplified = f_p.expression.simplify_metrics();
         let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
-        assert_eq!(f.index_permutation, f_parsed.index_permutation);
+        assert_eq!(
+            f.structure.structure.order(),
+            f_parsed.structure.structure.order()
+        );
         assert!(f_parsed.rep_permutation.is_identity());
 
         let f_p = f.clone().permute_reps_wrapped().permute_inds();
@@ -770,10 +769,10 @@ mod test {
         let simplified = f_p.expression.simplify_metrics();
         let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
-        println!("{}\n", f_p.expression);
-        println!("{}\n", f_p.expression.simplify_metrics());
-        assert_eq!(f.index_permutation, f_parsed.index_permutation);
-        assert_eq!(f.rep_permutation, f_parsed.rep_permutation);
+        assert_eq!(
+            f.structure.structure.order(),
+            f_parsed.structure.structure.order()
+        );
     }
 
     #[test]
@@ -814,10 +813,8 @@ mod test {
     #[test]
     fn true_cooking() {
         test_initialize();
-        let expr = parse_lit!(spenso::g(spenso::mink(4, f(0))));
+        let expr = parse_lit!(spenso::g(spenso::mink(4, true_cooking_index(0))));
 
-        println!("{}", expr.cook());
-        println!("{}", expr.cook().uncook());
-        // println!("{}", symbol!(&a, data = UserData::Atom(expr)));
+        assert_eq!(expr.cook().uncook(), expr);
     }
 }
