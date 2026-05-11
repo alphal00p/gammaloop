@@ -35,8 +35,8 @@ use symbolica::{
     parse_lit,
 };
 
-use crate::representations::initialize;
 use crate::test_support::TestReps;
+use crate::{Cookable, representations::initialize};
 
 #[test]
 fn gamma_construct() {
