@@ -21,47 +21,59 @@ pub trait IntoAtom {
     fn into_atom(self) -> Atom;
 }
 
-impl IntoAtom for Atom {
-    fn into_atom(self) -> Atom {
-        self
-    }
+macro_rules! impl_into_atom_via_atom_or_view {
+    (<$lt:lifetime> $($ty:ty),+ $(,)?) => {
+        $(
+            impl<$lt> IntoAtom for $ty {
+                fn into_atom(self) -> Atom {
+                    let atom: AtomOrView<$lt> = self.into();
+                    atom.into_owned()
+                }
+            }
+        )+
+    };
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl IntoAtom for $ty {
+                fn into_atom(self) -> Atom {
+                    let atom: AtomOrView<'_> = self.into();
+                    atom.into_owned()
+                }
+            }
+        )+
+    };
 }
 
-impl IntoAtom for &Atom {
-    fn into_atom(self) -> Atom {
-        self.clone()
-    }
+impl_into_atom_via_atom_or_view!(Atom, Symbol);
+impl_into_atom_via_atom_or_view!(<'a> &'a Atom, AtomView<'a>, AtomOrView<'a>);
+
+macro_rules! impl_into_atom_integer {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl IntoAtom for $ty {
+                fn into_atom(self) -> Atom {
+                    Atom::num(self)
+                }
+            }
+        )+
+    };
 }
 
-impl IntoAtom for AtomView<'_> {
-    fn into_atom(self) -> Atom {
-        self.to_owned()
-    }
+macro_rules! impl_into_atom_integer_via {
+    ($target:ty; $($ty:ty),+ $(,)?) => {
+        $(
+            impl IntoAtom for $ty {
+                fn into_atom(self) -> Atom {
+                    Atom::num(<$target>::from(self))
+                }
+            }
+        )+
+    };
 }
 
-impl IntoAtom for AtomOrView<'_> {
-    fn into_atom(self) -> Atom {
-        self.into_owned()
-    }
-}
-
-impl IntoAtom for Symbol {
-    fn into_atom(self) -> Atom {
-        Atom::var(self)
-    }
-}
-
-impl IntoAtom for i64 {
-    fn into_atom(self) -> Atom {
-        Atom::num(self)
-    }
-}
-
-impl IntoAtom for i32 {
-    fn into_atom(self) -> Atom {
-        Atom::num(i64::from(self))
-    }
-}
+impl_into_atom_integer!(i32, i64, isize, u32, u64, usize);
+impl_into_atom_integer_via!(i64; i8, i16);
+impl_into_atom_integer_via!(u64; u8, u16);
 
 impl<R, A> IntoAtom for Slot<R, A>
 where
@@ -431,7 +443,7 @@ macro_rules! slot {
 /// explicit `Symbol` expression when the head was built elsewhere.
 ///
 /// Arguments are converted through [`IntoAtom`], so callers can mix scalar
-/// arguments, atoms, slots, and stripped representations. Passing a
+/// literal arguments, atoms, slots, and stripped representations. Passing a
 /// representation, for example `tensor!(p, rep)`, emits compact Schoonschip
 /// syntax; passing a slot, for example `tensor!(p, slot!(rep, i))`, emits an
 /// explicitly indexed tensor.
@@ -446,14 +458,20 @@ macro_rules! slot {
 /// ```
 #[macro_export]
 macro_rules! tensor {
-    ($name:ident $(, $arg:expr)* $(,)?) => {{
+    ($name:ident $(,)?) => {
+        symbolica::atom::FunctionBuilder::new($crate::tensor_symbol!($name)).finish()
+    };
+    ($name:ident, $($arg:expr),+ $(,)?) => {{
         let mut tensor = symbolica::atom::FunctionBuilder::new($crate::tensor_symbol!($name));
         $(
             tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
         )*
         tensor.finish()
     }};
-    ($name:expr $(, $arg:expr)* $(,)?) => {{
+    ($name:expr $(,)?) => {
+        symbolica::atom::FunctionBuilder::new($name).finish()
+    };
+    ($name:expr, $($arg:expr),+ $(,)?) => {{
         let mut tensor = symbolica::atom::FunctionBuilder::new($name);
         $(
             tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
@@ -468,14 +486,20 @@ macro_rules! tensor {
 /// rank-one tensor in the caller's symbol namespace.
 #[macro_export]
 macro_rules! vector {
-    ($name:ident $(, $arg:expr)* $(,)?) => {{
+    ($name:ident $(,)?) => {
+        symbolica::atom::FunctionBuilder::new($crate::vector_symbol!($name)).finish()
+    };
+    ($name:ident, $($arg:expr),+ $(,)?) => {{
         let mut tensor = symbolica::atom::FunctionBuilder::new($crate::vector_symbol!($name));
         $(
             tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
         )*
         tensor.finish()
     }};
-    ($name:expr $(, $arg:expr)* $(,)?) => {{
+    ($name:expr $(,)?) => {
+        symbolica::atom::FunctionBuilder::new($name).finish()
+    };
+    ($name:expr, $($arg:expr),+ $(,)?) => {{
         let mut tensor = symbolica::atom::FunctionBuilder::new($name);
         $(
             tensor = tensor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
@@ -671,8 +695,29 @@ macro_rules! trace {
 
 #[cfg(test)]
 mod tests {
-    use crate::symbolica_atom::ProjectorExpander;
-    use symbolica::{atom::Atom, symbol};
+    use crate::{network::tags::SPENSO_TAG, symbolica_atom::ProjectorExpander};
+    use symbolica::{
+        atom::{Atom, AtomView},
+        symbol,
+    };
+
+    #[test]
+    fn tensor_macros_create_tagged_heads() {
+        let tensor = crate::tensor!(f);
+        let vector = crate::p!(1);
+
+        let AtomView::Fun(tensor) = tensor.as_view() else {
+            panic!("tensor macro should produce a function");
+        };
+        assert!(tensor.get_symbol().has_tag(&SPENSO_TAG.tensor));
+        assert!(!tensor.get_symbol().has_tag(&SPENSO_TAG.rank1));
+
+        let AtomView::Fun(vector) = vector.as_view() else {
+            panic!("vector macro should produce a function");
+        };
+        assert!(vector.get_symbol().has_tag(&SPENSO_TAG.tensor));
+        assert!(vector.get_symbol().has_tag(&SPENSO_TAG.rank1));
+    }
 
     #[test]
     fn chain_macro_accepts_iterable_factors() {
