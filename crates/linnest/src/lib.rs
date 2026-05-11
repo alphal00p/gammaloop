@@ -1339,6 +1339,8 @@ struct LayoutConfig {
     layout_algo: LayoutAlgo,
     #[serde(default = "default_layout_node_mode")]
     layout_nodes: LayoutNodeMode,
+    #[serde(default, deserialize_with = "deserialize_usize_vec")]
+    layout_roots: Vec<usize>,
     #[serde(default, flatten)]
     spring: SpringConfig,
     #[serde(default, flatten)]
@@ -1369,6 +1371,7 @@ impl Default for LayoutConfig {
             incremental_energy: default_incremental_energy(),
             layout_algo: default_layout_algo(),
             layout_nodes: default_layout_node_mode(),
+            layout_roots: Vec::new(),
             spring: SpringConfig::default(),
             schedule: ScheduleConfig::default(),
         }
@@ -1408,6 +1411,7 @@ impl LayoutConfig {
                 | "label-steps"
                 | "layout-algo"
                 | "layout-nodes"
+                | "layout-roots"
                 | "length-scale"
                 | "seed"
                 | "step"
@@ -1867,6 +1871,72 @@ where
     deserializer.deserialize_any(BoolVisitor)
 }
 
+fn deserialize_usize_vec<'de, D>(deserializer: D) -> Result<Vec<usize>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    struct UsizeVecVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for UsizeVecVisitor {
+        type Value = Vec<usize>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an array of node indices or a comma-separated index string")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Vec<usize>, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut values = Vec::new();
+            while let Some(value) = seq.next_element::<usize>()? {
+                values.push(value);
+            }
+            Ok(values)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Vec<usize>, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(vec![usize::try_from(value).map_err(E::custom)?])
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Vec<usize>, E>
+        where
+            E: serde::de::Error,
+        {
+            if value < 0 {
+                return Err(E::custom("layout root indices must be non-negative"));
+            }
+            Ok(vec![usize::try_from(value).map_err(E::custom)?])
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Vec<usize>, E>
+        where
+            E: serde::de::Error,
+        {
+            if value.trim().is_empty() {
+                return Ok(Vec::new());
+            }
+            value
+                .split([',', ' '])
+                .filter(|part| !part.trim().is_empty())
+                .map(|part| part.trim().parse().map_err(E::custom))
+                .collect()
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Vec<usize>, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&value)
+        }
+    }
+
+    deserializer.deserialize_any(UsizeVecVisitor)
+}
+
 impl TypstGraph {
     pub fn layout(&mut self) {
         self.layout_with_subgraph(None)
@@ -1886,6 +1956,7 @@ impl TypstGraph {
                         self.edge_layout_positions_from_current_nodes(
                             tree_cfg,
                             Some(&selected_edges),
+                            false,
                         )
                     } else {
                         self.partial_layout_positions(
@@ -1910,7 +1981,7 @@ impl TypstGraph {
             LayoutAlgo::Tree | LayoutAlgo::Dot
         ) {
             let (mut vertex_points, mut edge_points) = if fixed_nodes {
-                self.edge_layout_positions_from_current_nodes(tree_cfg, None)
+                self.edge_layout_positions_from_current_nodes(tree_cfg, None, false)
             } else {
                 self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
             };
@@ -2445,7 +2516,7 @@ impl TypstGraph {
         let (mut selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
         let (pos_n, pos_e) = if self.layout_config.layout_nodes.nodes_are_fixed() {
             selected_nodes = self.new_nodevec(|_, _, _| false);
-            self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edges))
+            self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edges), true)
         } else {
             let (mut pos_n, mut pos_e) =
                 self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph);
@@ -2558,7 +2629,9 @@ impl TypstGraph {
 
         let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
         let mut n_per_level: Vec<usize> = vec![];
-        for (root_node, &is_included) in included.iter() {
+        let roots = self.ordered_layout_nodes(&included);
+        for root_node in roots {
+            let is_included = included[root_node];
             if !is_included || level[root_node] >= 0 {
                 continue;
             }
@@ -2625,22 +2698,44 @@ impl TypstGraph {
 
         let mut rank: NodeVec<usize> = self.new_nodevec(|_, _, _| 0);
         let mut queue = std::collections::VecDeque::new();
-        for (node, &is_included) in included.iter() {
-            if is_included && indegree[node] == 0 {
+        let mut enqueued = self.new_nodevec(|_, _, _| false);
+        for &root in &self.layout_config.layout_roots {
+            if root < included.len().0 {
+                let node = NodeIndex(root);
+                if included[node] && !enqueued[node] {
+                    enqueued[node] = true;
+                    queue.push_back(node);
+                }
+            }
+        }
+        for node in self.ordered_layout_nodes(&included) {
+            if included[node] && indegree[node] == 0 && !enqueued[node] {
+                enqueued[node] = true;
                 queue.push_back(node);
             }
         }
 
         let mut visited = 0usize;
+        let mut processed = self.new_nodevec(|_, _, _| false);
         while let Some(node) = queue.pop_front() {
+            if processed[node] {
+                continue;
+            }
+            processed[node] = true;
             visited += 1;
             let next_rank = rank[node] + 1;
             for child in outgoing[node].clone() {
+                if processed[child] {
+                    continue;
+                }
                 if rank[child] < next_rank {
                     rank[child] = next_rank;
                 }
-                indegree[child] -= 1;
-                if indegree[child] == 0 {
+                if indegree[child] > 0 {
+                    indegree[child] -= 1;
+                }
+                if indegree[child] == 0 && !enqueued[child] {
+                    enqueued[child] = true;
                     queue.push_back(child);
                 }
             }
@@ -2673,6 +2768,30 @@ impl TypstGraph {
         self.targets_from_levels(cfg, &included, &level, &n_per_rank)
     }
 
+    fn ordered_layout_nodes(&self, included: &NodeVec<bool>) -> Vec<NodeIndex> {
+        let mut seen = vec![false; included.len().0];
+        let mut nodes = Vec::new();
+
+        for &root in &self.layout_config.layout_roots {
+            if root < included.len().0 {
+                let node = NodeIndex(root);
+                if included[node] && !seen[root] {
+                    seen[root] = true;
+                    nodes.push(node);
+                }
+            }
+        }
+
+        for (node, &is_included) in included.iter() {
+            if is_included && !seen[node.0] {
+                seen[node.0] = true;
+                nodes.push(node);
+            }
+        }
+
+        nodes
+    }
+
     fn targets_from_levels(
         &self,
         cfg: TreeInitCfg,
@@ -2682,12 +2801,14 @@ impl TypstGraph {
     ) -> NodeVec<Option<Point2<f64>>> {
         let mut targets = self.new_nodevec(|_, _, _| None);
         let mut level_counters: Vec<usize> = vec![0; n_per_level.len()];
+        let ordered_nodes = self.ordered_layout_nodes(included);
 
         for (cl, &n) in n_per_level.iter().enumerate() {
             let k = n as f64;
             let width = (k - 1.0) * cfg.dx;
             let y = (cl as f64) * cfg.dy;
-            for (node, &node_level) in level.iter() {
+            for &node in &ordered_nodes {
+                let node_level = level[node];
                 if !included[node] || node_level != cl as i32 {
                     continue;
                 }
@@ -2756,6 +2877,7 @@ impl TypstGraph {
         &self,
         cfg: TreeInitCfg,
         selected_edges: Option<&EdgeVec<bool>>,
+        respect_start: bool,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let pos_v = self.new_nodevec(|_, _, n| n.pos);
         let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
@@ -2779,10 +2901,15 @@ impl TypstGraph {
                     pos_v[node] + Vector2::new(1.0, 1.0)
                 }
             };
+            let (start_x, start_y) = if respect_start {
+                (self[eid].start_x, self[eid].start_y)
+            } else {
+                (false, false)
+            };
             Self::apply_target_point(
                 &self[eid].constraints,
-                self[eid].start_x,
-                self[eid].start_y,
+                start_x,
+                start_y,
                 target,
                 Vector2::new(cfg.dx * 0.5, cfg.dy * 0.5),
                 eid,

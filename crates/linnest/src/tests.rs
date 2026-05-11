@@ -1031,6 +1031,89 @@ fn test_dot_layout_layers_directed_graph() {
 }
 
 #[test]
+fn test_tree_layout_uses_explicit_root_order() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph roots {
+            a -> b
+            b -> c
+            d -> e
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&ciborium::Value::Map(vec![
+            (
+                ciborium::Value::Text("layout-algo".to_string()),
+                ciborium::Value::Text("tree".to_string()),
+            ),
+            (
+                ciborium::Value::Text("layout-roots".to_string()),
+                ciborium::Value::Array(vec![
+                    ciborium::Value::Integer(3.into()),
+                    ciborium::Value::Integer(0.into()),
+                ]),
+            ),
+            (
+                ciborium::Value::Text("label-steps".to_string()),
+                ciborium::Value::Text("0".to_string()),
+            ),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!(by_name["d"].x < by_name["a"].x);
+    assert_eq!(by_name["d"].y, by_name["a"].y);
+}
+
+#[test]
+fn test_dot_layout_uses_explicit_roots_as_first_rank() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph roots {
+            a -> b
+            c -> d
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&ciborium::Value::Map(vec![
+            (
+                ciborium::Value::Text("layout-algo".to_string()),
+                ciborium::Value::Text("dot".to_string()),
+            ),
+            (
+                ciborium::Value::Text("layout-roots".to_string()),
+                ciborium::Value::Integer(2.into()),
+            ),
+            (
+                ciborium::Value::Text("label-steps".to_string()),
+                ciborium::Value::Text("0".to_string()),
+            ),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!(by_name["c"].x < by_name["a"].x);
+    assert_eq!(by_name["c"].y, by_name["a"].y);
+    assert!(by_name["c"].y < by_name["d"].y);
+}
+
+#[test]
 fn test_partial_tree_layout_keeps_non_tree_edges_straight() {
     let parsed =
         parse_dot_graphs_bytes(br#"digraph partial { a -> b; b -> c; c -> d; d -> a; a -> c }"#)
@@ -1272,6 +1355,73 @@ fn test_fixed_node_second_layout_respects_previous_node_positions() {
     assert!(!info.global_statements.contains_key("layout-nodes"));
     assert!(!info.global_statements.contains_key("layout-algo"));
     assert!(!info.global_statements.contains_key("steps"));
+}
+
+#[test]
+fn test_fixed_node_tree_layout_straightens_existing_edges() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph straight {
+            a [pos="0,0"]
+            b [pos="4,0"]
+            a -> b [pos="0,8"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let fixed_tree_layout = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&fixed_tree_layout).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&fixed_tree_layout).unwrap());
+    let source = nodes[0].pos.as_ref().unwrap();
+    let sink = nodes[1].pos.as_ref().unwrap();
+
+    assert_point_close(
+        edges[0].pos.as_ref().unwrap(),
+        &TypstPoint {
+            x: 0.5 * (source.x + sink.x),
+            y: 0.5 * (source.y + sink.y),
+        },
+    );
+
+    let force_layout = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "force".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+            ("steps".to_string(), "8".to_string()),
+            ("epochs".to_string(), "2".to_string()),
+        ])),
+    )
+    .unwrap();
+    let fixed_tree_layout = layout_parsed_graph_bytes(
+        &force_layout,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&fixed_tree_layout).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&fixed_tree_layout).unwrap());
+    let source = nodes[0].pos.as_ref().unwrap();
+    let sink = nodes[1].pos.as_ref().unwrap();
+
+    assert_point_close(
+        edges[0].pos.as_ref().unwrap(),
+        &TypstPoint {
+            x: 0.5 * (source.x + sink.x),
+            y: 0.5 * (source.y + sink.y),
+        },
+    );
 }
 
 #[test]
