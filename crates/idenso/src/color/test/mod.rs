@@ -64,10 +64,7 @@ fn test_color_structures() {
     let simplified = f_p.expression.simplify_metrics();
     let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
-    assert_eq!(
-        f.structure.structure.order(),
-        f_parsed.structure.structure.order()
-    );
+    assert_eq!(f.index_permutation, f_parsed.index_permutation);
     assert!(f_parsed.rep_permutation.is_identity());
 
     let f_p = f.clone().permute_reps_wrapped().permute_inds();
@@ -75,10 +72,8 @@ fn test_color_structures() {
     let simplified = f_p.expression.simplify_metrics();
     let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
-    assert_eq!(
-        f.structure.structure.order(),
-        f_parsed.structure.structure.order()
-    );
+    assert_eq!(f.index_permutation, f_parsed.index_permutation);
+    assert_eq!(f.rep_permutation, f_parsed.rep_permutation);
 }
 
 #[test]
