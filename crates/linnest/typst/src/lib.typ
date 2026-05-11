@@ -14,13 +14,12 @@
 /// tree placement, or `"dot"` for a layered directed placement.
 ///
 /// ```example
-/// #let g = graph.parse("digraph partial { a -> b;a -> b;a -> b; b -> c; c -> d; d -> a }").at(0)
-/// #let gf = layout(g, layout-algo: "force")
+/// #let g = graph.parse("digraph partial { a:s -> b:s;a -> b;a -> b; b:s -> c:s; c:s -> d:s; d:s -> a:s }").at(0)
+/// #let south = subgraph.compass(g,"s")
+/// #let gf = layout(layout(g, layout-algo: "force"), layout-algo: "tree", layout-nodes: "fixed",subgraph:south)
 /// #let ga = layout(g, layout-algo: "anneal")
-/// #let gt = layout( layout(g, layout-algo: "tree"), layout-algo: "force", layout-nodes: "fixed")
-/// #draw(gf)
-/// #draw(ga)
-/// #draw(gt)
+/// #let gt = layout(layout(g, layout-algo: "tree",layout-roots: (2)), layout-algo: "anneal", layout-nodes: "fixed",gamma-ee:0.1,gamma-ev:1.5,beta:20,length-scale:0.4)
+/// #grid(columns: 3, gutter: 2cm, draw(gf), draw(ga), draw(gt))
 ///
 /// ```
 ///
@@ -148,6 +147,10 @@
   /// subgraph are moved; other edge control points stay at their current
   /// positions. -> string
   layout-nodes: "layout",
+  /// Ordered node indices used as preferred roots for `"tree"` and `"dot"`.
+  /// Roots outside the selected node set are ignored. Remaining components are
+  /// laid out afterward in graph order. -> array
+  layout-roots: (),
   /// Force-only spring pulling temporary z coordinates back toward the layout
   /// plane. Use with `z-spring-growth` to help separate overlapping
   /// points during integration. -> float
@@ -193,6 +196,7 @@
     incremental-energy: incremental-energy,
     layout-algo: layout-algo,
     layout-nodes: layout-nodes,
+    layout-roots: layout-roots,
     z-spring: str(z-spring),
     z-spring-growth: str(z-spring-growth),
     length-scale: str(length-scale),
