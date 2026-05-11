@@ -164,7 +164,7 @@ fn parse_four_factor_trace_closes_links_and_keeps_external_indices() {
         chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
         chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
         chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
-        chain_factor_with_external(symbol!("q"), slot!(external_rep, d).to_atom()),
+        chain_factor_with_external(symbol!("trace_q"), slot!(external_rep, d).to_atom()),
     );
 
     let parsed = expr
@@ -217,8 +217,8 @@ fn parse_empty_chain_as_endpoint_metric() {
 #[test]
 fn opaque_schoonschip_vectors_parse_as_tensor_scalar() {
     let rep = mink4();
-    let expr =
-        function!(symbol!("p"), rep.to_symbolic([])) * function!(symbol!("q"), rep.to_symbolic([]));
+    let expr = function!(symbol!("compact_p"), rep.to_symbolic([]))
+        * function!(symbol!("compact_q"), rep.to_symbolic([]));
 
     let parsed = expr
         .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
@@ -248,8 +248,8 @@ fn three_argument_metric_inner_product_is_not_parser_syntax() {
     let expr = function!(
         ETS.metric,
         rep.to_symbolic([]),
-        Atom::var(symbol!("p")),
-        Atom::var(symbol!("q"))
+        Atom::var(symbol!("compact_p")),
+        Atom::var(symbol!("compact_q"))
     );
 
     let parsed = expr
@@ -266,8 +266,8 @@ fn three_argument_dot_is_invalid_parser_syntax() {
     let expr = function!(
         SPENSO_TAG.dot,
         rep.to_symbolic([]),
-        Atom::var(symbol!("p")),
-        Atom::var(symbol!("q"))
+        Atom::var(symbol!("compact_p")),
+        Atom::var(symbol!("compact_q"))
     );
 
     let err = expr
@@ -282,8 +282,8 @@ fn parse_schoonschipped_metric_product() {
     let rep = mink4();
     let expr = function!(
         ETS.metric,
-        function!(symbol!("p"), rep.to_symbolic([])),
-        function!(symbol!("q"), rep.to_symbolic([]))
+        function!(symbol!("compact_p"), rep.to_symbolic([])),
+        function!(symbol!("compact_q"), rep.to_symbolic([]))
     );
 
     let parsed = expr
@@ -299,7 +299,7 @@ fn parse_schoonschipped_metric_with_open_slot() {
     let rep = mink4();
     let expr = ETS.metric(
         slot!(rep, i).to_atom(),
-        function!(symbol!("p"), rep.to_symbolic([])),
+        function!(symbol!("compact_p"), rep.to_symbolic([])),
     );
 
     let parsed = expr
@@ -316,7 +316,7 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
     let expr = function!(
         symbol!("F"),
         slot!(rep, i).to_atom(),
-        function!(symbol!("p"), rep.to_symbolic([])),
+        function!(symbol!("compact_p"), rep.to_symbolic([])),
         slot!(rep, j).to_atom()
     );
 
@@ -334,8 +334,8 @@ fn opaque_schoonschipped_metric_product_parses_as_tensor_scalar() {
     let rep = mink4();
     let expr = function!(
         ETS.metric,
-        function!(symbol!("p"), rep.to_symbolic([])),
-        function!(symbol!("q"), rep.to_symbolic([]))
+        function!(symbol!("compact_p"), rep.to_symbolic([])),
+        function!(symbol!("compact_q"), rep.to_symbolic([]))
     );
 
     let parsed = expr
@@ -351,7 +351,7 @@ fn parse_schoonschipped_metric_sum_product() {
     let rep = mink4();
     let k1 = function!(symbol!("k"), Atom::num(1), rep.to_symbolic([]));
     let k2 = function!(symbol!("k"), Atom::num(2), rep.to_symbolic([]));
-    let p = function!(symbol!("p"), Atom::num(3), rep.to_symbolic([]));
+    let p = function!(symbol!("compact_p"), Atom::num(3), rep.to_symbolic([]));
     let expr = function!(ETS.metric, k1 + k2, p);
 
     let parsed = expr
@@ -367,8 +367,8 @@ fn parse_schoonschipped_dot_product() {
     let rep = mink4();
     let expr = function!(
         SPENSO_TAG.dot,
-        function!(symbol!("p"), rep.to_symbolic([])),
-        function!(symbol!("q"), rep.to_symbolic([]))
+        function!(symbol!("compact_p"), rep.to_symbolic([])),
+        function!(symbol!("compact_q"), rep.to_symbolic([]))
     );
 
     let parsed = expr
@@ -384,8 +384,8 @@ fn opaque_schoonschipped_dot_product_parses_as_tensor_scalar() {
     let rep = mink4();
     let expr = function!(
         SPENSO_TAG.dot,
-        function!(symbol!("p"), rep.to_symbolic([])),
-        function!(symbol!("q"), rep.to_symbolic([]))
+        function!(symbol!("compact_p"), rep.to_symbolic([])),
+        function!(symbol!("compact_q"), rep.to_symbolic([]))
     );
 
     let parsed = expr
@@ -399,8 +399,8 @@ fn opaque_schoonschipped_dot_product_parses_as_tensor_scalar() {
 #[test]
 fn parse_linear_schoonschipped_dot_product() {
     let rep = mink4();
-    let p = function!(symbol!("p"), rep.to_symbolic([]));
-    let q = function!(symbol!("q"), rep.to_symbolic([]));
+    let p = function!(symbol!("compact_p"), rep.to_symbolic([]));
+    let q = function!(symbol!("compact_q"), rep.to_symbolic([]));
     let r = function!(symbol!("r"), rep.to_symbolic([]));
     let expr = function!(SPENSO_TAG.dot, p + q, r);
 
@@ -415,7 +415,7 @@ fn parse_linear_schoonschipped_dot_product() {
 #[test]
 fn parse_chain_materializes_schoonschip_factor_argument() {
     let rep = mink4();
-    let compact_vector = function!(symbol!("p"), rep.to_symbolic([]));
+    let compact_vector = function!(symbol!("compact_p"), rep.to_symbolic([]));
     let factor = FunctionBuilder::new(symbol!("f"))
         .add_arg(Atom::var(SPENSO_TAG.chain_in))
         .add_arg(Atom::var(SPENSO_TAG.chain_out))

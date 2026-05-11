@@ -756,7 +756,7 @@ mod tests {
         let state = ParseState::<AbstractIndex>::default();
         let materializer = SchoonschipMaterializer::new(&state);
 
-        let expression = compact_vector(symbol!("p"));
+        let expression = compact_vector(symbol!("materialized_p"));
 
         assert_eq!(
             materializer.materialize_shorthand(expression.as_view()),
@@ -772,7 +772,7 @@ mod tests {
             .slot::<AbstractIndex, _>(AbstractIndex::from(1))
             .to_atom();
         let expression = FunctionBuilder::new(symbol!("f"))
-            .add_arg(compact_vector(symbol!("p")).as_view())
+            .add_arg(compact_vector(symbol!("materialized_p")).as_view())
             .add_arg(visible_slot.as_view())
             .finish();
 
@@ -793,7 +793,7 @@ mod tests {
         let p = factors
             .iter()
             .find_map(|factor| match factor {
-                AtomView::Fun(fun) if fun.get_symbol() == symbol!("p") => Some(fun),
+                AtomView::Fun(fun) if fun.get_symbol() == symbol!("materialized_p") => Some(fun),
                 _ => None,
             })
             .unwrap();
@@ -813,8 +813,8 @@ mod tests {
         let materializer = SchoonschipMaterializer::new(&state);
         let expression = function!(
             ETS.metric,
-            compact_vector(symbol!("p")),
-            compact_vector(symbol!("q"))
+            compact_vector(symbol!("materialized_p")),
+            compact_vector(symbol!("materialized_q"))
         );
 
         let materialized = materializer.materialize_shorthand(expression.as_view());

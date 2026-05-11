@@ -59,26 +59,29 @@ pub struct AindSymbols {
 #[cfg(test)]
 mod test {
 
-    use symbolica::{atom::AtomCore, function, id::Replacement, parse_lit};
+    use symbolica::{atom::AtomCore, function, id::Replacement};
 
     use super::*;
 
     #[test]
     fn normalisation() {
+        let f = symbol!("f");
+        let g = symbol!("g");
+        let f1 = function!(f, Atom::num(1));
+        let f2 = function!(f, Atom::num(2));
+
         let atom = function!(
             AIND_SYMBOLS.dind,
             function!(AIND_SYMBOLS.dind, function!(AIND_SYMBOLS.uind, Atom::Zero))
         );
         assert_eq!(atom, Atom::Zero, "{atom}");
-        let atom = parse_lit!(dind(dind(f(1))));
 
-        assert_eq!(atom, parse_lit!(f(1)), "{atom}");
-
-        let f = symbol!("f");
+        let atom = function!(AIND_SYMBOLS.dind, function!(AIND_SYMBOLS.dind, f1.clone()));
+        assert_eq!(atom, f1, "{atom}");
         let fa = function!(f, symbol!("a__"));
 
-        let atom = parse_lit!(g(dind(f(1)), f(2)));
-        let tgt = parse_lit!(g(f(1), dind(f(2))));
+        let atom = function!(g, function!(AIND_SYMBOLS.dind, f1.clone()), f2.clone());
+        let tgt = function!(g, f1.clone(), function!(AIND_SYMBOLS.dind, f2.clone()));
 
         let rep = atom
             .replace(fa.clone())
@@ -86,8 +89,8 @@ mod test {
 
         assert_eq!(rep, tgt, "{rep} not equal to {tgt}");
 
-        let atom = parse_lit!(g(aind(f(1)), f(2)));
-        let tgt = parse_lit!(g(f(1), aind(f(2))));
+        let atom = function!(g, function!(AIND_SYMBOLS.aind, f1.clone()), f2.clone());
+        let tgt = function!(g, f1, function!(AIND_SYMBOLS.aind, f2));
         let rep = atom.replace_multiple(&[
             Replacement::new(
                 fa.clone().to_pattern(),
@@ -221,7 +224,7 @@ let args = arg.pos().map(to-eq).join("")
                 {
                     let arg = dind1.iter().next().unwrap();
                     if let AtomView::Fun(inarg) = arg {
-                        if inarg.get_nargs() == 1 && inarg.get_symbol() == symbol!(DOWNIND) {
+                        if inarg.get_nargs() == 1 && inarg.get_symbol() == dind1.get_symbol() {
                             **out = inarg.iter().next().unwrap().to_owned();
                         } else if inarg.get_symbol().has_tag(&SPENSO_TAG.self_dual) {
                             **out = arg.to_owned();

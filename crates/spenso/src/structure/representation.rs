@@ -1733,20 +1733,20 @@ mod test {
 mod shadowing_tests {
     use crate::network::tags::SPENSO_TAG;
     use crate::structure::representation::initialize;
-    use symbolica::{atom::AtomCore, parse, parse_lit, symbol};
+    use symbolica::{parse, symbol};
 
     #[test]
     fn normalization_shortcuts() {
         initialize();
-        let mu = symbol!("mu", tags = [&SPENSO_TAG.index]);
-        let a = parse!("mink(4,a,mu)");
-        let b = parse!("mink(4,mu,a)");
+        let _mu = symbol!("normalization_shortcut_mu", tags = [&SPENSO_TAG.index]);
+        let a = parse!("mink(4,a,normalization_shortcut_mu)");
+        let b = parse!("mink(4,normalization_shortcut_mu,a)");
         assert_eq!(a, b);
-        let a = parse!("lor(4,a,mu)");
-        let b = parse!("lor(4,mu,a)");
+        let a = parse!("lor(4,a,normalization_shortcut_mu)");
+        let b = parse!("lor(4,normalization_shortcut_mu,a)");
+        assert_eq!(a, b);
 
-        let a = parse!("mink(4,mu,mink(4,mu))");
-        // assert_ne!(a, b);
+        let _nested = parse!("mink(4,normalization_shortcut_mu,mink(4,normalization_shortcut_mu))");
     }
     // use symbolica::symbol;
 

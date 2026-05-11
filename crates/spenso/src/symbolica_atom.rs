@@ -703,8 +703,8 @@ mod tests {
 
     #[test]
     fn tensor_macros_create_tagged_heads() {
-        let tensor = crate::tensor!(f);
-        let vector = crate::p!(1);
+        let tensor = crate::tensor!(tensor_macro_test_head);
+        let vector = crate::vector!(vector_macro_test_head, 1);
 
         let AtomView::Fun(tensor) = tensor.as_view() else {
             panic!("tensor macro should produce a function");
