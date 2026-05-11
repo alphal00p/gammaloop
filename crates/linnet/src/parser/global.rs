@@ -57,15 +57,14 @@ impl GlobalData {
             self.node_statements.extend(node_data);
         }
 
-        // Extract top-level keys (no nested structure)
-        // Only add CLI parameters if they don't already exist in DOT statements
-        // This ensures DOT parameters take precedence over CLI parameters
+        // Extract top-level keys (no nested structure). Runtime parameters must
+        // override existing global statements so repeated layout passes can
+        // replace stale layout metadata stored on the graph.
         if let Ok(all_data) = figment.extract::<BTreeMap<String, figment::value::Value>>() {
             for (key, value) in all_data {
                 if !key.contains('.') {
                     if let Some(value_str) = value.into_string() {
-                        // Only insert if the key doesn't already exist (preserves local parameters)
-                        self.statements.entry(key).or_insert(value_str);
+                        self.statements.insert(key, value_str);
                     }
                 }
             }

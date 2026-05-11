@@ -409,6 +409,21 @@ For these iterative modes, nodes and edge control points outside the selected
 subgraph stay fixed and act as boundary points while the selected subgraph is
 optimized.
 
+Set `layout-nodes: "fixed"` to keep every node at its current `pos` for this
+layout pass and move only edge control points. With `subgraph`, only edges in
+the selected subgraph are moved; all other edge control points keep their
+current positions. The fixed-node policy is temporary; the returned graph stores
+the resulting coordinates as `pos`, but it does not turn them into persistent
+`pin` constraints. This is useful after one node-placement pass when a later pass
+should route or relax selected edges without disturbing the node layout:
+
+```typ
+#let g = graph.parse("digraph partial { a [pos=\"0,0\"]; b [pos=\"4,0\"]; c [pos=\"8,0\"]; a -> b; b -> c }").at(0)
+#let first = subgraph.bits(g, (true, true, false, false))
+#let g = layout(g, layout-algo: "tree", layout-nodes: "fixed", subgraph: first)
+#draw(g)
+```
+
 The shared spring/charge model uses the following coefficients:
 
 $ c_("vv") = beta L^2 $

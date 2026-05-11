@@ -62,7 +62,7 @@ pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Str
 
     let mut graph = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(arg) }
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
-    graph.global_data.set_figment(figment);
+    graph.global_data.set_figment(figment.clone());
     let subgraph = subgraph_label
         .as_deref()
         .map(|label| {
@@ -75,7 +75,7 @@ pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Str
         })
         .transpose()?;
 
-    let mut typst_graph = TypstGraph::from_dot(graph, &Figment::new());
+    let mut typst_graph = TypstGraph::from_dot(graph, &figment);
     typst_graph.layout_with_subgraph(subgraph.as_ref())?;
     typst_graph
         .to_dot_graph()
