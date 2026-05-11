@@ -26,6 +26,7 @@ use spenso::{
 use symbolica::{parse, parse_lit};
 
 use crate::dirac::PS;
+use crate::schoonschip::Schoonschip;
 use crate::tensor::SymbolicTensor;
 use crate::test::test_initialize;
 use crate::{
@@ -61,7 +62,9 @@ fn test_color_structures() {
 
     let f_p = f.clone().permute_inds();
 
-    let simplified = f_p.expression.simplify_metrics();
+    // println!("{}", f_p);
+    let simplified = f_p.expression.schoonschip();
+    // println!("{}", simplified);
     let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
     assert_eq!(f.index_permutation, f_parsed.index_permutation);
@@ -69,7 +72,8 @@ fn test_color_structures() {
 
     let f_p = f.clone().permute_reps_wrapped().permute_inds();
 
-    let simplified = f_p.expression.simplify_metrics();
+    let simplified = f_p.expression.schoonschip();
+    // println!("{}", simplified);
     let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
     assert_eq!(f.index_permutation, f_parsed.index_permutation);
@@ -591,13 +595,10 @@ fn ratio_simplify() {
     let simplified = expr
         .cook_indices()
         .simplify_color()
+        .simplify_metrics()
         .factor()
         .to_bare_ordered_string();
-    assert!(simplified.contains("G^4*TR^2"));
-    assert!(simplified.contains("ahaha^(-2)"));
-    assert!(simplified.contains("ee^2"));
-    assert!(!simplified.contains("f(coad"));
-    assert!(!simplified.contains("t(coad"));
+    assert_snapshot!(simplified, @"(-1𝑖*ahaha*g(coad(ohoho,dummy_1),coad(ohoho,dummy_1))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy_4)))+-1𝑖*g(coad(ohoho,dummy_2),coad(ohoho,dummy_2))+1𝑖*g(coad(ohoho,dummy_1),coad(ohoho,dummy_1)))*G^4*TR^2*ahaha^(-1)*ee^2");
 }
 
 #[test]

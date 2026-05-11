@@ -24,6 +24,7 @@ use bincode::{Decode, Encode};
 #[cfg(feature = "shadowing")]
 use crate::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    self_dual_symbol,
     structure::{abstract_index::AIND_SYMBOLS, slot::SlotError},
 };
 
@@ -1136,7 +1137,7 @@ pub struct RepData {
 static DUMMY_REP_DATA: LazyLock<RepData> = LazyLock::new(|| RepData {
     name: "Dummy".to_string(),
     #[cfg(feature = "shadowing")]
-    symbol: symbol!("Dummy"),
+    symbol: self_dual_symbol!("Dummy"),
 });
 
 pub struct ExtendibleReps {

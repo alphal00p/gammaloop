@@ -1,6 +1,9 @@
 use std::{collections::HashSet, sync::LazyLock};
 
-use crate::tensor::{SymbolicNetParse, SymbolicTensor};
+use crate::{
+    schoonschip::Schoonschip,
+    tensor::{SymbolicNetParse, SymbolicTensor},
+};
 use spenso::{
     network::{
         Network,
@@ -359,64 +362,6 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
     expr
 }
 
-pub fn simplify_metrics_impl(view: AtomView) -> Atom {
-    view.replace(
-        function!(ETS.metric, RS.a_, SPENSO_TAG.self_dual_)
-            * function!(RS.f_, RS.a___, SPENSO_TAG.self_dual_, RS.b___),
-    )
-    .repeat()
-    .level_range((0, Some(0)))
-    .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
-    // // g(a_,dual_)*f_(a___,dind(dual_),b___) = f_(a___,a_,b___)
-    // .replace(
-    //     function!(ETS.metric, RS.a_, SPENSO_TAG.dualizable_([RS.a__]))
-    //         * function!(
-    //             RS.f_,
-    //             RS.a___,
-    //             SPENSO_TAG.dualizable_dual_([RS.a__]),
-    //             RS.b___
-    //         ),
-    // )
-    // .repeat()
-    // .level_range((0, Some(0)))
-    // .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
-    // // g(a_,dind(dual_))*f_(a___,dual_,b___) = f_(a___,dual_,b___)
-    // .replace(
-    //     function!(ETS.metric, RS.a_, SPENSO_TAG.dualizable_dual_([RS.a__]))
-    //         * function!(RS.f_, RS.a___, SPENSO_TAG.dualizable_([RS.a__]), RS.b___),
-    // )
-    // .repeat()
-    // .level_range((0, Some(0)))
-    // .with(function!(RS.f_, RS.a___, RS.a_, RS.b___))
-    .replace(function!(
-        ETS.metric,
-        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
-        SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
-    ))
-    .repeat()
-    .level_range((0, Some(0)))
-    .with(Atom::var(RS.d_))
-    .replace(
-        function!(
-            ETS.metric,
-            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_]),
-            SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.j_])
-        )
-        .npow(2),
-    )
-    .repeat()
-    .level_range((0, Some(0)))
-    .with(Atom::var(RS.d_))
-    // .replace(function!(
-    //     ETS.metric,
-    //     SPENSO_TAG.dualizable_([RS.d_, RS.i_]),
-    //     SPENSO_TAG.dualizable_dual_([RS.d_, RS.i_])
-    // ))
-    // .repeat()
-    // .level_range((0, Some(0)))
-    // .with(Atom::var(RS.d_))
-}
-
 pub fn not_slot(sym: Symbol) -> Condition<PatternRestriction> {
     sym.restrict(WildcardRestriction::IsAtomType(AtomType::Var))
         | sym.restrict(WildcardRestriction::IsAtomType(AtomType::Num))
@@ -524,7 +469,7 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
             RS.a___,
             SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
         )
-        .npow(2),
+        .pow(2),
     )
     .level_range((0, Some(0)))
     .when(not_slot(RS.a___))
@@ -637,7 +582,7 @@ impl MetricSimplifier for Atom {
         self.as_view().expand_dots()
     }
     fn simplify_metrics(&self) -> Atom {
-        simplify_metrics_impl(self.as_view())
+        self.schoonschip()
     }
 }
 
@@ -669,7 +614,7 @@ impl MetricSimplifier for AtomView<'_> {
         }))
     }
     fn simplify_metrics(&self) -> Atom {
-        simplify_metrics_impl(*self)
+        self.schoonschip()
     }
 }
 
