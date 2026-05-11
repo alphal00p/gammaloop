@@ -1,24 +1,16 @@
 use spenso::{
     network::{
         ExecutionResult, Sequential, TensorOrScalarOrKey,
-        library::{DummyLibrary, function_lib::Wrap, symbolic::ETS},
+        library::{DummyLibrary, function_lib::Wrap},
         parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
-        tags::SPENSO_TAG as T,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::slot::{AbsInd, DummyAind, ParseableAind},
 };
 
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    function,
-    id::MatchStack,
-};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
-use crate::{
-    W_,
-    tensor::{SymbolicNetParse, SymbolicTensor},
-};
+use crate::tensor::{SymbolicNetParse, SymbolicTensor};
 
 use super::{
     contraction::{
@@ -33,42 +25,6 @@ use super::{
     utils::TRACE_SCHOONSCHIP,
 };
 
-fn positive_even_power(exp: AtomView<'_>) -> bool {
-    matches!(i64::try_from(exp), Ok(exp) if exp > 0 && exp % 2 == 0)
-}
-
-fn positive_odd_power(exp: AtomView<'_>) -> bool {
-    matches!(i64::try_from(exp), Ok(exp) if exp > 0 && exp % 2 == 1)
-}
-
-fn matched_power(matches: &MatchStack<'_>, power: symbolica::atom::Symbol) -> i64 {
-    i64::try_from(&matches.get(power).unwrap().to_atom()).unwrap()
-}
-
-fn matched_pattern(pattern: &Atom, matches: &MatchStack<'_>) -> Atom {
-    pattern.to_pattern().replace_wildcards_with_matches(matches)
-}
-
-fn pow_if_needed(base: Atom, exponent: i64) -> Atom {
-    match exponent {
-        0 => Atom::num(1),
-        1 => base,
-        _ => base.pow(Atom::num(exponent)),
-    }
-}
-
-fn even_power_replacement(base: Atom, exponent: i64) -> Atom {
-    pow_if_needed(base, exponent / 2)
-}
-
-fn odd_power_replacement(base: Atom, square: Atom, exponent: i64) -> Atom {
-    let half_power = exponent / 2;
-    if half_power == 0 {
-        base
-    } else {
-        pow_if_needed(square, half_power) * base
-    }
-}
 pub trait Schoonschip {
     fn schoonschip(&self) -> Atom;
 
@@ -316,159 +272,7 @@ impl NetworkSchoonschip<'_> {
 
 impl Schoonschip for AtomView<'_> {
     fn normalize_dots(&self) -> Atom {
-        let index_cond = T.index_fiter(W_.i_);
-        let other_index_cond = T.index_fiter(W_.j_);
-        let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-        let stripped = T.rep_::<0, _>([W_.d_]);
-        let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-        let self_dual_j = T.self_dual_::<0, _>([W_.d_, W_.j_]);
-        let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-        let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-        let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-        let dualizable_dual_j = T.dualizable_dual_::<0, _>([W_.d_, W_.j_]);
-        fn rank_one_with_slot(slot: &Atom) -> Atom {
-            T.rank1_::<0, _>([Atom::var(W_.c___), slot.clone()])
-        }
-        let self_dual_vector = rank_one_with_slot(&self_dual);
-        let self_dual_vector_stripped = rank_one_with_slot(&self_dual_stripped);
-        let dualizable_vector = rank_one_with_slot(&dualizable);
-        let dualizable_dual_vector = rank_one_with_slot(&dualizable_dual);
-        let dualizable_vector_stripped = rank_one_with_slot(&dualizable_stripped);
-
-        let self_dual_square = ETS.metric(&self_dual_vector_stripped, &self_dual_vector_stripped);
-        let self_dual_metric = function!(ETS.metric, &self_dual, &self_dual_j);
-        let dualizable_metric = function!(ETS.metric, &dualizable, &dualizable_dual_j);
-
-        // p(..,q(...,rep(d)))-> g(p(..,rep(d)),q(..,rep(d)))
-        self.replace(T.rank1_::<0, _>([
-            Atom::var(W_.c___),
-            T.rank1_::<1, _>([&Atom::var(W_.a___), &stripped]),
-        ]))
-        .with(ETS.metric(
-            T.rank1_::<0, _>([&Atom::var(W_.c___), &stripped]),
-            T.rank1_::<1, _>([&Atom::var(W_.a___), &stripped]),
-        ))
-        // g(rep(d,nu),p(..,rep(d)))->p(..,rep(d,nu))
-        .replace(function!(
-            ETS.metric,
-            &self_dual,
-            &self_dual_vector_stripped
-        ))
-        .when(index_cond.clone())
-        .repeat()
-        .with(self_dual_vector.clone())
-        .replace(function!(
-            ETS.metric,
-            &dualizable,
-            &dualizable_vector_stripped
-        ))
-        .when(index_cond.clone())
-        .repeat()
-        .with(dualizable_vector.clone())
-        .replace(function!(
-            ETS.metric,
-            &dualizable_dual,
-            &dualizable_vector_stripped
-        ))
-        .when(index_cond.clone())
-        .repeat()
-        .with(dualizable_dual_vector.clone())
-        // g(rep(d,nu),p(..))->p(..,rep(d,nu))
-        .replace(function!(
-            ETS.metric,
-            &self_dual,
-            T.rank1_::<0, _>([Atom::var(W_.c___)])
-        ))
-        .when(index_cond.clone())
-        .repeat()
-        .with(self_dual_vector.clone())
-        // Powers of a schoonschipped vector are normalized by parity:
-        // p(mu)^(2n) -> g(p,p)^n and
-        // p(mu)^(2n+1) -> g(p,p)^n p(mu).
-        .replace(self_dual_vector.clone().pow(Atom::var(W_.n_)))
-        .when(index_cond.clone() & W_.n_.filter_single(positive_even_power))
-        .with_map({
-            let self_dual_square = self_dual_square.clone();
-            move |matches| {
-                even_power_replacement(
-                    matched_pattern(&self_dual_square, matches),
-                    matched_power(matches, W_.n_),
-                )
-            }
-        })
-        .replace(self_dual_vector.clone().pow(Atom::var(W_.n_)))
-        .when(index_cond.clone() & W_.n_.filter_single(positive_odd_power))
-        .with_map({
-            let self_dual_square = self_dual_square.clone();
-            let self_dual_vector = self_dual_vector.clone();
-            move |matches| {
-                odd_power_replacement(
-                    matched_pattern(&self_dual_vector, matches),
-                    matched_pattern(&self_dual_square, matches),
-                    matched_power(matches, W_.n_),
-                )
-            }
-        })
-        // Metric powers follow the same parity split:
-        // g(mu,nu)^(2n) -> d^n and
-        // g(mu,nu)^(2n+1) -> d^n g(mu,nu).
-        .replace(self_dual_metric.clone().pow(Atom::var(W_.n_)))
-        .when(
-            index_cond.clone()
-                & other_index_cond.clone()
-                & W_.n_.filter_single(positive_even_power),
-        )
-        .with_map(move |matches| {
-            even_power_replacement(
-                matched_pattern(&Atom::var(W_.d_), matches),
-                matched_power(matches, W_.n_),
-            )
-        })
-        .replace(self_dual_metric.clone().pow(Atom::var(W_.n_)))
-        .when(
-            index_cond.clone() & other_index_cond.clone() & W_.n_.filter_single(positive_odd_power),
-        )
-        .with_map({
-            let self_dual_metric = self_dual_metric.clone();
-            move |matches| {
-                odd_power_replacement(
-                    matched_pattern(&self_dual_metric, matches),
-                    matched_pattern(&Atom::var(W_.d_), matches),
-                    matched_power(matches, W_.n_),
-                )
-            }
-        })
-        .replace(dualizable_metric.clone().pow(Atom::var(W_.n_)))
-        .when(
-            index_cond.clone()
-                & other_index_cond.clone()
-                & W_.n_.filter_single(positive_even_power),
-        )
-        .with_map(move |matches| {
-            even_power_replacement(
-                matched_pattern(&Atom::var(W_.d_), matches),
-                matched_power(matches, W_.n_),
-            )
-        })
-        .replace(dualizable_metric.clone().pow(Atom::var(W_.n_)))
-        .when(index_cond.clone() & other_index_cond & W_.n_.filter_single(positive_odd_power))
-        .with_map({
-            let dualizable_metric = dualizable_metric.clone();
-            move |matches| {
-                odd_power_replacement(
-                    matched_pattern(&dualizable_metric, matches),
-                    matched_pattern(&Atom::var(W_.d_), matches),
-                    matched_power(matches, W_.n_),
-                )
-            }
-        })
-        // Plain metric traces are the remaining non-power case.
-        .replace(function!(ETS.metric, &self_dual, &self_dual))
-        .when(&index_cond)
-        .with(Atom::var(W_.d_))
-        .replace(function!(ETS.metric, &dualizable, &dualizable_dual))
-        .when(&index_cond)
-        .with(Atom::var(W_.d_))
+        super::normalize_dots::DotNormalizer::run(*self)
     }
 
     fn schoonschip(&self) -> Atom {

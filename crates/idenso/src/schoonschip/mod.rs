@@ -1,6 +1,7 @@
 mod api;
 mod chain_like;
 mod contraction;
+mod normalize_dots;
 mod settings;
 mod utils;
 mod with_settings;

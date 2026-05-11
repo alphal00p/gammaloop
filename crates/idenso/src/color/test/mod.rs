@@ -596,6 +596,7 @@ fn ratio_simplify() {
         .cook_indices()
         .simplify_color()
         .simplify_metrics()
+        .normalize_dots()
         .factor()
         .to_bare_ordered_string();
     assert_snapshot!(simplified, @"(-1𝑖*ahaha*g(coad(ohoho,dummy_1),coad(ohoho,dummy_1))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy_4)))+-1𝑖*g(coad(ohoho,dummy_2),coad(ohoho,dummy_2))+1𝑖*g(coad(ohoho,dummy_1),coad(ohoho,dummy_1)))*G^4*TR^2*ahaha^(-1)*ee^2");
