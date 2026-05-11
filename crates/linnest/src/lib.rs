@@ -1139,7 +1139,7 @@ fn initial_point_constraint(
 }
 
 impl TypstGraph {
-    pub fn from_dot(dot: DotGraph, _figment: &Figment) -> Self {
+    pub fn from_dot(dot: DotGraph, figment: &Figment) -> Self {
         let mut placement_context = DotPlacementContext::new(&dot);
         let node_placements = dot
             .graph
@@ -1188,12 +1188,13 @@ impl TypstGraph {
             TypstHedge::parse,
         );
 
-        let figment = Figment::from(Serialized::from(
+        let graph_figment = Figment::from(Serialized::from(
             dot.global_data.statements.clone(),
             Profile::Default,
-        ));
+        ))
+        .merge(figment.clone());
 
-        let config = LayoutConfig::from_figment(&figment);
+        let config = LayoutConfig::from_figment(&graph_figment);
 
         let mut global_eval: Option<String> = dot.global_data.statements.get("eval").cloned();
 
@@ -1251,14 +1252,22 @@ fn default_layout_algo() -> LayoutAlgo {
     LayoutAlgo::Force
 }
 
-impl LayoutAlgo {
-    fn as_str(self) -> &'static str {
-        match self {
-            LayoutAlgo::Anneal => "anneal",
-            LayoutAlgo::Dot => "dot",
-            LayoutAlgo::Force => "force",
-            LayoutAlgo::Tree => "tree",
-        }
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+enum LayoutNodeMode {
+    Fixed,
+    Layout,
+}
+
+fn default_layout_node_mode() -> LayoutNodeMode {
+    LayoutNodeMode::Layout
+}
+
+impl LayoutNodeMode {
+    fn nodes_are_fixed(self) -> bool {
+        matches!(self, LayoutNodeMode::Fixed)
     }
 }
 
@@ -1321,10 +1330,15 @@ struct LayoutConfig {
         deserialize_with = "deserialize_f64"
     )]
     label_max_delta_scale: f64,
-    #[serde(default = "default_incremental_energy")]
+    #[serde(
+        default = "default_incremental_energy",
+        deserialize_with = "deserialize_bool"
+    )]
     incremental_energy: bool,
     #[serde(default = "default_layout_algo")]
     layout_algo: LayoutAlgo,
+    #[serde(default = "default_layout_node_mode")]
+    layout_nodes: LayoutNodeMode,
     #[serde(default, flatten)]
     spring: SpringConfig,
     #[serde(default, flatten)]
@@ -1354,6 +1368,7 @@ impl Default for LayoutConfig {
             label_max_delta_scale: default_label_max_delta_scale(),
             incremental_energy: default_incremental_energy(),
             layout_algo: default_layout_algo(),
+            layout_nodes: default_layout_node_mode(),
             spring: SpringConfig::default(),
             schedule: ScheduleConfig::default(),
         }
@@ -1365,43 +1380,47 @@ impl LayoutConfig {
         figment.extract::<Self>().unwrap_or_default()
     }
 
-    fn add_to_global(&self, global_data: &mut GlobalData) {
-        macro_rules! insert {
-            ($key:expr, $value:expr) => {
-                global_data
-                    .statements
-                    .insert($key.to_string(), $value.to_string());
-            };
-        }
-
-        insert!("viewport-w", self.viewport_w);
-        insert!("viewport-h", self.viewport_h);
-        insert!("tree-dx", self.tree_dx);
-        insert!("tree-dy", self.tree_dy);
-        insert!("step", self.step);
-        insert!("temp", self.temp);
-        insert!("seed", self.seed);
-        insert!("delta", self.delta);
-        insert!("directional-force", self.directional_force);
-        insert!("z-spring", self.z_spring);
-        insert!("z-spring-growth", self.z_spring_growth);
-        insert!("label-steps", self.label_steps);
-        insert!("label-step", self.label_step);
-        insert!("label-length-scale", self.label_length_scale);
-        insert!("label-charge", self.label_charge);
-        insert!("label-spring", self.label_spring);
-        insert!("label-early-tol", self.label_early_tol);
-        insert!("label-max-delta-scale", self.label_max_delta_scale);
-        insert!("layout-algo", self.layout_algo.as_str());
-        global_data.statements.insert(
-            "incremental-energy".to_string(),
-            self.incremental_energy.to_string(),
-        );
-
-        let spring_params = ParamTuning::from(&self.spring);
-        spring_params.add_to_global(global_data);
-        let schedule = GeoSchedule::from(&self.schedule);
-        schedule.add_to_global(global_data);
+    fn is_layout_statement_key(key: &str) -> bool {
+        let normalized = key.replace('_', "-");
+        matches!(
+            normalized.as_str(),
+            "accept-floor"
+                | "beta"
+                | "cool"
+                | "crossing-penalty"
+                | "delta"
+                | "directional-force"
+                | "early-tol"
+                | "epochs"
+                | "eps"
+                | "g-center"
+                | "gamma-dangling"
+                | "gamma-ee"
+                | "gamma-ev"
+                | "incremental-energy"
+                | "k-spring"
+                | "label-charge"
+                | "label-early-tol"
+                | "label-length-scale"
+                | "label-max-delta-scale"
+                | "label-spring"
+                | "label-step"
+                | "label-steps"
+                | "layout-algo"
+                | "layout-nodes"
+                | "length-scale"
+                | "seed"
+                | "step"
+                | "step-shrink"
+                | "steps"
+                | "temp"
+                | "tree-dx"
+                | "tree-dy"
+                | "viewport-h"
+                | "viewport-w"
+                | "z-spring"
+                | "z-spring-growth"
+        )
     }
 }
 
@@ -1809,6 +1828,45 @@ where
     deserializer.deserialize_any(UsizeVisitor)
 }
 
+fn deserialize_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    struct BoolVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for BoolVisitor {
+        type Value = bool;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a boolean or boolean string")
+        }
+
+        fn visit_bool<E>(self, value: bool) -> Result<bool, E> {
+            Ok(value)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<bool, E>
+        where
+            E: serde::de::Error,
+        {
+            match value.trim().to_ascii_lowercase().as_str() {
+                "true" | "on" | "yes" | "1" => Ok(true),
+                "false" | "off" | "no" | "0" => Ok(false),
+                other => Err(E::custom(format!("invalid boolean string {other:?}"))),
+            }
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<bool, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&value)
+        }
+    }
+
+    deserializer.deserialize_any(BoolVisitor)
+}
+
 impl TypstGraph {
     pub fn layout(&mut self) {
         self.layout_with_subgraph(None)
@@ -1819,18 +1877,29 @@ impl TypstGraph {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
 
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
+        let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         if let Some(subgraph) = subgraph {
             let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
-                LayoutAlgo::Tree | LayoutAlgo::Dot => self.partial_layout_positions(
-                    tree_cfg,
-                    self.layout_config.layout_algo,
-                    subgraph,
-                ),
+                LayoutAlgo::Tree | LayoutAlgo::Dot => {
+                    if fixed_nodes {
+                        let (_, selected_edges) = self.selected_layout_items(subgraph);
+                        self.edge_layout_positions_from_current_nodes(
+                            tree_cfg,
+                            Some(&selected_edges),
+                        )
+                    } else {
+                        self.partial_layout_positions(
+                            tree_cfg,
+                            self.layout_config.layout_algo,
+                            subgraph,
+                        )
+                    }
+                }
                 LayoutAlgo::Anneal | LayoutAlgo::Force => {
                     self.partial_optimized_positions(tree_cfg, subgraph, &energy)
                 }
             };
-            self.apply_grouped_constraints(&mut vertex_points, &mut edge_points);
+            self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(vertex_points, edge_points);
             self.layout_edge_labels(energy.spring_length);
             return Ok(());
@@ -1840,18 +1909,26 @@ impl TypstGraph {
             self.layout_config.layout_algo,
             LayoutAlgo::Tree | LayoutAlgo::Dot
         ) {
-            let (mut vertex_points, mut edge_points) =
-                self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo);
-            self.apply_grouped_constraints(&mut vertex_points, &mut edge_points);
+            let (mut vertex_points, mut edge_points) = if fixed_nodes {
+                self.edge_layout_positions_from_current_nodes(tree_cfg, None)
+            } else {
+                self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
+            };
+            self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(vertex_points, edge_points);
             self.layout_edge_labels(energy.spring_length);
             return Ok(());
         }
 
-        let (pos_n, pos_e) = self.new_positions(tree_cfg);
-        let (mut vertex_points, mut edge_points) = self.optimized_positions(pos_n, pos_e, &energy);
+        let (mut vertex_points, mut edge_points) = if fixed_nodes {
+            let full = self.full_filter();
+            self.partial_optimized_positions(tree_cfg, &full, &energy)
+        } else {
+            let (pos_n, pos_e) = self.new_positions(tree_cfg);
+            self.optimized_positions(pos_n, pos_e, &energy)
+        };
 
-        self.apply_grouped_constraints(&mut vertex_points, &mut edge_points);
+        self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
         self.update_positions(vertex_points, edge_points);
         self.layout_edge_labels(energy.spring_length);
         Ok(())
@@ -1936,6 +2013,42 @@ impl TypstGraph {
             let idx = NodeIndex(i);
             Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_v[idx].x);
             Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_v[idx].y);
+        }
+
+        for i in 0..edge_len {
+            let idx = EdgeIndex(i);
+            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_e[idx].x);
+            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_e[idx].y);
+        }
+    }
+
+    fn apply_layout_constraints(
+        &self,
+        pos_v: &mut NodeVec<Point2<f64>>,
+        pos_e: &mut EdgeVec<Point2<f64>>,
+    ) {
+        if self.layout_config.layout_nodes.nodes_are_fixed() {
+            self.apply_edge_grouped_constraints(pos_e);
+        } else {
+            self.apply_grouped_constraints(pos_v, pos_e);
+        }
+    }
+
+    fn apply_edge_grouped_constraints(&self, pos_e: &mut EdgeVec<Point2<f64>>) {
+        let edge_len = pos_e.len().0;
+        for i in 0..edge_len {
+            let idx = EdgeIndex(i);
+            let constraints = &self[idx].constraints;
+            if let Constraint::Grouped(reference, _) = constraints.x {
+                if reference < edge_len && reference != i {
+                    pos_e[idx].x = pos_e[EdgeIndex(reference)].x;
+                }
+            }
+            if let Constraint::Grouped(reference, _) = constraints.y {
+                if reference < edge_len && reference != i {
+                    pos_e[idx].y = pos_e[EdgeIndex(reference)].y;
+                }
+            }
         }
 
         for i in 0..edge_len {
@@ -2329,19 +2442,27 @@ impl TypstGraph {
         subgraph: &SuBitGraph,
         energy: &SpringChargeEnergy,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
-        let (selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
-        let (mut pos_n, mut pos_e) = self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph);
+        let (mut selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
+        let (pos_n, pos_e) = if self.layout_config.layout_nodes.nodes_are_fixed() {
+            selected_nodes = self.new_nodevec(|_, _, _| false);
+            self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edges))
+        } else {
+            let (mut pos_n, mut pos_e) =
+                self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph);
 
-        for (node, selected) in selected_nodes.iter() {
-            if !selected {
-                pos_n[node] = self.graph[node].pos;
+            for (node, selected) in selected_nodes.iter() {
+                if !selected {
+                    pos_n[node] = self.graph[node].pos;
+                }
             }
-        }
-        for (edge, selected) in selected_edges.iter() {
-            if !selected {
-                pos_e[edge] = self.graph[edge].pos;
+            for (edge, selected) in selected_edges.iter() {
+                if !selected {
+                    pos_e[edge] = self.graph[edge].pos;
+                }
             }
-        }
+
+            (pos_n, pos_e)
+        };
 
         let saved_node_constraints = self.new_nodevec(|_, _, node| node.constraints);
         let saved_edge_constraints = self.new_edgevec(|edge, _, _| edge.constraints);
@@ -2631,6 +2752,47 @@ impl TypstGraph {
         (pos_v, pos_e)
     }
 
+    fn edge_layout_positions_from_current_nodes(
+        &self,
+        cfg: TreeInitCfg,
+        selected_edges: Option<&EdgeVec<bool>>,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let pos_v = self.new_nodevec(|_, _, n| n.pos);
+        let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
+
+        for (pair, _, _) in self.iter_edges() {
+            let eid = self[&pair.any_hedge()];
+            if let Some(selected_edges) = selected_edges {
+                if !selected_edges[eid] {
+                    continue;
+                }
+            }
+
+            let target = match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let a = pos_v[self.node_id(source)];
+                    let b = pos_v[self.node_id(sink)];
+                    a.midpoint(b)
+                }
+                HedgePair::Unpaired { hedge, .. } => {
+                    let node = self.node_id(hedge);
+                    pos_v[node] + Vector2::new(1.0, 1.0)
+                }
+            };
+            Self::apply_target_point(
+                &self[eid].constraints,
+                self[eid].start_x,
+                self[eid].start_y,
+                target,
+                Vector2::new(cfg.dx * 0.5, cfg.dy * 0.5),
+                eid,
+                &mut pos_e,
+            );
+        }
+
+        (pos_v, pos_e)
+    }
+
     /// Generate new positions based on the default traversal-tree placement.
     pub fn new_positions(&self, cfg: TreeInitCfg) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let full = self.full_filter();
@@ -2667,17 +2829,19 @@ impl TypstGraph {
             |_hedge, hedge_data| hedge_data.to_dot(),
         );
 
-        // Reconstruct GlobalData from layout parameters
-
         let mut global_data = GlobalData::from(());
         global_data.name = self.name.clone();
-        global_data.statements = self.global_statements.clone();
+        global_data.statements = self
+            .global_statements
+            .iter()
+            .filter(|(key, _)| !LayoutConfig::is_layout_statement_key(key))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
         if let Some(eval) = &self.global_eval {
             global_data
                 .statements
                 .insert("eval".to_string(), eval.clone());
         }
-        self.layout_config.add_to_global(&mut global_data);
         DotGraph { graph, global_data }
     }
 }

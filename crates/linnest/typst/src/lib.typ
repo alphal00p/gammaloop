@@ -17,7 +17,7 @@
 /// #let g = graph.parse("digraph partial { a -> b;a -> b;a -> b; b -> c; c -> d; d -> a }").at(0)
 /// #let gf = layout(g, layout-algo: "force")
 /// #let ga = layout(g, layout-algo: "anneal")
-/// #let gt = layout( layout(g, layout-algo: "tree"), layout-algo: "force")
+/// #let gt = layout( layout(g, layout-algo: "tree"), layout-algo: "force", layout-nodes: "fixed")
 /// #draw(gf)
 /// #draw(ga)
 /// #draw(gt)
@@ -142,6 +142,12 @@
   /// traversal-tree placement, or `"dot"` for a layered directed placement.
   /// -> string
   layout-algo: "force",
+  /// Node movement policy. `"layout"` lets the layout algorithm move nodes.
+  /// `"fixed"` keeps every node at its current position for this layout pass
+  /// and only moves edge control points. With `subgraph`, only edges in the
+  /// subgraph are moved; other edge control points stay at their current
+  /// positions. -> string
+  layout-nodes: "layout",
   /// Force-only spring pulling temporary z coordinates back toward the layout
   /// plane. Use with `z-spring-growth` to help separate overlapping
   /// points during integration. -> float
@@ -186,6 +192,7 @@
     eps: str(eps),
     incremental-energy: incremental-energy,
     layout-algo: layout-algo,
+    layout-nodes: layout-nodes,
     z-spring: str(z-spring),
     z-spring-growth: str(z-spring-growth),
     length-scale: str(length-scale),

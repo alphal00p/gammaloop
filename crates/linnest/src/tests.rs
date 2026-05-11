@@ -1077,6 +1077,59 @@ fn test_partial_tree_layout_keeps_non_tree_edges_straight() {
 }
 
 #[test]
+fn test_fixed_node_subgraph_tree_layout_moves_only_selected_edges() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph fixed_edges {
+            a [pos="0,0"]
+            b [pos="4,0"]
+            c [pos="8,0"]
+            a -> b
+            b -> c [pos="88,88"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let selected_label: String = decode_cbor(
+        &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false])).unwrap(),
+    );
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("subgraph".to_string(), selected_label),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+
+    assert_point_close(
+        nodes[0].pos.as_ref().unwrap(),
+        &TypstPoint { x: 0.0, y: 0.0 },
+    );
+    assert_point_close(
+        nodes[1].pos.as_ref().unwrap(),
+        &TypstPoint { x: 4.0, y: 0.0 },
+    );
+    assert_point_close(
+        nodes[2].pos.as_ref().unwrap(),
+        &TypstPoint { x: 8.0, y: 0.0 },
+    );
+    assert_point_close(
+        edges[0].pos.as_ref().unwrap(),
+        &TypstPoint { x: 2.0, y: 0.0 },
+    );
+    assert_point_close(
+        edges[1].pos.as_ref().unwrap(),
+        &TypstPoint { x: 88.0, y: 88.0 },
+    );
+}
+
+#[test]
 fn test_partial_iterative_layout_preserves_complement_positions() {
     let parsed = parse_dot_graphs_bytes(
         br#"digraph partial {
@@ -1118,6 +1171,107 @@ fn test_partial_iterative_layout_preserves_complement_positions() {
             &TypstPoint { x: 4.0, y: 5.0 },
         );
     }
+}
+
+#[test]
+fn test_fixed_node_iterative_layout_keeps_nodes_and_complement_fixed() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph fixed_force {
+            a [pos="0,0"]
+            b [pos="4,0"]
+            c [pos="8,0"]
+            a -> b [pos="2,3"]
+            b -> c [pos="88,88"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let selected_label: String = decode_cbor(
+        &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false])).unwrap(),
+    );
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "force".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("subgraph".to_string(), selected_label),
+            ("label-steps".to_string(), "0".to_string()),
+            ("steps".to_string(), "4".to_string()),
+            ("epochs".to_string(), "2".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+
+    assert_point_close(
+        nodes[0].pos.as_ref().unwrap(),
+        &TypstPoint { x: 0.0, y: 0.0 },
+    );
+    assert_point_close(
+        nodes[1].pos.as_ref().unwrap(),
+        &TypstPoint { x: 4.0, y: 0.0 },
+    );
+    assert_point_close(
+        nodes[2].pos.as_ref().unwrap(),
+        &TypstPoint { x: 8.0, y: 0.0 },
+    );
+    assert_point_close(
+        edges[1].pos.as_ref().unwrap(),
+        &TypstPoint { x: 88.0, y: 88.0 },
+    );
+    let selected_edge = edges[0].pos.as_ref().unwrap();
+    assert!(
+        (selected_edge.x - 2.0).abs() > 1e-6 || (selected_edge.y - 3.0).abs() > 1e-6,
+        "selected edge control point should remain free when layout-nodes is fixed"
+    );
+}
+
+#[test]
+fn test_fixed_node_second_layout_respects_previous_node_positions() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph partial { a -> b; a -> b; a -> b; b -> c; c -> d; d -> a }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let tree_layout = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let tree_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&tree_layout).unwrap());
+
+    let fixed_force_layout = layout_parsed_graph_bytes(
+        &tree_layout,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "force".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+            ("steps".to_string(), "8".to_string()),
+            ("epochs".to_string(), "3".to_string()),
+        ])),
+    )
+    .unwrap();
+    let fixed_nodes: Vec<TypstDotNode> =
+        decode_cbor(&graph_nodes_bytes(&fixed_force_layout).unwrap());
+
+    for (tree_node, fixed_node) in tree_nodes.iter().zip(fixed_nodes.iter()) {
+        assert_point_close(
+            fixed_node.pos.as_ref().unwrap(),
+            tree_node.pos.as_ref().unwrap(),
+        );
+    }
+
+    let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(&fixed_force_layout).unwrap());
+    assert!(!info.global_statements.contains_key("layout-nodes"));
+    assert!(!info.global_statements.contains_key("layout-algo"));
+    assert!(!info.global_statements.contains_key("steps"));
 }
 
 #[test]
