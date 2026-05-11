@@ -477,6 +477,7 @@ impl Approximation {
                     },
                     true,
                     &settings.orientation_pattern,
+                    settings.alias_expressions,
                 );
                 if average_for_outer_orientation_projection {
                     // The root term comes from the explicitly summed production
@@ -491,14 +492,16 @@ impl Approximation {
                     }
                     atom /= Atom::num(valid_orientations.len() as i64);
                 }
-                Ok(atom
+                let atom = settings
+                    .alias_expressions
+                    .inline_for_symbolic_manipulation(atom)
                     .replace(GS.dim)
                     .with(4)
                     .simplify_color()
                     .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                     .with(W_.d_)
-                    .expand_dots()?
-                    .collect_factors())
+                    .expand_dots()?;
+                Ok(settings.alias_expressions.collect_factors_after_inlining(atom))
             })
             .collect()
     }

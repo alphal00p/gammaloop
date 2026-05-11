@@ -186,6 +186,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a3a1fd6f75306b68087b831f025c712524bcb19aad54e557b1129cfa0a2b207"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1726,7 +1735,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=3638099c607d79da709989716c8dc9d5085364bd#3638099c607d79da709989716c8dc9d5085364bd"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=f425ced4732853db6050c93c02bd4c643a7efa0d#f425ced4732853db6050c93c02bd4c643a7efa0d"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -2625,7 +2634,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=3638099c607d79da709989716c8dc9d5085364bd#3638099c607d79da709989716c8dc9d5085364bd"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=f425ced4732853db6050c93c02bd4c643a7efa0d#f425ced4732853db6050c93c02bd4c643a7efa0d"
 dependencies = [
  "ahash",
  "bincode 2.0.1",
@@ -4332,10 +4341,11 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "1.5.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=3638099c607d79da709989716c8dc9d5085364bd#3638099c607d79da709989716c8dc9d5085364bd"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=f425ced4732853db6050c93c02bd4c643a7efa0d#f425ced4732853db6050c93c02bd4c643a7efa0d"
 dependencies = [
  "ahash",
  "append-only-vec",
+ "arc-swap",
  "bincode 2.0.1",
  "bincode-trait-derive",
  "brotli 8.0.2",

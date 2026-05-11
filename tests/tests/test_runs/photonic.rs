@@ -1,5 +1,147 @@
 use super::utils::*;
 use super::*;
+use gammaloop_api::commands::import::Import;
+
+const ALIAS_EXPRESSION_MODES: [(&str, &str); 7] = [
+    ("none", "global.generation.alias_expressions=none"),
+    ("all", "global.generation.alias_expressions=all"),
+    (
+        "all_min_bytes",
+        "global.generation.alias_expressions.all=96",
+    ),
+    (
+        "subexpressions",
+        "global.generation.alias_expressions=subexpressions",
+    ),
+    (
+        "subexpressions_min_bytes",
+        "global.generation.alias_expressions.subexpressions=96",
+    ),
+    (
+        "repeated_subexpressions",
+        "global.generation.alias_expressions=repeated_subexpressions",
+    ),
+    (
+        "repeated_subexpressions_min_bytes",
+        "global.generation.alias_expressions.repeated_subexpressions=96",
+    ),
+];
+
+fn first_dot_graph(path: &Path) -> Result<String> {
+    let content = std::fs::read_to_string(path)?;
+    let first = content
+        .find("digraph")
+        .ok_or_else(|| eyre::eyre!("No DOT graph found in {}", path.display()))?;
+    let rest = &content[first + "digraph".len()..];
+    let end = rest
+        .find("\ndigraph")
+        .map(|index| first + "digraph".len() + index)
+        .unwrap_or(content.len());
+    Ok(content[first..end].to_string())
+}
+
+fn setup_photons_1l_no_numerator_alias_cli(
+    test_name: &str,
+    alias_expression_assignment: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let run_card = gammaloop_integration_tests::run_card("aa_aa_1L.toml")?;
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.default_runtime_settings = run_card.default_runtime_settings;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default",
+            &format!(
+                "set global kv {alias_expression_assignment} global.generation.evaluator.compile=false global.generation.evaluator.summed_function_map=true"
+            ),
+        ],
+    )?;
+    let dot = first_dot_graph(
+        &gammaloop_integration_tests::workspace_root()
+            .join("examples/cli/three_d_expr_demo/aa_aa_no_numerator.dot"),
+    )?;
+    Import::Graphs {
+        source: None,
+        inline_dot: Some(dot),
+        process: Some(ProcessRef::Unqualified(
+            "photons_1l_no_numerator_alias".to_string(),
+        )),
+        integrand_name: Some("default".to_string()),
+        overwrite: true,
+        append: false,
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    cli.run_command("generate existing -p photons_1l_no_numerator_alias -i default")?;
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    Ok(cli)
+}
+
+#[test]
+#[serial]
+fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
+    let point = vec![0.123, 0.3242, 0.4233];
+    let mut reference = setup_photons_1l_no_numerator_alias_cli(
+        "photons_1l_alias_none",
+        "global.generation.alias_expressions=none",
+    )?;
+    let (_, reference_value) = Inspect {
+        process: Some(ProcessRef::Unqualified(
+            "photons_1l_no_numerator_alias".to_string(),
+        )),
+        integrand_name: Some("default".to_string()),
+        point: point.clone(),
+        momentum_space: true,
+        graph_id: Some(0),
+        ..Default::default()
+    }
+    .run(&mut reference)?;
+
+    for (alias_label, alias_expression_assignment) in ALIAS_EXPRESSION_MODES
+        .into_iter()
+        .filter(|(alias_label, _)| *alias_label != "none")
+    {
+        let mut cli = setup_photons_1l_no_numerator_alias_cli(
+            &format!("photons_1l_alias_{alias_label}"),
+            alias_expression_assignment,
+        )?;
+        let (_, value) = Inspect {
+            process: Some(ProcessRef::Unqualified(
+                "photons_1l_no_numerator_alias".to_string(),
+            )),
+            integrand_name: Some("default".to_string()),
+            point: point.clone(),
+            momentum_space: true,
+            graph_id: Some(0),
+            ..Default::default()
+        }
+        .run(&mut cli)?;
+        assert_complex_approx_eq(
+            value,
+            reference_value,
+            &format!("1L six-photon inspect with alias_expressions={alias_label}"),
+        );
+        clean_test(&cli.cli_settings.state.folder);
+    }
+
+    clean_test(&reference.cli_settings.state.folder);
+    Ok(())
+}
 
 mod slow {
     use super::*;

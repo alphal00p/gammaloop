@@ -15,6 +15,30 @@ const CONSIDER_COMPARISON_WITH_LTD: bool = true;
 
 const DEFAULT_FINAL_STATES: &str = "{scalar_0 scalar_0, scalar_0 scalar_0 scalar_1}";
 const SAMPLE_POINT: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+const ALIAS_EXPRESSION_MODES: [(&str, &str); 7] = [
+    ("none", "global.generation.alias_expressions=none"),
+    ("all", "global.generation.alias_expressions=all"),
+    (
+        "all_min_bytes",
+        "global.generation.alias_expressions.all=96",
+    ),
+    (
+        "subexpressions",
+        "global.generation.alias_expressions=subexpressions",
+    ),
+    (
+        "subexpressions_min_bytes",
+        "global.generation.alias_expressions.subexpressions=96",
+    ),
+    (
+        "repeated_subexpressions",
+        "global.generation.alias_expressions=repeated_subexpressions",
+    ),
+    (
+        "repeated_subexpressions_min_bytes",
+        "global.generation.alias_expressions.repeated_subexpressions=96",
+    ),
+];
 
 #[derive(Clone, Copy)]
 struct Scalar3LGraphCase {
@@ -172,6 +196,29 @@ fn setup_scalar_3l_cross_section_cli(
     subtract_uv: bool,
     enable_thresholds: bool,
 ) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_scalar_3l_cross_section_cli_with_alias(
+        test_name,
+        representation,
+        local_uv_from_expanded_4d,
+        graph_commands,
+        integrand_commands,
+        subtract_uv,
+        enable_thresholds,
+        "global.generation.alias_expressions=none",
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn setup_scalar_3l_cross_section_cli_with_alias(
+    test_name: &str,
+    representation: &str,
+    local_uv_from_expanded_4d: bool,
+    graph_commands: &[&str],
+    integrand_commands: &[&str],
+    subtract_uv: bool,
+    enable_thresholds: bool,
+    alias_expression_assignment: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
     let mut cli = get_test_cli(
         None,
         get_tests_workspace_path().join(test_name),
@@ -185,7 +232,7 @@ fn setup_scalar_3l_cross_section_cli(
             "import model scalars-default.json",
             "remove processes",
             &format!(
-                "set global kv global.3d_representation={representation} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.generate_integrated=false global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds} global.generation.threshold_subtraction.check_esurface_at_generation=false"
+                "set global kv global.3d_representation={representation} {alias_expression_assignment} global.generation.explicit_orientation_sum_only=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.generate_integrated=false global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds} global.generation.threshold_subtraction.check_esurface_at_generation=false"
             ),
             &format!(
                 r#"set default-runtime string '
@@ -429,6 +476,125 @@ fn run_scalar_3l_cross_section_case_impl(
     Ok(())
 }
 
+fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
+    let process = "scalar_3l_alias_gl02_no_num";
+    let integrand = "no_numerator";
+    let graph_commands = [generate_graph_command(
+        process,
+        integrand,
+        "GL02",
+        DEFAULT_FINAL_STATES,
+        None,
+    )];
+    let integrand_commands = [format!("generate existing -p {process} -i {integrand}")];
+    let graph_command_refs = graph_commands
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let integrand_command_refs = integrand_commands
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+
+    let mut reference = setup_scalar_3l_cross_section_cli_with_alias(
+        "scalar_3l_alias_gl02_reference_cff_local_3d_none",
+        "CFF",
+        false,
+        &graph_command_refs,
+        &integrand_command_refs,
+        true,
+        true,
+        "global.generation.alias_expressions=none",
+    )?;
+    let reference_result = evaluate_xspace_process_with_events(
+        &mut reference,
+        process,
+        integrand,
+        &SAMPLE_POINT,
+        &[],
+    )?;
+
+    for (alias_label, alias_expression_assignment) in ALIAS_EXPRESSION_MODES {
+        let mut cff_3d = setup_scalar_3l_cross_section_cli_with_alias(
+            &format!("scalar_3l_alias_gl02_cff_local_3d_{alias_label}"),
+            "CFF",
+            false,
+            &graph_command_refs,
+            &integrand_command_refs,
+            true,
+            true,
+            alias_expression_assignment,
+        )?;
+        let cff_3d_result = evaluate_xspace_process_with_events(
+            &mut cff_3d,
+            process,
+            integrand,
+            &SAMPLE_POINT,
+            &[],
+        )?;
+        assert_evaluation_outputs_match(
+            &cff_3d_result.sample.evaluation,
+            &reference_result.sample.evaluation,
+            &format!("scalar GL02 CFF local-3D inspect with alias_expressions={alias_label}"),
+        );
+
+        let mut cff_4d = setup_scalar_3l_cross_section_cli_with_alias(
+            &format!("scalar_3l_alias_gl02_cff_local_4d_{alias_label}"),
+            "CFF",
+            true,
+            &graph_command_refs,
+            &integrand_command_refs,
+            true,
+            true,
+            alias_expression_assignment,
+        )?;
+        let cff_4d_result = evaluate_xspace_process_with_events(
+            &mut cff_4d,
+            process,
+            integrand,
+            &SAMPLE_POINT,
+            &[],
+        )?;
+        assert_evaluation_outputs_match(
+            &cff_4d_result.sample.evaluation,
+            &reference_result.sample.evaluation,
+            &format!("scalar GL02 CFF local-4D inspect with alias_expressions={alias_label}"),
+        );
+
+        if CONSIDER_COMPARISON_WITH_LTD {
+            let mut ltd_4d = setup_scalar_3l_cross_section_cli_with_alias(
+                &format!("scalar_3l_alias_gl02_ltd_local_4d_{alias_label}"),
+                "LTD",
+                true,
+                &graph_command_refs,
+                &integrand_command_refs,
+                true,
+                true,
+                alias_expression_assignment,
+            )?;
+            let ltd_4d_result = evaluate_xspace_process_with_events(
+                &mut ltd_4d,
+                process,
+                integrand,
+                &SAMPLE_POINT,
+                &[],
+            )?;
+            assert_evaluation_outputs_match(
+                &ltd_4d_result.sample.evaluation,
+                &reference_result.sample.evaluation,
+                &format!("scalar GL02 LTD local-4D inspect with alias_expressions={alias_label}"),
+            );
+            clean_test(&ltd_4d.cli_settings.state.folder);
+        }
+
+        clean_test(&cff_3d.cli_settings.state.folder);
+        clean_test(&cff_4d.cli_settings.state.folder);
+    }
+
+    clean_test(&reference.cli_settings.state.folder);
+    Ok(())
+}
+
 fn run_scalar_3l_quadratic_energy_numerator_case(
     case: Scalar3LGraphCase,
     edge: usize,
@@ -570,6 +736,12 @@ mod default_scalar_3l_cross_section_inspects {
     use super::*;
 
     scalar_3l_graph_test!(scalar_3l_cross_section_gl02_inspects_match, "GL02");
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl02_alias_expression_modes_inspects_match() -> Result<()> {
+        run_scalar_3l_alias_expression_modes_case()
+    }
 
     mod quadratic_energy_numerators {
         use super::*;

@@ -198,6 +198,7 @@ impl<A: AtomCore> TypstFormat for A {
                 symbols.entry(v.get_symbol()).or_insert_with(|| false);
                 false
             }
+            AtomView::Alias(_) => true,
         });
 
         writeln!(
@@ -263,6 +264,13 @@ let a = args.pos().map(v => $#v$).join($, $);
         mut print_state: TypstState,
     ) -> Result<bool> {
         match self.as_atom_view() {
+            AtomView::Alias(alias) if !alias.is_opaque() => {
+                alias.get_body().fmt_output(fmt, symbols, print_state)
+            }
+            AtomView::Alias(alias) => {
+                write!(fmt, "{}", alias.as_view().to_plain_string())?;
+                Ok(true)
+            }
             AtomView::Num(n) => match n.get_coeff_view() {
                 CoefficientView::FiniteField(_, _) => Ok(true),
                 CoefficientView::Float(re, im) => {

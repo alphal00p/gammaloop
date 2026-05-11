@@ -645,17 +645,22 @@ fn expanded_expression_parametric_atom(
             atom *= orientation.orientation_thetas_gs();
         }
         sum += atom;
+        sum = settings.alias_expressions.apply(sum);
     }
 
-    Ok(
-        (sum * inverse_energy_product * residual_denominator_factor * source_parity_correction)
-            .replace_multiple(&ose_replacements)
-            .replace(GS.dim)
-            .with(4)
-            .simplify_color()
-            .expand_dots()?
-            .collect_factors(),
-    )
+    let atom = settings
+        .alias_expressions
+        .inline_for_symbolic_manipulation(
+            sum * inverse_energy_product * residual_denominator_factor * source_parity_correction,
+        )
+        .replace_multiple(&ose_replacements)
+        .replace(GS.dim)
+        .with(4)
+        .simplify_color()
+        .expand_dots()?;
+    Ok(settings
+        .alias_expressions
+        .collect_factors_after_inlining(atom))
 }
 
 fn cross_section_residue_source_parity_correction(

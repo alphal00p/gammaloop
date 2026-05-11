@@ -807,6 +807,10 @@ impl EvaluatorStack {
             })
             .collect::<Result<Vec<_>>>()?;
         timings.spenso_time += spenso_started.elapsed();
+        for atom in &parsed_atoms {
+            timings.atom_byte_size += atom.get_byte_size();
+            timings.atom_alias_expanded_byte_size += atom.get_alias_expanded_byte_size();
+        }
 
         Ok((parsed_atoms, timings))
     }
@@ -1455,6 +1459,10 @@ impl GenericEvaluator {
             .into_iter()
             .map(|a| {
                 GS.collect_orientation_if(a.replace_multiple(&reps).replace_multiple(&reps), false)
+                    // Aliases are used as construction-time compression for Symbolica
+                    // expressions. The evaluator has its own CSE pass, so hand it the
+                    // transparent expression after final bookkeeping replacements.
+                    .inline_aliases(false)
             })
             .collect();
 

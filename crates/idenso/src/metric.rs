@@ -104,6 +104,8 @@ pub fn canonize_impl(view: AtomView) -> Atom {
 pub fn cook_function_view(view: AtomView) -> Result<Atom, CookingError> {
     match view {
         AtomView::Var(_) | AtomView::Num(_) => Ok(view.to_owned()),
+        AtomView::Alias(alias) if !alias.is_opaque() => cook_function_view(alias.get_body()),
+        AtomView::Alias(_) => Ok(view.to_owned()),
         AtomView::Mul(_) => Err(CookingError::Mul),
         AtomView::Add(_) => Err(CookingError::Add),
         AtomView::Pow(_) => Err(CookingError::Pow),
@@ -118,6 +120,10 @@ pub fn cook_function_impl(fun: FunView) -> Result<Symbol, CookingError> {
     let mut name = fun.get_symbol().get_name().to_string();
 
     for arg in fun.iter() {
+        let arg = match arg {
+            AtomView::Alias(alias) if !alias.is_opaque() => alias.get_body(),
+            other => other,
+        };
         name.push('_');
         match arg {
             AtomView::Fun(f) => {
@@ -181,6 +187,9 @@ pub fn cook_function_impl(fun: FunView) -> Result<Symbol, CookingError> {
             }
             AtomView::Mul(_) => {
                 return Err(CookingError::Mul);
+            }
+            AtomView::Alias(_) => {
+                name.push_str("alias");
             }
         }
     }

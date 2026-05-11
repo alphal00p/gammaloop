@@ -31,7 +31,10 @@ use gammalooprs::{
     numerator::symbolica_ext::AtomCoreExt,
     processes::{Amplitude, CrossSection, EvaluatorSettings, Process, ProcessCollection},
     settings::{
-        global::{FrozenCompilationMode, OrientationPattern, UniformNumeratorSamplingScale},
+        global::{
+            AliasExpressions, FrozenCompilationMode, OrientationPattern,
+            UniformNumeratorSamplingScale,
+        },
         runtime::Precision,
         RuntimeSettings,
     },
@@ -3672,6 +3675,7 @@ fn diagnostic_parametric_atom_for_evaluator(
         graph,
         &processed_numerator,
         &OrientationPattern::default(),
+        AliasExpressions::None(),
     ))
 }
 

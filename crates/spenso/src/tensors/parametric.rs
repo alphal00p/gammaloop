@@ -984,6 +984,9 @@ impl<C: HasStructure<Structure = S> + Clone, S: TensorStructure + Clone> ParamOr
         matches!(self, ParamOrConcrete::Param(_))
     }
 
+    // Returning `Self` preserves the input without an allocation and matches the
+    // standard `TryFrom` shape for owned enum extraction.
+    #[allow(clippy::result_large_err)]
     pub fn try_into_parametric(self) -> Result<ParamTensor<S>, Self> {
         match self {
             ParamOrConcrete::Param(x) => Ok(x),
@@ -991,6 +994,9 @@ impl<C: HasStructure<Structure = S> + Clone, S: TensorStructure + Clone> ParamOr
         }
     }
 
+    // Returning `Self` preserves the input without an allocation and matches the
+    // standard `TryFrom` shape for owned enum extraction.
+    #[allow(clippy::result_large_err)]
     pub fn try_into_concrete(self) -> Result<C, Self> {
         match self {
             ParamOrConcrete::Concrete(x) => Ok(x),

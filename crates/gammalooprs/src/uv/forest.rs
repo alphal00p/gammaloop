@@ -2,12 +2,9 @@ use crate::{
     GammaLoopContext,
     cff::expression::{CFFExpression, GammaLoopGraphOrientation, OrientationID},
     graph::{Graph, cuts::CutSet},
-    settings::global::{GenerationSettings, ThreeDRepresentation},
+    settings::global::{AliasExpressions, GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
-    uv::{
-        UVgenerationSettings,
-        approx::{CFFapprox, CutStructure, ForestNodeLike},
-    },
+    uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -64,8 +61,13 @@ impl ParametricIntegrands {
         }
     }
 
-    pub fn sum_orientations_explicitly(self, orientations: &[EdgeVec<Orientation>]) -> Self {
-        let mut summed = self.map(|atom| explicit_orientation_sum_atom(&atom, orientations));
+    pub fn sum_orientations_explicitly(
+        self,
+        orientations: &[EdgeVec<Orientation>],
+        alias_expressions: AliasExpressions,
+    ) -> Self {
+        let mut summed =
+            self.map(|atom| explicit_orientation_sum_atom(&atom, orientations, alias_expressions));
         summed.explicitly_summed_orientations = true;
         summed
     }
@@ -74,12 +76,14 @@ impl ParametricIntegrands {
 pub(crate) fn explicit_orientation_sum_atom(
     atom: &Atom,
     orientations: &[EdgeVec<Orientation>],
+    alias_expressions: AliasExpressions,
 ) -> Atom {
-    orientations
-        .iter()
-        .map(|orientation| orientation.select_gs(atom.as_atom_view()))
-        .fold(Atom::Zero, |acc, term| acc + term)
-        .collect_factors()
+    let mut sum = Atom::Zero;
+    for orientation in orientations {
+        sum += orientation.select_gs(atom.as_atom_view());
+        sum = alias_expressions.apply(sum);
+    }
+    alias_expressions.collect_factors_after_inlining(sum)
 }
 
 fn uv_reduced_subgraph_has_duplicate_leading_denominators(
@@ -199,7 +203,7 @@ impl CutForests {
     pub(crate) fn orientation_parametric_exprs(
         self,
         graph: &Graph,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Vec<ParametricIntegrands>> {
         let mut exprs = vec![];
 
@@ -209,7 +213,16 @@ impl CutForests {
             .zip(self.cuts.cuts.into_iter())
             .enumerate()
         {
-            let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
+            let forest_alias_expressions = if settings.uv.add_sigma {
+                AliasExpressions::None()
+            } else {
+                settings.alias_expressions
+            };
+            let mut integrands = forest.orientation_parametric_expr(
+                graph,
+                settings.uv.add_sigma,
+                forest_alias_expressions,
+            )?;
 
             debug!(integrands=%integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
                 "Orientation Parametric integrand {i},with {} terms for \n{}\n{}",
@@ -218,11 +231,13 @@ impl CutForests {
                 integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
 
             );
-            if !settings.keep_sigma {
+            if !settings.uv.keep_sigma {
                 integrands.iter_mut().for_each(|s| {
-                    *s = s
-                        .replace(function!(GS.if_sigma, W_.a___))
-                        .with(Atom::num(1))
+                    *s = settings.alias_expressions.apply(
+                        s.clone()
+                            .replace(function!(GS.if_sigma, W_.a___))
+                            .with(Atom::num(1)),
+                    )
                 });
             }
             exprs.push(ParametricIntegrands {
@@ -401,6 +416,7 @@ impl Forest {
         &self,
         graph: &Graph,
         add_sigma: bool,
+        alias_expressions: AliasExpressions,
     ) -> Result<Vec<Atom>> {
         let mut sum = None;
         let mut node_dump_terms = std::env::var("GAMMALOOP_DUMP_UV_FOREST_NODE_TERMS")
@@ -449,10 +465,11 @@ impl Forest {
                 } else {
                     integrand.clone()
                 };
+                let aliased_term = alias_expressions.apply(a.clone());
                 if first {
-                    sum.push(a.clone());
+                    sum.push(aliased_term);
                 } else {
-                    sum[i] += a.clone();
+                    sum[i] += aliased_term;
                 }
                 node_terms.push(a);
             }
@@ -470,7 +487,7 @@ impl Forest {
             return Err(eyre!("No terms in forest"));
         };
 
-        Self::finalize_parametric_terms(graph, &mut sum);
+        Self::finalize_parametric_terms(graph, &mut sum, alias_expressions);
 
         if let Some((dump_dir, mut dump_terms)) = node_dump_terms {
             static FOREST_DUMP_COUNTER: std::sync::atomic::AtomicUsize =
@@ -486,7 +503,7 @@ impl Forest {
             writeln!(dump, "mode {mode}").ok();
             writeln!(dump, "forest {dump_id}").ok();
             for (header, terms) in &mut dump_terms {
-                Self::finalize_parametric_terms(graph, terms);
+                Self::finalize_parametric_terms(graph, terms, AliasExpressions::None());
                 writeln!(dump, "{header}").ok();
                 for (term_id, term) in terms.iter().enumerate() {
                     writeln!(dump, "term {term_id}: {}", term.to_canonical_string()).ok();
@@ -503,7 +520,11 @@ impl Forest {
         Ok(sum)
     }
 
-    fn finalize_parametric_terms(graph: &Graph, terms: &mut [Atom]) {
+    fn finalize_parametric_terms(
+        graph: &Graph,
+        terms: &mut [Atom],
+        alias_expressions: AliasExpressions,
+    ) {
         for (pair, edge_index, _) in graph.iter_edges_of(
             &graph
                 .full_filter()
@@ -515,12 +536,15 @@ impl Forest {
             }
 
             for s in terms.iter_mut() {
-                *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
+                *s = alias_expressions
+                    .inline_for_symbolic_manipulation(s.clone())
+                    .replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
             }
         }
 
         for s in terms.iter_mut() {
-            *s = s
+            *s = alias_expressions
+                .inline_for_symbolic_manipulation(s.clone())
                 .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                 .with(W_.d_)
                 .collect_factors();

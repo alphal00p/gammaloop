@@ -354,6 +354,13 @@ fn format_generation_fraction(
     }
 }
 
+fn format_generation_compression_factor(factor: Option<f64>) -> String {
+    factor
+        .filter(|factor| factor.is_finite())
+        .map(|factor| format!("{factor:.2}x"))
+        .unwrap_or_else(|| "n/a".to_string())
+}
+
 fn format_generation_memory(bytes: u64) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = KIB * 1024.0;
@@ -406,6 +413,7 @@ pub(crate) fn render_generation_summary(
         "expr build".bold().blue().to_string(),
         "spenso".bold().blue().to_string(),
         "symbolica eval".bold().blue().to_string(),
+        "alias comp".bold().blue().to_string(),
         "compile".bold().blue().to_string(),
     ]);
 
@@ -432,6 +440,10 @@ pub(crate) fn render_generation_summary(
             format_generation_duration(report.stats.evaluator_compile_time).magenta(),
             format_generation_fraction(report.stats.evaluator_compile_time, total_time).cyan()
         );
+        let compression_value =
+            format_generation_compression_factor(report.stats.evaluator_alias_compression_factor())
+                .yellow()
+                .to_string();
 
         builder.push_record([
             report.integrand_name.yellow().to_string(),
@@ -445,6 +457,7 @@ pub(crate) fn render_generation_summary(
             expr_value,
             spenso_value,
             symbolica_value,
+            compression_value,
             compile_value,
         ]);
     }

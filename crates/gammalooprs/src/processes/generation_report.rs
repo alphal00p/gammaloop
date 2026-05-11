@@ -6,12 +6,16 @@ use serde::{Deserialize, Serialize};
 pub struct EvaluatorBuildTimings {
     pub spenso_time: Duration,
     pub symbolica_time: Duration,
+    pub atom_byte_size: usize,
+    pub atom_alias_expanded_byte_size: usize,
 }
 
 impl std::ops::AddAssign for EvaluatorBuildTimings {
     fn add_assign(&mut self, other: Self) {
         self.spenso_time += other.spenso_time;
         self.symbolica_time += other.symbolica_time;
+        self.atom_byte_size += other.atom_byte_size;
+        self.atom_alias_expanded_byte_size += other.atom_alias_expanded_byte_size;
     }
 }
 
@@ -27,6 +31,10 @@ pub struct GraphGenerationStats {
     pub evaluator_symbolica_time: Duration,
     #[serde(default)]
     pub evaluator_compile_time: Duration,
+    #[serde(default)]
+    pub evaluator_atom_byte_size: usize,
+    #[serde(default)]
+    pub evaluator_atom_alias_expanded_byte_size: usize,
 }
 
 impl GraphGenerationStats {
@@ -43,6 +51,15 @@ impl GraphGenerationStats {
     pub fn add_evaluator_build_timings(&mut self, timings: EvaluatorBuildTimings) {
         self.evaluator_spenso_time += timings.spenso_time;
         self.evaluator_symbolica_time += timings.symbolica_time;
+        self.evaluator_atom_byte_size += timings.atom_byte_size;
+        self.evaluator_atom_alias_expanded_byte_size += timings.atom_alias_expanded_byte_size;
+    }
+
+    pub fn evaluator_alias_compression_factor(&self) -> Option<f64> {
+        (self.evaluator_atom_byte_size > 0).then_some(
+            self.evaluator_atom_alias_expanded_byte_size as f64
+                / self.evaluator_atom_byte_size as f64,
+        )
     }
 
     pub fn merge_in_place(&mut self, other: &Self) {
@@ -51,6 +68,9 @@ impl GraphGenerationStats {
         self.evaluator_spenso_time += other.evaluator_spenso_time;
         self.evaluator_symbolica_time += other.evaluator_symbolica_time;
         self.evaluator_compile_time += other.evaluator_compile_time;
+        self.evaluator_atom_byte_size += other.evaluator_atom_byte_size;
+        self.evaluator_atom_alias_expanded_byte_size +=
+            other.evaluator_atom_alias_expanded_byte_size;
     }
 }
 

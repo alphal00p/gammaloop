@@ -1111,7 +1111,7 @@ impl CrossSectionGraph {
         )?;
 
         let parametric_integrands =
-            cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
+            cut_forests.orientation_parametric_exprs(&self.graph, settings)?;
 
         self.dump_parametric_integrands_if_requested(
             &parametric_integrands,
@@ -1129,7 +1129,10 @@ impl CrossSectionGraph {
                     projection_representation,
                 ) && !integrand.explicitly_summed_orientations
                 {
-                    integrand.sum_orientations_explicitly(&valid_orientations)
+                    integrand.sum_orientations_explicitly(
+                        &valid_orientations,
+                        settings.alias_expressions,
+                    )
                 } else {
                     integrand
                 }
@@ -1218,15 +1221,20 @@ impl CrossSectionGraph {
             .collect_factors()
     }
 
-    fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
-        Ok(atom
+    fn finalize_parametric_integrand_atom(
+        &self,
+        atom: Atom,
+        alias_expressions: crate::settings::global::AliasExpressions,
+    ) -> Result<Atom> {
+        let atom = alias_expressions
+            .inline_for_symbolic_manipulation(atom)
             .replace(GS.dim)
             .with(4)
             .simplify_color()
             .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
             .with(W_.d_)
-            .expand_dots()?
-            .collect_factors())
+            .expand_dots()?;
+        Ok(alias_expressions.collect_factors_after_inlining(atom))
     }
 
     fn build_direct_3d_original_integrand(
@@ -1334,9 +1342,11 @@ impl CrossSectionGraph {
                                 },
                                 true,
                                 &settings.orientation_pattern,
+                                settings.alias_expressions,
                             );
                         self.finalize_parametric_integrand_atom(
                             atom * &lu_prefactor * &representation_prefactor,
+                            settings.alias_expressions,
                         )
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -2127,7 +2137,7 @@ impl CrossSectionGraph {
         )?;
 
         let mut threshold_counterterms = cut_forests
-            .orientation_parametric_exprs(&self.graph, &settings.uv)?
+            .orientation_parametric_exprs(&self.graph, settings)?
             .into_iter();
 
         let lu_prefactor = self.lu_prefactor_helper();
@@ -2168,7 +2178,10 @@ impl CrossSectionGraph {
                     threshold_projection_representation,
                 ) && !atoms.explicitly_summed_orientations
                 {
-                    atoms.sum_orientations_explicitly(&valid_orientations)
+                    atoms.sum_orientations_explicitly(
+                        &valid_orientations,
+                        settings.alias_expressions,
+                    )
                 } else {
                     atoms
                 };
@@ -2184,7 +2197,10 @@ impl CrossSectionGraph {
                     threshold_projection_representation,
                 ) && !atoms.explicitly_summed_orientations
                 {
-                    atoms.sum_orientations_explicitly(&valid_orientations)
+                    atoms.sum_orientations_explicitly(
+                        &valid_orientations,
+                        settings.alias_expressions,
+                    )
                 } else {
                     atoms
                 };
@@ -2202,7 +2218,10 @@ impl CrossSectionGraph {
                     threshold_projection_representation,
                 ) && !atoms.explicitly_summed_orientations
                 {
-                    atoms.sum_orientations_explicitly(&valid_orientations)
+                    atoms.sum_orientations_explicitly(
+                        &valid_orientations,
+                        settings.alias_expressions,
+                    )
                 } else {
                     atoms
                 };

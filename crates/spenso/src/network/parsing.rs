@@ -142,6 +142,9 @@ impl<Aind: ParseableAind + AbsInd> OrderedStructure<LibraryRep, Aind> {
     pub fn from_atomcore_unchecked<A: AtomCore>(value: A) -> Result<Self, StructureError> {
         let view = value.as_atom_view();
         match view {
+            AtomView::Alias(alias) if !alias.is_opaque() => {
+                Self::from_atomcore_unchecked(alias.get_body())
+            }
             AtomView::Add(a) => {
                 // println!("Add{}", a.as_view());
                 Self::from_atomcore_unchecked(a.iter().next().unwrap())
@@ -410,6 +413,9 @@ where
         PermutedStructure<S>: for<'r> TryFrom<AtomView<'r>>,
     {
         match value {
+            AtomView::Alias(alias) if !alias.is_opaque() => {
+                Self::try_from_view_impl(alias.get_body(), state, library, settings)
+            }
             AtomView::Mul(m) => Self::try_from_mul(m, state, library, settings),
             AtomView::Fun(f) => Self::try_from_fun(f, state, library, settings),
             AtomView::Add(a) => Self::try_from_add(a, state, library, settings),
@@ -427,6 +433,12 @@ where
         T::Slot: IsAbstractSlot<Aind = Aind>,
         PermutedStructure<S>: for<'r> TryFrom<AtomView<'r>>,
     {
+        if let AtomView::Alias(alias) = value
+            && !alias.is_opaque()
+        {
+            return Self::as_leaf::<S>(alias.get_body());
+        }
+
         let s: Result<PermutedStructure<S>, _> = value.try_into();
 
         return if let Ok(s) = s {
@@ -586,6 +598,7 @@ where
                 view: AtomView,
             ) -> Result<Atom, TensorNetworkError<D, Symbol>> {
                 match view {
+                    AtomView::Alias(alias) if !alias.is_opaque() => index(ind, alias.get_body()),
                     AtomView::Fun(f) => {
                         let mut fb = FunctionBuilder::new(f.get_symbol());
 

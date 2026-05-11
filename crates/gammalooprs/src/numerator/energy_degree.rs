@@ -144,6 +144,10 @@ impl EnergyPowerAnalyzer {
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
         match expression {
             AtomView::Num(_) | AtomView::Var(_) => Ok(EnergyPowerCapMap::default()),
+            AtomView::Alias(alias) if !alias.is_opaque() => {
+                self.analyze_view(alias.get_body(), mode)
+            }
+            AtomView::Alias(_) => Ok(EnergyPowerCapMap::default()),
             AtomView::Add(add) => {
                 let mut max_degree = EnergyPowerCapMap::default();
                 for term in add.iter() {

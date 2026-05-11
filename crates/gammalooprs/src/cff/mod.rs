@@ -14,7 +14,7 @@ use crate::{
         surface::GammaLoopSurfaceCache,
     },
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
-    settings::global::OrientationPattern,
+    settings::global::{AliasExpressions, OrientationPattern},
     utils::GS,
     uv::UltravioletGraph,
 };
@@ -95,15 +95,22 @@ impl Graph {
         representation: RepresentationMode,
         explicit_orientation_sum_only: bool,
         pattern: &OrientationPattern,
+        alias_expressions: AliasExpressions,
     ) -> Atom {
         let atom = if explicit_orientation_sum_only {
             expression.diagnostic_parametric_atom_with_numerator_gs(
                 self,
                 numerator,
                 &OrientationPattern::default(),
+                alias_expressions,
             )
         } else {
-            expression.parametric_atom_with_numerator_gs(self, numerator, pattern)
+            expression.parametric_atom_with_numerator_gs(
+                self,
+                numerator,
+                pattern,
+                alias_expressions,
+            )
         };
         let atom =
             atom * self.residual_denominator_factor_gs(&expression.residual_denominators, true);

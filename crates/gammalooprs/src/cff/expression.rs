@@ -25,7 +25,7 @@ use super::{
 };
 use crate::{
     graph::Graph,
-    settings::global::OrientationPattern,
+    settings::global::{AliasExpressions, OrientationPattern},
     utils::{GS, W_, ose_atom_from_index, symbolica_ext::CallSymbol},
 };
 
@@ -351,12 +351,14 @@ pub trait GammaLoopThreeDExpression<O> {
         graph: &Graph,
         numerator: &Atom,
         pattern: &OrientationPattern,
+        alias_expressions: AliasExpressions,
     ) -> Atom;
     fn parametric_atom_with_numerator_gs(
         &self,
         graph: &Graph,
         numerator: &Atom,
         pattern: &OrientationPattern,
+        alias_expressions: AliasExpressions,
     ) -> Atom;
     fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
     fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom;
@@ -408,22 +410,21 @@ where
         graph: &Graph,
         numerator: &Atom,
         pattern: &OrientationPattern,
+        alias_expressions: AliasExpressions,
     ) -> Atom {
-        self.orientations
-            .iter()
-            .filter_map(|orientation| {
-                if pattern.filter_orientation(orientation.orientation()) {
-                    Some(orientation.parametric_atom_without_orientation_thetas_gs(
-                        graph,
-                        numerator,
-                        &self.surfaces,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .reduce(|acc, atom| acc + atom)
-            .unwrap_or_default()
+        let mut sum = Atom::Zero;
+        for orientation in self.orientations.iter() {
+            if !pattern.filter_orientation(orientation.orientation()) {
+                continue;
+            }
+            sum += orientation.parametric_atom_without_orientation_thetas_gs(
+                graph,
+                numerator,
+                &self.surfaces,
+            );
+            sum = alias_expressions.apply(sum);
+        }
+        sum
     }
 
     fn parametric_atom_with_numerator_gs(
@@ -431,18 +432,17 @@ where
         graph: &Graph,
         numerator: &Atom,
         pattern: &OrientationPattern,
+        alias_expressions: AliasExpressions,
     ) -> Atom {
-        self.orientations
-            .iter()
-            .filter_map(|orientation| {
-                if pattern.filter_orientation(orientation.orientation()) {
-                    Some(orientation.parametric_atom_gs(graph, numerator, &self.surfaces))
-                } else {
-                    None
-                }
-            })
-            .reduce(|acc, atom| acc + atom)
-            .unwrap_or_default()
+        let mut sum = Atom::Zero;
+        for orientation in self.orientations.iter() {
+            if !pattern.filter_orientation(orientation.orientation()) {
+                continue;
+            }
+            sum += orientation.parametric_atom_gs(graph, numerator, &self.surfaces);
+            sum = alias_expressions.apply(sum);
+        }
+        sum
     }
 
     fn diagnostic_parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
@@ -450,11 +450,17 @@ where
             graph,
             &graph.full_numerator_atom(),
             pattern,
+            AliasExpressions::None(),
         )
     }
 
     fn parametric_atom_gs(&self, graph: &Graph, pattern: &OrientationPattern) -> Atom {
-        self.parametric_atom_with_numerator_gs(graph, &graph.full_numerator_atom(), pattern)
+        self.parametric_atom_with_numerator_gs(
+            graph,
+            &graph.full_numerator_atom(),
+            pattern,
+            AliasExpressions::None(),
+        )
     }
 }
 

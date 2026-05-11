@@ -4,7 +4,11 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result as EyreResult, eyre};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{
+    Deserialize, Deserializer, Serialize, Serializer,
+    de::{Error as DeError, MapAccess, Visitor},
+    ser::SerializeMap,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     evaluate::{CompileOptions, ExportSettings, InlineASM},
@@ -40,6 +44,8 @@ pub struct GenerationSettings {
 
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub alias_expressions: AliasExpressions,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uniform_numerator_sampling_scale: UniformNumeratorSamplingScale,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -120,6 +126,198 @@ pub enum UniformNumeratorSamplingScale {
     None,
     BeyondQuadratic,
     All,
+}
+
+#[derive(Debug, Clone, Copy, Encode, Decode, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+pub enum AliasExpressions {
+    None(),
+    All { min_byte_size: Option<usize> },
+    Subexpressions { min_byte_size: Option<usize> },
+    RepeatedSubexpressions { min_byte_size: Option<usize> },
+}
+
+impl Default for AliasExpressions {
+    fn default() -> Self {
+        Self::RepeatedSubexpressions {
+            min_byte_size: None,
+        }
+    }
+}
+
+impl AliasExpressions {
+    const ALL_NAME: &'static str = "all";
+    const NONE_NAME: &'static str = "none";
+    const SUBEXPRESSIONS_NAME: &'static str = "subexpressions";
+    const REPEATED_SUBEXPRESSIONS_NAME: &'static str = "repeated_subexpressions";
+
+    pub fn apply(self, atom: Atom) -> Atom {
+        let atom = self.inline_for_symbolic_manipulation(atom);
+        match self {
+            Self::None() => atom,
+            Self::All { .. } => {
+                if self.accepts_alias(atom.as_atom_view()) {
+                    atom.alias(false)
+                } else {
+                    atom
+                }
+            }
+            Self::Subexpressions {
+                min_byte_size: None,
+            } => atom.alias_subexpressions(|_, _| Some(false)),
+            Self::Subexpressions {
+                min_byte_size: Some(min_byte_size),
+            } => atom.alias_subexpressions(|subexpr, _| {
+                alias_byte_size_is_accepted(subexpr, Some(min_byte_size)).then_some(false)
+            }),
+            Self::RepeatedSubexpressions {
+                min_byte_size: None,
+            } => atom.alias_repeated_subexpressions(),
+            Self::RepeatedSubexpressions {
+                min_byte_size: Some(min_byte_size),
+            } => atom.alias_subexpressions(|subexpr, _| match subexpr {
+                AtomView::Num(_) | AtomView::Var(_) | AtomView::Alias(_) => None,
+                _ => alias_byte_size_is_accepted(subexpr, Some(min_byte_size)).then_some(false),
+            }),
+        }
+    }
+
+    pub fn inline_for_symbolic_manipulation(self, atom: Atom) -> Atom {
+        match self {
+            Self::None() => atom,
+            _ => atom.inline_aliases(false),
+        }
+    }
+
+    pub fn collect_factors_after_inlining(self, atom: Atom) -> Atom {
+        self.inline_for_symbolic_manipulation(atom)
+            .collect_factors()
+    }
+
+    fn min_byte_size(self) -> Option<usize> {
+        match self {
+            Self::None() => None,
+            Self::All { min_byte_size }
+            | Self::Subexpressions { min_byte_size }
+            | Self::RepeatedSubexpressions { min_byte_size } => min_byte_size,
+        }
+    }
+
+    fn alias_name(self) -> &'static str {
+        match self {
+            Self::None() => Self::NONE_NAME,
+            Self::All { .. } => Self::ALL_NAME,
+            Self::Subexpressions { .. } => Self::SUBEXPRESSIONS_NAME,
+            Self::RepeatedSubexpressions { .. } => Self::REPEATED_SUBEXPRESSIONS_NAME,
+        }
+    }
+
+    fn from_name(name: &str, min_byte_size: Option<usize>) -> Option<Self> {
+        match normalize_alias_expression_name(name).as_str() {
+            Self::NONE_NAME => min_byte_size.is_none().then_some(Self::None()),
+            Self::ALL_NAME => Some(Self::All { min_byte_size }),
+            Self::SUBEXPRESSIONS_NAME => Some(Self::Subexpressions { min_byte_size }),
+            Self::REPEATED_SUBEXPRESSIONS_NAME => {
+                Some(Self::RepeatedSubexpressions { min_byte_size })
+            }
+            _ => None,
+        }
+    }
+
+    fn accepts_alias(self, subexpr: AtomView<'_>) -> bool {
+        alias_byte_size_is_accepted(subexpr, self.min_byte_size())
+    }
+}
+
+fn alias_byte_size_is_accepted(subexpr: AtomView<'_>, min_byte_size: Option<usize>) -> bool {
+    min_byte_size.is_none_or(|min_byte_size| subexpr.get_total_byte_size() >= min_byte_size)
+}
+
+fn normalize_alias_expression_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase().replace('-', "_")
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AliasExpressionThreshold {
+    MinByteSize(usize),
+    Options { min_byte_size: Option<usize> },
+}
+
+impl AliasExpressionThreshold {
+    fn min_byte_size(self) -> Option<usize> {
+        match self {
+            Self::MinByteSize(min_byte_size) => Some(min_byte_size),
+            Self::Options { min_byte_size } => min_byte_size,
+        }
+    }
+}
+
+impl Serialize for AliasExpressions {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.min_byte_size() {
+            None => serializer.serialize_str(self.alias_name()),
+            Some(min_byte_size) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry(self.alias_name(), &min_byte_size)?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AliasExpressions {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct AliasExpressionsVisitor;
+
+        impl<'de> Visitor<'de> for AliasExpressionsVisitor {
+            type Value = AliasExpressions;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str(
+                    "one of \"none\", \"all\", \"subexpressions\", \"repeated_subexpressions\", \
+                     or an inline table like { repeated_subexpressions = 128 }",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                AliasExpressions::from_name(value, None)
+                    .ok_or_else(|| E::custom(format!("unknown alias_expressions mode {value:?}")))
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let Some(mode): Option<String> = map.next_key()? else {
+                    return Err(A::Error::custom(
+                        "alias_expressions inline table must contain exactly one mode",
+                    ));
+                };
+                let threshold: AliasExpressionThreshold = map.next_value()?;
+                if map.next_key::<String>()?.is_some() {
+                    return Err(A::Error::custom(
+                        "alias_expressions inline table must contain exactly one mode",
+                    ));
+                }
+
+                AliasExpressions::from_name(&mode, threshold.min_byte_size()).ok_or_else(|| {
+                    A::Error::custom(format!("unknown alias_expressions mode {mode:?}"))
+                })
+            }
+        }
+
+        deserializer.deserialize_any(AliasExpressionsVisitor)
+    }
 }
 
 #[derive(
