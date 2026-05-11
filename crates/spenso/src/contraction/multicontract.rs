@@ -626,7 +626,7 @@ where
                         matches = false;
                         break;
                     }
-                    if self_slots[self_position.0].rep().negative()?[usize::from(self_index)] {
+                    if self_slots[self_position.0].rep().negative()?[self_index] {
                         neg = !neg;
                     }
                 }

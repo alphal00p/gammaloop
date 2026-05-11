@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn tensorial_syntax_detects_representation_tags() {
         let rep = mink4();
-        let compact = function!(symbol!("p"), rep.to_symbolic([]));
+        let compact = function!(symbol!("structure_inference_p"), rep.to_symbolic([]));
         let scalar = function!(symbol!("f"), Atom::num(1));
         let nested = scalar.clone() + compact.clone().pow(2);
 
@@ -571,7 +571,7 @@ mod tests {
     #[test]
     fn chain_with_schoonschipped_term_fast_and_expanded_inference_agree() {
         let rep = mink4();
-        let compact_vector = function!(symbol!("p"), rep.to_symbolic([]));
+        let compact_vector = function!(symbol!("structure_inference_p"), rep.to_symbolic([]));
         let schoonschipped_term = FunctionBuilder::new(symbol!("f"))
             .add_arg(&compact_vector)
             .add_arg(Atom::var(SPENSO_TAG.chain_in))

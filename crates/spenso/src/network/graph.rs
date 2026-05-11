@@ -57,6 +57,15 @@ pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
     // uncontracted: SuBitGraph,
 }
 
+type NetworkGraphBuilder<K, FK, Aind> =
+    HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
+
+pub type ReadyNetworkOp<K, FK = i8, Aind = AbstractIndex> = (
+    NetworkGraph<K, FK, Aind>,
+    NetworkOp<FK>,
+    Vec<NetworkLeaf<K, Aind>>,
+);
+
 #[derive(
     Debug,
     Clone,
@@ -432,7 +441,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
-    pub fn find_all_ready_ops(&mut self) -> Vec<(Self, NetworkOp<FK>, Vec<NetworkLeaf<K, Aind>>)>
+    pub fn find_all_ready_ops(&mut self) -> Vec<ReadyNetworkOp<K, FK, Aind>>
     where
         K: Clone + Display,
         FK: Clone + Display,
@@ -804,10 +813,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
     fn head_builder(
         node: NetworkNode<K, FK, Aind>,
-    ) -> (
-        HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>,
-        NodeIndex,
-    ) {
+    ) -> (NetworkGraphBuilder<K, FK, Aind>, NodeIndex) {
         let mut graph = HedgeGraphBuilder::new();
         let head = graph.add_node(node);
         graph.add_external_edge(head, NetworkEdge::Head, true, Flow::Source);
