@@ -135,6 +135,106 @@ macro_rules! gamma {
     };
 }
 
+/// Builds a Dirac `u` spinor tensor.
+///
+/// The first argument is the spinor label. The second argument can be a typed
+/// bispinor slot, an atom-like expression, an identifier/literal that defaults
+/// to a four-dimensional bispinor slot, or a bracketed bispinor argument list
+/// such as `[RS.d_, RS.i_]`.
+///
+/// # Examples
+///
+/// ```ignore
+/// use idenso::u;
+/// use spenso::slot;
+///
+/// let default_spinor = u!(1, i);
+/// let indexed_spinor = u!(1, 2);
+/// let explicit_spinor = u!(1, slot!(bis_d, i));
+/// let pattern_spinor = u!(1, [RS.d_, RS.i_]);
+/// ```
+#[macro_export]
+macro_rules! u {
+    ($label:expr, $base:ident . $i:ident) => {
+        $crate::u!(@done $label, spenso::structure::representation::RepName::to_symbolic(
+            &$crate::representations::Bispinor {},
+            [$base.$i],
+        ))
+    };
+    ($label:expr, [$($i:expr),+ $(,)?]) => {
+        $crate::u!(@done $label, spenso::structure::representation::RepName::to_symbolic(
+            &$crate::representations::Bispinor {},
+            [$($i),+],
+        ))
+    };
+    ($label:expr, $i:ident) => {{
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::u!(@done $label, spenso::slot!(bis, $i))
+    }};
+    ($label:expr, $i:literal) => {{
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::u!(@done $label, spenso::slot!(bis, $i))
+    }};
+    ($label:expr, $i:expr) => {
+        $crate::u!(@done $label, $i)
+    };
+    (@done $label:expr, $i:expr) => {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::PS.u)
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($label))
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
+            .finish()
+    };
+}
+
+/// Builds a Dirac `v` spinor tensor.
+///
+/// The argument conventions match [`u!`]: the first argument is the spinor
+/// label, and the second argument is a bispinor slot or a shorthand for one.
+#[macro_export]
+macro_rules! v {
+    ($label:expr, $base:ident . $i:ident) => {
+        $crate::v!(@done $label, spenso::structure::representation::RepName::to_symbolic(
+            &$crate::representations::Bispinor {},
+            [$base.$i],
+        ))
+    };
+    ($label:expr, [$($i:expr),+ $(,)?]) => {
+        $crate::v!(@done $label, spenso::structure::representation::RepName::to_symbolic(
+            &$crate::representations::Bispinor {},
+            [$($i),+],
+        ))
+    };
+    ($label:expr, $i:ident) => {{
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::v!(@done $label, spenso::slot!(bis, $i))
+    }};
+    ($label:expr, $i:literal) => {{
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::v!(@done $label, spenso::slot!(bis, $i))
+    }};
+    ($label:expr, $i:expr) => {
+        $crate::v!(@done $label, $i)
+    };
+    (@done $label:expr, $i:expr) => {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::PS.v)
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($label))
+            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
+            .finish()
+    };
+}
+
 /// Builds a gamma-zero factor or tensor.
 ///
 /// With no arguments, this builds a chain factor using the placeholder indices

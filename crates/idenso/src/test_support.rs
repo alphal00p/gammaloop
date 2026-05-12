@@ -50,7 +50,7 @@ impl TestReps {
         let _ = tags.rank_one_tensor_symbol("Q");
         let _ = tags.rank_one_tensor_symbol("K");
 
-        let _ = crate::test::TS.p;
+        let _ = spenso::p!();
         let _ = spenso::vector_symbol!(q);
         let _ = spenso::vector_symbol!(P);
         let _ = spenso::vector_symbol!(Q);

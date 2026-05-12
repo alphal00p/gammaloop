@@ -382,116 +382,26 @@ impl IndexTooling for AtomView<'_> {
 
 #[cfg(test)]
 pub mod test {
-    use std::sync::LazyLock;
-
-    pub struct TestSymbols {
-        pub p: Symbol,
-        pub a: Symbol,
-        pub u: Symbol,
-    }
-
-    pub static TS: LazyLock<TestSymbols> = LazyLock::new(|| {
-        let p = match spenso::p!().as_view() {
-            symbolica::atom::AtomView::Fun(fun) => fun.get_symbol(),
-            _ => unreachable!("p!() should build a vector function"),
-        };
-
-        TestSymbols {
-            p,
-            a: symbol!("a"),
-            u: symbol!("u"),
-        }
-    });
-
     use insta::assert_snapshot;
-    use spenso::structure::{
-        IndexlessNamedStructure,
-        abstract_index::AbstractIndex,
-        representation::{Minkowski, RepName},
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, Symbol},
-        function, parse_lit,
-        printer::CanonicalOrderingSettings,
-        symbol,
-    };
+    use spenso::{p, slot, structure::abstract_index::AbstractIndex};
+    use symbolica::{atom::AtomCore, parse_lit, printer::CanonicalOrderingSettings};
 
-    use crate::{
-        Cookable, IndexTooling, dirac::AGS, metric::PermuteWithMetric, representations::Bispinor,
-        test_support::test_initialize,
-    };
-    pub fn gamma(
-        i: impl Into<AbstractIndex>,
-        j: impl Into<AbstractIndex>,
-        mu: impl Into<AbstractIndex>,
-    ) -> Atom {
-        let gamma_strct = IndexlessNamedStructure::<Symbol, ()>::from_iter(
-            [
-                Bispinor {}.new_rep(4).to_lib(),
-                Bispinor {}.new_rep(4).cast(),
-                Minkowski {}.new_rep(4).cast(),
-            ],
-            AGS.gamma,
-            None,
-        );
-        gamma_strct
-            .reindex([i.into(), j.into(), mu.into()])
-            .unwrap()
-            .permute_with_metric()
-    }
-
-    pub fn u(i: usize, m: impl Into<AbstractIndex>) -> Atom {
-        let m_atom: AbstractIndex = m.into();
-        let m_atom: Atom = m_atom.into();
-        let mink = Bispinor {}.new_rep(4);
-        function!(TS.u, i, mink.to_symbolic([m_atom]))
-    }
-
-    #[allow(dead_code)]
-    pub fn p(i: usize, m: impl Into<AbstractIndex>) -> Atom {
-        let m_atom: AbstractIndex = m.into();
-        let m_atom: Atom = m_atom.into();
-        let mink = Minkowski {}.new_rep(4);
-        function!(TS.p, i, mink.to_symbolic([m_atom]))
-    }
-
-    #[allow(dead_code)]
-    pub fn a(i: usize, m: impl Into<AbstractIndex>, n: impl Into<AbstractIndex>) -> Atom {
-        let m_atom: AbstractIndex = m.into();
-        let m_atom: Atom = m_atom.into();
-
-        let n_atom: AbstractIndex = n.into();
-        let n_atom: Atom = n_atom.into();
-        let mink = Bispinor {}.new_rep(4);
-        function!(
-            TS.a,
-            i,
-            mink.to_symbolic([m_atom]),
-            mink.to_symbolic([n_atom])
-        )
-    }
+    use crate::{Cookable, IndexTooling, gamma, test_support::test_initialize, u};
 
     #[test]
     fn gamma_conj() {
-        test_initialize();
-        // let expr = gamma(1, 2, 3).dirac_adjoint::<AbstractIndex>().unwrap();
-        // println!("{expr}");
-        //
+        let a = test_initialize();
+        let mink4 = a.mink4;
 
-        let ubgu = u(2, 2)
-            * (gamma(1, 2, 3) * p(1, 3) + Bispinor {}.metric_atom([4, 1], [4, 2]))
-            * (u(1, 1).dirac_adjoint::<AbstractIndex>().unwrap());
-        // println!("Start:\n{}", ubgu);
-        // let expr = ubgu.dirac_adjoint::<AbstractIndex>().unwrap();
-        // println!("{expr}");
+        let bis4 = a.bis4;
 
-        // println!("conj trans\n {exp}");
-        // exp = exp.simplify_gamma_conj::<AbstractIndex>().unwrap();
-        // println!("conj gamma simplify \n{exp}");
-        // exp = exp.simplify_gamma0::<AbstractIndex>();
-        // println!("gamma0 simplify \n{exp}");
-        // exp = exp.simplify_metrics();
-        // println!("simplify metrics \n{exp}");
+        let p1 = p!(1, slot!(mink4, 3));
+
+        let ubgu = u!(2, slot!(bis4, 2))
+            * (gamma!(3, 1, 2) * p1 + bis4.g(1, 2))
+            * (u!(1, slot!(bis4, 1))
+                .dirac_adjoint::<AbstractIndex>()
+                .unwrap());
 
         assert_snapshot!(
             ubgu.dirac_adjoint::<AbstractIndex>()
@@ -500,44 +410,8 @@ pub mod test {
                 .to_canonically_ordered_string(CanonicalOrderingSettings {
                     include_attributes: false,
                     include_namespace: false,hide_namespace:None,
-                }),@"(g(bis(4,d_1),bis(4,d_2))+gamma(bis(4,d_1),bis(4,d_2),mink(4,d_0))*p(1,mink(4,d_0)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
+                }),@"(conj(p(1,mink(4,d_0)))*gamma(bis(4,d_1),bis(4,d_2),mink(4,d_0))+g(bis(4,d_1),bis(4,d_2)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
         );
-
-        // let ubggu = u(2, 3)
-        //     * gamma(1, 2, 3)
-        //     * gamma(2, 3, 1)
-        //     * (u(1, 1).dirac_adjoint::<AbstractIndex>().unwrap());
-
-        // println!("Ubggu:\n{}", ubggu);
-        // println!(
-        //     "Conjugate:\n{}",
-        //     ubggu.dirac_adjoint::<AbstractIndex>().unwrap()
-        // );
-
-        // let ub = u(1, 1).dirac_adjoint::<AbstractIndex>().unwrap();
-        // let u = u(2, 2);
-
-        // let ubgu = &ub * gamma(1, 2, 3) * &u;
-        // let cubgu = ubgu.dirac_adjoint::<AbstractIndex>().unwrap();
-
-        // let ccubgu = ub.dirac_adjoint::<AbstractIndex>().unwrap()
-        //     * gamma(1, 2, 3).dirac_adjoint::<AbstractIndex>().unwrap()
-        //     * u.dirac_adjoint::<AbstractIndex>().unwrap();
-        // println!("Start:\n{}", ubgu);
-        // println!("Oneshot:\n{}", cubgu);
-        // println!(
-        //     "Separate:\n{}",
-        //     ccubgu
-        //         .simplify_gamma0::<AbstractIndex>()
-        //         .replace(function!(symbol!("spenso::u"), RS.a__).spenso_conj())
-        //         .with(function!(symbol!("spenso::uconj"), RS.a__))
-        //         .canonize(AbstractIndex::Dummy)
-        // );
-
-        // let a = a(1, 1, 2) * a(2, 2, 4) * a(1, 4, 3) + a(1, 1, 4) * a(3, 4, 5) * a(1, 5, 3);
-
-        // println!("{a}");
-        // println!("{}", a.canonize(AbstractIndex::Dummy));
     }
 
     #[test]

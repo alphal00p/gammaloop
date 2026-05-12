@@ -10,7 +10,7 @@ use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
 
-use crate::{gamma, gamma0, gamma5};
+use crate::{gamma, gamma0, gamma5, u, v};
 
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
@@ -115,6 +115,14 @@ fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
     let expr = gamma!(mu, slot!(r.bis_d, a), 1);
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
+}
+
+#[test]
+fn spinor_macros_accept_default_and_explicit_indices() {
+    let r = TestReps::new();
+    let expr = u!(1, a) * v!(2, slot!(r.bis_d, b));
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"u(1,bis(4,a))*v(2,bis(d,b))");
 }
 
 #[test]
