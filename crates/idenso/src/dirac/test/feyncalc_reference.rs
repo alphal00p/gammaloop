@@ -31,7 +31,7 @@ fn metric(a: impl IntoAtom, b: impl IntoAtom) -> Atom {
 
 #[test]
 fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis_d, i),
         slot!(r.bis_d, j),
@@ -44,7 +44,7 @@ fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
 
 #[test]
 fn dirac_simplify_id2_odd_interior_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -60,7 +60,7 @@ fn dirac_simplify_id2_odd_interior_chain() {
 
 #[test]
 fn dirac_simplify_id3_four_interior_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, i),
         slot!(r.bis4, j),
@@ -77,7 +77,7 @@ fn dirac_simplify_id3_four_interior_chain() {
 
 #[test]
 fn dirac_simplify_id4_slash_sandwich() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let p = p4(&r);
     let q = q4(&r);
     let expr = Atom::var(s!(m))
@@ -92,7 +92,7 @@ fn dirac_simplify_id4_slash_sandwich() {
 
 #[test]
 fn dirac_simplify_id5_gamma5_anticommutes_left() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, i),
         slot!(r.bis4, j),
@@ -106,7 +106,7 @@ fn dirac_simplify_id5_gamma5_anticommutes_left() {
 #[test]
 #[ignore = "requires GA[6]/GA[7] projector support in chain simplification"]
 fn dirac_simplify_id6_projectors_move_through_gamma() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let gamma6 = (r.bis4.g(Atom::var(s!(i)), Atom::var(s!(a)))
         + gamma5!(slot!(r.bis4, i), slot!(r.bis4, a)))
         / 2;
@@ -123,7 +123,7 @@ fn dirac_simplify_id6_projectors_move_through_gamma() {
 
 #[test]
 fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(
         r.bis4.to_symbolic([]),
         gamma!(slot!(r.mink4, a)),
@@ -136,7 +136,7 @@ fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
 
 #[test]
 fn dirac_simplify_id24_odd_trace_vanishes() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(
         r.bis4.to_symbolic([]),
         gamma!(slot!(r.mink4, a)),
@@ -154,7 +154,7 @@ fn dirac_simplify_id24_odd_trace_vanishes() {
 
 #[test]
 fn dirac_simplify_id25_four_trace_recurses_beside_open_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(
         r.bis4.to_symbolic([]),
         gamma!(slot!(r.mink4, a)),
@@ -175,7 +175,7 @@ fn dirac_simplify_id25_four_trace_recurses_beside_open_chain() {
 
 #[test]
 fn dirac_simplify_id30_dirac_order_anticommutator() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let p = p4(&r);
     let expr = chain!(
         slot!(r.bis4, i),
@@ -196,7 +196,7 @@ fn dirac_simplify_id30_dirac_order_anticommutator() {
 
 #[test]
 fn dirac_simplify_id36_empty_trace_is_spin_dimension() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr_4 = trace!(r.bis4.to_symbolic([]); Vec::<Atom>::new());
     let expr_d = trace!(r.bis_d.to_symbolic([]); Vec::<Atom>::new());
     let expr_color = trace!(r.cof_nc.to_symbolic([]); Vec::<Atom>::new());
@@ -214,7 +214,7 @@ fn dirac_simplify_id36_empty_trace_is_spin_dimension() {
 
 #[test]
 fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let p = p4(&r);
     let open = Atom::var(s!(c1))
         * gamma!(mu, slot!(r.bis4, i), slot!(r.bis4, a))
@@ -236,7 +236,7 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
 
 #[test]
 fn dirac_simplify_id45_slash_square_and_sandwich() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let p = p4(&r);
     let slash_square = metric(p.clone(), p.clone())
         * chain!(
@@ -258,7 +258,7 @@ fn dirac_simplify_id45_slash_square_and_sandwich() {
 
 #[test]
 fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let p = pd(&r);
     let q = qd(&r);
     let expr = gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, i), slot!(r.bis_d, a))

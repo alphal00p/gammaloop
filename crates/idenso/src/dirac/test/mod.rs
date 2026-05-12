@@ -40,6 +40,8 @@ use crate::test_support::{TestReps, test_initialize};
 
 #[test]
 fn gamma_construct() {
+    test_initialize();
+
     println!("{}", gamma!(RS.a_, RS.b_, RS.c_));
 
     let f = GG
@@ -93,6 +95,8 @@ fn chain_test() {
 
 #[test]
 fn normalise_g() {
+    test_initialize();
+
     let expr = parse_lit!(
         gamma_chain(mink(dim, mu), bis(5), mink(dim, mu), bis(1), bis(2)),
         default_namespace = "spenso"
@@ -111,7 +115,7 @@ fn gamma_macro_accepts_integer_indices() {
 
 #[test]
 fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = gamma!(mu, slot!(r.bis_d, a), 1);
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
@@ -119,7 +123,7 @@ fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
 
 #[test]
 fn spinor_macros_accept_default_and_explicit_indices() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = u!(1, a) * v!(2, slot!(r.bis_d, b));
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"u(1,bis(4,a))*v(2,bis(d,b))");
@@ -127,7 +131,7 @@ fn spinor_macros_accept_default_and_explicit_indices() {
 
 #[test]
 fn gamma5_macro_accepts_explicit_indices() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = gamma5!(slot!(r.bis4, a), slot!(r.bis4, b));
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma5(bis(4,a),bis(4,b))");
@@ -135,6 +139,8 @@ fn gamma5_macro_accepts_explicit_indices() {
 
 #[test]
 fn gamma0_macro_builds_chain_factor() {
+    test_initialize();
+
     let expr = gamma0!();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma0(in,out)");
@@ -142,6 +148,8 @@ fn gamma0_macro_builds_chain_factor() {
 
 #[test]
 fn gamma_macros_accept_pattern_indices() {
+    test_initialize();
+
     let gamma = gamma!(RS.a__, RS.b__, RS.c__);
     let gamma5 = gamma5!(RS.b__, RS.c__);
     let gamma0 = gamma0!(RS.b__, RS.c__);
@@ -172,7 +180,7 @@ fn gamma_chain_canonical_ordering_is_opt_in() {
 
 #[test]
 fn gamma5_anticommutes_with_four_dimensional_gamma() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -186,7 +194,7 @@ fn gamma5_anticommutes_with_four_dimensional_gamma() {
 
 #[test]
 fn gamma5_does_not_move_in_dimension_generic_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis_d, a),
         slot!(r.bis_d, b),
@@ -199,7 +207,7 @@ fn gamma5_does_not_move_in_dimension_generic_chain() {
 
 #[test]
 fn gamma0_square_collapses_inside_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma0!(), gamma0!(),);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
@@ -207,7 +215,7 @@ fn gamma0_square_collapses_inside_chain() {
 
 #[test]
 fn gamma0_conjugates_gamma5_inside_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -221,7 +229,7 @@ fn gamma0_conjugates_gamma5_inside_chain() {
 
 #[test]
 fn gamma0_square_is_four_dimensional() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma0!(), gamma0!(),);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma0(in,out),gamma0(in,out))");
@@ -229,7 +237,7 @@ fn gamma0_square_is_four_dimensional() {
 
 #[test]
 fn gamma5_square_collapses_inside_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma5!(), gamma5!(),);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"g(bis(4,a),bis(4,b))");
@@ -237,7 +245,7 @@ fn gamma5_square_collapses_inside_chain() {
 
 #[test]
 fn gamma5_trace_pair_reduces_to_ordinary_trace() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(
         r.bis4.to_symbolic([]),
         gamma5!(),
@@ -251,7 +259,7 @@ fn gamma5_trace_pair_reduces_to_ordinary_trace() {
 
 #[test]
 fn gamma0_trace_pair_reduces_to_spin_dimension() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(r.bis4.to_symbolic([]), gamma0!(), gamma0!());
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4");
@@ -259,7 +267,7 @@ fn gamma0_trace_pair_reduces_to_spin_dimension() {
 
 #[test]
 fn gamma5_square_is_four_dimensional() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma5!(), gamma5!(),);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma5(in,out))");
@@ -267,7 +275,7 @@ fn gamma5_square_is_four_dimensional() {
 
 #[test]
 fn four_dimensional_chisholm_requires_four_dimensional_interior() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -529,7 +537,7 @@ fn gl_06() {
 
 #[test]
 fn gamma_alg() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let mink4 = r.mink4;
     let mink_dim = r.mink_d;
     let bis4 = r.bis4;

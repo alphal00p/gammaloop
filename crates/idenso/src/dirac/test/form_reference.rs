@@ -34,7 +34,7 @@ fn repeated_lorentz_gamma_chain_contracts_to_dimension() {
 
 #[test]
 fn adjacent_chain_lorentz_contraction() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis_d, a),
         slot!(r.bis_d, b),
@@ -47,7 +47,7 @@ fn adjacent_chain_lorentz_contraction() {
 
 #[test]
 fn trace4gen_chisholm_odd_interior_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -63,7 +63,7 @@ fn trace4gen_chisholm_odd_interior_chain() {
 
 #[test]
 fn trace4gen_chisholm_two_interior_chain() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -78,7 +78,7 @@ fn trace4gen_chisholm_two_interior_chain() {
 
 #[test]
 fn gamma_five_epsilon_trick() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
@@ -94,7 +94,7 @@ fn gamma_five_epsilon_trick() {
 
 #[test]
 fn gamma_five_four_gamma_trace_is_epsilon() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(
         r.bis4.to_symbolic([]),
         gamma5!(),
@@ -109,7 +109,7 @@ fn gamma_five_four_gamma_trace_is_epsilon() {
 
 #[test]
 fn gamma_five_two_gamma_trace_vanishes() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = trace!(
         r.bis4.to_symbolic([]),
         gamma5!(),
