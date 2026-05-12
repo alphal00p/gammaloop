@@ -119,7 +119,7 @@ Cubic segments use `start`, `ctrl-a`, `ctrl-b`, and `end`:
 ```
 
 Use `cubic-path(..segment)` once to turn that cubic dictionary into a path
-dictionary. Returned paths carry Kurvst's explicit wire path in `path`, plus
+dictionary. Returned paths carry a CeTZ-compatible wire path in `path`, plus
 Typst-friendly `points`, cubic `curves`, line `segments`, and `length` fields
 for drawing or inspection. Rust converts the wire path to Kurbo's `BezPath`
 internally.

@@ -411,7 +411,7 @@
 
 /// Build an open Hobby spline through two or more points.
 ///
-/// The returned dictionary is a path dictionary backed by Kurvst's explicit
+/// The returned dictionary is a path dictionary backed by a CeTZ-compatible
 /// wire path. Rust converts that wire path to Kurbo's `BezPath` internally, so
 /// it can be passed directly to @parallel-path, @pattern-path, @trim-path, or
 /// @cetz-path.
@@ -501,8 +501,8 @@
 /// Generate a parallel path for a path.
 ///
 /// Pass any path returned by this module, such as @hobby-spline. The result is a
-/// drawable path dictionary with the fitted parallel path and its explicit wire
-/// path.
+/// drawable path dictionary with the fitted parallel path and its
+/// CeTZ-compatible wire path.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((

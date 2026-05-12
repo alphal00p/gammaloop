@@ -1,6 +1,6 @@
 use kurbo::{
     BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl, PathSeg, Point,
-    Vec2, fit_to_bezpath, fit_to_bezpath_opt, offset::CubicOffset,
+    Vec2, offset::offset_cubic,
 };
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
@@ -255,76 +255,129 @@ fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "kebab-case")]
 struct WirePath {
-    elements: Vec<WirePathElement>,
+    subpaths: Vec<WireSubpath>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct WireSubpath {
+    origin: [f64; 2],
+    closed: bool,
+    segments: Vec<WireSegment>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-enum WirePathElement {
-    MoveTo {
-        point: CurvePoint,
+#[serde(tag = "kind")]
+enum WireSegment {
+    #[serde(rename = "l")]
+    Line { to: [f64; 2] },
+    #[serde(rename = "c")]
+    Cubic {
+        c1: [f64; 2],
+        c2: [f64; 2],
+        to: [f64; 2],
     },
-    LineTo {
-        point: CurvePoint,
-    },
-    QuadTo {
-        ctrl: CurvePoint,
-        end: CurvePoint,
-    },
-    CurveTo {
-        ctrl_a: CurvePoint,
-        ctrl_b: CurvePoint,
-        end: CurvePoint,
-    },
-    ClosePath,
+}
+
+fn point_to_wire(point: Point) -> [f64; 2] {
+    [point.x, point.y]
+}
+
+fn wire_to_point(point: [f64; 2]) -> Point {
+    Point::new(point[0], point[1])
+}
+
+fn push_current_subpath(subpaths: &mut Vec<WireSubpath>, current: &mut Option<WireSubpath>) {
+    if let Some(subpath) = current.take() {
+        subpaths.push(subpath);
+    }
+}
+
+fn ensure_current_subpath(current: &mut Option<WireSubpath>, origin: Point) -> &mut WireSubpath {
+    current.get_or_insert_with(|| WireSubpath {
+        origin: point_to_wire(origin),
+        closed: false,
+        segments: Vec::new(),
+    })
 }
 
 impl From<&BezPath> for WirePath {
     fn from(path: &BezPath) -> Self {
-        let elements = path
-            .elements()
-            .iter()
-            .map(|element| match *element {
-                PathEl::MoveTo(point) => WirePathElement::MoveTo {
-                    point: point.into(),
-                },
-                PathEl::LineTo(point) => WirePathElement::LineTo {
-                    point: point.into(),
-                },
-                PathEl::QuadTo(ctrl, end) => WirePathElement::QuadTo {
-                    ctrl: ctrl.into(),
-                    end: end.into(),
-                },
-                PathEl::CurveTo(ctrl_a, ctrl_b, end) => WirePathElement::CurveTo {
-                    ctrl_a: ctrl_a.into(),
-                    ctrl_b: ctrl_b.into(),
-                    end: end.into(),
-                },
-                PathEl::ClosePath => WirePathElement::ClosePath,
-            })
-            .collect();
-        Self { elements }
+        let mut subpaths = Vec::new();
+        let mut current = None;
+        let mut current_point = None;
+
+        for element in path.elements() {
+            match *element {
+                PathEl::MoveTo(point) => {
+                    push_current_subpath(&mut subpaths, &mut current);
+                    current = Some(WireSubpath {
+                        origin: point_to_wire(point),
+                        closed: false,
+                        segments: Vec::new(),
+                    });
+                    current_point = Some(point);
+                }
+                PathEl::LineTo(to) => {
+                    ensure_current_subpath(&mut current, current_point.unwrap_or(to))
+                        .segments
+                        .push(WireSegment::Line {
+                            to: point_to_wire(to),
+                        });
+                    current_point = Some(to);
+                }
+                PathEl::QuadTo(ctrl, to) => {
+                    let start = current_point.unwrap_or(ctrl);
+                    let c1 = start + (ctrl - start) * (2.0 / 3.0);
+                    let c2 = to + (ctrl - to) * (2.0 / 3.0);
+                    ensure_current_subpath(&mut current, start)
+                        .segments
+                        .push(WireSegment::Cubic {
+                            c1: point_to_wire(c1),
+                            c2: point_to_wire(c2),
+                            to: point_to_wire(to),
+                        });
+                    current_point = Some(to);
+                }
+                PathEl::CurveTo(c1, c2, to) => {
+                    ensure_current_subpath(&mut current, current_point.unwrap_or(c1))
+                        .segments
+                        .push(WireSegment::Cubic {
+                            c1: point_to_wire(c1),
+                            c2: point_to_wire(c2),
+                            to: point_to_wire(to),
+                        });
+                    current_point = Some(to);
+                }
+                PathEl::ClosePath => {
+                    if let Some(subpath) = current.as_mut() {
+                        subpath.closed = true;
+                        current_point = Some(wire_to_point(subpath.origin));
+                    }
+                }
+            }
+        }
+
+        push_current_subpath(&mut subpaths, &mut current);
+        Self { subpaths }
     }
 }
 
 impl From<WirePath> for BezPath {
     fn from(value: WirePath) -> Self {
         let mut path = BezPath::new();
-        for element in value.elements {
-            match element {
-                WirePathElement::MoveTo { point } => path.move_to(Point::from(point)),
-                WirePathElement::LineTo { point } => path.line_to(Point::from(point)),
-                WirePathElement::QuadTo { ctrl, end } => {
-                    path.quad_to(Point::from(ctrl), Point::from(end));
+        for subpath in value.subpaths {
+            path.move_to(wire_to_point(subpath.origin));
+            for segment in subpath.segments {
+                match segment {
+                    WireSegment::Line { to } => path.line_to(wire_to_point(to)),
+                    WireSegment::Cubic { c1, c2, to } => {
+                        path.curve_to(wire_to_point(c1), wire_to_point(c2), wire_to_point(to));
+                    }
                 }
-                WirePathElement::CurveTo {
-                    ctrl_a,
-                    ctrl_b,
-                    end,
-                } => path.curve_to(Point::from(ctrl_a), Point::from(ctrl_b), Point::from(end)),
-                WirePathElement::ClosePath => path.close_path(),
+            }
+            if subpath.closed {
+                path.close_path();
             }
         }
         path
@@ -644,21 +697,52 @@ fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
         });
     }
 
+    let _optimize = spec.optimize;
     let offset_segments = spec
         .path
         .segments()
-        .flat_map(|segment| {
-            let offset = CubicOffset::new_regularized(segment.to_cubic(), distance, accuracy);
-            let path = if spec.optimize {
-                fit_to_bezpath_opt(&offset, accuracy)
-            } else {
-                fit_to_bezpath(&offset, accuracy)
-            };
-            path.segments().collect::<Vec<_>>()
-        })
+        .flat_map(|segment| offset_path_segment(segment, distance, accuracy))
         .collect::<Vec<_>>();
     let segments = trim_path_segments(offset_segments, start_outset, end_outset, accuracy)?;
     curve_path_from_segments(segments, accuracy)
+}
+
+fn offset_path_segment(segment: PathSeg, distance: f64, accuracy: f64) -> Vec<PathSeg> {
+    match segment {
+        PathSeg::Line(line) => vec![offset_line(line.p0, line.p1, distance)],
+        PathSeg::Quad(_) | PathSeg::Cubic(_) => {
+            let cubic = segment.to_cubic();
+            if cubic_is_collinear(cubic, accuracy) {
+                vec![offset_line(cubic.p0, cubic.p3, distance)]
+            } else {
+                let mut path = BezPath::new();
+                offset_cubic(cubic, distance, accuracy, &mut path);
+                path.segments().collect()
+            }
+        }
+    }
+}
+
+fn offset_line(start: Point, end: Point, distance: f64) -> PathSeg {
+    let tangent = normalized_tangent_between(end - start, start, end);
+    let normal = tangent.turn_90() * distance;
+    PathSeg::Line(Line::new(start + normal, end + normal))
+}
+
+fn cubic_is_collinear(cubic: CubicBez, accuracy: f64) -> bool {
+    let chord = cubic.p3 - cubic.p0;
+    let chord_len = chord.hypot();
+    if chord_len <= f64::EPSILON {
+        return true;
+    }
+    let tolerance = accuracy.max(f64::EPSILON) * chord_len;
+    point_line_distance(cubic.p1, cubic.p0, chord, chord_len) <= tolerance
+        && point_line_distance(cubic.p2, cubic.p0, chord, chord_len) <= tolerance
+}
+
+fn point_line_distance(point: Point, origin: Point, direction: Vec2, direction_len: f64) -> f64 {
+    let delta = point - origin;
+    (direction.x * delta.y - direction.y * delta.x).abs() / direction_len
 }
 
 #[derive(Debug, Clone)]
@@ -1244,6 +1328,11 @@ mod tests {
         CurvePoint { x, y }
     }
 
+    fn assert_wire_point(actual: [f64; 2], expected: [f64; 2]) {
+        assert!((actual[0] - expected[0]).abs() < 1e-9);
+        assert!((actual[1] - expected[1]).abs() < 1e-9);
+    }
+
     #[test]
     fn cubic_path_returns_path_dictionary() {
         let output = cubic_path(CubicPathSpec {
@@ -1256,6 +1345,51 @@ mod tests {
         assert_eq!(output.points.first().copied(), Some(point(0.0, 0.0)));
         assert_eq!(output.points.last().copied(), Some(point(3.0, 0.0)));
         assert_eq!(output.curves.len(), 1);
+    }
+
+    #[test]
+    fn wire_path_uses_cetz_subpath_segments() {
+        let path = straight_path(3.0);
+        let wire = WirePath::from(&path);
+
+        assert_eq!(wire.subpaths.len(), 1);
+        let subpath = &wire.subpaths[0];
+        assert_wire_point(subpath.origin, [0.0, 0.0]);
+        assert!(!subpath.closed);
+        assert_eq!(subpath.segments.len(), 1);
+        match subpath.segments[0] {
+            WireSegment::Cubic { c1, c2, to } => {
+                assert_wire_point(c1, [1.0, 0.0]);
+                assert_wire_point(c2, [2.0, 0.0]);
+                assert_wire_point(to, [3.0, 0.0]);
+            }
+            WireSegment::Line { .. } => panic!("expected cubic segment"),
+        }
+
+        let roundtrip = BezPath::from(wire);
+        assert_eq!(roundtrip.elements(), path.elements());
+    }
+
+    #[test]
+    fn wire_path_elevates_quadratics_to_cetz_cubics() {
+        let mut path = BezPath::new();
+        path.move_to(Point::new(0.0, 0.0));
+        path.quad_to(Point::new(1.0, 3.0), Point::new(3.0, 0.0));
+
+        let wire = WirePath::from(&path);
+        assert_eq!(wire.subpaths.len(), 1);
+        assert_eq!(wire.subpaths[0].segments.len(), 1);
+        match wire.subpaths[0].segments[0] {
+            WireSegment::Cubic { c1, c2, to } => {
+                assert_wire_point(c1, [2.0 / 3.0, 2.0]);
+                assert_wire_point(c2, [5.0 / 3.0, 2.0]);
+                assert_wire_point(to, [3.0, 0.0]);
+            }
+            WireSegment::Line { .. } => panic!("expected elevated cubic segment"),
+        }
+
+        let roundtrip = BezPath::from(wire);
+        assert!(matches!(roundtrip.elements()[1], PathEl::CurveTo(_, _, _)));
     }
 
     #[test]
