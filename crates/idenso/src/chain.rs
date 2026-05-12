@@ -126,14 +126,14 @@ mod tests {
     use symbolica::parse_lit;
 
     use crate::gamma;
-    use crate::representations::{Bispinor, initialize};
-    use crate::test_support::TestReps;
+    use crate::representations::Bispinor;
+    use crate::test_support::{TestReps, test_initialize};
 
     use super::*;
 
     #[test]
     fn collect_gamma_chains_and_close_trace() {
-        initialize();
+        test_initialize();
         let gammas = parse_lit!(
             gamma(bis(4, 3), bis(4, 4), p(2, mink(4)))
                 * gamma(bis(4, 4), bis(4, 5), mink(4, mu))

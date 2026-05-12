@@ -675,7 +675,7 @@ mod tests {
         parse_lit, symbol,
     };
 
-    use crate::{Cookable, test::test_initialize};
+    use crate::{Cookable, test_support::test_initialize};
 
     use super::CookSettings;
 

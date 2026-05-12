@@ -480,6 +480,7 @@ mod tests {
 
     #[test]
     fn reference_case_simplification_snapshots() {
+        crate::test_support::test_initialize();
         let snapshot = reference_cases()
             .iter()
             .map(|case| {

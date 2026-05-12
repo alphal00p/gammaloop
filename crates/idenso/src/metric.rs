@@ -494,7 +494,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{Cookable, representations::Bispinor, test::test_initialize};
+    use crate::{Cookable, representations::Bispinor, test_support::test_initialize};
 
     use super::*;
 

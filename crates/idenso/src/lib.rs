@@ -390,13 +390,6 @@ pub mod test {
         pub u: Symbol,
     }
 
-    pub fn test_initialize() {
-        let _ = TS.p;
-        let _ = spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol("P");
-        let _ = spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol("Q");
-        initialize();
-    }
-
     pub static TS: LazyLock<TestSymbols> = LazyLock::new(|| {
         let p = match spenso::p!().as_view() {
             symbolica::atom::AtomView::Fun(fun) => fun.get_symbol(),
@@ -424,10 +417,8 @@ pub mod test {
     };
 
     use crate::{
-        Cookable, IndexTooling,
-        dirac::AGS,
-        metric::PermuteWithMetric,
-        representations::{Bispinor, initialize},
+        Cookable, IndexTooling, dirac::AGS, metric::PermuteWithMetric, representations::Bispinor,
+        test_support::test_initialize,
     };
     pub fn gamma(
         i: impl Into<AbstractIndex>,

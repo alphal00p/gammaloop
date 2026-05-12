@@ -3,7 +3,6 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
     Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
 };
-use spenso::vector_symbol;
 use symbolica::atom::{AtomCore, Symbol};
 
 use symbolica::symbol;
@@ -28,24 +27,14 @@ symbol_set!(TestSymbols, TS;
     hedge_0 hedge_1 hedge_2 hedge_3 hedge_4 hedge_5 hedge_6 hedge_7 hedge_8 hedge_9 hedge_10 hedge_11 hedge_12 hedge_13 hedge_14 hedge_15 hedge_16 hedge_17 hedge_18 hedge_19 hedge_20 mul
 );
 
-pub fn test_initialize() {
-    initialize();
-    let _ = vector_symbol!(p);
-    let _ = vector_symbol!(q);
-    let _ = vector_symbol!(N);
-    let _ = vector_symbol!(P);
-    let _ = vector_symbol!(Q);
-    let _ = vector_symbol!(K);
-    // let dim  =
-    let _ = TS.p;
-}
+use crate::test_support::test_initialize;
 
 use core::panic;
 
 use spenso::{
     shadowing::symbolica_utils::TypstSettings,
     structure::{
-        ToSymbolic,
+        TensorStructure, ToSymbolic,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::IsAbstractSlot,
     },
@@ -54,7 +43,6 @@ use spenso::{
 use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
-use crate::representations::initialize;
 use crate::symbol_set;
 use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 
@@ -102,8 +90,8 @@ fn parse_ratio() {
 
       0	 [label = "∏"];
       1	 [label = "S:(f(mul(P(3,mink(4,1))*P(4,mink(4,1)))))^(-1)"];
-      2	 [label = "T:P(1,mink(4,1))"];
-      3	 [label = "T:P(2,mink(4,1))"];
+      2	 [label = "T:P(2,mink(4,1))"];
+      3	 [label = "T:P(1,mink(4,1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       3:7:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
@@ -274,19 +262,19 @@ fn parse_scalar_tensors_step_by() {
 
       0	 [label = "∏"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:b(mink(4,1))"];
-      3	 [label = "T:d(mink(4,1))"];
-      4	 [label = "^( 2 )"];
-      5	 [label = "T:d(mink(4,2))"];
+      2	 [label = "T:d(mink(4,1))"];
+      3	 [label = "^( 2 )"];
+      4	 [label = "T:d(mink(4,2))"];
+      5	 [label = "T:b(mink(4,1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+      5:13:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
       3:8:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
       1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
-      2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
-      5:14:s	-> 4:12:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
-      5:13:s	-> 4:11:s	 [id=7  color="red:blue;0.5"];
+      2:7:s	-> 5:14:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
+      4:12:s	-> 3:10:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
+      4:11:s	-> 3:9:s	 [id=7  color="red:blue;0.5"];
     }
     "#
     );
@@ -301,16 +289,16 @@ fn parse_scalar_tensors_step_by() {
 
       0	 [label = "∏"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:b(mink(4,1))"];
-      3	 [label = "T:d(mink(4,1))"];
+      2	 [label = "T:d(mink(4,1))"];
+      3	 [label = "T:b(mink(4,1))"];
       4	 [label = "S:(d(mink(4,2)))^2"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+      4:10:s	-> 0:2:s	 [id=1  color="red:blue;0.5"];
       1:5:s	-> 0:4:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      2:7:s	-> 3:9:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
-      3:8:s	-> 0:2:s	 [id=5  color="red:blue;0.5"];
+      2:7:s	-> 3:8:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
+      3:9:s	-> 0:1:s	 [id=5  color="red:blue;0.5"];
     }
     "#
     );
@@ -360,45 +348,49 @@ fn parse_scalar_tensors_step_by() {
         .unwrap();
     assert_snapshot!(
         net.snapshot_dot(),@r#"
-        digraph {
-          node	 [shape=circle,height=0.1,label=""];
-          overlap = "scale";
-          layout = "neato";
+    digraph {
+      node	 [shape=circle,height=0.1,label=""];
+      overlap = "scale";
+      layout = "neato";
 
-          0	 [label = "T:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
-          ext0	 [style=invis];
-          0:0:s	-> ext0	 [id=0 color="red"];
-        }
-        "#
+      0	 [label = "S:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
+      ext0	 [style=invis];
+      0:0:s	-> ext0	 [id=0 color="red"];
+    }
+    "#
     );
     netc.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &fnlib)
         .unwrap();
     assert_snapshot!(
         netc.snapshot_dot(),@r#"
-        digraph {
-          node	 [shape=circle,height=0.1,label=""];
-          overlap = "scale";
-          layout = "neato";
+    digraph {
+      node	 [shape=circle,height=0.1,label=""];
+      overlap = "scale";
+      layout = "neato";
 
-          0	 [label = "T:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
-          ext0	 [style=invis];
-          0:0:s	-> ext0	 [id=0 color="red"];
-        }
-        "#
-    );
-    if let ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) = net.result().unwrap()
-    {
-        if let ExecutionResult::Val(TensorOrScalarOrKey::Tensor {
-            tensor: tensor2, ..
-        }) = netc.result().unwrap()
-        {
-            assert_eq!(tensor2.expression, tensor.expression);
-        } else {
-            panic!("Not scalar")
-        }
-    } else {
-        panic!("Not scalar")
+      0	 [label = "S:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
+      ext0	 [style=invis];
+      0:0:s	-> ext0	 [id=0 color="red"];
     }
+    "#
+    );
+    let net_expression = match net.result().unwrap() {
+        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(s)) => s.clone(),
+        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) if tensor.is_scalar() => {
+            tensor.expression.clone()
+        }
+        _ => panic!("expected scalar result"),
+    };
+
+    let netc_expression = match netc.result().unwrap() {
+        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(s)) => s.clone(),
+        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) if tensor.is_scalar() => {
+            tensor.expression.clone()
+        }
+        _ => panic!("expected scalar result"),
+    };
+
+    assert_eq!(net_expression, netc_expression);
 }
 
 #[test]
