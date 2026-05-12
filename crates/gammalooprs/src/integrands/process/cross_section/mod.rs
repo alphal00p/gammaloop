@@ -676,6 +676,7 @@ impl CrossSectionGraphTerm {
                             slice::from_ref(integrand_for_subset),
                             &graph.graph.param_builder,
                             dual_shape,
+                            settings.generation.alias_expressions,
                             &settings.generation.evaluator,
                         )
                     } else {
@@ -684,6 +685,7 @@ impl CrossSectionGraphTerm {
                             &graph.graph.param_builder,
                             &orientations.raw,
                             dual_shape,
+                            settings.generation.alias_expressions,
                             &settings.generation.evaluator,
                         )
                     }

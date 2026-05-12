@@ -417,12 +417,14 @@ where
             if !pattern.filter_orientation(orientation.orientation()) {
                 continue;
             }
-            sum += orientation.parametric_atom_without_orientation_thetas_gs(
-                graph,
-                numerator,
-                &self.surfaces,
+            alias_expressions.add_to_sum(
+                &mut sum,
+                orientation.parametric_atom_without_orientation_thetas_gs(
+                    graph,
+                    numerator,
+                    &self.surfaces,
+                ),
             );
-            sum = alias_expressions.apply(sum);
         }
         sum
     }
@@ -439,8 +441,10 @@ where
             if !pattern.filter_orientation(orientation.orientation()) {
                 continue;
             }
-            sum += orientation.parametric_atom_gs(graph, numerator, &self.surfaces);
-            sum = alias_expressions.apply(sum);
+            alias_expressions.add_to_sum(
+                &mut sum,
+                orientation.parametric_atom_gs(graph, numerator, &self.surfaces),
+            );
         }
         sum
     }

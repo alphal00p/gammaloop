@@ -80,8 +80,7 @@ pub(crate) fn explicit_orientation_sum_atom(
 ) -> Atom {
     let mut sum = Atom::Zero;
     for orientation in orientations {
-        sum += orientation.select_gs(atom.as_atom_view());
-        sum = alias_expressions.apply(sum);
+        alias_expressions.add_to_sum(&mut sum, orientation.select_gs(atom.as_atom_view()));
     }
     alias_expressions.collect_factors_after_inlining(sum)
 }
@@ -465,11 +464,10 @@ impl Forest {
                 } else {
                     integrand.clone()
                 };
-                let aliased_term = alias_expressions.apply(a.clone());
                 if first {
-                    sum.push(aliased_term);
+                    sum.push(alias_expressions.apply(a.clone()));
                 } else {
-                    sum[i] += aliased_term;
+                    alias_expressions.add_to_sum(&mut sum[i], a.clone());
                 }
                 node_terms.push(a);
             }
@@ -543,11 +541,12 @@ impl Forest {
         }
 
         for s in terms.iter_mut() {
-            *s = alias_expressions
-                .inline_for_symbolic_manipulation(s.clone())
-                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
-                .with(W_.d_)
-                .collect_factors();
+            *s = alias_expressions.collect_factors_after_inlining(
+                alias_expressions
+                    .inline_for_symbolic_manipulation(s.clone())
+                    .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                    .with(W_.d_),
+            );
         }
     }
 

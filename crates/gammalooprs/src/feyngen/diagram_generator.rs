@@ -2366,7 +2366,7 @@ impl ProcessDefinition {
                 )
             })
             .collect::<Vec<_>>();
-        reordered_edges.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        reordered_edges.sort_by(|a, b| a.1.cmp(&b.1));
 
         for &((_e, _is_flipped), (v_in, v_out, pdg)) in reordered_edges.iter() {
             // We must canonize the fermion flow as well, so we force the fermion flow to always go from the lower to the higher node order,
@@ -3419,7 +3419,7 @@ impl ProcessDefinition {
         for entries in lists_of_entries {
             processed_graphs.extend(entries);
         }
-        processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        processed_graphs.sort_by_cached_key(|(graph, _)| graph.to_dot());
 
         step = Instant::now();
         info!(
@@ -3951,17 +3951,16 @@ impl ProcessDefinition {
         // );
 
         // Make the graph order deterministic and already filter out the identical ones using the canonical representation with normalized fermion flow
-        canonized_processed_graphs.sort_by(|a, b| {
-            let ordering = (a.graph_with_canonized_flow)
-                .partial_cmp(&b.graph_with_canonized_flow)
-                .unwrap();
-            if ordering.is_eq() {
-                panic!(
-                    "Two graphs are identical after canonization with normalized fermion flow. This should never happen."
-                );
-            }
-            ordering
-        });
+        canonized_processed_graphs
+            .sort_by_cached_key(|graph_info| graph_info.graph_with_canonized_flow.to_dot());
+        if canonized_processed_graphs.windows(2).any(|graphs| {
+            graphs[0].graph_with_canonized_flow.to_dot()
+                == graphs[1].graph_with_canonized_flow.to_dot()
+        }) {
+            panic!(
+                "Two graphs are identical after canonization with normalized fermion flow. This should never happen."
+            );
+        }
 
         step = Instant::now();
         info!(

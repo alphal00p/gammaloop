@@ -341,6 +341,7 @@ impl LUCounterTermEvaluators {
                                     std::slice::from_ref(atom),
                                     param_builder,
                                     dual_shape,
+                                    settings.generation.alias_expressions,
                                     &settings.generation.evaluator,
                                 )
                             } else {
@@ -349,6 +350,7 @@ impl LUCounterTermEvaluators {
                                     param_builder,
                                     &orientations.raw,
                                     dual_shape,
+                                    settings.generation.alias_expressions,
                                     &settings.generation.evaluator,
                                 )
                             }
@@ -382,6 +384,7 @@ impl LUCounterTermEvaluators {
                                     std::slice::from_ref(atom),
                                     param_builder,
                                     dual_shape,
+                                    settings.generation.alias_expressions,
                                     &settings.generation.evaluator,
                                 )
                             } else {
@@ -390,6 +393,7 @@ impl LUCounterTermEvaluators {
                                     param_builder,
                                     &orientations.raw,
                                     dual_shape,
+                                    settings.generation.alias_expressions,
                                     &settings.generation.evaluator,
                                 )
                             }
@@ -421,6 +425,7 @@ impl LUCounterTermEvaluators {
                                 std::slice::from_ref(atom),
                                 param_builder,
                                 dual_shape,
+                                settings.generation.alias_expressions,
                                 &settings.generation.evaluator,
                             )
                         } else {
@@ -429,6 +434,7 @@ impl LUCounterTermEvaluators {
                                 param_builder,
                                 &orientations.raw,
                                 dual_shape,
+                                settings.generation.alias_expressions,
                                 &settings.generation.evaluator,
                             )
                         }

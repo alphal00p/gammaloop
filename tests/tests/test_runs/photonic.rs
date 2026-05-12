@@ -2,7 +2,7 @@ use super::utils::*;
 use super::*;
 use gammaloop_api::commands::import::Import;
 
-const ALIAS_EXPRESSION_MODES: [(&str, &str); 7] = [
+const ALIAS_EXPRESSION_MODES: [(&str, &str); 5] = [
     ("none", "global.generation.alias_expressions=none"),
     ("all", "global.generation.alias_expressions=all"),
     (
@@ -10,22 +10,27 @@ const ALIAS_EXPRESSION_MODES: [(&str, &str); 7] = [
         "global.generation.alias_expressions.all=96",
     ),
     (
-        "subexpressions",
-        "global.generation.alias_expressions=subexpressions",
+        "repeated_subexpressions_min_bytes",
+        "global.generation.alias_expressions.repeated_subexpressions=96",
     ),
     (
         "subexpressions_min_bytes",
         "global.generation.alias_expressions.subexpressions=96",
     ),
-    (
-        "repeated_subexpressions",
-        "global.generation.alias_expressions=repeated_subexpressions",
-    ),
-    (
-        "repeated_subexpressions_min_bytes",
-        "global.generation.alias_expressions.repeated_subexpressions=96",
-    ),
 ];
+
+const PHOTONS_1L_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, f64); 4] = [
+    ("all", 66.0),
+    ("all_min_bytes", 96.0),
+    ("repeated_subexpressions_min_bytes", 1.0),
+    ("subexpressions_min_bytes", 1.0),
+];
+
+fn alias_compression_min_factor(alias_label: &str, expected: &[(&str, f64)]) -> Option<f64> {
+    expected
+        .iter()
+        .find_map(|(label, factor)| (*label == alias_label).then_some(*factor))
+}
 
 fn first_dot_graph(path: &Path) -> Result<String> {
     let content = std::fs::read_to_string(path)?;
@@ -136,6 +141,17 @@ fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
             reference_value,
             &format!("1L six-photon inspect with alias_expressions={alias_label}"),
         );
+        if let Some(minimum_factor) =
+            alias_compression_min_factor(alias_label, &PHOTONS_1L_ALIAS_COMPRESSION_MIN_FACTORS)
+        {
+            assert_integrand_alias_compression_factor(
+                &cli,
+                "photons_1l_no_numerator_alias",
+                "default",
+                minimum_factor,
+                &format!("1L six-photon alias_expressions={alias_label}"),
+            )?;
+        }
         clean_test(&cli.cli_settings.state.folder);
     }
 

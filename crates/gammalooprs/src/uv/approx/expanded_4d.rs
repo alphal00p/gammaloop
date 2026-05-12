@@ -644,8 +644,7 @@ fn expanded_expression_parametric_atom(
         if !settings.explicit_orientation_sum_only {
             atom *= orientation.orientation_thetas_gs();
         }
-        sum += atom;
-        sum = settings.alias_expressions.apply(sum);
+        settings.alias_expressions.add_to_sum(&mut sum, atom);
     }
 
     let atom = settings

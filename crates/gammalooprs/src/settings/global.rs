@@ -128,7 +128,7 @@ pub enum UniformNumeratorSamplingScale {
     All,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode, PartialEq, Eq, JsonSchema)]
+#[derive(Debug, Clone, Copy, Encode, Decode, PartialEq, Eq)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum AliasExpressions {
     None(),
@@ -140,8 +140,52 @@ pub enum AliasExpressions {
 impl Default for AliasExpressions {
     fn default() -> Self {
         Self::RepeatedSubexpressions {
-            min_byte_size: None,
+            min_byte_size: Some(96),
         }
+    }
+}
+
+impl JsonSchema for AliasExpressions {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AliasExpressions".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Symbolica aliasing mode for generated evaluator expressions. Use a string mode, or an inline table with one mode mapped to a minimum byte-size threshold.",
+            "oneOf": [
+                {
+                    "type": "string",
+                    "enum": ["none", "all", "subexpressions", "repeated_subexpressions"]
+                },
+                {
+                    "type": "object",
+                    "minProperties": 1,
+                    "maxProperties": 1,
+                    "additionalProperties": false,
+                    "patternProperties": {
+                        "^(all|subexpressions|repeated_subexpressions)$": {
+                            "oneOf": [
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                        "min_byte_size": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        })
     }
 }
 
@@ -152,7 +196,6 @@ impl AliasExpressions {
     const REPEATED_SUBEXPRESSIONS_NAME: &'static str = "repeated_subexpressions";
 
     pub fn apply(self, atom: Atom) -> Atom {
-        let atom = self.inline_for_symbolic_manipulation(atom);
         match self {
             Self::None() => atom,
             Self::All { .. } => {
@@ -164,7 +207,10 @@ impl AliasExpressions {
             }
             Self::Subexpressions {
                 min_byte_size: None,
-            } => atom.alias_subexpressions(|_, _| Some(false)),
+            } => atom.alias_subexpressions(|subexpr, _| match subexpr {
+                AtomView::Num(_) | AtomView::Var(_) | AtomView::Alias(_) => None,
+                _ => Some(false),
+            }),
             Self::Subexpressions {
                 min_byte_size: Some(min_byte_size),
             } => atom.alias_subexpressions(|subexpr, _| {
@@ -175,11 +221,13 @@ impl AliasExpressions {
             } => atom.alias_repeated_subexpressions(),
             Self::RepeatedSubexpressions {
                 min_byte_size: Some(min_byte_size),
-            } => atom.alias_subexpressions(|subexpr, _| match subexpr {
-                AtomView::Num(_) | AtomView::Var(_) | AtomView::Alias(_) => None,
-                _ => alias_byte_size_is_accepted(subexpr, Some(min_byte_size)).then_some(false),
-            }),
+            } => alias_non_leaf_subexpressions(atom, Some(min_byte_size)),
         }
+    }
+
+    pub fn add_to_sum(self, sum: &mut Atom, term: Atom) {
+        *sum += term;
+        *sum = self.apply(std::mem::take(sum));
     }
 
     pub fn inline_for_symbolic_manipulation(self, atom: Atom) -> Atom {
@@ -230,7 +278,14 @@ impl AliasExpressions {
 }
 
 fn alias_byte_size_is_accepted(subexpr: AtomView<'_>, min_byte_size: Option<usize>) -> bool {
-    min_byte_size.is_none_or(|min_byte_size| subexpr.get_total_byte_size() >= min_byte_size)
+    min_byte_size.is_none_or(|min_byte_size| subexpr.get_byte_size() >= min_byte_size)
+}
+
+fn alias_non_leaf_subexpressions(atom: Atom, min_byte_size: Option<usize>) -> Atom {
+    atom.alias_subexpressions(|subexpr, _| match subexpr {
+        AtomView::Num(_) | AtomView::Var(_) | AtomView::Alias(_) => None,
+        _ => alias_byte_size_is_accepted(subexpr, min_byte_size).then_some(false),
+    })
 }
 
 fn normalize_alias_expression_name(name: &str) -> String {

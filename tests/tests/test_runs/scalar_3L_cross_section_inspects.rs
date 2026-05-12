@@ -15,7 +15,7 @@ const CONSIDER_COMPARISON_WITH_LTD: bool = true;
 
 const DEFAULT_FINAL_STATES: &str = "{scalar_0 scalar_0, scalar_0 scalar_0 scalar_1}";
 const SAMPLE_POINT: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-const ALIAS_EXPRESSION_MODES: [(&str, &str); 7] = [
+const ALIAS_EXPRESSION_MODES: [(&str, &str); 5] = [
     ("none", "global.generation.alias_expressions=none"),
     ("all", "global.generation.alias_expressions=all"),
     (
@@ -23,22 +23,37 @@ const ALIAS_EXPRESSION_MODES: [(&str, &str); 7] = [
         "global.generation.alias_expressions.all=96",
     ),
     (
-        "subexpressions",
-        "global.generation.alias_expressions=subexpressions",
+        "repeated_subexpressions_min_bytes",
+        "global.generation.alias_expressions.repeated_subexpressions=96",
     ),
     (
         "subexpressions_min_bytes",
         "global.generation.alias_expressions.subexpressions=96",
     ),
-    (
-        "repeated_subexpressions",
-        "global.generation.alias_expressions=repeated_subexpressions",
-    ),
-    (
-        "repeated_subexpressions_min_bytes",
-        "global.generation.alias_expressions.repeated_subexpressions=96",
-    ),
 ];
+
+const SCALAR_GL02_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, &str, f64); 12] = [
+    ("cff_local_3d", "all", 297.0),
+    ("cff_local_3d", "all_min_bytes", 297.0),
+    ("cff_local_3d", "repeated_subexpressions_min_bytes", 0.96),
+    ("cff_local_3d", "subexpressions_min_bytes", 0.96),
+    ("cff_local_4d", "all", 297.0),
+    ("cff_local_4d", "all_min_bytes", 297.0),
+    ("cff_local_4d", "repeated_subexpressions_min_bytes", 0.96),
+    ("cff_local_4d", "subexpressions_min_bytes", 0.96),
+    ("ltd_local_4d", "all", 297.0),
+    ("ltd_local_4d", "all_min_bytes", 297.0),
+    ("ltd_local_4d", "repeated_subexpressions_min_bytes", 0.96),
+    ("ltd_local_4d", "subexpressions_min_bytes", 0.96),
+];
+
+fn alias_compression_min_factor(path: &str, alias_label: &str) -> Option<f64> {
+    SCALAR_GL02_ALIAS_COMPRESSION_MIN_FACTORS.iter().find_map(
+        |(expected_path, expected_label, factor)| {
+            (*expected_path == path && *expected_label == alias_label).then_some(*factor)
+        },
+    )
+}
 
 #[derive(Clone, Copy)]
 struct Scalar3LGraphCase {
@@ -479,6 +494,8 @@ fn run_scalar_3l_cross_section_case_impl(
 fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
     let process = "scalar_3l_alias_gl02_no_num";
     let integrand = "no_numerator";
+    let subtract_uv = false;
+    let enable_thresholds = true;
     let graph_commands = [generate_graph_command(
         process,
         integrand,
@@ -502,8 +519,8 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
         false,
         &graph_command_refs,
         &integrand_command_refs,
-        true,
-        true,
+        subtract_uv,
+        enable_thresholds,
         "global.generation.alias_expressions=none",
     )?;
     let reference_result = evaluate_xspace_process_with_events(
@@ -521,8 +538,8 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
             false,
             &graph_command_refs,
             &integrand_command_refs,
-            true,
-            true,
+            subtract_uv,
+            enable_thresholds,
             alias_expression_assignment,
         )?;
         let cff_3d_result = evaluate_xspace_process_with_events(
@@ -537,6 +554,15 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
             &reference_result.sample.evaluation,
             &format!("scalar GL02 CFF local-3D inspect with alias_expressions={alias_label}"),
         );
+        if let Some(minimum_factor) = alias_compression_min_factor("cff_local_3d", alias_label) {
+            assert_integrand_alias_compression_factor(
+                &cff_3d,
+                process,
+                integrand,
+                minimum_factor,
+                &format!("scalar GL02 CFF local-3D alias_expressions={alias_label}"),
+            )?;
+        }
 
         let mut cff_4d = setup_scalar_3l_cross_section_cli_with_alias(
             &format!("scalar_3l_alias_gl02_cff_local_4d_{alias_label}"),
@@ -544,8 +570,8 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
             true,
             &graph_command_refs,
             &integrand_command_refs,
-            true,
-            true,
+            subtract_uv,
+            enable_thresholds,
             alias_expression_assignment,
         )?;
         let cff_4d_result = evaluate_xspace_process_with_events(
@@ -560,6 +586,15 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
             &reference_result.sample.evaluation,
             &format!("scalar GL02 CFF local-4D inspect with alias_expressions={alias_label}"),
         );
+        if let Some(minimum_factor) = alias_compression_min_factor("cff_local_4d", alias_label) {
+            assert_integrand_alias_compression_factor(
+                &cff_4d,
+                process,
+                integrand,
+                minimum_factor,
+                &format!("scalar GL02 CFF local-4D alias_expressions={alias_label}"),
+            )?;
+        }
 
         if CONSIDER_COMPARISON_WITH_LTD {
             let mut ltd_4d = setup_scalar_3l_cross_section_cli_with_alias(
@@ -568,8 +603,8 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
                 true,
                 &graph_command_refs,
                 &integrand_command_refs,
-                true,
-                true,
+                subtract_uv,
+                enable_thresholds,
                 alias_expression_assignment,
             )?;
             let ltd_4d_result = evaluate_xspace_process_with_events(
@@ -584,6 +619,16 @@ fn run_scalar_3l_alias_expression_modes_case() -> Result<()> {
                 &reference_result.sample.evaluation,
                 &format!("scalar GL02 LTD local-4D inspect with alias_expressions={alias_label}"),
             );
+            if let Some(minimum_factor) = alias_compression_min_factor("ltd_local_4d", alias_label)
+            {
+                assert_integrand_alias_compression_factor(
+                    &ltd_4d,
+                    process,
+                    integrand,
+                    minimum_factor,
+                    &format!("scalar GL02 LTD local-4D alias_expressions={alias_label}"),
+                )?;
+            }
             clean_test(&ltd_4d.cli_settings.state.folder);
         }
 
