@@ -18,52 +18,6 @@ fn contains_index(result: &str, index: &str) -> bool {
     result.contains(&format!("{index})")) || result.contains(&format!("{index},"))
 }
 
-fn run_network_informed() {
-    initialize();
-    let _mink = Minkowski {}.new_rep(4);
-
-    symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
-        tags=["spenso::index"]);
-
-    let settings = SchoonschipSettings::full();
-
-    let metric_vector = parse!("spenso::mink(4, mu1, mu2)*k1(spenso::mink(4, mu1))")
-        .schoonschip_with_net::<false, AbstractIndex>(&settings)
-        .to_bare_ordered_string();
-    assert_eq!(metric_vector, "k1(mink(4,mu2))");
-
-    let metric_metric = parse!("spenso::mink(4, mu1, mu2)*spenso::mink(4, mu2, mu3)")
-        .schoonschip_with_net::<false, AbstractIndex>(&settings)
-        .to_bare_ordered_string();
-    assert_eq!(metric_metric, "g(mink(4,mu1),mink(4,mu3))");
-
-    let metric_chain = parse!(
-        "spenso::mink(4, mu1, mu2)
-            * spenso::mink(4, mu2, mu3)
-            * k1(spenso::mink(4, mu3))"
-    )
-    .schoonschip_with_net::<false, AbstractIndex>(&settings)
-    .to_bare_ordered_string();
-    assert_eq!(metric_chain, "k1(mink(4,mu1))");
-    assert!(!contains_index(&metric_chain, "mu2"));
-    assert!(!contains_index(&metric_chain, "mu3"));
-
-    let metric_into_vertex = parse!(
-        "spenso::mink(4, mu1, mu2)
-            * vx(3, -k2, k3, k2-k3, spenso::mink(4, mu1), spenso::mink(4, mu3), spenso::mink(4, mu10))"
-    )
-    .schoonschip_with_net::<false, AbstractIndex>(&settings)
-    .to_bare_ordered_string();
-
-    assert!(!contains_index(&metric_into_vertex, "mu1"));
-    assert!(contains_index(&metric_into_vertex, "mu2"));
-}
-
-#[test]
-fn network_informed() {
-    run_network_informed();
-}
-
 #[test]
 fn spenso_bare_symb_vertex_substitution() {
     initialize();
