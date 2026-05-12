@@ -392,13 +392,22 @@ pub mod test {
 
     pub fn test_initialize() {
         let _ = TS.p;
+        let _ = spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol("P");
+        let _ = spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol("Q");
         initialize();
     }
 
-    pub static TS: LazyLock<TestSymbols> = LazyLock::new(|| TestSymbols {
-        p: symbol!("p";Real),
-        a: symbol!("a"),
-        u: symbol!("u"),
+    pub static TS: LazyLock<TestSymbols> = LazyLock::new(|| {
+        let p = match spenso::p!().as_view() {
+            symbolica::atom::AtomView::Fun(fun) => fun.get_symbol(),
+            _ => unreachable!("p!() should build a vector function"),
+        };
+
+        TestSymbols {
+            p,
+            a: symbol!("a"),
+            u: symbol!("u"),
+        }
     });
 
     use insta::assert_snapshot;

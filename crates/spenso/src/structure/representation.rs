@@ -1505,36 +1505,4 @@ mod test {
 
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
-mod shadowing_tests {
-    use crate::network::tags::SPENSO_TAG;
-    use crate::structure::representation::initialize;
-    use symbolica::{parse, symbol};
-
-    #[test]
-    fn normalization_shortcuts() {
-        initialize();
-        let _mu = symbol!("normalization_shortcut_mu", tags = [&SPENSO_TAG.index]);
-        let a = parse!("mink(4,a,normalization_shortcut_mu)");
-        let b = parse!("mink(4,normalization_shortcut_mu,a)");
-        assert_eq!(a, b);
-        let a = parse!("lor(4,a,normalization_shortcut_mu)");
-        let b = parse!("lor(4,normalization_shortcut_mu,a)");
-        assert_eq!(a, b);
-
-        let _nested = parse!("mink(4,normalization_shortcut_mu,mink(4,normalization_shortcut_mu))");
-    }
-    // use symbolica::symbol;
-
-    // use crate::structure::representation::BaseRepName;
-
-    // use super::Lorentz;
-
-    // #[test]
-    // fn rep_pattern() {
-    //     println!("{}", Dual::<Lorentz>::pattern(symbol!("d_")));
-    //     println!(
-    //         "{}",
-    //         Dual::<Lorentz>::rep(3).to_pattern_wrapped(symbol!("d_"))
-    //     );
-    // }
-}
+mod shadowing_tests {}

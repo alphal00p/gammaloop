@@ -675,7 +675,7 @@ mod tests {
         parse_lit, symbol,
     };
 
-    use crate::{Cookable, representations::initialize};
+    use crate::{Cookable, test::test_initialize};
 
     use super::CookSettings;
 
@@ -731,7 +731,7 @@ mod tests {
 
     #[test]
     fn flattened_index_cooking_uses_custom_tags() {
-        initialize();
+        test_initialize();
         let expr = parse_lit!(p(spenso::mink(4, f(0))));
         let settings = CookSettings::flattened().with_output_tags(["idenso::flat_index"]);
 
@@ -744,7 +744,7 @@ mod tests {
 
     #[test]
     fn reversible_index_cooking_uses_custom_tags_and_uncooks_with_settings() {
-        initialize();
+        test_initialize();
         let expr = parse_lit!(p(spenso::mink(4, f(0))));
         let settings = CookSettings::reversible().with_output_tags(["idenso::reversible_index"]);
 
@@ -831,6 +831,7 @@ mod tests {
 
     #[test]
     fn index_payload_filter_cooks_only_matching_payloads() {
+        test_initialize();
         let input_tag = "idenso::index_payload";
         let tagged = CookedFunction::tagged_symbol("idenso::tagged_index", &[input_tag]);
         let payload = CookedFunction::call(tagged, 0);
@@ -848,7 +849,7 @@ mod tests {
 
     #[test]
     fn index_payload_filter_leaves_unmatched_payloads() {
-        initialize();
+        test_initialize();
         let expr = parse_lit!(p(spenso::mink(4, f(0))));
         let settings = CookSettings::indices().with_input_tags(["idenso::index_payload"]);
 
