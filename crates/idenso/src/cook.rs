@@ -1,11 +1,11 @@
 use spenso::network::tags::SPENSO_TAG;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, NamespacedSymbol, Symbol, UserData, representation::FunView},
+    atom::{
+        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, UserData,
+        representation::FunView,
+    },
     coefficient::CoefficientView,
-    id::MatchSettings,
 };
-
-use crate::rep_symbols::RS;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum CookingError {
@@ -40,6 +40,192 @@ pub enum CookMode {
     ReversibleEncoding,
 }
 
+/// Selects which function occurrences are cooked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CookSourceFilter {
+    /// Cook every function-like subexpression.
+    AnyFunction,
+    /// Cook only functions whose head symbol passes this tag filter.
+    FunctionTags(CookTagFilter),
+    /// Cook function payloads only inside representation index slots.
+    RepresentationIndexPayload { filter: Option<CookTagFilter> },
+}
+
+impl CookSourceFilter {
+    fn regular_filter(&self) -> Option<Option<&CookTagFilter>> {
+        match self {
+            CookSourceFilter::AnyFunction => Some(None),
+            CookSourceFilter::FunctionTags(filter) => Some(Some(filter)),
+            CookSourceFilter::RepresentationIndexPayload { .. } => None,
+        }
+    }
+
+    fn index_payload_filter(&self) -> Option<&CookTagFilter> {
+        match self {
+            CookSourceFilter::AnyFunction => None,
+            CookSourceFilter::FunctionTags(filter) => Some(filter),
+            CookSourceFilter::RepresentationIndexPayload { filter } => filter.as_ref(),
+        }
+    }
+
+    fn with_tag_filter(&mut self, filter: CookTagFilter) {
+        match self {
+            CookSourceFilter::RepresentationIndexPayload {
+                filter: index_filter,
+            } => {
+                *index_filter = Some(filter);
+            }
+            _ => {
+                *self = CookSourceFilter::FunctionTags(filter);
+            }
+        }
+    }
+}
+
+/// Tag predicate used to select input function heads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CookTagFilter {
+    /// Match if any listed tag is present.
+    Any(Vec<String>),
+    /// Match only if all listed tags are present.
+    All(Vec<String>),
+    /// Match against the settings' explicit output tags.
+    MatchedOutputTags,
+}
+
+impl CookTagFilter {
+    pub fn any<I, S>(tags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Self::Any(Self::collect_tags(tags))
+    }
+
+    pub fn all<I, S>(tags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Self::All(Self::collect_tags(tags))
+    }
+
+    fn matches(&self, symbol: Symbol, output_tags: &[String]) -> bool {
+        let tags = self.tags(output_tags);
+        if tags.is_empty() {
+            return false;
+        }
+
+        match self {
+            CookTagFilter::Any(_) | CookTagFilter::MatchedOutputTags => {
+                tags.iter().any(|tag| symbol.has_tag(tag))
+            }
+            CookTagFilter::All(_) => tags.iter().all(|tag| symbol.has_tag(tag)),
+        }
+    }
+
+    fn matched_tags(&self, symbol: Symbol, output_tags: &[String]) -> Vec<String> {
+        let tags = self.tags(output_tags);
+        match self {
+            CookTagFilter::All(_) if self.matches(symbol, output_tags) => tags.to_vec(),
+            CookTagFilter::All(_) => vec![],
+            CookTagFilter::Any(_) | CookTagFilter::MatchedOutputTags => tags
+                .iter()
+                .filter(|tag| symbol.has_tag(*tag))
+                .cloned()
+                .collect(),
+        }
+    }
+
+    fn tags<'a>(&'a self, output_tags: &'a [String]) -> &'a [String] {
+        match self {
+            CookTagFilter::Any(tags) | CookTagFilter::All(tags) => tags,
+            CookTagFilter::MatchedOutputTags => output_tags,
+        }
+    }
+
+    fn collect_tags<I, S>(tags: I) -> Vec<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        tags.into_iter()
+            .map(|tag| tag.as_ref().to_string())
+            .collect()
+    }
+}
+
+/// Selects which tags are attached to cooked output symbols.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CookOutputTags {
+    /// Attach exactly these tags.
+    Explicit(Vec<String>),
+    /// Attach the input tags that were used to select the function.
+    PreserveTags,
+    /// Attach explicit output tags and preserve selected input tags.
+    ExplicitAndPreserve(Vec<String>),
+}
+
+impl CookOutputTags {
+    fn explicit<I, S>(tags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Self::Explicit(CookTagFilter::collect_tags(tags))
+    }
+
+    fn preserving(self) -> Self {
+        match self {
+            CookOutputTags::Explicit(tags) if tags.is_empty() => CookOutputTags::PreserveTags,
+            CookOutputTags::Explicit(tags) | CookOutputTags::ExplicitAndPreserve(tags) => {
+                CookOutputTags::ExplicitAndPreserve(tags)
+            }
+            CookOutputTags::PreserveTags => CookOutputTags::PreserveTags,
+        }
+    }
+
+    fn explicit_tags(&self) -> &[String] {
+        match self {
+            CookOutputTags::Explicit(tags) | CookOutputTags::ExplicitAndPreserve(tags) => tags,
+            CookOutputTags::PreserveTags => &[],
+        }
+    }
+
+    fn tags_for(&self, symbol: Symbol, filter: Option<&CookTagFilter>) -> Vec<String> {
+        match self {
+            CookOutputTags::Explicit(tags) => tags.clone(),
+            CookOutputTags::PreserveTags => {
+                Self::preserved_tags(symbol, filter, self.explicit_tags())
+            }
+            CookOutputTags::ExplicitAndPreserve(tags) => {
+                let mut output = tags.clone();
+                for tag in Self::preserved_tags(symbol, filter, tags) {
+                    Self::push_unique(&mut output, tag);
+                }
+                output
+            }
+        }
+    }
+
+    fn preserved_tags(
+        symbol: Symbol,
+        filter: Option<&CookTagFilter>,
+        output_tags: &[String],
+    ) -> Vec<String> {
+        match filter {
+            Some(filter) => filter.matched_tags(symbol, output_tags),
+            None => symbol.get_tags().to_vec(),
+        }
+    }
+
+    fn push_unique(tags: &mut Vec<String>, tag: String) {
+        if !tags.iter().any(|existing| existing == &tag) {
+            tags.push(tag);
+        }
+    }
+}
+
 /// Settings for cooking functions and representation-slot indices.
 ///
 /// Tags are attached through `Symbol::new(...).with_tags(...)`, so they must be
@@ -47,7 +233,8 @@ pub enum CookMode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CookSettings {
     mode: CookMode,
-    tags: Vec<String>,
+    source: CookSourceFilter,
+    output_tags: CookOutputTags,
 }
 
 impl Default for CookSettings {
@@ -61,14 +248,16 @@ impl CookSettings {
     pub fn flattened() -> Self {
         Self {
             mode: CookMode::FlattenedSymbol,
-            tags: vec![],
+            source: CookSourceFilter::AnyFunction,
+            output_tags: CookOutputTags::Explicit(vec![]),
         }
     }
 
     pub fn indices() -> Self {
         Self {
             mode: CookMode::FlattenedSymbol,
-            tags: vec![SPENSO_TAG.index.clone()],
+            source: CookSourceFilter::RepresentationIndexPayload { filter: None },
+            output_tags: CookOutputTags::Explicit(vec![SPENSO_TAG.index.clone()]),
         }
     }
 
@@ -76,7 +265,8 @@ impl CookSettings {
     pub fn reversible() -> Self {
         Self {
             mode: CookMode::ReversibleEncoding,
-            tags: vec!["idenso::cooked".to_string()],
+            source: CookSourceFilter::AnyFunction,
+            output_tags: CookOutputTags::Explicit(vec!["idenso::cooked".to_string()]),
         }
     }
 
@@ -87,15 +277,57 @@ impl CookSettings {
     }
 
     /// Replace the tags used for any newly created cooked symbols.
-    pub fn with_tags<I, S>(mut self, tags: I) -> Self
+    pub fn with_output_tags<I, S>(mut self, tags: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.tags = tags
-            .into_iter()
-            .map(|tag| tag.as_ref().to_string())
-            .collect();
+        self.output_tags = CookOutputTags::explicit(tags);
+        self
+    }
+
+    /// Replace the source filter.
+    pub fn with_source_filter(mut self, source: CookSourceFilter) -> Self {
+        self.source = source;
+        self
+    }
+
+    /// Select input function heads that carry any listed tag.
+    pub fn with_input_tags<I, S>(mut self, tags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.source.with_tag_filter(CookTagFilter::any(tags));
+        self
+    }
+
+    /// Select input function heads that carry all listed tags.
+    pub fn with_all_input_tags<I, S>(mut self, tags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.source.with_tag_filter(CookTagFilter::all(tags));
+        self
+    }
+
+    /// Select input function heads by matching the explicit output tags.
+    pub fn matched_filter(mut self) -> Self {
+        self.source
+            .with_tag_filter(CookTagFilter::MatchedOutputTags);
+        self
+    }
+
+    /// Preserve matched input tags on cooked output symbols.
+    pub fn preserve_tags(mut self) -> Self {
+        self.output_tags = self.output_tags.preserving();
+        self
+    }
+
+    /// Cook only representation index payloads, with an optional tag filter.
+    pub fn with_index_payload_filter(mut self, filter: Option<CookTagFilter>) -> Self {
+        self.source = CookSourceFilter::RepresentationIndexPayload { filter };
         self
     }
 
@@ -104,16 +336,26 @@ impl CookSettings {
         self.mode
     }
 
-    /// Tags attached to newly created cooked symbols.
-    pub fn tags(&self) -> &[String] {
-        &self.tags
+    /// Which function occurrences are cooked.
+    pub fn source_filter(&self) -> &CookSourceFilter {
+        &self.source
     }
 
-    /// Cook every function-like subexpression according to these settings.
+    /// Tags attached to newly created cooked symbols.
+    pub fn output_tags(&self) -> &[String] {
+        self.output_tags.explicit_tags()
+    }
+
+    /// Cook function-like subexpressions according to these settings.
     pub fn cook(&self, view: AtomView<'_>) -> Atom {
+        let Some(filter) = self.source.regular_filter() else {
+            return self
+                .cook_representation_index_payloads(view, self.source.index_payload_filter());
+        };
+
         view.replace_map(|a, _, out| {
             if let AtomView::Fun(f) = a
-                && let Ok(cooked) = self.cook_function(f)
+                && let Ok(Some(cooked)) = self.cook_function_symbol(f, filter)
             {
                 **out = Atom::var(cooked);
             }
@@ -136,50 +378,83 @@ impl CookSettings {
 
     /// Cook only the abstract-index payloads of recognized representation slots.
     pub fn cook_indices(&self, view: AtomView<'_>) -> Atom {
-        let mut expr = view.to_owned();
-
-        let ipat = SPENSO_TAG.rep_::<0, _>([RS.d_, RS.a_]).to_pattern();
-        expr = expr
-            .replace(ipat)
-            .when(RS.a_.filter_single(|a| a.as_fun_view().is_some()))
-            .with_map(move |m| {
-                if let Ok(aind) =
-                    self.cook_function(m.get(RS.a_).unwrap().to_atom().as_fun_view().unwrap())
-                {
-                    SPENSO_TAG
-                        .rep_::<0, _>([RS.d_, aind])
-                        .to_pattern()
-                        .replace_wildcards_with_matches(m)
-                } else {
-                    SPENSO_TAG
-                        .rep_::<0, _>([RS.d_, RS.a_])
-                        .to_pattern()
-                        .replace_wildcards_with_matches(m)
-                }
-            });
-
-        expr
+        self.cook_representation_index_payloads(view, self.source.index_payload_filter())
     }
 
-    /// Cook one atom into a symbol, preserving vars and numbers as-is.
-    pub fn cook_function(&self, fun: FunView<'_>) -> Result<Symbol, CookingError> {
+    /// Cook one function call into an atom, or return it unchanged if skipped.
+    pub fn cook_function(&self, fun: FunView<'_>) -> Result<Atom, CookingError> {
+        self.cook_function_symbol(fun, self.source.index_payload_filter())
+            .map(|symbol| symbol.map_or_else(|| fun.as_view().to_owned(), Atom::var))
+    }
+
+    fn cook_representation_index_payloads(
+        &self,
+        view: AtomView<'_>,
+        filter: Option<&CookTagFilter>,
+    ) -> Atom {
+        view.replace_map(|a, _, out| {
+            let AtomView::Fun(rep) = a else {
+                return;
+            };
+
+            if !rep.get_symbol().has_tag(&SPENSO_TAG.representation) || rep.get_nargs() != 2 {
+                return;
+            }
+
+            let mut args = rep.iter();
+            let Some(dim) = args.next() else {
+                return;
+            };
+            let Some(AtomView::Fun(index)) = args.next() else {
+                return;
+            };
+            let Ok(Some(cooked)) = self.cook_function_symbol(index, filter) else {
+                return;
+            };
+
+            **out = FunctionBuilder::new(rep.get_symbol())
+                .add_arg(dim)
+                .add_arg(Atom::var(cooked))
+                .finish();
+        })
+    }
+
+    fn cook_function_symbol(
+        &self,
+        fun: FunView<'_>,
+        filter: Option<&CookTagFilter>,
+    ) -> Result<Option<Symbol>, CookingError> {
+        let explicit_output_tags = self.output_tags.explicit_tags();
+        if filter.is_some_and(|filter| !filter.matches(fun.get_symbol(), explicit_output_tags)) {
+            return Ok(None);
+        }
+
+        let output_tags = self.output_tags.tags_for(fun.get_symbol(), filter);
         match self.mode {
             CookMode::FlattenedSymbol => {
                 let name = CookFunctionName::from_fun(fun)?;
-                self.build_symbol(name, None)
+                self.build_symbol(name, None, &output_tags).map(Some)
             }
-            CookMode::ReversibleEncoding => self.build_symbol(
-                self.reversible_name(fun.as_view()),
-                Some(fun.as_view().to_owned()),
-            ),
+            CookMode::ReversibleEncoding => self
+                .build_symbol(
+                    self.reversible_name(fun.as_view(), &output_tags),
+                    Some(fun.as_view().to_owned()),
+                    &output_tags,
+                )
+                .map(Some),
         }
     }
 
-    fn build_symbol(&self, name: String, source: Option<Atom>) -> Result<Symbol, CookingError> {
+    fn build_symbol(
+        &self,
+        name: String,
+        source: Option<Atom>,
+        tags: &[String],
+    ) -> Result<Symbol, CookingError> {
         let name = Self::namespaced_name(name);
         let mut builder = Symbol::new(NamespacedSymbol::parse(&name));
-        if !self.tags.is_empty() {
-            builder = builder.with_tags(&self.tags);
+        if !tags.is_empty() {
+            builder = builder.with_tags(tags);
         }
         if let Some(source) = source {
             builder = builder.with_user_data(UserData::Atom(source));
@@ -187,10 +462,10 @@ impl CookSettings {
         builder.build().map_err(|_| CookingError::Symbol)
     }
 
-    fn reversible_name(&self, source: AtomView<'_>) -> String {
+    fn reversible_name(&self, source: AtomView<'_>, tags: &[String]) -> String {
         let mut hasher = blake3::Hasher::new();
         hasher.update(source.get_data());
-        for tag in &self.tags {
+        for tag in tags {
             hasher.update(tag.as_bytes());
             hasher.update(&[0]);
         }
@@ -208,7 +483,16 @@ impl CookSettings {
     }
 
     fn should_uncook_symbol(&self, symbol: Symbol) -> bool {
-        self.mode == CookMode::ReversibleEncoding && self.tags.iter().all(|tag| symbol.has_tag(tag))
+        if self.mode != CookMode::ReversibleEncoding {
+            return false;
+        }
+
+        let explicit_tags = self.output_tags.explicit_tags();
+        if explicit_tags.is_empty() {
+            symbol.get_stripped_name().starts_with("cooked_")
+        } else {
+            explicit_tags.iter().all(|tag| symbol.has_tag(tag))
+        }
     }
 }
 
@@ -296,9 +580,7 @@ impl Cookable for AtomView<'_> {
     }
 
     fn cook_function_with_settings(&self, settings: &CookSettings) -> Result<Atom, CookingError> {
-        settings
-            .cook_function(self.as_fun_view().ok_or(CookingError::from_view(*self))?)
-            .map(Atom::var)
+        settings.cook_function(self.as_fun_view().ok_or(CookingError::from_view(*self))?)
     }
 }
 
@@ -387,9 +669,10 @@ impl CookFunctionName {
 
 #[cfg(test)]
 mod tests {
+    use spenso::network::tags::SPENSO_TAG;
     use symbolica::{
-        atom::{Atom, AtomView, Symbol, UserData},
-        parse_lit,
+        atom::{Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, UserData},
+        parse_lit, symbol,
     };
 
     use crate::{Cookable, representations::initialize};
@@ -419,11 +702,38 @@ mod tests {
         }
     }
 
+    struct CookedFunction;
+
+    impl CookedFunction {
+        fn tagged_symbol(name: &str, tags: &[&str]) -> Symbol {
+            Symbol::new(NamespacedSymbol::parse(name))
+                .with_tags(tags)
+                .build()
+                .unwrap()
+        }
+
+        fn call(symbol: Symbol, arg: i64) -> Atom {
+            FunctionBuilder::new(symbol)
+                .add_arg(Atom::num(arg))
+                .finish()
+        }
+
+        fn assert_var_with_tag(expr: &Atom, name: &str, tag: &str) {
+            let AtomView::Var(var) = expr.as_view() else {
+                panic!("expected cooked variable");
+            };
+
+            let symbol = var.get_symbol();
+            assert_eq!(symbol.get_stripped_name(), name);
+            assert!(symbol.has_tag(tag));
+        }
+    }
+
     #[test]
     fn flattened_index_cooking_uses_custom_tags() {
         initialize();
         let expr = parse_lit!(p(spenso::mink(4, f(0))));
-        let settings = CookSettings::flattened().with_tags(["idenso::flat_index"]);
+        let settings = CookSettings::flattened().with_output_tags(["idenso::flat_index"]);
 
         let cooked = expr.cook_indices_with_settings(&settings);
         let symbol = CookedIndex::first_index_symbol(&cooked);
@@ -436,7 +746,7 @@ mod tests {
     fn reversible_index_cooking_uses_custom_tags_and_uncooks_with_settings() {
         initialize();
         let expr = parse_lit!(p(spenso::mink(4, f(0))));
-        let settings = CookSettings::reversible().with_tags(["idenso::reversible_index"]);
+        let settings = CookSettings::reversible().with_output_tags(["idenso::reversible_index"]);
 
         let cooked = expr.cook_indices_with_settings(&settings);
         let symbol = CookedIndex::first_index_symbol(&cooked);
@@ -449,10 +759,99 @@ mod tests {
     #[test]
     fn reversible_expression_cooking_round_trips_with_settings() {
         let expr = parse_lit!(f(g(1)));
-        let settings = CookSettings::reversible().with_tags(["idenso::reversible_expr"]);
+        let settings = CookSettings::reversible().with_output_tags(["idenso::reversible_expr"]);
 
         let cooked = expr.cook_with_settings(&settings);
 
         assert_eq!(cooked.uncook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn function_cooking_filters_by_input_tags() {
+        let cook_tag = "idenso::cook_me";
+        let tagged = CookedFunction::tagged_symbol("idenso::tagged_filter_function", &[cook_tag]);
+        let plain = symbol!("plain_function");
+        let expr = CookedFunction::call(tagged, 0) + CookedFunction::call(plain, 1);
+        let settings = CookSettings::flattened().with_input_tags([cook_tag]);
+
+        let cooked = expr.cook_with_settings(&settings);
+        let AtomView::Add(sum) = cooked.as_view() else {
+            panic!("expected sum");
+        };
+
+        let mut cooked_tagged = false;
+        let mut kept_plain = false;
+        for term in sum.iter() {
+            match term {
+                AtomView::Var(var)
+                    if var.get_symbol().get_stripped_name() == "tagged_filter_function_0" =>
+                {
+                    cooked_tagged = true;
+                }
+                AtomView::Fun(fun) if fun.get_symbol() == plain => {
+                    kept_plain = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(cooked_tagged);
+        assert!(kept_plain);
+    }
+
+    #[test]
+    fn matched_filter_uses_output_tags_as_input_tags() {
+        let shared_tag = "idenso::shared";
+        let tagged =
+            CookedFunction::tagged_symbol("idenso::tagged_matched_function", &[shared_tag]);
+        let expr = CookedFunction::call(tagged, 0);
+        let settings = CookSettings::flattened()
+            .with_output_tags([shared_tag])
+            .matched_filter();
+
+        let cooked = expr.cook_with_settings(&settings);
+
+        CookedFunction::assert_var_with_tag(&cooked, "tagged_matched_function_0", shared_tag);
+    }
+
+    #[test]
+    fn preserve_tags_copies_matched_input_tags() {
+        let input_tag = "idenso::preserve_me";
+        let tagged =
+            CookedFunction::tagged_symbol("idenso::tagged_preserved_function", &[input_tag]);
+        let expr = CookedFunction::call(tagged, 0);
+        let settings = CookSettings::flattened()
+            .with_input_tags([input_tag])
+            .preserve_tags();
+
+        let cooked = expr.cook_with_settings(&settings);
+
+        CookedFunction::assert_var_with_tag(&cooked, "tagged_preserved_function_0", input_tag);
+    }
+
+    #[test]
+    fn index_payload_filter_cooks_only_matching_payloads() {
+        let input_tag = "idenso::index_payload";
+        let tagged = CookedFunction::tagged_symbol("idenso::tagged_index", &[input_tag]);
+        let payload = CookedFunction::call(tagged, 0);
+        let expr = FunctionBuilder::new(symbol!("p"))
+            .add_arg(SPENSO_TAG.rep_::<0, _>([Atom::num(4), payload]))
+            .finish();
+        let settings = CookSettings::indices().with_input_tags([input_tag]);
+
+        let cooked = expr.cook_with_settings(&settings);
+        let symbol = CookedIndex::first_index_symbol(&cooked);
+
+        assert_eq!(symbol.get_stripped_name(), "tagged_index_0");
+        assert!(symbol.has_tag(&SPENSO_TAG.index));
+    }
+
+    #[test]
+    fn index_payload_filter_leaves_unmatched_payloads() {
+        initialize();
+        let expr = parse_lit!(p(spenso::mink(4, f(0))));
+        let settings = CookSettings::indices().with_input_tags(["idenso::index_payload"]);
+
+        assert_eq!(expr.cook_with_settings(&settings), expr);
     }
 }
