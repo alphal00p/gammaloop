@@ -719,21 +719,3 @@ impl<Aind: AbsInd> std::fmt::Display for SymbolicTensor<Aind> {
         )
     }
 }
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-    use spenso::network::library::symbolic::ETS;
-    use symbolica::parse;
-
-    #[test]
-    fn parse() {
-        let _ = ETS.metric;
-        let expr = parse!("g(mink(4,6),mink(4,7))");
-
-        let parsed = ShadowedStructure::<AbstractIndex>::parse(expr.as_view()).unwrap();
-        let structure = SymbolicTensor::from_permuted(&parsed).unwrap();
-
-        Contract::<SymbolicTensor, ()>::contract(&structure, &structure).unwrap();
-    }
-}

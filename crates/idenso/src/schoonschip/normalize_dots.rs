@@ -124,7 +124,7 @@ static METRIC_POWER_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
         // Normalize odd powers of a metric g(rep(dim,i),rep(dim,j))^(2n+1) -> dim^(n/2) * g(rep(dim,i),rep(dim,j))
         Replacement::new(
             self_dual_metric.pow(Atom::var(W_.n_)).to_pattern(),
-            Atom::var(W_.d_).pow(Atom::var(W_.n_) / 2) * &self_dual_metric,
+            Atom::var(W_.d_).pow((Atom::var(W_.n_) - 1) / 2) * &self_dual_metric,
         )
         .with_conditions(W_.n_.filter_single(DotNormalizer::odd_power)),
     ]

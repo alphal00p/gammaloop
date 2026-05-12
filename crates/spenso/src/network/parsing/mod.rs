@@ -442,7 +442,6 @@ where
 
             return Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?));
         }
-
         if !value.as_view().is_tensorial() {
             return Ok(Self::from_scalar(value.as_view().try_into()?));
         }
@@ -486,7 +485,6 @@ where
                     Self::try_from_view_impl(a, state.clone(), library, function_library, settings)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-
             Ok(n_muls.pop().unwrap().n_mul(n_muls))
         } else if symbol.has_tag(&SPENSO_TAG.broadcast) {
             if value.get_nargs() != 1 {
