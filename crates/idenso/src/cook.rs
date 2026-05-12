@@ -908,7 +908,7 @@ mod tests {
         let symbol = CookedIndex::first_index_symbol(&cooked);
 
         assert_eq!(symbol.get_stripped_name(), "tagged_index_0");
-        assert!(symbol.has_tag(&SPENSO_TAG.index));
+        assert!(symbol.has_tag(input_tag));
     }
 
     #[test]

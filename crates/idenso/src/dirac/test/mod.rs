@@ -157,17 +157,17 @@ fn gamma_macros_accept_pattern_indices() {
 
 #[test]
 fn gamma_chain_canonical_ordering_is_opt_in() {
-    let r = TestReps::new();
+    let r = test_initialize();
     let expr = chain!(
         slot!(r.bis4, a),
         slot!(r.bis4, b),
-        gamma!(slot!(r.mink4, nu)),
         gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))");
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
