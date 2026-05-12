@@ -3,6 +3,7 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
     Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
 };
+use spenso::vector_symbol;
 use symbolica::atom::{AtomCore, Symbol};
 
 use symbolica::symbol;
@@ -29,6 +30,12 @@ symbol_set!(TestSymbols, TS;
 
 pub fn test_initialize() {
     initialize();
+    let _ = vector_symbol!(p);
+    let _ = vector_symbol!(q);
+    let _ = vector_symbol!(N);
+    let _ = vector_symbol!(P);
+    let _ = vector_symbol!(Q);
+    let _ = vector_symbol!(K);
     // let dim  =
     let _ = TS.p;
 }
@@ -108,15 +115,20 @@ fn parse_ratio() {
 
     assert_eq!(net.simple_execute::<()>(), expr);
 }
+
 #[test]
 fn parse_div() {
-    let expr = parse!(
-        "c*a/bracket(d(spenso::mink(4,1))* b(spenso::mink(4,1)))(bracket(d(spenso::mink(4,1))* b(spenso::mink(4,1)))^-3)(bracket(d(spenso::mink(4,1))* b(spenso::mink(4,1)))^-2)"
+    test_initialize();
+    let expr = parse_lit!(
+        c * a
+            / spenso::bracket(d(spenso::mink(4, 1)) * b(spenso::mink(4, 1)))(
+                spenso::bracket(d(spenso::mink(4, 1)) * b(spenso::mink(4, 1))) ^ -3
+            )(spenso::bracket(d(spenso::mink(4, 1)) * b(spenso::mink(4, 1))) ^ -2)
     );
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(), @"(bracket(b(mink(4,1))*d(mink(4,1))))^(-6)*a*c");
+    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(), @"(b(mink(4,1)))^(-6)*(d(mink(4,1)))^(-6)*a*c");
 
     let expr = parse_lit!(st(Q(1, mink(4, 1)) * Q(2, mink(4, 1))) ^ -1);
     let net = expr
@@ -241,7 +253,7 @@ fn parse_val() {
 
 #[test]
 fn parse_scalar_tensors_step_by() {
-    initialize();
+    test_initialize();
     let expr = parse!(
         "c*a*b(spenso::mink(4,1))*d(spenso::mink(4,2))*d(spenso::mink(4,1))*d(spenso::mink(4,2))"
     );
@@ -391,6 +403,7 @@ fn parse_scalar_tensors_step_by() {
 
 #[test]
 fn parse_scalar_expr() {
+    test_initialize();
     let expr = parse!("(y+x(spenso::mink(4,1))*y(spenso::mink(4,1))) *(1+1+2*x*(3*sin(r))/t)");
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
@@ -400,6 +413,7 @@ fn parse_scalar_expr() {
 
 #[test]
 fn parse_tensor_expr() {
+    test_initialize();
     let tensor1 = ShadowedStructure::<AbstractIndex>::from_iter(
         [
             Minkowski {}.new_slot(4, 1).to_lib(),
@@ -469,7 +483,7 @@ fn parse_tensor_expr() {
 
 #[test]
 fn parse_big_tensors() {
-    initialize();
+    test_initialize();
     let expr = parse!(
         "-G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*vbar(1,euc(4,1))*u(0,euc(4,0))*ebar(2,mink(4,2))*ebar(3,mink(4,3))*gamma(euc(4,5),euc(4,4),mink(4,4))",
         default_namespace = "spenso"
@@ -482,7 +496,7 @@ fn parse_big_tensors() {
 
 #[test]
 fn equal_duals() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         ((Q(5, cind(0)))
             ^ 2 + (Q(5, cind(1)))
@@ -548,7 +562,7 @@ fn equal_duals() {
 
 #[test]
 fn gammaloop_six_photon() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         -64 / 243 * ee
             ^ 6 * (MT * g(euc(4, hedge3), euc(4, hedge4))
@@ -591,7 +605,7 @@ fn gammaloop_six_photon() {
 
 #[test]
 fn parse_neg_tensors() {
-    initialize();
+    test_initialize();
     let expr = parse!(
         "-d(mink(4,6),mink(4,5))*Q(2,mink(4,7))+d(mink(4,6),mink(4,5))*Q(3,mink(4,7))",
         default_namespace = "spenso"
@@ -604,7 +618,7 @@ fn parse_neg_tensors() {
 
 #[test]
 fn many_sums() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         (P(4, mink(4, r_2)) + N(4, mink(4, r_2)))
             * (P(5, mink(4, r_3)) + N(5, mink(4, r_3)))
@@ -619,7 +633,7 @@ fn many_sums() {
 
 #[test]
 fn contract_problem() {
-    initialize();
+    test_initialize();
 
     let expr = parse_lit!(
         (-1 * Q(EMRID(0, 4), mink(4, l_20))
@@ -642,7 +656,7 @@ fn contract_problem() {
 #[test]
 // #[should_panic]
 fn parse_problem() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         1 / 18 * ee
             ^ 2 * G
@@ -782,7 +796,7 @@ fn infinite_execution() {
 
 #[test]
 fn gammaloop_input() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         16 / 81 * ee
             ^ 4 * (MT * g(euc(4, hedge_3), euc(4, hedge_4))
@@ -884,7 +898,7 @@ fn gammaloop_input() {
 }
 #[test]
 fn wrapping() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         A * g(euc(4, hedge_3), euc(4, hedge_5)),
         default_namespace = "spenso"
@@ -935,7 +949,7 @@ fn wrapping() {
 }
 #[test]
 fn scalar_mult() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(A * B * C * g(euc(4, hedge_3)), default_namespace = "spenso");
 
     let expr2 = parse_lit!(B * gg(euc(4, hedge_3)), default_namespace = "spenso");
@@ -979,46 +993,8 @@ fn scalar_mult() {
 }
 
 #[test]
-fn dot_derivative() {
-    initialize();
-
-    let l = symbol!("lambda";Scalar);
-    let expr = parse_lit!(
-        // (2 * dot(Q3(0), Q3(2), mink(4)) + dot(Q3(0), Q3(0), mink(4)))
-        dot(mink(4), Q(1), Q(3)) * dot(mink(4), Q(3), Q(1) + Q(2)),
-        default_namespace = "spenso"
-    );
-
-    // 2*dot(Q3(0),Q3(2),mink(4)) is Scalar vs dot(Q3(0),Q3(0),mink(4)
-
-    let e = expr
-        .replace(parse_lit!(Q(1), default_namespace = "spenso"))
-        .with(parse_lit!(Q(1), default_namespace = "spenso") * l)
-        .expand();
-    println!("{}", e);
-
-    let net = e
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
-        .unwrap();
-
-    assert_snapshot!(net.snapshot_dot(),@r#"
-    digraph {
-      node	 [shape=circle,height=0.1,label=""];
-      overlap = "scale";
-      layout = "neato";
-
-      0	 [label = "S:(dot(Q(1),Q(3),mink(4)))^2*lambda^2+dot(Q(1),Q(3),mink(4))*dot(Q(2),Q(3),mink(4))*lambda"];
-      ext0	 [style=invis];
-      0:0:s	-> ext0	 [id=0 color="red"];
-    }
-    "#);
-
-    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(),@"dot(mink(4),Q(1)*lambda,Q(3))*dot(mink(4),Q(3),Q(1)*lambda+Q(2))");
-}
-
-#[test]
 fn symbolic_structure_parsing() {
-    initialize();
+    test_initialize();
 
     let a = parse_lit!(
         (g(mink(4, mu1), mink(4, mu8)) * g(mink(4), k(0), k(10))

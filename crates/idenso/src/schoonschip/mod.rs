@@ -1,5 +1,4 @@
 mod api;
-mod chain_like;
 mod contraction;
 mod normalize_dots;
 mod settings;

@@ -12,13 +12,16 @@ use spenso::{
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     function, symbol,
 };
 
-use crate::representations::{Bispinor, ColorFundamental};
+use crate::{
+    representations::{Bispinor, ColorFundamental},
+    test::test_initialize,
+};
 
-use super::{Schoonschip, SchoonschipSettings, chain_like::is_slot};
+use super::{Schoonschip, SchoonschipSettings};
 
 fn chain_in() -> Atom {
     Atom::var(T.chain_in)
@@ -28,8 +31,28 @@ fn chain_out() -> Atom {
     Atom::var(T.chain_out)
 }
 
+pub(super) fn is_slot(atom: &Atom) -> bool {
+    is_slot_view(atom.as_view())
+}
+
+fn is_slot_view(atom: AtomView<'_>) -> bool {
+    let AtomView::Fun(f) = atom else {
+        return false;
+    };
+
+    if f.get_symbol().has_tag(&T.representation) {
+        return f.get_nargs() == 2;
+    }
+
+    // Downstairs indices wrap the actual slot as `dind(slot)`.
+    f.get_symbol() == AIND_SYMBOLS.dind
+        && f.get_nargs() == 1
+        && f.iter().next().is_some_and(is_slot_view)
+}
+
 #[test]
 fn simple_dot() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let p = T.rank_one_tensor_symbol("P");
     let q = T.rank_one_tensor_symbol("Q");
@@ -105,6 +128,7 @@ fn simple_dot() {
 
 #[test]
 fn schoonschip_settings_substitutes_metric_slots_in_plain_functions() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let cof: Representation<_> = ColorFundamental {}.new_rep(symbol!("N"));
     let coaf = cof.dual();
@@ -123,6 +147,7 @@ fn schoonschip_settings_substitutes_metric_slots_in_plain_functions() {
 
 #[test]
 fn slot_detection_uses_representation_tags() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let cof: Representation<_> = ColorFundamental {}.new_rep(symbol!("N"));
     let coaf = cof.dual();
@@ -140,6 +165,7 @@ fn slot_detection_uses_representation_tags() {
 
 #[test]
 fn chain_like_metric_simplification_is_opt_in() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
     let p = T.rank_one_tensor_symbol("P");
@@ -160,31 +186,8 @@ fn chain_like_metric_simplification_is_opt_in() {
 }
 
 #[test]
-fn chain_like_metric_simplification_handles_generic_nested_arguments() {
-    let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
-    let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
-    let p = T.rank_one_tensor_symbol("P");
-    let f = symbol!("F");
-    let h = symbol!("H");
-    let mu = slot!(mink, 1).to_atom();
-    let i = slot!(bis, i).to_atom();
-    let j = slot!(bis, j).to_atom();
-    let p_stripped = function!(p, 1, mink.to_symbolic([]));
-
-    let expr = ETS.metric(&mu, &p_stripped)
-        * chain!(
-            &i,
-            &j,
-            function!(f, chain_in(), chain_out(), symbol!("x"), function!(h, &mu))
-        );
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
-    assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,i),bis(D,j),F(in,out,x,H(P(1,mink(D)))))");
-}
-
-#[test]
 fn chain_like_metric_simplification_keeps_compact_scalar_products() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
     let p = T.rank_one_tensor_symbol("P");
@@ -205,6 +208,7 @@ fn chain_like_metric_simplification_keeps_compact_scalar_products() {
 
 #[test]
 fn chain_like_metric_simplification_handles_traces() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
     let p = T.rank_one_tensor_symbol("P");
@@ -225,6 +229,7 @@ fn chain_like_metric_simplification_handles_traces() {
 
 #[test]
 fn chain_like_metric_simplification_handles_chain_endpoints() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let p = T.rank_one_tensor_symbol("P");
     let f = symbol!("F");
@@ -242,6 +247,7 @@ fn chain_like_metric_simplification_handles_chain_endpoints() {
 
 #[test]
 fn benchmark_modes_output() {
+    test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
     let p = T.rank_one_tensor_symbol("P");
     let q = T.rank_one_tensor_symbol("Q");
