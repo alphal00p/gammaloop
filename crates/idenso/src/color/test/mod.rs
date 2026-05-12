@@ -695,7 +695,11 @@ fn minus_sign() {
     let residual = (expr1.simplify_color() + expr2.simplify_color())
         .expand()
         .simplify_metrics()
-        .cook_indices()
+        .cook_indices();
+
+    println!("{}", residual);
+
+    let residual = residual
         .canonize(AbstractIndex::Dummy)
         .simplify_metrics()
         .expand();

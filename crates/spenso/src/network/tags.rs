@@ -1,6 +1,5 @@
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    id::{Condition, PatternRestriction},
     printer::PrintState,
     symbol, tag,
 };
@@ -372,9 +371,6 @@ impl SpensoTags {
         }
     }
 
-    pub fn index_fiter(&self, symbol: Symbol) -> Condition<PatternRestriction> {
-        symbol.filter_tag(self.index.clone()) | symbol.filter_single(|a| a.is_integer())
-    }
     pub fn rep_<'a, const N: usize, A: Into<AtomOrView<'a>>>(
         &self,
         args: impl IntoIterator<Item = A>,

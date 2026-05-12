@@ -46,7 +46,6 @@ static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(
 });
 
 static DOT_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let index_cond = T.index_fiter(W_.i_);
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
 
@@ -58,11 +57,10 @@ static DOT_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
             function!(W_.g_, W_.b___, &self_dual_stripped),
         ),
     )
-    .with_conditions(index_cond & not_slot(W_.a___) & not_slot(W_.b___))]
+    .with_conditions(not_slot(W_.a___) & not_slot(W_.b___))]
 });
 
 static SELF_DUAL_POWER: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let index_cond = T.index_fiter(W_.i_);
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
 
@@ -75,11 +73,10 @@ static SELF_DUAL_POWER: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
             function!(W_.f_, W_.a___, &self_dual_stripped),
         ),
     )
-    .with_conditions(index_cond & not_slot(W_.a___))]
+    .with_conditions(not_slot(W_.a___))]
 });
 
 static RANK_ONE_PRODUCT_REPLACEMENTS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let index_cond = T.index_fiter(W_.i_);
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
@@ -95,8 +92,7 @@ static RANK_ONE_PRODUCT_REPLACEMENTS: LazyLock<[Replacement; 3]> = LazyLock::new
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
                 T.rank1_::<1, _>([&Atom::var(W_.a___), &self_dual_stripped]),
             ),
-        )
-        .with_conditions(index_cond.clone()),
+        ),
         Replacement::new(
             T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual])
                 .pow(Atom::num(2))
@@ -105,8 +101,7 @@ static RANK_ONE_PRODUCT_REPLACEMENTS: LazyLock<[Replacement; 3]> = LazyLock::new
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
             ),
-        )
-        .with_conditions(index_cond.clone()),
+        ),
         Replacement::new(
             (T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable])
                 * T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_dual]))
@@ -115,13 +110,11 @@ static RANK_ONE_PRODUCT_REPLACEMENTS: LazyLock<[Replacement; 3]> = LazyLock::new
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
                 T.rank1_::<1, _>([&Atom::var(W_.a___), &dualizable_stripped]),
             ),
-        )
-        .with_conditions(index_cond),
+        ),
     ]
 });
 
 static BARE_PRODUCT_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let index_cond = T.index_fiter(W_.i_);
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
@@ -139,8 +132,7 @@ static BARE_PRODUCT_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| 
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
                 W_.b___
             ),
-        )
-        .with_conditions(index_cond.clone()),
+        ),
         Replacement::new(
             (function!(W_.a_, W_.a___, &dualizable, W_.b___)
                 * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
@@ -151,8 +143,7 @@ static BARE_PRODUCT_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| 
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
                 W_.b___
             ),
-        )
-        .with_conditions(index_cond),
+        ),
         Replacement::new(
             (function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)
                 * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
