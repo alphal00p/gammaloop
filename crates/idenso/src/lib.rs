@@ -48,7 +48,9 @@ pub mod schoonschip;
 #[cfg(test)]
 pub(crate) mod test_support;
 
-pub use cook::{CookMode, CookSettings, Cookable, CookingError};
+pub use cook::{
+    CookMode, CookOutputTags, CookSettings, CookSourceFilter, CookTagFilter, Cookable, CookingError,
+};
 
 #[macro_export]
 macro_rules!  symbol_set {
