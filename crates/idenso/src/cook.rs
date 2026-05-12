@@ -1,4 +1,5 @@
 use spenso::network::tags::SPENSO_TAG;
+use std::sync::{Arc, Mutex};
 use symbolica::{
     atom::{
         Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, UserData,
@@ -7,7 +8,7 @@ use symbolica::{
     coefficient::CoefficientView,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CookingError {
     Add,
     Mul,
@@ -16,6 +17,7 @@ pub enum CookingError {
     FiniteField,
     Float,
     Symbol,
+    Symbolica(String),
 }
 
 impl CookingError {
@@ -27,6 +29,41 @@ impl CookingError {
             AtomView::Pow(_) => CookingError::Pow,
             AtomView::Num(_) => CookingError::RatCoeff,
             _ => CookingError::Symbol,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ArcMutexOption<E> {
+    value: Arc<Mutex<Option<E>>>,
+}
+
+impl<E> ArcMutexOption<E> {
+    fn empty() -> Self {
+        Self {
+            value: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn set_once(&self, error: E) {
+        let mut value = self
+            .value
+            .lock()
+            .expect("replace_map error capture mutex poisoned");
+        if value.is_none() {
+            *value = Some(error);
+        }
+    }
+
+    fn into_result<T>(self, value: T) -> Result<T, E> {
+        match self
+            .value
+            .lock()
+            .expect("replace_map error capture mutex poisoned")
+            .take()
+        {
+            Some(error) => Err(error),
+            None => Ok(value),
         }
     }
 }
@@ -257,7 +294,7 @@ impl CookSettings {
         Self {
             mode: CookMode::FlattenedSymbol,
             source: CookSourceFilter::RepresentationIndexPayload { filter: None },
-            output_tags: CookOutputTags::Explicit(vec![SPENSO_TAG.index.clone()]),
+            output_tags: CookOutputTags::PreserveTags,
         }
     }
 
@@ -348,18 +385,31 @@ impl CookSettings {
 
     /// Cook function-like subexpressions according to these settings.
     pub fn cook(&self, view: AtomView<'_>) -> Atom {
+        self.try_cook(view)
+            .unwrap_or_else(|error| panic!("failed to cook expression: {error:?}"))
+    }
+
+    /// Try to cook function-like subexpressions according to these settings.
+    pub fn try_cook(&self, view: AtomView<'_>) -> Result<Atom, CookingError> {
         let Some(filter) = self.source.regular_filter() else {
             return self
                 .cook_representation_index_payloads(view, self.source.index_payload_filter());
         };
 
-        view.replace_map(|a, _, out| {
-            if let AtomView::Fun(f) = a
-                && let Ok(Some(cooked)) = self.cook_function_symbol(f, filter)
-            {
-                **out = Atom::var(cooked);
+        let error = ArcMutexOption::empty();
+        let cooked = view.replace_map(|a, _, out| {
+            let AtomView::Fun(f) = a else {
+                return;
+            };
+
+            match self.cook_function_symbol(f, filter) {
+                Ok(Some(cooked)) => **out = Atom::var(cooked),
+                Ok(None) => {}
+                Err(e) => error.set_once(e),
             }
-        })
+        });
+
+        error.into_result(cooked)
     }
 
     /// Restore reversible cooked symbols matching these settings.
@@ -378,6 +428,12 @@ impl CookSettings {
 
     /// Cook only the abstract-index payloads of recognized representation slots.
     pub fn cook_indices(&self, view: AtomView<'_>) -> Atom {
+        self.try_cook_indices(view)
+            .unwrap_or_else(|error| panic!("failed to cook representation indices: {error:?}"))
+    }
+
+    /// Try to cook only the abstract-index payloads of recognized representation slots.
+    pub fn try_cook_indices(&self, view: AtomView<'_>) -> Result<Atom, CookingError> {
         self.cook_representation_index_payloads(view, self.source.index_payload_filter())
     }
 
@@ -391,8 +447,9 @@ impl CookSettings {
         &self,
         view: AtomView<'_>,
         filter: Option<&CookTagFilter>,
-    ) -> Atom {
-        view.replace_map(|a, _, out| {
+    ) -> Result<Atom, CookingError> {
+        let error = ArcMutexOption::empty();
+        let cooked = view.replace_map(|a, _, out| {
             let AtomView::Fun(rep) = a else {
                 return;
             };
@@ -408,15 +465,20 @@ impl CookSettings {
             let Some(AtomView::Fun(index)) = args.next() else {
                 return;
             };
-            let Ok(Some(cooked)) = self.cook_function_symbol(index, filter) else {
-                return;
-            };
 
-            **out = FunctionBuilder::new(rep.get_symbol())
-                .add_arg(dim)
-                .add_arg(Atom::var(cooked))
-                .finish();
-        })
+            match self.cook_function_symbol(index, filter) {
+                Ok(Some(cooked)) => {
+                    **out = FunctionBuilder::new(rep.get_symbol())
+                        .add_arg(dim)
+                        .add_arg(Atom::var(cooked))
+                        .finish();
+                }
+                Ok(None) => {}
+                Err(e) => error.set_once(e),
+            }
+        });
+
+        error.into_result(cooked)
     }
 
     fn cook_function_symbol(
@@ -459,7 +521,9 @@ impl CookSettings {
         if let Some(source) = source {
             builder = builder.with_user_data(UserData::Atom(source));
         }
-        builder.build().map_err(|_| CookingError::Symbol)
+        builder
+            .build()
+            .map_err(|error| CookingError::Symbolica(format!("{error:?}")))
     }
 
     fn reversible_name(&self, source: AtomView<'_>, tags: &[String]) -> String {

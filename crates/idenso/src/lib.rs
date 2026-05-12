@@ -54,35 +54,69 @@ pub use cook::{
 
 #[macro_export]
 macro_rules!  symbol_set {
-        // Identifier symbols with explicit struct and static names
-        ($struct_name:ident, $static_name:ident; $($char:ident)*) => {
-            #[allow(non_snake_case)]
+        // Identifier symbols with an explicit namespace.
+        ($struct_name:ident, $static_name:ident, namespace = $namespace:literal; $($char:ident)*) => {
+            #[allow(dead_code, non_snake_case)]
             pub struct $struct_name {
-                $(pub $char: Symbol,)*
+                $(pub $char: ::symbolica::atom::Symbol,)*
             }
 
             pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($char: symbol!(stringify!($char)),)*
+                $($char: ::symbolica::symbol!(concat!($namespace, "::", stringify!($char))),)*
             });
+        };
+
+        // Identifier symbols with explicit struct and static names
+        ($struct_name:ident, $static_name:ident; $($char:ident)*) => {
+            #[allow(dead_code, non_snake_case)]
+            pub struct $struct_name {
+                $(pub $char: ::symbolica::atom::Symbol,)*
+            }
+
+            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($char: ::symbolica::symbol!(stringify!($char)),)*
+            });
+        };
+
+        // String literals as individual statics with an explicit namespace.
+        (statics, namespace = $namespace:literal; $($field:ident : $string:literal),* $(,)?) => {
+            $(
+                #[allow(non_upper_case_globals)]
+                pub static $field: ::std::sync::LazyLock<::symbolica::atom::Symbol> =
+                    ::std::sync::LazyLock::new(|| ::symbolica::symbol!(concat!($namespace, "::", $string)));
+            )*
         };
 
         // String literals as individual statics
         (statics; $($field:ident : $string:literal),* $(,)?) => {
             $(
                 #[allow(non_upper_case_globals)]
-                pub static $field: ::std::sync::LazyLock<Symbol> = ::std::sync::LazyLock::new(|| symbol!($string));
+                pub static $field: ::std::sync::LazyLock<::symbolica::atom::Symbol> =
+                    ::std::sync::LazyLock::new(|| ::symbolica::symbol!($string));
             )*
+        };
+
+        // String literals grouped in a struct with an explicit namespace.
+        ($struct_name:ident, $static_name:ident, namespace = $namespace:literal; $($field:ident : $string:literal),* $(,)?) => {
+            #[allow(dead_code, non_snake_case)]
+            pub struct $struct_name {
+                $(pub $field: ::symbolica::atom::Symbol,)*
+            }
+
+            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($field: ::symbolica::symbol!(concat!($namespace, "::", $string)),)*
+            });
         };
 
         // String literals grouped in a struct
         ($struct_name:ident, $static_name:ident; $($field:ident : $string:literal),* $(,)?) => {
-            #[allow(non_snake_case)]
+            #[allow(dead_code, non_snake_case)]
             pub struct $struct_name {
-                $(pub $field: Symbol,)*
+                $(pub $field: ::symbolica::atom::Symbol,)*
             }
 
             pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($field: symbol!($string),)*
+                $($field: ::symbolica::symbol!($string),)*
             });
         };
     }
@@ -383,7 +417,9 @@ impl IndexTooling for AtomView<'_> {
 #[cfg(test)]
 pub mod test {
     use insta::assert_snapshot;
-    use spenso::{p, slot, structure::abstract_index::AbstractIndex};
+    use spenso::{
+        p, shadowing::symbolica_utils::AtomCoreExt, slot, structure::abstract_index::AbstractIndex,
+    };
     use symbolica::{atom::AtomCore, parse_lit, printer::CanonicalOrderingSettings};
 
     use crate::{Cookable, IndexTooling, gamma, test_support::test_initialize, u};
@@ -429,16 +465,13 @@ pub mod test {
             default_namespace = "spenso"
         );
 
-        let can = expr
-            .cook_indices()
-            .canonize::<AbstractIndex>(AbstractIndex::Dummy);
+        let can = expr.cook_indices();
+
+        println!("{}", can);
+        let can = can.canonize::<AbstractIndex>(AbstractIndex::Dummy);
 
         assert_snapshot!(
-            can.to_canonically_ordered_string(CanonicalOrderingSettings {
-                include_namespace: false,
-                include_attributes: false,
-                hide_namespace: None
-            }),@"f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_4),dind(cof(3,d_5)))*t(coad(8,d_2),cof(3,d_5),dind(cof(3,d_3)))"
+            can.to_bare_ordered_string(),@"f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_4),dind(cof(3,d_5)))*t(coad(8,d_2),cof(3,d_5),dind(cof(3,d_3)))"
         );
 
         //  gives

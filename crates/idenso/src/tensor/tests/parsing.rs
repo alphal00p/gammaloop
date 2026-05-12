@@ -16,17 +16,6 @@ use spenso::structure::abstract_index::AbstractIndex;
 
 use symbolica::atom::Atom;
 
-// Generate TestSymbols with all alphabet characters and some multi-character symbols
-symbol_set!(TestSymbols, TS;
-    a b c d e f h i j k l m n o p q r s t u v w x y z
-    A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
-    vbar
-    ebar
-    edge_1_1 edge_2_1 edge_3_1 edge_4_1 edge_5_1 edge_6_1 edge_7_1 edge_8_1 edge_9_1 edge_10_1 edge_11_1 edge_12_1 edge_13_1 edge_14_1 edge_15_1 edge_16_1 edge_17_1 edge_18_1 edge_19_1 edge_20_1
-    hedge0 hedge1 hedge2 hedge3 hedge4 hedge5 hedge6 hedge7 hedge8 hedge9 hedge10 hedge11 hedge12 hedge13 hedge14 hedge15 hedge16 hedge17 hedge18 hedge19 hedge20
-    hedge_0 hedge_1 hedge_2 hedge_3 hedge_4 hedge_5 hedge_6 hedge_7 hedge_8 hedge_9 hedge_10 hedge_11 hedge_12 hedge_13 hedge_14 hedge_15 hedge_16 hedge_17 hedge_18 hedge_19 hedge_20 mul
-);
-
 use crate::test_support::test_initialize;
 
 use core::panic;
@@ -43,7 +32,6 @@ use spenso::{
 use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
-use crate::symbol_set;
 use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 
 #[test]
@@ -189,17 +177,17 @@ fn parse_val() {
       2	 [label = "T:g(cof(3,hedge_2),dind(cof(3,hedge_1)))"];
       3	 [label = "T:g(cof(3,hedge_1),dind(cof(3,hedge_2)))"];
       4	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
-      5	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
-      6	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
-      7	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
+      5	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
+      6	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
+      7	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
       8	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
       9	 [label = "T:Q(5,mink(4,edge_5_1))"];
       10	 [label = "T:Q(6,mink(4,edge_6_1))"];
-      11	 [label = "T:u(1,bis(4,hedge_1))"];
-      12	 [label = "T:vbar(2,bis(4,hedge_2))"];
-      13	 [label = "T:ebar(0,mink(4,hedge_0))"];
-      14	 [label = "T:ebar(3,mink(4,hedge_3))"];
-      15	 [label = "T:ebar(4,mink(4,hedge_4))"];
+      11	 [label = "T:vbar(2,bis(4,hedge_2))"];
+      12	 [label = "T:ebar(0,mink(4,hedge_0))"];
+      13	 [label = "T:ebar(3,mink(4,hedge_3))"];
+      14	 [label = "T:ebar(4,mink(4,hedge_4))"];
+      15	 [label = "T:u(1,bis(4,hedge_1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       15:55:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
@@ -219,17 +207,17 @@ fn parse_val() {
       1:16:s	-> 0:15:s	 [id=15  color="red:blue;0.5"];
       2:19:s	-> 3:21:s	 [id=16 dir=back  color="red:blue;0.5" label="cof🠓3|_hedge_1"];
       2:18:s	-> 3:22:s	 [id=17  color="red:blue;0.5" label="cof🠑3|^hedge_2"];
-      4:26:s	-> 13:52:s	 [id=18 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
-      4:24:s	-> 12:50:s	 [id=19 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
-      4:25:s	-> 5:28:s	 [id=20 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
-      5:29:s	-> 8:41:s	 [id=21 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
-      5:30:s	-> 10:46:s	 [id=22 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
-      6:34:s	-> 14:54:s	 [id=23 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
-      6:32:s	-> 11:48:s	 [id=24 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
-      6:33:s	-> 7:36:s	 [id=25 dir=none  color="red:blue;0.5" label="bis4|hedge_5"];
-      7:37:s	-> 8:40:s	 [id=26 dir=none  color="red:blue;0.5" label="bis4|hedge_6"];
-      7:38:s	-> 9:44:s	 [id=27 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
-      8:42:s	-> 15:56:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
+      4:26:s	-> 12:50:s	 [id=18 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
+      4:24:s	-> 11:48:s	 [id=19 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
+      4:25:s	-> 7:37:s	 [id=20 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
+      5:30:s	-> 13:52:s	 [id=21 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
+      5:28:s	-> 15:56:s	 [id=22 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
+      5:29:s	-> 6:32:s	 [id=23 dir=none  color="red:blue;0.5" label="bis4|hedge_5"];
+      6:33:s	-> 8:40:s	 [id=24 dir=none  color="red:blue;0.5" label="bis4|hedge_6"];
+      6:34:s	-> 9:44:s	 [id=25 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
+      7:38:s	-> 10:46:s	 [id=26 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
+      7:36:s	-> 8:41:s	 [id=27 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
+      8:42:s	-> 14:54:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
     }
     "#);
     assert_eq!(net.simple_execute::<()>(), expr);
@@ -262,19 +250,19 @@ fn parse_scalar_tensors_step_by() {
 
       0	 [label = "∏"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:d(mink(4,1))"];
-      3	 [label = "^( 2 )"];
-      4	 [label = "T:d(mink(4,2))"];
-      5	 [label = "T:b(mink(4,1))"];
+      2	 [label = "T:b(mink(4,1))"];
+      3	 [label = "T:d(mink(4,1))"];
+      4	 [label = "^( 2 )"];
+      5	 [label = "T:d(mink(4,2))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      5:13:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
       3:8:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
       1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
-      2:7:s	-> 5:14:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
-      4:12:s	-> 3:10:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
-      4:11:s	-> 3:9:s	 [id=7  color="red:blue;0.5"];
+      2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
+      5:14:s	-> 4:12:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
+      5:13:s	-> 4:11:s	 [id=7  color="red:blue;0.5"];
     }
     "#
     );
@@ -289,16 +277,16 @@ fn parse_scalar_tensors_step_by() {
 
       0	 [label = "∏"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:d(mink(4,1))"];
-      3	 [label = "T:b(mink(4,1))"];
+      2	 [label = "T:b(mink(4,1))"];
+      3	 [label = "T:d(mink(4,1))"];
       4	 [label = "S:(d(mink(4,2)))^2"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      4:10:s	-> 0:2:s	 [id=1  color="red:blue;0.5"];
+      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
       1:5:s	-> 0:4:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      2:7:s	-> 3:8:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
-      3:9:s	-> 0:1:s	 [id=5  color="red:blue;0.5"];
+      2:7:s	-> 3:9:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
+      3:8:s	-> 0:2:s	 [id=5  color="red:blue;0.5"];
     }
     "#
     );
@@ -319,7 +307,7 @@ fn parse_scalar_tensors_step_by() {
       3:0:s	-> ext0	 [id=0 color="red"];
       1:5:s	-> 3:4:s	 [id=1  color="red:blue;0.5"];
       2:6:s	-> 3:3:s	 [id=2  color="red:blue;0.5"];
-      0:1:s	-> 3:2:s	 [id=3  color="red:blue;0.5"];
+      0:2:s	-> 3:1:s	 [id=3  color="red:blue;0.5"];
     }
     "#
     );
@@ -338,7 +326,7 @@ fn parse_scalar_tensors_step_by() {
       2	 [label = "T:b(mink(4,1))*d(mink(4,1))"];
       ext0	 [style=invis];
       3:0:s	-> ext0	 [id=0 color="red"];
-      0:1:s	-> 3:2:s	 [id=1  color="red:blue;0.5"];
+      0:2:s	-> 3:1:s	 [id=1  color="red:blue;0.5"];
       1:5:s	-> 3:4:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 3:3:s	 [id=3  color="red:blue;0.5"];
     }
@@ -770,15 +758,15 @@ fn infinite_execution() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_1"];
+      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_4"];
       ext2	 [style=invis];
-      0:2:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_2"];
+      0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_0"];
       ext3	 [style=invis];
       0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:5:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_4"];
+      0:3:s	-> ext4	 [id=4 dir=none color="red" label="bis4|l_2"];
       ext5	 [style=invis];
-      0:3:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_0"];
+      0:5:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_1"];
     }
     "#
     );
