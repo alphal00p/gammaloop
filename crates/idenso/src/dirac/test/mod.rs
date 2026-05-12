@@ -29,15 +29,14 @@ use super::*;
 use crate::color::ColorSimplifier;
 use crate::tensor::SymbolicNetParse;
 use crate::tensor::SymbolicTensor;
-use crate::test::test_initialize;
 use spenso::structure::{abstract_index::AbstractIndex, permuted::Perm};
 use symbolica::{
     atom::{Atom, AtomCore},
     parse_lit,
 };
 
-use crate::test_support::TestReps;
-use crate::{Cookable, representations::initialize};
+use crate::Cookable;
+use crate::test_support::{TestReps, test_initialize};
 
 #[test]
 fn gamma_construct() {
@@ -66,7 +65,7 @@ fn gamma_construct() {
 
 #[test]
 fn chain_test() {
-    initialize();
+    test_initialize();
 
     let expr = parse_lit!(
         (-1 * P(2, mink(dim, l(20))) + P(1, mink(dim, l(20)))) * 1𝑖 * G
@@ -104,7 +103,7 @@ fn normalise_g() {
 
 #[test]
 fn gamma_macro_accepts_integer_indices() {
-    initialize();
+    test_initialize();
     let expr = gamma!(1, 2, 3);
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,2),bis(4,3),mink(4,1))");
@@ -274,7 +273,7 @@ fn four_dimensional_chisholm_requires_four_dimensional_interior() {
 
 #[test]
 fn gamma_trace_evaluation_can_be_disabled() {
-    initialize();
+    test_initialize();
     let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
 
     assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))");
@@ -286,7 +285,7 @@ mod feyncalc_reference;
 
 #[test]
 fn collect_expand_chain() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(gamma_chain(
         mink(dim, nu1),
         bis(dim, 3),
@@ -608,7 +607,7 @@ mod failing {
 
     #[test]
     fn val_test() {
-        initialize();
+        test_initialize();
         // let expr = parse_lit!(
         //     (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
         //         + gamma(

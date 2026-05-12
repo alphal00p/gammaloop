@@ -28,15 +28,11 @@ use symbolica::{parse, parse_lit};
 use crate::dirac::PS;
 use crate::schoonschip::Schoonschip;
 use crate::tensor::SymbolicTensor;
-use crate::test::test_initialize;
-use crate::{
-    Cookable, IndexTooling, dirac::GammaSimplifier, metric::MetricSimplifier,
-    representations::initialize,
-};
+use crate::{Cookable, IndexTooling, dirac::GammaSimplifier, metric::MetricSimplifier};
 
 use super::*;
 
-use crate::test_support::TestReps;
+use crate::test_support::{TestReps, test_initialize};
 
 fn assert_color_zero(expr: Atom) {
     assert!(expr.simplify_color().is_zero());
@@ -83,7 +79,7 @@ fn test_color_structures() {
 
 #[test]
 fn test_color_simplification() {
-    initialize();
+    test_initialize();
     let atom = parse_lit!(
         f(
             coad(Nc ^ 2 - 1, 1),
@@ -99,7 +95,7 @@ fn test_color_simplification() {
 
 #[test]
 fn color_casimir_basis_rewrites_dimensions() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(Nc ^ -1 + Nc ^ 2 - 1 + NA, default_namespace = "spenso");
 
     assert_snapshot!(expr.to_color_casimir().to_bare_ordered_string(), @"-2*CF+4*CA*CF+CA");
@@ -107,7 +103,7 @@ fn color_casimir_basis_rewrites_dimensions() {
 
 #[test]
 fn color_casimir_basis_keeps_trace_normalization_symbolic_by_default() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(TR, default_namespace = "spenso");
 
     assert_snapshot!(expr.to_color_casimir().to_bare_ordered_string(), @"TR");
@@ -320,7 +316,7 @@ fn colored_matrix_element() -> (Atom, Atom) {
 
 #[test]
 fn compact_printing() {
-    initialize();
+    test_initialize();
 
     let (atom, _) = colored_matrix_element();
     println!(
@@ -357,7 +353,7 @@ fn t_structure() {
 
 #[test]
 fn test_val() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         (G ^ 3
             * (g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
@@ -711,7 +707,7 @@ mod failing {
 
     #[test]
     fn test_color_matrix_element() {
-        initialize();
+        test_initialize();
         let spin_sum_rule = parse!(
             "
                 g(coad(Nc^2-1, left(3)), coad(Nc^2-1, right(3)))
@@ -837,7 +833,7 @@ mod failing {
 
     #[test]
     fn test_color_matrix_element_two() {
-        initialize();
+        test_initialize();
 
         let spin_sum_rule_src = parse_lit!(
             vbar(1, bis(D, left(1)))

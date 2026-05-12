@@ -18,7 +18,7 @@ use symbolica::{
 
 use crate::{
     representations::{Bispinor, ColorFundamental},
-    test::test_initialize,
+    test_support::test_initialize,
 };
 
 use super::{Schoonschip, SchoonschipSettings};

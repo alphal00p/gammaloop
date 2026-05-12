@@ -3,7 +3,7 @@ use insta::assert_snapshot;
 
 #[test]
 fn two_gamma_trace() {
-    initialize();
+    test_initialize();
     let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*g(mink(4,mu),mink(4,nu))");
@@ -11,14 +11,14 @@ fn two_gamma_trace() {
 
 #[test]
 fn odd_gamma_trace_vanishes() {
-    initialize();
+    test_initialize();
     let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, a);
     assert!(expr.simplify_gamma().is_zero());
 }
 
 #[test]
 fn four_gamma_trace_recurses() {
-    initialize();
+    test_initialize();
     let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, d) * gamma!(sigma, d, a);
 
     assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))");
@@ -26,7 +26,7 @@ fn four_gamma_trace_recurses() {
 
 #[test]
 fn repeated_lorentz_gamma_chain_contracts_to_dimension() {
-    initialize();
+    test_initialize();
     let expr = gamma!(mu, a, b) * gamma!(mu, b, c);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*g(bis(4,a),bis(4,c))");
@@ -123,7 +123,7 @@ fn gamma_five_two_gamma_trace_vanishes() {
 #[test]
 #[ignore = "pending gamma-five trace term-count stress support"]
 fn gamma_five_symmetric_12_term_count() {
-    initialize();
+    test_initialize();
     let term_count = 0usize;
 
     assert_snapshot!(term_count.to_string(), @"51975");
@@ -132,7 +132,7 @@ fn gamma_five_symmetric_12_term_count() {
 #[test]
 #[ignore = "pending gamma-five trace4 term-count stress support"]
 fn gamma_five_regular_12_term_count() {
-    initialize();
+    test_initialize();
     let term_count = 0usize;
 
     assert_snapshot!(term_count.to_string(), @"1029");

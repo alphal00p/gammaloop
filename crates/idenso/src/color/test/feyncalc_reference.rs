@@ -55,7 +55,7 @@ macro_rules! sdf {
 
 #[test]
 fn sun_simplify_sunn_to_cacf_rewrites_sunn_squared_minus_one() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
 
     assert_snapshot!(expr.to_color_casimir().to_bare_ordered_string(), @"2*CA*CF");
@@ -63,7 +63,7 @@ fn sun_simplify_sunn_to_cacf_rewrites_sunn_squared_minus_one() {
 
 #[test]
 fn sun_simplify_sunn_to_cacf_rewrites_structure_square_dimension() {
-    initialize();
+    test_initialize();
     let expr = parse_lit!(
         f(
             coad(Nc ^ 2 - 1, 1),
