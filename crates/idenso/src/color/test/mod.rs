@@ -595,7 +595,7 @@ fn ratio_simplify() {
 
     let simplified = expr.cook_indices().simplify_color();
 
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"-1𝑖*G^4*TR^2*ee^2*g(cof(ahaha,dummy_3),dind(cof(ahaha,dummy(3))))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy(4))))*g(cof(ahaha,dummy_5),dind(cof(ahaha,dummy(5))))+1𝑖*G^4*TR^2*ee^2*g(cof(ahaha,dummy_3),dind(cof(ahaha,dummy(5))))*g(cof(ahaha,dummy_4),dind(cof(ahaha,dummy(3))))*g(cof(ahaha,dummy_5),dind(cof(ahaha,dummy(4))))");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"-1𝑖*G^4*TR^2*ahaha*ee^2*ohoho");
 }
 
 #[test]

@@ -2,11 +2,12 @@ use insta::assert_snapshot;
 use spenso::network::StructureLessDisplay;
 use spenso::network::parsing::ParseSettings;
 use spenso::network::store::TensorScalarStore;
+use spenso::p;
+use spenso::q;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::shadowing::symbolica_utils::TypstSettings;
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
-use spenso::symbolica_atom::IntoAtom;
 use spenso::{chain, s, slot, trace};
 
 use crate::{gamma, gamma0, gamma5};
@@ -526,32 +527,20 @@ fn gamma_alg() {
     let mink_dim = r.mink_d;
     let bis4 = r.bis4;
 
-    fn p(index: impl IntoAtom) -> Atom {
-        function!(symbol!("spenso::p"), index.into_atom())
-    }
-
-    fn q(index: impl IntoAtom) -> Atom {
-        function!(symbol!("spenso::q"), index.into_atom())
-    }
-
     let expr = (gamma!(0, 1, 3) * gamma!(0, 3, 2)).simplify_gamma();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,2))");
 
-    let expr = (p(slot!(mink4, nu1))
-        * (p(slot!(mink4, nu3)) + q(slot!(mink4, nu3)))
+    let expr = (p!(slot!(mink4, nu1))
+        * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
         * gamma!(nu1, 1, 3)
         * gamma!(mu, 3, 4)
         * gamma!(nu3, 4, 5)
         * gamma!(nu, 5, 1))
     .simplify_gamma()
-    .expand()
-    .replace(s!(nu3))
-    .with(s!(dummy))
-    .replace(s!(nu1))
-    .with(s!(dummy));
+    .expand();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"(p(mink(4,dummy)))^2*-4*g(mink(4,mu),mink(4,nu))+-4*g(mink(4,mu),mink(4,nu))*p(mink(4,dummy))*q(mink(4,dummy))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
 
     let expr = (mink_dim.g(5, 6)
         * (mink_dim.g(1, 2) * mink_dim.g(3, 4) * mink_dim.g(5, 6)
@@ -561,34 +550,28 @@ fn gamma_alg() {
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d+d^3");
 
-    let expr = (p(slot!(mink4, nu1))
-        * (p(slot!(mink4, nu3)) + q(slot!(mink4, nu3)))
+    let expr = (p!(slot!(mink4, nu1))
+        * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
         * gamma!(nu1, 1, 3)
         * gamma!(mu, 3, 4)
         * gamma!(nu, 4, 5)
         * gamma!(nu3, 5, 1))
-    .simplify_gamma()
-    .replace(s!(nu3))
-    .with(s!(dummy))
-    .replace(s!(nu1))
-    .with(s!(dummy));
+    .simplify_gamma();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"(p(mink(4,dummy)))^2*4*g(mink(4,mu),mink(4,nu))+-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*p(mink(4,dummy))*q(mink(4,dummy))+4*p(mink(4,mu))*q(mink(4,nu))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))");
 
-    let expr = (p(slot!(mink_dim, nu1))
-        * (p(slot!(mink_dim, nu3)) + q(slot!(mink_dim, nu3)))
+    let expr = (p!(slot!(mink_dim, nu1))
+        * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
         * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 4), slot!(bis4, 5))
         * gamma!(slot!(mink_dim, nu3), slot!(bis4, 5), slot!(bis4, 1)))
-    .simplify_gamma()
-    .replace(s!(nu1))
-    .with(s!(nu3));
+    .simplify_gamma();
 
     assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
 
-    let expr = (p(slot!(mink_dim, nu1))
-        * (p(slot!(mink_dim, nu3)) + q(slot!(mink_dim, nu3)))
+    let expr = (p!(slot!(mink_dim, nu1))
+        * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
         * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
         * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
@@ -597,10 +580,10 @@ fn gamma_alg() {
 
     assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
 
-    let expr = (p(slot!(mink_dim, nu1))
-        * q(slot!(mink_dim, nu2))
-        * (p(slot!(mink_dim, nu3)) + q(slot!(mink_dim, nu3)))
-        * q(slot!(mink_dim, nu4))
+    let expr = (p!(slot!(mink_dim, nu1))
+        * q!(slot!(mink_dim, nu2))
+        * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
+        * q!(slot!(mink_dim, nu4))
         * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
         * gamma!(slot!(mink_dim, nu4), slot!(bis4, 3), slot!(bis4, 4))
         * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
