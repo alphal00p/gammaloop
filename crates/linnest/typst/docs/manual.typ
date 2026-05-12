@@ -9,7 +9,9 @@
 
 Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst
 API. Its drawing layer imports the sibling Kurvst package; the standalone
-Kurvst manual documents the full curve and path-pattern API.
+Kurvst manual documents the full curve and path-pattern API. Derived edge
+layers use Kurvst's CeTZ-compatible path wire format internally, so path data
+can move through Linnest, Kurvst, and CeTZ-style tooling without an extra shape.
 The public surface is intentionally narrow:
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.

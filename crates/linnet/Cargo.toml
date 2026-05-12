@@ -47,7 +47,7 @@ figment = "0.10.19"
 # fixedbitset = "0.5.7"
 iai-callgrind = "0.14.0"
 insta = { workspace = true, features = ["ron"] }
-kurbo = "0.11.1"
+kurbo = "0.13"
 linnest = { workspace = true }
 proptest = "1.6.0"
 serde = "1.0"
