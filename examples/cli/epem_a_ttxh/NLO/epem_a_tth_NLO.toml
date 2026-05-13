@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/epem_a_ttxh/NLO/state"
+folder = "./examples/cli/epem_a_ttxh/NLO/gammaloop_state"
 
 #[cli_settings.global]
 #logfile_directive = "info,gammalooprs[kernel]=debug,gammalooprs[orientation_parametric_exprs]=debug,symbolica=off"  # ,gammalooprs[kernel]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"  # ,gammalooprs[build_original_parametric_integrand]=debug"

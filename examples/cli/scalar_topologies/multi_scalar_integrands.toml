@@ -1,3 +1,7 @@
+commands = []
+
+[[command_blocks]]
+name = "default"
 commands = [
   "run generate",
   #"run integrate_triangle_below_threshold",  

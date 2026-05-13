@@ -1,7 +1,7 @@
 [cli_settings]
 [cli_settings.state]
 name = "aa_aa_2L"
-folder = "./examples/cli/aa_aa/2L/state"
+folder = "./examples/cli/aa_aa/2L/gammaloop_state"
 
 [[command_blocks]]
 name = "generate_diagrams"

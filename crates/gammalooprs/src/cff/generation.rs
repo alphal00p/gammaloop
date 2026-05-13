@@ -314,18 +314,14 @@ impl Graph {
             let mut orientation_iterator = orientation.into_iter();
 
             let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
-                if hedge_pair.is_unpaired() {
+                if hedge_pair.is_unpaired() || contract_edges.contains(&edge_id) {
                     Orientation::Undirected
+                } else if edges_in_initial_state_cut.contains(&edge_id) {
+                    Orientation::Default
                 } else {
-                    if contract_edges.contains(&edge_id) {
-                        Orientation::Undirected
-                    } else if edges_in_initial_state_cut.contains(&edge_id) {
-                        Orientation::Default
-                    } else {
-                        orientation_iterator
-                            .next()
-                            .expect("orientation generation corrupted, not enough edges")
-                    }
+                    orientation_iterator
+                        .next()
+                        .expect("orientation generation corrupted, not enough edges")
                 }
             });
 

@@ -953,10 +953,38 @@ impl OneShot {
         )
     }
 
-    /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
-    pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
+    fn is_inline_run_command_flag(arg: &OsString) -> bool {
+        let arg = arg.to_string_lossy();
+        arg == "-c" || arg == "--commands" || arg.starts_with("--commands=")
+    }
+
+    fn legacy_post_card_inline_run_argv(argv: &[OsString]) -> Option<Vec<OsString>> {
+        let inline_command_index = argv.iter().position(Self::is_inline_run_command_flag)?;
+        let prefix = &argv[..inline_command_index];
+        if prefix.len() < 2 {
+            return None;
+        }
+
+        let prefix_cli = OneShot::try_parse_from(prefix.to_vec()).ok()?;
+        if prefix_cli.boot_commands_path.is_none() || prefix_cli.command.is_some() {
+            return None;
+        }
+
+        let mut expanded = Vec::with_capacity(argv.len() + 1);
+        expanded.extend(prefix.iter().cloned());
+        expanded.push(OsString::from("run"));
+        expanded.extend(argv[inline_command_index..].iter().cloned());
+        Some(expanded)
+    }
+
+    fn parse_args_with_capture<I, T>(args: I) -> Result<Parsed, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString>,
+    {
         let argv: Vec<OsString> = command_parser::normalize_clap_args(
-            std::env::args_os()
+            args.into_iter()
+                .map(Into::into)
                 .map(|arg| arg.to_string_lossy().into_owned())
                 .collect(),
         )
@@ -966,7 +994,18 @@ impl OneShot {
 
         // Build a Command (same as derive(Parser)) and get matches
         let mut cmd = <OneShot as CommandFactory>::command();
-        let matches = cmd.clone().try_get_matches_from(&argv)?;
+        let (matches, argv) = match cmd.clone().try_get_matches_from(&argv) {
+            Ok(matches) => (matches, argv),
+            Err(err) => {
+                let Some(expanded_argv) = Self::legacy_post_card_inline_run_argv(&argv) else {
+                    return Err(err);
+                };
+                match cmd.clone().try_get_matches_from(&expanded_argv) {
+                    Ok(matches) => (matches, expanded_argv),
+                    Err(_) => return Err(err),
+                }
+            }
+        };
 
         let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
             .map_err(|e| e.format(&mut cmd))?;
@@ -980,6 +1019,11 @@ impl OneShot {
             matches,
             cli,
         })
+    }
+
+    /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
+    pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
+        Self::parse_args_with_capture(std::env::args_os())
     }
 
     fn resolve_initial_state_folder(
@@ -1942,6 +1986,21 @@ mod tests {
         assert_eq!(parsed.boot_commands_path, Some(PathBuf::from("card.toml")));
         assert_eq!(parsed.state_folder, PathBuf::from("./GL_OUTPUT/triangle"));
         assert!(matches!(parsed.command, Some(Commands::Run(_))));
+    }
+
+    #[test]
+    fn oneshot_allows_post_card_inline_run_command_shortcut() {
+        let parsed =
+            OneShot::parse_args_with_capture(["gammaloop", "card.toml", "-c", "quit -n"]).unwrap();
+
+        assert_eq!(
+            parsed.cli.boot_commands_path,
+            Some(PathBuf::from("card.toml"))
+        );
+        let Some(Commands::Run(run)) = parsed.cli.command else {
+            panic!("expected run command");
+        };
+        assert_eq!(run.commands.as_deref(), Some("quit -n"));
     }
 
     #[test]

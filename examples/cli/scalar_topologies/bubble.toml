@@ -2,7 +2,7 @@ commands = []
 
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/scalar_topologies/bubble_state"
+folder = "./examples/cli/scalar_topologies/gammaloop_state/bubble"
 name = "bubble_state"
 
 [[command_blocks]]

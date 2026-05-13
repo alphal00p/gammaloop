@@ -1,3 +1,7 @@
+commands = []
+
+[[command_blocks]]
+name = "default"
 commands = [
   "run generate",
   "quit -o"
