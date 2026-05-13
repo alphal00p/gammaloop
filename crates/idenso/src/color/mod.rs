@@ -7,6 +7,7 @@ use spenso::{
         library::symbolic::{ETS, ExplicitKey},
         tags::SPENSO_TAG as T,
     },
+    rep_,
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         TensorStructure,
@@ -15,7 +16,9 @@ use spenso::{
         representation::{Minkowski, RepName},
         slot::{AbsInd, IsAbstractSlot},
     },
-    symbolica_atom, trace,
+    symbolica_atom,
+    tensors::parametric::atomcore::PatternReplacement,
+    trace,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
@@ -27,7 +30,7 @@ use symbolica::{
     utils::Settable,
 };
 
-use crate::{chain::Chain, metric::PermuteWithMetric, representations::ColorAntiFundamental};
+use crate::{W_, chain::Chain, metric::PermuteWithMetric, representations::ColorAntiFundamental};
 
 use super::rep_symbols::RS;
 use super::{
@@ -694,6 +697,13 @@ static COLOR_ADJOINT_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
 static COLOR_D_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::d"));
 static COLOR_D33_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::d33"));
 static COLOR_TRACE_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("x"));
+
+static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    [Replacement::new(
+        trace!(rep_!(0; W_.d_)).to_pattern(),
+        Atom::var(W_.d_),
+    )]
+});
 
 /// Applies SU(N) simplification rules to raw color tensors and chain/trace form.
 pub fn color_simplify_impl(expression: AtomView) -> Atom {
@@ -1586,14 +1596,9 @@ fn representation_slot(slot: AtomView, symbol: Symbol) -> Option<(Atom, Atom)> {
 }
 
 fn trace_terminal_dimension(rep: AtomView) -> Option<Atom> {
-    let AtomView::Fun(f) = rep else {
-        return None;
-    };
-    if !f.get_symbol().has_tag(&T.representation) || f.get_nargs() == 0 {
-        return None;
-    }
-
-    f.iter().next().map(|dimension| dimension.to_owned())
+    let trace = trace!(rep.to_owned());
+    let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
+    (simplified != trace).then_some(simplified)
 }
 
 fn has_chain_endpoints(left: AtomView, right: AtomView) -> bool {
