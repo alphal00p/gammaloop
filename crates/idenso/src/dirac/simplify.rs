@@ -4,12 +4,12 @@ use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rep_,
-    structure::representation::{Minkowski, RepName},
+    structure::representation::{LibraryRep, Minkowski, RepName},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
     function,
     id::{Context, Replacement},
     utils::Settable,
@@ -26,23 +26,10 @@ use crate::{
 
 use super::{AGS, id_atom};
 
-static MINKOWSKI_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-    let minkowski = Minkowski {}.to_symbolic(std::iter::empty::<Atom>());
-    let AtomView::Fun(f) = minkowski.as_view() else {
-        unreachable!("Minkowski representations are symbolic functions")
-    };
+static MINKOWSKI_SYMBOL: LazyLock<Symbol> =
+    LazyLock::new(|| LibraryRep::from(Minkowski {}).symbol());
 
-    f.get_symbol()
-});
-
-static BISPINOR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-    let bispinor = Bispinor {}.to_symbolic(std::iter::empty::<Atom>());
-    let AtomView::Fun(f) = bispinor.as_view() else {
-        unreachable!("Bispinor representations are symbolic functions")
-    };
-
-    f.get_symbol()
-});
+static BISPINOR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| LibraryRep::from(Bispinor {}).symbol());
 
 static EPSILON_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("sigma"));
 
@@ -109,6 +96,29 @@ impl GammaSimplifySettings {
     pub fn with_gamma5_epsilon_expansion(mut self) -> Self {
         self.expand_three_gamma_epsilon = true;
         self
+    }
+
+    fn rewrite_expression(&self, expr: AtomView) -> Atom {
+        expr.to_owned()
+            .replace_map(|a, b, c| self.rewrite_node(a, b, c))
+    }
+
+    fn rewrite_node(&self, arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
+        let AtomView::Fun(f) = arg else {
+            return;
+        };
+
+        let simplifier = DiracSimplifier::new(self);
+        if f.get_symbol() == T.chain {
+            if let Some(rewritten) = simplifier.simplify_chain_node(f) {
+                **out = rewritten;
+            }
+        } else if self.evaluate_traces
+            && f.get_symbol() == T.trace
+            && let Some(rewritten) = simplifier.simplify_trace_node(f)
+        {
+            **out = rewritten;
+        }
     }
 }
 
@@ -206,21 +216,17 @@ impl DiracRuleDimension {
     }
 }
 
-pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplifySettings) -> Atom {
-    DiracSimplifier::new(&settings).simplify(expr)
-}
-
 #[derive(Debug, Clone, Copy)]
-struct DiracSimplifier<'settings> {
+pub(crate) struct DiracSimplifier<'settings> {
     settings: &'settings GammaSimplifySettings,
 }
 
 impl<'settings> DiracSimplifier<'settings> {
-    fn new(settings: &'settings GammaSimplifySettings) -> Self {
+    pub(crate) fn new(settings: &'settings GammaSimplifySettings) -> Self {
         Self { settings }
     }
 
-    fn simplify(self, expr: AtomView) -> Atom {
+    pub(crate) fn simplify(self, expr: AtomView) -> Atom {
         let rep = Bispinor {}.into();
         let mut expr = expr
             .to_owned()
@@ -235,6 +241,7 @@ impl<'settings> DiracSimplifier<'settings> {
 
         loop {
             let next = self
+                .settings
                 .rewrite_expression(expr.as_view())
                 .expand()
                 .simplify_metrics()
@@ -251,61 +258,7 @@ impl<'settings> DiracSimplifier<'settings> {
         }
     }
 
-    fn rewrite_expression(self, expr: AtomView) -> Atom {
-        match (
-            self.settings.chain_ordering,
-            self.settings.evaluate_traces,
-            self.settings.expand_three_gamma_epsilon,
-        ) {
-            (GammaChainOrdering::RepeatedPairs, true, false) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<false, true, false>),
-            (GammaChainOrdering::RepeatedPairs, true, true) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<false, true, true>),
-            (GammaChainOrdering::RepeatedPairs, false, false) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<false, false, false>),
-            (GammaChainOrdering::RepeatedPairs, false, true) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<false, false, true>),
-            (GammaChainOrdering::Canonical, true, false) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<true, true, false>),
-            (GammaChainOrdering::Canonical, true, true) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<true, true, true>),
-            (GammaChainOrdering::Canonical, false, false) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<true, false, false>),
-            (GammaChainOrdering::Canonical, false, true) => expr
-                .to_owned()
-                .replace_map(&dirac_chain_rewrite::<true, false, true>),
-        }
-    }
-
-    fn rewrite_node(self, arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
-        let AtomView::Fun(f) = arg else {
-            return;
-        };
-
-        if f.get_symbol() == T.chain {
-            if let Some(rewritten) = self.simplify_chain_node(arg) {
-                **out = rewritten;
-            }
-        } else if self.settings.evaluate_traces
-            && f.get_symbol() == T.trace
-            && let Some(rewritten) = self.simplify_trace_node(arg)
-        {
-            **out = rewritten;
-        }
-    }
-
-    fn simplify_chain_node(self, chain: AtomView) -> Option<Atom> {
-        let AtomView::Fun(f) = chain else {
-            return None;
-        };
-
+    fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
         let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
         let [start, end, factors @ ..] = args.as_slice() else {
             return None;
@@ -357,29 +310,6 @@ impl<'settings> DiracSimplifier<'settings> {
                 }
             })
     }
-}
-
-// `replace_map` needs a function item with sufficiently general lifetimes.
-fn dirac_chain_rewrite<
-    const CANONICAL: bool,
-    const EVALUATE_TRACES: bool,
-    const EXPAND_EPSILON: bool,
->(
-    arg: AtomView,
-    context: &Context,
-    out: &mut Settable<'_, Atom>,
-) {
-    let ordering = if CANONICAL {
-        GammaChainOrdering::Canonical
-    } else {
-        GammaChainOrdering::RepeatedPairs
-    };
-    let settings = GammaSimplifySettings {
-        chain_ordering: ordering,
-        evaluate_traces: EVALUATE_TRACES,
-        expand_three_gamma_epsilon: EXPAND_EPSILON,
-    };
-    DiracSimplifier::new(&settings).rewrite_node(arg, context, out);
 }
 
 impl DiracSimplifier<'_> {
@@ -985,18 +915,14 @@ fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
 }
 
 impl DiracSimplifier<'_> {
-    fn simplify_trace_node(self, trace: AtomView) -> Option<Atom> {
-        let AtomView::Fun(f) = trace else {
-            return None;
-        };
-
+    fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
         let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
         let [rep, factors @ ..] = args.as_slice() else {
             return None;
         };
 
         if factors.is_empty() {
-            return Self::simplify_trace_terminal(trace);
+            return Self::simplify_trace_terminal(f.as_view());
         }
 
         let parsed_factors = factors

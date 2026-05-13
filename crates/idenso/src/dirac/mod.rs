@@ -24,8 +24,8 @@ use symbolica::{
 };
 
 use crate::{
-    IndexTooling, bis, color::SelectiveExpand, gamma, gamma0, gamma5, metric::MetricSimplifier,
-    rep_symbols::RS,
+    IndexTooling, bis, color::SelectiveExpand, dirac::simplify::DiracSimplifier, gamma, gamma0,
+    gamma5, metric::MetricSimplifier, rep_symbols::RS,
 };
 use eyre::Result;
 
@@ -919,7 +919,7 @@ impl GammaSimplifier for AtomView<'_> {
     }
 
     fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
-        simplify::simplify_dirac_chains_impl(*self, settings)
+        DiracSimplifier::new(&settings).simplify(*self)
     }
 
     fn simplify_gamma0(&self) -> Atom {
