@@ -300,6 +300,13 @@ static VECTOR_DOT_PRODUCTS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
 This style is appropriate when the right-hand side is determined entirely by the
 matched wildcard substitution.
 
+Current examples of this style are `CHAIN_NORMALIZATIONS` in
+`crates/idenso/src/chain.rs`, `TRACE_TERMINALS` in
+`crates/idenso/src/dirac/simplify.rs`, and `TRACE_TERMINALS` in
+`crates/idenso/src/color/mod.rs`. They are all local identities: the replacement
+does not need to inspect an ordered factor list, choose a contraction target,
+allocate fresh dummies, or branch on a simplification strategy.
+
 Use `replace_map` or `ReplaceBuilder::with_map` when the right-hand side must be
 computed from the match:
 
@@ -310,6 +317,14 @@ computed from the match:
 - cyclic color trace normalization;
 - loop-detection algorithms such as FORM `ReplaceLoop`;
 - fresh dummy allocation.
+
+This is also how FORM-style rules should be translated when FORM spells them as
+`id` rules inside an ordered procedure. A literal replacement in FORM may still
+depend on earlier `if (match(...))`, `repeat`, `ReplaceLoop`, `sum`, `renumber`,
+or C-side trace logic. In Rust, keep the local identity as a static replacement
+only when the Symbolica match already contains all information needed for the
+right-hand side. Otherwise put the strategy on a pass type, as in
+`DiracChainSimplifier` in `crates/idenso/src/dirac/simplify.rs`.
 
 Disable RHS caching when a map creates match-local fresh symbols:
 
