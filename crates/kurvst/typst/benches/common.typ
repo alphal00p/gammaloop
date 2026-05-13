@@ -11,8 +11,8 @@
 #let stroke = black + 0.35pt
 
 #let straight-segment(y) = (
-  start: (x: 0, y: y),
-  ctrl-a: (x: width / 3, y: y),
-  ctrl-b: (x: width * 2 / 3, y: y),
-  end: (x: width, y: y),
+  start: (0, y),
+  control-start: (width / 3, y),
+  control-end: (width * 2 / 3, y),
+  end: (width, y),
 )

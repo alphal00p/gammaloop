@@ -2,7 +2,7 @@
 #import "subgraph.typ" as subgraph-module
 #import "curve.typ" as curve-module
 #import "physics-edge-style.typ" as physics-edge-style-module
-#import "draw.typ": draw
+#import "draw.typ": draw, edge-halves, to-cetz-edge-halves
 
 #let _plugin = plugin("../linnest.wasm")
 

@@ -3,7 +3,9 @@
 #import "graph.typ" as graph-api
 #import "subgraph.typ" as subgraph-api
 
-#let _point(p) = (p.x, p.y)
+#let _point-x(p) = if type(p) == array { p.at(0) } else { p.x }
+#let _point-y(p) = if type(p) == array { p.at(1) } else { p.y }
+#let _point(p) = (_point-x(p), _point-y(p))
 
 #let _canvas-length(unit) = {
   if type(unit) in (int, float) {
@@ -288,7 +290,7 @@
 #let _clamp(value, low, high) = calc.min(high, calc.max(low, value))
 
 #let _segment-length(segment, accuracy: 0.001) = {
-  curve-api.path-length(curve-api.cubic-path(..segment, accuracy: accuracy), accuracy: accuracy)
+  curve-api.length(curve-api.from-cubic(segment), accuracy: accuracy)
 }
 
 #let _visible-half-outsets(
@@ -319,7 +321,7 @@
   }
 }
 
-#let _layer-path(segment, style, start-outset: 0, end-outset: 0, label-pos: none, center-outset: auto) = {
+#let _layer(segment, style, start-outset: 0, end-outset: 0, label-pos: none, center-outset: auto) = {
   let geometry = _edge-geometry(style)
   let side-point = if geometry.offset-side == "label" { label-pos } else { none }
   let length = geometry.length
@@ -330,15 +332,15 @@
     length = none
     ratio = none
   }
-  curve-api.layer-path(
-    curve-api.cubic-path(..segment, accuracy: geometry.accuracy),
+  curve-api.layer(
+    curve-api.from-cubic(segment),
     offset: geometry.offset,
     length: length,
     ratio: ratio,
     resolve-length: geometry.resolve-length,
     start-outset: start-outset,
     end-outset: end-outset,
-    side-point: side-point,
+    side-point: if side-point == none { none } else { _point(side-point) },
     accuracy: geometry.accuracy,
     optimize: geometry.optimize,
   )
@@ -353,7 +355,7 @@
   label-pos: none,
   center-outset: auto,
 ) = {
-  curve-api.path-segments(_layer-path(
+  curve-api.segments(_layer(
     segment,
     style,
     start-outset: start-outset,
@@ -379,6 +381,64 @@
   }
 }
 
+/// Split a laid-out graph edge into source and sink half-edge paths.
+///
+/// The returned dictionary has `source`, `sink`, and `curve`. The split point is
+/// the edge layout point, so the two half-edges join smoothly there.
+/// -> dictionary
+#let edge-halves(edge, nodes, omega: 1.0, source-outset: 0, sink-outset: 0, accuracy: 0.001) = {
+  if edge.source == none or edge.sink == none {
+    panic("edge-halves currently requires a paired edge with source and sink")
+  }
+
+  let points = (
+    _point(nodes.at(edge.source.node).pos),
+    _point(edge.pos),
+    _point(nodes.at(edge.sink.node).pos),
+  )
+  let split = curve-api.split-through(
+    points,
+    omega: omega,
+    start-outset: source-outset,
+    end-outset: sink-outset,
+    accuracy: accuracy,
+  )
+
+  (
+    source: split.parts.at(0),
+    sink: split.parts.at(1),
+    curve: split.curve,
+  )
+}
+
+/// Draw the two halves of a laid-out graph edge through CeTZ.
+///
+/// `source-style` applies from the source node to the edge layout point, and
+/// `sink-style` applies from the edge layout point to the sink node.
+/// -> content
+#let to-cetz-edge-halves(
+  edge,
+  nodes,
+  unit: 1,
+  omega: 1.0,
+  source-outset: 0,
+  sink-outset: 0,
+  accuracy: 0.001,
+  source-style: (:),
+  sink-style: (:),
+) = {
+  let halves = edge-halves(
+    edge,
+    nodes,
+    omega: omega,
+    source-outset: source-outset,
+    sink-outset: sink-outset,
+    accuracy: accuracy,
+  )
+  curve-api.to-cetz(halves.source, unit: unit, ..source-style)
+  curve-api.to-cetz(halves.sink, unit: unit, ..sink-style)
+}
+
 #let _edge-geometry-halves(
   edge,
   nodes,
@@ -390,9 +450,10 @@
   accuracy: 0.001,
   label-pos: none,
 ) = {
-  let base = curve-api.edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
-  let source-segment = base.curve.curves.at(0)
-  let sink-segment = base.curve.curves.at(1)
+  let base = edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
+  let base-segments = curve-api.segments(base.curve)
+  let source-segment = base-segments.at(0)
+  let sink-segment = base-segments.at(1)
   let source-length = _segment-length(source-segment, accuracy: accuracy)
   let sink-length = _segment-length(sink-segment, accuracy: accuracy)
   let base-length = source-length + sink-length
@@ -433,10 +494,10 @@
   )
 }
 
-#let _pattern-path(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
+#let _pattern(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
   let pattern-style = _pattern-style(style)
-  curve-api.pattern-path(
-    curve-api.cubic-path(..segment, accuracy: pattern-style.pattern-accuracy),
+  curve-api.pattern(
+    curve-api.from-cubic(segment),
     pattern: pattern-style.pattern,
     amplitude: pattern-style.pattern-amplitude,
     wavelength: pattern-style.pattern-wavelength,
@@ -453,8 +514,8 @@
   cetz.draw.bezier(
     _point(segment.start),
     _point(segment.end),
-    _point(segment.ctrl-a),
-    _point(segment.ctrl-b),
+    _point(segment.control-start),
+    _point(segment.control-end),
     .._draw-style(style),
   )
 }
@@ -466,16 +527,17 @@
     let current-phase = if phase == auto { _style-value(style, "pattern-phase") } else { phase }
     let wavelength = _style-value(style, "pattern-wavelength")
     for (index, segment) in segments.enumerate() {
-      let piece = _pattern-path(
+      let piece = _pattern(
         segment,
         style,
         phase: current-phase,
         anchor-start: anchor-start and index == 0,
         anchor-end: anchor-end and index == segments.len() - 1,
       )
-      elements.push(curve-api.cetz-pattern(piece, .._draw-style(style)))
-      length = length + piece.length
-      current-phase = current-phase + 2 * calc.pi * piece.length / wavelength
+      elements.push(curve-api.to-cetz(piece, .._draw-style(style)))
+      let piece-length = _segment-length(segment, accuracy: _style-value(style, "pattern-accuracy"))
+      length = length + piece-length
+      current-phase = current-phase + 2 * calc.pi * piece-length / wavelength
     }
   } else {
     let mark-index = if _mark-direction(style) == "backward" { 0 } else { segments.len() - 1 }
@@ -485,7 +547,7 @@
       } else if _has-mark(style) {
         elements.push(_bezier-element(segment, _without-mark-style(style)))
       } else {
-        elements.push(curve-api.cetz-path(curve-api.cubic-path(..segment), .._draw-style(style)))
+        elements.push(curve-api.to-cetz(curve-api.from-cubic(segment), .._draw-style(style)))
       }
     }
   }
@@ -493,23 +555,23 @@
 }
 
 #let _segment-elements(segment, style, phase: auto, anchor-start: true, anchor-end: true, label-pos: none) = {
-  let path = _layer-path(segment, style, label-pos: label-pos)
+  let path = _layer(segment, style, label-pos: label-pos)
   if _has-mark(style) and _mark-position(style) == "center" and not _has-pattern(style) {
-    let length = curve-api.path-length(path, accuracy: _style-value(style, "accuracy"))
-    let first = curve-api.trim-path(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
-    let second = curve-api.trim-path(path, start-outset: length / 2, accuracy: _style-value(style, "accuracy"))
+    let length = curve-api.length(path, accuracy: _style-value(style, "accuracy"))
+    let first = curve-api.trim(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
+    let second = curve-api.trim(path, start-outset: length / 2, accuracy: _style-value(style, "accuracy"))
     let backward = _mark-direction(style) == "backward"
     let first-style = if backward { _without-mark-style(style) } else { style }
     let second-style = if backward { style } else { _without-mark-style(style) }
     let first-elements = _segments-elements(
-      curve-api.path-segments(first),
+      curve-api.segments(first),
       first-style,
       phase: phase,
       anchor-start: anchor-start,
       anchor-end: false,
     ).elements
     let second-elements = _segments-elements(
-      curve-api.path-segments(second),
+      curve-api.segments(second),
       second-style,
       phase: phase,
       anchor-start: false,
@@ -534,7 +596,7 @@
     (elements: pieces, length: length)
   } else {
     _segments-elements(
-      curve-api.path-segments(path),
+      curve-api.segments(path),
       style,
       phase: phase,
       anchor-start: anchor-start,
@@ -589,7 +651,7 @@
 }
 
 #let _pattern-line(start, end, style, label-pos: none) = {
-  _segment-elements(curve-api.line-segment(start, end), style, label-pos: label-pos).elements
+  _segment-elements(curve-api.line-segment(_point(start), _point(end)), style, label-pos: label-pos).elements
 }
 
 #let _node-outset(style, node-outset) = {
@@ -639,10 +701,7 @@
   node.pos
 }
 
-#let _midpoint(a, b) = (
-  x: (a.x + b.x) / 2,
-  y: (a.y + b.y) / 2,
-)
+#let _midpoint(a, b) = ((_point-x(a) + _point-x(b)) / 2, (_point-y(a) + _point-y(b)) / 2)
 
 #let _edge-pos(edge, nodes) = {
   if edge.pos != none {
@@ -1080,12 +1139,12 @@
                   elements.push(element)
                 }
               }
-            } else if source-half-edge != none {
-              let line-start = curve-api.outset-point(
-                _node-pos(nodes.at(source-half-edge.node)),
-                edge.pos,
-                distance: node-outsets.at(source-half-edge.node),
-              )
+	            } else if source-half-edge != none {
+	              let line-start = curve-api.outset-point(
+	                _point(_node-pos(nodes.at(source-half-edge.node))),
+	                _point(edge.pos),
+	                distance: node-outsets.at(source-half-edge.node),
+	              )
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-line(
                   line-start,
@@ -1101,12 +1160,12 @@
                   elements.push(element)
                 }
               }
-            } else if sink-half-edge != none {
-              let line-end = curve-api.outset-point(
-                _node-pos(nodes.at(sink-half-edge.node)),
-                edge.pos,
-                distance: node-outsets.at(sink-half-edge.node),
-              )
+	            } else if sink-half-edge != none {
+	              let line-end = curve-api.outset-point(
+	                _point(_node-pos(nodes.at(sink-half-edge.node))),
+	                _point(edge.pos),
+	                distance: node-outsets.at(sink-half-edge.node),
+	              )
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-line(
                   edge.pos,
