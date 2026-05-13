@@ -158,7 +158,7 @@ mod tests {
         let normalized = gammas.chainify(rep).chainify(rep);
         let collected = normalized.collect_chains(rep);
 
-        assert_snapshot!(collected.to_bare_ordered_string(), @"trace(bis(4),gamma(in,out,p(2,mink(4))),gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))))");
+        assert_snapshot!(collected.to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))),gamma(in,out,p(2,mink(4)))))");
     }
 
     #[test]
