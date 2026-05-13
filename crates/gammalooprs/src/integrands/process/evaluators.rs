@@ -22,7 +22,7 @@ use spenso::{
 use std::ops::Deref;
 use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, Symbol},
     domains::{
         dual::HyperDual,
         float::Complex as SymComplex,
@@ -51,11 +51,13 @@ use crate::{
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::AtomCoreExt,
     processes::{EvaluatorBuildTimings, EvaluatorSettings},
-    settings::{RuntimeSettings, global::FrozenCompilationMode},
+    settings::{RuntimeSettings, global::AliasExpressions, global::FrozenCompilationMode},
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
-        symbolica_ext::{CallSymbol, LogPrint},
+        symbolica_ext::{
+            CallSymbol, LogPrint, collect_gammaloop_alias_entries, is_gammaloop_alias_atom,
+        },
     },
 };
 
@@ -384,6 +386,20 @@ impl EvaluatorStack {
         Self::parse_atoms_with_timings(atoms, settings).map(|(atoms, _)| atoms)
     }
 
+    fn record_alias_atom_size(atom: AtomView, timings: &mut EvaluatorBuildTimings) {
+        timings.record_alias_atom_size(atom);
+    }
+
+    fn alias_atom_with_timings(
+        atom: Atom,
+        alias_expressions: AliasExpressions,
+        timings: &mut EvaluatorBuildTimings,
+    ) -> Atom {
+        let atom = alias_expressions.apply_final(atom);
+        Self::record_alias_atom_size(atom.as_atom_view(), timings);
+        atom
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -394,11 +410,13 @@ impl EvaluatorStack {
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         dual_shape: &Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
+        timings: &mut EvaluatorBuildTimings,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let opt_settings = settings.optimization_settings();
 
-        GenericEvaluator::new_from_builder(
+        GenericEvaluator::new_from_builder_with_alias_timings(
             parametric_atom
                 .iter()
                 .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
@@ -406,6 +424,8 @@ impl EvaluatorStack {
             dual_shape.clone(),
             opt_settings.clone(),
             settings,
+            alias_expressions,
+            timings,
         )
     }
 
@@ -419,9 +439,11 @@ impl EvaluatorStack {
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         dual_shape: &Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
+        timings: &mut EvaluatorBuildTimings,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
-        GenericEvaluator::new_from_builder(
+        GenericEvaluator::new_from_builder_with_alias_timings(
             parametric_atom
                 .iter()
                 .map(|atom| atom.as_atom_view().to_owned()),
@@ -429,6 +451,8 @@ impl EvaluatorStack {
             dual_shape.clone(),
             settings.optimization_settings(),
             settings,
+            alias_expressions,
+            timings,
         )
     }
 
@@ -464,12 +488,14 @@ impl EvaluatorStack {
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         dual_shape: &Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
+        timings: &mut EvaluatorBuildTimings,
         settings: &EvaluatorSettings,
     ) -> Result<(GenericEvaluator, usize)> {
         // let  n_orientations=;
 
         Ok((
-            GenericEvaluator::new_from_builder(
+            GenericEvaluator::new_from_builder_with_alias_timings(
                 parametric_atom.iter().flat_map(|atom| {
                     orientations.iter().map(|a| {
                         let selected = a.select_gs(atom.as_atom_view());
@@ -481,6 +507,8 @@ impl EvaluatorStack {
                 dual_shape.clone(),
                 settings.optimization_settings(),
                 settings,
+                alias_expressions,
+                timings,
             )?,
             orientations.len(),
         ))
@@ -497,6 +525,8 @@ impl EvaluatorStack {
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         dual_shape: &Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
+        timings: &mut EvaluatorBuildTimings,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let params: Vec<Atom> = (&param_builder.pairs)
@@ -507,38 +537,46 @@ impl EvaluatorStack {
 
         //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
 
-        let entries: Vec<FnMapEntry> = atoms
-            .iter()
-            .enumerate()
-            .map(|(i, a)| {
-                let mut args = vec![];
-                let mut lhs = FunctionBuilder::new(GS.integrand);
-                lhs = lhs.add_arg(i);
-                for (e, _) in &orientations[0] {
-                    lhs = lhs.add_arg(GS.sign(e));
-                    args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
-                }
-                let param_integrand = GS.collect_orientation_if(a.as_atom_view(), false);
-                fn_map
-                    .add_tagged_function(
-                        GS.integrand,
-                        vec![Atom::num(i)],
-                        args.clone(),
-                        param_integrand.clone(),
-                    )
-                    .map_err(|a| eyre!(a))?;
-                Ok(FnMapEntry {
-                    lhs: lhs.finish(),
-                    rhs: param_integrand.clone(),
-                    tags: vec![Atom::num(i)],
-                    args,
-                })
-            })
-            .collect::<Result<_>>()?;
+        let mut entries = Vec::new();
+        let mut registered_aliases = std::collections::HashSet::new();
+        for (i, a) in atoms.iter().enumerate() {
+            let mut args = vec![];
+            let mut lhs = FunctionBuilder::new(GS.integrand);
+            lhs = lhs.add_arg(i);
+            for (e, _) in &orientations[0] {
+                lhs = lhs.add_arg(GS.sign(e));
+                args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
+            }
+            let param_integrand = Self::alias_atom_with_timings(
+                GS.collect_orientation_if(a.as_atom_view(), false),
+                alias_expressions,
+                timings,
+            );
+            register_alias_function_map_entries(
+                &mut fn_map,
+                &mut entries,
+                &mut registered_aliases,
+                param_integrand.as_atom_view(),
+            )?;
+            fn_map
+                .add_tagged_function(
+                    GS.integrand,
+                    vec![Atom::num(i)],
+                    args.clone(),
+                    param_integrand.clone(),
+                )
+                .map_err(|a| eyre!(a))?;
+            entries.push(FnMapEntry {
+                lhs: lhs.finish(),
+                rhs: param_integrand.clone(),
+                tags: vec![Atom::num(i)],
+                args,
+            });
+        }
 
         // fn_map.add_conditional(name)
 
-        let sum = (0..entries.len()).map(|i| {
+        let sum = (0..atoms.len()).map(|i| {
             orientations
                 .iter()
                 .map(|a| {
@@ -558,14 +596,19 @@ impl EvaluatorStack {
                 ]))
         });
 
-        GenericEvaluator::new_from_raw_params(
+        GenericEvaluator::new_from_raw_params_with_progress(
             sum,
-            &params,
-            &fn_map,
-            entries,
-            settings.optimization_settings(),
-            dual_shape.clone(),
-            settings,
+            RawEvaluatorBuildParams {
+                params: &params,
+                fn_map: &fn_map,
+                fn_map_entries: entries,
+                optimization_settings: settings.optimization_settings(),
+                dual_shape: dual_shape.clone(),
+                settings,
+                alias_expressions,
+                evaluator_timings: Some(timings),
+            },
+            |_, _| {},
         )
     }
 
@@ -580,6 +623,8 @@ impl EvaluatorStack {
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         dual_shape: &Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
+        timings: &mut EvaluatorBuildTimings,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let sum = atoms.iter().map(|atom| {
@@ -606,12 +651,14 @@ impl EvaluatorStack {
                 ]))
         });
 
-        GenericEvaluator::new_from_builder(
+        GenericEvaluator::new_from_builder_with_alias_timings(
             sum,
             param_builder,
             dual_shape.clone(),
             settings.optimization_settings(),
             settings,
+            alias_expressions,
+            timings,
         )
     }
     pub fn new<A: AtomCore>(
@@ -621,7 +668,15 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
+        Ok(Self::new_with_timings(
+            atoms,
+            param_builder,
+            orientations,
+            dual_shape,
+            AliasExpressions::None(),
+            settings,
+        )?
+        .0)
     }
 
     pub fn new_preprocessed_components_with_timings<A, P>(
@@ -669,6 +724,7 @@ impl EvaluatorStack {
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         dual_shape: Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
         let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
@@ -681,6 +737,8 @@ impl EvaluatorStack {
                     param_builder,
                     orientations,
                     &dual_shape,
+                    alias_expressions,
+                    &mut timings,
                     settings,
                 )
                 .with_context(|| "Failed to create iterative evaluator")?,
@@ -696,6 +754,8 @@ impl EvaluatorStack {
                     param_builder,
                     orientations,
                     &dual_shape,
+                    alias_expressions,
+                    &mut timings,
                     settings,
                 )
                 .with_context(|| "Failed to create summed function map")?,
@@ -711,6 +771,8 @@ impl EvaluatorStack {
                     param_builder,
                     orientations,
                     &dual_shape,
+                    alias_expressions,
+                    &mut timings,
                     settings,
                 )
                 .with_context(|| "Failed to create summed ")?,
@@ -719,9 +781,15 @@ impl EvaluatorStack {
             None
         };
 
-        let single_parametric =
-            Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)
-                .with_context(|| "Failed to create parametric")?;
+        let single_parametric = Self::new_single_parametric(
+            &parsed_atoms,
+            param_builder,
+            &dual_shape,
+            alias_expressions,
+            &mut timings,
+            settings,
+        )
+        .with_context(|| "Failed to create parametric")?;
         timings.symbolica_time += symbolica_started.elapsed();
 
         Ok((
@@ -745,14 +813,21 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         dual_shape: Option<Vec<Vec<usize>>>,
+        alias_expressions: AliasExpressions,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
         let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
 
         let symbolica_started = std::time::Instant::now();
-        let single_parametric =
-            Self::new_direct(&parsed_atoms, param_builder, &dual_shape, settings)
-                .with_context(|| "Failed to create explicit orientation sum evaluator")?;
+        let single_parametric = Self::new_direct(
+            &parsed_atoms,
+            param_builder,
+            &dual_shape,
+            alias_expressions,
+            &mut timings,
+            settings,
+        )
+        .with_context(|| "Failed to create explicit orientation sum evaluator")?;
         timings.symbolica_time += symbolica_started.elapsed();
 
         Ok((
@@ -1222,6 +1297,59 @@ pub(crate) struct RawEvaluatorBuildParams<'a> {
     optimization_settings: OptimizationSettings,
     dual_shape: Option<Vec<Vec<usize>>>,
     settings: &'a EvaluatorSettings,
+    alias_expressions: AliasExpressions,
+    evaluator_timings: Option<&'a mut EvaluatorBuildTimings>,
+}
+
+fn register_alias_function_map_entry(
+    fn_map: &mut FunctionMap,
+    fn_map_entries: &mut Vec<FnMapEntry>,
+    alias: Atom,
+    body: Atom,
+) -> Result<()> {
+    let AtomView::Fun(function) = alias.as_atom_view() else {
+        return Err(eyre!("Expected GammaLoop alias function, got {alias}"));
+    };
+    let mut function_args = function.iter();
+    let tags = vec![
+        function_args
+            .next()
+            .ok_or_else(|| eyre!("Expected GammaLoop alias tag, got {alias}"))?
+            .to_owned(),
+    ];
+    let args = function_args
+        .map(|arg| Indeterminate::try_from(arg.to_owned()))
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|_| eyre!("Expected GammaLoop alias arguments to be indeterminates in {alias}"))?;
+    fn_map
+        .add_tagged_function(
+            function.get_symbol(),
+            tags.clone(),
+            args.clone(),
+            body.clone(),
+        )
+        .map_err(|err| eyre!(err))?;
+    fn_map_entries.push(FnMapEntry {
+        lhs: alias,
+        rhs: body,
+        args,
+        tags,
+    });
+    Ok(())
+}
+
+fn register_alias_function_map_entries(
+    fn_map: &mut FunctionMap,
+    fn_map_entries: &mut Vec<FnMapEntry>,
+    registered_aliases: &mut std::collections::HashSet<Atom>,
+    atom: AtomView<'_>,
+) -> Result<()> {
+    for (alias, body) in collect_gammaloop_alias_entries(atom) {
+        if registered_aliases.insert(alias.clone()) {
+            register_alias_function_map_entry(fn_map, fn_map_entries, alias, body)?;
+        }
+    }
+    Ok(())
 }
 
 impl GenericEvaluator {
@@ -1354,23 +1482,6 @@ impl GenericEvaluator {
             .unwrap_or(ActiveF64Backend::Eager)
     }
 
-    pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
-        atoms: I,
-        builder: &ParamBuilder<f64>,
-        dual_shape: Option<Vec<Vec<usize>>>,
-        optimization_settings: OptimizationSettings,
-        settings: &EvaluatorSettings,
-    ) -> Result<Self> {
-        Self::new_from_builder_with_progress(
-            atoms,
-            builder,
-            dual_shape,
-            optimization_settings,
-            settings,
-            |_, _| {},
-        )
-    }
-
     pub(crate) fn new_from_builder_with_progress<I, P>(
         atoms: I,
         builder: &ParamBuilder<f64>,
@@ -1397,8 +1508,40 @@ impl GenericEvaluator {
                 optimization_settings,
                 dual_shape,
                 settings,
+                alias_expressions: AliasExpressions::None(),
+                evaluator_timings: None,
             },
             progress,
+        )
+    }
+
+    pub(crate) fn new_from_builder_with_alias_timings<I: IntoIterator<Item = Atom>>(
+        atoms: I,
+        builder: &ParamBuilder<f64>,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        optimization_settings: OptimizationSettings,
+        settings: &EvaluatorSettings,
+        alias_expressions: AliasExpressions,
+        evaluator_timings: &mut EvaluatorBuildTimings,
+    ) -> Result<Self> {
+        let params: Vec<Atom> = (&builder.pairs)
+            .into_iter()
+            .flat_map(|p| p.params.clone())
+            .collect();
+
+        Self::new_from_raw_params_with_progress(
+            atoms,
+            RawEvaluatorBuildParams {
+                params: &params,
+                fn_map: &builder.fn_map,
+                fn_map_entries: builder.reps.clone(),
+                optimization_settings,
+                dual_shape,
+                settings,
+                alias_expressions,
+                evaluator_timings: Some(evaluator_timings),
+            },
+            |_, _| {},
         )
     }
 
@@ -1420,6 +1563,8 @@ impl GenericEvaluator {
                 optimization_settings,
                 dual_shape,
                 settings,
+                alias_expressions: AliasExpressions::None(),
+                evaluator_timings: None,
             },
             |_, _| {},
         )
@@ -1441,6 +1586,8 @@ impl GenericEvaluator {
             optimization_settings,
             dual_shape,
             settings,
+            alias_expressions,
+            mut evaluator_timings,
         } = build;
         let reps = if settings.do_fn_map_replacements {
             fn_map_entries
@@ -1450,19 +1597,39 @@ impl GenericEvaluator {
         } else {
             vec![]
         };
-
+        let mut fn_map_entries = fn_map_entries;
+        let mut fn_map = fn_map.clone();
+        let mut registered_aliases = fn_map_entries
+            .iter()
+            .filter(|entry| is_gammaloop_alias_atom(entry.lhs.as_atom_view()))
+            .map(|entry| entry.lhs.clone())
+            .collect::<std::collections::HashSet<_>>();
         let exprs: Vec<Atom> = atoms
             .into_iter()
             .map(|a| {
-                GS.collect_orientation_if(a.replace_multiple(&reps).replace_multiple(&reps), false)
+                let expr = GS.collect_orientation_if(
+                    a.replace_multiple(&reps).replace_multiple(&reps),
+                    false,
+                );
+                let expr = alias_expressions.apply_final(expr);
+                register_alias_function_map_entries(
+                    &mut fn_map,
+                    &mut fn_map_entries,
+                    &mut registered_aliases,
+                    expr.as_atom_view(),
+                )?;
+                if let Some(timings) = evaluator_timings.as_deref_mut() {
+                    EvaluatorStack::record_alias_atom_size(expr.as_atom_view(), timings);
+                }
+                Ok(expr)
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         let total_exprs = exprs.len();
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for (index, expr) in exprs.iter().enumerate() {
             let eval = expr
-                .evaluator(fn_map, params, optimization_settings.clone())
+                .evaluator(&fn_map, params, optimization_settings.clone())
                 .map_err(|e| {
                     let mut settings = SpensoPrintSettings::compact().nice_symbolica();
                     settings.max_line_length = Some(120);

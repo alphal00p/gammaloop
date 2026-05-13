@@ -170,7 +170,9 @@ mod tests {
         momentum::{Dep, ExternalMomenta, Helicity},
         settings::{
             GlobalSettings, RuntimeSettings, SamplingSettings,
-            global::{GammaloopCompileOptions, GenerationSettings, ThreeDRepresentation},
+            global::{
+                AliasExpressions, GammaloopCompileOptions, GenerationSettings, ThreeDRepresentation,
+            },
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
                 GammaloopTropicalSamplingSettings,
@@ -228,6 +230,53 @@ mod tests {
     #[test]
     fn generation_test_serialize_deserialize() {
         generic_test_settings::<GenerationSettings>();
+    }
+
+    #[test]
+    fn generation_alias_expressions_parse_legacy_and_threshold_forms() {
+        let legacy: GenerationSettings = toml::from_str(
+            r#"
+alias_expressions = "all"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            legacy.alias_expressions,
+            AliasExpressions::All {
+                min_byte_size: None
+            }
+        );
+
+        let threshold: GenerationSettings = toml::from_str(
+            r#"
+alias_expressions = { all = 128 }
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            threshold.alias_expressions,
+            AliasExpressions::All {
+                min_byte_size: Some(128)
+            }
+        );
+
+        let explicit_options: GenerationSettings = toml::from_str(
+            r#"
+[alias_expressions]
+final_only = { min_byte_size = 64 }
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            explicit_options.alias_expressions,
+            AliasExpressions::FinalOnly {
+                min_byte_size: Some(64)
+            }
+        );
+
+        let serialized = toml::to_string_pretty(&threshold).unwrap();
+        let roundtrip: GenerationSettings = toml::from_str(&serialized).unwrap();
+        assert_eq!(threshold, roundtrip);
     }
 
     #[test]

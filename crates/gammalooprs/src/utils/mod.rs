@@ -1742,6 +1742,10 @@ impl<T: FloatLike + ExportNumber> ExportNumber for F<T> {
     fn is_real(&self) -> bool {
         self.0.is_real()
     }
+
+    fn to_complex_double(&self) -> symbolica::domains::float::Complex<f64> {
+        self.0.to_complex_double()
+    }
 }
 
 impl<T: TensorLibraryData + FloatLike> TensorLibraryData for F<T> {

@@ -130,6 +130,7 @@ impl AmplitudeCountertermAtom {
                         slice::from_ref(integrand),
                         param_builder,
                         dual_shape,
+                        global_settings.generation.alias_expressions,
                         &global_settings.generation.evaluator,
                     )
                 } else {
@@ -138,6 +139,7 @@ impl AmplitudeCountertermAtom {
                         param_builder,
                         orientations.as_slice().as_ref(),
                         dual_shape,
+                        global_settings.generation.alias_expressions,
                         &global_settings.generation.evaluator,
                     )
                 }

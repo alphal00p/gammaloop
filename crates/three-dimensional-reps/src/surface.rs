@@ -524,6 +524,10 @@ pub struct UnitSurface {}
 pub struct InfiniteSurface {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// These surfaces are stored in typed caches and moved as cache entries; boxing
+// the linear variant would add indirection to the hot representation builders
+// without shrinking the cache allocation itself.
+#[allow(clippy::large_enum_variant)]
 pub enum HybridSurface<E = (), H = ()> {
     Esurface(E),
     Hsurface(H),

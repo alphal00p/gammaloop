@@ -5,10 +5,13 @@ use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fmt::{Display, Write},
     ops::{Deref, DerefMut},
-    sync::LazyLock,
+    sync::{
+        LazyLock, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Indeterminate, Symbol},
@@ -31,6 +34,221 @@ use symbolica::{
 use crate::GammaLoopContext;
 
 use super::{GS, W_};
+
+const GAMMALOOP_ALIAS_SYMBOL: &str = "gammalooprs::alias";
+
+static GAMMALOOP_ALIAS_COUNTER: AtomicUsize = AtomicUsize::new(0);
+static GAMMALOOP_ALIAS_STORE: LazyLock<Mutex<BTreeMap<Atom, Atom>>> =
+    LazyLock::new(|| Mutex::new(BTreeMap::new()));
+
+pub(crate) fn alias_subexpressions_into_global_store(
+    atom: Atom,
+    min_byte_size: Option<usize>,
+) -> Atom {
+    let aliased = atom.alias_subexpressions(|subexpr, _, _| {
+        alias_subexpression_is_allowed(subexpr, min_byte_size)
+            .then(|| gammaloop_alias_atom(subexpr))
+    });
+
+    if !aliased.get_aliases().is_empty() {
+        let mut store = GAMMALOOP_ALIAS_STORE
+            .lock()
+            .expect("GammaLoop alias store lock poisoned");
+        for (alias, body) in aliased.get_aliases() {
+            store.insert(alias.clone(), body.clone());
+        }
+    }
+
+    aliased.get_root().clone()
+}
+
+pub(crate) fn get_all_aliases(atom: AtomView<'_>) -> Vec<Atom> {
+    let mut aliases = Vec::new();
+    let mut seen_aliases = HashSet::new();
+    collect_all_aliases(atom, &mut seen_aliases, &mut aliases);
+    aliases
+}
+
+pub(crate) fn get_alias_expanded_byte_size(atom: AtomView<'_>) -> usize {
+    if let Some(alias_body) = lookup_gammaloop_alias(atom) {
+        return get_alias_expanded_byte_size(alias_body.as_atom_view());
+    }
+
+    match atom {
+        AtomView::Num(_) | AtomView::Var(_) => atom.get_byte_size(),
+        AtomView::Fun(fun) => expanded_container_byte_size(atom, fun.iter()),
+        AtomView::Pow(pow) => expanded_container_byte_size(atom, pow.iter()),
+        AtomView::Mul(mul) => expanded_container_byte_size(atom, mul.iter()),
+        AtomView::Add(add) => expanded_container_byte_size(atom, add.iter()),
+    }
+}
+
+pub(crate) fn lookup_gammaloop_alias(atom: AtomView<'_>) -> Option<Atom> {
+    is_gammaloop_alias_atom(atom).then(|| {
+        GAMMALOOP_ALIAS_STORE
+            .lock()
+            .expect("GammaLoop alias store lock poisoned")
+            .get::<[u8]>(atom.get_data())
+            .cloned()
+    })?
+}
+
+pub(crate) fn inline_gammaloop_aliases(mut atom: Atom) -> Atom {
+    loop {
+        let expanded = atom.replace_map(|subexpr, _, out| {
+            if let Some(alias_body) = lookup_gammaloop_alias(subexpr) {
+                **out = alias_body;
+            }
+        });
+        if expanded == atom {
+            return atom;
+        }
+        atom = expanded;
+    }
+}
+
+fn expanded_container_byte_size<'a>(
+    atom: AtomView<'a>,
+    children: impl IntoIterator<Item = AtomView<'a>>,
+) -> usize {
+    children
+        .into_iter()
+        .fold(atom.get_byte_size(), |byte_size, child| {
+            byte_size - child.get_byte_size() + get_alias_expanded_byte_size(child)
+        })
+}
+
+fn collect_all_aliases(
+    atom: AtomView<'_>,
+    seen_aliases: &mut HashSet<Atom>,
+    aliases: &mut Vec<Atom>,
+) {
+    if let Some(alias_body) = lookup_gammaloop_alias(atom) {
+        let alias_atom = atom.to_owned();
+        if seen_aliases.insert(alias_atom) {
+            collect_all_aliases(alias_body.as_atom_view(), seen_aliases, aliases);
+            aliases.push(alias_body);
+        }
+        return;
+    }
+
+    match atom {
+        AtomView::Num(_) | AtomView::Var(_) => {}
+        AtomView::Fun(fun) => {
+            for child in fun {
+                collect_all_aliases(child, seen_aliases, aliases);
+            }
+        }
+        AtomView::Pow(pow) => {
+            for child in pow {
+                collect_all_aliases(child, seen_aliases, aliases);
+            }
+        }
+        AtomView::Mul(mul) => {
+            for child in mul {
+                collect_all_aliases(child, seen_aliases, aliases);
+            }
+        }
+        AtomView::Add(add) => {
+            for child in add {
+                collect_all_aliases(child, seen_aliases, aliases);
+            }
+        }
+    }
+}
+
+pub(crate) fn collect_gammaloop_alias_entries(atom: AtomView<'_>) -> Vec<(Atom, Atom)> {
+    let mut aliases = Vec::new();
+    let mut seen_aliases = HashSet::new();
+    collect_gammaloop_alias_entries_impl(atom, &mut seen_aliases, &mut aliases);
+    aliases
+}
+
+fn collect_gammaloop_alias_entries_impl(
+    atom: AtomView<'_>,
+    seen_aliases: &mut HashSet<Atom>,
+    aliases: &mut Vec<(Atom, Atom)>,
+) {
+    if let Some(alias_body) = lookup_gammaloop_alias(atom) {
+        let alias_atom = atom.to_owned();
+        if seen_aliases.insert(alias_atom.clone()) {
+            collect_gammaloop_alias_entries_impl(alias_body.as_atom_view(), seen_aliases, aliases);
+            aliases.push((alias_atom, alias_body));
+        }
+        return;
+    }
+
+    match atom {
+        AtomView::Num(_) | AtomView::Var(_) => {}
+        AtomView::Fun(fun) => {
+            for child in fun {
+                collect_gammaloop_alias_entries_impl(child, seen_aliases, aliases);
+            }
+        }
+        AtomView::Pow(pow) => {
+            for child in pow {
+                collect_gammaloop_alias_entries_impl(child, seen_aliases, aliases);
+            }
+        }
+        AtomView::Mul(mul) => {
+            for child in mul {
+                collect_gammaloop_alias_entries_impl(child, seen_aliases, aliases);
+            }
+        }
+        AtomView::Add(add) => {
+            for child in add {
+                collect_gammaloop_alias_entries_impl(child, seen_aliases, aliases);
+            }
+        }
+    }
+}
+
+fn alias_subexpression_is_allowed(subexpr: AtomView<'_>, min_byte_size: Option<usize>) -> bool {
+    match subexpr {
+        AtomView::Num(_) | AtomView::Var(_) | AtomView::Pow(_) => false,
+        AtomView::Fun(fun) if is_structural_index_function(fun.get_symbol()) => false,
+        _ if is_gammaloop_alias_atom(subexpr) => false,
+        _ => min_byte_size.is_none_or(|min_byte_size| subexpr.get_byte_size() >= min_byte_size),
+    }
+}
+
+fn is_structural_index_function(symbol: Symbol) -> bool {
+    matches!(
+        symbol.get_stripped_name(),
+        "cind" | "mink" | "aind" | "uind" | "dind"
+    )
+}
+
+fn gammaloop_alias_atom(subexpr: AtomView<'_>) -> Atom {
+    let alias_index = GAMMALOOP_ALIAS_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut args = subexpr
+        .get_all_indeterminates(true)
+        .into_iter()
+        .map(|arg| arg.to_owned())
+        .filter(|arg| {
+            !is_gammaloop_alias_atom(arg.as_atom_view())
+                && !matches!(
+                    arg.as_atom_view(),
+                    AtomView::Fun(fun) if is_structural_index_function(fun.get_symbol())
+                )
+        })
+        .collect::<Vec<_>>();
+    args.sort();
+
+    let mut alias = FunctionBuilder::new(symbol!(GAMMALOOP_ALIAS_SYMBOL));
+    alias = alias.add_arg(alias_index);
+    for arg in args {
+        alias = alias.add_arg(arg);
+    }
+    alias.finish()
+}
+
+pub(crate) fn is_gammaloop_alias_atom(atom: AtomView<'_>) -> bool {
+    let AtomView::Fun(fun) = atom else {
+        return false;
+    };
+    fun.get_symbol().get_name() == GAMMALOOP_ALIAS_SYMBOL && fun.get_nargs() >= 1
+}
 
 pub(crate) fn add_numeric_constant_to_fn_map(
     fn_map: &mut symbolica::evaluate::FunctionMap,
@@ -997,5 +1215,125 @@ pub trait Replaces {
 impl<A: AtomCore> Replaces for A {
     fn replace_with<R: Into<ReplaceWith<'static>>>(&self, rhs: R) -> Replacement {
         Replacement::new(self.to_pattern(), rhs)
+    }
+}
+
+#[cfg(test)]
+mod alias_accounting_tests {
+    use symbolica::{atom::AtomCore, function, parse, symbol};
+
+    use super::{
+        alias_subexpressions_into_global_store, get_alias_expanded_byte_size, get_all_aliases,
+        inline_gammaloop_aliases,
+    };
+
+    fn alias_storage_byte_size(aliases: &[symbolica::atom::Atom]) -> usize {
+        aliases
+            .iter()
+            .map(|alias| alias.as_atom_view().get_byte_size())
+            .sum()
+    }
+
+    #[test]
+    fn alias_accounting_has_no_overhead_for_unaliased_atoms() {
+        let atom = parse!("probe::f(x+y,z)^2 + probe::g(x)");
+
+        assert!(get_all_aliases(atom.as_atom_view()).is_empty());
+        assert_eq!(
+            get_alias_expanded_byte_size(atom.as_atom_view()),
+            atom.as_atom_view().get_byte_size()
+        );
+    }
+
+    #[test]
+    fn alias_accounting_counts_repeated_alias_expansion_and_storage_once() {
+        let body = parse!("x+y+z");
+        let atom = function!(symbol!("probe::f"), body.clone())
+            + function!(symbol!("probe::g"), body.clone())
+            + function!(symbol!("probe::h"), body.clone());
+        let aliased = alias_subexpressions_into_global_store(atom, None);
+
+        let aliases = get_all_aliases(aliased.as_atom_view());
+        let root_byte_size = aliased.as_atom_view().get_byte_size();
+        let alias_storage_byte_size = alias_storage_byte_size(&aliases);
+        let expression_byte_size = root_byte_size + alias_storage_byte_size;
+        let expanded_byte_size = get_alias_expanded_byte_size(aliased.as_atom_view());
+
+        assert!(!aliases.is_empty());
+        assert!(alias_storage_byte_size >= body.as_atom_view().get_byte_size());
+        let materialized_expanded_byte_size = inline_gammaloop_aliases(aliased.clone())
+            .as_atom_view()
+            .get_byte_size();
+        assert_eq!(expanded_byte_size, materialized_expanded_byte_size);
+        assert!(expression_byte_size > 0);
+    }
+
+    #[test]
+    fn alias_accounting_collects_nested_alias_storage_once() {
+        let inner_body = parse!("x+y+z");
+        let inner_alias = alias_subexpressions_into_global_store(
+            function!(
+                symbol!("probe::inner_holder"),
+                inner_body.clone(),
+                inner_body.clone()
+            ),
+            None,
+        );
+        let outer_body = function!(
+            symbol!("probe::outer"),
+            inner_alias.clone(),
+            inner_alias.clone(),
+            inner_alias
+        );
+        let atom = function!(
+            symbol!("probe::top"),
+            outer_body.clone(),
+            outer_body.clone()
+        );
+        let aliased = alias_subexpressions_into_global_store(atom, None);
+
+        let aliases = get_all_aliases(aliased.as_atom_view());
+        let root_byte_size = aliased.as_atom_view().get_byte_size();
+        let alias_storage_byte_size = alias_storage_byte_size(&aliases);
+        let expression_byte_size = root_byte_size + alias_storage_byte_size;
+        let expanded_byte_size = get_alias_expanded_byte_size(aliased.as_atom_view());
+
+        assert!(aliases.len() >= 2);
+        let materialized_expanded_byte_size = inline_gammaloop_aliases(aliased.clone())
+            .as_atom_view()
+            .get_byte_size();
+        assert_eq!(expanded_byte_size, materialized_expanded_byte_size);
+        assert!(expression_byte_size > root_byte_size);
+    }
+
+    #[test]
+    fn alias_accounting_matches_faithful_compression_metric() {
+        let body =
+            parse!("probe::b0(x+y+z+w)+probe::b1(x+y+z+w)+probe::b2(x+y+z+w)+probe::b3(x+y+z+w)");
+        let atom = function!(symbol!("probe::f0"), body.clone())
+            + function!(symbol!("probe::f1"), body.clone())
+            + function!(symbol!("probe::f2"), body.clone())
+            + function!(symbol!("probe::f3"), body.clone())
+            + function!(symbol!("probe::f4"), body.clone())
+            + function!(symbol!("probe::f5"), body.clone())
+            + function!(symbol!("probe::f6"), body.clone())
+            + function!(symbol!("probe::f7"), body.clone());
+        let aliased = alias_subexpressions_into_global_store(atom, None);
+
+        let aliases = get_all_aliases(aliased.as_atom_view());
+        let expression_byte_size =
+            aliased.as_atom_view().get_byte_size() + alias_storage_byte_size(&aliases);
+        let expanded_byte_size = get_alias_expanded_byte_size(aliased.as_atom_view());
+
+        assert!(!aliases.is_empty());
+        let materialized_expanded_byte_size = inline_gammaloop_aliases(aliased.clone())
+            .as_atom_view()
+            .get_byte_size();
+        assert!(
+            expanded_byte_size.abs_diff(materialized_expanded_byte_size) <= 1,
+            "structural expanded byte size {expanded_byte_size} differs from materialized \
+             expanded byte size {materialized_expanded_byte_size}"
+        );
+        assert!(expression_byte_size > 0);
     }
 }

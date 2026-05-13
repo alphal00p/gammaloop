@@ -90,6 +90,53 @@ pub(super) fn default_integrate_for(name: &str) -> Integrate {
     }
 }
 
+pub(super) fn assert_integrand_alias_compression_factor(
+    cli: &gammaloop_integration_tests::CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    minimum_factor: f64,
+    context: &str,
+) -> Result<f64> {
+    let process_ref = ProcessRef::Unqualified(process_name.to_string());
+    let integrand_ref = Some(integrand_name.to_string());
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&process_ref), integrand_ref.as_ref())?;
+    let summary = cli
+        .state
+        .generation_summary(process_id, &resolved_integrand_name)
+        .ok_or_else(|| {
+            eyre::eyre!(
+                "{context}: missing generation summary for process {process_name}, integrand {integrand_name}"
+            )
+        })?;
+    let expression_byte_size = summary
+        .reports
+        .iter()
+        .map(|report| report.stats.evaluator_expression_byte_size())
+        .sum::<usize>();
+    let alias_expanded_byte_size = summary
+        .reports
+        .iter()
+        .map(|report| report.stats.evaluator_atom_alias_expanded_byte_size)
+        .sum::<usize>();
+    if expression_byte_size == 0 {
+        return Err(eyre::eyre!(
+            "{context}: generation summary did not record evaluator atom byte sizes"
+        ));
+    }
+    let factor = alias_expanded_byte_size as f64 / expression_byte_size as f64;
+    eprintln!(
+        "{context}: alias compression factor = {factor:.6} ({alias_expanded_byte_size} expanded bytes / {expression_byte_size} expression bytes)"
+    );
+    assert!(
+        factor > minimum_factor,
+        "{context}: expected alias compression factor > {minimum_factor:.6}, got {factor:.6} \
+         ({alias_expanded_byte_size} expanded bytes / {expression_byte_size} expression bytes)"
+    );
+    Ok(factor)
+}
+
 pub(super) fn selected_slot_workspace(
     cli: &gammaloop_integration_tests::CLIState,
     workspace: &Path,

@@ -40,8 +40,9 @@ use gammalooprs::{
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
-        merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
-        NamedGraphGenerationReport, Process, ProcessCollection, ProcessDefinition, ProcessList,
+        finalize_generated_graph_reports_alias_size_accounting, merge_generated_graph_reports,
+        DotExportSettings, GeneratedGraphReport, NamedGraphGenerationReport, Process,
+        ProcessCollection, ProcessDefinition, ProcessList,
     },
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     utils::{
@@ -1719,12 +1720,15 @@ impl State {
         let peak_ram_bytes = monitor.finish();
         clear_interrupt_request();
 
-        generation_result.map(|reports| GenerationReports {
-            reports,
-            resources: GenerationResourceSummary {
-                peak_ram_bytes,
-                generation_cores,
-            },
+        generation_result.map(|mut reports| {
+            finalize_generated_graph_reports_alias_size_accounting(&mut reports);
+            GenerationReports {
+                reports,
+                resources: GenerationResourceSummary {
+                    peak_ram_bytes,
+                    generation_cores,
+                },
+            }
         })
     }
 

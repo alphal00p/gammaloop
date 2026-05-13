@@ -172,6 +172,13 @@ impl<T: ExportNumber + SingleFloat> ExportNumber for Complex<T> {
     fn is_real(&self) -> bool {
         self.im.is_zero()
     }
+
+    fn to_complex_double(&self) -> SymComplex<f64> {
+        SymComplex {
+            re: self.re.to_complex_double().re,
+            im: self.im.to_complex_double().re,
+        }
+    }
 }
 impl<T: SingleFloat> SingleFloat for Complex<T>
 where

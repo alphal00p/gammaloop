@@ -795,8 +795,13 @@ impl AmplitudeGraph {
             .collect_factors()
     }
 
-    fn prepare_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
-        Ok(atom
+    fn prepare_parametric_integrand_atom(
+        &self,
+        atom: Atom,
+        alias_expressions: crate::settings::global::AliasExpressions,
+    ) -> Result<Atom> {
+        Ok(alias_expressions
+            .inline_for_symbolic_manipulation(atom)
             .replace(GS.dim)
             .with(4)
             .simplify_color()
@@ -806,11 +811,14 @@ impl AmplitudeGraph {
             .collect_factors())
     }
 
-    fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
-        let prepared = self.prepare_parametric_integrand_atom(atom)?;
-        Ok(self
-            .add_additional_factors_to_cff_atom(&prepared)
-            .collect_factors())
+    fn finalize_parametric_integrand_atom(
+        &self,
+        atom: Atom,
+        alias_expressions: crate::settings::global::AliasExpressions,
+    ) -> Result<Atom> {
+        let prepared = self.prepare_parametric_integrand_atom(atom, alias_expressions)?;
+        Ok(alias_expressions
+            .collect_factors_after_inlining(self.add_additional_factors_to_cff_atom(&prepared)))
     }
 
     pub fn to_numerical(
@@ -1036,9 +1044,10 @@ impl AmplitudeGraph {
                     RepresentationMode::Ltd,
                     true,
                     &settings.orientation_pattern,
+                    settings.alias_expressions,
                 );
             self.derived_data.all_mighty_integrand =
-                self.finalize_parametric_integrand_atom(atom)?;
+                self.finalize_parametric_integrand_atom(atom, settings.alias_expressions)?;
             return Ok(());
         }
         let cutstructure = CutStructure::empty(&self.graph);
@@ -1054,7 +1063,7 @@ impl AmplitudeGraph {
             settings.explicit_orientation_sum_only,
         )?;
         let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, &settings.uv)?
+            .orientation_parametric_exprs(&self.graph, settings)?
             .into_iter()
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .map(|e| {
@@ -1063,7 +1072,7 @@ impl AmplitudeGraph {
                     && !settings.uv.local_uv_cts_from_expanded_4d_integrands
                     && !e.explicitly_summed_orientations
                 {
-                    e.sum_orientations_explicitly(&valid_orientations)
+                    e.sum_orientations_explicitly(&valid_orientations, settings.alias_expressions)
                 } else {
                     e
                 }
@@ -1216,7 +1225,7 @@ impl AmplitudeGraph {
         )?;
 
         let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, &settings.uv)?
+            .orientation_parametric_exprs(&self.graph, settings)?
             .into_iter()
             .map(|e| {
                 if settings.explicit_orientation_sum_only
@@ -1224,7 +1233,7 @@ impl AmplitudeGraph {
                     && !settings.uv.local_uv_cts_from_expanded_4d_integrands
                     && !e.explicitly_summed_orientations
                 {
-                    e.sum_orientations_explicitly(&valid_orientations)
+                    e.sum_orientations_explicitly(&valid_orientations, settings.alias_expressions)
                 } else {
                     e
                 }

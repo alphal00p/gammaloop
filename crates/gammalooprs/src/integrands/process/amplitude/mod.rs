@@ -185,6 +185,7 @@ impl AmplitudeGraphTerm {
                     &[&graph.derived_data.all_mighty_integrand],
                     &graph.graph.param_builder,
                     None,
+                    settings.generation.alias_expressions,
                     &settings.generation.evaluator,
                 )?
             } else {
@@ -193,6 +194,7 @@ impl AmplitudeGraphTerm {
                     &graph.graph.param_builder,
                     orientations.as_slice().as_ref(),
                     None,
+                    settings.generation.alias_expressions,
                     &settings.generation.evaluator,
                 )?
             };
