@@ -31,8 +31,18 @@ where
 }
 
 /// Builds a four-dimensional Levi-Civita tensor.
-pub fn epsilon4(mu: &Atom, nu: &Atom, rho: &Atom, sigma: &Atom) -> Atom {
-    epsilon([mu, nu, rho, sigma])
+pub fn epsilon4<'a, 'b, 'c, 'd>(
+    mu: impl Into<AtomOrView<'a>>,
+    nu: impl Into<AtomOrView<'b>>,
+    rho: impl Into<AtomOrView<'c>>,
+    sigma: impl Into<AtomOrView<'d>>,
+) -> Atom {
+    FunctionBuilder::new(*EPSILON_SYMBOL)
+        .add_arg(mu)
+        .add_arg(nu)
+        .add_arg(rho)
+        .add_arg(sigma)
+        .finish()
 }
 
 /// Simplifies epsilon-metric contractions and epsilon-pair contractions.
