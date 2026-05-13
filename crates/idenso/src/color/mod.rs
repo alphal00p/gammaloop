@@ -18,7 +18,7 @@ use spenso::{
     },
     symbolica_atom,
     tensors::parametric::atomcore::PatternReplacement,
-    trace,
+    trace, trace_sym,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
@@ -1463,15 +1463,14 @@ fn trace_parts(trace: AtomView) -> Option<(Atom, Vec<Atom>)> {
     let AtomView::Fun(f) = trace else {
         return None;
     };
-    if f.get_symbol() != T.trace {
-        return None;
-    }
-
-    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    let [rep, factors @ ..] = args.as_slice() else {
-        return None;
-    };
-    Some((rep.clone(), factors.to_vec()))
+    let (rep, factors) = symbolica_atom::trace_parts(f)?;
+    Some((
+        rep.to_owned(),
+        factors
+            .into_iter()
+            .map(|factor| factor.to_owned())
+            .collect(),
+    ))
 }
 
 fn color_generator_adjoint(factor: AtomView) -> Option<Atom> {
@@ -1691,7 +1690,7 @@ fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) ->
         .into_iter()
         .map(|factor| CS.chain_t(factor))
         .collect::<Vec<_>>();
-    trace!(rep.clone(), symbolica_atom::sym(sym_factors))
+    trace_sym!(rep.clone(); sym_factors)
 }
 
 fn color_symmetric_product(rank: usize, left_rep: Atom, right_rep: Atom) -> Atom {

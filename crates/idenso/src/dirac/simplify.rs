@@ -5,7 +5,7 @@ use spenso::{
     network::tags::SPENSO_TAG as T,
     rep_,
     structure::representation::{LibraryRep, Minkowski, RepName},
-    symbolica_atom::IntoAtom,
+    symbolica_atom::{self, IntoAtom},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
@@ -1046,10 +1046,7 @@ impl DiracSimplifier<'_> {
     /// odd traces vanish and even traces recurse by contracting the first gamma
     /// with each later gamma.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
-        let args = f.iter().collect::<Vec<_>>();
-        let [rep, factors @ ..] = args.as_slice() else {
-            return None;
-        };
+        let (rep, factors) = symbolica_atom::trace_parts(f)?;
 
         if factors.is_empty() {
             return Self::simplify_trace_terminal(f.as_view());
@@ -1060,11 +1057,11 @@ impl DiracSimplifier<'_> {
             .map(|factor| DiracFactor::parse(*factor))
             .collect::<Vec<_>>();
 
-        if let Some(rewritten) = Self::simplify_special_trace_pair(*rep, &factors) {
+        if let Some(rewritten) = Self::simplify_special_trace_pair(rep, &factors) {
             return Some(rewritten);
         }
 
-        if let Some(rewritten) = Self::simplify_gamma5_trace_node(*rep, &factors) {
+        if let Some(rewritten) = Self::simplify_gamma5_trace_node(rep, &factors) {
             return Some(rewritten);
         }
 
@@ -1091,10 +1088,10 @@ impl DiracSimplifier<'_> {
             Self::extend_factors(&mut rest, &factors[i + 1..]);
 
             let rest_trace = if rest.is_empty() {
-                let terminal_trace = trace!(*rep; std::iter::empty::<Atom>());
+                let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
                 Self::simplify_trace_terminal(terminal_trace.as_view())?
             } else {
-                trace!(*rep; rest)
+                trace!(rep; rest)
             };
 
             let term = g!(first, mu_i) * rest_trace;

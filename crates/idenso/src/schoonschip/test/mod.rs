@@ -9,7 +9,7 @@ use spenso::{
         representation::{Minkowski, RepName, Representation},
         slot::IsAbstractSlot,
     },
-    trace,
+    trace, trace_sym,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -224,7 +224,28 @@ fn chain_like_metric_simplification_handles_traces() {
     let result = expr.schoonschip_with_settings(
         &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
     );
-    assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),F(in,out,P(1,mink(D))))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),cyclic(F(in,out,P(1,mink(D)))))");
+}
+
+#[test]
+fn chain_like_metric_simplification_handles_symmetric_traces() {
+    test_initialize();
+    let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+    let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+    let p = T.rank_one_tensor_symbol("P");
+    let f = symbol!("F");
+    let mu = slot!(mink, 1).to_atom();
+    let p_stripped = function!(p, 1, mink.to_symbolic([]));
+
+    let expr = ETS.metric(&mu, &p_stripped)
+        * trace_sym!(
+            bis.to_symbolic([]),
+            function!(f, chain_in(), chain_out(), &mu)
+        );
+    let result = expr.schoonschip_with_settings(
+        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+    );
+    assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),sym(F(in,out,P(1,mink(D)))))");
 }
 
 #[test]

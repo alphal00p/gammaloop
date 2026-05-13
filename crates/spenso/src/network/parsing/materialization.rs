@@ -43,6 +43,7 @@ use crate::{
         representation::{LibraryRep, RepName, Representation},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot},
     },
+    symbolica_atom,
 };
 use eyre::eyre;
 
@@ -510,7 +511,7 @@ where
 
         let rep = Representation::<LibraryRep>::try_from(*rep_view)
             .map_err(|err| eyre!("invalid trace representation `{rep_view}`: {err}"))?;
-        let factors = &args[1..];
+        let factors = symbolica_atom::trace_factor_views(&args[1..]);
 
         if factors.is_empty() {
             return Self::try_from_view_impl(
@@ -522,7 +523,7 @@ where
             );
         }
 
-        if let [factor] = factors {
+        if let [factor] = factors.as_slice() {
             let left = state.slot(&rep);
             let right = state.slot(&rep);
             let bridge = state.slot(&rep);
@@ -709,10 +710,19 @@ impl ChainExpansion {
             return None;
         };
 
+        if fun.get_symbol() == SPENSO_TAG.trace {
+            let (rep, factors) = symbolica_atom::trace_parts(fun)?;
+            let mut factors = factors
+                .into_iter()
+                .map(|factor| factor.to_owned())
+                .collect::<Vec<_>>();
+            let first = factors.first_mut()?;
+            *first = scalar.clone() * first.clone();
+            return Some(symbolica_atom::trace(rep, factors));
+        }
+
         let offset = if fun.get_symbol() == SPENSO_TAG.chain {
             2
-        } else if fun.get_symbol() == SPENSO_TAG.trace {
-            1
         } else {
             return None;
         };
