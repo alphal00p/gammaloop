@@ -127,6 +127,70 @@ symbol_set!(Wildcards, W_;
     a___ b___ c___ d___ e___ f___ g___ h___ i___ j___ k___ l___ m___ n___ o___ p___ q___ r___ s___ t___ u___ v___ w___ x___ y___ z___
 );
 
+/// Builds a stripped or indexed bispinor representation atom.
+#[macro_export]
+macro_rules! bis {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::Bispinor {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed spin-fundamental representation atom.
+#[macro_export]
+macro_rules! spf {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::SpinFundamental {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed spin-antifundamental representation atom.
+#[macro_export]
+macro_rules! spaf {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::SpinAntiFundamental {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed color-fundamental representation atom.
+#[macro_export]
+macro_rules! cof {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::ColorFundamental {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed color-antifundamental representation atom.
+#[macro_export]
+macro_rules! coaf {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::ColorAntiFundamental {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed color-sextet representation atom.
+#[macro_export]
+macro_rules! cos {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::ColorSextet {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed color-antisextet representation atom.
+#[macro_export]
+macro_rules! coas {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::ColorAntiSextet {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed color-adjoint representation atom.
+#[macro_export]
+macro_rules! coad {
+    ($($args:tt)*) => {
+        spenso::spenso_rep_atom!($crate::representations::ColorAdjoint {}; $($args)*)
+    };
+}
+
 /// Defines operations related to manipulating abstract indices within symbolic expressions,
 /// particularly relevant for physics calculations involving tensor structures and diagrams.
 ///
@@ -212,6 +276,37 @@ impl IndexTooling for Atom {
     }
     fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom> {
         self.as_view().list_dangling::<Aind>()
+    }
+}
+
+#[cfg(test)]
+mod syntax_macro_tests {
+    #[allow(unused_imports)]
+    use crate::{bis, coad, coaf, cof, color_d, color_d33, f, t};
+    use spenso::shadowing::symbolica_utils::AtomCoreExt;
+
+    #[test]
+    fn representation_macros_build_surface_syntax() {
+        crate::representations::initialize();
+
+        insta::assert_snapshot!(bis!(4, i).to_bare_ordered_string(), @"bis(4,i)");
+        insta::assert_snapshot!(cof!(Nc, i).to_bare_ordered_string(), @"cof(Nc,i)");
+        insta::assert_snapshot!(coaf!(Nc, i).to_bare_ordered_string(), @"dind(cof(Nc,i))");
+        insta::assert_snapshot!(coad!(Na, a).to_bare_ordered_string(), @"coad(Na,a)");
+    }
+
+    #[test]
+    fn color_macros_build_surface_syntax() {
+        crate::representations::initialize();
+
+        let a = coad!(Na, a);
+        let b = coad!(Na, b);
+        let c = coad!(Na, c);
+
+        insta::assert_snapshot!(t!(a.clone()).to_bare_ordered_string(), @"t(coad(Na,a),in,out)");
+        insta::assert_snapshot!(f!(a.clone(), b.clone(), c.clone()).to_bare_ordered_string(), @"f(coad(Na,a),coad(Na,b),coad(Na,c))");
+        insta::assert_snapshot!(color_d!(coad!(Na), a, b, c).to_bare_ordered_string(), @"d(coad(Na),coad(Na,a),coad(Na,b),coad(Na,c))");
+        insta::assert_snapshot!(color_d33!(coad!(Na), coad!(Na)).to_bare_ordered_string(), @"d33(coad(Na),coad(Na))");
     }
 }
 

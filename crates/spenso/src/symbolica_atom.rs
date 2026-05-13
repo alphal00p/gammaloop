@@ -436,6 +436,63 @@ macro_rules! slot {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! spenso_rep_atom {
+    ($rep:expr; $dim:ident $(,)?) => {{
+        let rep = $crate::structure::representation::RepName::new_rep(&$rep, $crate::s!($dim));
+        rep.to_symbolic(std::iter::empty::<symbolica::atom::Atom>())
+    }};
+    ($rep:expr; $dim:expr $(,)?) => {{
+        let rep = $crate::structure::representation::RepName::new_rep(&$rep, $dim);
+        rep.to_symbolic(std::iter::empty::<symbolica::atom::Atom>())
+    }};
+    ($rep:expr; $dim:ident, $index:ident $(,)?) => {{
+        let rep = $crate::structure::representation::RepName::new_rep(&$rep, $crate::s!($dim));
+        rep.to_symbolic([$crate::symbolica_atom::IntoAtom::into_atom($crate::s!(
+            $index
+        ))])
+    }};
+    ($rep:expr; $dim:ident, $index:expr $(,)?) => {{
+        let rep = $crate::structure::representation::RepName::new_rep(&$rep, $crate::s!($dim));
+        rep.to_symbolic([$crate::symbolica_atom::IntoAtom::into_atom($index)])
+    }};
+    ($rep:expr; $dim:expr, $index:ident $(,)?) => {{
+        let rep = $crate::structure::representation::RepName::new_rep(&$rep, $dim);
+        rep.to_symbolic([$crate::symbolica_atom::IntoAtom::into_atom($crate::s!(
+            $index
+        ))])
+    }};
+    ($rep:expr; $dim:expr, $index:expr $(,)?) => {{
+        let rep = $crate::structure::representation::RepName::new_rep(&$rep, $dim);
+        rep.to_symbolic([$crate::symbolica_atom::IntoAtom::into_atom($index)])
+    }};
+}
+
+/// Builds a stripped or indexed Minkowski representation atom.
+#[macro_export]
+macro_rules! mink {
+    ($($args:tt)*) => {
+        $crate::spenso_rep_atom!($crate::structure::representation::Minkowski {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed Euclidean representation atom.
+#[macro_export]
+macro_rules! euc {
+    ($($args:tt)*) => {
+        $crate::spenso_rep_atom!($crate::structure::representation::Euclidean {}; $($args)*)
+    };
+}
+
+/// Builds a stripped or indexed Lorentz representation atom.
+#[macro_export]
+macro_rules! lor {
+    ($($args:tt)*) => {
+        $crate::spenso_rep_atom!($crate::structure::representation::Lorentz {}; $($args)*)
+    };
+}
+
 /// Builds a symbolic tensor function from a name and tensor arguments.
 ///
 /// Identifier heads are created with [`tensor_symbol!`], so they keep the
@@ -532,6 +589,117 @@ macro_rules! q {
     ($($arg:expr),+ $(,)?) => {
         $crate::vector!(q, $($arg),+)
     };
+}
+
+/// Builds a metric tensor atom `g(a,b)`.
+#[macro_export]
+macro_rules! metric {
+    ($a:expr, $b:expr $(,)?) => {
+        symbolica::function!(
+            $crate::network::library::symbolic::ETS.metric,
+            $crate::symbolica_atom::IntoAtom::into_atom($a),
+            $crate::symbolica_atom::IntoAtom::into_atom($b)
+        )
+    };
+}
+
+/// Builds a metric tensor atom `g(a,b)`.
+#[macro_export]
+macro_rules! g {
+    ($a:expr, $b:expr $(,)?) => {
+        $crate::metric!($a, $b)
+    };
+}
+
+/// Builds a two-argument compact dot-product atom.
+#[macro_export]
+macro_rules! dot {
+    ($a:expr, $b:expr $(,)?) => {
+        symbolica::function!(
+            $crate::network::tags::SPENSO_TAG.dot,
+            $crate::symbolica_atom::IntoAtom::into_atom($a),
+            $crate::symbolica_atom::IntoAtom::into_atom($b)
+        )
+    };
+}
+
+/// Forces an expression through the parser's pure-scalar boundary.
+#[macro_export]
+macro_rules! pure_scalar {
+    ($expr:expr $(,)?) => {
+        symbolica::function!(
+            $crate::network::tags::SPENSO_TAG.pure_scalar,
+            $crate::symbolica_atom::IntoAtom::into_atom($expr)
+        )
+    };
+}
+
+/// Builds a parser grouping over network factors.
+#[macro_export]
+macro_rules! bracket {
+    ($($expr:expr),* $(,)?) => {
+        symbolica::function!(
+            $crate::network::tags::SPENSO_TAG.bracket,
+            $($crate::symbolica_atom::IntoAtom::into_atom($expr)),*
+        )
+    };
+}
+
+/// Bundles structural slots inside one tensor argument.
+#[macro_export]
+macro_rules! aind {
+    ($($slot:expr),* $(,)?) => {
+        symbolica::function!(
+            $crate::structure::abstract_index::AIND_SYMBOLS.aind,
+            $($crate::symbolica_atom::IntoAtom::into_atom($slot)),*
+        )
+    };
+}
+
+/// Wraps a slot or representation atom in the dual-index marker.
+#[macro_export]
+macro_rules! dind {
+    ($slot:expr $(,)?) => {
+        symbolica::function!(
+            $crate::structure::abstract_index::AIND_SYMBOLS.dind,
+            $crate::symbolica_atom::IntoAtom::into_atom($slot)
+        )
+    };
+}
+
+/// Builds a generic chain or trace factor with explicit `in` and `out` markers.
+///
+/// Use the identifier tokens `in` and `out` in the argument list to insert the
+/// chain placeholder symbols. Other arguments are converted through `IntoAtom`.
+#[macro_export]
+macro_rules! chain_factor {
+    ($name:ident $(,)?) => {{
+        let factor = symbolica::atom::FunctionBuilder::new($crate::tensor_symbol!($name));
+        $crate::chain_factor!(@finish factor)
+    }};
+    ($name:ident, $($args:tt)+) => {{
+        let factor = symbolica::atom::FunctionBuilder::new($crate::tensor_symbol!($name));
+        $crate::chain_factor!(@finish factor, $($args)+)
+    }};
+    ($name:expr; $($args:tt)*) => {{
+        let factor = symbolica::atom::FunctionBuilder::new($name);
+        $crate::chain_factor!(@finish factor $(, $args)*)
+    }};
+    (@finish $factor:ident) => {
+        $factor.finish()
+    };
+    (@finish $factor:ident, in $(, $rest:tt)*) => {{
+        let $factor = $factor.add_arg(symbolica::atom::Atom::var($crate::network::tags::SPENSO_TAG.chain_in));
+        $crate::chain_factor!(@finish $factor $(, $rest)*)
+    }};
+    (@finish $factor:ident, out $(, $rest:tt)*) => {{
+        let $factor = $factor.add_arg(symbolica::atom::Atom::var($crate::network::tags::SPENSO_TAG.chain_out));
+        $crate::chain_factor!(@finish $factor $(, $rest)*)
+    }};
+    (@finish $factor:ident, $arg:expr $(, $rest:tt)*) => {{
+        let $factor = $factor.add_arg($crate::symbolica_atom::IntoAtom::into_atom($arg));
+        $crate::chain_factor!(@finish $factor $(, $rest)*)
+    }};
 }
 
 /// Builds an inert normalized symmetrizer over chain/trace factors.
@@ -695,7 +863,12 @@ macro_rules! trace {
 
 #[cfg(test)]
 mod tests {
-    use crate::{network::tags::SPENSO_TAG, symbolica_atom::ProjectorExpander};
+    #[allow(unused_imports)]
+    use crate::{
+        aind, antisym, bracket, chain, chain_factor, dind, dot, g, lor, mink,
+        network::tags::SPENSO_TAG, p, pure_scalar, q, shadowing::symbolica_utils::AtomCoreExt, sym,
+        symbolica_atom::ProjectorExpander, trace,
+    };
     use symbolica::{
         atom::{Atom, AtomView},
         symbol,
@@ -703,8 +876,11 @@ mod tests {
 
     #[test]
     fn tensor_macros_create_tagged_heads() {
-        let tensor = crate::tensor!(tensor_macro_test_head);
-        let vector = crate::vector!(vector_macro_test_head, 1);
+        #[allow(unused_imports)]
+        use crate::{tensor, vector};
+
+        let tensor = tensor!(tensor_macro_test_head);
+        let vector = vector!(vector_macro_test_head, 1);
 
         let AtomView::Fun(tensor) = tensor.as_view() else {
             panic!("tensor macro should produce a function");
@@ -720,6 +896,32 @@ mod tests {
     }
 
     #[test]
+    fn surface_macros_build_parser_syntax() {
+        let mu = mink!(4, mu);
+        let nu = mink!(4, nu);
+        let p = p!(mink!(4));
+        let q = q!(mink!(4));
+
+        insta::assert_snapshot!(g!(mu.clone(), nu.clone()).to_bare_ordered_string(), @"g(mink(4,mu),mink(4,nu))");
+        insta::assert_snapshot!(dot!(p.clone(), q.clone()).to_bare_ordered_string(), @"dot(p(mink(4)),q(mink(4)))");
+        insta::assert_snapshot!(aind!(mu.clone(), nu.clone()).to_bare_ordered_string(), @"aind(mink(4,mu),mink(4,nu))");
+        let dual = dind!(lor!(4, rho));
+        let AtomView::Fun(dual) = dual.as_view() else {
+            panic!("dind macro should produce a function");
+        };
+        assert_eq!(
+            dual.get_symbol(),
+            crate::structure::abstract_index::AIND_SYMBOLS.dind
+        );
+        insta::assert_snapshot!(pure_scalar!(Atom::num(1)).to_bare_ordered_string(), @"pure_scalar(1)");
+        insta::assert_snapshot!(bracket!(p, q).to_bare_ordered_string(), @"bracket(p(mink(4)),q(mink(4)))");
+        insta::assert_snapshot!(
+            chain_factor!(factor, in, mu, out).to_bare_ordered_string(),
+            @"factor(in,mink(4,mu),out)"
+        );
+    }
+
+    #[test]
     fn chain_macro_accepts_iterable_factors() {
         let start = Atom::var(symbol!("start"));
         let end = Atom::var(symbol!("end"));
@@ -727,8 +929,8 @@ mod tests {
         let second = Atom::var(symbol!("second"));
 
         assert_eq!(
-            crate::chain!(start.clone(), end.clone(); vec![first.clone(), second.clone()]),
-            crate::chain!(start, end, first, second)
+            chain!(start.clone(), end.clone(); vec![first.clone(), second.clone()]),
+            chain!(start, end, first, second)
         );
     }
 
@@ -739,8 +941,8 @@ mod tests {
         let second = Atom::var(symbol!("second"));
 
         assert_eq!(
-            crate::trace!(rep.clone(); vec![first.clone(), second.clone()]),
-            crate::trace!(rep, first, second)
+            trace!(rep.clone(); vec![first.clone(), second.clone()]),
+            trace!(rep, first, second)
         );
     }
 
@@ -749,10 +951,7 @@ mod tests {
         let first = Atom::var(symbol!("first"));
         let second = Atom::var(symbol!("second"));
 
-        assert_eq!(
-            crate::sym!(second.clone(), first.clone()),
-            crate::sym!(first, second)
-        );
+        assert_eq!(sym!(second.clone(), first.clone()), sym!(first, second));
     }
 
     #[test]
@@ -762,15 +961,15 @@ mod tests {
         let first = Atom::var(symbol!("first"));
         let second = Atom::var(symbol!("second"));
 
-        let expanded = crate::chain!(
+        let expanded = chain!(
             start.clone(),
             end.clone(),
-            crate::sym!(first.clone(), second.clone())
+            sym!(first.clone(), second.clone())
         )
         .expand_projectors();
         let expected = Atom::num(1) / Atom::num(2)
-            * crate::chain!(start.clone(), end.clone(), first.clone(), second.clone())
-            + Atom::num(1) / Atom::num(2) * crate::chain!(start, end, second, first);
+            * chain!(start.clone(), end.clone(), first.clone(), second.clone())
+            + Atom::num(1) / Atom::num(2) * chain!(start, end, second, first);
 
         assert_eq!(expanded, expected);
     }
@@ -781,8 +980,8 @@ mod tests {
         let first = Atom::var(symbol!("first"));
         let second = Atom::var(symbol!("second"));
 
-        let expanded = crate::trace!(rep.clone(), crate::antisym!(first.clone(), second.clone()))
-            .expand_projectors();
+        let expanded =
+            trace!(rep.clone(), antisym!(first.clone(), second.clone())).expand_projectors();
 
         assert_eq!(expanded, Atom::Zero);
     }
@@ -794,14 +993,14 @@ mod tests {
         let second = Atom::var(symbol!("second"));
         let third = Atom::var(symbol!("third"));
 
-        let expanded = crate::trace!(
+        let expanded = trace!(
             rep.clone(),
-            crate::sym!(first.clone(), second.clone(), third.clone())
+            sym!(first.clone(), second.clone(), third.clone())
         )
         .expand_projectors();
         let expected = Atom::num(1) / Atom::num(2)
-            * crate::trace!(rep.clone(), first.clone(), second.clone(), third.clone())
-            + Atom::num(1) / Atom::num(2) * crate::trace!(rep, first, third, second);
+            * trace!(rep.clone(), first.clone(), second.clone(), third.clone())
+            + Atom::num(1) / Atom::num(2) * trace!(rep, first, third, second);
 
         assert_eq!(expanded, expected);
     }
@@ -813,15 +1012,15 @@ mod tests {
         let first = Atom::var(symbol!("first"));
         let second = Atom::var(symbol!("second"));
 
-        let expanded = crate::chain!(
+        let expanded = chain!(
             start.clone(),
             end.clone(),
-            crate::antisym!(second.clone(), first.clone())
+            antisym!(second.clone(), first.clone())
         )
         .expand_projectors();
         let expected = Atom::num(-1) / Atom::num(2)
-            * crate::chain!(start.clone(), end.clone(), first.clone(), second.clone())
-            + Atom::num(1) / Atom::num(2) * crate::chain!(start, end, second, first);
+            * chain!(start.clone(), end.clone(), first.clone(), second.clone())
+            + Atom::num(1) / Atom::num(2) * chain!(start, end, second, first);
 
         assert_eq!(expanded, expected);
     }
