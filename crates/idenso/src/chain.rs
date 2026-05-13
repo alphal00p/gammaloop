@@ -21,6 +21,8 @@ static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     let stripped_rep = self_dual_!(1; W_.d_);
 
     [Replacement::new(
+        // A chain whose endpoints are the same slot is a closed line:
+        // chain(rep(d,i), rep(d,i), factors...) -> trace(rep(d), factors...).
         chain!(&rep, &rep, W_.a___).to_pattern(),
         trace!(stripped_rep, W_.a___),
     )]

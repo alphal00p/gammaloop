@@ -87,6 +87,7 @@ and what to use when matching it in a replacement rule.
 | `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
 | `chain(start, end, factors...)` | ordered open chain | `chain!(start, end, factors...)` | `SPENSO_TAG.chain` symbol; ordered arguments | `chain!(start, end, factors...)` |
 | `trace(rep, factors...)` | ordered closed trace | `trace!(rep, factors...)` | `SPENSO_TAG.trace` symbol; ordered arguments | `trace!(rep, factors...)` |
+| `epsilon(args...)` | antisymmetric Levi-Civita tensor for idenso epsilon algebra | `epsilon!(args...)` | `EPSILON_SYMBOL` with `Antisymmetric` attribute | `function!(*EPSILON_SYMBOL, W_.x___)` |
 | `bracket(expr...)` | product-like parser grouping of network factors | `bracket!(expr...)` | `SPENSO_TAG.bracket` symbol | `function!(T.bracket, W_.x___)` |
 | `broadcast(expr)` | apply a scalar/broadcast function to the parsed inner tensor | `broadcast_symbol!(f)` then `function!(f, expr)` | head tagged `broadcast` | `function!(W_.f_, W_.x_)` with a broadcast-head condition |
 | `sum`, `product`, `integer power` | ordinary Symbolica arithmetic, parsed recursively | `+`, `*`, `.pow(...)` | Symbolica arithmetic nodes | ordinary Symbolica pattern, with conditions for exponent cases |
@@ -173,7 +174,7 @@ concrete side of the same tag system used by the pattern constructors.
 For concrete expressions in tests and examples, prefer the expression macros:
 
 ```rust
-use idenso::gamma;
+use idenso::{epsilon, gamma};
 use spenso::{chain, dot, p, q, slot};
 
 let mu = slot!(mink4, mu);
@@ -184,6 +185,7 @@ let expr = chain!(
     gamma!(slot!(mink4, nu)),
 );
 let dot = dot!(p!(&mink4), q!(&mink4));
+let eps = epsilon!(slot!(mink4, mu), slot!(mink4, nu), slot!(mink4, rho));
 ```
 
 For replacement rules, use wildcard-head macros with the same tags instead of
@@ -224,11 +226,12 @@ structural predicates, or local predicates such as `not_slot(...)` to prevent
 variadic tails from swallowing structural slots.
 
 idenso adds domain-specific expression macros for common Dirac objects:
-`gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. It also has color builders
-`color_t!`, `t!`, `color_f!`, `f!`, `color_d!`, and `color_d33!`. Use these in
-tests and examples when they make the expression read like the algebra. In
-generic rewrite rules, still match the structural class with Spenso tag patterns
-when the rule is not specific to one concrete head.
+`gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. It also has the Levi-Civita
+builder `epsilon!` and color builders `color_t!`, `t!`, `color_f!`, `f!`,
+`color_d!`, and `color_d33!`. Use these in tests and examples when they make
+the expression read like the algebra. In generic rewrite rules, still match the
+structural class with Spenso tag patterns when the rule is not specific to one
+concrete head.
 
 ## Rust Rewrite Idioms
 
@@ -325,6 +328,12 @@ or C-side trace logic. In Rust, keep the local identity as a static replacement
 only when the Symbolica match already contains all information needed for the
 right-hand side. Otherwise put the strategy on a pass type, as in
 `DiracChainSimplifier` in `crates/idenso/src/dirac/simplify.rs`.
+
+`crates/idenso/src/epsilon.rs` is an example of a dynamic pass. Its right-hand
+side depends on the matched epsilon rank and factor positions: it emits
+`g(a,b) epsilon(...,a,...) -> epsilon(...,b,...)`,
+`epsilon(a_1,...,a_n) epsilon(b_1,...,b_n) -> det(g(a_i,b_j))`, and the matching
+power form `epsilon(a_1,...,a_n)^k -> det(g(a_i,a_j)) epsilon(...)^(k-2)`.
 
 Disable RHS caching when a map creates match-local fresh symbols:
 
