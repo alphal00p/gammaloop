@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    chain,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    chain, g,
+    network::tags::SPENSO_TAG as T,
     rep_,
     structure::representation::{LibraryRep, Minkowski, RepName},
     symbolica_atom::IntoAtom,
@@ -11,7 +11,6 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    function,
     id::{Context, Replacement},
     utils::Settable,
 };
@@ -36,6 +35,7 @@ static EPSILON_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symb
 
 static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     [Replacement::new(
+        // Empty spin trace: Tr_rep(1) -> dim(rep).
         trace!(rep_!(0; W_.d_)).to_pattern(),
         Atom::var(W_.d_),
     )]
@@ -418,7 +418,7 @@ impl DiracSimplifier<'_> {
             Self::extend_factors(&mut rest, &factors[..i]);
             Self::extend_factors(&mut rest, &factors[i + 2..]);
 
-            return Some(function!(ETS.metric, mu, nu) * chain!(start, end; rest));
+            return Some(g!(mu, nu) * chain!(start, end; rest));
         }
 
         None
@@ -549,7 +549,7 @@ impl DiracSimplifier<'_> {
 
                 Some(
                     Atom::num(4)
-                        * function!(ETS.metric, mu, nu)
+                        * g!(mu, nu)
                         * chain!(start, end; Self::chain_factors(
                             factors,
                             left,
@@ -826,7 +826,7 @@ impl DiracSimplifier<'_> {
         nu: AtomView<'_>,
         factors: Vec<Atom>,
     ) -> Atom {
-        (function!(ETS.metric, mu, nu) * chain!(start, end; factors)).schoonschip_with_settings(
+        (g!(mu, nu) * chain!(start, end; factors)).schoonschip_with_settings(
             &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
         )
     }
@@ -1039,6 +1039,12 @@ fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
 }
 
 impl DiracSimplifier<'_> {
+    /// Evaluates a Dirac trace.
+    ///
+    /// The pass first handles four-dimensional special factors (`gamma0`,
+    /// `gamma5`), then falls back to ordinary gamma traces:
+    /// odd traces vanish and even traces recurse by contracting the first gamma
+    /// with each later gamma.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
         let args = f.iter().collect::<Vec<_>>();
         let [rep, factors @ ..] = args.as_slice() else {
@@ -1066,14 +1072,16 @@ impl DiracSimplifier<'_> {
             Self::gamma_mink_index_sequence_for(TRACE_GAMMA_RECURSION, &factors)?;
 
         if factors.len() % 2 == 1 {
+            // Tr(gamma(mu_1)...gamma(mu_{2n+1})) -> 0.
             return Some(Atom::Zero);
         }
 
         let first = trace_mink_indices[0];
         let mut sum = Atom::Zero;
 
-        // Standard recursive even trace formula:
-        // tr(g1...gn) = sum_i (-1)^i g(1,i) tr(g2...g_{i-1}g_{i+1}...gn).
+        // Standard recursive even trace formula, with one-based positions:
+        // Tr(g1...gn) =
+        //   sum_{k=2..n} (-1)^k g(1,k) Tr(g2...g_{k-1}g_{k+1}...gn).
         for i in 1..factors.len() {
             let mu_i = trace_mink_indices[i];
             let sign = if i % 2 == 1 { 1 } else { -1 };
@@ -1089,7 +1097,7 @@ impl DiracSimplifier<'_> {
                 trace!(*rep; rest)
             };
 
-            let term = function!(ETS.metric, first, mu_i) * rest_trace;
+            let term = g!(first, mu_i) * rest_trace;
             if sign == 1 {
                 sum += term;
             } else {
@@ -1109,6 +1117,9 @@ impl DiracSimplifier<'_> {
             match (&factors[i], &factors[i + 1]) {
                 (DiracFactor::Gamma5(_), DiracFactor::Gamma5(_))
                 | (DiracFactor::Gamma0(_), DiracFactor::Gamma0(_)) => {
+                    // Four-dimensional involutions inside a trace:
+                    // Tr(... gamma5 gamma5 ...) -> Tr(...)
+                    // Tr(... gamma0 gamma0 ...) -> Tr(...).
                     let mut rest = Vec::with_capacity(factors.len() - 2);
                     Self::extend_factors(&mut rest, &factors[..i]);
                     Self::extend_factors(&mut rest, &factors[i + 2..]);
@@ -1144,15 +1155,21 @@ impl DiracSimplifier<'_> {
         factors: &[DiracFactor<'_>],
         gamma5_position: usize,
     ) -> Option<Atom> {
+        // Use trace cyclicity to put gamma5 first, then evaluate
+        // Tr(gamma5 gamma(mu_1)...gamma(mu_n)).
         let parsed_after_gamma5 = Self::cyclic_without_position(factors, gamma5_position);
         let mink_indices =
             Self::gamma_mink_index_sequence_for(TRACE_GAMMA5_RECURSION, &parsed_after_gamma5)?;
 
         if mink_indices.len() < 4 || mink_indices.len() % 2 == 1 {
+            // With one gamma5, traces with fewer than four gammas or an odd
+            // number of ordinary gammas vanish.
             return Some(Atom::Zero);
         }
 
         if mink_indices.len() == 4 {
+            // Tr(gamma5 gamma(mu) gamma(nu) gamma(rho) gamma(sigma))
+            //   -> 4 epsilon(mu,nu,rho,sigma).
             return Some(
                 Atom::num(4)
                     * epsilon4(
@@ -1173,9 +1190,10 @@ impl DiracSimplifier<'_> {
             Self::extend_factors(&mut rest, &parsed_after_gamma5[1..i]);
             Self::extend_factors(&mut rest, &parsed_after_gamma5[i + 1..]);
 
-            let term =
-                function!(ETS.metric, first, mink_indices[i]) * Self::trace_or_terminal(rep, rest);
+            let term = g!(first, mink_indices[i]) * Self::trace_or_terminal(rep, rest);
 
+            // Longer gamma5 traces recurse by contracting the first ordinary
+            // gamma, leaving gamma5 in the reduced trace.
             if i % 2 == 1 {
                 sum += term;
             } else {
@@ -1191,6 +1209,9 @@ impl DiracSimplifier<'_> {
         factors: &[DiracFactor<'_>],
         first_gamma5_position: usize,
     ) -> Option<Atom> {
+        // Rotate one gamma5 to the front. If every intervening factor
+        // anticommutes with gamma5, move the second gamma5 next to it:
+        // Tr(gamma5 A_1...A_m gamma5 B) -> (-1)^m Tr(A_1...A_m B).
         let factors = Self::cyclic_from_position(factors, first_gamma5_position);
         let second_gamma5_position = factors
             .iter()
@@ -1249,6 +1270,7 @@ impl DiracSimplifier<'_> {
     }
 
     fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
+        // Tr_rep(1) -> dim(rep).
         let trace = trace.to_owned();
         let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
         (simplified != trace).then_some(simplified)

@@ -700,6 +700,7 @@ static COLOR_TRACE_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("x"
 
 static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     [Replacement::new(
+        // Empty color trace: Tr_rep(1) -> dim(rep).
         trace!(rep_!(0; W_.d_)).to_pattern(),
         Atom::var(W_.d_),
     )]
@@ -857,6 +858,8 @@ impl ColorAlgebraSimplifier {
                 .iter()
                 .all(|factor| is_chain_identity_factor(factor.as_view()))
         {
+            // Tr(1) and Tr(identity-line factors) collapse to the traced
+            // representation dimension.
             return trace_terminal_dimension(rep.as_view());
         }
 
@@ -864,6 +867,8 @@ impl ColorAlgebraSimplifier {
             .iter()
             .position(|factor| is_chain_identity_factor(factor.as_view()))
         {
+            // An identity line inside a longer trace is neutral:
+            // Tr(... 1 ... ) -> Tr(...).
             return Some(trace_with_factors(
                 rep,
                 factors_excluding_indices(&factors, &[identity_index]),
@@ -892,8 +897,12 @@ impl ColorAlgebraSimplifier {
             .collect::<Option<Vec<_>>>()?;
 
         match generators.as_slice() {
+            // Tr(T^a) -> 0.
             [_] => Some(Atom::Zero),
+            // Tr(T^a T^b) -> TR g^{ab}.
             [a, b] => Some(Atom::var(CS.tr) * color_metric(a.clone(), b.clone())),
+            // Tr(T^a T^b T^c) ->
+            //   Tr(sym(T^a,T^b,T^c)) + i/2 TR f^{abc}.
             [a, b, c] => Some(
                 color_symmetric_trace(&rep, [a.clone(), b.clone(), c.clone()])
                     + Atom::i() * Atom::num(1) / Atom::num(2)
@@ -917,6 +926,8 @@ impl ColorAlgebraSimplifier {
                 continue;
             }
 
+            // Adjacent equal generators inside a fundamental trace:
+            // Tr(... T^a T^a ...) -> CF Tr(...).
             return Some(
                 Atom::var(CS.cf)
                     * trace_with_factors(rep.clone(), factors_excluding_range(factors, i, i + 2)),
@@ -958,7 +969,9 @@ impl ColorAlgebraSimplifier {
         if let [factor] = factors {
             let (prefactor, args) = color_antisymmetric_generator_args(factor.as_view())?;
             return match args.as_slice() {
+                // Tr(antisym(T^a,T^b)) is the trace of a commutator.
                 [_, _] => Some(Atom::Zero),
+                // Tr(antisym(T^a,T^b,T^c)) -> i/2 TR f^{abc}.
                 [a, b, c] => Some(
                     prefactor
                         * Atom::i()
@@ -982,6 +995,8 @@ impl ColorAlgebraSimplifier {
 
             let mut replacement_factors = factors.to_vec();
             replacement_factors[position] = CS.chain_t(x.clone());
+            // In a longer trace, antisym(T^a,T^b) is the normalized
+            // commutator: i/2 f^{abx} T^x.
             return Some(
                 prefactor * Atom::i() / Atom::num(2)
                     * color_f([a.clone(), b.clone(), x])
@@ -1004,6 +1019,8 @@ impl ColorAlgebraSimplifier {
                 continue;
             }
 
+            // Separated equal generators with one generator between them:
+            // Tr(... T^a T^b T^a ...) -> (CF - CA/2) Tr(... T^b ...).
             return Some(
                 (Atom::var(CS.cf) - Atom::var(CS.ca) / Atom::num(2))
                     * trace_with_factors(
@@ -1054,6 +1071,9 @@ impl ColorAlgebraSimplifier {
     ) -> Option<Atom> {
         let x = color_adjoint_dummy_like(a)?;
 
+        // Four-generator terminal decomposition:
+        // Tr(T^a T^b T^c T^d) is split into a fully symmetric trace, two
+        // f * symmetric-trace terms, and two f*f terms.
         Some(
             color_symmetric_trace(rep, [a.clone(), b.clone(), c.clone(), d.clone()])
                 + Atom::i() / Atom::num(2)
@@ -1183,6 +1203,7 @@ impl ColorAlgebraSimplifier {
                     continue;
                 }
 
+                // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
                 let replacement = Atom::i() * Atom::var(CS.ca) / Atom::num(2)
                     * trace!(rep.clone(); std::iter::once(CS.chain_t(fc)).chain(rest.iter().cloned()));
                 return Some(product_replacing_pair(
