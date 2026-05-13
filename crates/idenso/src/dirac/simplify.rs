@@ -198,595 +198,657 @@ impl DiracRuleDimension {
 }
 
 pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplifySettings) -> Atom {
-    let rep = Bispinor {}.into();
-    let mut expr = expr
-        .to_owned()
-        .expand()
-        .simplify_metrics()
-        .simplify_epsilon()
-        .chainify(rep)
-        .collect_chains(rep)
-        .expand()
-        .simplify_metrics()
-        .simplify_epsilon();
+    DiracChainSimplifier::new(settings).simplify(expr)
+}
 
-    loop {
-        let next = match (
-            settings.chain_ordering,
-            settings.evaluate_traces,
-            settings.expand_three_gamma_epsilon,
+#[derive(Debug, Clone, Copy)]
+struct DiracChainSimplifier {
+    settings: GammaSimplifySettings,
+}
+
+impl DiracChainSimplifier {
+    fn new(settings: GammaSimplifySettings) -> Self {
+        Self { settings }
+    }
+
+    fn from_options(
+        chain_ordering: GammaChainOrdering,
+        evaluate_traces: bool,
+        expand_epsilon: bool,
+    ) -> Self {
+        Self::new(GammaSimplifySettings {
+            chain_ordering,
+            evaluate_traces,
+            expand_three_gamma_epsilon: expand_epsilon,
+        })
+    }
+
+    fn simplify(self, expr: AtomView) -> Atom {
+        let rep = Bispinor {}.into();
+        let mut expr = expr
+            .to_owned()
+            .expand()
+            .simplify_metrics()
+            .simplify_epsilon()
+            .chainify(rep)
+            .collect_chains(rep)
+            .expand()
+            .simplify_metrics()
+            .simplify_epsilon();
+
+        loop {
+            let next = self
+                .rewrite_expression(expr.as_view())
+                .expand()
+                .simplify_metrics()
+                .simplify_epsilon()
+                .normalize_chains()
+                .simplify_metrics()
+                .simplify_epsilon();
+
+            if next == expr {
+                return next;
+            }
+
+            expr = next;
+        }
+    }
+
+    fn rewrite_expression(self, expr: AtomView) -> Atom {
+        match (
+            self.settings.chain_ordering,
+            self.settings.evaluate_traces,
+            self.settings.expand_three_gamma_epsilon,
         ) {
-            (GammaChainOrdering::RepeatedPairs, true, false) => {
-                expr.replace_map(&dirac_chain_rewrite::<false, true, false>)
-            }
-            (GammaChainOrdering::RepeatedPairs, true, true) => {
-                expr.replace_map(&dirac_chain_rewrite::<false, true, true>)
-            }
-            (GammaChainOrdering::RepeatedPairs, false, false) => {
-                expr.replace_map(&dirac_chain_rewrite::<false, false, false>)
-            }
-            (GammaChainOrdering::RepeatedPairs, false, true) => {
-                expr.replace_map(&dirac_chain_rewrite::<false, false, true>)
-            }
-            (GammaChainOrdering::Canonical, true, false) => {
-                expr.replace_map(&dirac_chain_rewrite::<true, true, false>)
-            }
-            (GammaChainOrdering::Canonical, true, true) => {
-                expr.replace_map(&dirac_chain_rewrite::<true, true, true>)
-            }
-            (GammaChainOrdering::Canonical, false, false) => {
-                expr.replace_map(&dirac_chain_rewrite::<true, false, false>)
-            }
-            (GammaChainOrdering::Canonical, false, true) => {
-                expr.replace_map(&dirac_chain_rewrite::<true, false, true>)
-            }
+            (GammaChainOrdering::RepeatedPairs, true, false) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<false, true, false>),
+            (GammaChainOrdering::RepeatedPairs, true, true) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<false, true, true>),
+            (GammaChainOrdering::RepeatedPairs, false, false) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<false, false, false>),
+            (GammaChainOrdering::RepeatedPairs, false, true) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<false, false, true>),
+            (GammaChainOrdering::Canonical, true, false) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<true, true, false>),
+            (GammaChainOrdering::Canonical, true, true) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<true, true, true>),
+            (GammaChainOrdering::Canonical, false, false) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<true, false, false>),
+            (GammaChainOrdering::Canonical, false, true) => expr
+                .to_owned()
+                .replace_map(&dirac_chain_rewrite::<true, false, true>),
         }
-        .expand()
-        .simplify_metrics()
-        .simplify_epsilon()
-        .normalize_chains()
-        .simplify_metrics()
-        .simplify_epsilon();
+    }
 
-        if next == expr {
-            return next;
+    fn rewrite_node(self, arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
+        let AtomView::Fun(f) = arg else {
+            return;
+        };
+
+        if f.get_symbol() == T.chain {
+            if let Some(rewritten) = self.simplify_chain_node(arg) {
+                **out = rewritten;
+            }
+        } else if self.settings.evaluate_traces
+            && f.get_symbol() == T.trace
+            && let Some(rewritten) = self.simplify_trace_node(arg)
+        {
+            **out = rewritten;
+        }
+    }
+
+    fn simplify_chain_node(self, chain: AtomView) -> Option<Atom> {
+        let AtomView::Fun(f) = chain else {
+            return None;
+        };
+
+        let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+        let [start, end, factors @ ..] = args.as_slice() else {
+            return None;
+        };
+
+        if factors.is_empty() {
+            return Some(id_atom(start.clone(), end.clone()));
         }
 
-        expr = next;
+        let parsed_factors = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
+
+        Self::contract_adjacent_gamma_pair(start, end, factors, &parsed_factors)
+            .or_else(|| {
+                Self::contract_adjacent_special_dirac_pair(start, end, factors, &parsed_factors)
+            })
+            .or_else(|| {
+                Self::conjugate_special_factor_by_gamma0(start, end, factors, &parsed_factors)
+            })
+            .or_else(|| Self::four_dim_chisholm_contraction(start, end, factors, &parsed_factors))
+            .or_else(|| {
+                self.settings
+                    .expand_three_gamma_epsilon
+                    .then(|| {
+                        Self::four_dim_three_gamma_epsilon_expansion(
+                            start,
+                            end,
+                            factors,
+                            &parsed_factors,
+                        )
+                    })
+                    .flatten()
+            })
+            .or_else(|| Self::move_gamma5_right_of_gamma(start, end, factors, &parsed_factors))
+            .or_else(|| Self::move_projector_right_of_gamma(start, end, factors, &parsed_factors))
+            .or_else(|| match self.settings.chain_ordering {
+                GammaChainOrdering::RepeatedPairs => {
+                    Self::bubble_repeated_gamma_towards_contraction(
+                        start,
+                        end,
+                        factors,
+                        &parsed_factors,
+                    )
+                }
+                GammaChainOrdering::Canonical => {
+                    Self::canonicalize_gamma_chain_order(start, end, factors, &parsed_factors)
+                }
+            })
     }
 }
 
 // `replace_map` needs a function item with sufficiently general lifetimes.
-// Const generics keep the settings static without four handwritten wrappers.
 fn dirac_chain_rewrite<
     const CANONICAL: bool,
     const EVALUATE_TRACES: bool,
     const EXPAND_EPSILON: bool,
 >(
     arg: AtomView,
-    _context: &Context,
+    context: &Context,
     out: &mut Settable<'_, Atom>,
 ) {
-    let AtomView::Fun(f) = arg else {
-        return;
-    };
-
-    if f.get_symbol() == T.chain {
-        if let Some(rewritten) =
-            simplify_chain_node(arg, chain_ordering::<CANONICAL>(), EXPAND_EPSILON)
-        {
-            **out = rewritten;
-        }
-    } else if EVALUATE_TRACES
-        && f.get_symbol() == T.trace
-        && let Some(rewritten) = simplify_trace_node(arg)
-    {
-        **out = rewritten;
-    }
-}
-
-fn chain_ordering<const CANONICAL: bool>() -> GammaChainOrdering {
-    if CANONICAL {
+    let ordering = if CANONICAL {
         GammaChainOrdering::Canonical
     } else {
         GammaChainOrdering::RepeatedPairs
-    }
-}
-
-fn simplify_chain_node(
-    chain: AtomView,
-    chain_ordering: GammaChainOrdering,
-    expand_epsilon: bool,
-) -> Option<Atom> {
-    let AtomView::Fun(f) = chain else {
-        return None;
     };
-
-    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    let [start, end, factors @ ..] = args.as_slice() else {
-        return None;
-    };
-
-    if factors.is_empty() {
-        return Some(id_atom(start.clone(), end.clone()));
-    }
-
-    let parsed_factors = factors
-        .iter()
-        .map(|factor| DiracFactor::parse(factor.as_view()))
-        .collect::<Vec<_>>();
-
-    contract_adjacent_gamma_pair(start, end, factors, &parsed_factors)
-        .or_else(|| contract_adjacent_special_dirac_pair(start, end, factors, &parsed_factors))
-        .or_else(|| conjugate_special_factor_by_gamma0(start, end, factors, &parsed_factors))
-        .or_else(|| four_dim_chisholm_contraction(start, end, factors, &parsed_factors))
-        .or_else(|| {
-            expand_epsilon
-                .then(|| {
-                    four_dim_three_gamma_epsilon_expansion(start, end, factors, &parsed_factors)
-                })
-                .flatten()
-        })
-        .or_else(|| move_gamma5_right_of_gamma(start, end, factors, &parsed_factors))
-        .or_else(|| move_projector_right_of_gamma(start, end, factors, &parsed_factors))
-        .or_else(|| match chain_ordering {
-            GammaChainOrdering::RepeatedPairs => {
-                bubble_repeated_gamma_towards_contraction(start, end, factors, &parsed_factors)
-            }
-            GammaChainOrdering::Canonical => {
-                canonicalize_gamma_chain_order(start, end, factors, &parsed_factors)
-            }
-        })
+    DiracChainSimplifier::from_options(ordering, EVALUATE_TRACES, EXPAND_EPSILON)
+        .rewrite_node(arg, context, out);
 }
 
-fn contract_adjacent_gamma_pair(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    for i in 0..factors.len().saturating_sub(1) {
-        let Some((mu, nu)) = gamma_pair_lorentz_for(
-            ADJACENT_GAMMA_CONTRACTION,
-            &parsed_factors[i],
-            &parsed_factors[i + 1],
-        ) else {
-            continue;
-        };
-
-        if mu != nu {
-            continue;
-        }
-
-        let mut rest = Vec::with_capacity(factors.len() - 2);
-        rest.extend_from_slice(&factors[..i]);
-        rest.extend_from_slice(&factors[i + 2..]);
-
-        return Some(function!(ETS.metric, mu, nu) * chain!(start, end; rest));
-    }
-
-    None
-}
-
-fn contract_adjacent_special_dirac_pair(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_spin_endpoints(start, end) {
-        return None;
-    }
-
-    for i in 0..factors.len().saturating_sub(1) {
-        let replacement = match (&parsed_factors[i], &parsed_factors[i + 1]) {
-            (DiracFactor::Gamma5, DiracFactor::Gamma5)
-            | (DiracFactor::Gamma0, DiracFactor::Gamma0) => Vec::new(),
-            (DiracFactor::ProjectorPlus, DiracFactor::ProjectorPlus) => {
-                vec![endpoint_factor(AGS.projp)]
-            }
-            (DiracFactor::ProjectorMinus, DiracFactor::ProjectorMinus) => {
-                vec![endpoint_factor(AGS.projm)]
-            }
-            (DiracFactor::ProjectorPlus, DiracFactor::ProjectorMinus)
-            | (DiracFactor::ProjectorMinus, DiracFactor::ProjectorPlus) => return Some(Atom::Zero),
-            _ => continue,
-        };
-
-        return Some(chain!(start, end; chain_factors(factors, i, i + 1, replacement)));
-    }
-
-    None
-}
-
-fn conjugate_special_factor_by_gamma0(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_spin_endpoints(start, end) {
-        return None;
-    }
-
-    for i in 0..factors.len().saturating_sub(2) {
-        if parsed_factors[i] != DiracFactor::Gamma0 || parsed_factors[i + 2] != DiracFactor::Gamma0
-        {
-            continue;
-        }
-
-        let (sign, replacement) = match parsed_factors[i + 1] {
-            DiracFactor::Gamma5 => (-1, gamma5_factor()),
-            DiracFactor::ProjectorPlus => (1, endpoint_factor(AGS.projm)),
-            DiracFactor::ProjectorMinus => (1, endpoint_factor(AGS.projp)),
-            _ => continue,
-        };
-
-        let rewritten = chain!(start, end; chain_factors(factors, i, i + 2, [replacement]));
-        return Some(if sign == 1 {
-            rewritten
-        } else {
-            Atom::num(sign) * rewritten
-        });
-    }
-
-    None
-}
-
-fn bubble_repeated_gamma_towards_contraction(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    // Repeated-pair mode only pays the anticommutation cost when it exposes a
-    // contraction in the next fixed-point step.
-    let (_i, j) = shortest_repeated_gamma_pair(parsed_factors)?;
-    if j == 0 {
-        return None;
-    }
-
-    anticommute_adjacent_gamma_pair(start, end, factors, parsed_factors, j - 1)
-}
-
-fn four_dim_chisholm_contraction(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    let (left, right) = shortest_repeated_four_dim_gamma_pair(parsed_factors)?;
-    let interior = &factors[left + 1..right];
-    let parsed_interior = &parsed_factors[left + 1..right];
-    let interior_lorentz = gamma_lorentz_sequence_for(FOUR_DIM_CHISHOLM, parsed_interior)?;
-
-    // FORM and FeynCalc use direct 4D Chisholm identities for short interiors;
-    // this avoids generating the larger anticommutation expansion first.
-    match interior.len() {
-        1 => Some(
-            Atom::num(-2)
-                * chain!(start, end; chain_factors(factors, left, right, interior.iter().cloned())),
-        ),
-        2 => {
-            let mu = interior_lorentz[0].clone();
-            let nu = interior_lorentz[1].clone();
-
-            Some(
-                Atom::num(4)
-                    * function!(ETS.metric, mu, nu)
-                    * chain!(start, end; chain_factors(factors, left, right, [])),
-            )
-        }
-        3 => {
-            let reversed = interior.iter().rev().cloned().collect::<Vec<_>>();
-            Some(Atom::num(-2) * chain!(start, end; chain_factors(factors, left, right, reversed)))
-        }
-        4 => {
-            let term_1 = [
-                interior[2].clone(),
-                interior[1].clone(),
-                interior[0].clone(),
-                interior[3].clone(),
-            ];
-            let term_2 = [
-                interior[3].clone(),
-                interior[0].clone(),
-                interior[1].clone(),
-                interior[2].clone(),
-            ];
-
-            Some(
-                Atom::num(2) * chain!(start, end; chain_factors(factors, left, right, term_1))
-                    + Atom::num(2)
-                        * chain!(start, end; chain_factors(factors, left, right, term_2)),
-            )
-        }
-        _ => None,
-    }
-}
-
-fn four_dim_three_gamma_epsilon_expansion(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_spin_endpoints(start, end) {
-        return None;
-    }
-
-    for i in 0..factors.len().saturating_sub(2) {
-        let Some(lorentz) =
-            gamma_lorentz_sequence_for(FOUR_DIM_THREE_GAMMA_EPSILON, &parsed_factors[i..i + 3])
-        else {
-            continue;
-        };
-        if !lorentz.iter().all(is_minkowski_slot) {
-            continue;
-        }
-
-        let [mu, nu, rho] = lorentz.as_slice() else {
-            unreachable!("the window always contains three gamma factors")
-        };
-        let sigma = epsilon_dummy_minkowski_slot();
-
-        // The chain normal form keeps gamma5 to the right of ordinary gammas.
-        let epsilon_term = Atom::num(-1)
-            * chain!(start, end; chain_factors(
-                factors,
-                i,
-                i + 2,
-                [gamma_factor(sigma.clone()), gamma5_factor()],
-            ))
-            * epsilon4(mu, nu, rho, &sigma);
-
-        let metric_mu_nu = generated_metric_chain_term(
-            start,
-            end,
-            mu,
-            nu,
-            chain_factors(factors, i, i + 2, [factors[i + 2].clone()]),
-        );
-        let metric_mu_rho = generated_metric_chain_term(
-            start,
-            end,
-            mu,
-            rho,
-            chain_factors(factors, i, i + 2, [factors[i + 1].clone()]),
-        );
-        let metric_nu_rho = generated_metric_chain_term(
-            start,
-            end,
-            nu,
-            rho,
-            chain_factors(factors, i, i + 2, [factors[i].clone()]),
-        );
-
-        return Some(epsilon_term + metric_mu_nu - metric_mu_rho + metric_nu_rho);
-    }
-
-    None
-}
-
-fn chain_factors(
-    factors: &[Atom],
-    left: usize,
-    right: usize,
-    middle: impl IntoIterator<Item = Atom>,
-) -> Vec<Atom> {
-    let mut result = Vec::with_capacity(factors.len() - 2);
-    result.extend_from_slice(&factors[..left]);
-    result.extend(middle);
-    result.extend_from_slice(&factors[right + 1..]);
-    result
-}
-
-fn canonicalize_gamma_chain_order(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    for i in 0..factors.len().saturating_sub(1) {
-        let Some((mu, nu)) = gamma_pair_lorentz_for(
-            GAMMA_ANTICOMMUTATION,
-            &parsed_factors[i],
-            &parsed_factors[i + 1],
-        ) else {
-            continue;
-        };
-
-        if mu > nu {
-            return anticommute_adjacent_gamma_pair(start, end, factors, parsed_factors, i);
-        }
-    }
-
-    None
-}
-
-fn move_gamma5_right_of_gamma(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_spin_endpoints(start, end) {
-        return None;
-    }
-
-    for i in 0..factors.len().saturating_sub(1) {
-        let DiracFactor::Gamma5 = parsed_factors[i] else {
-            continue;
-        };
-        if parsed_factors[i + 1]
-            .gamma_lorentz(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
-            .is_none()
-        {
-            continue;
-        }
-
-        let mut swapped = factors.to_vec();
-        swapped.swap(i, i + 1);
-        return Some(Atom::num(-1) * chain!(start, end; swapped));
-    }
-
-    None
-}
-
-fn move_projector_right_of_gamma(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_spin_endpoints(start, end) {
-        return None;
-    }
-
-    for i in 0..factors.len().saturating_sub(1) {
-        let opposite_projector = match parsed_factors[i] {
-            DiracFactor::ProjectorPlus => endpoint_factor(AGS.projm),
-            DiracFactor::ProjectorMinus => endpoint_factor(AGS.projp),
-            _ => continue,
-        };
-        if parsed_factors[i + 1]
-            .gamma_lorentz(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
-            .is_none()
-        {
-            continue;
-        }
-
-        let mut moved = factors.to_vec();
-        moved[i] = factors[i + 1].clone();
-        moved[i + 1] = opposite_projector;
-        return Some(chain!(start, end; moved));
-    }
-
-    None
-}
-
-fn anticommute_adjacent_gamma_pair(
-    start: &Atom,
-    end: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-    swap_at: usize,
-) -> Option<Atom> {
-    let (mu, nu) = gamma_pair_lorentz_for(
-        GAMMA_ANTICOMMUTATION,
-        &parsed_factors[swap_at],
-        &parsed_factors[swap_at + 1],
-    )?;
-
-    let mut metric_rest = Vec::with_capacity(factors.len() - 2);
-    metric_rest.extend_from_slice(&factors[..swap_at]);
-    metric_rest.extend_from_slice(&factors[swap_at + 2..]);
-
-    // Run the local metric term through chain-aware Schoonschip before it can
-    // swell the Clifford expansion.
-    let metric_term = Atom::num(2) * generated_metric_chain_term(start, end, &mu, &nu, metric_rest);
-
-    let mut swapped = factors.to_vec();
-    swapped.swap(swap_at, swap_at + 1);
-
-    Some(metric_term - chain!(start, end; swapped))
-}
-
-fn generated_metric_chain_term(
-    start: &Atom,
-    end: &Atom,
-    mu: &Atom,
-    nu: &Atom,
-    factors: Vec<Atom>,
-) -> Atom {
-    (function!(ETS.metric, mu.clone(), nu.clone()) * chain!(start, end; factors))
-        .schoonschip_with_settings(
-            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-        )
-}
-
-fn shortest_repeated_gamma_pair(factors: &[DiracFactor]) -> Option<(usize, usize)> {
-    let mut best = None;
-
-    for i in 0..factors.len() {
-        if factors[i].gamma_lorentz(GAMMA_ANTICOMMUTATION).is_none() {
-            continue;
-        }
-
-        for (j, factor) in factors.iter().enumerate().skip(i + 1) {
-            let Some((mu, nu)) = gamma_pair_lorentz_for(GAMMA_ANTICOMMUTATION, &factors[i], factor)
-            else {
+impl DiracChainSimplifier {
+    fn contract_adjacent_gamma_pair(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        for i in 0..factors.len().saturating_sub(1) {
+            let Some((mu, nu)) = Self::gamma_pair_lorentz_for(
+                ADJACENT_GAMMA_CONTRACTION,
+                &parsed_factors[i],
+                &parsed_factors[i + 1],
+            ) else {
                 continue;
             };
 
-            if mu == nu && best.is_none_or(|(a, b)| j - i < b - a) {
-                best = Some((i, j));
-            }
-        }
-    }
-
-    best
-}
-
-fn shortest_repeated_four_dim_gamma_pair(factors: &[DiracFactor]) -> Option<(usize, usize)> {
-    let mut best = None;
-
-    for i in 0..factors.len() {
-        let Some(mu) = factors[i].gamma_lorentz(FOUR_DIM_CHISHOLM) else {
-            continue;
-        };
-        if !is_minkowski_slot(mu) {
-            continue;
-        }
-
-        for (j, factor) in factors.iter().enumerate().skip(i + 1) {
-            let Some(nu) = factor.gamma_lorentz(FOUR_DIM_CHISHOLM) else {
+            if mu != nu {
                 continue;
-            };
-
-            if mu == nu && best.is_none_or(|(a, b)| j - i < b - a) {
-                best = Some((i, j));
             }
+
+            let mut rest = Vec::with_capacity(factors.len() - 2);
+            rest.extend_from_slice(&factors[..i]);
+            rest.extend_from_slice(&factors[i + 2..]);
+
+            return Some(function!(ETS.metric, mu, nu) * chain!(start, end; rest));
         }
+
+        None
     }
 
-    best
-}
-
-fn gamma_pair_lorentz_for(
-    rule_dimension: DiracRuleDimension,
-    left: &DiracFactor,
-    right: &DiracFactor,
-) -> Option<(Atom, Atom)> {
-    let left_lorentz = left.gamma_lorentz(rule_dimension)?;
-    let right_lorentz = right.gamma_lorentz(rule_dimension)?;
-    if !compatible_gamma_dimensions(rule_dimension, left, right) {
-        return None;
-    }
-
-    Some((left_lorentz.clone(), right_lorentz.clone()))
-}
-
-fn gamma_lorentz_sequence_for(
-    rule_dimension: DiracRuleDimension,
-    factors: &[DiracFactor],
-) -> Option<Vec<Atom>> {
-    let mut known_dimension = None;
-    let mut lorentz = Vec::with_capacity(factors.len());
-
-    for factor in factors {
-        let gamma_lorentz = factor.gamma_lorentz(rule_dimension)?;
-        if !merge_known_gamma_dimension(
-            rule_dimension,
-            &mut known_dimension,
-            factor.gamma_dimension(),
-        ) {
+    fn contract_adjacent_special_dirac_pair(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_spin_endpoints(start, end) {
             return None;
         }
-        lorentz.push(gamma_lorentz.clone());
+
+        for i in 0..factors.len().saturating_sub(1) {
+            let replacement = match (&parsed_factors[i], &parsed_factors[i + 1]) {
+                (DiracFactor::Gamma5, DiracFactor::Gamma5)
+                | (DiracFactor::Gamma0, DiracFactor::Gamma0) => Vec::new(),
+                (DiracFactor::ProjectorPlus, DiracFactor::ProjectorPlus) => {
+                    vec![endpoint_factor(AGS.projp)]
+                }
+                (DiracFactor::ProjectorMinus, DiracFactor::ProjectorMinus) => {
+                    vec![endpoint_factor(AGS.projm)]
+                }
+                (DiracFactor::ProjectorPlus, DiracFactor::ProjectorMinus)
+                | (DiracFactor::ProjectorMinus, DiracFactor::ProjectorPlus) => {
+                    return Some(Atom::Zero);
+                }
+                _ => continue,
+            };
+
+            return Some(chain!(start, end; Self::chain_factors(factors, i, i + 1, replacement)));
+        }
+
+        None
     }
 
-    Some(lorentz)
+    fn conjugate_special_factor_by_gamma0(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_spin_endpoints(start, end) {
+            return None;
+        }
+
+        for i in 0..factors.len().saturating_sub(2) {
+            if parsed_factors[i] != DiracFactor::Gamma0
+                || parsed_factors[i + 2] != DiracFactor::Gamma0
+            {
+                continue;
+            }
+
+            let (sign, replacement) = match parsed_factors[i + 1] {
+                DiracFactor::Gamma5 => (-1, gamma5_factor()),
+                DiracFactor::ProjectorPlus => (1, endpoint_factor(AGS.projm)),
+                DiracFactor::ProjectorMinus => (1, endpoint_factor(AGS.projp)),
+                _ => continue,
+            };
+
+            let rewritten =
+                chain!(start, end; Self::chain_factors(factors, i, i + 2, [replacement]));
+            return Some(if sign == 1 {
+                rewritten
+            } else {
+                Atom::num(sign) * rewritten
+            });
+        }
+
+        None
+    }
+
+    fn bubble_repeated_gamma_towards_contraction(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        // Repeated-pair mode only pays the anticommutation cost when it exposes a
+        // contraction in the next fixed-point step.
+        let (_i, j) = Self::shortest_repeated_gamma_pair(parsed_factors)?;
+        if j == 0 {
+            return None;
+        }
+
+        Self::anticommute_adjacent_gamma_pair(start, end, factors, parsed_factors, j - 1)
+    }
+
+    fn four_dim_chisholm_contraction(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        let (left, right) = Self::shortest_repeated_four_dim_gamma_pair(parsed_factors)?;
+        let interior = &factors[left + 1..right];
+        let parsed_interior = &parsed_factors[left + 1..right];
+        let interior_lorentz =
+            Self::gamma_lorentz_sequence_for(FOUR_DIM_CHISHOLM, parsed_interior)?;
+
+        // FORM and FeynCalc use direct 4D Chisholm identities for short interiors;
+        // this avoids generating the larger anticommutation expansion first.
+        match interior.len() {
+            1 => Some(
+                Atom::num(-2)
+                    * chain!(start, end; Self::chain_factors(factors, left, right, interior.iter().cloned())),
+            ),
+            2 => {
+                let mu = interior_lorentz[0].clone();
+                let nu = interior_lorentz[1].clone();
+
+                Some(
+                    Atom::num(4)
+                        * function!(ETS.metric, mu, nu)
+                        * chain!(start, end; Self::chain_factors(factors, left, right, [])),
+                )
+            }
+            3 => {
+                let reversed = interior.iter().rev().cloned().collect::<Vec<_>>();
+                Some(
+                    Atom::num(-2)
+                        * chain!(start, end; Self::chain_factors(factors, left, right, reversed)),
+                )
+            }
+            4 => {
+                let term_1 = [
+                    interior[2].clone(),
+                    interior[1].clone(),
+                    interior[0].clone(),
+                    interior[3].clone(),
+                ];
+                let term_2 = [
+                    interior[3].clone(),
+                    interior[0].clone(),
+                    interior[1].clone(),
+                    interior[2].clone(),
+                ];
+
+                Some(
+                    Atom::num(2)
+                        * chain!(start, end; Self::chain_factors(factors, left, right, term_1))
+                        + Atom::num(2)
+                            * chain!(start, end; Self::chain_factors(factors, left, right, term_2)),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    fn four_dim_three_gamma_epsilon_expansion(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_spin_endpoints(start, end) {
+            return None;
+        }
+
+        for i in 0..factors.len().saturating_sub(2) {
+            let Some(lorentz) = Self::gamma_lorentz_sequence_for(
+                FOUR_DIM_THREE_GAMMA_EPSILON,
+                &parsed_factors[i..i + 3],
+            ) else {
+                continue;
+            };
+            if !lorentz.iter().all(is_minkowski_slot) {
+                continue;
+            }
+
+            let [mu, nu, rho] = lorentz.as_slice() else {
+                unreachable!("the window always contains three gamma factors")
+            };
+            let sigma = epsilon_dummy_minkowski_slot();
+
+            // The chain normal form keeps gamma5 to the right of ordinary gammas.
+            let epsilon_term = Atom::num(-1)
+                * chain!(start, end; Self::chain_factors(
+                    factors,
+                    i,
+                    i + 2,
+                    [gamma_factor(sigma.clone()), gamma5_factor()],
+                ))
+                * epsilon4(mu, nu, rho, &sigma);
+
+            let metric_mu_nu = Self::generated_metric_chain_term(
+                start,
+                end,
+                mu,
+                nu,
+                Self::chain_factors(factors, i, i + 2, [factors[i + 2].clone()]),
+            );
+            let metric_mu_rho = Self::generated_metric_chain_term(
+                start,
+                end,
+                mu,
+                rho,
+                Self::chain_factors(factors, i, i + 2, [factors[i + 1].clone()]),
+            );
+            let metric_nu_rho = Self::generated_metric_chain_term(
+                start,
+                end,
+                nu,
+                rho,
+                Self::chain_factors(factors, i, i + 2, [factors[i].clone()]),
+            );
+
+            return Some(epsilon_term + metric_mu_nu - metric_mu_rho + metric_nu_rho);
+        }
+
+        None
+    }
+
+    fn chain_factors(
+        factors: &[Atom],
+        left: usize,
+        right: usize,
+        middle: impl IntoIterator<Item = Atom>,
+    ) -> Vec<Atom> {
+        let mut result = Vec::with_capacity(factors.len() - 2);
+        result.extend_from_slice(&factors[..left]);
+        result.extend(middle);
+        result.extend_from_slice(&factors[right + 1..]);
+        result
+    }
+
+    fn canonicalize_gamma_chain_order(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        for i in 0..factors.len().saturating_sub(1) {
+            let Some((mu, nu)) = Self::gamma_pair_lorentz_for(
+                GAMMA_ANTICOMMUTATION,
+                &parsed_factors[i],
+                &parsed_factors[i + 1],
+            ) else {
+                continue;
+            };
+
+            if mu > nu {
+                return Self::anticommute_adjacent_gamma_pair(
+                    start,
+                    end,
+                    factors,
+                    parsed_factors,
+                    i,
+                );
+            }
+        }
+
+        None
+    }
+
+    fn move_gamma5_right_of_gamma(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_spin_endpoints(start, end) {
+            return None;
+        }
+
+        for i in 0..factors.len().saturating_sub(1) {
+            let DiracFactor::Gamma5 = parsed_factors[i] else {
+                continue;
+            };
+            if parsed_factors[i + 1]
+                .gamma_lorentz(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
+                .is_none()
+            {
+                continue;
+            }
+
+            let mut swapped = factors.to_vec();
+            swapped.swap(i, i + 1);
+            return Some(Atom::num(-1) * chain!(start, end; swapped));
+        }
+
+        None
+    }
+
+    fn move_projector_right_of_gamma(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_spin_endpoints(start, end) {
+            return None;
+        }
+
+        for i in 0..factors.len().saturating_sub(1) {
+            let opposite_projector = match parsed_factors[i] {
+                DiracFactor::ProjectorPlus => endpoint_factor(AGS.projm),
+                DiracFactor::ProjectorMinus => endpoint_factor(AGS.projp),
+                _ => continue,
+            };
+            if parsed_factors[i + 1]
+                .gamma_lorentz(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
+                .is_none()
+            {
+                continue;
+            }
+
+            let mut moved = factors.to_vec();
+            moved[i] = factors[i + 1].clone();
+            moved[i + 1] = opposite_projector;
+            return Some(chain!(start, end; moved));
+        }
+
+        None
+    }
+
+    fn anticommute_adjacent_gamma_pair(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+        swap_at: usize,
+    ) -> Option<Atom> {
+        let (mu, nu) = Self::gamma_pair_lorentz_for(
+            GAMMA_ANTICOMMUTATION,
+            &parsed_factors[swap_at],
+            &parsed_factors[swap_at + 1],
+        )?;
+
+        let mut metric_rest = Vec::with_capacity(factors.len() - 2);
+        metric_rest.extend_from_slice(&factors[..swap_at]);
+        metric_rest.extend_from_slice(&factors[swap_at + 2..]);
+
+        // Run the local metric term through chain-aware Schoonschip before it can
+        // swell the Clifford expansion.
+        let metric_term =
+            Atom::num(2) * Self::generated_metric_chain_term(start, end, &mu, &nu, metric_rest);
+
+        let mut swapped = factors.to_vec();
+        swapped.swap(swap_at, swap_at + 1);
+
+        Some(metric_term - chain!(start, end; swapped))
+    }
+
+    fn generated_metric_chain_term(
+        start: &Atom,
+        end: &Atom,
+        mu: &Atom,
+        nu: &Atom,
+        factors: Vec<Atom>,
+    ) -> Atom {
+        (function!(ETS.metric, mu.clone(), nu.clone()) * chain!(start, end; factors))
+            .schoonschip_with_settings(
+                &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+            )
+    }
+
+    fn shortest_repeated_gamma_pair(factors: &[DiracFactor]) -> Option<(usize, usize)> {
+        let mut best = None;
+
+        for i in 0..factors.len() {
+            if factors[i].gamma_lorentz(GAMMA_ANTICOMMUTATION).is_none() {
+                continue;
+            }
+
+            for (j, factor) in factors.iter().enumerate().skip(i + 1) {
+                let Some((mu, nu)) =
+                    Self::gamma_pair_lorentz_for(GAMMA_ANTICOMMUTATION, &factors[i], factor)
+                else {
+                    continue;
+                };
+
+                if mu == nu && best.is_none_or(|(a, b)| j - i < b - a) {
+                    best = Some((i, j));
+                }
+            }
+        }
+
+        best
+    }
+
+    fn shortest_repeated_four_dim_gamma_pair(factors: &[DiracFactor]) -> Option<(usize, usize)> {
+        let mut best = None;
+
+        for i in 0..factors.len() {
+            let Some(mu) = factors[i].gamma_lorentz(FOUR_DIM_CHISHOLM) else {
+                continue;
+            };
+            if !is_minkowski_slot(mu) {
+                continue;
+            }
+
+            for (j, factor) in factors.iter().enumerate().skip(i + 1) {
+                let Some(nu) = factor.gamma_lorentz(FOUR_DIM_CHISHOLM) else {
+                    continue;
+                };
+
+                if mu == nu && best.is_none_or(|(a, b)| j - i < b - a) {
+                    best = Some((i, j));
+                }
+            }
+        }
+
+        best
+    }
+
+    fn gamma_pair_lorentz_for(
+        rule_dimension: DiracRuleDimension,
+        left: &DiracFactor,
+        right: &DiracFactor,
+    ) -> Option<(Atom, Atom)> {
+        let left_lorentz = left.gamma_lorentz(rule_dimension)?;
+        let right_lorentz = right.gamma_lorentz(rule_dimension)?;
+        if !compatible_gamma_dimensions(rule_dimension, left, right) {
+            return None;
+        }
+
+        Some((left_lorentz.clone(), right_lorentz.clone()))
+    }
+
+    fn gamma_lorentz_sequence_for(
+        rule_dimension: DiracRuleDimension,
+        factors: &[DiracFactor],
+    ) -> Option<Vec<Atom>> {
+        let mut known_dimension = None;
+        let mut lorentz = Vec::with_capacity(factors.len());
+
+        for factor in factors {
+            let gamma_lorentz = factor.gamma_lorentz(rule_dimension)?;
+            if !merge_known_gamma_dimension(
+                rule_dimension,
+                &mut known_dimension,
+                factor.gamma_dimension(),
+            ) {
+                return None;
+            }
+            lorentz.push(gamma_lorentz.clone());
+        }
+
+        Some(lorentz)
+    }
 }
 
 fn compatible_gamma_dimensions(
@@ -921,225 +983,236 @@ fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
     matches!(arg, AtomView::Var(symbol) if symbol.get_symbol() == expected)
 }
 
-fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
-    let AtomView::Fun(f) = trace else {
-        return None;
-    };
-
-    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    let [rep, factors @ ..] = args.as_slice() else {
-        return None;
-    };
-
-    if factors.is_empty() {
-        return simplify_trace_terminal(trace);
-    }
-
-    let parsed_factors = factors
-        .iter()
-        .map(|factor| DiracFactor::parse(factor.as_view()))
-        .collect::<Vec<_>>();
-
-    if let Some(rewritten) = simplify_special_trace_pair(rep, factors, &parsed_factors) {
-        return Some(rewritten);
-    }
-
-    if let Some(rewritten) = simplify_gamma5_trace_node(rep, factors, &parsed_factors) {
-        return Some(rewritten);
-    }
-
-    let trace_lorentz = gamma_lorentz_sequence_for(TRACE_GAMMA_RECURSION, &parsed_factors)?;
-
-    if factors.len() % 2 == 1 {
-        return Some(Atom::Zero);
-    }
-
-    let first = trace_lorentz[0].clone();
-    let mut sum = Atom::Zero;
-
-    // Standard recursive even trace formula:
-    // tr(g1...gn) = sum_i (-1)^i g(1,i) tr(g2...g_{i-1}g_{i+1}...gn).
-    for i in 1..factors.len() {
-        let mu_i = trace_lorentz[i].clone();
-        let sign = if i % 2 == 1 { 1 } else { -1 };
-
-        let mut rest = Vec::with_capacity(factors.len() - 2);
-        rest.extend_from_slice(&factors[1..i]);
-        rest.extend_from_slice(&factors[i + 1..]);
-
-        let rest_trace = if rest.is_empty() {
-            let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
-            simplify_trace_terminal(terminal_trace.as_view())?
-        } else {
-            trace!(rep; rest)
+impl DiracChainSimplifier {
+    fn simplify_trace_node(self, trace: AtomView) -> Option<Atom> {
+        let AtomView::Fun(f) = trace else {
+            return None;
         };
 
-        let term = function!(ETS.metric, first.clone(), mu_i) * rest_trace;
-        if sign == 1 {
-            sum += term;
-        } else {
-            sum -= term;
+        let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+        let [rep, factors @ ..] = args.as_slice() else {
+            return None;
+        };
+
+        if factors.is_empty() {
+            return Self::simplify_trace_terminal(trace);
         }
-    }
 
-    Some(sum)
-}
+        let parsed_factors = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
 
-fn simplify_special_trace_pair(
-    rep: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_trace_rep(rep) {
-        return None;
-    }
+        if let Some(rewritten) = Self::simplify_special_trace_pair(rep, factors, &parsed_factors) {
+            return Some(rewritten);
+        }
 
-    for i in 0..factors.len().saturating_sub(1) {
-        match (&parsed_factors[i], &parsed_factors[i + 1]) {
-            (DiracFactor::Gamma5, DiracFactor::Gamma5)
-            | (DiracFactor::Gamma0, DiracFactor::Gamma0) => {
-                let mut rest = Vec::with_capacity(factors.len() - 2);
-                rest.extend_from_slice(&factors[..i]);
-                rest.extend_from_slice(&factors[i + 2..]);
-                return Some(trace_or_terminal(rep, rest));
+        if let Some(rewritten) = Self::simplify_gamma5_trace_node(rep, factors, &parsed_factors) {
+            return Some(rewritten);
+        }
+
+        let trace_lorentz =
+            Self::gamma_lorentz_sequence_for(TRACE_GAMMA_RECURSION, &parsed_factors)?;
+
+        if factors.len() % 2 == 1 {
+            return Some(Atom::Zero);
+        }
+
+        let first = trace_lorentz[0].clone();
+        let mut sum = Atom::Zero;
+
+        // Standard recursive even trace formula:
+        // tr(g1...gn) = sum_i (-1)^i g(1,i) tr(g2...g_{i-1}g_{i+1}...gn).
+        for i in 1..factors.len() {
+            let mu_i = trace_lorentz[i].clone();
+            let sign = if i % 2 == 1 { 1 } else { -1 };
+
+            let mut rest = Vec::with_capacity(factors.len() - 2);
+            rest.extend_from_slice(&factors[1..i]);
+            rest.extend_from_slice(&factors[i + 1..]);
+
+            let rest_trace = if rest.is_empty() {
+                let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
+                Self::simplify_trace_terminal(terminal_trace.as_view())?
+            } else {
+                trace!(rep; rest)
+            };
+
+            let term = function!(ETS.metric, first.clone(), mu_i) * rest_trace;
+            if sign == 1 {
+                sum += term;
+            } else {
+                sum -= term;
             }
-            _ => {}
+        }
+
+        Some(sum)
+    }
+
+    fn simplify_special_trace_pair(
+        rep: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_trace_rep(rep) {
+            return None;
+        }
+
+        for i in 0..factors.len().saturating_sub(1) {
+            match (&parsed_factors[i], &parsed_factors[i + 1]) {
+                (DiracFactor::Gamma5, DiracFactor::Gamma5)
+                | (DiracFactor::Gamma0, DiracFactor::Gamma0) => {
+                    let mut rest = Vec::with_capacity(factors.len() - 2);
+                    rest.extend_from_slice(&factors[..i]);
+                    rest.extend_from_slice(&factors[i + 2..]);
+                    return Some(Self::trace_or_terminal(rep, rest));
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    fn simplify_gamma5_trace_node(
+        rep: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_trace_rep(rep) {
+            return None;
+        }
+
+        let gamma5_positions = parsed_factors
+            .iter()
+            .enumerate()
+            .filter_map(|(i, factor)| (*factor == DiracFactor::Gamma5).then_some(i))
+            .collect::<Vec<_>>();
+
+        match gamma5_positions.len() {
+            0 => None,
+            1 => Self::simplify_single_gamma5_trace(
+                rep,
+                factors,
+                parsed_factors,
+                gamma5_positions[0],
+            ),
+            _ => Self::reduce_gamma5_trace_pair(rep, factors, parsed_factors, gamma5_positions[0]),
         }
     }
 
-    None
-}
+    fn simplify_single_gamma5_trace(
+        rep: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+        gamma5_position: usize,
+    ) -> Option<Atom> {
+        let factors_after_gamma5 = Self::cyclic_without_position(factors, gamma5_position);
+        let parsed_after_gamma5 = Self::cyclic_without_position(parsed_factors, gamma5_position);
+        let lorentz =
+            Self::gamma_lorentz_sequence_for(TRACE_GAMMA5_RECURSION, &parsed_after_gamma5)?;
 
-fn simplify_gamma5_trace_node(
-    rep: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-) -> Option<Atom> {
-    if !has_four_dimensional_trace_rep(rep) {
-        return None;
+        if lorentz.len() < 4 || lorentz.len() % 2 == 1 {
+            return Some(Atom::Zero);
+        }
+
+        if lorentz.len() == 4 {
+            return Some(
+                Atom::num(4) * epsilon4(&lorentz[0], &lorentz[1], &lorentz[2], &lorentz[3]),
+            );
+        }
+
+        let first = lorentz[0].clone();
+        let mut sum = Atom::Zero;
+
+        for i in 1..factors_after_gamma5.len() {
+            let mut rest = Vec::with_capacity(factors_after_gamma5.len() - 1);
+            rest.push(gamma5_factor());
+            rest.extend_from_slice(&factors_after_gamma5[1..i]);
+            rest.extend_from_slice(&factors_after_gamma5[i + 1..]);
+
+            let term = function!(ETS.metric, first.clone(), lorentz[i].clone())
+                * Self::trace_or_terminal(rep, rest);
+
+            if i % 2 == 1 {
+                sum += term;
+            } else {
+                sum -= term;
+            }
+        }
+
+        Some(sum)
     }
 
-    let gamma5_positions = parsed_factors
-        .iter()
-        .enumerate()
-        .filter_map(|(i, factor)| (*factor == DiracFactor::Gamma5).then_some(i))
-        .collect::<Vec<_>>();
+    fn reduce_gamma5_trace_pair(
+        rep: &Atom,
+        factors: &[Atom],
+        parsed_factors: &[DiracFactor],
+        first_gamma5_position: usize,
+    ) -> Option<Atom> {
+        let factors = Self::cyclic_from_position(factors, first_gamma5_position);
+        let parsed_factors = Self::cyclic_from_position(parsed_factors, first_gamma5_position);
+        let second_gamma5_position = parsed_factors
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find_map(|(i, factor)| (*factor == DiracFactor::Gamma5).then_some(i))?;
 
-    match gamma5_positions.len() {
-        0 => None,
-        1 => simplify_single_gamma5_trace(rep, factors, parsed_factors, gamma5_positions[0]),
-        _ => reduce_gamma5_trace_pair(rep, factors, parsed_factors, gamma5_positions[0]),
-    }
-}
+        let crossing_count = parsed_factors[1..second_gamma5_position]
+            .iter()
+            .filter(|factor| Self::factor_anticommutes_with_gamma5(factor))
+            .count();
+        if parsed_factors[1..second_gamma5_position]
+            .iter()
+            .any(|factor| !Self::factor_anticommutes_with_gamma5(factor))
+        {
+            return None;
+        }
 
-fn simplify_single_gamma5_trace(
-    rep: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-    gamma5_position: usize,
-) -> Option<Atom> {
-    let factors_after_gamma5 = cyclic_without_position(factors, gamma5_position);
-    let parsed_after_gamma5 = cyclic_without_position(parsed_factors, gamma5_position);
-    let lorentz = gamma_lorentz_sequence_for(TRACE_GAMMA5_RECURSION, &parsed_after_gamma5)?;
+        let mut rest = Vec::with_capacity(factors.len() - 2);
+        rest.extend_from_slice(&factors[1..second_gamma5_position]);
+        rest.extend_from_slice(&factors[second_gamma5_position + 1..]);
 
-    if lorentz.len() < 4 || lorentz.len() % 2 == 1 {
-        return Some(Atom::Zero);
-    }
-
-    if lorentz.len() == 4 {
-        return Some(Atom::num(4) * epsilon4(&lorentz[0], &lorentz[1], &lorentz[2], &lorentz[3]));
-    }
-
-    let first = lorentz[0].clone();
-    let mut sum = Atom::Zero;
-
-    for i in 1..factors_after_gamma5.len() {
-        let mut rest = Vec::with_capacity(factors_after_gamma5.len() - 1);
-        rest.push(gamma5_factor());
-        rest.extend_from_slice(&factors_after_gamma5[1..i]);
-        rest.extend_from_slice(&factors_after_gamma5[i + 1..]);
-
-        let term =
-            function!(ETS.metric, first.clone(), lorentz[i].clone()) * trace_or_terminal(rep, rest);
-
-        if i % 2 == 1 {
-            sum += term;
+        let reduced = Self::trace_or_terminal(rep, rest);
+        Some(if crossing_count % 2 == 0 {
+            reduced
         } else {
-            sum -= term;
+            Atom::num(-1) * reduced
+        })
+    }
+
+    fn factor_anticommutes_with_gamma5(factor: &DiracFactor) -> bool {
+        matches!(factor, DiracFactor::Gamma { .. } | DiracFactor::Gamma0)
+    }
+
+    fn cyclic_without_position<T: Clone>(items: &[T], position: usize) -> Vec<T> {
+        let mut result = Vec::with_capacity(items.len().saturating_sub(1));
+        result.extend_from_slice(&items[position + 1..]);
+        result.extend_from_slice(&items[..position]);
+        result
+    }
+
+    fn cyclic_from_position<T: Clone>(items: &[T], position: usize) -> Vec<T> {
+        let mut result = Vec::with_capacity(items.len());
+        result.extend_from_slice(&items[position..]);
+        result.extend_from_slice(&items[..position]);
+        result
+    }
+
+    fn trace_or_terminal(rep: &Atom, factors: Vec<Atom>) -> Atom {
+        if factors.is_empty() {
+            let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
+            Self::simplify_trace_terminal(terminal_trace.as_view()).unwrap_or(terminal_trace)
+        } else {
+            trace!(rep; factors)
         }
     }
 
-    Some(sum)
-}
-
-fn reduce_gamma5_trace_pair(
-    rep: &Atom,
-    factors: &[Atom],
-    parsed_factors: &[DiracFactor],
-    first_gamma5_position: usize,
-) -> Option<Atom> {
-    let factors = cyclic_from_position(factors, first_gamma5_position);
-    let parsed_factors = cyclic_from_position(parsed_factors, first_gamma5_position);
-    let second_gamma5_position = parsed_factors
-        .iter()
-        .enumerate()
-        .skip(1)
-        .find_map(|(i, factor)| (*factor == DiracFactor::Gamma5).then_some(i))?;
-
-    let crossing_count = parsed_factors[1..second_gamma5_position]
-        .iter()
-        .filter(|factor| factor_anticommutes_with_gamma5(factor))
-        .count();
-    if parsed_factors[1..second_gamma5_position]
-        .iter()
-        .any(|factor| !factor_anticommutes_with_gamma5(factor))
-    {
-        return None;
+    fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
+        let trace = trace.to_owned();
+        let simplified = trace
+            .replace(function!(T.trace, T.rep_::<0, _>([W_.d_])).to_pattern())
+            .with(Atom::var(W_.d_));
+        (simplified != trace).then_some(simplified)
     }
-
-    let mut rest = Vec::with_capacity(factors.len() - 2);
-    rest.extend_from_slice(&factors[1..second_gamma5_position]);
-    rest.extend_from_slice(&factors[second_gamma5_position + 1..]);
-
-    let reduced = trace_or_terminal(rep, rest);
-    Some(if crossing_count % 2 == 0 {
-        reduced
-    } else {
-        Atom::num(-1) * reduced
-    })
-}
-
-fn factor_anticommutes_with_gamma5(factor: &DiracFactor) -> bool {
-    matches!(factor, DiracFactor::Gamma { .. } | DiracFactor::Gamma0)
-}
-
-fn cyclic_without_position<T: Clone>(items: &[T], position: usize) -> Vec<T> {
-    let mut result = Vec::with_capacity(items.len().saturating_sub(1));
-    result.extend_from_slice(&items[position + 1..]);
-    result.extend_from_slice(&items[..position]);
-    result
-}
-
-fn cyclic_from_position<T: Clone>(items: &[T], position: usize) -> Vec<T> {
-    let mut result = Vec::with_capacity(items.len());
-    result.extend_from_slice(&items[position..]);
-    result.extend_from_slice(&items[..position]);
-    result
-}
-
-fn trace_or_terminal(rep: &Atom, factors: Vec<Atom>) -> Atom {
-    if factors.is_empty() {
-        let terminal_trace = trace!(rep; std::iter::empty::<Atom>());
-        simplify_trace_terminal(terminal_trace.as_view()).unwrap_or(terminal_trace)
-    } else {
-        trace!(rep; factors)
-    }
-}
-
-fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
-    let trace = trace.to_owned();
-    let simplified = trace
-        .replace(function!(T.trace, T.rep_::<0, _>([W_.d_])).to_pattern())
-        .with(Atom::var(W_.d_));
-    (simplified != trace).then_some(simplified)
 }
