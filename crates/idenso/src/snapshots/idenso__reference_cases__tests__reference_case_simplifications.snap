@@ -1,5 +1,6 @@
 ---
 source: crates/idenso/src/reference_cases.rs
+assertion_line: 503
 expression: snapshot
 ---
 dirac_form_two_gamma_trace [Dirac4, GammaDefault, enabled]
@@ -15,7 +16,7 @@ dirac_feyncalc_open_chain_chisholm_id2 [Dirac4, GammaDefault, enabled]
 -2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))
 
 dirac_feyncalc_open_chain_chisholm_id3 [Dirac4, GammaDefault, enabled]
-chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))
+(2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho))))*1/2
 
 dirac_feyncalc_slash_sandwich_id4 [Dirac4, GammaDefault, enabled]
 -2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m
@@ -45,7 +46,7 @@ color_form_fierz_generator_contraction [ColorSu3, ColorDefault, enabled]
 -1/3*TR*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))+TR*g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j)))
 
 color_feyncalc_open_chain_separated_casimir_id2 [ColorSu3, ColorDefault, enabled]
--1/2*CA*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))+CF*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))
+(-1/2*CA+CF)*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))
 
 color_feyncalc_structure_loop_to_adjoint_delta_id3 [ColorSu3, ColorDefault, enabled]
 CA*g(coad(8,a),coad(8,b))
@@ -60,7 +61,7 @@ color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, enab
 1𝑖/2*TR*f(coad(8,i),coad(8,j),coad(8,k))+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
 
 color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, enabled]
--4*CA*TR+8*CF*TR
+(-1/2*CA+CF)*8*TR
 
 color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, enabled]
 -1/6*TR*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))+1/3*TR*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))+1𝑖/2*f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))+1𝑖/2*f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))

@@ -5,7 +5,7 @@ use spenso::{
     network::tags::SPENSO_TAG as T,
     rep_,
     structure::representation::{LibraryRep, Minkowski, RepName},
-    symbolica_atom::{self, IntoAtom},
+    symbolica_atom::{self, IntoAtom, TensorCollectExt},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
@@ -329,12 +329,12 @@ impl<'settings> DiracSimplifier<'settings> {
         let rep = Bispinor {}.into();
         let mut expr = expr
             .to_owned()
-            .expand()
+            .collect_metrics()
             .simplify_metrics()
             .simplify_epsilon()
             .chainify(rep)
             .collect_chains(rep)
-            .expand()
+            .collect_tensors()
             .simplify_metrics()
             .simplify_epsilon();
 
@@ -342,7 +342,7 @@ impl<'settings> DiracSimplifier<'settings> {
             let next = self
                 .settings
                 .rewrite_expression(expr.clone())
-                .expand()
+                .collect_tensors()
                 .simplify_metrics()
                 .simplify_epsilon()
                 .normalize_chains()

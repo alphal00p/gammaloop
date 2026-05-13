@@ -128,7 +128,7 @@ fn separated_generator_casimir_trace() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*CA*TR*g(coad(NA,b),coad(NA,c))+CF*TR*g(coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(-1/2*CA+CF)*TR*g(coad(NA,b),coad(NA,c))");
 }
 
 #[test]

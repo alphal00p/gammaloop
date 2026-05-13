@@ -5,6 +5,7 @@ use spenso::{
     chain,
     network::{
         library::symbolic::{ETS, ExplicitKey},
+        parsing::AtomStructureExt,
         tags::SPENSO_TAG as T,
     },
     rep_,
@@ -16,7 +17,7 @@ use spenso::{
         representation::{Minkowski, RepName},
         slot::{AbsInd, IsAbstractSlot},
     },
-    symbolica_atom,
+    symbolica_atom::{self, ScalarCollectExt, TensorCollectExt},
     tensors::parametric::atomcore::PatternReplacement,
     trace, trace_sym,
 };
@@ -649,7 +650,7 @@ fn simplify_raw_color_tensors(expression: AtomView) -> Atom {
             };
             first = false;
             *e = e.replace_multiple(&frep);
-            *e = e.expand();
+            *e = e.collect_tensors();
             *e = e.simplify_metrics();
         }
     }
@@ -668,11 +669,20 @@ fn simplify_raw_color_tensors(expression: AtomView) -> Atom {
     //     }
     // }
     //
-    let out = expression.iter().fold(Atom::Zero, |a, (c, s)| a + c * s);
-    if let Some(ncs) = ncs {
+    let out = expression
+        .iter()
+        .fold(Atom::Zero, |a, (c, s)| a + c * s)
+        .collect_tensors();
+    let out = if let Some(ncs) = ncs {
         out.replace(CS.nc).with(ncs)
     } else {
         out
+    };
+
+    if out.is_tensorial() {
+        out
+    } else {
+        out.collect_scalar_symbols()
     }
 }
 
@@ -718,19 +728,19 @@ impl ColorAlgebraSimplifier {
         let use_raw_tensor_simplifier =
             !contains_chain_or_trace(expression) && contains_raw_color_generator(expression);
 
-        let mut expr = expression.to_owned().expand().simplify_metrics();
+        let mut expr = expression.to_owned().collect_tensors().simplify_metrics();
         // Keep legacy raw `t(a,i,j)` expressions on the old pattern path; chain
         // collection is only unambiguous once generators use chain endpoints.
         if use_raw_tensor_simplifier {
             return simplify_raw_color_tensors(expr.as_view())
-                .expand()
+                .collect_tensors()
                 .simplify_metrics();
         }
 
         loop {
             let collected = Self::collect_lines(expr.as_view());
             let next = Self::rewrite_terms(collected.as_view())
-                .expand()
+                .collect_tensors()
                 .simplify_metrics();
 
             if next == expr {
@@ -1916,7 +1926,7 @@ fn color_casimir_basis_impl(expression: AtomView, settings: ColorCasimirSettings
                 **out = replacement;
             }
         })
-        .expand()
+        .collect_tensors()
 }
 
 fn color_casimir_rewrite(arg: AtomView, settings: ColorCasimirSettings) -> Option<Atom> {

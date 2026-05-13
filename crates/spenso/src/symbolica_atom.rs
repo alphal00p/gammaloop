@@ -1,8 +1,9 @@
-use std::sync::LazyLock;
+use std::{collections::BTreeSet, sync::LazyLock};
 
 use crate::{
-    network::tags::SPENSO_TAG,
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
+        abstract_index::AIND_SYMBOLS,
         representation::{RepName, Representation},
         slot::{AbsInd, IsAbstractSlot, ParseableAind, Slot},
     },
@@ -129,6 +130,240 @@ pub static ANTISYM: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::antisym
 /// `trace(rep, cyclic(a,b,c))`.
 pub static CYCLIC: LazyLock<Symbol> =
     LazyLock::new(|| symbol!("spenso::cyclic"; Cyclesymmetric; norm = normalize_cyclic_projector));
+
+/// Temporary head used to collect tensor factors without expanding products.
+///
+/// The collection helpers wrap matching tensor leaves as `spenso::collect(...)`,
+/// call Symbolica's `collect_symbol` on this inert head, then unwrap it again.
+/// This gives simplifiers a way to combine terms with common tensor factors
+/// without distributing scalar sums through the whole expression.
+pub static COLLECT: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::collect"));
+
+/// Selects which tensor leaves are protected during collection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TensorCollectFilter {
+    /// Collect every syntactically tensorial leaf.
+    Tensors,
+    /// Collect tensor leaves that contain this representation.
+    Rep(crate::structure::representation::LibraryRep),
+    /// Collect only metric tensors.
+    Metrics,
+}
+
+impl TensorCollectFilter {
+    fn collect(self, expression: AtomView<'_>) -> Atom {
+        let wrapped = expression.replace_map_bottom_up(|arg, context, out| {
+            if context.child_changed {
+                return;
+            }
+            if self.matches(arg) {
+                **out = self.wrap(arg);
+            }
+        });
+
+        if wrapped == expression.to_owned() {
+            return wrapped;
+        }
+
+        let collected = wrapped.collect_symbol::<i16>(*COLLECT, None, None);
+        self.unwrap(collected.as_view())
+    }
+
+    fn matches(self, arg: AtomView<'_>) -> bool {
+        let AtomView::Fun(fun) = arg else {
+            return false;
+        };
+
+        match self {
+            Self::Metrics => fun.get_symbol() == ETS.metric,
+            Self::Tensors => {
+                !Self::is_collection_boundary(fun.get_symbol()) && Self::contains_rep(fun)
+            }
+            Self::Rep(rep) => {
+                !Self::is_collection_boundary(fun.get_symbol())
+                    && fun.iter().any(|arg| Self::arg_contains_rep(arg, rep))
+            }
+        }
+    }
+
+    fn wrap(self, arg: AtomView<'_>) -> Atom {
+        FunctionBuilder::new(*COLLECT).add_arg(arg).finish()
+    }
+
+    fn unwrap(self, expression: AtomView<'_>) -> Atom {
+        expression.replace_map(|arg, _context, out| {
+            if let Some(inner) = Self::collect_inner(arg) {
+                **out = inner.to_owned();
+            }
+        })
+    }
+
+    fn collect_inner(arg: AtomView<'_>) -> Option<AtomView<'_>> {
+        let AtomView::Fun(fun) = arg else {
+            return None;
+        };
+        if fun.get_symbol() != *COLLECT || fun.get_nargs() != 1 {
+            return None;
+        }
+        fun.iter().next()
+    }
+
+    fn contains_rep(fun: FunView<'_>) -> bool {
+        fun.iter().any(Self::arg_is_or_contains_rep)
+    }
+
+    fn arg_is_or_contains_rep(arg: AtomView<'_>) -> bool {
+        if Self::is_rep(arg) {
+            return true;
+        }
+
+        match arg {
+            AtomView::Fun(fun) if !Self::is_collection_boundary(fun.get_symbol()) => {
+                fun.iter().any(Self::arg_is_or_contains_rep)
+            }
+            AtomView::Mul(mul) => mul.iter().any(Self::arg_is_or_contains_rep),
+            AtomView::Add(add) => add.iter().any(Self::arg_is_or_contains_rep),
+            AtomView::Pow(pow) => Self::arg_is_or_contains_rep(pow.get_base_exp().0),
+            _ => false,
+        }
+    }
+
+    fn arg_contains_rep(
+        arg: AtomView<'_>,
+        rep: crate::structure::representation::LibraryRep,
+    ) -> bool {
+        if Self::is_exact_rep(arg, rep) {
+            return true;
+        }
+
+        match arg {
+            AtomView::Fun(fun) if !Self::is_collection_boundary(fun.get_symbol()) => {
+                fun.iter().any(|arg| Self::arg_contains_rep(arg, rep))
+            }
+            AtomView::Mul(mul) => mul.iter().any(|arg| Self::arg_contains_rep(arg, rep)),
+            AtomView::Add(add) => add.iter().any(|arg| Self::arg_contains_rep(arg, rep)),
+            AtomView::Pow(pow) => Self::arg_contains_rep(pow.get_base_exp().0, rep),
+            _ => false,
+        }
+    }
+
+    fn is_exact_rep(arg: AtomView<'_>, rep: crate::structure::representation::LibraryRep) -> bool {
+        Representation::<crate::structure::representation::LibraryRep>::try_from(arg)
+            .is_ok_and(|found| found.rep.base() == rep.base())
+    }
+
+    fn is_rep(arg: AtomView<'_>) -> bool {
+        matches!(arg, AtomView::Fun(fun) if fun.get_symbol().has_tag(&SPENSO_TAG.representation))
+            || arg.has_attributes_of(SPENSO_TAG.rep_)
+    }
+
+    fn is_collection_boundary(symbol: Symbol) -> bool {
+        symbol == *COLLECT
+            || symbol == SPENSO_TAG.chain
+            || symbol == SPENSO_TAG.trace
+            || symbol == *SYM
+            || symbol == *ANTISYM
+            || symbol == *CYCLIC
+            || symbol == AIND_SYMBOLS.aind
+            || symbol == AIND_SYMBOLS.dind
+            || symbol == AIND_SYMBOLS.uind
+            || symbol == AIND_SYMBOLS.selfdualind
+            || symbol.has_tag(&SPENSO_TAG.representation)
+    }
+}
+
+#[derive(Default)]
+struct ScalarSymbolCollector {
+    symbols: BTreeSet<Symbol>,
+}
+
+impl ScalarSymbolCollector {
+    fn collect(expression: AtomView<'_>) -> Atom {
+        let mut collector = Self::default();
+        collector.visit(expression);
+
+        collector
+            .symbols
+            .into_iter()
+            .fold(expression.to_owned(), |expr, symbol| {
+                expr.collect_symbol::<i16>(symbol, None, None)
+            })
+    }
+
+    fn visit(&mut self, expression: AtomView<'_>) {
+        match expression {
+            AtomView::Var(var) => self.push(var.get_symbol()),
+            AtomView::Add(add) => add.iter().for_each(|arg| self.visit(arg)),
+            AtomView::Mul(mul) => mul.iter().for_each(|arg| self.visit(arg)),
+            AtomView::Pow(pow) => self.visit(pow.get_base_exp().0),
+            AtomView::Fun(_) | AtomView::Num(_) => {}
+        }
+    }
+
+    fn push(&mut self, symbol: Symbol) {
+        if symbol.get_wildcard_level() == 0 {
+            self.symbols.insert(symbol);
+        }
+    }
+}
+
+/// Collect tensor factors without full expression expansion.
+pub trait TensorCollectExt {
+    /// Collect common tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
+    fn collect_tensors(&self) -> Atom;
+
+    /// Collect common tensor leaves that contain `rep` as one of their slot representations.
+    fn collect_rep(&self, rep: crate::structure::representation::LibraryRep) -> Atom;
+
+    /// Collect common metric tensors.
+    fn collect_metrics(&self) -> Atom;
+}
+
+/// Collect visible scalar variables without distributing products.
+pub trait ScalarCollectExt {
+    /// Repeatedly call Symbolica's `collect_symbol` on scalar variable factors.
+    fn collect_scalar_symbols(&self) -> Atom;
+}
+
+impl ScalarCollectExt for Atom {
+    fn collect_scalar_symbols(&self) -> Atom {
+        self.as_view().collect_scalar_symbols()
+    }
+}
+
+impl ScalarCollectExt for AtomView<'_> {
+    fn collect_scalar_symbols(&self) -> Atom {
+        ScalarSymbolCollector::collect(*self)
+    }
+}
+
+impl TensorCollectExt for Atom {
+    fn collect_tensors(&self) -> Atom {
+        self.as_view().collect_tensors()
+    }
+
+    fn collect_rep(&self, rep: crate::structure::representation::LibraryRep) -> Atom {
+        self.as_view().collect_rep(rep)
+    }
+
+    fn collect_metrics(&self) -> Atom {
+        self.as_view().collect_metrics()
+    }
+}
+
+impl TensorCollectExt for AtomView<'_> {
+    fn collect_tensors(&self) -> Atom {
+        TensorCollectFilter::Tensors.collect(*self)
+    }
+
+    fn collect_rep(&self, rep: crate::structure::representation::LibraryRep) -> Atom {
+        TensorCollectFilter::Rep(rep).collect(*self)
+    }
+
+    fn collect_metrics(&self) -> Atom {
+        TensorCollectFilter::Metrics.collect(*self)
+    }
+}
 
 /// Builds an inert normalized symmetrizer over chain/trace factors.
 pub fn sym<F>(factors: impl IntoIterator<Item = F>) -> Atom
@@ -298,7 +533,7 @@ fn expand_projectors_impl(expression: AtomView) -> Atom {
                     **out = expanded;
                 }
             })
-            .expand();
+            .collect_tensors();
 
         if next == current {
             return next;
@@ -1055,11 +1290,16 @@ macro_rules! trace_sym {
 
 #[cfg(test)]
 mod tests {
+    use crate::structure::representation::{LibraryRep, Minkowski};
     #[allow(unused_imports)]
     use crate::{
-        aind, antisym, bracket, chain, chain_factor, cyclic, dind, dot, g, lor, mink,
-        network::tags::SPENSO_TAG, p, pure_scalar, q, shadowing::symbolica_utils::AtomCoreExt, sym,
-        symbolica_atom::ProjectorExpander, trace, trace_sym,
+        aind, antisym, bracket, chain, chain_factor, cyclic, dind, dot, euc, g, lor, mink,
+        network::tags::SPENSO_TAG,
+        p, pure_scalar, q,
+        shadowing::symbolica_utils::AtomCoreExt,
+        sym,
+        symbolica_atom::{ProjectorExpander, ScalarCollectExt, TensorCollectExt},
+        trace, trace_sym,
     };
     use symbolica::{
         atom::{Atom, AtomView},
@@ -1110,6 +1350,66 @@ mod tests {
         insta::assert_snapshot!(
             chain_factor!(factor, in, mu, out).to_bare_ordered_string(),
             @"factor(in,mink(4,mu),out)"
+        );
+    }
+
+    #[test]
+    fn collect_tensors_keeps_scalar_products_factored() {
+        let (a, b, c, d) = symbol!("a", "b", "c", "d");
+        let p = p!(mink!(4));
+        let expr = (Atom::var(a) + Atom::var(b)) * (Atom::var(c) + Atom::var(d)) * p.clone()
+            + Atom::var(a) * p;
+
+        insta::assert_snapshot!(
+            expr.collect_tensors().to_bare_ordered_string(),
+            @"((a+b)*(c+d)+a)*p(mink(4))"
+        );
+    }
+
+    #[test]
+    fn collect_rep_only_wraps_matching_representations() {
+        let (a, b) = symbol!("a", "b");
+        let mink_p = p!(mink!(4));
+        let euc_q = q!(euc!(3));
+        let expr = Atom::var(a) * mink_p.clone()
+            + Atom::var(b) * mink_p
+            + Atom::var(a) * euc_q.clone()
+            + Atom::var(b) * euc_q;
+
+        insta::assert_snapshot!(
+            expr.collect_rep(LibraryRep::from(Minkowski {}))
+                .to_bare_ordered_string(),
+            @"(a+b)*p(mink(4))+a*q(euc(3))+b*q(euc(3))"
+        );
+    }
+
+    #[test]
+    fn collect_metrics_only_wraps_metric_heads() {
+        let (a, b) = symbol!("a", "b");
+        let metric = g!(mink!(4, mu), mink!(4, nu));
+        let vector = p!(mink!(4));
+        let expr = Atom::var(a) * metric.clone()
+            + Atom::var(b) * metric
+            + Atom::var(a) * vector.clone()
+            + Atom::var(b) * vector;
+
+        insta::assert_snapshot!(
+            expr.collect_metrics().to_bare_ordered_string(),
+            @"(a+b)*g(mink(4,mu),mink(4,nu))+a*p(mink(4))+b*p(mink(4))"
+        );
+    }
+
+    #[test]
+    fn collect_scalar_symbols_combines_nested_coefficients() {
+        let (a, b, c) = symbol!("a", "b", "c");
+        let expr = ((-Atom::var(a) + Atom::var(b)) * Atom::var(c) - Atom::var(b) * Atom::var(c))
+            * p!(mink!(4));
+
+        insta::assert_snapshot!(
+            expr.collect_tensors()
+                .collect_scalar_symbols()
+                .to_bare_ordered_string(),
+            @"-1*a*c*p(mink(4))"
         );
     }
 

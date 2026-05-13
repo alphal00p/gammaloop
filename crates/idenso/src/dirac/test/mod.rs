@@ -615,7 +615,7 @@ fn gamma_alg() {
     .simplify_gamma()
     .to_dots();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d^2*g(bis(4,1),bis(4,2))+2*d*g(bis(4,1),bis(4,2))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"(-1*d^2+2*d)*g(bis(4,1),bis(4,2))");
 }
 
 mod failing {
