@@ -112,7 +112,6 @@ impl<'a> TryFrom<AtomView<'a>> for Dimension {
     type Error = DimensionError;
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
         match value {
-            AtomView::Alias(alias) if !alias.is_opaque() => Dimension::try_from(alias.get_body()),
             AtomView::Var(a) => Ok(Dimension::Symbolic(a.get_symbol().into())),
             AtomView::Num(n) => match n.get_coeff_view() {
                 CoefficientView::Natural(n, 1, _, _) => {

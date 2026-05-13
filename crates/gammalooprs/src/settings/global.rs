@@ -22,7 +22,9 @@ use crate::{
     utils::{
         GS, W_,
         serde_utils::{IsDefault, is_false, is_float, is_true, is_usize, show_defaults_helper},
-        symbolica_ext::StringSerializedAtom,
+        symbolica_ext::{
+            StringSerializedAtom, alias_subexpressions_into_global_store, inline_gammaloop_aliases,
+        },
     },
     uv::UVgenerationSettings,
 };
@@ -133,13 +135,12 @@ pub enum UniformNumeratorSamplingScale {
 pub enum AliasExpressions {
     None(),
     All { min_byte_size: Option<usize> },
-    Subexpressions { min_byte_size: Option<usize> },
-    RepeatedSubexpressions { min_byte_size: Option<usize> },
+    FinalOnly { min_byte_size: Option<usize> },
 }
 
 impl Default for AliasExpressions {
     fn default() -> Self {
-        Self::RepeatedSubexpressions {
+        Self::All {
             min_byte_size: Some(96),
         }
     }
@@ -156,7 +157,7 @@ impl JsonSchema for AliasExpressions {
             "oneOf": [
                 {
                     "type": "string",
-                    "enum": ["none", "all", "subexpressions", "repeated_subexpressions"]
+                    "enum": ["none", "all", "final_only"]
                 },
                 {
                     "type": "object",
@@ -164,7 +165,7 @@ impl JsonSchema for AliasExpressions {
                     "maxProperties": 1,
                     "additionalProperties": false,
                     "patternProperties": {
-                        "^(all|subexpressions|repeated_subexpressions)$": {
+                        "^(all|final_only)$": {
                             "oneOf": [
                                 {
                                     "type": "integer",
@@ -191,37 +192,26 @@ impl JsonSchema for AliasExpressions {
 
 impl AliasExpressions {
     const ALL_NAME: &'static str = "all";
+    const FINAL_ONLY_NAME: &'static str = "final_only";
     const NONE_NAME: &'static str = "none";
-    const SUBEXPRESSIONS_NAME: &'static str = "subexpressions";
-    const REPEATED_SUBEXPRESSIONS_NAME: &'static str = "repeated_subexpressions";
 
     pub fn apply(self, atom: Atom) -> Atom {
         match self {
             Self::None() => atom,
-            Self::All { .. } => {
-                if self.accepts_alias(atom.as_atom_view()) {
-                    atom.alias(false)
-                } else {
-                    atom
-                }
+            Self::All { min_byte_size } => {
+                alias_subexpressions_into_global_store(atom, min_byte_size)
             }
-            Self::Subexpressions {
-                min_byte_size: None,
-            } => atom.alias_subexpressions(|subexpr, _| match subexpr {
-                AtomView::Num(_) | AtomView::Var(_) | AtomView::Alias(_) => None,
-                _ => Some(false),
-            }),
-            Self::Subexpressions {
-                min_byte_size: Some(min_byte_size),
-            } => atom.alias_subexpressions(|subexpr, _| {
-                alias_byte_size_is_accepted(subexpr, Some(min_byte_size)).then_some(false)
-            }),
-            Self::RepeatedSubexpressions {
-                min_byte_size: None,
-            } => atom.alias_repeated_subexpressions(),
-            Self::RepeatedSubexpressions {
-                min_byte_size: Some(min_byte_size),
-            } => alias_non_leaf_subexpressions(atom, Some(min_byte_size)),
+            Self::FinalOnly { .. } => atom,
+        }
+    }
+
+    pub fn apply_final(self, atom: Atom) -> Atom {
+        match self {
+            Self::None() => atom,
+            Self::All { .. } => self.apply(atom),
+            Self::FinalOnly { min_byte_size } => {
+                alias_subexpressions_into_global_store(atom, min_byte_size)
+            }
         }
     }
 
@@ -233,7 +223,7 @@ impl AliasExpressions {
     pub fn inline_for_symbolic_manipulation(self, atom: Atom) -> Atom {
         match self {
             Self::None() => atom,
-            _ => atom.inline_aliases(false),
+            _ => inline_gammaloop_aliases(atom),
         }
     }
 
@@ -245,9 +235,7 @@ impl AliasExpressions {
     fn min_byte_size(self) -> Option<usize> {
         match self {
             Self::None() => None,
-            Self::All { min_byte_size }
-            | Self::Subexpressions { min_byte_size }
-            | Self::RepeatedSubexpressions { min_byte_size } => min_byte_size,
+            Self::All { min_byte_size } | Self::FinalOnly { min_byte_size } => min_byte_size,
         }
     }
 
@@ -255,8 +243,7 @@ impl AliasExpressions {
         match self {
             Self::None() => Self::NONE_NAME,
             Self::All { .. } => Self::ALL_NAME,
-            Self::Subexpressions { .. } => Self::SUBEXPRESSIONS_NAME,
-            Self::RepeatedSubexpressions { .. } => Self::REPEATED_SUBEXPRESSIONS_NAME,
+            Self::FinalOnly { .. } => Self::FINAL_ONLY_NAME,
         }
     }
 
@@ -264,28 +251,10 @@ impl AliasExpressions {
         match normalize_alias_expression_name(name).as_str() {
             Self::NONE_NAME => min_byte_size.is_none().then_some(Self::None()),
             Self::ALL_NAME => Some(Self::All { min_byte_size }),
-            Self::SUBEXPRESSIONS_NAME => Some(Self::Subexpressions { min_byte_size }),
-            Self::REPEATED_SUBEXPRESSIONS_NAME => {
-                Some(Self::RepeatedSubexpressions { min_byte_size })
-            }
+            Self::FINAL_ONLY_NAME => Some(Self::FinalOnly { min_byte_size }),
             _ => None,
         }
     }
-
-    fn accepts_alias(self, subexpr: AtomView<'_>) -> bool {
-        alias_byte_size_is_accepted(subexpr, self.min_byte_size())
-    }
-}
-
-fn alias_byte_size_is_accepted(subexpr: AtomView<'_>, min_byte_size: Option<usize>) -> bool {
-    min_byte_size.is_none_or(|min_byte_size| subexpr.get_byte_size() >= min_byte_size)
-}
-
-fn alias_non_leaf_subexpressions(atom: Atom, min_byte_size: Option<usize>) -> Atom {
-    atom.alias_subexpressions(|subexpr, _| match subexpr {
-        AtomView::Num(_) | AtomView::Var(_) | AtomView::Alias(_) => None,
-        _ => alias_byte_size_is_accepted(subexpr, min_byte_size).then_some(false),
-    })
 }
 
 fn normalize_alias_expression_name(name: &str) -> String {
@@ -336,8 +305,8 @@ impl<'de> Deserialize<'de> for AliasExpressions {
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str(
-                    "one of \"none\", \"all\", \"subexpressions\", \"repeated_subexpressions\", \
-                     or an inline table like { repeated_subexpressions = 128 }",
+                    "one of \"none\", \"all\", \"final_only\", \
+                     or an inline table like { all = 128 }",
                 )
             }
 

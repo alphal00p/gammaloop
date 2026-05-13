@@ -537,9 +537,6 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
 
     fn try_from(view: AtomView<'_>) -> Result<Self, Self::Error> {
         match view {
-            AtomView::Alias(alias) if !alias.is_opaque() => {
-                AbstractIndex::try_from(alias.get_body())
-            }
             AtomView::Num(n) => match n.get_coeff_view() {
                 CoefficientView::Natural(n, 1, _, _) => Ok(AbstractIndex::from(n as i32)),
                 CoefficientView::Natural(n, d, _, _) => {

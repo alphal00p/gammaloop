@@ -405,7 +405,7 @@ impl LUCounterTermEvaluators {
             })
             .collect();
 
-        let iterated_timings = std::cell::Cell::new(EvaluatorBuildTimings::default());
+        let iterated_timings = std::cell::RefCell::new(EvaluatorBuildTimings::default());
         let iterated_evaluator = counterterm_data.iterated.map_ref(|parametric_integrands| {
             parametric_integrands
                 .integrands
@@ -439,14 +439,12 @@ impl LUCounterTermEvaluators {
                             )
                         }
                         .unwrap();
-                    let mut timings = iterated_timings.get();
-                    timings += evaluator_timings;
-                    iterated_timings.set(timings);
+                    *iterated_timings.borrow_mut() += evaluator_timings;
                     evaluator
                 })
                 .collect()
         });
-        timings += iterated_timings.get();
+        timings += iterated_timings.into_inner();
 
         for (label, orders) in [
             (

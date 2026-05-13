@@ -15,36 +15,25 @@ const CONSIDER_COMPARISON_WITH_LTD: bool = true;
 
 const DEFAULT_FINAL_STATES: &str = "{scalar_0 scalar_0, scalar_0 scalar_0 scalar_1}";
 const SAMPLE_POINT: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-const ALIAS_EXPRESSION_MODES: [(&str, &str); 5] = [
+const ALIAS_EXPRESSION_MODES: [(&str, &str); 3] = [
     ("none", "global.generation.alias_expressions=none"),
-    ("all", "global.generation.alias_expressions=all"),
+    ("all", "global.generation.alias_expressions.all=96"),
     (
-        "all_min_bytes",
-        "global.generation.alias_expressions.all=96",
-    ),
-    (
-        "repeated_subexpressions_min_bytes",
-        "global.generation.alias_expressions.repeated_subexpressions=96",
-    ),
-    (
-        "subexpressions_min_bytes",
-        "global.generation.alias_expressions.subexpressions=96",
+        "final_only",
+        "global.generation.alias_expressions.final_only=96",
     ),
 ];
 
-const SCALAR_GL02_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, &str, f64); 12] = [
-    ("cff_local_3d", "all", 297.0),
-    ("cff_local_3d", "all_min_bytes", 297.0),
-    ("cff_local_3d", "repeated_subexpressions_min_bytes", 0.96),
-    ("cff_local_3d", "subexpressions_min_bytes", 0.96),
-    ("cff_local_4d", "all", 297.0),
-    ("cff_local_4d", "all_min_bytes", 297.0),
-    ("cff_local_4d", "repeated_subexpressions_min_bytes", 0.96),
-    ("cff_local_4d", "subexpressions_min_bytes", 0.96),
-    ("ltd_local_4d", "all", 297.0),
-    ("ltd_local_4d", "all_min_bytes", 297.0),
-    ("ltd_local_4d", "repeated_subexpressions_min_bytes", 0.96),
-    ("ltd_local_4d", "subexpressions_min_bytes", 0.96),
+const SCALAR_GL02_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, &str, f64); 9] = [
+    ("cff_local_3d", "none", 0.99),
+    ("cff_local_3d", "all", 1.02),
+    ("cff_local_3d", "final_only", 1.02),
+    ("cff_local_4d", "none", 0.99),
+    ("cff_local_4d", "all", 1.02),
+    ("cff_local_4d", "final_only", 1.02),
+    ("ltd_local_4d", "none", 0.99),
+    ("ltd_local_4d", "all", 1.02),
+    ("ltd_local_4d", "final_only", 1.02),
 ];
 
 fn alias_compression_min_factor(path: &str, alias_label: &str) -> Option<f64> {

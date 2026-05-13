@@ -413,6 +413,7 @@ pub(crate) fn render_generation_summary(
         "expr build".bold().blue().to_string(),
         "spenso".bold().blue().to_string(),
         "symbolica eval".bold().blue().to_string(),
+        "Expressions size".bold().blue().to_string(),
         "alias comp".bold().blue().to_string(),
         "compile".bold().blue().to_string(),
     ]);
@@ -444,6 +445,15 @@ pub(crate) fn render_generation_summary(
             format_generation_compression_factor(report.stats.evaluator_alias_compression_factor())
                 .yellow()
                 .to_string();
+        let expression_size_value = format_generation_memory(
+            report
+                .stats
+                .evaluator_expression_byte_size()
+                .try_into()
+                .unwrap_or(u64::MAX),
+        )
+        .yellow()
+        .to_string();
 
         builder.push_record([
             report.integrand_name.yellow().to_string(),
@@ -457,6 +467,7 @@ pub(crate) fn render_generation_summary(
             expr_value,
             spenso_value,
             symbolica_value,
+            expression_size_value,
             compression_value,
             compile_value,
         ]);

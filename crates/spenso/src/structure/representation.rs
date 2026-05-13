@@ -1369,20 +1369,10 @@ impl<'a, T: RepName> TryFrom<AtomView<'a>> for Representation<T> {
     type Error = SlotError;
 
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
-        if let AtomView::Alias(alias) = value
-            && !alias.is_opaque()
-        {
-            return Self::try_from(alias.get_body());
-        }
-
         let (rep, mut iter) = if let AtomView::Fun(f) = value {
             let name = f.get_symbol();
 
             let innerf = f.iter().next().ok_or(SlotError::Composite)?;
-            let innerf = match innerf {
-                AtomView::Alias(alias) if !alias.is_opaque() => alias.get_body(),
-                other => other,
-            };
 
             if let AtomView::Fun(innerf) = innerf {
                 let rep =

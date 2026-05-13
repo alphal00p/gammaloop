@@ -515,7 +515,7 @@ impl CrossSectionGraphTerm {
         let mut stats = GraphGenerationStats::default();
         let selected_generation_orientations = graph
             .derived_data
-            .global_cff_expression
+            .global_three_d_expression
             .as_ref()
             .unwrap()
             .orientations

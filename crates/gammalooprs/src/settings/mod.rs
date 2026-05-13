@@ -249,13 +249,13 @@ alias_expressions = "all"
 
         let threshold: GenerationSettings = toml::from_str(
             r#"
-alias_expressions = { repeated_subexpressions = 128 }
+alias_expressions = { all = 128 }
 "#,
         )
         .unwrap();
         assert_eq!(
             threshold.alias_expressions,
-            AliasExpressions::RepeatedSubexpressions {
+            AliasExpressions::All {
                 min_byte_size: Some(128)
             }
         );
@@ -263,13 +263,13 @@ alias_expressions = { repeated_subexpressions = 128 }
         let explicit_options: GenerationSettings = toml::from_str(
             r#"
 [alias_expressions]
-subexpressions = { min_byte_size = 64 }
+final_only = { min_byte_size = 64 }
 "#,
         )
         .unwrap();
         assert_eq!(
             explicit_options.alias_expressions,
-            AliasExpressions::Subexpressions {
+            AliasExpressions::FinalOnly {
                 min_byte_size: Some(64)
             }
         );

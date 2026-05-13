@@ -4,26 +4,46 @@ use gammaloop_api::commands::import::Import;
 
 const ALIAS_EXPRESSION_MODES: [(&str, &str); 5] = [
     ("none", "global.generation.alias_expressions=none"),
-    ("all", "global.generation.alias_expressions=all"),
+    ("all_no_min", "global.generation.alias_expressions=all"),
+    ("all_min_96", "global.generation.alias_expressions.all=96"),
     (
-        "all_min_bytes",
-        "global.generation.alias_expressions.all=96",
+        "final_only_no_min",
+        "global.generation.alias_expressions=final_only",
     ),
     (
-        "repeated_subexpressions_min_bytes",
-        "global.generation.alias_expressions.repeated_subexpressions=96",
-    ),
-    (
-        "subexpressions_min_bytes",
-        "global.generation.alias_expressions.subexpressions=96",
+        "final_only_min_96",
+        "global.generation.alias_expressions.final_only=96",
     ),
 ];
 
-const PHOTONS_1L_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, f64); 4] = [
-    ("all", 66.0),
-    ("all_min_bytes", 96.0),
-    ("repeated_subexpressions_min_bytes", 1.0),
-    ("subexpressions_min_bytes", 1.0),
+const FINAL_ONLY_ALIAS_EXPRESSION_MODES: [(&str, &str); 5] = [
+    ("none", "global.generation.alias_expressions=none"),
+    ("all_no_min", "global.generation.alias_expressions=all"),
+    ("all_min_96", "global.generation.alias_expressions.all=96"),
+    (
+        "final_only_no_min",
+        "global.generation.alias_expressions=final_only",
+    ),
+    (
+        "final_only_min_96",
+        "global.generation.alias_expressions.final_only=96",
+    ),
+];
+
+const PHOTONS_1L_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, f64); 5] = [
+    ("none", 0.99),
+    ("all_no_min", 0.70),
+    ("all_min_96", 0.99),
+    ("final_only_no_min", 0.70),
+    ("final_only_min_96", 0.99),
+];
+
+const PHOTONS_1L_NUMERATOR_ALIAS_COMPRESSION_MIN_FACTORS: [(&str, f64); 5] = [
+    ("none", 0.99),
+    ("all_no_min", 1.40),
+    ("all_min_96", 1.40),
+    ("final_only_no_min", 1.40),
+    ("final_only_min_96", 1.40),
 ];
 
 fn alias_compression_min_factor(alias_label: &str, expected: &[(&str, f64)]) -> Option<f64> {
@@ -45,9 +65,11 @@ fn first_dot_graph(path: &Path) -> Result<String> {
     Ok(content[first..end].to_string())
 }
 
-fn setup_photons_1l_no_numerator_alias_cli(
+fn setup_photons_1l_alias_cli(
     test_name: &str,
     alias_expression_assignment: &str,
+    dot_file_name: &str,
+    process_name: &str,
 ) -> Result<gammaloop_integration_tests::CLIState> {
     let run_card = gammaloop_integration_tests::run_card("aa_aa_1L.toml")?;
     let mut cli = get_test_cli(
@@ -69,20 +91,19 @@ fn setup_photons_1l_no_numerator_alias_cli(
     )?;
     let dot = first_dot_graph(
         &gammaloop_integration_tests::workspace_root()
-            .join("examples/cli/three_d_expr_demo/aa_aa_no_numerator.dot"),
+            .join("examples/cli/three_d_expr_demo")
+            .join(dot_file_name),
     )?;
     Import::Graphs {
         source: None,
         inline_dot: Some(dot),
-        process: Some(ProcessRef::Unqualified(
-            "photons_1l_no_numerator_alias".to_string(),
-        )),
+        process: Some(ProcessRef::Unqualified(process_name.to_string())),
         integrand_name: Some("default".to_string()),
         overwrite: true,
         append: false,
     }
     .run(&mut cli.state, &cli.cli_settings)?;
-    cli.run_command("generate existing -p photons_1l_no_numerator_alias -i default")?;
+    cli.run_command(&format!("generate existing -p {process_name} -i default"))?;
 
     cli.state
         .model_parameters
@@ -97,18 +118,44 @@ fn setup_photons_1l_no_numerator_alias_cli(
     Ok(cli)
 }
 
-#[test]
-#[serial]
-fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
+fn setup_photons_1l_no_numerator_alias_cli(
+    test_name: &str,
+    alias_expression_assignment: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_photons_1l_alias_cli(
+        test_name,
+        alias_expression_assignment,
+        "aa_aa_no_numerator.dot",
+        "photons_1l_no_numerator_alias",
+    )
+}
+
+fn setup_photons_1l_numerator_alias_cli(
+    test_name: &str,
+    alias_expression_assignment: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    setup_photons_1l_alias_cli(
+        test_name,
+        alias_expression_assignment,
+        "aa_aa.dot",
+        "photons_1l_numerator_alias",
+    )
+}
+
+fn assert_photons_1l_alias_expression_modes_inspect_match(
+    label: &str,
+    process_name: &str,
+    setup: fn(&str, &str) -> Result<gammaloop_integration_tests::CLIState>,
+    alias_expression_modes: &[(&str, &str)],
+    expected_compression_min_factors: &[(&str, f64)],
+) -> Result<()> {
     let point = vec![0.123, 0.3242, 0.4233];
-    let mut reference = setup_photons_1l_no_numerator_alias_cli(
-        "photons_1l_alias_none",
+    let mut reference = setup(
+        &format!("{label}_alias_none"),
         "global.generation.alias_expressions=none",
     )?;
     let (_, reference_value) = Inspect {
-        process: Some(ProcessRef::Unqualified(
-            "photons_1l_no_numerator_alias".to_string(),
-        )),
+        process: Some(ProcessRef::Unqualified(process_name.to_string())),
         integrand_name: Some("default".to_string()),
         point: point.clone(),
         momentum_space: true,
@@ -117,18 +164,28 @@ fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
     }
     .run(&mut reference)?;
 
-    for (alias_label, alias_expression_assignment) in ALIAS_EXPRESSION_MODES
+    if let Some(minimum_factor) =
+        alias_compression_min_factor("none", expected_compression_min_factors)
+    {
+        assert_integrand_alias_compression_factor(
+            &reference,
+            process_name,
+            "default",
+            minimum_factor,
+            &format!("{label} alias_expressions=none"),
+        )?;
+    }
+
+    for (alias_label, alias_expression_assignment) in alias_expression_modes
         .into_iter()
         .filter(|(alias_label, _)| *alias_label != "none")
     {
-        let mut cli = setup_photons_1l_no_numerator_alias_cli(
-            &format!("photons_1l_alias_{alias_label}"),
+        let mut cli = setup(
+            &format!("{label}_alias_{alias_label}"),
             alias_expression_assignment,
         )?;
         let (_, value) = Inspect {
-            process: Some(ProcessRef::Unqualified(
-                "photons_1l_no_numerator_alias".to_string(),
-            )),
+            process: Some(ProcessRef::Unqualified(process_name.to_string())),
             integrand_name: Some("default".to_string()),
             point: point.clone(),
             momentum_space: true,
@@ -139,17 +196,17 @@ fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
         assert_complex_approx_eq(
             value,
             reference_value,
-            &format!("1L six-photon inspect with alias_expressions={alias_label}"),
+            &format!("{label} inspect with alias_expressions={alias_label}"),
         );
         if let Some(minimum_factor) =
-            alias_compression_min_factor(alias_label, &PHOTONS_1L_ALIAS_COMPRESSION_MIN_FACTORS)
+            alias_compression_min_factor(alias_label, expected_compression_min_factors)
         {
             assert_integrand_alias_compression_factor(
                 &cli,
-                "photons_1l_no_numerator_alias",
+                process_name,
                 "default",
                 minimum_factor,
-                &format!("1L six-photon alias_expressions={alias_label}"),
+                &format!("{label} alias_expressions={alias_label}"),
             )?;
         }
         clean_test(&cli.cli_settings.state.folder);
@@ -157,6 +214,25 @@ fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
 
     clean_test(&reference.cli_settings.state.folder);
     Ok(())
+}
+
+#[test]
+#[serial]
+fn photons_1l_alias_expression_modes_inspect_match() -> Result<()> {
+    assert_photons_1l_alias_expression_modes_inspect_match(
+        "photons_1l_no_numerator",
+        "photons_1l_no_numerator_alias",
+        setup_photons_1l_no_numerator_alias_cli,
+        &ALIAS_EXPRESSION_MODES,
+        &PHOTONS_1L_ALIAS_COMPRESSION_MIN_FACTORS,
+    )?;
+    assert_photons_1l_alias_expression_modes_inspect_match(
+        "photons_1l_numerator",
+        "photons_1l_numerator_alias",
+        setup_photons_1l_numerator_alias_cli,
+        &FINAL_ONLY_ALIAS_EXPRESSION_MODES,
+        &PHOTONS_1L_NUMERATOR_ALIAS_COMPRESSION_MIN_FACTORS,
+    )
 }
 
 mod slow {

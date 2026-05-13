@@ -341,11 +341,7 @@ fn collect_prop_calls(
                 collect_prop_calls(arg, prop_name, out)?;
             }
         }
-        AtomView::Alias(alias) if !alias.is_opaque() => {
-            collect_prop_calls(alias.get_body(), prop_name, out)?;
-        }
         AtomView::Num(_) | AtomView::Var(_) => {}
-        AtomView::Alias(_) => {}
     }
     Ok(())
 }

@@ -54,7 +54,7 @@ smartstring = "1.0.1"
 spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "dcedfced8060a92f113b29fc03535e0a78d8c91d", default-features = false }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0cfa692c1fa34d5461a2647baa657f74b0a00c3a", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
 thiserror = "2.0"
@@ -70,9 +70,9 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "dcedfced8060a92f113b29fc03535e0a78d8c91d" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "dcedfced8060a92f113b29fc03535e0a78d8c91d" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "dcedfced8060a92f113b29fc03535e0a78d8c91d" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0cfa692c1fa34d5461a2647baa657f74b0a00c3a" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0cfa692c1fa34d5461a2647baa657f74b0a00c3a" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0cfa692c1fa34d5461a2647baa657f74b0a00c3a" }
 
 [profile.bench]
 opt-level = 3

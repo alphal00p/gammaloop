@@ -2493,7 +2493,7 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .global_cff_expression
+                    .global_three_d_expression
                     .as_ref()
                     .unwrap();
 

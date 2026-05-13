@@ -21,7 +21,8 @@ use crate::model::Model;
 mod generation_report;
 pub use generation_report::{
     EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats,
-    NamedGraphGenerationReport, merge_generated_graph_reports,
+    NamedGraphGenerationReport, finalize_generated_graph_reports_alias_size_accounting,
+    merge_generated_graph_reports,
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
@@ -61,7 +62,7 @@ pub struct EvaluatorSettings {
 
     #[serde(
         default = "evaluator_default_max_horner_scheme_variables",
-        skip_serializing_if = "is_usize::<500>"
+        skip_serializing_if = "is_usize::<100>"
     )]
     pub max_horner_scheme_variables: usize,
 
@@ -93,7 +94,7 @@ const fn evaluator_default_n_cores() -> usize {
 }
 
 const fn evaluator_default_max_horner_scheme_variables() -> usize {
-    500
+    100
 }
 
 const fn evaluator_default_max_common_pair_cache_entries() -> usize {

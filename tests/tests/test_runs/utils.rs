@@ -110,27 +110,29 @@ pub(super) fn assert_integrand_alias_compression_factor(
                 "{context}: missing generation summary for process {process_name}, integrand {integrand_name}"
             )
         })?;
-    let atom_byte_size = summary
+    let expression_byte_size = summary
         .reports
         .iter()
-        .map(|report| report.stats.evaluator_atom_byte_size)
+        .map(|report| report.stats.evaluator_expression_byte_size())
         .sum::<usize>();
     let alias_expanded_byte_size = summary
         .reports
         .iter()
         .map(|report| report.stats.evaluator_atom_alias_expanded_byte_size)
         .sum::<usize>();
-    if atom_byte_size == 0 {
+    if expression_byte_size == 0 {
         return Err(eyre::eyre!(
             "{context}: generation summary did not record evaluator atom byte sizes"
         ));
     }
-    let factor = alias_expanded_byte_size as f64 / atom_byte_size as f64;
-    eprintln!("{context}: alias compression factor = {factor:.6}");
+    let factor = alias_expanded_byte_size as f64 / expression_byte_size as f64;
+    eprintln!(
+        "{context}: alias compression factor = {factor:.6} ({alias_expanded_byte_size} expanded bytes / {expression_byte_size} expression bytes)"
+    );
     assert!(
         factor > minimum_factor,
         "{context}: expected alias compression factor > {minimum_factor:.6}, got {factor:.6} \
-         ({alias_expanded_byte_size} expanded bytes / {atom_byte_size} aliased bytes)"
+         ({alias_expanded_byte_size} expanded bytes / {expression_byte_size} expression bytes)"
     );
     Ok(factor)
 }

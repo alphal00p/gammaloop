@@ -495,13 +495,6 @@ impl FormatWithState for AtomView<'_> {
             AtomView::Pow(p) => p.fmt_output(fmt, opts, print_state),
             AtomView::Mul(t) => t.fmt_output(fmt, opts, print_state),
             AtomView::Add(e) => e.fmt_output(fmt, opts, print_state),
-            AtomView::Alias(alias) if !alias.is_opaque() => {
-                alias.get_body().fmt_output(fmt, opts, print_state)
-            }
-            AtomView::Alias(alias) => {
-                fmt.write_str(&alias.as_view().to_plain_string())?;
-                Ok(false)
-            }
         }
     }
 }
