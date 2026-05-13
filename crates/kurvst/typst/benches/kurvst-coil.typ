@@ -6,8 +6,8 @@
 
 #cetz.canvas({
   for index in range(count) {
-    let path = kurvst.cubic-path(..straight-segment(-index * spacing))
-    let pattern = kurvst.pattern-path(
+    let path = kurvst.from-cubic(straight-segment(-index * spacing))
+    let pattern = kurvst.pattern(
       path,
       pattern: kurvst.coil(samples-per-period: samples-per-period, longitudinal-scale: 1.25),
       amplitude: amplitude,
@@ -15,6 +15,6 @@
       samples-per-period: samples-per-period,
       coil-longitudinal-scale: 1.25,
     )
-    kurvst.cetz-pattern(pattern, stroke: stroke)
+    kurvst.to-cetz(pattern, stroke: stroke)
   }
 })

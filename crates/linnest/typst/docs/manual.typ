@@ -3,7 +3,41 @@
 
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
-#set text(size: 10pt)
+#set text(size: 10pt, font: "Atkinson Hyperlegible Next")
+
+#align(center)[
+  #set text(size: 3em, font: "Hanken Grotesk")
+  linnest
+  #set text(size: 0.3em, font: "Atkinson Hyperlegible Next")
+
+  _a typst interface to the `linnet` crate_
+
+  `linnet` is a rust crate that provides a graph data structure and many graph algorithms, and crucially for this package, multiple layout algorithms, as well as a dot parser (using the `dot_parser` crate).
+
+
+
+]
+
+#outline(depth: 2)
+#let crown = $star$
+
+= Linnet
+
+The `linnet` crate that this package wraps around, is built around the half-edge graph data structure.
+This means that instead of a graph being represented as a set of nodes and edges, it is represented as a set of half-edges $H$, and a set of vertices $V$.
+The graph structure is then encoded through two maps.
+The first map, $partial : H --> V$ maps each half-edge to its corresponding vertex.
+The preimage of any vertex $v$ is the set of half-edges that map to it, called the crown of $v$.
+The second map, $iota : H --> H$, is an involution that _glues_ half edges together to form edges.
+If a half-edge is glued to itself, we call that an external half-edge.
+
+
+#let g = graph.build(
+  nodes: ((name: "a"), (name: "b")),
+  edges: ((source: (node: 0), target: (node: 1), label: "e"), (source: (node: 0), target: (node: 1), label: "g")),
+)
+#graph.edges(g)
+#draw(layout(g))
 
 = Linnest Typst APIs
 

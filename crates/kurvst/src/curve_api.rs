@@ -4,14 +4,75 @@ use kurbo::{
 };
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
-    de::{self, Visitor},
+    de::{self, SeqAccess, Visitor},
+    ser::SerializeTuple,
 };
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurvePoint {
     pub x: f64,
     pub y: f64,
+}
+
+impl Serialize for CurvePoint {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(&self.x)?;
+        tuple.serialize_element(&self.y)?;
+        tuple.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for CurvePoint {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(CurvePointVisitor)
+    }
+}
+
+struct CurvePointVisitor;
+
+struct F64Value(f64);
+
+impl<'de> Deserialize<'de> for F64Value {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_f64(deserializer).map(Self)
+    }
+}
+
+impl<'de> Visitor<'de> for CurvePointVisitor {
+    type Value = CurvePoint;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a two-item point tuple")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let x = seq
+            .next_element::<F64Value>()?
+            .ok_or_else(|| de::Error::invalid_length(0, &self))?
+            .0;
+        let y = seq
+            .next_element::<F64Value>()?
+            .ok_or_else(|| de::Error::invalid_length(1, &self))?
+            .0;
+        if seq.next_element::<de::IgnoredAny>()?.is_some() {
+            return Err(de::Error::invalid_length(3, &self));
+        }
+        Ok(CurvePoint { x, y })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -19,20 +80,8 @@ pub struct CurvePoint {
 pub struct CubicBezierSpec {
     pub start: CurvePoint,
     pub end: CurvePoint,
-    pub ctrl_a: CurvePoint,
-    pub ctrl_b: CurvePoint,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub struct CubicPathSpec {
-    #[serde(flatten)]
-    pub curve: CubicBezierSpec,
-    #[serde(
-        default = "default_arclen_accuracy",
-        deserialize_with = "deserialize_f64"
-    )]
-    pub accuracy: f64,
+    pub control_start: CurvePoint,
+    pub control_end: CurvePoint,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -109,6 +158,18 @@ pub struct ParallelPathSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct PathLengthSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    pub path: BezPath,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum PatternInput {
     Name(String),
@@ -170,12 +231,6 @@ pub struct HobbySplineSpec {
     pub accuracy: f64,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub struct LineSegmentSpec {
-    pub start: CurvePoint,
-    pub end: CurvePoint,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PatternPathOutput {
     #[serde(
@@ -184,10 +239,6 @@ pub struct PatternPathOutput {
     )]
     pub path: BezPath,
     pub pattern: String,
-    pub length: f64,
-    pub points: Vec<CurvePoint>,
-    pub curves: Vec<CubicBezierSpec>,
-    pub segments: Vec<LineSegmentSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -197,10 +248,6 @@ pub struct CurvePathOutput {
         deserialize_with = "deserialize_bez_path"
     )]
     pub path: BezPath,
-    pub length: f64,
-    pub points: Vec<CurvePoint>,
-    pub curves: Vec<CubicBezierSpec>,
-    pub segments: Vec<LineSegmentSpec>,
 }
 
 fn default_hobby_omega() -> f64 {
@@ -256,128 +303,89 @@ fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct WirePath {
-    subpaths: Vec<WireSubpath>,
+    elements: Vec<WirePathElement>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct WireSubpath {
-    origin: [f64; 2],
-    closed: bool,
-    segments: Vec<WireSegment>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind")]
-enum WireSegment {
-    #[serde(rename = "l")]
-    Line { to: [f64; 2] },
-    #[serde(rename = "c")]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum WirePathElement {
+    Move {
+        start: CurvePoint,
+    },
+    Line {
+        end: CurvePoint,
+    },
+    Quad {
+        control: CurvePoint,
+        end: CurvePoint,
+    },
     Cubic {
-        c1: [f64; 2],
-        c2: [f64; 2],
-        to: [f64; 2],
+        #[serde(rename = "control-start")]
+        control_start: CurvePoint,
+        #[serde(rename = "control-end")]
+        control_end: CurvePoint,
+        end: CurvePoint,
+    },
+    Close {
+        #[serde(default = "default_close_mode")]
+        mode: String,
     },
 }
 
-fn point_to_wire(point: Point) -> [f64; 2] {
-    [point.x, point.y]
-}
-
-fn wire_to_point(point: [f64; 2]) -> Point {
-    Point::new(point[0], point[1])
-}
-
-fn push_current_subpath(subpaths: &mut Vec<WireSubpath>, current: &mut Option<WireSubpath>) {
-    if let Some(subpath) = current.take() {
-        subpaths.push(subpath);
-    }
-}
-
-fn ensure_current_subpath(current: &mut Option<WireSubpath>, origin: Point) -> &mut WireSubpath {
-    current.get_or_insert_with(|| WireSubpath {
-        origin: point_to_wire(origin),
-        closed: false,
-        segments: Vec::new(),
-    })
+fn default_close_mode() -> String {
+    "straight".to_string()
 }
 
 impl From<&BezPath> for WirePath {
     fn from(path: &BezPath) -> Self {
-        let mut subpaths = Vec::new();
-        let mut current = None;
-        let mut current_point = None;
-
-        for element in path.elements() {
-            match *element {
-                PathEl::MoveTo(point) => {
-                    push_current_subpath(&mut subpaths, &mut current);
-                    current = Some(WireSubpath {
-                        origin: point_to_wire(point),
-                        closed: false,
-                        segments: Vec::new(),
-                    });
-                    current_point = Some(point);
-                }
-                PathEl::LineTo(to) => {
-                    ensure_current_subpath(&mut current, current_point.unwrap_or(to))
-                        .segments
-                        .push(WireSegment::Line {
-                            to: point_to_wire(to),
-                        });
-                    current_point = Some(to);
-                }
-                PathEl::QuadTo(ctrl, to) => {
-                    let start = current_point.unwrap_or(ctrl);
-                    let c1 = start + (ctrl - start) * (2.0 / 3.0);
-                    let c2 = to + (ctrl - to) * (2.0 / 3.0);
-                    ensure_current_subpath(&mut current, start)
-                        .segments
-                        .push(WireSegment::Cubic {
-                            c1: point_to_wire(c1),
-                            c2: point_to_wire(c2),
-                            to: point_to_wire(to),
-                        });
-                    current_point = Some(to);
-                }
-                PathEl::CurveTo(c1, c2, to) => {
-                    ensure_current_subpath(&mut current, current_point.unwrap_or(c1))
-                        .segments
-                        .push(WireSegment::Cubic {
-                            c1: point_to_wire(c1),
-                            c2: point_to_wire(c2),
-                            to: point_to_wire(to),
-                        });
-                    current_point = Some(to);
-                }
-                PathEl::ClosePath => {
-                    if let Some(subpath) = current.as_mut() {
-                        subpath.closed = true;
-                        current_point = Some(wire_to_point(subpath.origin));
-                    }
-                }
-            }
-        }
-
-        push_current_subpath(&mut subpaths, &mut current);
-        Self { subpaths }
+        let elements = path
+            .elements()
+            .iter()
+            .map(|element| match *element {
+                PathEl::MoveTo(point) => WirePathElement::Move {
+                    start: point.into(),
+                },
+                PathEl::LineTo(point) => WirePathElement::Line { end: point.into() },
+                PathEl::QuadTo(control, end) => WirePathElement::Quad {
+                    control: control.into(),
+                    end: end.into(),
+                },
+                PathEl::CurveTo(control_start, control_end, end) => WirePathElement::Cubic {
+                    control_start: control_start.into(),
+                    control_end: control_end.into(),
+                    end: end.into(),
+                },
+                PathEl::ClosePath => WirePathElement::Close {
+                    mode: default_close_mode(),
+                },
+            })
+            .collect();
+        Self { elements }
     }
 }
 
 impl From<WirePath> for BezPath {
     fn from(value: WirePath) -> Self {
         let mut path = BezPath::new();
-        for subpath in value.subpaths {
-            path.move_to(wire_to_point(subpath.origin));
-            for segment in subpath.segments {
-                match segment {
-                    WireSegment::Line { to } => path.line_to(wire_to_point(to)),
-                    WireSegment::Cubic { c1, c2, to } => {
-                        path.curve_to(wire_to_point(c1), wire_to_point(c2), wire_to_point(to));
-                    }
+        for element in value.elements {
+            match element {
+                WirePathElement::Move { start } => path.move_to(Point::from(start)),
+                WirePathElement::Line { end } => path.line_to(Point::from(end)),
+                WirePathElement::Quad { control, end } => {
+                    path.quad_to(Point::from(control), Point::from(end));
                 }
-            }
-            if subpath.closed {
-                path.close_path();
+                WirePathElement::Cubic {
+                    control_start,
+                    control_end,
+                    end,
+                } => {
+                    path.curve_to(
+                        Point::from(control_start),
+                        Point::from(control_end),
+                        Point::from(end),
+                    );
+                }
+                WirePathElement::Close { .. } => path.close_path(),
             }
         }
         path
@@ -469,7 +477,12 @@ impl From<Point> for CurvePoint {
 
 impl From<CubicBezierSpec> for CubicBez {
     fn from(value: CubicBezierSpec) -> Self {
-        CubicBez::new(value.start, value.ctrl_a, value.ctrl_b, value.end)
+        CubicBez::new(
+            value.start,
+            value.control_start,
+            value.control_end,
+            value.end,
+        )
     }
 }
 
@@ -477,8 +490,8 @@ impl From<CubicBez> for CubicBezierSpec {
     fn from(value: CubicBez) -> Self {
         Self {
             start: value.p0.into(),
-            ctrl_a: value.p1.into(),
-            ctrl_b: value.p2.into(),
+            control_start: value.p1.into(),
+            control_end: value.p2.into(),
             end: value.p3.into(),
         }
     }
@@ -488,25 +501,6 @@ impl From<CubicBezierSpec> for PathSeg {
     fn from(value: CubicBezierSpec) -> Self {
         PathSeg::Cubic(value.into())
     }
-}
-
-impl From<LineSegmentSpec> for Line {
-    fn from(value: LineSegmentSpec) -> Self {
-        Line::new(value.start, value.end)
-    }
-}
-
-impl From<LineSegmentSpec> for PathSeg {
-    fn from(value: LineSegmentSpec) -> Self {
-        PathSeg::Line(value.into())
-    }
-}
-
-pub fn curve_cubic_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: CubicPathSpec = ciborium::de::from_reader(arg)
-        .map_err(|err| format!("Failed to deserialize cubic path spec: {err}"))?;
-    let output = cubic_path(spec)?;
-    encode_cbor(&output)
 }
 
 pub fn curve_trim_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -544,9 +538,11 @@ pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
-fn cubic_path(spec: CubicPathSpec) -> Result<CurvePathOutput, String> {
-    let accuracy = validate_positive_accuracy(spec.accuracy)?;
-    curve_path_from_segments(std::iter::once(PathSeg::Cubic(spec.curve.into())), accuracy)
+pub fn curve_path_length_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PathLengthSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path length spec: {err}"))?;
+    let output = path_length(spec)?;
+    encode_cbor(&output)
 }
 
 fn trim_path(spec: TrimPathSpec) -> Result<CurvePathOutput, String> {
@@ -554,7 +550,16 @@ fn trim_path(spec: TrimPathSpec) -> Result<CurvePathOutput, String> {
     let start_outset = validate_outset(spec.start_outset, "start")?;
     let end_outset = validate_outset(spec.end_outset, "end")?;
     let segments = trim_path_segments(spec.path.segments(), start_outset, end_outset, accuracy)?;
-    curve_path_from_segments(segments, accuracy)
+    curve_path_from_segments(segments)
+}
+
+fn path_length(spec: PathLengthSpec) -> Result<f64, String> {
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    Ok(spec
+        .path
+        .segments()
+        .map(|segment| segment.arclen(accuracy))
+        .sum())
 }
 
 fn validate_positive_accuracy(value: f64) -> Result<f64, String> {
@@ -593,17 +598,9 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
         .collect::<Vec<_>>();
     let length: f64 = segment_lengths.iter().sum();
     if length <= f64::EPSILON {
-        let point = path_segments
-            .first()
-            .map(PathSeg::start)
-            .unwrap_or(Point::new(0.0, 0.0));
         return Ok(PatternPathOutput {
             path: spec.path,
             pattern: pattern.name.clone(),
-            length,
-            points: vec![point.into()],
-            curves: Vec::new(),
-            segments: Vec::new(),
         });
     }
 
@@ -650,24 +647,22 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
             .into();
     }
 
-    let segments = line_segments(&points);
-    let curves = match pattern.interpolation {
-        PatternInterpolation::Linear => Vec::new(),
-        PatternInterpolation::Smooth => cubic_spline_through_points(&points),
-    };
-    let path = if curves.is_empty() {
-        BezPath::from_path_segments(segments.iter().copied().map(Into::into))
-    } else {
-        BezPath::from_path_segments(curves.iter().copied().map(Into::into))
+    let path = match pattern.interpolation {
+        PatternInterpolation::Linear => BezPath::from_path_segments(
+            points
+                .windows(2)
+                .map(|window| PathSeg::Line(Line::new(window[0], window[1]))),
+        ),
+        PatternInterpolation::Smooth => BezPath::from_path_segments(
+            cubic_spline_through_points(&points)
+                .into_iter()
+                .map(PathSeg::from),
+        ),
     };
 
     Ok(PatternPathOutput {
         path,
         pattern: pattern.name,
-        length,
-        curves,
-        segments,
-        points,
     })
 }
 
@@ -682,19 +677,7 @@ fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
         .map(|segment| segment.arclen(accuracy))
         .sum();
     if source_length <= f64::EPSILON {
-        let point = spec
-            .path
-            .segments()
-            .next()
-            .map(|segment| segment.start().into())
-            .unwrap_or(CurvePoint { x: 0.0, y: 0.0 });
-        return Ok(CurvePathOutput {
-            path: spec.path,
-            length: 0.0,
-            points: vec![point],
-            curves: Vec::new(),
-            segments: Vec::new(),
-        });
+        return Ok(CurvePathOutput { path: spec.path });
     }
 
     let _optimize = spec.optimize;
@@ -704,7 +687,7 @@ fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
         .flat_map(|segment| offset_path_segment(segment, distance, accuracy))
         .collect::<Vec<_>>();
     let segments = trim_path_segments(offset_segments, start_outset, end_outset, accuracy)?;
-    curve_path_from_segments(segments, accuracy)
+    curve_path_from_segments(segments)
 }
 
 fn offset_path_segment(segment: PathSeg, distance: f64, accuracy: f64) -> Vec<PathSeg> {
@@ -998,52 +981,15 @@ fn path_seg_tangent(segment: &PathSeg, t: f64) -> Vec2 {
     }
 }
 
-fn line_segments(points: &[CurvePoint]) -> Vec<LineSegmentSpec> {
-    points
-        .windows(2)
-        .map(|window| LineSegmentSpec {
-            start: window[0],
-            end: window[1],
-        })
-        .collect()
-}
-
 fn curve_path_from_segments(
     segments: impl IntoIterator<Item = PathSeg>,
-    accuracy: f64,
 ) -> Result<CurvePathOutput, String> {
     let path = BezPath::from_path_segments(segments.into_iter());
-    let mut length = 0.0;
-    let mut points = Vec::new();
-    let mut curves = Vec::new();
-    let mut line_segments = Vec::new();
-
-    for segment in path.segments() {
-        length += segment.arclen(accuracy);
-        if points.is_empty() {
-            points.push(segment.start().into());
-        }
-        points.push(segment.end().into());
-        match segment {
-            PathSeg::Line(line) => line_segments.push(LineSegmentSpec {
-                start: line.p0.into(),
-                end: line.p1.into(),
-            }),
-            PathSeg::Quad(_) | PathSeg::Cubic(_) => curves.push(segment.to_cubic().into()),
-        }
-    }
-
-    if points.is_empty() {
+    if path.segments().next().is_none() {
         return Err("path fitting produced no visible path".to_string());
     }
 
-    Ok(CurvePathOutput {
-        path,
-        length,
-        points,
-        curves,
-        segments: line_segments,
-    })
+    Ok(CurvePathOutput { path })
 }
 
 fn trim_path_segments(
@@ -1185,8 +1131,8 @@ fn hobby_spline(spec: HobbySplineSpec) -> Result<CurvePathOutput, String> {
 }
 
 fn cubic_spline_output(segments: Vec<CubicBez>, accuracy: f64) -> Result<CurvePathOutput, String> {
-    let accuracy = validate_positive_accuracy(accuracy)?;
-    curve_path_from_segments(segments.into_iter().map(PathSeg::Cubic), accuracy)
+    validate_positive_accuracy(accuracy)?;
+    curve_path_from_segments(segments.into_iter().map(PathSeg::Cubic))
 }
 
 fn hobby_to_cubic_open(points: &[Point], omega: f64) -> Result<Vec<CubicBez>, String> {
@@ -1328,42 +1274,88 @@ mod tests {
         CurvePoint { x, y }
     }
 
-    fn assert_wire_point(actual: [f64; 2], expected: [f64; 2]) {
-        assert!((actual[0] - expected[0]).abs() < 1e-9);
-        assert!((actual[1] - expected[1]).abs() < 1e-9);
+    fn assert_point_close(actual: CurvePoint, expected: CurvePoint) {
+        assert!((actual.x - expected.x).abs() < 1e-6);
+        assert!((actual.y - expected.y).abs() < 1e-6);
+    }
+
+    fn path_points(path: &BezPath) -> Vec<CurvePoint> {
+        let mut points = Vec::new();
+        for segment in path.segments() {
+            if points.is_empty() {
+                points.push(segment.start().into());
+            }
+            points.push(segment.end().into());
+        }
+        points
+    }
+
+    fn path_cubics(path: &BezPath) -> Vec<CubicBezierSpec> {
+        path.segments()
+            .map(|segment| segment.to_cubic().into())
+            .collect()
+    }
+
+    fn path_length_value(path: &BezPath, accuracy: f64) -> f64 {
+        path.segments()
+            .map(|segment| segment.arclen(accuracy))
+            .sum()
+    }
+
+    fn cbor_map_keys(value: &ciborium::Value) -> Vec<&str> {
+        match value {
+            ciborium::Value::Map(entries) => entries
+                .iter()
+                .filter_map(|(key, _)| match key {
+                    ciborium::Value::Text(key) => Some(key.as_str()),
+                    _ => None,
+                })
+                .collect(),
+            _ => panic!("expected CBOR map"),
+        }
+    }
+
+    fn cbor_map_get<'a>(value: &'a ciborium::Value, field: &str) -> &'a ciborium::Value {
+        match value {
+            ciborium::Value::Map(entries) => entries
+                .iter()
+                .find_map(|(key, value)| match key {
+                    ciborium::Value::Text(key) if key == field => Some(value),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing CBOR field `{field}`")),
+            _ => panic!("expected CBOR map"),
+        }
+    }
+
+    fn assert_cbor_point_tuple(value: &ciborium::Value) {
+        match value {
+            ciborium::Value::Array(values) => assert_eq!(values.len(), 2),
+            _ => panic!("expected CBOR point tuple"),
+        }
     }
 
     #[test]
-    fn cubic_path_returns_path_dictionary() {
-        let output = cubic_path(CubicPathSpec {
-            curve: straight_curve(3.0),
-            accuracy: 1e-6,
-        })
-        .unwrap();
-
-        assert!((output.length - 3.0).abs() < 1e-6);
-        assert_eq!(output.points.first().copied(), Some(point(0.0, 0.0)));
-        assert_eq!(output.points.last().copied(), Some(point(3.0, 0.0)));
-        assert_eq!(output.curves.len(), 1);
-    }
-
-    #[test]
-    fn wire_path_uses_cetz_subpath_segments() {
+    fn wire_path_uses_curve_command_elements() {
         let path = straight_path(3.0);
         let wire = WirePath::from(&path);
 
-        assert_eq!(wire.subpaths.len(), 1);
-        let subpath = &wire.subpaths[0];
-        assert_wire_point(subpath.origin, [0.0, 0.0]);
-        assert!(!subpath.closed);
-        assert_eq!(subpath.segments.len(), 1);
-        match subpath.segments[0] {
-            WireSegment::Cubic { c1, c2, to } => {
-                assert_wire_point(c1, [1.0, 0.0]);
-                assert_wire_point(c2, [2.0, 0.0]);
-                assert_wire_point(to, [3.0, 0.0]);
+        assert_eq!(wire.elements.len(), 2);
+        match &wire.elements[0] {
+            WirePathElement::Move { start } => assert_point_close(*start, point(0.0, 0.0)),
+            _ => panic!("expected move element"),
+        }
+        match &wire.elements[1] {
+            WirePathElement::Cubic {
+                control_start,
+                control_end,
+                end,
+            } => {
+                assert_point_close(*control_start, point(1.0, 0.0));
+                assert_point_close(*control_end, point(2.0, 0.0));
+                assert_point_close(*end, point(3.0, 0.0));
             }
-            WireSegment::Line { .. } => panic!("expected cubic segment"),
+            _ => panic!("expected cubic element"),
         }
 
         let roundtrip = BezPath::from(wire);
@@ -1371,25 +1363,32 @@ mod tests {
     }
 
     #[test]
-    fn wire_path_elevates_quadratics_to_cetz_cubics() {
+    fn wire_path_preserves_quadratic_curve_commands() {
         let mut path = BezPath::new();
         path.move_to(Point::new(0.0, 0.0));
         path.quad_to(Point::new(1.0, 3.0), Point::new(3.0, 0.0));
 
         let wire = WirePath::from(&path);
-        assert_eq!(wire.subpaths.len(), 1);
-        assert_eq!(wire.subpaths[0].segments.len(), 1);
-        match wire.subpaths[0].segments[0] {
-            WireSegment::Cubic { c1, c2, to } => {
-                assert_wire_point(c1, [2.0 / 3.0, 2.0]);
-                assert_wire_point(c2, [5.0 / 3.0, 2.0]);
-                assert_wire_point(to, [3.0, 0.0]);
+        assert_eq!(wire.elements.len(), 2);
+        match &wire.elements[1] {
+            WirePathElement::Quad { control, end } => {
+                assert_point_close(*control, point(1.0, 3.0));
+                assert_point_close(*end, point(3.0, 0.0));
             }
-            WireSegment::Line { .. } => panic!("expected elevated cubic segment"),
+            _ => panic!("expected quadratic element"),
         }
 
         let roundtrip = BezPath::from(wire);
-        assert!(matches!(roundtrip.elements()[1], PathEl::CurveTo(_, _, _)));
+        assert!(matches!(roundtrip.elements()[1], PathEl::QuadTo(_, _)));
+    }
+
+    #[test]
+    fn curve_point_rejects_dictionary_shape() {
+        let input = std::collections::BTreeMap::from([("x", 0.0), ("y", 1.0)]);
+        let bytes = encode_cbor(&input).unwrap();
+        let result: Result<CurvePoint, _> = ciborium::de::from_reader(&bytes[..]);
+
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1401,11 +1400,10 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
-        assert!((output.points.first().unwrap().x - 0.25).abs() < 1e-6);
-        assert_eq!(output.points.first().unwrap().y, 0.0);
-        assert!((output.points.last().unwrap().x - 2.5).abs() < 1e-6);
-        assert_eq!(output.points.last().unwrap().y, 0.0);
+        assert_point_close(points[0], point(0.25, 0.0));
+        assert_point_close(*points.last().unwrap(), point(2.5, 0.0));
     }
 
     #[test]
@@ -1419,13 +1417,12 @@ mod tests {
             optimize: true,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
-        assert!(output.points.len() >= 2);
-        assert!((output.points.first().unwrap().x - 0.0).abs() < 1e-6);
-        assert!((output.points.first().unwrap().y - 0.5).abs() < 1e-6);
-        assert!((output.points.last().unwrap().x - 3.0).abs() < 1e-6);
-        assert!((output.points.last().unwrap().y - 0.5).abs() < 1e-6);
-        assert!(!output.curves.is_empty() || !output.segments.is_empty());
+        assert!(points.len() >= 2);
+        assert_point_close(points[0], point(0.0, 0.5));
+        assert_point_close(*points.last().unwrap(), point(3.0, 0.5));
+        assert!(output.path.segments().next().is_some());
     }
 
     #[test]
@@ -1439,9 +1436,10 @@ mod tests {
             optimize: false,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
-        assert!((output.points.first().unwrap().y + 0.25).abs() < 1e-6);
-        assert!((output.points.last().unwrap().y + 0.25).abs() < 1e-6);
+        assert!((points.first().unwrap().y + 0.25).abs() < 1e-6);
+        assert!((points.last().unwrap().y + 0.25).abs() < 1e-6);
     }
 
     #[test]
@@ -1455,19 +1453,18 @@ mod tests {
             optimize: false,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
-        assert!((output.points.first().unwrap().x - 1.0).abs() < 1e-6);
-        assert!((output.points.first().unwrap().y - 0.25).abs() < 1e-6);
-        assert!((output.points.last().unwrap().x - 3.0).abs() < 1e-6);
-        assert!((output.points.last().unwrap().y - 0.25).abs() < 1e-6);
-        assert!((output.length - 2.0).abs() < 1e-6);
+        assert_point_close(points[0], point(1.0, 0.25));
+        assert_point_close(*points.last().unwrap(), point(3.0, 0.25));
+        assert!((path_length_value(&output.path, 1e-6) - 2.0).abs() < 1e-6);
     }
 
     fn straight_curve(length: f64) -> CubicBezierSpec {
         CubicBezierSpec {
             start: point(0.0, 0.0),
-            ctrl_a: point(length / 3.0, 0.0),
-            ctrl_b: point(2.0 * length / 3.0, 0.0),
+            control_start: point(length / 3.0, 0.0),
+            control_end: point(2.0 * length / 3.0, 0.0),
             end: point(length, 0.0),
         }
     }
@@ -1579,15 +1576,21 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
+        let segments = output.path.segments().collect::<Vec<_>>();
 
         assert_eq!(output.pattern, "wave");
-        assert!(output.points.len() >= 5);
-        assert!((output.points[0].y - 0.0).abs() < 1e-9);
-        let peak = nearest_x(&output.points, 1.0);
+        assert!(points.len() >= 5);
+        assert!((points[0].y - 0.0).abs() < 1e-9);
+        let peak = nearest_x(&points, 1.0);
         assert!((peak.x - 1.0).abs() < 1e-6);
         assert!((peak.y - 0.5).abs() < 1e-6);
-        assert_eq!(output.segments.len(), output.points.len() - 1);
-        assert_eq!(output.curves.len(), output.points.len() - 1);
+        assert_eq!(segments.len(), points.len() - 1);
+        assert!(
+            segments
+                .iter()
+                .all(|segment| matches!(segment, PathSeg::Cubic(_)))
+        );
     }
 
     #[test]
@@ -1605,12 +1608,18 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
         assert_eq!(output.pattern, "zigzag");
-        assert!(output.points.len() >= 5);
-        assert!((nearest_x(&output.points, 1.0).y - 1.0).abs() < 1e-9);
-        assert!((nearest_x(&output.points, 3.0).y + 1.0).abs() < 1e-9);
-        assert!(output.curves.is_empty());
+        assert!(points.len() >= 5);
+        assert!((nearest_x(&points, 1.0).y - 1.0).abs() < 1e-9);
+        assert!((nearest_x(&points, 3.0).y + 1.0).abs() < 1e-9);
+        assert!(
+            output
+                .path
+                .segments()
+                .all(|segment| matches!(segment, PathSeg::Line(_)))
+        );
     }
 
     #[test]
@@ -1650,10 +1659,16 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
         assert_eq!(output.pattern, "points");
-        assert!((nearest_x(&output.points, 2.0).y - 0.5).abs() < 1e-9);
-        assert!(output.curves.is_empty());
+        assert!((nearest_x(&points, 2.0).y - 0.5).abs() < 1e-9);
+        assert!(
+            output
+                .path
+                .segments()
+                .all(|segment| matches!(segment, PathSeg::Line(_)))
+        );
     }
 
     #[test]
@@ -1671,13 +1686,14 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
         assert_eq!(output.pattern, "coil");
-        assert!((output.points[0].x - 0.25).abs() < 1e-9);
-        assert!((output.points[0].y - 0.0).abs() < 1e-9);
-        assert!((output.points[1].x - 1.0).abs() < 1e-6);
-        assert!((output.points[1].y - 0.5).abs() < 1e-6);
-        assert_eq!(output.curves.len(), output.points.len() - 1);
+        assert!((points[0].x - 0.25).abs() < 1e-9);
+        assert!((points[0].y - 0.0).abs() < 1e-9);
+        assert!((points[1].x - 1.0).abs() < 1e-6);
+        assert!((points[1].y - 0.5).abs() < 1e-6);
+        assert_eq!(output.path.segments().count(), points.len() - 1);
     }
 
     #[test]
@@ -1695,13 +1711,9 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
-        assert!(
-            output
-                .points
-                .windows(2)
-                .any(|window| window[1].x < window[0].x)
-        );
+        assert!(points.windows(2).any(|window| window[1].x < window[0].x));
     }
 
     #[test]
@@ -1720,10 +1732,11 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let points = path_points(&output.path);
 
-        assert_eq!(output.points[0], curve.start);
-        assert_eq!(*output.points.last().unwrap(), curve.end);
-        assert!(output.points[1].y.abs() < 0.08);
+        assert_eq!(points[0], curve.start);
+        assert_eq!(*points.last().unwrap(), curve.end);
+        assert!(points[1].y.abs() < 0.08);
     }
 
     #[test]
@@ -1736,15 +1749,16 @@ mod tests {
             accuracy: 1e-6,
         })
         .unwrap();
+        let curves = path_cubics(&output.path);
 
-        assert_eq!(output.curves.len(), 2);
-        assert_eq!(output.curves[0].start, point(0.0, 0.0));
-        assert_eq!(output.curves[0].end, point(1.0, 1.0));
-        assert_eq!(output.curves[1].start, point(1.0, 1.0));
-        assert_eq!(output.curves[1].end, point(2.0, 0.0));
+        assert_eq!(curves.len(), 2);
+        assert_eq!(curves[0].start, point(0.0, 0.0));
+        assert_eq!(curves[0].end, point(1.0, 1.0));
+        assert_eq!(curves[1].start, point(1.0, 1.0));
+        assert_eq!(curves[1].end, point(2.0, 0.0));
 
-        let incoming = Point::from(output.curves[0].end) - Point::from(output.curves[0].ctrl_b);
-        let outgoing = Point::from(output.curves[1].ctrl_a) - Point::from(output.curves[1].start);
+        let incoming = Point::from(curves[0].end) - Point::from(curves[0].control_end);
+        let outgoing = Point::from(curves[1].control_start) - Point::from(curves[1].start);
         assert!(signed_angle(incoming, outgoing).abs() < 1e-12);
     }
 
@@ -1762,16 +1776,17 @@ mod tests {
             accuracy: 1e-3,
         })
         .unwrap();
+        let curves = path_cubics(&output.path);
 
-        assert_eq!(output.curves.len(), points.len() - 1);
-        for (index, segment) in output.curves.iter().enumerate() {
+        assert_eq!(curves.len(), points.len() - 1);
+        for (index, segment) in curves.iter().enumerate() {
             assert_eq!(segment.start, points[index]);
             assert_eq!(segment.end, points[index + 1]);
         }
 
-        for pair in output.curves.windows(2) {
-            let incoming = Point::from(pair[0].end) - Point::from(pair[0].ctrl_b);
-            let outgoing = Point::from(pair[1].ctrl_a) - Point::from(pair[1].start);
+        for pair in curves.windows(2) {
+            let incoming = Point::from(pair[0].end) - Point::from(pair[0].control_end);
+            let outgoing = Point::from(pair[1].control_start) - Point::from(pair[1].start);
             assert!(signed_angle(incoming, outgoing).abs() < 1e-12);
         }
     }
@@ -1786,13 +1801,23 @@ mod tests {
             accuracy: 1e-6,
         };
         let bytes = encode_cbor(&input).unwrap();
-        let output: CurvePathOutput =
-            ciborium::de::from_reader(&curve_hobby_through_bytes(&bytes).unwrap()[..]).unwrap();
+        let output_bytes = curve_hobby_through_bytes(&bytes).unwrap();
+        let output_value: ciborium::Value = ciborium::de::from_reader(&output_bytes[..]).unwrap();
+        let output: CurvePathOutput = ciborium::de::from_reader(&output_bytes[..]).unwrap();
+        let curves = path_cubics(&output.path);
+        let path_value = cbor_map_get(&output_value, "path");
+        let elements = match cbor_map_get(path_value, "elements") {
+            ciborium::Value::Array(elements) => elements,
+            _ => panic!("expected path element array"),
+        };
+        let first_start = cbor_map_get(&elements[0], "start");
 
-        assert_eq!(output.curves[0].start, point(0.0, 0.0));
-        assert_eq!(output.curves[0].end, point(1.0, 1.0));
-        assert_eq!(output.curves[1].start, point(1.0, 1.0));
-        assert_eq!(output.curves[1].end, point(2.0, 0.0));
+        assert_eq!(cbor_map_keys(&output_value), vec!["path"]);
+        assert_cbor_point_tuple(first_start);
+        assert_eq!(curves[0].start, point(0.0, 0.0));
+        assert_eq!(curves[0].end, point(1.0, 1.0));
+        assert_eq!(curves[1].start, point(1.0, 1.0));
+        assert_eq!(curves[1].end, point(2.0, 0.0));
         assert_eq!(output.path.segments().count(), 2);
     }
 }

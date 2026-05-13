@@ -2,11 +2,19 @@
 
 #let _plugin = plugin("../kurvst.wasm")
 
-#let _point(p, unit: 1) = (p.x * unit, p.y * unit)
+#let _point-x(p) = p.at(0)
+#let _point-y(p) = p.at(1)
+#let _point-pair(p) = (_point-x(p), _point-y(p))
+#let _point(p, unit: 1) = (_point-x(p) * unit, _point-y(p) * unit)
+
+/// Build a numeric point tuple.
+///
+/// -> array
+#let point(x, y) = (x, y)
 
 /// Default geometry options for derived path layers.
 ///
-/// These defaults are shared by @layer-path and drawing packages that build on
+/// These defaults are shared by @layer and drawing packages that build on
 /// Kurvst. The dictionary shape intentionally mirrors the public function
 /// arguments so callers can merge user styles into it and unpack the result.
 /// -> dictionary
@@ -28,7 +36,7 @@
     let at = index / samples
     let theta = 2 * calc.pi * at
     let point = offset(theta)
-    (at: at, x: point.x, y: point.y)
+    (at: at, x: _point-x(point), y: _point-y(point))
   })
 }
 
@@ -37,11 +45,11 @@
 /// ```example
 /// #let pattern = kurvst.wave(samples-per-period: 24)
 /// #let points = pattern.points.map(point => (
-///   x: point.at * 3.1 + point.x * 0.18,
-///   y: 1 + point.y * 0.32,
+///   point.at * 3.1 + point.x * 0.18,
+///   1 + point.y * 0.32,
 /// ))
 /// #native-scene({
-///   native-polyline(((x: 0.0, y: 1.0), (x: 3.15, y: 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
+///   native-polyline(((0.0, 1.0), (3.15, 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
 ///   native-polyline(points, stroke: rgb("#1b7f4c") + 0.75pt)
 /// })
 /// ```
@@ -51,7 +59,7 @@
   kind: "points",
   name: "wave",
   interpolation: "smooth",
-  points: _sampled-pattern(samples-per-period, theta => (x: 0, y: calc.sin(theta))),
+  points: _sampled-pattern(samples-per-period, theta => (0, calc.sin(theta))),
 )
 
 /// A straight-segment triangular path pattern.
@@ -59,11 +67,11 @@
 /// ```example
 /// #let pattern = kurvst.zigzag()
 /// #let points = pattern.points.map(point => (
-///   x: point.at * 3.1 + point.x * 0.18,
-///   y: 1 + point.y * 0.32,
+///   point.at * 3.1 + point.x * 0.18,
+///   1 + point.y * 0.32,
 /// ))
 /// #native-scene({
-///   native-polyline(((x: 0.0, y: 1.0), (x: 3.15, y: 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
+///   native-polyline(((0.0, 1.0), (3.15, 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
 ///   native-polyline(points, stroke: rgb("#1b7f4c") + 0.75pt)
 /// })
 /// ```
@@ -86,11 +94,11 @@
 /// ```example
 /// #let pattern = kurvst.coil(samples-per-period: 24, longitudinal-scale: 1.6)
 /// #let points = pattern.points.map(point => (
-///   x: point.at * 3.1 + point.x * 0.18,
-///   y: 1 + point.y * 0.32,
+///   point.at * 3.1 + point.x * 0.18,
+///   1 + point.y * 0.32,
 /// ))
 /// #native-scene({
-///   native-polyline(((x: 0.0, y: 1.0), (x: 3.15, y: 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
+///   native-polyline(((0.0, 1.0), (3.15, 1.0)), stroke: rgb("#bbbbbb") + 0.35pt)
 ///   native-polyline(points, stroke: rgb("#1b7f4c") + 0.75pt)
 /// })
 /// ```
@@ -103,7 +111,7 @@
   endpoint-ramp: true,
   points: _sampled-pattern(
     samples-per-period,
-    theta => (x: longitudinal-scale * calc.cos(theta), y: calc.sin(theta)),
+    theta => (longitudinal-scale * calc.cos(theta), calc.sin(theta)),
   ),
 )
 
@@ -125,16 +133,16 @@
 }
 
 #let outset-point(from, toward, distance: 0) = {
-  let dx = toward.x - from.x
-  let dy = toward.y - from.y
+  let dx = _point-x(toward) - _point-x(from)
+  let dy = _point-y(toward) - _point-y(from)
   let length = calc.sqrt(dx * dx + dy * dy)
   if distance == 0 or length == 0 {
-    from
+    _point-pair(from)
   } else {
     let applied = calc.min(distance, length * 0.45)
     (
-      x: from.x + dx / length * applied,
-      y: from.y + dy / length * applied,
+      _point-x(from) + dx / length * applied,
+      _point-y(from) + dy / length * applied,
     )
   }
 }
@@ -147,55 +155,278 @@
   }
 }
 
+#let _same-point(a, b) = _point-pair(a) == _point-pair(b)
+
+#let _origin = (0, 0)
+
+/// Build a `move` path element.
+///
+/// -> dictionary
+#let move-to(start) = (kind: "move", start: _point-pair(start))
+
+/// Build a `line` path element.
+///
+/// -> dictionary
+#let line-to(end) = (kind: "line", end: _point-pair(end))
+
+/// Build a `quad` path element.
+///
+/// -> dictionary
+#let quad-to(control, end) = (
+  kind: "quad",
+  control: _point-pair(control),
+  end: _point-pair(end),
+)
+
+/// Build a `cubic` path element.
+///
+/// -> dictionary
+#let cubic-to(control-start, control-end, end) = (
+  kind: "cubic",
+  control-start: _point-pair(control-start),
+  control-end: _point-pair(control-end),
+  end: _point-pair(end),
+)
+
+/// Build a `close` path element.
+///
+/// -> dictionary
+#let close(mode: "straight") = (kind: "close", mode: mode)
+
+#let _normalized-element(element) = {
+  if element.kind == "move" {
+    move-to(element.start)
+  } else if element.kind == "line" {
+    line-to(element.end)
+  } else if element.kind == "quad" {
+    quad-to(element.control, element.end)
+  } else if element.kind == "cubic" {
+    cubic-to(element.control-start, element.control-end, element.end)
+  } else if element.kind == "close" {
+    close(mode: element.at("mode", default: "straight"))
+  } else {
+    panic("Unsupported Kurvst path element kind: " + str(element.kind))
+  }
+}
+
+#let _part-elements(part) = {
+  let value = _path-value(part)
+  let elements = if type(value) == dictionary and value.keys().contains("elements") {
+    value.elements
+  } else if type(value) == dictionary and value.keys().contains("kind") {
+    (value,)
+  } else if type(value) == array {
+    value
+  } else {
+    panic("Expected a Kurvst path, path element, or element array")
+  }
+  elements.map(_normalized-element)
+}
+
+#let _path-state-after(state, element) = {
+  if element.kind == "move" {
+    (current: element.start, subpath: element.start)
+  } else if element.kind == "line" or element.kind == "quad" or element.kind == "cubic" {
+    (current: element.end, subpath: state.subpath)
+  } else if element.kind == "close" {
+    (current: if state.subpath == none { _origin } else { state.subpath }, subpath: state.subpath)
+  } else {
+    state
+  }
+}
+
+#let _path-state(elements) = {
+  let state = (current: none, subpath: none)
+  for element in elements {
+    state = _path-state-after(state, element)
+  }
+  state
+}
+
+#let _append-elements(base-elements, parts) = {
+  let result = base-elements.map(_normalized-element)
+  let state = _path-state(result)
+  for part in parts {
+    for element in _part-elements(part) {
+      if element.kind == "move" and state.current != none and _same-point(state.current, element.start) {
+        ()
+      } else {
+        if state.current == none and (element.kind == "line" or element.kind == "quad" or element.kind == "cubic") {
+          panic("Path segment elements need a current point; use line(start, end), quad(start, control, end), cubic(start, control-start, control-end, end), or move-to(start) first")
+        }
+        result.push(element)
+        state = _path-state-after(state, element)
+      }
+    }
+  }
+  result
+}
+
+/// Build a path dictionary from an existing element array.
+///
+/// -> dictionary
+#let from-elements(elements) = (elements: elements.map(_normalized-element))
+
+/// Build a path dictionary from path fragments or elements.
+///
+/// Leading `move` elements are kept. Later `move` elements are skipped when they
+/// match the current endpoint, so `path(line(a, b), line(b, c))` produces one
+/// continuous subpath.
+///
+/// -> dictionary
+#let path(..parts) = from-elements(_append-elements((), parts.pos()))
+
+/// Return a path with additional fragments or elements appended.
+///
+/// If an appended fragment starts with a `move` at the current endpoint, the
+/// `move` is skipped. If it starts elsewhere, the `move` begins a new subpath.
+///
+/// -> dictionary
+#let append(path, ..parts) = from-elements(_append-elements(_elements(path), parts.pos()))
+
+/// Build a straight-line path fragment.
+///
+/// -> dictionary
+#let line(start, end) = path(move-to(start), line-to(end))
+
+/// Build a quadratic path fragment.
+///
+/// -> dictionary
+#let quad(start, control, end) = path(move-to(start), quad-to(control, end))
+
+/// Build a cubic path fragment.
+///
+/// -> dictionary
+#let cubic(start, control-start, control-end, end) = path(
+  move-to(start),
+  cubic-to(control-start, control-end, end),
+)
+
+/// Build a path fragment from a cubic segment dictionary.
+///
+/// -> dictionary
+#let from-cubic(segment) = cubic(
+  segment.start,
+  segment.control-start,
+  segment.control-end,
+  segment.end,
+)
+
 /// Build a cubic segment dictionary for a straight line.
 ///
 /// -> dictionary
 #let line-segment(start, end) = {
-  let ctrl-a = (
-    x: start.x + (end.x - start.x) / 3,
-    y: start.y + (end.y - start.y) / 3,
+  let control-start = (
+    _point-x(start) + (_point-x(end) - _point-x(start)) / 3,
+    _point-y(start) + (_point-y(end) - _point-y(start)) / 3,
   )
-  let ctrl-b = (
-    x: start.x + (end.x - start.x) * 2 / 3,
-    y: start.y + (end.y - start.y) * 2 / 3,
+  let control-end = (
+    _point-x(start) + (_point-x(end) - _point-x(start)) * 2 / 3,
+    _point-y(start) + (_point-y(end) - _point-y(start)) * 2 / 3,
   )
   (
-    start: start,
-    ctrl-a: ctrl-a,
-    ctrl-b: ctrl-b,
-    end: end,
+    start: _point-pair(start),
+    control-start: control-start,
+    control-end: control-end,
+    end: _point-pair(end),
   )
 }
 
 #let _lerp(a, b, t) = a + (b - a) * t
+
+#let _elements(path) = {
+  let path = _path-value(path)
+  if type(path) == dictionary and path.keys().contains("elements") {
+    path.elements
+  } else {
+    panic("Expected a Kurvst path dictionary with an `elements` field")
+  }
+}
+
+#let _quad-cubic-segment(start, control, end) = (
+  start: _point-pair(start),
+  control-start: (
+    _point-x(start) + (_point-x(control) - _point-x(start)) * 2 / 3,
+    _point-y(start) + (_point-y(control) - _point-y(start)) * 2 / 3,
+  ),
+  control-end: (
+    _point-x(end) + (_point-x(control) - _point-x(end)) * 2 / 3,
+    _point-y(end) + (_point-y(control) - _point-y(end)) * 2 / 3,
+  ),
+  end: _point-pair(end),
+)
+
+#let _path-cursor(current) = if current == none { _origin } else { current }
+
+#let _path-element-end(element, current, subpath-start) = {
+  if element.kind == "move" {
+    element.start
+  } else if element.kind == "line" or element.kind == "quad" or element.kind == "cubic" {
+    element.end
+  } else if element.kind == "close" {
+    if subpath-start == none { _origin } else { subpath-start }
+  } else {
+    current
+  }
+}
+
+/// Return the command elements that make up a Kurvst path.
+///
+/// The elements mirror Typst's native `curve` components with numeric point tuples:
+/// `move`, `line`, `quad`, `cubic`, and `close`.
+/// -> array
+#let elements(path) = _elements(path)
+
+/// Return the points visited by a Kurvst path's command stream.
+///
+/// -> array
+#let points(path) = {
+  let points = ()
+  let current = none
+  let subpath-start = none
+  for element in _elements(path) {
+    if element.kind == "move" {
+      points.push(element.start)
+      current = element.start
+      subpath-start = element.start
+    } else if element.kind == "line" or element.kind == "quad" or element.kind == "cubic" {
+      points.push(element.end)
+      current = element.end
+    } else if element.kind == "close" {
+      current = _path-element-end(element, current, subpath-start)
+      points.push(current)
+    }
+  }
+  points
+}
 
 /// Evaluate a cubic segment at parameter `t`.
 ///
 /// -> dictionary
 #let cubic-point(segment, t) = {
   let ab = (
-    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
-    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
+    _lerp(_point-x(segment.start), _point-x(segment.control-start), t),
+    _lerp(_point-y(segment.start), _point-y(segment.control-start), t),
   )
   let bc = (
-    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
-    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
+    _lerp(_point-x(segment.control-start), _point-x(segment.control-end), t),
+    _lerp(_point-y(segment.control-start), _point-y(segment.control-end), t),
   )
   let cd = (
-    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
-    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
+    _lerp(_point-x(segment.control-end), _point-x(segment.end), t),
+    _lerp(_point-y(segment.control-end), _point-y(segment.end), t),
   )
   let abc = (
-    x: _lerp(ab.x, bc.x, t),
-    y: _lerp(ab.y, bc.y, t),
+    _lerp(_point-x(ab), _point-x(bc), t),
+    _lerp(_point-y(ab), _point-y(bc), t),
   )
   let bcd = (
-    x: _lerp(bc.x, cd.x, t),
-    y: _lerp(bc.y, cd.y, t),
+    _lerp(_point-x(bc), _point-x(cd), t),
+    _lerp(_point-y(bc), _point-y(cd), t),
   )
   (
-    x: _lerp(abc.x, bcd.x, t),
-    y: _lerp(abc.y, bcd.y, t),
+    _lerp(_point-x(abc), _point-x(bcd), t),
+    _lerp(_point-y(abc), _point-y(bcd), t),
   )
 }
 
@@ -204,49 +435,67 @@
 /// -> dictionary
 #let cubic-tangent(segment, t) = {
   let ab = (
-    x: _lerp(segment.start.x, segment.ctrl-a.x, t),
-    y: _lerp(segment.start.y, segment.ctrl-a.y, t),
+    _lerp(_point-x(segment.start), _point-x(segment.control-start), t),
+    _lerp(_point-y(segment.start), _point-y(segment.control-start), t),
   )
   let bc = (
-    x: _lerp(segment.ctrl-a.x, segment.ctrl-b.x, t),
-    y: _lerp(segment.ctrl-a.y, segment.ctrl-b.y, t),
+    _lerp(_point-x(segment.control-start), _point-x(segment.control-end), t),
+    _lerp(_point-y(segment.control-start), _point-y(segment.control-end), t),
   )
   let cd = (
-    x: _lerp(segment.ctrl-b.x, segment.end.x, t),
-    y: _lerp(segment.ctrl-b.y, segment.end.y, t),
+    _lerp(_point-x(segment.control-end), _point-x(segment.end), t),
+    _lerp(_point-y(segment.control-end), _point-y(segment.end), t),
   )
   let abc = (
-    x: _lerp(ab.x, bc.x, t),
-    y: _lerp(ab.y, bc.y, t),
+    _lerp(_point-x(ab), _point-x(bc), t),
+    _lerp(_point-y(ab), _point-y(bc), t),
   )
   let bcd = (
-    x: _lerp(bc.x, cd.x, t),
-    y: _lerp(bc.y, cd.y, t),
+    _lerp(_point-x(bc), _point-x(cd), t),
+    _lerp(_point-y(bc), _point-y(cd), t),
   )
   (
-    x: bcd.x - abc.x,
-    y: bcd.y - abc.y,
+    _point-x(bcd) - _point-x(abc),
+    _point-y(bcd) - _point-y(abc),
   )
 }
 
 /// Return drawable cubic segments for any Kurvst path dictionary.
 ///
-/// Line segments and sampled point paths are converted to equivalent cubic
-/// line segments so downstream renderers can use one code path.
+/// Lines and quadratics are converted to equivalent cubic segments so
+/// downstream renderers can use one code path.
 /// -> array
-#let path-segments(path) = {
+#let segments(path) = {
   let segments = ()
-  if path.keys().contains("curves") and path.curves.len() > 0 {
-    for segment in path.curves {
-      segments.push(segment)
-    }
-  } else if path.keys().contains("segments") and path.segments.len() > 0 {
-    for segment in path.segments {
-      segments.push(line-segment(segment.start, segment.end))
-    }
-  } else if path.keys().contains("points") and path.points.len() > 1 {
-    for i in range(0, path.points.len() - 1) {
-      segments.push(line-segment(path.points.at(i), path.points.at(i + 1)))
+  let current = none
+  let subpath-start = none
+  for element in _elements(path) {
+    if element.kind == "move" {
+      current = element.start
+      subpath-start = element.start
+    } else if element.kind == "line" {
+      let start = _path-cursor(current)
+      segments.push(line-segment(start, element.end))
+      current = element.end
+    } else if element.kind == "quad" {
+      let start = _path-cursor(current)
+      segments.push(_quad-cubic-segment(start, element.control, element.end))
+      current = element.end
+    } else if element.kind == "cubic" {
+      let start = _path-cursor(current)
+      segments.push((
+        start: _point-pair(start),
+        control-start: _point-pair(element.control-start),
+        control-end: _point-pair(element.control-end),
+        end: _point-pair(element.end),
+      ))
+      current = element.end
+    } else if element.kind == "close" and subpath-start != none {
+      let start = _path-cursor(current)
+      if start != subpath-start {
+        segments.push(line-segment(start, subpath-start))
+      }
+      current = subpath-start
     }
   }
   segments
@@ -254,16 +503,15 @@
 
 /// Compute the arc length of a path dictionary.
 ///
-/// If the path already carries a `length` field, that value is returned.
-/// Otherwise the length is computed from the drawable segments.
 /// -> int | float
-#let path-length(path, accuracy: 0.001) = {
-  if path.keys().contains("length") {
-    path.length
-  } else {
-    path-segments(path).map(segment => cubic-path(..segment, accuracy: accuracy).length).sum()
-  }
+#let _length(path, accuracy: 0.001) = {
+  cbor(_plugin.curve_path_length(cbor.encode((
+    path: _path-value(path),
+    accuracy: accuracy,
+  ))))
 }
+
+#let length(path, accuracy: 0.001) = _length(path, accuracy: accuracy)
 
 /// Resolve a fixed and relative visible path length.
 ///
@@ -320,7 +568,7 @@
 }
 
 #let _side-segment(path) = {
-  let segments = path-segments(path)
+  let segments = segments(path)
   if segments.len() == 0 { none } else { segments.at(calc.quo(segments.len(), 2)) }
 }
 
@@ -334,49 +582,32 @@
     } else {
       let mid = cubic-point(segment, 0.5)
       let tangent = cubic-tangent(segment, 0.5)
-      let cross = tangent.x * (side-point.y - mid.y) - tangent.y * (side-point.x - mid.x)
+      let cross = (
+        _point-x(tangent) * (_point-y(side-point) - _point-y(mid))
+          - _point-y(tangent) * (_point-x(side-point) - _point-x(mid))
+      )
       let sign = if cross < 0 { -1 } else { 1 }
       sign * calc.abs(offset)
     }
   }
 }
 
-/// Build a path dictionary from one cubic Bezier.
-///
-/// ```example
-/// #let path = kurvst.cubic-path(..demo-segment)
-/// #native-scene({
-///   native-cubics(path.curves, stroke: rgb("#1b7f4c") + 0.8pt)
-/// })
-/// ```
-///
-/// -> dictionary
-#let cubic-path(start: none, end: none, ctrl-a: none, ctrl-b: none, accuracy: 0.001) = {
-  cbor(_plugin.curve_cubic_path(cbor.encode((
-    start: start,
-    end: end,
-    ctrl-a: ctrl-a,
-    ctrl-b: ctrl-b,
-    accuracy: accuracy,
-  ))))
-}
-
 /// Trim a path by curve distance from either end.
 ///
-/// The returned dictionary is another path dictionary with `path`, `points`,
-/// `curves`, `segments`, and `length`.
+/// The returned dictionary is another path dictionary with a curve-command
+/// wire path.
 ///
 /// ```example
-/// #let base = kurvst.cubic-path(..demo-segment)
-/// #let trimmed = kurvst.trim-path(base, start-outset: 0.35, end-outset: 0.3)
+/// #let base = kurvst.from-cubic(demo-segment)
+/// #let trimmed = kurvst.trim(base, start-outset: 0.35, end-outset: 0.3)
 /// #native-scene({
-///   native-cubics(base.curves, stroke: rgb("#c8c8c8") + 0.45pt)
-///   native-cubics(trimmed.curves, stroke: rgb("#d72638") + 1pt)
+///   native-cubics(kurvst.segments(base), stroke: rgb("#c8c8c8") + 0.45pt)
+///   native-cubics(kurvst.segments(trimmed), stroke: rgb("#d72638") + 1pt)
 /// })
 /// ```
 ///
 /// -> dictionary
-#let trim-path(path, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+#let trim(path, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
   cbor(_plugin.curve_trim_path(cbor.encode((
     path: _path-value(path),
     start-outset: start-outset,
@@ -388,12 +619,12 @@
 /// Build an open Hobby curve through `start`, `through`, and `end`.
 ///
 /// The returned dictionary is a path dictionary. For this three-point variant,
-/// `curves` contains the two cubic halves meeting at `through`.
+/// @segments returns the two cubic halves meeting at `through`.
 ///
 /// ```example
 /// #let path = kurvst.hobby-through(demo-start, demo-through, demo-end, omega: 1.2)
 /// #native-scene({
-///   native-cubics(path.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+///   native-cubics(kurvst.segments(path), stroke: rgb("#1b7f4c") + 0.8pt)
 ///   native-dot(demo-through, fill: black)
 /// })
 /// ```
@@ -411,22 +642,22 @@
 
 /// Build an open Hobby spline through two or more points.
 ///
-/// The returned dictionary is a path dictionary backed by a CeTZ-compatible
-/// wire path. Rust converts that wire path to Kurbo's `BezPath` internally, so
-/// it can be passed directly to @parallel-path, @pattern-path, @trim-path, or
-/// @cetz-path.
+/// The returned dictionary is a path dictionary backed by a curve-command wire
+/// path. Rust converts that wire path to Kurbo's `BezPath` internally, so it
+/// can be passed directly to @parallel, @pattern, @trim, or
+/// @to-native.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
-///   (x: 0.0, y: 0.0),
-///   (x: 0.9, y: 0.8),
-///   (x: 1.8, y: -0.3),
-///   (x: 2.8, y: 0.4),
+///   (0.0, 0.0),
+///   (0.9, 0.8),
+///   (1.8, -0.3),
+///   (2.8, 0.4),
 /// ))
-/// #let shifted = kurvst.parallel-path(spline, distance: 0.14)
+/// #let shifted = kurvst.parallel(spline, distance: 0.14)
 /// #native-scene({
-///   native-cubics(spline.curves, stroke: rgb("#c8c8c8") + 0.45pt)
-///   native-cubics(shifted.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+///   native-cubics(kurvst.segments(spline), stroke: rgb("#c8c8c8") + 0.45pt)
+///   native-cubics(kurvst.segments(shifted), stroke: rgb("#1b7f4c") + 0.8pt)
 /// })
 /// ```
 ///
@@ -449,25 +680,25 @@
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
-///   (x: 0.0, y: 0.0),
-///   (x: 0.9, y: 0.8),
-///   (x: 1.8, y: -0.3),
-///   (x: 2.8, y: 0.4),
+///   (0.0, 0.0),
+///   (0.9, 0.8),
+///   (1.8, -0.3),
+///   (2.8, 0.4),
 /// ))
-/// #let path = kurvst.pattern-path(
+/// #let path = kurvst.pattern(
 ///   spline,
 ///   pattern: kurvst.wave(samples-per-period: 24),
 ///   amplitude: 0.12,
 ///   wavelength: 0.55,
 /// )
 /// #native-scene({
-///   native-cubics(spline.curves, stroke: rgb("#c8c8c8") + 0.45pt)
-///   native-cubics(path.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+///   native-cubics(kurvst.segments(spline), stroke: rgb("#c8c8c8") + 0.45pt)
+///   native-cubics(kurvst.segments(path), stroke: rgb("#1b7f4c") + 0.8pt)
 /// })
 /// ```
 ///
 /// -> dictionary
-#let pattern-path(
+#let pattern(
   path,
   pattern: "wave",
   amplitude: 0.1,
@@ -501,25 +732,25 @@
 /// Generate a parallel path for a path.
 ///
 /// Pass any path returned by this module, such as @hobby-spline. The result is a
-/// drawable path dictionary with the fitted parallel path and its
-/// CeTZ-compatible wire path.
+/// drawable path dictionary with the fitted parallel path and its curve-command
+/// wire path.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
-///   (x: 0.0, y: 0.0),
-///   (x: 0.9, y: 0.8),
-///   (x: 1.8, y: -0.3),
-///   (x: 2.8, y: 0.4),
+///   (0.0, 0.0),
+///   (0.9, 0.8),
+///   (1.8, -0.3),
+///   (2.8, 0.4),
 /// ))
-/// #let parallel = kurvst.parallel-path(spline, distance: 0.14)
+/// #let parallel = kurvst.parallel(spline, distance: 0.14)
 /// #native-scene({
-///   native-cubics(spline.curves, stroke: rgb("#c8c8c8") + 0.45pt)
-///   native-cubics(parallel.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+///   native-cubics(kurvst.segments(spline), stroke: rgb("#c8c8c8") + 0.45pt)
+///   native-cubics(kurvst.segments(parallel), stroke: rgb("#1b7f4c") + 0.8pt)
 /// })
 /// ```
 ///
 /// -> dictionary
-#let parallel-path(
+#let parallel(
   path,
   distance: 0,
   start-outset: 0,
@@ -539,20 +770,20 @@
 
 /// Build a derived visible path layer.
 ///
-/// `layer-path` combines the common operations needed by drawing packages:
+/// `layer` combines the common operations needed by drawing packages:
 /// optional side-aware offsetting, endpoint trimming, and centered shortening by
 /// a fixed `length`, a relative `ratio`, or both. The return value is a normal
-/// Kurvst path dictionary that can be passed to @pattern-path, @parallel-path,
-/// @trim-path, or @cetz-path.
+/// Kurvst path dictionary that can be passed to @pattern, @parallel,
+/// @trim, or @to-cetz.
 ///
 /// ```example
 /// #let base = kurvst.hobby-spline((
-///   (x: 0.0, y: 0.0),
-///   (x: 0.9, y: 0.8),
-///   (x: 1.8, y: -0.3),
-///   (x: 2.8, y: 0.4),
+///   (0.0, 0.0),
+///   (0.9, 0.8),
+///   (1.8, -0.3),
+///   (2.8, 0.4),
 /// ))
-/// #let layer = kurvst.layer-path(
+/// #let layer = kurvst.layer(
 ///   base,
 ///   offset: 0.16,
 ///   length: 1.6,
@@ -560,13 +791,13 @@
 ///   resolve-length: "min",
 /// )
 /// #native-scene({
-///   native-cubics(base.curves, stroke: rgb("#c8c8c8") + 0.45pt)
-///   native-cubics(layer.curves, stroke: rgb("#1b7f4c") + 0.8pt)
+///   native-cubics(kurvst.segments(base), stroke: rgb("#c8c8c8") + 0.45pt)
+///   native-cubics(kurvst.segments(layer), stroke: rgb("#1b7f4c") + 0.8pt)
 /// })
 /// ```
 ///
 /// -> dictionary
-#let layer-path(
+#let layer(
   path,
   offset: 0,
   length: none,
@@ -579,20 +810,20 @@
   optimize: true,
 ) = {
   let distance = _offset-toward-side-point(path, offset, side-point)
-  let trim = center-outset(
-    path-length(path, accuracy: accuracy),
+  let center-trim = center-outset(
+    _length(path, accuracy: accuracy),
     length: length,
     ratio: ratio,
     resolve-length: resolve-length,
     start-outset: start-outset,
     end-outset: end-outset,
   )
-  let start-outset = start-outset + trim
-  let end-outset = end-outset + trim
+  let start-outset = start-outset + center-trim
+  let end-outset = end-outset + center-trim
   if distance == none or distance == 0 {
-    trim-path(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+    trim(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
   } else {
-    parallel-path(
+    parallel(
       path,
       distance: distance,
       start-outset: start-outset,
@@ -603,143 +834,180 @@
   }
 }
 
-#let _cetz-args(segment, unit: 1) = (
-  _point(segment.start, unit: unit),
-  _point(segment.end, unit: unit),
-  _point(segment.ctrl-a, unit: unit),
-  _point(segment.ctrl-b, unit: unit),
-)
+/// Emit a Kurvst path as native Typst `curve` content.
+///
+/// -> content
+#let to-native(path, unit: 1, ..style) = {
+  let components = ()
+  for element in _elements(path) {
+    if element.kind == "move" {
+      components.push(curve.move(_point(element.start, unit: unit)))
+    } else if element.kind == "line" {
+      components.push(curve.line(_point(element.end, unit: unit)))
+    } else if element.kind == "quad" {
+      components.push(curve.quad(_point(element.control, unit: unit), _point(element.end, unit: unit)))
+    } else if element.kind == "cubic" {
+      components.push(curve.cubic(
+        _point(element.control-start, unit: unit),
+        _point(element.control-end, unit: unit),
+        _point(element.end, unit: unit),
+      ))
+    } else if element.kind == "close" {
+      components.push(curve.close(mode: element.at("mode", default: "straight")))
+    }
+  }
 
-#let _cetz-bezier(segment, unit: 1, ..style) = {
-  cetz.draw.bezier(.._cetz-args(segment, unit: unit), ..style)
+  if components.len() == 0 {
+    ()
+  } else {
+    curve(..style.named(), ..components)
+  }
 }
 
-#let _draw-merged-curves(segments, unit: 1, ..style) = {
-  if segments.len() > 0 {
-    cetz.draw.merge-path({
-      for segment in segments {
-        _cetz-bezier(segment, unit: unit)
+/// Emit a Kurvst path as CeTZ path data.
+///
+/// The result has CeTZ's subpath shape: `(origin, closed, segments)`, where
+/// line segments are `("l", end)` and cubics are `("c", control-start,
+/// control-end, end)`.
+/// -> array
+#let to-cetz-data(path, unit: 1) = {
+  let subpaths = ()
+  let origin = none
+  let current = none
+  let segments = ()
+  let closed = false
+
+  for element in _elements(path) {
+    if element.kind == "move" {
+      if origin != none {
+        subpaths.push((_point(origin, unit: unit), closed, segments))
       }
-    }, ..style)
-  } else {
-    ()
+      origin = element.start
+      current = element.start
+      segments = ()
+      closed = false
+    } else {
+      if origin == none {
+        origin = _origin
+        current = _origin
+        segments = ()
+        closed = false
+      }
+
+      if element.kind == "line" {
+        segments.push(("l", _point(element.end, unit: unit)))
+        current = element.end
+      } else if element.kind == "quad" {
+        let cubic = _quad-cubic-segment(_path-cursor(current), element.control, element.end)
+        segments.push((
+          "c",
+          _point(cubic.control-start, unit: unit),
+          _point(cubic.control-end, unit: unit),
+          _point(cubic.end, unit: unit),
+        ))
+        current = element.end
+      } else if element.kind == "cubic" {
+        segments.push((
+          "c",
+          _point(element.control-start, unit: unit),
+          _point(element.control-end, unit: unit),
+          _point(element.end, unit: unit),
+        ))
+        current = element.end
+      } else if element.kind == "close" {
+        closed = true
+        subpaths.push((_point(origin, unit: unit), closed, segments))
+        current = origin
+        origin = none
+        segments = ()
+        closed = false
+      }
+    }
   }
+
+  if origin != none {
+    subpaths.push((_point(origin, unit: unit), closed, segments))
+  }
+  subpaths
 }
 
 /// Draw a path dictionary through CeTZ.
 ///
 /// ```example
-/// #let path = kurvst.parallel-path(kurvst.cubic-path(..demo-segment), distance: 0.18)
+/// #let path = kurvst.parallel(kurvst.from-cubic(demo-segment), distance: 0.18)
 /// #cetz.canvas({
-///   kurvst.cetz-path(path, stroke: rgb("#355c9a") + 0.55pt)
+///   kurvst.to-cetz(path, stroke: rgb("#355c9a") + 0.55pt)
 /// })
 /// ```
 ///
 /// -> content
-#let cetz-path(path, unit: 1, ..style) = {
+#let to-cetz(path, unit: 1, ..style) = {
   let style = style.named()
-  if path.keys().contains("curves") and path.curves.len() > 0 {
-    _draw-merged-curves(path.curves, unit: unit, ..style)
-  } else if path.keys().contains("points") and path.points.len() > 1 {
-    cetz.draw.line(..path.points.map(point => _point(point, unit: unit)), ..style)
-  } else {
+  let subpaths = to-cetz-data(path, unit: unit)
+  if subpaths.len() == 0 {
     ()
+  } else {
+    cetz.draw.merge-path({
+      for (origin, closed, segments) in subpaths {
+        let current = origin
+        for (kind, ..args) in segments {
+          if kind == "l" {
+            cetz.draw.line(current, args.last())
+          } else if kind == "c" {
+            cetz.draw.bezier(current, args.last(), args.at(0), args.at(1))
+          }
+          current = args.last()
+        }
+        if closed and current != origin {
+          cetz.draw.line(current, origin)
+        }
+      }
+    }, ..style)
   }
 }
 
-/// Draw a sampled path pattern.
+/// Split a path through a point sequence into per-span paths.
+///
+/// The returned dictionary has `parts` and `curve`. Each entry in `parts` is
+/// the path between two consecutive points, and all parts join smoothly through
+/// the input points.
 ///
 /// ```example
-/// #let path = kurvst.pattern-path(
-///   kurvst.cubic-path(..demo-segment),
-///   pattern: kurvst.coil(longitudinal-scale: 1.6),
-///   amplitude: 0.12,
-///   wavelength: 0.55,
-/// )
-/// #cetz.canvas({
-///   kurvst.cetz-pattern(path, stroke: rgb("#355c9a") + 0.55pt)
-/// })
-/// ```
-///
-/// -> content
-#let cetz-pattern(path, unit: 1, ..style) = cetz-path(path, unit: unit, ..style)
-
-/// Split a laid-out graph edge into source and sink half-edge paths.
-///
-/// The returned dictionary has `source`, `sink`, and `curve`. The split point is
-/// the edge layout point, so the two half-edges join smoothly there.
-///
-/// ```example
-/// #let halves = kurvst.edge-halves(
-///   demo-edge,
-///   demo-nodes,
-///   source-outset: 0.2,
-///   sink-outset: 0.2,
+/// #let split = kurvst.split-through(
+///   (demo-start, demo-through, demo-end),
+///   start-outset: 0.2,
+///   end-outset: 0.2,
 /// )
 /// #native-scene({
-///   native-cubics(halves.source.curves, stroke: rgb("#d72638") + 0.9pt)
-///   native-cubics(halves.sink.curves, stroke: rgb("#355c9a") + 0.9pt)
+///   native-cubics(kurvst.segments(split.parts.at(0)), stroke: rgb("#d72638") + 0.9pt)
+///   native-cubics(kurvst.segments(split.parts.at(1)), stroke: rgb("#355c9a") + 0.9pt)
 ///   native-dot(demo-through, fill: black)
 /// })
 /// ```
 ///
 /// -> dictionary
-#let edge-halves(edge, nodes, omega: 1.0, source-outset: 0, sink-outset: 0, accuracy: 0.001) = {
-  if edge.source == none or edge.sink == none {
-    panic("edge-halves currently requires a paired edge with source and sink")
+#let split-through(points, omega: 1.0, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+  if points.len() < 2 {
+    panic("split-through expects at least two points")
   }
 
-  let start = nodes.at(edge.source.node).pos
-  let end = nodes.at(edge.sink.node).pos
-  let split = hobby-through(start, edge.pos, end, omega: omega, accuracy: accuracy)
-  let source = trim-path(cubic-path(..split.curves.at(0), accuracy: accuracy), start-outset: source-outset, accuracy: accuracy)
-  let sink = trim-path(cubic-path(..split.curves.at(1), accuracy: accuracy), end-outset: sink-outset, accuracy: accuracy)
+  let curve = hobby-spline(points, omega: omega, accuracy: accuracy)
+  let split-segments = segments(curve)
+  let parts = ()
+  let last-index = split-segments.len() - 1
+  for (index, segment) in split-segments.enumerate() {
+    let part-start-outset = if index == 0 { start-outset } else { 0 }
+    let part-end-outset = if index == last-index { end-outset } else { 0 }
+    parts.push(trim(
+      from-cubic(segment),
+      start-outset: part-start-outset,
+      end-outset: part-end-outset,
+      accuracy: accuracy,
+    ))
+  }
 
   (
-    source: source,
-    sink: sink,
-    curve: split,
+    parts: parts,
+    curve: curve,
   )
-}
-
-/// Draw the two halves of a laid-out graph edge through CeTZ.
-///
-/// `source-style` applies from the source node to the edge layout point, and
-/// `sink-style` applies from the edge layout point to the sink node.
-///
-/// ```example
-/// #cetz.canvas({
-///   kurvst.cetz-edge-halves(
-///     demo-edge,
-///     demo-nodes,
-///     source-outset: 0.2,
-///     sink-outset: 0.2,
-///     source-style: (stroke: rgb("#d72638") + 0.6pt),
-///     sink-style: (stroke: rgb("#355c9a") + 0.6pt),
-///   )
-/// })
-/// ```
-///
-/// -> content
-#let cetz-edge-halves(
-  edge,
-  nodes,
-  unit: 1,
-  omega: 1.0,
-  source-outset: 0,
-  sink-outset: 0,
-  accuracy: 0.001,
-  source-style: (:),
-  sink-style: (:),
-) = {
-  let halves = edge-halves(
-    edge,
-    nodes,
-    omega: omega,
-    source-outset: source-outset,
-    sink-outset: sink-outset,
-    accuracy: accuracy,
-  )
-  cetz-path(halves.source, unit: unit, ..source-style)
-  cetz-path(halves.sink, unit: unit, ..sink-style)
 }
