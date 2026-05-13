@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    metric, mink,
+    metric,
     network::{
         library::symbolic::{ETS, ExplicitKey},
         tags::SPENSO_TAG,
@@ -12,22 +12,16 @@ use spenso::{
         representation::{LibraryRep, Minkowski, RepName},
         slot::{AbsInd, DummyAind, ParseableAind},
     },
-    symbolica_atom::TensorCollectExt,
     utils::to_superscript,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     function,
-    id::{Context, Replacement},
     printer::PrintState,
     symbol,
-    utils::Settable,
 };
 
-use crate::{
-    IndexTooling, bis, color::SelectiveExpand, dirac::simplify::DiracSimplifier, gamma, gamma0,
-    gamma5, metric::MetricSimplifier, rep_symbols::RS,
-};
+use crate::{IndexTooling, bis, dirac::simplify::DiracSimplifier, gamma, gamma0, rep_symbols::RS};
 use eyre::Result;
 
 use super::representations::Bispinor;
@@ -42,133 +36,6 @@ pub struct GammaLibrary {
     pub gamma5: Symbol,
     pub sigma: Symbol,
 }
-
-impl GammaLibrary {
-    pub fn replace_with(&self, rep: &Self) -> Vec<Replacement> {
-        vec![
-            Replacement::new(
-                function!(self.gamma, RS.i__).to_pattern(),
-                function!(rep.gamma, RS.i__),
-            ),
-            Replacement::new(
-                function!(self.projp, RS.i__).to_pattern(),
-                function!(rep.projp, RS.i__),
-            ),
-            Replacement::new(
-                function!(self.projm, RS.i__).to_pattern(),
-                function!(rep.projm, RS.i__),
-            ),
-            Replacement::new(
-                function!(self.gamma5, RS.i__).to_pattern(),
-                function!(rep.gamma5, RS.i__),
-            ),
-            Replacement::new(
-                function!(self.sigma, RS.i__).to_pattern(),
-                function!(rep.sigma, RS.i__),
-            ),
-        ]
-    }
-}
-
-pub struct GammaSymbolsInternal {
-    pub gamma_chain: Symbol,
-    pub gamma_trace: Symbol,
-}
-
-impl GammaSymbolsInternal {
-    pub fn chain_pattern<'a, It: Into<AtomOrView<'a>>>(
-        &self,
-        i: impl Into<AtomOrView<'a>>,
-        j: impl Into<AtomOrView<'a>>,
-        mus: impl IntoIterator<Item = It>,
-    ) -> Atom {
-        let mus: Vec<_> = mus
-            .into_iter()
-            .enumerate()
-            .map(|(idx, a)| {
-                if idx % 2 == 0 {
-                    Minkowski {}.to_symbolic([a])
-                } else {
-                    Bispinor {}.to_symbolic([a])
-                }
-            })
-            .collect();
-        if mus.len() % 2 == 0 {
-            panic!("Should intersperse dummies")
-        }
-        FunctionBuilder::new(self.gamma_chain)
-            .add_args(&mus)
-            .add_arg(Bispinor {}.to_symbolic([i]))
-            .add_arg(Bispinor {}.to_symbolic([j]))
-            .finish()
-    }
-}
-
-pub struct PolSymbols {
-    pub eps: Symbol,
-    pub ebar: Symbol,
-    pub u: Symbol,
-    pub ubar: Symbol,
-    pub v: Symbol,
-    pub vbar: Symbol,
-}
-
-pub static PS: LazyLock<PolSymbols> = LazyLock::new(|| PolSymbols {
-    eps: symbol!("spenso::ϵ"),
-    ebar: symbol!("spenso::ϵbar"),
-    u: symbol!("spenso::u"),
-    ubar: symbol!("spenso::ubar"),
-    v: symbol!("spenso::v"),
-    vbar: symbol!("spenso::vbar"),
-});
-
-static POLARIZATION_CONJUGATION_RULES: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
-    [
-        Replacement::new(
-            function!(PS.ebar, RS.i__).to_pattern(),
-            function!(PS.eps, RS.i__),
-        ),
-        Replacement::new(
-            function!(PS.eps, RS.i__).to_pattern(),
-            function!(PS.ebar, RS.i__),
-        ),
-        Replacement::new(
-            function!(PS.u, RS.i__).to_pattern(),
-            function!(PS.ubar, RS.i__),
-        ),
-        Replacement::new(
-            function!(PS.ubar, RS.i__).to_pattern(),
-            function!(PS.u, RS.i__),
-        ),
-        Replacement::new(
-            function!(PS.v, RS.i__).to_pattern(),
-            function!(PS.vbar, RS.i__),
-        ),
-        Replacement::new(
-            function!(PS.vbar, RS.i__).to_pattern(),
-            function!(PS.v, RS.i__),
-        ),
-    ]
-});
-
-pub fn pol_conj_impl(expression: AtomView) -> Atom {
-    expression
-        .to_owned()
-        .replace_multiple(POLARIZATION_CONJUGATION_RULES.as_ref())
-}
-
-pub fn gamma_conj_impl(expression: AtomView) -> Atom {
-    let expr = expression.to_owned();
-
-    expr.replace(gamma!(RS.a__, RS.i__, RS.j__).to_pattern())
-        .with((-gamma!(RS.a__, RS.j__, RS.i__)).to_pattern())
-        .replace(gamma5!(RS.i__, RS.j__).to_pattern())
-        .with(gamma5!(RS.j__, RS.i__).to_pattern())
-}
-pub static GS: LazyLock<GammaSymbolsInternal> = LazyLock::new(|| GammaSymbolsInternal {
-    gamma_chain: symbol!("spenso::gamma_chain"),
-    gamma_trace: symbol!("spenso::gamma_trace"),
-});
 
 pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     gamma: symbol!(
@@ -525,353 +392,23 @@ impl GammaLibrary {
     }
 }
 
-static GAMMA_COLLECTION_RULES: LazyLock<[Replacement; 7]> = LazyLock::new(|| {
-    [
-        Replacement::new(
-            function!(AGS.projp, bis!(RS.a__), bis!(RS.b__)).to_pattern(),
-            ((metric!(bis!(RS.a__), bis!(RS.b__)) - gamma5!(RS.a__, RS.b__)) / 2).to_pattern(),
-        ),
-        Replacement::new(
-            function!(AGS.projm, bis!(RS.a__), bis!(RS.b__)).to_pattern(),
-            ((metric!(bis!(RS.a__), bis!(RS.b__)) + gamma5!(RS.a__, RS.b__)) / 2).to_pattern(),
-        ),
-        Replacement::new(
-            (gamma!(RS.a__, RS.b__, RS.c__) * gamma!(RS.d__, RS.c__, RS.e__)).to_pattern(),
-            GS.chain_pattern(RS.b__, RS.e__, [RS.a__, RS.c__, RS.d__])
-                .to_pattern(),
-        ),
-        Replacement::new(
-            gamma!(RS.a__, RS.b__, RS.b__).to_pattern(),
-            Atom::Zero.to_pattern(),
-        ),
-        Replacement::new(
-            (function!(GS.gamma_chain, RS.a__, RS.a_, RS.b_)
-                * function!(GS.gamma_chain, RS.b__, RS.b_, RS.c_))
-            .to_pattern(),
-            function!(GS.gamma_chain, RS.a__, RS.b_, RS.b__, RS.a_, RS.c_).to_pattern(),
-        ),
-        Replacement::new(
-            (function!(GS.gamma_chain, RS.a___, bis!(RS.a__), bis!(RS.b__))
-                * gamma!(RS.y__, RS.b__, RS.c__))
-            .to_pattern(),
-            function!(
-                GS.gamma_chain,
-                RS.a___,
-                bis!(RS.b__),
-                mink!(RS.y__),
-                bis!(RS.a__),
-                bis!(RS.c__)
-            )
-            .to_pattern(),
-        ),
-        Replacement::new(
-            (gamma!(RS.y__, RS.a__, RS.b__)
-                * function!(GS.gamma_chain, RS.a___, bis!(RS.b__), bis!(RS.c__)))
-            .to_pattern(),
-            function!(
-                GS.gamma_chain,
-                RS.a___,
-                bis!(RS.b__),
-                mink!(RS.y__),
-                bis!(RS.a__),
-                bis!(RS.c__)
-            )
-            .to_pattern(),
-        ),
-    ]
+pub struct PolSymbols {
+    pub eps: Symbol,
+    pub ebar: Symbol,
+    pub u: Symbol,
+    pub ubar: Symbol,
+    pub v: Symbol,
+    pub vbar: Symbol,
+}
+
+pub static PS: LazyLock<PolSymbols> = LazyLock::new(|| PolSymbols {
+    eps: symbol!("spenso::ϵ"),
+    ebar: symbol!("spenso::ϵbar"),
+    u: symbol!("spenso::u"),
+    ubar: symbol!("spenso::ubar"),
+    v: symbol!("spenso::v"),
+    vbar: symbol!("spenso::vbar"),
 });
-
-#[cfg(test)]
-static UNDO_GAMMA_CHAIN_RULES: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    [
-        Replacement::new(
-            GS.chain_pattern(RS.b__, RS.e__, [RS.a__, RS.c__, RS.d__])
-                .to_pattern(),
-            (gamma!(RS.a__, RS.b__, RS.c__) * gamma!(RS.d__, RS.c__, RS.e__)).to_pattern(),
-        ),
-        Replacement::new(
-            function!(
-                GS.gamma_chain,
-                RS.a___,
-                bis!(RS.b__),
-                mink!(RS.y__),
-                bis!(RS.a__),
-                bis!(RS.c__)
-            )
-            .to_pattern(),
-            (function!(GS.gamma_chain, RS.a___, bis!(RS.a__), bis!(RS.b__))
-                * gamma!(RS.y__, RS.b__, RS.c__))
-            .to_pattern(),
-        ),
-        Replacement::new(
-            function!(
-                GS.gamma_chain,
-                RS.a___,
-                bis!(RS.b__),
-                mink!(RS.y__),
-                bis!(RS.a__),
-                bis!(RS.c__)
-            )
-            .to_pattern(),
-            (gamma!(RS.y__, RS.a__, RS.b__)
-                * function!(GS.gamma_chain, RS.a___, bis!(RS.b__), bis!(RS.c__)))
-            .to_pattern(),
-        ),
-    ]
-});
-
-static GAMMA_CHAIN_REDUCTION_RULES: LazyLock<[Replacement; 5]> = LazyLock::new(|| {
-    [
-        Replacement::new(
-            function!(
-                GS.gamma_chain,
-                RS.a___,
-                bis!(RS.i__),
-                mink!(RS.d_, RS.a_),
-                bis!(RS.j__),
-                mink!(RS.d_, RS.a_),
-                RS.b__
-            )
-            .to_pattern(),
-            (function!(GS.gamma_chain, RS.a___, RS.b__) * RS.d_).to_pattern(),
-        ),
-        Replacement::new(
-            function!(
-                GS.gamma_chain,
-                mink!(RS.d_, RS.a_),
-                bis!(RS.b__),
-                mink!(RS.d_, RS.a_),
-                bis!(RS.i__),
-                bis!(RS.j__)
-            )
-            .to_pattern(),
-            (function!(GS.gamma_chain, bis!(RS.i__), bis!(RS.j__)) * RS.d_).to_pattern(),
-        ),
-        Replacement::new(
-            function!(GS.gamma_chain, mink!(RS.a__), bis!(RS.i__), bis!(RS.j__)).to_pattern(),
-            gamma!(RS.a__, RS.i__, RS.j__).to_pattern(),
-        ),
-        Replacement::new(
-            gamma!(RS.a__, RS.i__, RS.i__).to_pattern(),
-            Atom::Zero.to_pattern(),
-        ),
-        Replacement::new(
-            function!(GS.gamma_chain, bis!(RS.a__), bis!(RS.b__)).to_pattern(),
-            metric!(bis!(RS.a__), bis!(RS.b__)).to_pattern(),
-        ),
-    ]
-});
-
-fn collect_gammas(expr: &mut Atom) {
-    let mut atom = Atom::new();
-
-    while expr.replace_multiple_into(GAMMA_COLLECTION_RULES.as_ref(), &mut atom) {
-        // println!("collecting:{atom}");
-        std::mem::swap(expr, &mut atom);
-        *expr = expr.collect_tensors();
-        // println!("expanding::{expr}");
-        *expr = expr.simplify_metrics();
-        // println!("simplifying::{expr}");
-    }
-}
-
-fn normalise_gammas(expr: &mut Atom) {
-    // Uses the anti commutation rule of the gamma chain to sort the minkowski indices
-    fn gamma_chain_normalisation(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
-        if let AtomView::Fun(f) = arg
-            && f.get_symbol() == GS.gamma_chain
-        {
-            // println!("Gamma chain:{}", arg);
-            let mut args = f.iter().collect::<Vec<_>>();
-            if args.len() >= 5 {
-                let more = args.len() > 5;
-                for i in 0..args.len().saturating_sub(4) {
-                    if i % 2 == 0 {
-                        // println!("{}", args[i]);
-                        // println!("{}?{}", args[i], args[i + 1]);
-                        if args[i] > args[i + 2] {
-                            // println!("{}>{}", args[i], args[i + 1]);
-                            args.swap(i, i + 2);
-                            let swapped = FunctionBuilder::new(GS.gamma_chain)
-                                .add_args(&args)
-                                .finish();
-
-                            // println!("{}", swapped);
-                            let mu = args.remove(i);
-                            let _bis = args.remove(i);
-                            let nu = args.remove(i);
-                            if more {
-                                if i == 0 {
-                                    args.remove(i);
-                                } else {
-                                    args.remove(i - 1);
-                                }
-                            }
-
-                            // println!("mu:{}bis:{}nu:{}", mu, bis, nu);
-                            let metric = function!(ETS.metric, mu, nu)
-                                * 2
-                                * FunctionBuilder::new(GS.gamma_chain)
-                                    .add_args(&args)
-                                    .finish();
-                            **out = metric - swapped;
-                            return;
-                            // println!("{}->{}", a, c);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    loop {
-        let new = expr.replace_map(&gamma_chain_normalisation);
-        if new == *expr {
-            break;
-        } else {
-            *expr = new;
-        }
-    }
-}
-
-#[cfg(test)]
-fn undo_gamma_chain(expr: &mut Atom) {
-    loop {
-        let new = expr.replace_multiple(UNDO_GAMMA_CHAIN_RULES.as_ref());
-        if new == *expr {
-            break;
-        }
-        *expr = new;
-    }
-}
-
-fn gamma_simplify_impl(expr: AtomView) -> Atom {
-    let mink = Minkowski {};
-
-    let mut coef_list_spin = expr.expand_mink_bis();
-
-    for (expr, _) in &mut coef_list_spin {
-        // println!("gs:{expr}");
-        *expr = expr.simplify_metrics();
-        collect_gammas(expr);
-        // println!("collected:{expr}");
-        // expr = normalise_gammas(expr);
-
-        normalise_gammas(expr);
-        loop {
-            let new = expr
-                .replace_multiple(GAMMA_CHAIN_REDUCTION_RULES.as_ref())
-                .collect_tensors()
-                .simplify_metrics();
-            if new == *expr {
-                break;
-            } else {
-                *expr = new;
-            }
-        }
-
-        *expr = expr
-            .replace(function!(GS.gamma_chain, RS.a__, RS.x_, RS.x_).to_pattern())
-            .repeat()
-            .with(function!(GS.gamma_trace, RS.a__).to_pattern())
-            .replace(function!(GS.gamma_trace, RS.a___, bis!(RS.a__), RS.b___))
-            .repeat()
-            .with(function!(GS.gamma_trace, RS.a___, RS.b___));
-
-        // undo_gamma_chain(expr);
-        // println!("Before tracer:{expr}");
-
-        // expr = expr.replace_map(|term, ctx, out| {
-
-        //     if let AtomView::Fun(f)= term{
-        //         if f.get_symbol()= GS.gamma_chain{
-
-        //         }
-        //     }
-
-        //     false});
-
-        // //Chisholm identity:
-        // expr.replace_all_repeat_mut(
-        //     &(function!(AGS.gamma, RS.a_, RS.x_, RS.y_) * function!(gamma_trace, RS.a_, RS.a__)).to_pattern(),
-        //     (function!(gamma_chain, RS.a__)).to_pattern(),
-        //     None,
-        //     None,
-        // );
-        //
-        fn gamma_tracer(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
-            let gamma_trace = GS.gamma_trace;
-
-            if let AtomView::Fun(f) = arg
-                && f.get_symbol() == gamma_trace
-            {
-                // println!("{arg}");
-
-                let mut sum = Atom::Zero;
-
-                if f.get_nargs() == 1 {
-                    **out = Atom::Zero;
-                }
-                let args = f.iter().collect::<Vec<_>>();
-
-                for i in 1..args.len() {
-                    let sign = if i % 2 == 0 { -1 } else { 1 };
-
-                    let mut gcn = FunctionBuilder::new(gamma_trace);
-                    #[allow(clippy::needless_range_loop)]
-                    for j in 1..args.len() {
-                        if i != j {
-                            gcn = gcn.add_arg(args[j]);
-                        }
-                    }
-
-                    let metric = if args[0] == args[i] {
-                        if let AtomView::Fun(f) = args[0].as_atom_view() {
-                            f.iter().next().unwrap().to_owned()
-                        } else {
-                            panic!("aaaa")
-                        }
-                        // Atom::num(4)
-                    } else {
-                        function!(ETS.metric, args[0], args[i])
-                    };
-                    if args.len() == 2 {
-                        sum += metric * sign * Atom::num(4);
-                    } else {
-                        sum += metric * gcn.finish() * sign;
-                    }
-                }
-                **out = sum;
-
-                // println!("{}->{}", arg, out);
-            }
-        }
-
-        loop {
-            let new = expr.replace_map(&gamma_tracer);
-            if new == *expr {
-                break;
-            } else {
-                *expr = new;
-            }
-        }
-
-        *expr = expr
-            .replace(
-                function!(AGS.gamma, RS.a__, mink.to_symbolic([RS.d_, RS.b_]))
-                    .pow(Atom::num(2))
-                    .to_pattern(),
-            )
-            .repeat()
-            .with(Atom::var(RS.d_) * 4)
-            .collect_tensors()
-            .simplify_metrics();
-    }
-
-    coef_list_spin
-        .iter()
-        .fold(Atom::Zero, |a, (c, s)| a + c * s)
-}
 
 /// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
 ///

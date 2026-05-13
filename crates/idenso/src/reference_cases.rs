@@ -1,15 +1,12 @@
 use spenso::{
-    chain,
-    network::library::symbolic::ETS,
-    s, slot,
+    chain, g, p, q, s, slot,
     structure::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName, Representation},
     },
-    symbolica_atom::IntoAtom,
     trace,
 };
-use symbolica::{atom::Atom, function, symbol};
+use symbolica::atom::Atom;
 
 use crate::{
     color::{CS, ColorSimplifier},
@@ -88,22 +85,6 @@ impl ConcreteReps {
             coad8: ColorAdjoint {}.new_rep(8),
         }
     }
-}
-
-fn metric(left: impl IntoAtom, right: impl IntoAtom) -> Atom {
-    function!(ETS.metric, left.into_atom(), right.into_atom())
-}
-
-fn mom(name: &str, rep: &Representation<Minkowski>) -> Atom {
-    function!(symbol!(format!("spenso::{name}")), rep.to_symbolic([]))
-}
-
-fn p4(r: &ConcreteReps) -> Atom {
-    mom("p", &r.mink4)
-}
-
-fn q4(r: &ConcreteReps) -> Atom {
-    mom("q", &r.mink4)
 }
 
 fn color_t(r: &ConcreteReps, index: symbolica::atom::Symbol) -> Atom {
@@ -197,8 +178,8 @@ fn dirac_feyncalc_open_chain_chisholm_id3() -> Atom {
 
 fn dirac_feyncalc_slash_sandwich_id4() -> Atom {
     let r = ConcreteReps::new();
-    let p = p4(&r);
-    let q = q4(&r);
+    let p = p!(&r.mink4);
+    let q = q!(&r.mink4);
     Atom::var(s!(m))
         * crate::gamma!(p.clone(), slot!(r.bis4, i), slot!(r.bis4, a))
         * crate::gamma!(p.clone(), slot!(r.bis4, a), slot!(r.bis4, j))
@@ -219,7 +200,7 @@ fn dirac_feyncalc_gamma5_anticommutes_id5() -> Atom {
 
 fn dirac_feyncalc_order_anticommutator_id30() -> Atom {
     let r = ConcreteReps::new();
-    let p = p4(&r);
+    let p = p!(&r.mink4);
     chain!(
         slot!(r.bis4, i),
         slot!(r.bis4, j),
@@ -230,7 +211,7 @@ fn dirac_feyncalc_order_anticommutator_id30() -> Atom {
         slot!(r.bis4, j),
         crate::gamma!(p.clone()),
         crate::gamma!(slot!(r.mink4, nu)),
-    ) - Atom::num(2) * metric(slot!(r.mink4, nu), p) * chain!(slot!(r.bis4, i), slot!(r.bis4, j))
+    ) - Atom::num(2) * g!(slot!(r.mink4, nu), p) * chain!(slot!(r.bis4, i), slot!(r.bis4, j))
 }
 
 fn dirac_gamma0_square() -> Atom {
@@ -299,7 +280,7 @@ fn color_feyncalc_structure_times_open_chain_id4() -> Atom {
 fn color_feyncalc_delta_closes_doubled_two_generator_chain_id18() -> Atom {
     let r = ConcreteReps::new();
     let line = color_chain(&r, s!(a), s!(d), &[s!(i)]) * color_chain(&r, s!(d), s!(b), &[s!(j)]);
-    metric(slot!(r.cof3, b), slot!(r.cof3.dual(), a)) * (line.clone() + line)
+    g!(slot!(r.cof3, b), slot!(r.cof3.dual(), a)) * (line.clone() + line)
 }
 
 fn color_feyncalc_three_generator_trace_terminal_id30() -> Atom {

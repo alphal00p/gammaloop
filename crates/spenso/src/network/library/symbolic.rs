@@ -773,6 +773,9 @@ mod test {
 
     use super::*;
 
+    const LOCAL_GAMMA: &str = "symbolic_lib_test_gamma";
+    const LOCAL_P: &str = "symbolic_lib_test_p";
+
     #[test]
     fn add_to_lib() {
         let mut lib =
@@ -783,7 +786,7 @@ mod test {
                 Euclidean {}.new_rep(4).cast(),
                 LibraryRep::from(Minkowski {}).new_rep(4),
             ],
-            symbol!("gamma"),
+            symbol!(LOCAL_GAMMA),
             None,
         );
 
@@ -844,7 +847,7 @@ mod test {
                 Euclidean {}.new_rep(2).cast(),
                 LibraryRep::from(Minkowski {}).new_rep(2),
             ],
-            symbol!("gamma"),
+            symbol!(LOCAL_GAMMA),
             None,
         );
 
@@ -885,8 +888,10 @@ mod test {
             _,
             Symbol,
         >::try_from_view(
-            parse!("gamma(euc(2,1),euc(2,2),mink(2,0))-gamma(mink(2,0),euc(2,2),euc(2,1))")
-                .as_view(),
+            parse!(
+                "symbolic_lib_test_gamma(euc(2,1),euc(2,2),mink(2,0))-symbolic_lib_test_gamma(mink(2,0),euc(2,2),euc(2,1))"
+            )
+            .as_view(),
             &lib,
             &ParseSettings::default(),
         )
@@ -905,7 +910,7 @@ mod test {
             _,
             Symbol,
         >::try_from_view(
-            parse!("gamma(mink(2,0),euc(2,2),euc(2,1))").as_view(),
+            parse!("symbolic_lib_test_gamma(mink(2,0),euc(2,2),euc(2,1))").as_view(),
             &lib,
             &ParseSettings::default(),
         )
@@ -928,7 +933,7 @@ mod test {
                 LibraryRep::from(Minkowski {}).new_rep(4),
                 Euclidean {}.new_rep(4).cast(),
             ],
-            symbol!("gamma"),
+            symbol!(LOCAL_GAMMA),
             None,
         );
 
@@ -987,7 +992,7 @@ mod test {
             let m_atom: AbstractIndex = m.into();
             let m_atom: Atom = m_atom.into();
             let mink = Minkowski {}.new_rep(4);
-            function!(symbol!("spenso::p"), mink.to_symbolic([m_atom]))
+            function!(symbol!(LOCAL_P), mink.to_symbolic([m_atom]))
         }
 
         let mink = Minkowski {}.new_rep(4);
@@ -1087,7 +1092,7 @@ mod test {
         lib.update_ids();
 
         let expr = parse!(
-            " -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*vbar(1,euc(4,1))*u(0,euc(4,0))*ϵbar(2,mink(4,2))*ϵbar(3,mink(4,3))*gamma(euc(4,5),euc(4,4),mink(4,4))"
+            " -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*symbolic_lib_test_vbar(1,euc(4,1))*symbolic_lib_test_u(0,euc(4,0))*symbolic_lib_test_epsbar(2,mink(4,2))*symbolic_lib_test_epsbar(3,mink(4,3))*symbolic_lib_test_gamma(euc(4,5),euc(4,4),mink(4,4))"
         );
         let mut net = Network::<
             NetworkStore<

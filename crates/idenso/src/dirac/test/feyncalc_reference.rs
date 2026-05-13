@@ -1,33 +1,6 @@
 use super::*;
 use insta::assert_snapshot;
-use spenso::network::library::symbolic::ETS;
-use spenso::symbolica_atom::IntoAtom;
-use spenso::trace;
-use symbolica::{function, symbol};
-
-fn mom(name: &str, rep: Atom) -> Atom {
-    function!(symbol!(format!("spenso::{name}")), rep)
-}
-
-fn p4(r: &TestReps) -> Atom {
-    mom("p", r.mink4.to_symbolic([]))
-}
-
-fn q4(r: &TestReps) -> Atom {
-    mom("q", r.mink4.to_symbolic([]))
-}
-
-fn pd(r: &TestReps) -> Atom {
-    mom("p", r.mink_d.to_symbolic([]))
-}
-
-fn qd(r: &TestReps) -> Atom {
-    mom("q", r.mink_d.to_symbolic([]))
-}
-
-fn metric(a: impl IntoAtom, b: impl IntoAtom) -> Atom {
-    function!(ETS.metric, a.into_atom(), b.into_atom())
-}
+use spenso::{g, p, q, trace};
 
 #[test]
 fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
@@ -72,14 +45,14 @@ fn dirac_simplify_id3_four_interior_chain() {
         gamma!(slot!(r.mink4, mu)),
     ) / 2;
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"(2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho))))*1/2");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))");
 }
 
 #[test]
 fn dirac_simplify_id4_slash_sandwich() {
     let r = test_initialize();
-    let p = p4(&r);
-    let q = q4(&r);
+    let p = p!(r.mink4);
+    let q = q!(r.mink4);
     let expr = Atom::var(s!(m))
         * gamma!(p.clone(), slot!(r.bis4, i), slot!(r.bis4, a))
         * gamma!(p.clone(), slot!(r.bis4, a), slot!(r.bis4, j))
@@ -176,7 +149,7 @@ fn dirac_simplify_id25_four_trace_recurses_beside_open_chain() {
 #[test]
 fn dirac_simplify_id30_dirac_order_anticommutator() {
     let r = test_initialize();
-    let p = p4(&r);
+    let p = p!(&r.mink4);
     let expr = chain!(
         slot!(r.bis4, i),
         slot!(r.bis4, j),
@@ -188,7 +161,7 @@ fn dirac_simplify_id30_dirac_order_anticommutator() {
         gamma!(p.clone()),
         gamma!(slot!(r.mink4, nu)),
     ) - Atom::num(2)
-        * metric(slot!(r.mink4, nu), p)
+        * g!(slot!(r.mink4, nu), p)
         * chain!(slot!(r.bis4, i), slot!(r.bis4, j); Vec::<Atom>::new());
 
     assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"0");
@@ -215,7 +188,7 @@ fn dirac_simplify_id36_empty_trace_is_spin_dimension() {
 #[test]
 fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
     let r = test_initialize();
-    let p = p4(&r);
+    let p = p!(&r.mink4);
     let open = Atom::var(s!(c1))
         * gamma!(mu, slot!(r.bis4, i), slot!(r.bis4, a))
         * gamma!(p.clone(), slot!(r.bis4, a), slot!(r.bis4, b))
@@ -237,8 +210,8 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
 #[test]
 fn dirac_simplify_id45_slash_square_and_sandwich() {
     let r = test_initialize();
-    let p = p4(&r);
-    let slash_square = metric(p.clone(), p.clone())
+    let p = p!(&r.mink4);
+    let slash_square = g!(p.clone(), p.clone())
         * chain!(
             slot!(r.bis4, i),
             slot!(r.bis4, j),
@@ -253,14 +226,14 @@ fn dirac_simplify_id45_slash_square_and_sandwich() {
     );
 
     assert_snapshot!(slash_square.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))");
-    assert_snapshot!(sandwich.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(mink(4,mu),p(mink(4)))");
+    assert_snapshot!(sandwich.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*p(mink(4,mu))");
 }
 
 #[test]
 fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
     let r = test_initialize();
-    let p = pd(&r);
-    let q = qd(&r);
+    let p = p!(&r.mink_d);
+    let q = q!(&r.mink_d);
     let expr = gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, i), slot!(r.bis_d, a))
         * gamma!(p.clone(), slot!(r.bis_d, a), slot!(r.bis_d, b))
         * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, b), slot!(r.bis_d, j))

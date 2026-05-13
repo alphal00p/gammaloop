@@ -133,18 +133,19 @@ pub static CYCLIC: LazyLock<Symbol> =
 
 /// Temporary head used to collect tensor factors without expanding products.
 ///
-/// The collection helpers wrap matching tensor leaves as `spenso::collect(...)`,
-/// call Symbolica's `collect_symbol` on this inert head, then unwrap it again.
-/// This gives simplifiers a way to combine terms with common tensor factors
-/// without distributing scalar sums through the whole expression.
+/// The collection helpers wrap maximal matching tensorial subexpressions as
+/// `spenso::collect(...)`, call Symbolica's `collect_symbol` on this inert
+/// head, then unwrap it again. This gives simplifiers a way to combine terms
+/// with common tensor factors without distributing scalar sums through the
+/// whole expression.
 pub static COLLECT: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::collect"));
 
-/// Selects which tensor leaves are protected during collection.
+/// Selects which tensorial subexpressions are protected during collection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TensorCollectFilter {
-    /// Collect every syntactically tensorial leaf.
+    /// Collect every syntactically tensorial subexpression.
     Tensors,
-    /// Collect tensor leaves that contain this representation.
+    /// Collect tensorial subexpressions that contain this representation.
     Rep(crate::structure::representation::LibraryRep),
     /// Collect only metric tensors.
     Metrics,
@@ -152,10 +153,7 @@ pub enum TensorCollectFilter {
 
 impl TensorCollectFilter {
     fn collect(self, expression: AtomView<'_>) -> Atom {
-        let wrapped = expression.replace_map_bottom_up(|arg, context, out| {
-            if context.child_changed {
-                return;
-            }
+        let wrapped = expression.replace_map(|arg, _context, out| {
             if self.matches(arg) {
                 **out = self.wrap(arg);
             }
@@ -177,10 +175,10 @@ impl TensorCollectFilter {
         match self {
             Self::Metrics => fun.get_symbol() == ETS.metric,
             Self::Tensors => {
-                !Self::is_collection_boundary(fun.get_symbol()) && Self::contains_rep(fun)
+                !Self::is_non_tensorial_wrapper(fun.get_symbol()) && Self::contains_rep(fun)
             }
             Self::Rep(rep) => {
-                !Self::is_collection_boundary(fun.get_symbol())
+                !Self::is_non_tensorial_wrapper(fun.get_symbol())
                     && fun.iter().any(|arg| Self::arg_contains_rep(arg, rep))
             }
         }
@@ -218,7 +216,7 @@ impl TensorCollectFilter {
         }
 
         match arg {
-            AtomView::Fun(fun) if !Self::is_collection_boundary(fun.get_symbol()) => {
+            AtomView::Fun(fun) if !Self::is_non_tensorial_wrapper(fun.get_symbol()) => {
                 fun.iter().any(Self::arg_is_or_contains_rep)
             }
             AtomView::Mul(mul) => mul.iter().any(Self::arg_is_or_contains_rep),
@@ -237,7 +235,7 @@ impl TensorCollectFilter {
         }
 
         match arg {
-            AtomView::Fun(fun) if !Self::is_collection_boundary(fun.get_symbol()) => {
+            AtomView::Fun(fun) if !Self::is_non_tensorial_wrapper(fun.get_symbol()) => {
                 fun.iter().any(|arg| Self::arg_contains_rep(arg, rep))
             }
             AtomView::Mul(mul) => mul.iter().any(|arg| Self::arg_contains_rep(arg, rep)),
@@ -257,13 +255,8 @@ impl TensorCollectFilter {
             || arg.has_attributes_of(SPENSO_TAG.rep_)
     }
 
-    fn is_collection_boundary(symbol: Symbol) -> bool {
+    fn is_non_tensorial_wrapper(symbol: Symbol) -> bool {
         symbol == *COLLECT
-            || symbol == SPENSO_TAG.chain
-            || symbol == SPENSO_TAG.trace
-            || symbol == *SYM
-            || symbol == *ANTISYM
-            || symbol == *CYCLIC
             || symbol == AIND_SYMBOLS.aind
             || symbol == AIND_SYMBOLS.dind
             || symbol == AIND_SYMBOLS.uind
@@ -1363,6 +1356,45 @@ mod tests {
         insta::assert_snapshot!(
             expr.collect_tensors().to_bare_ordered_string(),
             @"((a+b)*(c+d)+a)*p(mink(4))"
+        );
+    }
+
+    #[test]
+    fn collect_tensors_marks_chain_like_forms_as_maximal_factors() {
+        let (a, b) = symbol!("a", "b");
+        let mu = mink!(4, mu);
+        let gamma_mu = chain_factor!(collect_test_gamma, in, mu, out);
+
+        let chain_expr = chain!(mink!(4, i), mink!(4, j), gamma_mu.clone());
+        insta::assert_snapshot!(
+            (Atom::var(a) * chain_expr.clone() + Atom::var(b) * chain_expr)
+                .collect_tensors()
+                .to_bare_ordered_string(),
+            @"(a+b)*chain(mink(4,i),mink(4,j),collect_test_gamma(in,mink(4,mu),out))"
+        );
+
+        let trace_expr = trace!(mink!(4), gamma_mu.clone());
+        insta::assert_snapshot!(
+            (Atom::var(a) * trace_expr.clone() + Atom::var(b) * trace_expr)
+                .collect_tensors()
+                .to_bare_ordered_string(),
+            @"(a+b)*trace(mink(4),cyclic(collect_test_gamma(in,mink(4,mu),out)))"
+        );
+
+        let sym_expr = sym!(gamma_mu.clone());
+        insta::assert_snapshot!(
+            (Atom::var(a) * sym_expr.clone() + Atom::var(b) * sym_expr)
+                .collect_tensors()
+                .to_bare_ordered_string(),
+            @"(a+b)*sym(collect_test_gamma(in,mink(4,mu),out))"
+        );
+
+        let cyclic_expr = cyclic!(gamma_mu);
+        insta::assert_snapshot!(
+            (Atom::var(a) * cyclic_expr.clone() + Atom::var(b) * cyclic_expr)
+                .collect_tensors()
+                .to_bare_ordered_string(),
+            @"(a+b)*cyclic(collect_test_gamma(in,mink(4,mu),out))"
         );
     }
 
