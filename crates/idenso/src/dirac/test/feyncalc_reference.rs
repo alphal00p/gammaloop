@@ -131,7 +131,7 @@ fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
         gamma!(slot!(r.mink4, a))
     ) + gamma!(a, 1, 2) * gamma!(a, 2, 3);
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)),gamma(in,out,mink(4,a)))");
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),cyclic(gamma(in,out,mink(4,a)),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b))))");
 }
 
 #[test]
