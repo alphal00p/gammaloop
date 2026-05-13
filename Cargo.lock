@@ -4219,6 +4219,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "tabled",
  "xpct",
 ]
 

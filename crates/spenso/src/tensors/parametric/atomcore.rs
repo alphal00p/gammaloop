@@ -1159,7 +1159,10 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
         const_map: &HashMap<A, T>,
         function_map: &HashMap<Symbol, EvaluationFn<A, T>>,
     ) -> Result<Self::ContainerData<T>, String> {
-        self.map_data_ref_result(|a| a.evaluate(coeff_map, const_map, function_map))
+        self.map_data_ref_result(|a| {
+            a.evaluate(coeff_map, const_map, function_map)
+                .map_err(|e| format!("could not evaluate {}, because {}", a, e))
+        })
     }
 
     /// Check if the expression could be 0, using (potentially) numerical sampling with

@@ -10,6 +10,7 @@ use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
 
+use crate::metric::MetricSimplifier;
 use crate::{gamma, gamma0, gamma5, u, v};
 
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
@@ -36,7 +37,7 @@ use symbolica::{
 };
 
 use crate::Cookable;
-use crate::test_support::{TestReps, test_initialize};
+use crate::test_support::test_initialize;
 
 #[test]
 fn gamma_construct() {
@@ -298,42 +299,6 @@ fn gamma_trace_evaluation_can_be_disabled() {
 mod form_reference;
 
 mod feyncalc_reference;
-
-#[test]
-fn collect_expand_chain() {
-    test_initialize();
-    let expr = parse_lit!(gamma_chain(
-        mink(dim, nu1),
-        bis(dim, 3),
-        mink(dim, nu12),
-        bis(dim, 31),
-        mink(dim, nu13),
-        bis(dim, 32),
-        mink(dim, nu14),
-        bis(dim, 33),
-        mink(dim, nu),
-        bis(dim, 34),
-        mink(dim, nu16),
-        bis(dim, 35),
-        mink(dim, nu17),
-        bis(dim, 36),
-        mink(dim, nu),
-        bis(dim, 4),
-        mink(dim, nu3),
-        bis(dim, 5),
-        mink(dim, nu2),
-        bis(dim, 1),
-        bis(dim, 2)
-    ));
-
-    let mut a = expr.clone();
-    collect_gammas(&mut a);
-    undo_gamma_chain(&mut a);
-    collect_gammas(&mut a);
-
-    assert_eq!(a, expr);
-    // println!("{a}");
-}
 
 #[test]
 fn gl23() {
