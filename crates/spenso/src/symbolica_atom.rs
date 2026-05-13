@@ -8,8 +8,11 @@ use crate::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
+    },
     symbol,
+    utils::Settable,
 };
 
 /// Converts common symbolic Spenso values into owned Symbolica atoms.
@@ -117,6 +120,16 @@ pub static SYM: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::sym"; Symme
 /// calls to [`ProjectorExpander::expand_projectors`].
 pub static ANTISYM: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::antisym"; Antisymmetric));
 
+/// Normalized cyclic symmetrizer over an ordered list of chain/trace factors.
+///
+/// This is an inert projector head. Its arguments are canonicalized by
+/// Symbolica's `Cyclesymmetric` attribute, but it is only expanded by explicit
+/// calls to [`ProjectorExpander::expand_projectors`]. In traces it is also the
+/// compact representation of cyclic trace equivalence:
+/// `trace(rep, cyclic(a,b,c))`.
+pub static CYCLIC: LazyLock<Symbol> =
+    LazyLock::new(|| symbol!("spenso::cyclic"; Cyclesymmetric; norm = normalize_cyclic_projector));
+
 /// Builds an inert normalized symmetrizer over chain/trace factors.
 pub fn sym<F>(factors: impl IntoIterator<Item = F>) -> Atom
 where
@@ -133,6 +146,111 @@ where
     projector(*ANTISYM, factors)
 }
 
+/// Builds an inert normalized cyclic symmetrizer over chain/trace factors.
+pub fn cyclic<F>(factors: impl IntoIterator<Item = F>) -> Atom
+where
+    F: IntoAtom,
+{
+    projector(*CYCLIC, factors)
+}
+
+/// Builds a trace in canonical projector form.
+///
+/// Empty traces are represented as `trace(rep)`. Non-empty traces are
+/// represented as `trace(rep, cyclic(factors...))`. Passing a single existing
+/// `cyclic(...)` factor is accepted and not wrapped again. The `cyclic`
+/// constructor itself normalizes `cyclic(sym(...))` to `sym(...)`.
+pub fn trace<R, F>(rep: R, factors: impl IntoIterator<Item = F>) -> Atom
+where
+    R: IntoAtom,
+    F: IntoAtom,
+{
+    let rep = rep.into_atom();
+    let factors = factors
+        .into_iter()
+        .map(IntoAtom::into_atom)
+        .collect::<Vec<_>>();
+
+    if factors.is_empty() {
+        return chain_like_with_factors(SPENSO_TAG.trace, &[rep], std::iter::empty());
+    }
+
+    let trace_factor = if let [factor] = factors.as_slice() {
+        if is_cyclic_projector(factor.as_view()) {
+            factor.clone()
+        } else {
+            cyclic(factors)
+        }
+    } else {
+        cyclic(factors)
+    };
+
+    chain_like_with_factors(SPENSO_TAG.trace, &[rep], std::iter::once(trace_factor))
+}
+
+/// Builds a trace whose payload is a single symmetric projector.
+///
+/// This is the compact form for fully symmetric trace invariants such as color
+/// `d` tensors: `trace(rep, sym(factors...))`. Ordinary ordered closed traces
+/// should use [`trace`], which wraps factors in `cyclic(...)` instead.
+pub fn trace_sym<R, F>(rep: R, factors: impl IntoIterator<Item = F>) -> Atom
+where
+    R: IntoAtom,
+    F: IntoAtom,
+{
+    let rep = rep.into_atom();
+    let projector = sym(factors);
+    chain_like_with_factors(SPENSO_TAG.trace, &[rep], std::iter::once(projector))
+}
+
+/// Return the representation and actual factor sequence of a trace.
+///
+/// Canonical traces store their factors under a single `cyclic(...)` argument;
+/// this helper unwraps that representation for algorithms that need the
+/// ordered factor list. The non-canonical raw shape `trace(rep, factors...)` is
+/// accepted on input so readers can normalize externally constructed atoms, but
+/// all builders emit the cyclic form.
+pub fn trace_parts<'a>(fun: FunView<'a>) -> Option<(AtomView<'a>, Vec<AtomView<'a>>)> {
+    if fun.get_symbol() != SPENSO_TAG.trace {
+        return None;
+    }
+
+    let args = fun.iter().collect::<Vec<_>>();
+    let [rep, factors @ ..] = args.as_slice() else {
+        return None;
+    };
+
+    Some((*rep, trace_factor_views(factors)))
+}
+
+/// Flatten the canonical cyclic trace factor wrapper.
+pub fn trace_factor_views<'a>(factors: &[AtomView<'a>]) -> Vec<AtomView<'a>> {
+    if let [factor] = factors
+        && let AtomView::Fun(fun) = *factor
+        && fun.get_symbol() == *CYCLIC
+    {
+        return fun.iter().collect();
+    }
+
+    factors.to_vec()
+}
+
+fn is_cyclic_projector(factor: AtomView<'_>) -> bool {
+    matches!(factor, AtomView::Fun(fun) if fun.get_symbol() == *CYCLIC)
+}
+
+fn normalize_cyclic_projector(view: AtomView<'_>, out: &mut Settable<Atom>) {
+    let AtomView::Fun(fun) = view else {
+        return;
+    };
+    let args = fun.iter().collect::<Vec<_>>();
+    if let [AtomView::Fun(inner)] = args.as_slice()
+        && inner.get_symbol() == *SYM
+    {
+        out.set_from_view(&args[0]);
+    }
+}
+
 fn projector<F>(symbol: Symbol, factors: impl IntoIterator<Item = F>) -> Atom
 where
     F: IntoAtom,
@@ -145,14 +263,16 @@ where
         .finish()
 }
 
-/// Expands `sym(...)` and `antisym(...)` factors inside `chain(...)` and
-/// `trace(...)`.
+/// Expands `sym(...)`, `antisym(...)`, and `cyclic(...)` factors inside
+/// `chain(...)` and `trace(...)`.
 ///
-/// The projectors are interpreted as normalized sums over permutations of the
-/// factor list. Trace projectors are grouped by cyclic rotations before being
-/// emitted, which keeps the expanded form compact while preserving trace
-/// cyclicity. Projectors are not expanded outside chain-like containers because
-/// the ordering only has a noncommutative meaning in that context.
+/// `sym` and `antisym` are interpreted as normalized sums over all
+/// permutations of the factor list. `cyclic` is interpreted as a normalized sum
+/// over cyclic rotations. Inside traces, expanded terms are emitted as
+/// `trace(rep, cyclic(...))`, so trace cyclicity stays explicit in the
+/// expression instead of being handled by a side-channel grouping pass.
+/// Projectors are not expanded outside chain-like containers because the
+/// ordering only has a noncommutative meaning in that context.
 pub trait ProjectorExpander {
     fn expand_projectors(&self) -> Atom;
 }
@@ -202,27 +322,39 @@ fn expand_chain_like_projector(arg: AtomView) -> Option<Atom> {
         return None;
     }
 
-    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
-    let (prefix, factors) = args.split_at(offset);
+    let args = f.iter().collect::<Vec<_>>();
+    let (prefix, raw_factors) = args.split_at(offset);
+    let factors = if f.get_symbol() == SPENSO_TAG.trace {
+        trace_factor_views(raw_factors)
+    } else {
+        raw_factors.to_vec()
+    };
     for (position, factor) in factors.iter().enumerate() {
-        let Some((prefactor, projector_symbol, projector_factors)) =
-            projector_factor(factor.as_view())
+        let Some((prefactor, projector_symbol, projector_factors)) = projector_factor(*factor)
         else {
             continue;
         };
 
         let mut sum = Atom::Zero;
-        for (coefficient, expanded_factors) in projector_expansion_terms(
-            &projector_factors,
-            projector_symbol == *ANTISYM,
-            f.get_symbol() == SPENSO_TAG.trace,
-        )? {
+        let is_trace = f.get_symbol() == SPENSO_TAG.trace;
+        for (coefficient, expanded_factors) in
+            projector_expansion_terms(&projector_factors, projector_symbol)?
+        {
             let new_factors = factors[..position]
                 .iter()
-                .cloned()
+                .map(|factor| factor.to_owned())
                 .chain(expanded_factors)
-                .chain(factors[position + 1..].iter().cloned());
-            let rebuilt = chain_like_with_factors(f.get_symbol(), prefix, new_factors);
+                .chain(
+                    factors[position + 1..]
+                        .iter()
+                        .map(|factor| factor.to_owned()),
+                );
+            let rebuilt = if is_trace {
+                trace_with_cyclic_factors(prefix, new_factors)
+            } else {
+                let prefix = prefix.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+                chain_like_with_factors(f.get_symbol(), &prefix, new_factors)
+            };
             sum += prefactor.clone() * coefficient * rebuilt;
         }
         return Some(sum);
@@ -263,7 +395,7 @@ fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
     let AtomView::Fun(f) = projector else {
         return None;
     };
-    if f.get_symbol() != *SYM && f.get_symbol() != *ANTISYM {
+    if f.get_symbol() != *SYM && f.get_symbol() != *ANTISYM && f.get_symbol() != *CYCLIC {
         return None;
     }
 
@@ -272,59 +404,47 @@ fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
 
 fn projector_expansion_terms(
     factors: &[Atom],
-    antisymmetric: bool,
-    cyclic: bool,
+    projector_symbol: Symbol,
 ) -> Option<Vec<(Atom, Vec<Atom>)>> {
+    if projector_symbol == *CYCLIC {
+        return cyclic_projector_terms(factors);
+    }
+
     let denominator = Atom::num(factorial_i64(factors.len())?);
     let mut permutation = (0..factors.len()).collect::<Vec<_>>();
     let mut terms = Vec::new();
     collect_projector_terms(
         factors,
-        antisymmetric,
+        projector_symbol == *ANTISYM,
         0,
         1,
         &mut permutation,
         &denominator,
         &mut terms,
     );
-    Some(if cyclic {
-        collect_cyclic_projector_terms(terms)
-    } else {
-        terms
-    })
+    Some(terms)
 }
 
-fn collect_cyclic_projector_terms(terms: Vec<(Atom, Vec<Atom>)>) -> Vec<(Atom, Vec<Atom>)> {
-    let mut grouped = Vec::<(Atom, Vec<Atom>)>::new();
-    for (coefficient, factors) in terms {
-        if let Some((group_coefficient, _)) = grouped
-            .iter_mut()
-            .find(|(_, group_factors)| same_cyclic_factors(group_factors, &factors))
-        {
-            *group_coefficient = (group_coefficient.clone() + coefficient).expand();
-        } else {
-            grouped.push((coefficient, factors));
-        }
+fn cyclic_projector_terms(factors: &[Atom]) -> Option<Vec<(Atom, Vec<Atom>)>> {
+    if factors.is_empty() {
+        return Some(vec![(Atom::num(1), Vec::new())]);
     }
 
-    grouped
-        .into_iter()
-        .filter(|(coefficient, _)| !coefficient.is_zero())
-        .collect()
-}
-
-fn same_cyclic_factors(left: &[Atom], right: &[Atom]) -> bool {
-    if left.is_empty() || right.is_empty() {
-        return left.is_empty() && right.is_empty();
-    }
-
-    left.len() == right.len()
-        && (0..left.len()).any(|shift| {
-            left.iter()
-                .zip(right.iter().cycle().skip(shift))
-                .take(left.len())
-                .all(|(left, right)| left == right)
-        })
+    let denominator = Atom::num(i64::try_from(factors.len()).ok()?);
+    Some(
+        (0..factors.len())
+            .map(|shift| {
+                let rotated = factors
+                    .iter()
+                    .cycle()
+                    .skip(shift)
+                    .take(factors.len())
+                    .cloned()
+                    .collect();
+                (Atom::num(1) / denominator.clone(), rotated)
+            })
+            .collect(),
+    )
 }
 
 fn collect_projector_terms(
@@ -385,6 +505,14 @@ fn chain_like_with_factors(
             builder.add_arg(arg)
         })
         .finish()
+}
+
+fn trace_with_cyclic_factors(
+    prefix: &[AtomView<'_>],
+    factors: impl IntoIterator<Item = Atom>,
+) -> Atom {
+    debug_assert_eq!(prefix.len(), 1);
+    trace(prefix[0], factors)
 }
 
 /// Creates a Symbolica symbol from an identifier.
@@ -750,6 +878,30 @@ macro_rules! antisym {
     };
 }
 
+/// Builds an inert normalized cyclic symmetrizer over chain/trace factors.
+///
+/// The resulting `cyclic(...)` is canonicalized through Symbolica's
+/// cyclesymmetric function attribute. Inside traces it is the compact syntax
+/// for cyclic trace equivalence, for example `trace(rep, cyclic(a,b,c))`.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::{cyclic, trace};
+///
+/// let cyclic_trace = trace!(rep, cyclic!(a, b, c));
+/// let from_vec = cyclic!(; vec![a, b, c]);
+/// ```
+#[macro_export]
+macro_rules! cyclic {
+    (; $factors:expr $(,)?) => {
+        $crate::symbolica_atom::cyclic(($factors).into_iter())
+    };
+    ($($factor:expr),* $(,)?) => {
+        $crate::symbolica_atom::cyclic(vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*])
+    };
+}
+
 /// Builds a symbolic open chain with a start slot, an end slot, and any number
 /// of factors.
 ///
@@ -811,20 +963,21 @@ macro_rules! chain {
 
 /// Builds a symbolic trace with a representation and any number of factors.
 ///
-/// The representation and factors are converted through [`IntoAtom`]. This is
-/// the variadic surface for [`SPENSO_TAG.trace`](crate::network::tags::SPENSO_TAG)
-/// and intentionally leaves any algebraic simplification to the caller.
+/// The representation and factors are converted through [`IntoAtom`]. Empty
+/// traces are emitted as `trace(rep)`. Non-empty traces are emitted in the
+/// canonical cyclic form `trace(rep, cyclic(factors...))`.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// use spenso::trace;
+/// use spenso::{cyclic, trace};
 ///
 /// let expr = trace!(
 ///     &cof_nc,
 ///     color_t_a,
 ///     color_t_b,
 /// );
+/// assert_eq!(expr, trace!(&cof_nc, cyclic!(color_t_a, color_t_b)));
 ///
 /// let factors = vec![color_t_a, color_t_b];
 /// let expr = trace!(&cof_nc; factors);
@@ -832,13 +985,13 @@ macro_rules! chain {
 #[macro_export]
 macro_rules! trace {
     ($rep:expr $(,)?) => {
-        $crate::network::tags::SPENSO_TAG.trace(
+        $crate::symbolica_atom::trace(
             $crate::symbolica_atom::IntoAtom::into_atom($rep),
             std::iter::empty::<symbolica::atom::Atom>(),
         )
     };
     ($rep:expr; $factors:expr $(,)?) => {
-        $crate::network::tags::SPENSO_TAG.trace(
+        $crate::symbolica_atom::trace(
             $crate::symbolica_atom::IntoAtom::into_atom($rep),
             ($factors)
                 .into_iter()
@@ -846,7 +999,7 @@ macro_rules! trace {
         )
     };
     ($rep:expr $(, $factor:expr)+; $factors:expr $(,)?) => {
-        $crate::network::tags::SPENSO_TAG.trace(
+        $crate::symbolica_atom::trace(
             $crate::symbolica_atom::IntoAtom::into_atom($rep),
             vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*]
                 .into_iter()
@@ -854,7 +1007,46 @@ macro_rules! trace {
         )
     };
     ($rep:expr $(, $factor:expr)* $(,)?) => {
-        $crate::network::tags::SPENSO_TAG.trace(
+        $crate::symbolica_atom::trace(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*],
+        )
+    };
+}
+
+/// Builds a symbolic trace with a single symmetric projector payload.
+///
+/// This emits `trace(rep, sym(factors...))`. Use `trace!` for ordinary cyclic
+/// closed traces.
+///
+/// # Examples
+///
+/// ```ignore
+/// use spenso::trace_sym;
+///
+/// let invariant = trace_sym!(&cof_nc, color_t_a, color_t_b, color_t_c);
+/// let from_vec = trace_sym!(&cof_nc; factors);
+/// ```
+#[macro_export]
+macro_rules! trace_sym {
+    ($rep:expr; $factors:expr $(,)?) => {
+        $crate::symbolica_atom::trace_sym(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            ($factors)
+                .into_iter()
+                .map($crate::symbolica_atom::IntoAtom::into_atom),
+        )
+    };
+    ($rep:expr $(, $factor:expr)+; $factors:expr $(,)?) => {
+        $crate::symbolica_atom::trace_sym(
+            $crate::symbolica_atom::IntoAtom::into_atom($rep),
+            vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*]
+                .into_iter()
+                .chain(($factors).into_iter().map($crate::symbolica_atom::IntoAtom::into_atom)),
+        )
+    };
+    ($rep:expr $(, $factor:expr)+ $(,)?) => {
+        $crate::symbolica_atom::trace_sym(
             $crate::symbolica_atom::IntoAtom::into_atom($rep),
             vec![$($crate::symbolica_atom::IntoAtom::into_atom($factor)),*],
         )
@@ -865,9 +1057,9 @@ macro_rules! trace {
 mod tests {
     #[allow(unused_imports)]
     use crate::{
-        aind, antisym, bracket, chain, chain_factor, dind, dot, g, lor, mink,
+        aind, antisym, bracket, chain, chain_factor, cyclic, dind, dot, g, lor, mink,
         network::tags::SPENSO_TAG, p, pure_scalar, q, shadowing::symbolica_utils::AtomCoreExt, sym,
-        symbolica_atom::ProjectorExpander, trace,
+        symbolica_atom::ProjectorExpander, trace, trace_sym,
     };
     use symbolica::{
         atom::{Atom, AtomView},
@@ -942,7 +1134,11 @@ mod tests {
 
         assert_eq!(
             trace!(rep.clone(); vec![first.clone(), second.clone()]),
-            trace!(rep, first, second)
+            trace!(rep.clone(), first.clone(), second.clone())
+        );
+        assert_eq!(
+            trace!(rep, first.clone(), second.clone()),
+            trace!(Atom::var(symbol!("rep")), cyclic!(first, second))
         );
     }
 
@@ -952,6 +1148,45 @@ mod tests {
         let second = Atom::var(symbol!("second"));
 
         assert_eq!(sym!(second.clone(), first.clone()), sym!(first, second));
+    }
+
+    #[test]
+    fn cyclic_macro_canonicalizes_rotations() {
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+        let third = Atom::var(symbol!("third"));
+
+        assert_eq!(
+            cyclic!(second.clone(), third.clone(), first.clone()),
+            cyclic!(first.clone(), second.clone(), third.clone())
+        );
+        assert_ne!(
+            cyclic!(first.clone(), third.clone(), second.clone()),
+            cyclic!(second, third, first)
+        );
+    }
+
+    #[test]
+    fn cyclic_unwraps_single_symmetric_projector() {
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+
+        assert_eq!(
+            cyclic!(sym!(first.clone(), second.clone())),
+            sym!(first, second)
+        );
+    }
+
+    #[test]
+    fn trace_sym_macro_builds_symmetric_trace() {
+        let rep = Atom::var(symbol!("rep"));
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+
+        assert_eq!(
+            trace_sym!(rep.clone(), first.clone(), second.clone()),
+            trace!(rep, cyclic!(sym!(first, second)))
+        );
     }
 
     #[test]
@@ -987,7 +1222,7 @@ mod tests {
     }
 
     #[test]
-    fn expand_sym_in_trace_groups_cyclic_rotations() {
+    fn expand_sym_in_trace_emits_cyclic_projectors() {
         let rep = Atom::var(symbol!("rep"));
         let first = Atom::var(symbol!("first"));
         let second = Atom::var(symbol!("second"));
@@ -999,8 +1234,63 @@ mod tests {
         )
         .expand_projectors();
         let expected = Atom::num(1) / Atom::num(2)
-            * trace!(rep.clone(), first.clone(), second.clone(), third.clone())
-            + Atom::num(1) / Atom::num(2) * trace!(rep, first, third, second);
+            * trace!(
+                rep.clone(),
+                cyclic!(first.clone(), second.clone(), third.clone())
+            )
+            + Atom::num(1) / Atom::num(2) * trace!(rep, cyclic!(first, third, second));
+
+        assert_eq!(expanded, expected);
+    }
+
+    #[test]
+    fn expand_cyclic_in_chain_rotates_factors() {
+        let start = Atom::var(symbol!("start"));
+        let end = Atom::var(symbol!("end"));
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+        let third = Atom::var(symbol!("third"));
+
+        let expanded = chain!(
+            start.clone(),
+            end.clone(),
+            cyclic!(first.clone(), second.clone(), third.clone())
+        )
+        .expand_projectors();
+        let expected = Atom::num(1) / Atom::num(3)
+            * chain!(
+                start.clone(),
+                end.clone(),
+                first.clone(),
+                second.clone(),
+                third.clone()
+            )
+            + Atom::num(1) / Atom::num(3)
+                * chain!(
+                    start.clone(),
+                    end.clone(),
+                    second.clone(),
+                    third.clone(),
+                    first.clone()
+                )
+            + Atom::num(1) / Atom::num(3) * chain!(start, end, third, first, second);
+
+        assert_eq!(expanded, expected);
+    }
+
+    #[test]
+    fn expand_cyclic_in_trace_keeps_compact_cyclic_trace() {
+        let rep = Atom::var(symbol!("rep"));
+        let first = Atom::var(symbol!("first"));
+        let second = Atom::var(symbol!("second"));
+        let third = Atom::var(symbol!("third"));
+
+        let expanded = trace!(
+            rep.clone(),
+            cyclic!(first.clone(), second.clone(), third.clone())
+        )
+        .expand_projectors();
+        let expected = trace!(rep, cyclic!(first, second, third));
 
         assert_eq!(expanded, expected);
     }

@@ -86,7 +86,9 @@ and what to use when matching it in a replacement rule.
 | `g(p(rep), q(rep))` | compact scalar product shorthand | `g!(p, q)` or `metric!(p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))` |
 | `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
 | `chain(start, end, factors...)` | ordered open chain | `chain!(start, end, factors...)` | `SPENSO_TAG.chain` symbol; ordered arguments | `chain!(start, end, factors...)` |
-| `trace(rep, factors...)` | ordered closed trace | `trace!(rep, factors...)` | `SPENSO_TAG.trace` symbol; ordered arguments | `trace!(rep, factors...)` |
+| `trace(rep)` | empty closed trace | `trace!(rep)` | `SPENSO_TAG.trace` symbol | `trace!(rep)` |
+| `trace(rep, cyclic(factors...))` | ordinary closed trace with cyclic factor order | `trace!(rep, factors...)` or `trace!(rep, cyclic!(factors...))` | `SPENSO_TAG.trace` plus `CYCLIC` with `Cyclesymmetric` attribute | `trace!(rep, cyclic!(args...))` |
+| `trace(rep, sym(factors...))` | fully symmetric closed trace invariant | `trace_sym!(rep, factors...)` | `SPENSO_TAG.trace` plus `SYM` with `Symmetric` attribute | `trace_sym!(rep, args...)` |
 | `epsilon(args...)` | antisymmetric Levi-Civita tensor for idenso epsilon algebra | `epsilon!(args...)` | `EPSILON_SYMBOL` with `Antisymmetric` attribute | `function!(*EPSILON_SYMBOL, W_.x___)` |
 | `bracket(expr...)` | product-like parser grouping of network factors | `bracket!(expr...)` | `SPENSO_TAG.bracket` symbol | `function!(T.bracket, W_.x___)` |
 | `broadcast(expr)` | apply a scalar/broadcast function to the parsed inner tensor | `broadcast_symbol!(f)` then `function!(f, expr)` | head tagged `broadcast` | `function!(W_.f_, W_.x_)` with a broadcast-head condition |
@@ -109,8 +111,10 @@ symbol carries Symbolica's `Linear` attribute while `g` does not. This matters
 before parser materialization, because Symbolica may distribute `dot` over sums
 as ordinary linear algebra syntax.
 
-`chain` and `trace` are ordered and non-symmetric. Their factor order is part of
-the algebra. A factor inside a chain uses the symbols `in` and `out` as local
+`chain` is ordered and non-symmetric. Ordinary non-empty traces are stored as
+`trace(rep, cyclic(factors...))`, never as an ordered raw factor list. Fully
+symmetric trace invariants use `trace(rep, sym(factors...))`.
+A factor inside a chain or trace uses the symbols `in` and `out` as local
 placeholder slots:
 
 ```text
@@ -118,15 +122,29 @@ chain(bis(D, i), bis(D, j),
   gamma(in, out, mink(D, mu)),
   gamma(in, out, mink(D, nu)))
 
-trace(bis(D),
+trace(bis(D), cyclic(
   gamma(in, out, mink(D, mu)),
-  gamma(in, out, mink(D, nu)))
+  gamma(in, out, mink(D, nu))))
 ```
 
 In expanded parsing, chain materialization replaces `in` and `out` with actual
 slots and creates intermediate dummy slots between adjacent factors. In opaque
 parsing, the chain or trace remains a leaf and its exposed structure is inferred
 from the endpoints and visible external slots.
+
+The trace macro does the cyclic wrapping automatically:
+
+```text
+trace!(rep, A, B, C) -> trace(rep, cyclic(A, B, C))
+trace(rep, cyclic(A, B, C)) = trace(rep, cyclic(B, C, A))
+trace_sym!(rep, A, B, C) -> trace(rep, sym(A, B, C))
+trace(rep, cyclic(sym(A, B, C))) -> trace(rep, sym(A, B, C))
+```
+
+`cyclic` is a Symbolica `Cyclesymmetric` head. It is not the same as a symmetric
+projector: it only identifies rotations, not arbitrary permutations. Its
+Symbolica normalization rule unwraps a single symmetric projector argument,
+because `sym(...)` is already stronger than cyclic equivalence.
 
 Compact Schoonschip-style rank-one notation is local shorthand:
 
@@ -158,12 +176,15 @@ concrete `Slot<LibraryRep, Aind>` and prints as `rep(dim, mu)`. `tensor!(F,
 args...)` creates a tensor-tagged head. `vector!(p, args...)`, and the short
 `p!(...)` and `q!(...)` forms, create rank-one tensor heads. `g!`/`metric!`,
 `dot!`, `pure_scalar!`, `bracket!`, `aind!`, and `dind!` cover the named parser
-forms. `chain!` and `trace!` build the ordered containers, including iterator
-forms `chain!(start, end; factors)` and `trace!(rep; factors)`. `chain_factor!`
-builds a generic ordered factor with explicit `in` and `out` placeholders.
-`sym!` and `antisym!` build inert ordered projectors. `function!(head, args...)`
-remains the fallback when there is no Spenso-specific builder, and `s!(mu)` is
-the lightweight plain-symbol helper for labels and indices.
+forms. `chain!` builds an ordered open container, while `trace!` builds the
+cyclic closed container and `trace_sym!` builds the symmetric closed trace
+invariant, including iterator forms `chain!(start, end; factors)`,
+`trace!(rep; factors)`, and `trace_sym!(rep; factors)`. `chain_factor!` builds a
+generic ordered factor with explicit `in` and `out` placeholders.
+`sym!`, `antisym!`, and `cyclic!` build inert ordered projectors.
+`function!(head, args...)` remains the fallback when there is no
+Spenso-specific builder, and `s!(mu)` is the lightweight plain-symbol helper for
+labels and indices.
 
 When adding new heads, use the symbol-constructor macro for the semantic class
 you need: `tensor_symbol!(F)`, `vector_symbol!(p)`,
@@ -214,8 +235,10 @@ let rhs = function!(
 
 Use `function!(W_.f_, args...)` when the head itself is arbitrary Symbolica
 syntax rather than a tagged tensor class. Use `function!(ETS.metric, a, b)` for
-metric rules and `function!(T.dot, a, b)` for compact dot rules. `chain!` and
-`trace!` are also the preferred pattern builders for ordered containers.
+metric rules and `function!(T.dot, a, b)` for compact dot rules. `chain!` is the
+preferred pattern builder for ordered open containers; `trace!` is the preferred
+builder for cyclic closed containers; `trace_sym!` is the preferred builder for
+fully symmetric closed trace invariants.
 
 `W_` contains the plain Symbolica wildcards used inside these constructors:
 `x_` matches one atom, `x__` matches one or more atoms, and `x___` matches zero
@@ -351,8 +374,11 @@ rule in the same family, run to a fixed point with an equality guard.
 
 Keep semantic boundaries clear:
 
-- `chain` and `trace` stay opaque ordered containers except inside chain/trace
-  materialization or their dedicated algebraic simplifiers.
+- `chain` stays an opaque ordered container except inside chain materialization
+  or dedicated algebraic simplifiers. Ordinary non-empty `trace` stores its
+  factors under `cyclic(...)`; symmetric trace invariants use `sym(...)`.
+  Match them through `trace!`, `trace_sym!`, or the trace helper APIs that
+  flatten only the cyclic wrapper.
 - Four-dimensional identities must match a four-dimensional representation in
   the pattern or check it in the map.
 - Fresh dummies belong at parser materialization or explicit dynamic rewrite

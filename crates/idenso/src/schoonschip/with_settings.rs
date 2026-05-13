@@ -3,8 +3,9 @@ use std::sync::LazyLock;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    symbolica_atom,
     tensors::parametric::atomcore::PatternReplacement,
-    trace,
+    trace, trace_sym,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView},
@@ -81,37 +82,62 @@ static METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN: LazyLock<[Replacement; 3]> = LazyL
         ),
     ]
 });
-static METRIC_FUNCTION_CONTRACTIONS_ON_TRACE: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
+static METRIC_FUNCTION_CONTRACTIONS_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
     let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
 
-    fn trace_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace!(W_.y_, W_.x___, a.into(), W_.y___)
+    fn trace_cyclic_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
+        trace!(W_.y_, a.into(), W_.x___)
     }
-    let function_with_replacement = trace_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
+    fn trace_sym_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
+        trace_sym!(W_.y_, a.into(), W_.x___)
+    }
+    let cyclic_function_with_replacement = trace_cyclic_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
+    let sym_function_with_replacement = trace_sym_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
 
     [
         // g(i,j)*trace(y,...,T(...,j,...),...)->trace(y,...,T(...,i,...),...)
         Replacement::new(
             (function!(ETS.metric, &self_dual, W_.c_)
-                * trace_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
+                * trace_cyclic_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
             .to_pattern(),
-            function_with_replacement.clone(),
+            cyclic_function_with_replacement.clone(),
         ),
         // g(i,j)*trace(y,...,T(...,d(j),...),...)->trace(y,...,T(...,i,...),...)
         Replacement::new(
             (function!(ETS.metric, W_.c_, &dualizable)
-                * trace_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
+                * trace_cyclic_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
             .to_pattern(),
-            function_with_replacement.clone(),
+            cyclic_function_with_replacement.clone(),
         ),
         // g(i,d(j))*trace(y,...,T(...,j,...),...)->trace(y,...,T(...,i,...),...)
         Replacement::new(
             (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * trace_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
+                * trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
             .to_pattern(),
-            function_with_replacement.clone(),
+            cyclic_function_with_replacement.clone(),
+        ),
+        // g(i,j)*trace(y,sym(...,T(...,j,...),...))->trace(y,sym(...,T(...,i,...),...))
+        Replacement::new(
+            (function!(ETS.metric, &self_dual, W_.c_)
+                * trace_sym_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
+            .to_pattern(),
+            sym_function_with_replacement.clone(),
+        ),
+        // g(i,j)*trace(y,sym(...,T(...,d(j),...),...))->trace(y,sym(...,T(...,i,...),...))
+        Replacement::new(
+            (function!(ETS.metric, W_.c_, &dualizable)
+                * trace_sym_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
+            .to_pattern(),
+            sym_function_with_replacement.clone(),
+        ),
+        // g(i,d(j))*trace(y,sym(...,T(...,j,...),...))->trace(y,sym(...,T(...,i,...),...))
+        Replacement::new(
+            (function!(ETS.metric, W_.c_, &dualizable_dual)
+                * trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
+            .to_pattern(),
+            sym_function_with_replacement,
         ),
     ]
 });
@@ -260,22 +286,25 @@ static SCHOONSCHIP_VECTOR_ON_CHAIN: LazyLock<[Replacement; 3]> = LazyLock::new(|
     ]
 });
 
-static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
+static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
     let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
     let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-    fn trace_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace!(W_.x_, W_.x___, a.into(), W_.y___)
+    fn trace_cyclic_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
+        trace!(W_.x_, a.into(), W_.z___)
+    }
+    fn trace_sym_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
+        trace_sym!(W_.x_, a.into(), W_.z___)
     }
     [
         // trace(rep1,...,a(...,i,...),...)*p(...,i)->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
         Replacement::new(
-            (trace_(function!(W_.a_, W_.a___, &self_dual, W_.b___))
+            (trace_cyclic_(function!(W_.a_, W_.a___, &self_dual, W_.b___))
                 * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual.clone()]))
             .to_pattern(),
-            trace_(function!(
+            trace_cyclic_(function!(
                 W_.a_,
                 W_.a___,
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
@@ -284,10 +313,10 @@ static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 3]> = LazyLock::new(|
         ),
         // trace(rep1,...,a(...,i,...),...)*p(...,d(i))->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
         Replacement::new(
-            (trace_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
+            (trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
                 * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
             .to_pattern(),
-            trace_(function!(
+            trace_cyclic_(function!(
                 W_.a_,
                 W_.a___,
                 T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
@@ -296,10 +325,46 @@ static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 3]> = LazyLock::new(|
         ),
         // trace(rep1,...,a(...,d(i),...),...)*p(...,i)->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
         Replacement::new(
-            (trace_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
+            (trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
                 * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
             .to_pattern(),
-            trace_(function!(
+            trace_cyclic_(function!(
+                W_.a_,
+                W_.a___,
+                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped.clone()]),
+                W_.b___
+            )),
+        ),
+        // trace(rep1,sym(...,a(...,i,...),...))*p(...,i)->trace(rep1,sym(...,a(....,p(...,rep),...),...))
+        Replacement::new(
+            (trace_sym_(function!(W_.a_, W_.a___, &self_dual, W_.b___))
+                * T.rank1_::<0, _>([Atom::var(W_.c___), self_dual]))
+            .to_pattern(),
+            trace_sym_(function!(
+                W_.a_,
+                W_.a___,
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
+                W_.b___
+            )),
+        ),
+        // trace(rep1,sym(...,a(...,i,...),...))*p(...,d(i))->trace(rep1,sym(...,a(....,p(...,rep),...),...))
+        Replacement::new(
+            (trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
+                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_dual]))
+            .to_pattern(),
+            trace_sym_(function!(
+                W_.a_,
+                W_.a___,
+                T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable_stripped]),
+                W_.b___
+            )),
+        ),
+        // trace(rep1,sym(...,a(...,d(i),...),...))*p(...,i)->trace(rep1,sym(...,a(....,p(...,rep),...),...))
+        Replacement::new(
+            (trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
+                * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
+            .to_pattern(),
+            trace_sym_(function!(
                 W_.a_,
                 W_.a___,
                 T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped]),
@@ -336,16 +401,45 @@ impl SchoonschipWithSettings<'_> {
             .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR);
 
         let simplified = if self.settings.simplify_chain_like_functions {
-            simplified
-                .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN)
-                .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS_ON_TRACE)
-                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
-                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_TRACE)
+            self.apply_chain_like_rules(simplified)
         } else {
             simplified
         };
 
         simplified.normalize_dots()
+    }
+
+    fn apply_chain_like_rules(&self, expression: Atom) -> Atom {
+        let (metric_trace_rules, metric_trace_sym_rules) =
+            METRIC_FUNCTION_CONTRACTIONS_ON_TRACE.split_at(3);
+        let (vector_trace_rules, vector_trace_sym_rules) = SCHOONSCHIP_VECTOR_ON_TRACE.split_at(3);
+
+        let simplified = expression
+            .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN)
+            .replace_multiple_repeat(metric_trace_rules)
+            .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
+            .replace_multiple_repeat(vector_trace_rules);
+
+        if Self::contains_symmetric_projector(simplified.as_view()) {
+            simplified
+                .replace_multiple_repeat(metric_trace_sym_rules)
+                .replace_multiple_repeat(vector_trace_sym_rules)
+        } else {
+            simplified
+        }
+    }
+
+    fn contains_symmetric_projector(expr: AtomView<'_>) -> bool {
+        match expr {
+            AtomView::Fun(f) => {
+                f.get_symbol() == *symbolica_atom::SYM
+                    || f.iter().any(Self::contains_symmetric_projector)
+            }
+            AtomView::Add(add) => add.iter().any(Self::contains_symmetric_projector),
+            AtomView::Mul(mul) => mul.iter().any(Self::contains_symmetric_projector),
+            AtomView::Pow(pow) => pow.iter().any(Self::contains_symmetric_projector),
+            AtomView::Num(_) | AtomView::Var(_) => false,
+        }
     }
 }
 

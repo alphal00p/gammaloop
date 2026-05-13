@@ -12,7 +12,6 @@ use symbolica::{
 };
 
 use super::{NetworkParse, ParseSettings, ShadowedStructure, ShorthandParsing};
-use crate::network::tags::SPENSO_TAG;
 use crate::structure::{
     HasName, NamedStructure, OrderedStructure, PermutedStructure, StructureContract,
     StructureError, TensorStructure,
@@ -20,6 +19,7 @@ use crate::structure::{
     representation::LibraryRep,
     slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError},
 };
+use crate::{network::tags::SPENSO_TAG, symbolica_atom};
 
 /// Chooses how tensor structure is inferred from symbolic syntax.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -307,8 +307,8 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         }
 
         let mut slots = Vec::new();
-        for factor in &args[1..] {
-            Self::append_syntactic_slots(*factor, &mut slots)?;
+        for factor in symbolica_atom::trace_factor_views(&args[1..]) {
+            Self::append_syntactic_slots(factor, &mut slots)?;
         }
 
         Self::from_slots(slots)
