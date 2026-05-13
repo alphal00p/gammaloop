@@ -13,14 +13,14 @@ commands = [
 
     "remove processes",
 	"set global kv global.generation.uv.generate_integrated=true",
-	"import graphs ./bubble_dod1.dot -p bubble_dod1 -i scalar_bubble_below_thres",
+	"import graphs ./examples/cli/scalar_topologies/bubble_dod1.dot -p bubble_dod1 -i scalar_bubble_below_thres",
 	#"import graphs ./tests/resources/graphs/scalar/dod1_bubble.dot -p bubble_dod1 -i scalar_bubble_below_thres",
 	"generate existing -p bubble_dod1 -i scalar_bubble_below_thres",
     "duplicate integrand -p bubble_dod1 -i scalar_bubble_below_thres --output_process_name bubble_dod1 --output_integrand_name scalar_bubble_above_thres",
     "save dot",
 
     "set global kv global.generation.uv.generate_integrated=false",
-    "import graphs ./bubble_dod1.dot -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres",
+    "import graphs ./examples/cli/scalar_topologies/bubble_dod1.dot -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres",
     #"import graphs ./tests/resources/graphs/scalar/dod1_bubble.dot -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres",
     "generate existing -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres",
     "duplicate integrand -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres --output_process_name bubble_dod1_no_integrated_UV --output_integrand_name scalar_bubble_above_thres",
