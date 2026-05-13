@@ -3,13 +3,15 @@ use std::sync::LazyLock;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    rep_,
     structure::representation::{Minkowski, RepName},
+    tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
-    id::Context,
+    id::{Context, Replacement},
     utils::Settable,
 };
 
@@ -43,6 +45,13 @@ static BISPINOR_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
 });
 
 static EPSILON_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbolica::symbol!("sigma"));
+
+static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    [Replacement::new(
+        trace!(rep_!(0; W_.d_)).to_pattern(),
+        Atom::var(W_.d_),
+    )]
+});
 
 /// Controls how open gamma chains are reordered during simplification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1210,9 +1219,7 @@ impl DiracChainSimplifier {
 
     fn simplify_trace_terminal(trace: AtomView) -> Option<Atom> {
         let trace = trace.to_owned();
-        let simplified = trace
-            .replace(function!(T.trace, T.rep_::<0, _>([W_.d_])).to_pattern())
-            .with(Atom::var(W_.d_));
+        let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
         (simplified != trace).then_some(simplified)
     }
 }
