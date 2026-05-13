@@ -1,14 +1,30 @@
+use std::sync::LazyLock;
+
 use spenso::{
+    chain,
     network::tags::SPENSO_TAG as T,
+    self_dual_,
     structure::representation::{LibraryRep, RepName},
+    tensors::parametric::atomcore::PatternReplacement,
+    trace,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     function,
-    id::Match,
+    id::{Match, Replacement},
 };
 
 use crate::W_;
+
+static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    let rep = self_dual_!(1; W_.d_, W_.i_);
+    let stripped_rep = self_dual_!(1; W_.d_);
+
+    [Replacement::new(
+        chain!(&rep, &rep, W_.a___).to_pattern(),
+        trace!(stripped_rep, W_.a___),
+    )]
+});
 
 pub trait Chain {
     /// combine adjacent chain expressions into a single chain expression.
@@ -110,12 +126,8 @@ impl<'a> Chain for AtomView<'a> {
     }
 
     fn normalize_chains(&self) -> Atom {
-        let rep = T.self_dual_::<1, _>([W_.d_, W_.i_]);
-        let stripped_rep = T.self_dual_::<1, _>([W_.d_]);
-
-        let traced_chain = function!(T.chain, rep, rep, W_.a___);
-        self.replace(traced_chain)
-            .with(function!(T.trace, stripped_rep, W_.a___))
+        self.to_owned()
+            .replace_multiple_repeat(CHAIN_NORMALIZATIONS.as_ref())
     }
 }
 
