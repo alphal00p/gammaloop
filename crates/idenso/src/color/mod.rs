@@ -81,6 +81,26 @@ impl ColorSymbols {
             .finish()
     }
 
+    pub fn symmetric_d<'a>(&self, rep: impl Into<AtomOrView<'a>>, args: Vec<Atom>) -> Atom {
+        args.into_iter()
+            .fold(
+                FunctionBuilder::new(*COLOR_D_SYMBOL).add_arg(rep),
+                |d, arg| d.add_arg(arg),
+            )
+            .finish()
+    }
+
+    pub fn d33<'a, 'b>(
+        &self,
+        left: impl Into<AtomOrView<'a>>,
+        right: impl Into<AtomOrView<'b>>,
+    ) -> Atom {
+        FunctionBuilder::new(*COLOR_D33_SYMBOL)
+            .add_arg(left)
+            .add_arg(right)
+            .finish()
+    }
+
     // Generator for the adjoint representation of SU(N)
     pub fn t_strct<Aind: AbsInd>(
         &self,
@@ -325,6 +345,44 @@ macro_rules! color_f {
             spenso::symbolica_atom::IntoAtom::into_atom($a),
             spenso::symbolica_atom::IntoAtom::into_atom($b),
             spenso::symbolica_atom::IntoAtom::into_atom($c),
+        )
+    };
+}
+
+/// Alias for [`color_t!`].
+#[macro_export]
+macro_rules! t {
+    ($a:expr $(,)?) => {
+        $crate::color_t!($a)
+    };
+}
+
+/// Alias for [`color_f!`].
+#[macro_export]
+macro_rules! f {
+    ($a:expr, $b:expr, $c:expr $(,)?) => {
+        $crate::color_f!($a, $b, $c)
+    };
+}
+
+/// Builds a symmetric color invariant `d(rep,args...)`.
+#[macro_export]
+macro_rules! color_d {
+    ($rep:expr $(, $arg:expr)+ $(,)?) => {
+        $crate::color::CS.symmetric_d(
+            spenso::symbolica_atom::IntoAtom::into_atom($rep),
+            vec![$(spenso::symbolica_atom::IntoAtom::into_atom($arg)),+],
+        )
+    };
+}
+
+/// Builds a contracted symmetric color invariant `d33(left,right)`.
+#[macro_export]
+macro_rules! color_d33 {
+    ($left:expr, $right:expr $(,)?) => {
+        $crate::color::CS.d33(
+            spenso::symbolica_atom::IntoAtom::into_atom($left),
+            spenso::symbolica_atom::IntoAtom::into_atom($right),
         )
     };
 }

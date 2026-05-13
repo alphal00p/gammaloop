@@ -75,24 +75,38 @@ and what to use when matching it in a replacement rule.
 | Surface form | Meaning | Concrete builder | Tag or symbol | Pattern form |
 | --- | --- | --- | --- | --- |
 | `f(args...)` with no representation-tagged syntax | pure scalar Symbolica expression | `function!(f, args...)` | no Spenso tensor tag | ordinary Symbolica pattern |
-| `pure_scalar(expr)` | force `expr` to parse as a scalar | `function!(T.pure_scalar, expr)` | `SPENSO_TAG.pure_scalar` symbol | `function!(T.pure_scalar, W_.x_)` |
-| `rep(dim)` | stripped representation, for compact notation or traces | `rep.to_symbolic([])` or `IntoAtom` on `Representation` | representation head tagged `representation` | `T.rep_::<N, _>([W_.d_])` |
-| `rep(dim, i)` | indexed representation slot | `slot!(rep, i)` | representation head tagged `representation`; maybe `self_dual` or `dualizable` | `T.rep_::<N, _>([W_.d_, W_.i_])` |
-| `dind(rep(dim, i))` | dual slot | `slot.dual().to_atom()` or explicit `AIND_SYMBOLS.dind` | `dind` dual wrapper plus representation tags | `T.dualizable_dual_::<N, _>([W_.d_, W_.i_])` |
-| `aind(slot...)` | bundle of structural slots inside one argument | `function!(AIND_SYMBOLS.aind, slots...)` | `AIND_SYMBOLS.aind` symbol | `function!(AIND_SYMBOLS.aind, W_.x___)` |
-| `F(..., slot, ...)` | ordinary tensor leaf; direct slots define structure | `tensor!(F, args...)` | head tagged `tensor` | `T.tensor_::<N, _>([W_.a___])` or `function!(W_.f_, args...)` |
-| `p(..., rep(dim))` | compact rank-one tensor shorthand | `vector!(p, args...)`, `p!(args...)`, `q!(args...)` | head tagged `tensor` and `rank1` | `T.rank1_::<N, _>([W_.a___, T.rep_::<M, _>([W_.d_])])` |
-| `g(slot_a, slot_b)` | metric tensor syntax | `function!(ETS.metric, a, b)` | `ETS.metric` symbol | `function!(ETS.metric, a, b)` |
-| `g(p(rep), q(rep))` | compact scalar product shorthand | `function!(ETS.metric, p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, T.rank1_::<0, _>(...), T.rank1_::<1, _>(...))` |
-| `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `function!(T.dot, p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
+| `pure_scalar(expr)` | force `expr` to parse as a scalar | `pure_scalar!(expr)` | `SPENSO_TAG.pure_scalar` symbol | `function!(T.pure_scalar, W_.x_)` |
+| `rep(dim)` | stripped representation, for compact notation or traces | `mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(NA)` | representation head tagged `representation` | `rep_!(N; W_.d_)` |
+| `rep(dim, i)` | indexed representation slot | `mink!(D, mu)`, `bis!(D, i)`, `cof!(NC, i)`, `slot!(rep, i)` | representation head tagged `representation`; maybe `self_dual` or `dualizable` | `rep_!(N; W_.d_, W_.i_)`, `self_dual_!(N; ...)`, `dualizable_!(N; ...)` |
+| `dind(rep(dim, i))` | dual slot | `dind!(cof!(NC, i))` or `slot.dual().to_atom()` | `dind` dual wrapper plus representation tags | `dualizable_dual_!(N; W_.d_, W_.i_)` |
+| `aind(slot...)` | bundle of structural slots inside one argument | `aind!(slots...)` | `AIND_SYMBOLS.aind` symbol | `function!(AIND_SYMBOLS.aind, W_.x___)` |
+| `F(..., slot, ...)` | ordinary tensor leaf; direct slots define structure | `tensor!(F, args...)` | head tagged `tensor` | `tensor_!(N; W_.a___)` or `function!(W_.f_, args...)` |
+| `p(..., rep(dim))` | compact rank-one tensor shorthand | `vector!(p, args...)`, `p!(args...)`, `q!(args...)` | head tagged `tensor` and `rank1` | `rank1_!(N; W_.a___, rep_!(M; W_.d_))` |
+| `g(slot_a, slot_b)` | metric tensor syntax | `g!(a, b)` or `metric!(a, b)` | `ETS.metric` symbol | `function!(ETS.metric, a, b)` |
+| `g(p(rep), q(rep))` | compact scalar product shorthand | `g!(p, q)` or `metric!(p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))` |
+| `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
 | `chain(start, end, factors...)` | ordered open chain | `chain!(start, end, factors...)` | `SPENSO_TAG.chain` symbol; ordered arguments | `chain!(start, end, factors...)` |
 | `trace(rep, factors...)` | ordered closed trace | `trace!(rep, factors...)` | `SPENSO_TAG.trace` symbol; ordered arguments | `trace!(rep, factors...)` |
-| `bracket(expr...)` | product-like parser grouping of network factors | `function!(T.bracket, expr...)` | `SPENSO_TAG.bracket` symbol | `function!(T.bracket, W_.x___)` |
+| `bracket(expr...)` | product-like parser grouping of network factors | `bracket!(expr...)` | `SPENSO_TAG.bracket` symbol | `function!(T.bracket, W_.x___)` |
 | `broadcast(expr)` | apply a scalar/broadcast function to the parsed inner tensor | `broadcast_symbol!(f)` then `function!(f, expr)` | head tagged `broadcast` | `function!(W_.f_, W_.x_)` with a broadcast-head condition |
 | `sum`, `product`, `integer power` | ordinary Symbolica arithmetic, parsed recursively | `+`, `*`, `.pow(...)` | Symbolica arithmetic nodes | ordinary Symbolica pattern, with conditions for exponent cases |
 
 `dot` is a two-argument shorthand. A three-argument spelling such as
 `dot(rep, p, q)` is not parser syntax.
+
+For compact vector arguments, `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
+materialize to the same expanded tensor product:
+
+```text
+p(rep(d)) * q(rep(d))
+```
+
+The difference is the Symbolica head. `g` is the actual metric tensor head
+(`ETS.metric`), so it is also the spelling for explicit slot metrics such as
+`g(rep(d), rep(e))`. `dot` is only the compact scalar-product shorthand, and its
+symbol carries Symbolica's `Linear` attribute while `g` does not. This matters
+before parser materialization, because Symbolica may distribute `dot` over sums
+as ordinary linear algebra syntax.
 
 `chain` and `trace` are ordered and non-symmetric. Their factor order is part of
 the algebra. A factor inside a chain uses the symbols `in` and `out` as local
@@ -132,30 +146,36 @@ carries the `representation` tag; a self-dual representation also carries
 `self_dual`; a dualizable representation also carries `dualizable`. Tensor heads
 such as `F`, `gamma`, and `t` carry `tensor`, while vector heads such as `p`,
 `q`, `u`, and `v` carry both `tensor` and `rank1`. Broadcast heads carry
-`broadcast`, index symbols may carry `index`, and `upper`/`lower` are available
-for oriented index syntax.
+`broadcast`.
 
 The expression macros are the concrete builders for the rows in the surface-form
-table. `slot!(rep, mu)` builds a concrete `Slot<LibraryRep, Aind>` and prints as
-`rep(dim, mu)`. `tensor!(F, args...)` creates a tensor-tagged head.
-`vector!(p, args...)`, and the short `p!(...)` and `q!(...)` forms, create
-rank-one tensor heads. `chain!` and `trace!` build the ordered containers,
-including iterator forms `chain!(start, end; factors)` and
-`trace!(rep; factors)`. `sym!` and `antisym!` build inert ordered projectors.
-`function!(head, args...)` remains the fallback when there is no Spenso-specific
-builder, and `s!(mu)` is the lightweight plain-symbol helper for labels and
-indices.
+table. Representation helpers such as `mink!`, `euc!`, `lor!`, `bis!`, `spf!`,
+`cof!`, `cos!`, and `coad!` build stripped or indexed representation atoms.
+Their dual-representation aliases `spaf!`, `coaf!`, and `coas!` are available
+when explicit dual representation syntax is needed. `slot!(rep, mu)` builds a
+concrete `Slot<LibraryRep, Aind>` and prints as `rep(dim, mu)`. `tensor!(F,
+args...)` creates a tensor-tagged head. `vector!(p, args...)`, and the short
+`p!(...)` and `q!(...)` forms, create rank-one tensor heads. `g!`/`metric!`,
+`dot!`, `pure_scalar!`, `bracket!`, `aind!`, and `dind!` cover the named parser
+forms. `chain!` and `trace!` build the ordered containers, including iterator
+forms `chain!(start, end; factors)` and `trace!(rep; factors)`. `chain_factor!`
+builds a generic ordered factor with explicit `in` and `out` placeholders.
+`sym!` and `antisym!` build inert ordered projectors. `function!(head, args...)`
+remains the fallback when there is no Spenso-specific builder, and `s!(mu)` is
+the lightweight plain-symbol helper for labels and indices.
 
 When adding new heads, use the symbol-constructor macro for the semantic class
 you need: `tensor_symbol!(F)`, `vector_symbol!(p)`,
 `representation_symbol!(rep)`, `self_dual_symbol!(mink)`,
-`dualizable_symbol!(cof)`, `index_symbol!(i)`, or
-`broadcast_symbol!(sqrt)`. These macros are the concrete side of the same tag
-system used by the pattern constructors.
+`dualizable_symbol!(cof)`, or `broadcast_symbol!(sqrt)`. These macros are the
+concrete side of the same tag system used by the pattern constructors.
 
 For concrete expressions in tests and examples, prefer the expression macros:
 
 ```rust
+use idenso::gamma;
+use spenso::{chain, dot, p, q, slot};
+
 let mu = slot!(mink4, mu);
 let expr = chain!(
     slot!(bis4, i),
@@ -163,28 +183,30 @@ let expr = chain!(
     gamma!(mu),
     gamma!(slot!(mink4, nu)),
 );
-let dot = function!(T.dot, p!(&mink4), q!(&mink4));
+let dot = dot!(p!(&mink4), q!(&mink4));
 ```
 
-For replacement rules, use wildcard heads with the same tags instead of naming
-one concrete symbol. `T.rep_::<N, _>(args)` matches any representation syntax;
-`T.self_dual_::<N, _>(args)` restricts that to self-dual representations;
-`T.dualizable_::<N, _>(args)` and `T.dualizable_dual_::<N, _>(args)` match the
-two orientations of dualizable representations; `T.tensor_::<N, _>(args)`
-matches any tensor-tagged head; and `T.rank1_::<N, _>(args)` matches any
-rank-one tensor head. Numbered constructors create independent wildcard heads,
-so `rank1_::<0, _>` and `rank1_::<1, _>` can match two different vector symbols
-in the same rule.
+For replacement rules, use wildcard-head macros with the same tags instead of
+naming one concrete symbol. `rep_!(N; args...)` matches any representation
+syntax; `self_dual_!(N; args...)` restricts that to self-dual representations;
+`dualizable_!(N; args...)` and `dualizable_dual_!(N; args...)` match the two
+orientations of dualizable representations; `tensor_!(N; args...)` matches any
+tensor-tagged head; and `rank1_!(N; args...)` matches any rank-one tensor head.
+Numbered constructors create independent wildcard heads, so `rank1_!(0; ...)`
+and `rank1_!(1; ...)` can match two different vector symbols in the same rule.
+These macros return atoms, not patterns. Put `.to_pattern()` on the complete
+left-hand side after composing products, sums, or fixed-head functions.
 
 ```rust
-let slot = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-let stripped = T.self_dual_::<0, _>([W_.d_]);
-let lhs = T.rank1_::<0, _>([W_.a___, &slot])
-    * T.rank1_::<1, _>([W_.b___, &slot]);
+use spenso::{rank1_, self_dual_};
+
+let slot = self_dual_!(0; W_.d_, W_.i_);
+let stripped = self_dual_!(0; W_.d_);
+let lhs = rank1_!(0; W_.a___, &slot) * rank1_!(1; W_.b___, &slot);
 let rhs = function!(
     T.dot,
-    T.rank1_::<0, _>([W_.a___, &stripped]),
-    T.rank1_::<1, _>([W_.b___, &stripped]),
+    rank1_!(0; W_.a___, &stripped),
+    rank1_!(1; W_.b___, &stripped),
 );
 ```
 
@@ -202,10 +224,11 @@ structural predicates, or local predicates such as `not_slot(...)` to prevent
 variadic tails from swallowing structural slots.
 
 idenso adds domain-specific expression macros for common Dirac objects:
-`gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. Use these in tests and examples
-when they make the expression read like the algebra. In generic rewrite rules,
-still match the structural class with Spenso tag patterns when the rule is not
-specific to one concrete head.
+`gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. It also has color builders
+`color_t!`, `t!`, `color_f!`, `f!`, `color_d!`, and `color_d33!`. Use these in
+tests and examples when they make the expression read like the algebra. In
+generic rewrite rules, still match the structural class with Spenso tag patterns
+when the rule is not specific to one concrete head.
 
 ## Rust Rewrite Idioms
 
@@ -257,18 +280,18 @@ impl AlgebraSimplifier<'_> {
 Use private static replacement tables for local, static identities:
 
 ```rust
+use spenso::{rank1_, self_dual_};
+
 static VECTOR_DOT_PRODUCTS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let slot = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let stripped = T.self_dual_::<0, _>([W_.d_]);
+    let slot = self_dual_!(0; W_.d_, W_.i_);
+    let stripped = self_dual_!(0; W_.d_);
 
     [Replacement::new(
-        (T.rank1_::<0, _>([W_.a___, &slot])
-            * T.rank1_::<1, _>([W_.b___, &slot]))
-        .to_pattern(),
+        (rank1_!(0; W_.a___, &slot) * rank1_!(1; W_.b___, &slot)).to_pattern(),
         function!(
             T.dot,
-            T.rank1_::<0, _>([W_.a___, &stripped]),
-            T.rank1_::<1, _>([W_.b___, &stripped]),
+            rank1_!(0; W_.a___, &stripped),
+            rank1_!(1; W_.b___, &stripped),
         ),
     )]
 });

@@ -1,7 +1,9 @@
 use std::sync::LazyLock;
 
 use spenso::{
+    dualizable_, dualizable_dual_,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    rank1_, rep_, self_dual_,
     tensors::parametric::atomcore::PatternReplacement,
 };
 use symbolica::{
@@ -13,31 +15,27 @@ use symbolica::{
 use crate::W_;
 
 static ASYMMETRIC_SCHOONSCHIP_VECTOR_IN_VECTOR: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let stripped = T.rep_::<0, _>([W_.d_]);
+    let stripped = rep_!(0; W_.d_);
 
     [
         //  p(...,q(..,rep)) is asymmetric, so we replace it with a dot product, using a schoonschiped metric:
         //  p(...,q(..,rep)) => g(p(...,rep), q(..,rep))
         Replacement::new(
-            T.rank1_::<0, _>([
-                Atom::var(W_.c___),
-                T.rank1_::<1, _>([&Atom::var(W_.a___), &stripped]),
-            ])
-            .to_pattern(),
+            rank1_!(0; W_.c___, rank1_!(1; W_.a___, &stripped)).to_pattern(),
             ETS.metric(
-                T.rank1_::<0, _>([&Atom::var(W_.c___), &stripped]),
-                T.rank1_::<1, _>([&Atom::var(W_.a___), &stripped]),
+                rank1_!(0; W_.c___, &stripped),
+                rank1_!(1; W_.a___, &stripped),
             ),
         ),
     ]
 });
 
 static REDUNDANT_METRIC_SCHOONSCHIPS: LazyLock<[Replacement; 4]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_stripped = T.dualizable_::<0, _>([W_.d_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
+    let self_dual = self_dual_!(0; W_.d_, W_.i_);
+    let self_dual_stripped = self_dual_!(0; W_.d_);
+    let dualizable = dualizable_!(0; W_.d_, W_.i_);
+    let dualizable_stripped = dualizable_!(0; W_.d_);
+    let dualizable_dual = dualizable_dual_!(0; W_.d_, W_.i_);
 
     [
         // g(mu,p(...,rep)) is redundant:
@@ -46,40 +44,35 @@ static REDUNDANT_METRIC_SCHOONSCHIPS: LazyLock<[Replacement; 4]> = LazyLock::new
             function!(
                 ETS.metric,
                 &self_dual,
-                T.rank1_::<0, _>([Atom::var(W_.c___), self_dual_stripped])
+                rank1_!(0; W_.c___, self_dual_stripped)
             )
             .to_pattern(),
-            T.rank1_::<0, _>([Atom::var(W_.c___), self_dual.clone()]),
+            rank1_!(0; W_.c___, self_dual.clone()),
         ),
         // Same thing but for dualizable
         Replacement::new(
             function!(
                 ETS.metric,
                 &dualizable,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped.clone()])
+                rank1_!(0; W_.c___, dualizable_stripped.clone())
             )
             .to_pattern(),
-            T.rank1_::<0, _>([Atom::var(W_.c___), dualizable]),
+            rank1_!(0; W_.c___, dualizable),
         ),
         // Same thing but for dual dualizable
         Replacement::new(
             function!(
                 ETS.metric,
                 &dualizable_dual,
-                T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_stripped])
+                rank1_!(0; W_.c___, dualizable_stripped)
             )
             .to_pattern(),
-            T.rank1_::<0, _>([Atom::var(W_.c___), dualizable_dual]),
+            rank1_!(0; W_.c___, dualizable_dual),
         ),
         // g(mu,p(...)) is also allowed (although a bit weird), here we normalize it to p(...,mu)
         Replacement::new(
-            function!(
-                ETS.metric,
-                &self_dual,
-                T.rank1_::<0, _>([Atom::var(W_.c___)])
-            )
-            .to_pattern(),
-            T.rank1_::<0, _>([Atom::var(W_.c___), self_dual]),
+            function!(ETS.metric, &self_dual, rank1_!(0; W_.c___)).to_pattern(),
+            rank1_!(0; W_.c___, self_dual),
         ),
     ]
 });
