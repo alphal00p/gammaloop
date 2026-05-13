@@ -207,29 +207,17 @@ impl DiracRuleDimension {
 }
 
 pub(super) fn simplify_dirac_chains_impl(expr: AtomView, settings: GammaSimplifySettings) -> Atom {
-    DiracChainSimplifier::new(settings).simplify(expr)
+    DiracSimplifier::new(&settings).simplify(expr)
 }
 
 #[derive(Debug, Clone, Copy)]
-struct DiracChainSimplifier {
-    settings: GammaSimplifySettings,
+struct DiracSimplifier<'settings> {
+    settings: &'settings GammaSimplifySettings,
 }
 
-impl DiracChainSimplifier {
-    fn new(settings: GammaSimplifySettings) -> Self {
+impl<'settings> DiracSimplifier<'settings> {
+    fn new(settings: &'settings GammaSimplifySettings) -> Self {
         Self { settings }
-    }
-
-    fn from_options(
-        chain_ordering: GammaChainOrdering,
-        evaluate_traces: bool,
-        expand_epsilon: bool,
-    ) -> Self {
-        Self::new(GammaSimplifySettings {
-            chain_ordering,
-            evaluate_traces,
-            expand_three_gamma_epsilon: expand_epsilon,
-        })
     }
 
     fn simplify(self, expr: AtomView) -> Atom {
@@ -386,11 +374,15 @@ fn dirac_chain_rewrite<
     } else {
         GammaChainOrdering::RepeatedPairs
     };
-    DiracChainSimplifier::from_options(ordering, EVALUATE_TRACES, EXPAND_EPSILON)
-        .rewrite_node(arg, context, out);
+    let settings = GammaSimplifySettings {
+        chain_ordering: ordering,
+        evaluate_traces: EVALUATE_TRACES,
+        expand_three_gamma_epsilon: EXPAND_EPSILON,
+    };
+    DiracSimplifier::new(&settings).rewrite_node(arg, context, out);
 }
 
-impl DiracChainSimplifier {
+impl DiracSimplifier<'_> {
     fn contract_adjacent_gamma_pair(
         start: &Atom,
         end: &Atom,
@@ -992,7 +984,7 @@ fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
     matches!(arg, AtomView::Var(symbol) if symbol.get_symbol() == expected)
 }
 
-impl DiracChainSimplifier {
+impl DiracSimplifier<'_> {
     fn simplify_trace_node(self, trace: AtomView) -> Option<Atom> {
         let AtomView::Fun(f) = trace else {
             return None;
