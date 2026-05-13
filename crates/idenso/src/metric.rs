@@ -20,6 +20,7 @@ use spenso::{
         representation::{LibraryRep, LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
+    symbolica_atom::TensorCollectExt,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomType, AtomView, FunctionBuilder, Symbol},
@@ -102,7 +103,7 @@ pub fn not_wraped_aind(header: Symbol) -> impl FilterFn + 'static {
 }
 
 pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
-    let mut expr = view.expand();
+    let mut expr = view.collect_tensors();
     let dim = RS.d_;
     let dima = Atom::var(dim);
     let settings = MatchSettings {

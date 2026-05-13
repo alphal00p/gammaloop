@@ -96,7 +96,9 @@ impl<'a> Chain for AtomView<'a> {
         );
         // println!("{}", collected);
 
-        self.replace(product)
+        self.to_owned()
+            .collect_symbol::<i16>(T.chain, None, None)
+            .replace(product)
             .repeat()
             .with(collected)
             .normalize_chains()
@@ -177,6 +179,30 @@ mod tests {
         let rep = Bispinor {}.into();
 
         assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
+    }
+
+    #[test]
+    fn collect_chains_composes_common_prefix_terms_before_factoring() {
+        let r = TestReps::new();
+        let shared_prefix = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+        );
+        let first_tail = chain!(
+            slot!(r.bis4, b),
+            slot!(r.bis4, c),
+            gamma!(slot!(r.mink4, nu)),
+        );
+        let second_tail = chain!(
+            slot!(r.bis4, b),
+            slot!(r.bis4, d),
+            gamma!(slot!(r.mink4, rho)),
+        );
+        let chains = shared_prefix.clone() * first_tail + shared_prefix * second_tail;
+        let rep = Bispinor {}.into();
+
+        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+chain(bis(4,a),bis(4,d),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,rho)))");
     }
 
     #[test]

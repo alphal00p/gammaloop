@@ -84,7 +84,7 @@ fn sun_simplify_id2_open_chain_separated_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*CA*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))+CF*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(-1/2*CA+CF)*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn sun_simplify_id45_open_chain_separated_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*CA*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))+CF*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(-1/2*CA+CF)*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn sun_simplify_id52_repeated_trace_pair() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i1, i2, i1, i2);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*CA*NA*TR+CF*NA*TR");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(-1/2*CA+CF)*NA*TR");
 }
 
 #[test]

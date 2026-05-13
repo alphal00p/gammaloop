@@ -19,6 +19,7 @@ use spenso::{
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
+    symbolica_atom::TensorCollectExt,
 };
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
@@ -324,14 +325,18 @@ fn direct_contract_smallest_expanded_sum_side<Aind: AbsInd + DummyAind + Parseab
     let slot_pairs = contracted_slot_pairs(left, right, left_positions, right_positions)?;
 
     if expression_size(left_expr) <= expression_size(right_expr) {
-        direct_contract_expanded_sum_side::<Aind>(&left_expr.expand(), right_expr, &slot_pairs)
+        direct_contract_expanded_sum_side::<Aind>(
+            &left_expr.collect_tensors(),
+            right_expr,
+            &slot_pairs,
+        )
     } else {
         let reversed_slot_pairs: Vec<_> = slot_pairs
             .into_iter()
             .map(|(left_slot, right_slot)| (right_slot, left_slot))
             .collect();
         direct_contract_expanded_sum_side::<Aind>(
-            &right_expr.expand(),
+            &right_expr.collect_tensors(),
             left_expr,
             &reversed_slot_pairs,
         )

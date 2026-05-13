@@ -12,6 +12,7 @@ use spenso::{
         representation::{LibraryRep, Minkowski, RepName},
         slot::{AbsInd, DummyAind, ParseableAind},
     },
+    symbolica_atom::TensorCollectExt,
     utils::to_superscript,
 };
 use symbolica::{
@@ -667,7 +668,7 @@ fn collect_gammas(expr: &mut Atom) {
     while expr.replace_multiple_into(GAMMA_COLLECTION_RULES.as_ref(), &mut atom) {
         // println!("collecting:{atom}");
         std::mem::swap(expr, &mut atom);
-        *expr = expr.expand();
+        *expr = expr.collect_tensors();
         // println!("expanding::{expr}");
         *expr = expr.simplify_metrics();
         // println!("simplifying::{expr}");
@@ -760,7 +761,7 @@ fn gamma_simplify_impl(expr: AtomView) -> Atom {
         loop {
             let new = expr
                 .replace_multiple(GAMMA_CHAIN_REDUCTION_RULES.as_ref())
-                .expand()
+                .collect_tensors()
                 .simplify_metrics();
             if new == *expr {
                 break;
@@ -863,7 +864,7 @@ fn gamma_simplify_impl(expr: AtomView) -> Atom {
             )
             .repeat()
             .with(Atom::var(RS.d_) * 4)
-            .expand()
+            .collect_tensors()
             .simplify_metrics();
     }
 

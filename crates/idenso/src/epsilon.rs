@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use spenso::g;
+use spenso::{g, symbolica_atom::TensorCollectExt};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
@@ -98,7 +98,7 @@ impl EpsilonSimplifierPass {
                         **out = rewritten;
                     }
                 })
-                .expand()
+                .collect_metrics()
                 .simplify_metrics();
 
             if next == current {

@@ -1,3 +1,4 @@
+use spenso::symbolica_atom::TensorCollectExt;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 pub(super) const TRACE_SCHOONSCHIP: bool = false;
@@ -46,13 +47,13 @@ pub(super) fn distribute_smallest_expanded_sum_side(left: &Atom, right: &Atom) -
     match (is_sum(left), is_sum(right)) {
         (true, true) => {
             if expression_size(left) <= expression_size(right) {
-                distribute_expanded_left_sum(&left.expand(), right)
+                distribute_expanded_left_sum(&left.collect_tensors(), right)
             } else {
-                distribute_expanded_right_sum(left, &right.expand())
+                distribute_expanded_right_sum(left, &right.collect_tensors())
             }
         }
-        (true, false) => distribute_expanded_left_sum(&left.expand(), right),
-        (false, true) => distribute_expanded_right_sum(left, &right.expand()),
+        (true, false) => distribute_expanded_left_sum(&left.collect_tensors(), right),
+        (false, true) => distribute_expanded_right_sum(left, &right.collect_tensors()),
         (false, false) => left * right,
     }
 }
