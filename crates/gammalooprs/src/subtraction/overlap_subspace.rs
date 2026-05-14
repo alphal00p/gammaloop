@@ -349,12 +349,13 @@ pub(crate) fn find_center(
     let center_is_valid = |center: &LoopMomenta<F<f64>>| {
         esurfaces_to_consider.iter().all(|&existing_esurface_id| {
             let esurface_id = existing_esurfaces[existing_esurface_id];
-            let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
-
-            let edge_masses = &overlap_input.edge_masses;
-            let esurface = &overlap_input.thresholds[esurface_id];
-
-            esurface.compute_from_momenta(lmb, edge_masses, center, external_momenta) < F(0.0)
+            subspace_esurface_value_at_center(
+                overlap_input,
+                esurface_id,
+                center,
+                loop_moms,
+                external_momenta,
+            ) < F(0.0)
         })
     };
 
@@ -406,19 +407,40 @@ pub(crate) fn check_global_center(
     overlap_input: &OverlapInput,
     existing_esurfaces: &ExistingThresholds,
     center: &LoopMomenta<F<f64>>,
+    loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
 ) -> bool {
     existing_esurfaces.iter().all(|esurface_id| {
-        let esurface = &overlap_input.thresholds[*esurface_id];
-
-        let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
-        let edge_masses = &overlap_input.edge_masses;
-
-        let esurface_val =
-            esurface.compute_from_momenta(lmb, edge_masses, center, external_momenta);
-
-        esurface_val < F(0.0)
+        subspace_esurface_value_at_center(
+            overlap_input,
+            *esurface_id,
+            center,
+            loop_moms,
+            external_momenta,
+        ) < F(0.0)
     })
+}
+
+fn subspace_esurface_value_at_center(
+    overlap_input: &OverlapInput,
+    esurface_id: crate::cff::esurface::EsurfaceID,
+    center: &LoopMomenta<F<f64>>,
+    loop_moms: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+) -> F<f64> {
+    let zero_radius = F(0.0);
+    let esurface = &overlap_input.thresholds[esurface_id];
+    let (value, _) = esurface.compute_self_and_r_derivative_subspace(
+        &zero_radius,
+        loop_moms,
+        center,
+        external_momenta,
+        &overlap_input.edge_masses,
+        overlap_input.subspace,
+        overlap_input.lmbs,
+        overlap_input.graph,
+    );
+    value
 }
 
 /// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
@@ -456,6 +478,7 @@ pub(crate) fn find_maximal_overlap(
                 overlap_input,
                 existing_esurfaces,
                 &global_center_f,
+                loop_moms,
                 external_momenta,
             );
 
@@ -483,8 +506,13 @@ pub(crate) fn find_maximal_overlap(
             (0..global_loop_count).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
         );
 
-        let is_valid =
-            check_global_center(overlap_input, existing_esurfaces, &origin, external_momenta);
+        let is_valid = check_global_center(
+            overlap_input,
+            existing_esurfaces,
+            &origin,
+            loop_moms,
+            external_momenta,
+        );
 
         if is_valid {
             let single_group = OverlapGroup {
