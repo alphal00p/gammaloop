@@ -140,7 +140,7 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
     external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
     subspace: &SubspaceData,
     all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-    graph: &Graph,
+    _graph: &Graph,
     masses: &EdgeVec<F<T>>,
 ) -> HyperDual<F<T>> {
     let lmb = subspace.get_lmb(all_lmbs);
@@ -170,8 +170,13 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
         .map(|momentum| momentum.spatial.clone())
         .collect::<TiVec<ExternalIndex, _>>();
 
-    let remaining_shift = subspace
-        .does_not_contain(&esurface.energies, graph)
+    let remaining_shift = esurface
+        .energies
+        .iter()
+        .copied()
+        .filter(|index| {
+            !subspace.loop_signature_depends_on_subspace(&lmb.edge_signatures[*index].internal)
+        })
         .map(|index| {
             let signature = &lmb.edge_signatures[index];
             let momentum = signature
@@ -228,8 +233,13 @@ fn compute_self_and_r_derivative_subspace_dual<T: FloatLike>(
 
     let lmb = subspace.get_lmb(all_lmbs);
     let zero = new_constant(radius, &radius.values[0].zero());
-    let (derivative, energy_sum) = subspace
-        .contains(&esurface.energies, graph)
+    let (derivative, energy_sum) = esurface
+        .energies
+        .iter()
+        .copied()
+        .filter(|index| {
+            subspace.loop_signature_depends_on_subspace(&lmb.edge_signatures[*index].internal)
+        })
         .map(|index| {
             let signature = &lmb.edge_signatures[index];
             let momentum = signature

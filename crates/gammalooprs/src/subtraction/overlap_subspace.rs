@@ -159,10 +159,11 @@ fn construct_solver(
 
         let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
 
-        for edge_id in overlap_input
-            .subspace
-            .contains(&esurface.energies, overlap_input.graph)
-        {
+        for edge_id in esurface.energies.iter().copied().filter(|edge_id| {
+            overlap_input
+                .subspace
+                .loop_signature_depends_on_subspace(&lmb.edge_signatures[*edge_id].internal)
+        }) {
             if let Some(edge_position) = propagator_constraints
                 .iter()
                 .position(|constraint| *constraint.signature == lmb.edge_signatures[edge_id])
@@ -345,13 +346,29 @@ pub(crate) fn find_center(
 
     let global_loop_number = overlap_input.graph.get_loop_number();
 
+    let center_is_valid = |center: &LoopMomenta<F<f64>>| {
+        esurfaces_to_consider.iter().all(|&existing_esurface_id| {
+            let esurface_id = existing_esurfaces[existing_esurface_id];
+            let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
+
+            let edge_masses = &overlap_input.edge_masses;
+            let esurface = &overlap_input.thresholds[esurface_id];
+
+            esurface.compute_from_momenta(lmb, edge_masses, center, external_momenta) < F(0.0)
+        })
+    };
+
     if solver.solution.status == SolverStatus::Solved {
         let center = extract_center(
             global_loop_number,
             overlap_input.subspace,
             &solver.solution.x,
         );
-        Some(center)
+        if center_is_valid(&center) {
+            Some(center)
+        } else {
+            None
+        }
     } else if solver.solution.status == SolverStatus::AlmostSolved
         || solver.solution.status == SolverStatus::InsufficientProgress
     {
@@ -362,18 +379,11 @@ pub(crate) fn find_center(
             &solver.solution.x,
         );
 
-        let is_valid = esurfaces_to_consider.iter().all(|&existing_esurface_id| {
-            let esurface_id = existing_esurfaces[existing_esurface_id];
-            let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
-
-            let edge_masses = &overlap_input.edge_masses;
-            let esurface = &overlap_input.thresholds[esurface_id];
-
-            esurface.compute_from_momenta(lmb, edge_masses, &center, external_momenta)
-                < F::from_f64(0.0)
-        });
-
-        if is_valid { Some(center) } else { None }
+        if center_is_valid(&center) {
+            Some(center)
+        } else {
+            None
+        }
     } else {
         if verbose {
             println!("{:?}", solver.solution.x);

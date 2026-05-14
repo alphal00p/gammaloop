@@ -63,6 +63,14 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    fn energy_depends_on_subspace(
+        edge_index: EdgeIndex,
+        subspace: &SubspaceData,
+        lmb: &LoopMomentumBasis,
+    ) -> bool {
+        subspace.loop_signature_depends_on_subspace(&lmb.edge_signatures[edge_index].internal)
+    }
+
     pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
         edges.iter().all(|edge| {
             self.external_shift
@@ -205,7 +213,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         subspace: &SubspaceData,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-        graph: &Graph,
+        _graph: &Graph,
         real_mass_vector: &EdgeVec<F<T>>,
         reversed_edges: &[EdgeIndex],
         e_cm: &F<T>,
@@ -221,15 +229,18 @@ impl Esurface {
             external_moms,
             subspace,
             all_lmbs,
-            graph,
+            _graph,
             real_mass_vector,
         );
 
         if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
             let lmb = subspace.get_lmb(all_lmbs);
 
-            let mass_sum: F<T> = subspace
-                .contains(&self.energies, graph)
+            let mass_sum: F<T> = self
+                .energies
+                .iter()
+                .copied()
+                .filter(|index| Self::energy_depends_on_subspace(*index, subspace, lmb))
                 .map(|index| &real_mass_vector[index])
                 .fold(e_cm.zero(), |acc, x| acc + x);
 
@@ -246,8 +257,11 @@ impl Esurface {
                 .reduce(|acc, x| acc + x)
                 .unwrap_or_else(|| zero_vector.clone());
 
-            let other_part = subspace
-                .does_not_contain(&self.energies, graph)
+            let other_part = self
+                .energies
+                .iter()
+                .copied()
+                .filter(|index| !Self::energy_depends_on_subspace(*index, subspace, lmb))
                 .map(|index| {
                     let signature = &lmb.edge_signatures[index];
                     let sign = if reversed_edges.contains(&index) {
@@ -340,7 +354,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         subspace: &SubspaceData,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-        graph: &Graph,
+        _graph: &Graph,
         masses: &EdgeVec<F<T>>,
     ) -> F<T> {
         let lmb = subspace.get_lmb(all_lmbs);
@@ -364,8 +378,11 @@ impl Esurface {
             .map(|mom| mom.spatial.clone())
             .collect::<TiVec<ExternalIndex, _>>();
 
-        let remaining_shift = subspace
-            .does_not_contain(&self.energies, graph)
+        let remaining_shift = self
+            .energies
+            .iter()
+            .copied()
+            .filter(|index| !Self::energy_depends_on_subspace(*index, subspace, lmb))
             .map(|index| {
                 let signature = &lmb.edge_signatures[index];
                 //panic!("signature: {:?}", signature);
@@ -439,8 +456,11 @@ impl Esurface {
         );
 
         let lmb = subspace.get_lmb(all_lmbs);
-        let (derivative, energy_sum) = subspace
-            .contains(&self.energies, graph)
+        let (derivative, energy_sum) = self
+            .energies
+            .iter()
+            .copied()
+            .filter(|index| Self::energy_depends_on_subspace(*index, subspace, lmb))
             .map(|index| {
                 let signature = &lmb.edge_signatures[index];
 
@@ -548,7 +568,12 @@ impl Esurface {
         let external_3_momenta = external_moms.iter().map(|x| x.spatial.clone()).collect();
 
         //println!("got to energy loop");
-        for energy in subspace.contains(&self.energies, graph) {
+        for energy in self
+            .energies
+            .iter()
+            .copied()
+            .filter(|index| Self::energy_depends_on_subspace(*index, subspace, lmb))
+        {
             debug!("computing contribution for energy {:?}", energy);
             let signature = &lmb.edge_signatures[energy];
             //println!("signature {:?}", signature);
@@ -580,7 +605,9 @@ impl Esurface {
             debug!("current denominator: {}", denominator);
         }
 
-        radius_guess += esurface_shift.abs() / denominator;
+        if denominator != const_builder.zero() {
+            radius_guess += esurface_shift.abs() / denominator;
+        }
         debug!("final radius guess: {}", radius_guess);
         let negative_radius = radius_guess.ref_neg();
         (radius_guess, negative_radius)
