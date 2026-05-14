@@ -1,4 +1,68 @@
 use super::*;
+use gammaloop_api::state::RunHistory;
+use gammaloop_integration_tests::workspace_root;
+use std::fs;
+
+fn is_generated_state_dir(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.contains("state"))
+}
+
+fn is_ignored_old_card(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("OLD_"))
+}
+
+fn discover_toml_cards(root: &Path, cards: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            if !is_generated_state_dir(&path) {
+                discover_toml_cards(&path, cards)?;
+            }
+        } else if !is_ignored_old_card(&path)
+            && path.extension().and_then(|extension| extension.to_str()) == Some("toml")
+        {
+            cards.push(path);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn all_example_toml_cards_are_loadable() -> Result<()> {
+    let workspace_root = workspace_root();
+    let mut cards = Vec::new();
+    for examples_dir in ["examples/api", "examples/cli"] {
+        discover_toml_cards(&workspace_root.join(examples_dir), &mut cards)?;
+    }
+    cards.sort();
+    if cards.is_empty() {
+        return Err(eyre::eyre!("No example TOML cards were discovered"));
+    }
+
+    let failures = cards
+        .iter()
+        .filter_map(|card| {
+            RunHistory::load(card).err().map(|err| {
+                let display_path = card.strip_prefix(&workspace_root).unwrap_or(card);
+                format!("{}:\n{err:?}", display_path.display())
+            })
+        })
+        .collect_vec();
+
+    if !failures.is_empty() {
+        return Err(eyre::eyre!(
+            "Failed to load {} example TOML card(s):\n\n{}",
+            failures.len(),
+            failures.join("\n\n")
+        ));
+    }
+    Ok(())
+}
 
 #[test]
 fn test_scalar_bubble_example_cli() -> Result<()> {
@@ -41,7 +105,7 @@ fn test_aa_aa_example_card() -> Result<()> {
     );
     assert_eq!(
         run_history.cli_settings.state.folder,
-        PathBuf::from("./examples/cli/aa_aa/1L/state")
+        PathBuf::from("./examples/cli/aa_aa/1L/gammaloop_state")
     );
     assert_eq!(run_history.default_runtime_settings.kinematics.e_cm, 300.0);
     Ok(())
