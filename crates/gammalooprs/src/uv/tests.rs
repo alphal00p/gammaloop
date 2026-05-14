@@ -74,9 +74,9 @@ fn scalar_bubble_root_integrand_reference(
     let vakint = crate::utils::vakint().unwrap();
     let valid_orientations: Vec<_> = amplitude_graph
         .derived_data
-        .cff_expression
+        .three_d_expression
         .as_ref()
-        .expect("cff_expression should have been created")
+        .expect("3D expression should have been created")
         .orientations
         .iter()
         .map(|orientation| orientation.data.orientation.clone())
@@ -87,7 +87,7 @@ fn scalar_bubble_root_integrand_reference(
             vakint,
             &valid_orientations,
             &reference_settings,
-            amplitude_graph.derived_data.cff_expression.as_ref(),
+            amplitude_graph.derived_data.three_d_expression.as_ref(),
             crate::settings::global::ThreeDRepresentation::Cff,
             false,
         )
@@ -1544,7 +1544,7 @@ mod failing {
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
                     .unwrap()
                     .orientations[OrientationID(0)],
@@ -1592,7 +1592,7 @@ mod failing {
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
                     .unwrap()
                     .orientations[OrientationID(0)],

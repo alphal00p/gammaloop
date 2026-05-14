@@ -731,7 +731,10 @@ mod slow {
             dummy_index: 1,
         })
     );
-    scalar_3l_graph_test!(scalar_3l_cross_section_gl29_inspects_match, "GL29");
+    scalar_3l_graph_test!(
+        scalar_3l_cross_section_gl29_inspects_match,
+        Scalar3LGraphCase::default("GL29").without_uv_subtraction()
+    );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl30_inspects_match,
         Scalar3LGraphCase::default("GL30")

@@ -27,7 +27,7 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId},
-        expression::{CFFExpression, OrientationID},
+        expression::{OrientationID, ThreeDExpression},
     },
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
@@ -532,7 +532,7 @@ impl AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
                 all_mighty_integrand: Atom::Zero,
-                cff_expression: None,
+                three_d_expression: None,
 
                 lmbs: None,
                 tropical_sampler: None,
@@ -612,7 +612,7 @@ impl AmplitudeGraph {
         let expression =
             self.graph
                 .generate_3d_expression_for_integrand(&[], &shift_rewrite, options)?;
-        self.derived_data.cff_expression = Some(expression);
+        self.derived_data.three_d_expression = Some(expression);
 
         Ok(())
     }
@@ -656,9 +656,9 @@ impl AmplitudeGraph {
         if settings.threshold_subtraction.enable_thresholds {
             let mut raised_data = self.graph.determine_raised_esurfaces_from_expression(
                 self.derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
-                    .expect("cff_expression should have been created"),
+                    .expect("3D expression should have been created"),
             );
             let max_order = raised_data
                 .raised_groups
@@ -764,35 +764,12 @@ impl AmplitudeGraph {
 
     // fn get_eager_const_map(&self)->HashM
 
-    fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
+    fn add_additional_factors_to_three_d_atom(&self, three_d_atom: &Atom) -> Atom {
         // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
         let factors_of_pi = (Atom::var(GS.pi) * 2).pow(3 * self.graph.get_loop_number() as i64);
 
         // debug!("result: {}", result);
-        cff_atom / factors_of_pi
-    }
-
-    fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
-        let reduced = self
-            .graph
-            .full_filter()
-            .subtract(&self.graph.initial_state_cut);
-        let numerator = self
-            .graph
-            .numerator(&reduced, &self.graph.empty_subgraph())
-            .get_single_atom()
-            .expect("Graph numerator should be available")
-            * self.graph.global_atom();
-        let momentum_replacements = self.graph.normal_emr_replacement(
-            &self.graph.full_filter(),
-            &self.graph.loop_momentum_basis,
-            &[W_.x___],
-            HedgePair::is_paired,
-        );
-        numerator
-            .replace_multiple(&momentum_replacements)
-            .expand()
-            .collect_factors()
+        three_d_atom / factors_of_pi
     }
 
     fn prepare_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
@@ -809,7 +786,7 @@ impl AmplitudeGraph {
     fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
         let prepared = self.prepare_parametric_integrand_atom(atom)?;
         Ok(self
-            .add_additional_factors_to_cff_atom(&prepared)
+            .add_additional_factors_to_three_d_atom(&prepared)
             .collect_factors())
     }
 
@@ -1011,9 +988,9 @@ impl AmplitudeGraph {
         let settings = &global_settings.generation;
         let valid_orientations: Vec<_> = self
             .derived_data
-            .cff_expression
+            .three_d_expression
             .as_ref()
-            .expect("cff_expression should have been created")
+            .expect("3D expression should have been created")
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
@@ -1024,10 +1001,12 @@ impl AmplitudeGraph {
         {
             let expression = self
                 .derived_data
-                .cff_expression
+                .three_d_expression
                 .as_ref()
                 .expect("3D expression should have been created");
-            let numerator = self.production_numerator_atom_for_full_3d_expression();
+            let numerator = self
+                .graph
+                .production_numerator_atom_for_full_3d_expression();
             let atom = self
                 .graph
                 .three_d_expression_parametric_atom_with_numerator_gs(
@@ -1049,14 +1028,14 @@ impl AmplitudeGraph {
             vakint,
             &valid_orientations,
             settings,
-            self.derived_data.cff_expression.as_ref(),
+            self.derived_data.three_d_expression.as_ref(),
             global_settings.three_d_representation,
             settings.explicit_orientation_sum_only,
         )?;
         let exprs: Vec<_> = forests
             .orientation_parametric_exprs(&self.graph, &settings.uv)?
             .into_iter()
-            .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
+            .map(|e| e.map(|a| self.add_additional_factors_to_three_d_atom(&a)))
             .map(|e| {
                 if settings.explicit_orientation_sum_only
                     && global_settings.three_d_representation == ThreeDRepresentation::Cff
@@ -1092,15 +1071,19 @@ impl AmplitudeGraph {
     )> {
         let valid_orientations: Vec<_> = self
             .derived_data
-            .cff_expression
+            .three_d_expression
             .as_ref()
-            .expect("cff_expression should have been created")
+            .expect("3D expression should have been created")
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        let global_cff = self.derived_data.cff_expression.as_ref().unwrap(); // should always be set at this point
+        let three_d_expression = self
+            .derived_data
+            .three_d_expression
+            .as_ref()
+            .expect("3D expression should have been created");
         let esurface_raising = &self.derived_data.raised_data;
         let mut counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom> = ti_vec![
             AmplitudeCountertermAtom::new();
@@ -1144,7 +1127,7 @@ impl AmplitudeGraph {
 
         for raised_data in esurface_raising.raised_groups.iter().cloned() {
             let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
+            let esurface = &three_d_expression.surfaces.esurface_cache[esurface_id];
 
             if esurface.external_shift.is_empty() {
                 continue;
@@ -1192,6 +1175,7 @@ impl AmplitudeGraph {
                 residue_selector: ResidueSelector {
                     lu_cut: Some(raised_data.clone()),
                     lu_cut_edge_sets: Vec::new(),
+                    ltd_lu_cut_esurface_signs: Vec::new(),
                     left_th_cut: None,
                     right_th_cut: None,
                 },
@@ -1210,7 +1194,7 @@ impl AmplitudeGraph {
             vakint,
             &valid_orientations,
             settings,
-            self.derived_data.cff_expression.as_ref(),
+            self.derived_data.three_d_expression.as_ref(),
             representation,
             settings.explicit_orientation_sum_only,
         )?;
@@ -1365,7 +1349,7 @@ impl AmplitudeGraph {
         Ok(())
     }
 
-    // Expects cff_expression, esurface_data,
+    // Expects three_d_expression, esurface_data,
     #[instrument(
           name = "generate_term_for_graph",
           level = "info",
@@ -1403,7 +1387,7 @@ pub struct AmplitudeDerivedData {
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
-    pub cff_expression: Option<CFFExpression<OrientationID>>,
+    pub three_d_expression: Option<ThreeDExpression<OrientationID>>,
 }
 
 pub trait AmplitudeState:
@@ -1669,7 +1653,7 @@ pub mod test {
         assert!(
             graph
                 .derived_data
-                .cff_expression
+                .three_d_expression
                 .as_ref()
                 .unwrap()
                 .orientations
@@ -1682,7 +1666,7 @@ pub mod test {
                 orientation_pattern: OrientationPattern::from_orientation(
                     &graph
                         .derived_data
-                        .cff_expression
+                        .three_d_expression
                         .as_ref()
                         .unwrap()
                         .orientations[OrientationID(0)],
@@ -1710,7 +1694,7 @@ pub mod test {
             term.orientations[OrientationID(0)],
             graph
                 .derived_data
-                .cff_expression
+                .three_d_expression
                 .as_ref()
                 .unwrap()
                 .orientations[OrientationID(0)]

@@ -51,6 +51,8 @@ use eyre::Context;
 use eyre::eyre;
 use std::{
     collections::HashSet,
+    fs,
+    path::Path,
     slice,
     time::{Duration, Instant},
 };
@@ -65,11 +67,7 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
-use std::{
-    fs::{self},
-    path::Path,
-    vec,
-};
+use std::vec;
 use symbolica::{
     domains::{dual::HyperDual, float::SingleFloat},
     numerical_integration::{Grid, Sample},
@@ -515,7 +513,7 @@ impl CrossSectionGraphTerm {
         let mut stats = GraphGenerationStats::default();
         let selected_generation_orientations = graph
             .derived_data
-            .global_cff_expression
+            .global_three_d_expression
             .as_ref()
             .unwrap()
             .orientations

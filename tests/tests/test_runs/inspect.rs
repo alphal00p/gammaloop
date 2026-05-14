@@ -1443,9 +1443,11 @@ fn ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade() 
     let traded_command = format!(
         "generate xs scalar_1 > scalar_0 scalar_0 | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p scalar_xs_gl10_quartic_traded -i numerator -o --select-graphs GL10 --global-prefactor-num '{traded_prefactor}'"
     );
-    let cff_graph_commands = [direct_command.as_str()];
-    let cff_integrand_commands =
-        ["generate existing -p scalar_xs_gl10_quartic_direct -i numerator"];
+    let cff_graph_commands = [direct_command.as_str(), traded_command.as_str()];
+    let cff_integrand_commands = [
+        "generate existing -p scalar_xs_gl10_quartic_direct -i numerator",
+        "generate existing -p scalar_xs_gl10_quartic_traded -i numerator",
+    ];
     let ltd_graph_commands = [direct_command.as_str(), traded_command.as_str()];
     let ltd_integrand_commands = [
         "generate existing -p scalar_xs_gl10_quartic_direct -i numerator",
@@ -1481,6 +1483,13 @@ fn ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade() 
         &point,
         &[],
     )?;
+    let cff_traded = evaluate_xspace_process_with_events(
+        &mut cff,
+        "scalar_xs_gl10_quartic_traded",
+        "numerator",
+        &point,
+        &[],
+    )?;
     let ltd_direct = evaluate_xspace_process_with_events(
         &mut ltd,
         "scalar_xs_gl10_quartic_direct",
@@ -1496,6 +1505,11 @@ fn ltd_generated_gl10_repeated_quartic_numerator_matches_cff_and_energy_trade() 
         &[],
     )?;
 
+    assert_evaluation_outputs_match(
+        &cff_traded.sample.evaluation,
+        &cff_direct.sample.evaluation,
+        "CFF generated scalar forward cross-section GL10 repeated quartic numerator energy-conservation trade",
+    );
     assert_evaluation_outputs_match(
         &ltd_direct.sample.evaluation,
         &cff_direct.sample.evaluation,

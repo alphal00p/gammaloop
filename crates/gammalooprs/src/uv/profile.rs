@@ -808,7 +808,7 @@ impl<'a> UVProfileRunner<'a> {
         let integrand_expr = &g.derived_data.all_mighty_integrand;
         let analytic_orientations: Vec<_> = g
             .derived_data
-            .cff_expression
+            .three_d_expression
             .as_ref()
             .unwrap()
             .orientations
@@ -1215,7 +1215,7 @@ impl SubSetResult {
 
     pub fn analyse_analytic(&self) -> Option<AnalyticAnalysis> {
         //             .derived_data
-        //             .cff_expression
+        //             .three_d_expression
         //             .as_ref()
         //             .unwrap()
         //             .orientations

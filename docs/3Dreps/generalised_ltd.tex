@@ -1949,12 +1949,23 @@ additional counterterm weights.
 Canonicalization fixes the sign convention of a surface such as
 \(-\omega_{i_1}-\cdots-\omega_{i_r}+\Delta\) by replacing it with
 \(\omega_{i_1}+\cdots+\omega_{i_r}-\Delta\) and carrying the corresponding
-residue orientation in the surface map.  The remaining representation bridges
-are global convention factors: the LTD LU loop-measure parity
-\((-1)^{L-1}\), with \(L\) the forward-scattering loop count after removing
-initial-state cut edges, and the full-source versus reduced-source CFF sign
-exponent used for expanded-four-dimensional UV counterterms.  Neither depends
-on a graph label or on a fitted sign from tests.
+residue orientation in the surface map.  The LTD projection also carries a
+branch-local Cutkosky residue bridge.  A cut with \(n\) simultaneously on-shell
+propagators contributes the generic parity \((-1)^{n-1}\) when the branch-local
+dual residue is mapped back to GammaLoop's simultaneous Cutkosky residue
+normalization.  This is multiplied by the product of source-side cut-edge
+orientation signs that converts the graph edge flow to the left-to-right
+positive-energy Cutkosky convention; in the current graph convention a
+default-oriented cut edge is opposite to that positive-energy flow and a
+reversed cut edge is aligned with it.  The resulting sign is stored on the
+generated Cutkosky \(E\)-surface id before raised-cut alternatives are merged,
+so different alternatives in the same raised group can keep their correct
+residue orientation.  The remaining representation bridges are global
+convention factors: the LTD LU loop-measure parity \((-1)^{L-1}\), with \(L\)
+the forward-scattering loop count after removing initial-state cut edges, and
+the full-source versus reduced-source CFF sign exponent used for
+expanded-four-dimensional UV counterterms.  None of these signs depends on a
+graph label or on a fitted sign from tests.
 
 \paragraph{Embedding in gammaLoop cross-section integrands.}
 The gammaLoop production path always constructs the three-dimensional
@@ -1972,11 +1983,13 @@ with local UV counterterms from expanded four-dimensional integrands, and LTD
 with local UV counterterms from expanded four-dimensional integrands.  The only
 LTD-specific global bridge in this comparison is the loop-measure convention
 factor \((-1)^{L-1}\), where \(L\) is the forward-scattering loop count after
-removing initial-state cut edges.  CFF expanded-source UV terms instead receive
-the difference between the full-graph and reduced-source generalized-CFF sign
-exponents; this accounts for duplicate-signature excess lost or gained when a
-local UV source is projected out of the original graph.  These signs are
-representation-convention factors, not graph-name patches.
+removing initial-state cut edges; its branch-local Cutkosky residue bridge is
+the simultaneous-residue and cut-edge-flow parity described above.  CFF
+expanded-source UV terms instead receive the difference between the full-graph
+and reduced-source generalized-CFF sign exponents; this accounts for
+duplicate-signature excess lost or gained when a local UV source is projected
+out of the original graph.  These signs are representation-convention factors,
+not graph-name patches.
 
 The hybrid high-power tests are not pure-CFF tests.  They compare the hybrid
 value with a split-mass LTD proxy and verify convergence as the mass split is

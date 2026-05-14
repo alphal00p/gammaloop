@@ -1106,6 +1106,8 @@ mod tests {
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
             denominator_edges: Vec::new(),
+            denominator_surface_signs: BTreeMap::new(),
+            denominator_edge_support_signs: BTreeMap::new(),
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
             denominator,

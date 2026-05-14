@@ -1,12 +1,12 @@
 use crate::{
     GammaLoopContext,
-    cff::expression::{CFFExpression, GammaLoopGraphOrientation, OrientationID},
+    cff::expression::{GammaLoopGraphOrientation, OrientationID, ThreeDExpression},
     graph::{Graph, cuts::CutSet},
     settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
         UVgenerationSettings,
-        approx::{CFFapprox, CutStructure, ForestNodeLike},
+        approx::{CutStructure, ForestNodeLike, Local3DApprox},
     },
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -172,7 +172,7 @@ impl CutForests {
         vakint: &Vakint,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
-        root_expression: Option<&CFFExpression<OrientationID>>,
+        root_expression: Option<&ThreeDExpression<OrientationID>>,
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
@@ -254,7 +254,7 @@ impl Forest {
         cut_data: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
-        root_expression: Option<&CFFExpression<OrientationID>>,
+        root_expression: Option<&ThreeDExpression<OrientationID>>,
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
@@ -345,9 +345,10 @@ impl Forest {
                             valid_orientations,
                             settings,
                             representation,
+                            root_expression,
                         )?;
                     } else {
-                        if !matches!(parent.data.local_3d, CFFapprox::Dependent { .. }) {
+                        if !matches!(parent.data.local_3d, Local3DApprox::Dependent { .. }) {
                             return Err(eyre!(
                                 "UV forest parent {parent_id:?} local 3D approximation was not computed before node {n:?}"
                             ));

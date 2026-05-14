@@ -9,7 +9,7 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{Minkowski, RepName, Representation},
+        representation::{LibraryRep, Minkowski, RepName, Representation},
         slot::{DummyAind, IsAbstractSlot},
     },
     utils::{to_subscript, to_superscript},
@@ -26,6 +26,25 @@ use symbolica::{
 use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
 
 use super::symbolica_ext::CallSymbol;
+
+fn concrete_lorentz_component_index(index: AtomView<'_>) -> Option<i64> {
+    let AtomView::Fun(function) = index else {
+        return None;
+    };
+
+    if function.get_symbol() == AIND_SYMBOLS.cind && function.get_nargs() == 1 {
+        return i64::try_from(function.get(0)).ok();
+    }
+
+    if function.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
+        && function.get_nargs() == 2
+        && i64::try_from(function.get(0)).ok()? == 4
+    {
+        return i64::try_from(function.get(1)).ok();
+    }
+
+    None
+}
 
 pub struct WildCards {
     pub edgeid_: Symbol,
@@ -761,14 +780,16 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             {
                 let mut iter = ff.iter();
                 let matchid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
-                    && cind.get_symbol() == AIND_SYMBOLS.cind
-                {
-                    if cind.as_view() != matchid {
-                        **out = Atom::Zero;
+                let other = iter.next().unwrap();
+                if let (Some(left), Some(right)) = (
+                    concrete_lorentz_component_index(matchid),
+                    concrete_lorentz_component_index(other),
+                ) {
+                    **out = if left == right {
+                        Atom::num(1)
                     } else {
-                        **out = Atom::num(1);
-                    }
+                        Atom::Zero
+                    };
                 }
             }
         }
@@ -816,15 +837,12 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             {
                 let mut iter = ff.iter();
                 let eid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
-                    && cind.get_symbol() == AIND_SYMBOLS.cind
-                    && let Some(i) = cind.iter().next()
-                    && let Ok(i) = i64::try_from(i)
-                {
+                let index = iter.next().unwrap();
+                if let Some(i) = concrete_lorentz_component_index(index) {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = symbol!("Q").f(&[eid, cind.as_view()])
+                        **out = symbol!("Q").f(&[eid, AIND_SYMBOLS.cind.f([i]).as_view()])
                     }
                 }
             }

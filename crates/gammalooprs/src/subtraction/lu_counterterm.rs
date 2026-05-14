@@ -1061,7 +1061,6 @@ impl LUCounterTerm {
                         .unwrap()
                         .pop()
                         .unwrap();
-
                     right_evaluations += multiply_dual_or_not_complex(
                         result_of_this_ct,
                         &sample.value_of_multi_channeling_factor,
@@ -1117,7 +1116,6 @@ impl LUCounterTerm {
                                 .unwrap()
                                 .pop()
                                 .unwrap();
-
                             cartesian_product_result += multiply_dual_or_not_complex(
                                 result_of_this_ct,
                                 &multi_channeling_factor,

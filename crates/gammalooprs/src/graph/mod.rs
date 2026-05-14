@@ -37,7 +37,8 @@ use crate::{
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    utils::{F, Length, W_, ose_atom_from_index, symbolica_ext::LogPrint},
+    uv::UltravioletGraph,
 };
 
 pub(crate) mod attribute_warnings;
@@ -102,7 +103,7 @@ impl Graph {
             ParamBuilder::new(self, model, &loop_momentum_basis, additional_params);
     }
 
-    pub(crate) fn cff_global_sign_exponent_for_3d_expression(&self) -> usize {
+    pub(crate) fn three_d_global_sign_exponent(&self) -> usize {
         let parsed = self
             .to_three_d_parsed_graph()
             .expect("GammaLoop graph should convert to generalized 3D-rep input");
@@ -203,6 +204,25 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
+    pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
+        let reduced = self.full_filter().subtract(&self.initial_state_cut);
+        let numerator = self
+            .numerator(&reduced, &self.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * self.global_atom();
+        let momentum_replacements = self.normal_emr_replacement(
+            &self.full_filter(),
+            &self.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        numerator
+            .replace_multiple(&momentum_replacements)
+            .expand()
+            .collect_factors()
     }
 
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {

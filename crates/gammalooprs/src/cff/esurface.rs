@@ -867,8 +867,8 @@ impl Graph {
         expr: &CFFExpression<OrientationID>,
     ) -> RaisedEsurfaceData {
         let raised_edges = self.get_raised_edge_groups();
-        let normalized_cut_esurfaces = self
-            .surface_cache
+        let normalized_cut_esurfaces = expr
+            .surfaces
             .esurface_cache
             .iter()
             .map(|esurface| {

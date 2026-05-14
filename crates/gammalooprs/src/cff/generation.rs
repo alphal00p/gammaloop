@@ -42,6 +42,12 @@ struct SurfaceMapEntry {
     sign: i64,
 }
 
+struct RemappedDenominatorTree {
+    prefactor_sign: i64,
+    surface_signs: BTreeMap<HybridSurfaceID, i64>,
+    denominator: Tree<HybridSurfaceID>,
+}
+
 impl Graph {
     pub(crate) fn generate_3d_expression_for_integrand(
         &mut self,
@@ -119,6 +125,17 @@ impl Graph {
             representation_mode(representation),
             numerator_sampling_scale_mode(settings.uniform_numerator_sampling_scale),
         )?;
+        options.energy_degree_bounds = self
+            .automatic_numerator_energy_degree_bounds_for_prepared_3d_numerator(
+                representation_mode(representation),
+                &self.production_numerator_atom_for_full_3d_expression(),
+            )?;
+        debug!(
+            graph = %self.name,
+            ?representation,
+            bounds = ?options.energy_degree_bounds,
+            "using production 3D numerator energy-degree bounds"
+        );
         if representation == ThreeDRepresentation::Cff && !settings.explicit_orientation_sum_only {
             // The orientation-localized CFF forest path substitutes the
             // numerator pointwise on each orientation and only needs the pure
@@ -153,11 +170,21 @@ impl Graph {
         &self,
         representation: RepresentationMode,
     ) -> Result<Vec<(usize, usize)>> {
-        let excluded_edges = self
-            .iter_edges_of(&self.initial_state_cut)
+        self.automatic_numerator_energy_degree_bounds_for_source_numerator(representation)
+    }
+
+    fn excluded_numerator_energy_bound_edges_for_3d_expression(&self) -> Vec<EdgeIndex> {
+        self.iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
             .chain(self.external_tree_4d_denominator_edges())
-            .collect_vec();
+            .collect_vec()
+    }
+
+    fn automatic_numerator_energy_degree_bounds_for_source_numerator(
+        &self,
+        representation: RepresentationMode,
+    ) -> Result<Vec<(usize, usize)>> {
+        let excluded_edges = self.excluded_numerator_energy_bound_edges_for_3d_expression();
         let min_degree = match representation {
             RepresentationMode::Ltd => 1,
             // The generalized CFF builder also needs multilinear source-edge
@@ -183,6 +210,35 @@ impl Graph {
             )?;
         if self.energy_degree_bounds_are_convergent_for_3d_source(&lmb_bounds)? {
             return Ok(lmb_bounds);
+        }
+
+        Ok(source_edge_bounds)
+    }
+
+    fn automatic_numerator_energy_degree_bounds_for_prepared_3d_numerator(
+        &self,
+        representation: RepresentationMode,
+        numerator: &Atom,
+    ) -> Result<Vec<(usize, usize)>> {
+        let excluded_edges = self.excluded_numerator_energy_bound_edges_for_3d_expression();
+        let source_edge_bounds = self
+            .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+                numerator,
+                excluded_edges.iter().copied(),
+                1,
+            )?;
+        if representation != RepresentationMode::Cff {
+            return Ok(source_edge_bounds);
+        }
+
+        let quadratic_bounds = self
+            .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+                numerator,
+                excluded_edges,
+                2,
+            )?;
+        if self.energy_degree_bounds_are_convergent_for_3d_source(&quadratic_bounds)? {
+            return Ok(quadratic_bounds);
         }
 
         Ok(source_edge_bounds)
@@ -304,10 +360,11 @@ impl Graph {
                     // always stay on their generated variants.
                     variant.half_edges.clear();
                 }
-                for (denominator_sign, denominator) in signed_denominators {
+                for remapped_denominator in signed_denominators {
                     let mut signed_variant = variant.clone();
-                    signed_variant.denominator = denominator;
-                    if denominator_sign < 0 {
+                    signed_variant.denominator = remapped_denominator.denominator;
+                    signed_variant.denominator_surface_signs = remapped_denominator.surface_signs;
+                    if remapped_denominator.prefactor_sign < 0 {
                         signed_variant.prefactor *= Atom::num(-1);
                     }
                     remapped_variants.push(signed_variant);
@@ -505,7 +562,7 @@ fn remap_generated_surface_id(
 fn remap_denominator_tree_surface_ids(
     denominator: &Tree<HybridSurfaceID>,
     linear_surface_map: &BTreeMap<LinearSurfaceID, SurfaceMapEntry>,
-) -> Vec<(i64, Tree<HybridSurfaceID>)> {
+) -> Vec<RemappedDenominatorTree> {
     let node_signs = denominator
         .iter_nodes()
         .map(|node| {
@@ -521,31 +578,54 @@ fn remap_denominator_tree_surface_ids(
         })
         .collect::<BTreeMap<_, _>>();
 
-    let mut chains_by_sign = BTreeMap::<i64, Vec<Vec<HybridSurfaceID>>>::new();
+    let mut chains_by_signature =
+        BTreeMap::<(i64, Vec<(HybridSurfaceID, i64)>), Vec<Vec<HybridSurfaceID>>>::new();
     for leaf in denominator.get_bottom_layer() {
         let mut sign = 1;
+        let mut surface_signs = BTreeMap::<HybridSurfaceID, i64>::new();
         let mut chain = Vec::new();
         let mut current = Some(leaf);
         while let Some(node_id) = current {
-            sign *= node_signs.get(&node_id).copied().unwrap_or(1);
             let mut surface_id = denominator.get_node(node_id).data;
+            let node_sign = node_signs.get(&node_id).copied().unwrap_or(1);
+            sign *= node_sign;
             remap_generated_surface_id(&mut surface_id, linear_surface_map);
             if surface_id != HybridSurfaceID::Unit {
+                if node_sign < 0 {
+                    let entry = surface_signs.entry(surface_id).or_insert(1);
+                    *entry *= node_sign;
+                    if *entry > 0 {
+                        surface_signs.remove(&surface_id);
+                    }
+                }
                 chain.push(surface_id);
             }
             current = denominator.get_node(node_id).parent;
         }
         chain.reverse();
-        chains_by_sign.entry(sign).or_default().push(chain);
+        chains_by_signature
+            .entry((sign, surface_signs.into_iter().collect()))
+            .or_default()
+            .push(chain);
     }
 
-    if chains_by_sign.is_empty() {
-        return vec![(1, Tree::from_root(HybridSurfaceID::Unit))];
+    if chains_by_signature.is_empty() {
+        return vec![RemappedDenominatorTree {
+            prefactor_sign: 1,
+            surface_signs: BTreeMap::new(),
+            denominator: Tree::from_root(HybridSurfaceID::Unit),
+        }];
     }
 
-    chains_by_sign
+    chains_by_signature
         .into_iter()
-        .map(|(sign, chains)| (sign, denominator_tree_from_chains(&chains)))
+        .map(
+            |((prefactor_sign, surface_signs), chains)| RemappedDenominatorTree {
+                prefactor_sign,
+                surface_signs: surface_signs.into_iter().collect(),
+                denominator: denominator_tree_from_chains(&chains),
+            },
+        )
         .collect()
 }
 

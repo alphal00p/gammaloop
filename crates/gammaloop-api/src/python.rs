@@ -2464,7 +2464,7 @@ impl GammaLoopAPI {
 
         let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
-                let cff = amplitudes
+                let three_d_expression = amplitudes
                     .get(&name)
                     .unwrap()
                     .graphs
@@ -2473,18 +2473,19 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
                     .unwrap();
 
-                cff.orientations
+                three_d_expression
+                    .orientations
                     .iter()
                     .map(|or_data| or_data.data.orientation.clone())
                     .collect_vec()
             }
 
             ProcessCollection::CrossSections(cross_sections) => {
-                let cff = cross_sections
+                let three_d_expression = cross_sections
                     .get(&name)
                     .unwrap()
                     .supergraphs
@@ -2493,11 +2494,12 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .global_cff_expression
+                    .global_three_d_expression
                     .as_ref()
                     .unwrap();
 
-                cff.orientations
+                three_d_expression
+                    .orientations
                     .iter()
                     .map(|or_data| or_data.data.orientation.clone())
                     .collect_vec()

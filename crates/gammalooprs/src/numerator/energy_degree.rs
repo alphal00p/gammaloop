@@ -236,7 +236,11 @@ impl EnergyPowerAnalyzer {
                 && usize::try_from(function.get(0)).is_ok_and(|index| index == 0);
         }
 
-        function.get_symbol() == self.minkowski_symbol && function.get_nargs() == 2
+        if function.get_symbol() == self.minkowski_symbol && function.get_nargs() == 2 {
+            return usize::try_from(function.get(1)).map_or(true, |index| index == 0);
+        }
+
+        false
     }
 
     fn is_internal_edge(&self, edge: EdgeIndex) -> bool {
@@ -304,8 +308,31 @@ impl Graph {
         )
     }
 
+    pub(crate) fn numerator_energy_power_upper_bounds_in_atom(
+        &self,
+        numerator: &Atom,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_atom_energy_powers(
+            numerator,
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
+    }
+
     fn analyze_numerator_energy_powers(
         &self,
+        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        // Keep edge-energy variables attached to their source denominator.
+        // Rewriting them to a loop-momentum basis loses cancellation
+        // information in non-coordinate UV directions, e.g. when q_i-q_j is
+        // kept fixed while q_i and q_j are both large.
+        let numerator = self.full_numerator_atom().expand();
+        self.analyze_numerator_atom_energy_powers(&numerator, mode)
+    }
+
+    fn analyze_numerator_atom_energy_powers(
+        &self,
+        numerator: &Atom,
         mode: EnergyPowerAnalysisMode,
     ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
         let internal_edges = self
@@ -314,11 +341,6 @@ impl Graph {
             .filter_map(|(pair, edge, edge_data)| {
                 (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
             });
-        // Keep edge-energy variables attached to their source denominator.
-        // Rewriting them to a loop-momentum basis loses cancellation
-        // information in non-coordinate UV directions, e.g. when q_i-q_j is
-        // kept fixed while q_i and q_j are both large.
-        let numerator = self.full_numerator_atom().expand();
 
         EnergyPowerAnalyzer::with_internal_edges(
             self.loop_momentum_basis.loop_edges.iter().copied(),
@@ -350,6 +372,28 @@ impl Graph {
 
         for (edge, degree) in self
             .numerator_energy_power_upper_bounds_for_3d_expression()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+        &self,
+        numerator: &Atom,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_in_atom(numerator)?
             .iter()
         {
             if excluded_edges.contains(&edge) || degree < min_degree {
@@ -407,6 +451,13 @@ mod tests {
             .finish()
     }
 
+    fn mink_component(index: i64) -> Atom {
+        FunctionBuilder::new(LibraryRep::from(Minkowski {}).symbol())
+            .add_arg(Atom::num(4).as_view())
+            .add_arg(Atom::num(index).as_view())
+            .finish()
+    }
+
     fn bounds(expression: Atom) -> Vec<(usize, usize)> {
         EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
             .analyze_atom(&expression)
@@ -424,6 +475,18 @@ mod tests {
     #[test]
     fn emr_minkowski_index_counts_as_energy_power() {
         let expression = function!(GS.emr_mom, 3, mink_index("mu"));
+        assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn emr_concrete_spatial_minkowski_index_does_not_count_as_energy_power() {
+        let expression = function!(GS.emr_mom, 3, mink_component(1));
+        assert!(bounds(expression).is_empty());
+    }
+
+    #[test]
+    fn emr_concrete_temporal_minkowski_index_counts_as_energy_power() {
+        let expression = function!(GS.emr_mom, 3, mink_component(0));
         assert_eq!(bounds(expression), vec![(3, 1)]);
     }
 

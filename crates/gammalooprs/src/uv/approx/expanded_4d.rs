@@ -6,7 +6,7 @@ use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
-    subgraph::{SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+    subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
 };
 use spenso::structure::concrete_index::ExpandedIndex;
 use symbolica::{
@@ -15,20 +15,21 @@ use symbolica::{
     id::Replacement,
 };
 use three_dimensional_reps::{
-    EnergyEdgeIndexMap, Generate3DExpressionOptions, GraphOrientation, MomentumSignature,
-    NumeratorSamplingScaleMode, OrientationSelector, ParsedGraph, RepresentationMode,
-    graph_io::{
-        ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
-        initial_state_cut_external_alias,
-    },
+    EnergyEdgeIndexMap, Generate3DExpressionOptions, MomentumSignature, NumeratorSamplingScaleMode,
+    ParsedGraph, RepresentationMode,
+    graph_io::{ParsedGraphExternalEdge, ParsedGraphInternalEdge},
     repeated_groups,
 };
 
 use crate::{
     cff::{
+        esurface::{Esurface, EsurfaceID, RaisedEsurfaceGroup},
         expression::{
-            GammaLoopCFFVariant, GammaLoopGraphOrientation, GammaLoopOrientationExpression,
-            OrientationID, RaisedEsurfaceGroupView,
+            GammaLoopCFFVariant, GammaLoopOrientationExpression, OrientationID,
+            RaisedEsurfaceGroupView, ThreeDExpression, localize_three_d_expression_on_esurface,
+            normalize_cut_edge_support_with_raised_edge_groups,
+            normalize_three_d_expression_cut_support_with_raised_edge_groups,
+            remove_ltd_global_contact_completions_from_local_residue,
         },
         generation::generated_cff_expression_uses_variant_half_edges,
         surface::GammaLoopSurfaceCache,
@@ -40,6 +41,7 @@ use crate::{
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{UltravioletGraph, approx::ForestNodeLike},
 };
+use typed_index_collections::TiVec;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Expanded4DApprox {
@@ -75,6 +77,42 @@ struct Expanded4DParsedSource {
     parsed: ParsedGraph,
     edge_map: EnergyEdgeIndexMap,
     denominator_edges: Vec<ParsedDenominatorEdge>,
+}
+
+#[derive(Clone, Copy)]
+pub struct Expanded4DSourceContext<'a> {
+    cograph_contract_subgraph: &'a SuBitGraph,
+    uv_leading_subgraph: Option<&'a SuBitGraph>,
+}
+
+impl<'a> Expanded4DSourceContext<'a> {
+    pub fn cograph_only(cograph_contract_subgraph: &'a SuBitGraph) -> Self {
+        Self {
+            cograph_contract_subgraph,
+            uv_leading_subgraph: None,
+        }
+    }
+
+    pub fn local_uv(
+        cograph_contract_subgraph: &'a SuBitGraph,
+        uv_leading_subgraph: &'a SuBitGraph,
+    ) -> Self {
+        Self {
+            cograph_contract_subgraph,
+            uv_leading_subgraph: Some(uv_leading_subgraph),
+        }
+    }
+
+    fn label(self) -> String {
+        match self.uv_leading_subgraph {
+            Some(uv_subgraph) => format!(
+                "cograph_{}_uv_{}",
+                self.cograph_contract_subgraph.string_label(),
+                uv_subgraph.string_label()
+            ),
+            None => self.cograph_contract_subgraph.string_label(),
+        }
+    }
 }
 
 impl Expanded4DApprox {
@@ -174,8 +212,9 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
-    _valid_orientations: &[EdgeVec<Orientation>],
-    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+    valid_orientations: &[EdgeVec<Orientation>],
+    source_context: Expanded4DSourceContext<'_>,
+    root_expression: Option<&ThreeDExpression<OrientationID>>,
 ) -> Result<Vec<Atom>> {
     let terms = extract_expanded_terms(atom)?;
     if let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_PROJECTION") {
@@ -191,7 +230,7 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
             "terms={} has_selector={} contract_subgraph={}",
             terms.len(),
             cutset_has_residue_selector(cutset),
-            contract_subgraph.string_label()
+            source_context.label()
         )
         .ok();
         for (term_id, term) in terms.iter().enumerate() {
@@ -228,7 +267,9 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
             cutset,
             representation,
             settings,
-            contract_subgraph,
+            valid_orientations,
+            source_context,
+            root_expression,
         )? {
             accumulate_expanded_4d_term(&mut out, generated)?;
         }
@@ -244,7 +285,9 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
-    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+    valid_orientations: &[EdgeVec<Orientation>],
+    source_context: Expanded4DSourceContext<'_>,
+    root_expression: Option<&ThreeDExpression<OrientationID>>,
 ) -> Result<Option<Vec<Atom>>> {
     if term.denominators.is_empty() {
         if cutset_has_residue_selector(cutset) {
@@ -253,7 +296,7 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
         return Ok(Some(vec![term.numerator]));
     }
 
-    let source = build_expanded_4d_parsed_source(graph, &term.denominators, contract_subgraph)?;
+    let source = build_expanded_4d_parsed_source(graph, &term.denominators, source_context)?;
     dump_expanded_4d_parsed_source_if_requested(
         graph,
         &source,
@@ -261,37 +304,38 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
         cutset,
         representation,
         settings,
-        contract_subgraph,
+        source_context,
     )?;
-    let local_projection_representation =
-        if representation == ThreeDRepresentation::Ltd && cutset_has_residue_selector(cutset) {
-            // Expanded-4D local UV counterterms are representation-independent 4D
-            // objects. When they must be projected onto a LU/threshold residue, use
-            // GammaLoop's canonical CFF E-surface decomposition as the local
-            // projector. The generated LTD source is globally equivalent, but its
-            // denominator tree does not expose the same local E-surface branches for
-            // these UV-expanded sources. The top-level/original integrand remains
-            // in the requested representation.
-            ThreeDRepresentation::Cff
-        } else {
-            representation
-        };
-
-    let expression = generate_expanded_4d_source_expression(
+    let mut expression = generate_expanded_4d_source_expression(
         graph,
         &source,
         &term.numerator,
-        local_projection_representation,
+        representation,
         settings,
     )?;
+    let raised_edge_groups = graph.get_raised_edge_groups();
+    normalize_three_d_expression_cut_support_with_raised_edge_groups(
+        &mut expression,
+        &raised_edge_groups,
+    );
 
-    let residues = select_cut_residues(expression, cutset)?;
+    let source_cutset = remap_cutset_to_expression_surfaces(
+        graph,
+        cutset,
+        root_expression,
+        &expression.surfaces.esurface_cache,
+        &raised_edge_groups,
+        source_context,
+        representation,
+    )?;
+
+    let residues = select_cut_residues(expression, &source_cutset, representation)?;
     dump_expanded_4d_selected_residues_if_requested(
         graph,
         &source,
         &residues,
-        local_projection_representation,
-        contract_subgraph,
+        representation,
+        source_context,
     );
 
     residues
@@ -302,9 +346,10 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
                 &residue,
                 &term.numerator,
                 &source,
-                cutset,
-                local_projection_representation,
+                &source_cutset,
+                representation,
                 settings,
+                valid_orientations,
             )
         })
         .collect::<Result<Vec<_>>>()
@@ -316,7 +361,7 @@ fn dump_expanded_4d_selected_residues_if_requested(
     source: &Expanded4DParsedSource,
     residues: &[crate::cff::expression::ThreeDExpression<OrientationID>],
     representation: ThreeDRepresentation,
-    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+    source_context: Expanded4DSourceContext<'_>,
 ) {
     let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_SELECTED_RESIDUES") else {
         return;
@@ -326,18 +371,13 @@ fn dump_expanded_4d_selected_residues_if_requested(
         "{}_{:?}_{}_selected_residues.txt",
         graph.name,
         representation,
-        contract_subgraph.string_label()
+        source_context.label()
     ));
     let mut dump = String::new();
     use std::fmt::Write;
     writeln!(dump, "graph {}", graph.name).ok();
     writeln!(dump, "representation {:?}", representation).ok();
-    writeln!(
-        dump,
-        "contract_subgraph {}",
-        contract_subgraph.string_label()
-    )
-    .ok();
+    writeln!(dump, "contract_subgraph {}", source_context.label()).ok();
     writeln!(dump, "source {}", expanded_source_summary(&source.parsed)).ok();
     writeln!(dump, "residue_count {}", residues.len()).ok();
     for (residue_id, residue) in residues.iter().enumerate() {
@@ -365,11 +405,12 @@ fn dump_expanded_4d_selected_residues_if_requested(
             for (variant_id, variant) in orientation.variants.iter().enumerate() {
                 writeln!(
                     dump,
-                    "    variant {variant_id} origin {:?} prefactor {} half_edges {:?} denominator_edges {:?} numerator_surfaces {:?} denominator_nodes {}",
+                    "    variant {variant_id} origin {:?} prefactor {} half_edges {:?} denominator_edges {:?} denominator_edge_support_signs {:?} numerator_surfaces {:?} denominator_nodes {}",
                     variant.origin,
                     variant.prefactor.to_canonical_string(),
                     variant.half_edges,
                     variant.denominator_edges,
+                    variant.denominator_edge_support_signs,
                     variant.numerator_surfaces,
                     variant.denominator.get_num_nodes()
                 )
@@ -396,7 +437,7 @@ fn dump_expanded_4d_parsed_source_if_requested(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
-    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+    source_context: Expanded4DSourceContext<'_>,
 ) -> Result<()> {
     let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_EXPANDED_4D_SOURCE") else {
         return Ok(());
@@ -408,18 +449,13 @@ fn dump_expanded_4d_parsed_source_if_requested(
         "{}_{:?}_{}_source.txt",
         graph.name,
         representation,
-        contract_subgraph.string_label()
+        source_context.label()
     ));
     let mut dump = String::new();
     use std::fmt::Write;
     writeln!(dump, "graph {}", graph.name).ok();
     writeln!(dump, "representation {:?}", representation).ok();
-    writeln!(
-        dump,
-        "contract_subgraph {}",
-        contract_subgraph.string_label()
-    )
-    .ok();
+    writeln!(dump, "contract_subgraph {}", source_context.label()).ok();
     writeln!(dump, "has_selector {}", cutset_has_residue_selector(cutset)).ok();
     writeln!(dump, "lu_cut {:?}", cutset.residue_selector.lu_cut).ok();
     if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
@@ -552,34 +588,226 @@ fn cutset_has_residue_selector(cutset: &CutSet) -> bool {
         || cutset.residue_selector.lu_cut.is_some()
 }
 
+fn remap_cutset_to_expression_surfaces(
+    graph: &Graph,
+    cutset: &CutSet,
+    root_expression: Option<&ThreeDExpression<OrientationID>>,
+    generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
+    raised_edge_groups: &[Vec<EdgeIndex>],
+    source_context: Expanded4DSourceContext<'_>,
+    representation: ThreeDRepresentation,
+) -> Result<CutSet> {
+    if !cutset_has_residue_selector(cutset) {
+        return Ok(cutset.clone());
+    }
+
+    let root_expression = root_expression.ok_or_else(|| {
+        eyre!(
+            "expanded 4D local UV residue selection for graph {} requires the production root 3D expression surface cache",
+            graph.name
+        )
+    })?;
+    let normalized_generated_esurfaces = generated_esurfaces
+        .iter()
+        .map(|esurface| {
+            Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups)
+        })
+        .collect::<TiVec<EsurfaceID, _>>();
+    let reference_esurfaces = &root_expression.surfaces.esurface_cache;
+
+    let remap_group = |group: &RaisedEsurfaceGroup, label: &str| -> Result<RaisedEsurfaceGroup> {
+        let esurface_ids = group
+                .esurface_ids
+                .iter()
+                .map(|reference_id| {
+                    let reference = reference_esurfaces.get(*reference_id).ok_or_else(|| {
+                        eyre!(
+                            "{label} residue selector in graph {} references E-surface {:?}, but the production root expression contains only {} E-surfaces",
+                            graph.name,
+                            reference_id,
+                            reference_esurfaces.len()
+                        )
+                    })?;
+                    find_matching_generated_esurface(
+                        graph,
+                        reference,
+                        generated_esurfaces,
+                        &normalized_generated_esurfaces,
+                        &raised_edge_groups,
+                        format!(
+                            "{label} residue selector for {:?} expanded-4D source {}",
+                            representation,
+                            source_context.label()
+                        ),
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
+        Ok(RaisedEsurfaceGroup {
+            esurface_ids,
+            max_occurence: group.max_occurence,
+        })
+    };
+
+    let mut remapped = cutset.clone();
+    let remapped_lu_cut = cutset
+        .residue_selector
+        .lu_cut
+        .as_ref()
+        .map(|group| remap_group(group, "Cutkosky"))
+        .transpose()?;
+    remapped.residue_selector.ltd_lu_cut_esurface_signs = if let (
+        Some(original_lu_cut),
+        Some(remapped_lu_cut),
+    ) = (
+        cutset.residue_selector.lu_cut.as_ref(),
+        remapped_lu_cut.as_ref(),
+    ) {
+        cutset
+                .residue_selector
+                .ltd_lu_cut_esurface_signs
+                .iter()
+                .map(|(esurface_id, sign)| {
+                    let position = original_lu_cut
+                        .esurface_ids
+                        .iter()
+                        .position(|original_id| original_id == esurface_id)
+                        .ok_or_else(|| {
+                            eyre!(
+                                "Cutkosky LTD orientation sign references E-surface {esurface_id:?}, but the original selector group is {:?}",
+                                original_lu_cut.esurface_ids
+                            )
+                        })?;
+                    Ok((remapped_lu_cut.esurface_ids[position], *sign))
+                })
+                .collect::<Result<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+    remapped.residue_selector.lu_cut = remapped_lu_cut;
+    remapped.residue_selector.lu_cut_edge_sets = cutset
+        .residue_selector
+        .lu_cut_edge_sets
+        .iter()
+        .map(|cut_edges| {
+            normalize_cut_edge_support_with_raised_edge_groups(cut_edges, raised_edge_groups)
+        })
+        .collect();
+    remapped.residue_selector.left_th_cut = cutset
+        .residue_selector
+        .left_th_cut
+        .as_ref()
+        .map(|group| remap_group(group, "left threshold"))
+        .transpose()?;
+    remapped.residue_selector.right_th_cut = cutset
+        .residue_selector
+        .right_th_cut
+        .as_ref()
+        .map(|group| remap_group(group, "right threshold"))
+        .transpose()?;
+    Ok(remapped)
+}
+
+fn find_matching_generated_esurface(
+    graph: &Graph,
+    requested: &Esurface,
+    generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
+    normalized_generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
+    raised_edge_groups: &[Vec<EdgeIndex>],
+    context: impl std::fmt::Display,
+) -> Result<EsurfaceID> {
+    let normalized_requested =
+        Graph::normalize_esurface_with_raised_edge_groups(requested, raised_edge_groups);
+    generated_esurfaces
+        .iter()
+        .zip(normalized_generated_esurfaces.iter())
+        .position(|(generated, normalized_generated)| {
+            generated == requested || normalized_generated == &normalized_requested
+        })
+        .ok_or_else(|| {
+            eyre!(
+                "{context} E-surface {requested:?} for graph {} was not present in the expanded 4D generated source expression.\n\
+                 Normalized requested E-surface: {:?}\n\
+                 Generated E-surfaces: {:?}",
+                graph.name,
+                normalized_requested,
+                generated_esurfaces,
+            )
+        })
+        .map(Into::into)
+}
+
 fn select_cut_residues(
     expression: crate::cff::expression::ThreeDExpression<OrientationID>,
     cutset: &CutSet,
+    representation: ThreeDRepresentation,
 ) -> Result<Vec<crate::cff::expression::ThreeDExpression<OrientationID>>> {
-    let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-        let residues = expression.select_esurface_residue(right_threshold);
-        expect_single_threshold_residue(residues, "right")?
-    } else {
-        expression
+    let mut residues = vec![expression];
+
+    if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+        residues = residues
+            .into_iter()
+            .map(|residue| {
+                let residues = residue.select_esurface_residue(right_threshold);
+                expect_single_threshold_residue(residues, "right")
+            })
+            .collect::<Result<Vec<_>>>()?;
+    }
+
+    if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+        residues = residues
+            .into_iter()
+            .map(|residue| {
+                let residues = residue.select_esurface_residue(left_threshold);
+                expect_single_threshold_residue(residues, "left")
+            })
+            .collect::<Result<Vec<_>>>()?;
     };
 
-    let residue = if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-        let residues = residue.select_esurface_residue(left_threshold);
-        expect_single_threshold_residue(residues, "left")?
-    } else {
-        residue
-    };
+    if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+        residues = residues
+            .into_iter()
+            .flat_map(|expression| {
+                if representation == ThreeDRepresentation::Ltd {
+                    expression.select_esurface_residue_with_cut_edges_and_esurface_signs(
+                        lu_cut,
+                        &cutset.residue_selector.lu_cut_edge_sets,
+                        &cutset.residue_selector.ltd_lu_cut_esurface_signs,
+                    )
+                } else {
+                    expression.select_esurface_residue_with_cut_edges(
+                        lu_cut,
+                        &cutset.residue_selector.lu_cut_edge_sets,
+                    )
+                }
+            })
+            .collect();
+    }
 
-    Ok(
-        if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-            residue.select_esurface_residue_with_cut_edges(
-                lu_cut,
-                &cutset.residue_selector.lu_cut_edge_sets,
-            )
-        } else {
-            vec![residue]
-        },
-    )
+    if representation == ThreeDRepresentation::Ltd {
+        for residue in &mut residues {
+            remove_ltd_global_contact_completions_from_local_residue(residue);
+            localize_ltd_threshold_residue_if_needed(residue, cutset)?;
+        }
+    }
+
+    Ok(residues)
+}
+
+fn localize_ltd_threshold_residue_if_needed(
+    residue: &mut crate::cff::expression::ThreeDExpression<OrientationID>,
+    cutset: &CutSet,
+) -> Result<()> {
+    if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+        for esurface_id in right_threshold.esurface_ids() {
+            localize_three_d_expression_on_esurface(residue, *esurface_id)?;
+        }
+    }
+    if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+        for esurface_id in left_threshold.esurface_ids() {
+            localize_three_d_expression_on_esurface(residue, *esurface_id)?;
+        }
+    }
+    Ok(())
 }
 
 fn expect_single_threshold_residue(
@@ -605,6 +833,7 @@ fn expanded_expression_parametric_atom(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
     settings: &GenerationSettings,
+    valid_orientations: &[EdgeVec<Orientation>],
 ) -> Result<Atom> {
     let replacement_rules = expression.surfaces.get_all_replacements_gs(&[]);
     let ose_replacements = expanded_ose_replacements(source);
@@ -616,23 +845,10 @@ fn expanded_expression_parametric_atom(
     } else {
         Atom::num(1)
     };
-    let source_parity_correction = if representation == ThreeDRepresentation::Cff {
-        cross_section_residue_source_parity_correction(graph, source, cutset)
-    } else {
-        Atom::num(1)
-    };
-    let all_orientations = crate::settings::global::OrientationPattern::default();
-    let pattern = if settings.explicit_orientation_sum_only {
-        &all_orientations
-    } else {
-        &settings.orientation_pattern
-    };
-
+    let source_global_sign_factor =
+        cross_section_residue_source_global_sign_factor(graph, source, cutset, representation);
     let mut sum = Atom::Zero;
     for orientation in expression.orientations.iter() {
-        if !pattern.filter_orientation(orientation.orientation()) {
-            continue;
-        }
         let mut atom = numerator.replace_multiple(orientation.energy_replacements_gs(graph));
         atom *= orientation
             .variants
@@ -641,14 +857,25 @@ fn expanded_expression_parametric_atom(
             .reduce(|acc, term| acc + term)
             .unwrap_or_else(Atom::new);
         atom = atom.replace_multiple(&replacement_rules);
-        if !settings.explicit_orientation_sum_only {
-            atom *= orientation.orientation_thetas_gs();
-        }
         sum += atom;
+    }
+    if !settings.explicit_orientation_sum_only {
+        if valid_orientations.is_empty() {
+            return Err(eyre!(
+                "expanded 4D local UV term for graph {} cannot be embedded in an empty production orientation space",
+                graph.name
+            ));
+        }
+        // The orientations generated for an expanded-4D UV source are the
+        // internal energy-residue decomposition of that reduced source. They
+        // are not the production graph's orientation variables. Sum the source
+        // orientations explicitly, then distribute the result uniformly over
+        // the outer orientation projector used by ordinary CFF evaluation.
+        sum /= Atom::num(valid_orientations.len() as i64);
     }
 
     Ok(
-        (sum * inverse_energy_product * residual_denominator_factor * source_parity_correction)
+        (sum * inverse_energy_product * residual_denominator_factor * source_global_sign_factor)
             .replace_multiple(&ose_replacements)
             .replace(GS.dim)
             .with(4)
@@ -658,23 +885,33 @@ fn expanded_expression_parametric_atom(
     )
 }
 
-fn cross_section_residue_source_parity_correction(
+fn cross_section_residue_source_global_sign_factor(
     graph: &Graph,
     source: &Expanded4DParsedSource,
     cutset: &CutSet,
+    representation: ThreeDRepresentation,
 ) -> Atom {
     if cutset.residue_selector.lu_cut.is_none() {
         return Atom::num(1);
     }
+    if representation == ThreeDRepresentation::Ltd {
+        let source_exponent = three_d_global_sign_exponent_for_expanded_source(source);
+        return if source_exponent.is_multiple_of(2) {
+            Atom::num(1)
+        } else {
+            Atom::num(-1)
+        };
+    }
 
-    // Cross-section LU residues are assembled in GammaLoop's full-graph CFF
-    // production convention. Expanded-4D local UV terms are generated on
-    // reduced parsed sources, whose generalized-CFF global sign can differ
-    // from the full graph, especially for repeated UV denominators. Correct
-    // each reduced source to the full-graph convention before the forest terms
-    // are combined.
-    let full_exponent = graph.cff_global_sign_exponent_for_3d_expression();
-    let source_exponent = cff_global_sign_exponent_for_expanded_source(source);
+    // Cross-section LU residues are assembled in GammaLoop's full-graph 3D
+    // production convention. Expanded-4D local UV terms are projected through
+    // reduced parsed sources, whose generalized 3D-rep global sign convention
+    // is set by their loop count and repeated-signature excess. Convert each
+    // reduced source to the full-graph convention before combining forest
+    // terms; this is an algebraic convention change, not a representation-
+    // dependent tuning of individual cuts.
+    let full_exponent = graph.three_d_global_sign_exponent();
+    let source_exponent = three_d_global_sign_exponent_for_expanded_source(source);
     if (full_exponent + source_exponent).is_multiple_of(2) {
         Atom::num(1)
     } else {
@@ -694,7 +931,7 @@ fn cff_inverse_energy_product_for_expanded_source(source: &Expanded4DParsedSourc
         .unwrap_or_else(|| Atom::num(1))
 }
 
-fn cff_global_sign_exponent_for_expanded_source(source: &Expanded4DParsedSource) -> usize {
+fn three_d_global_sign_exponent_for_expanded_source(source: &Expanded4DParsedSource) -> usize {
     let preserved_edges = source
         .denominator_edges
         .iter()
@@ -800,11 +1037,11 @@ fn expression_options_for_expanded_term(
 fn build_expanded_4d_parsed_source(
     graph: &Graph,
     denominators: &[ExpandedDenominator],
-    contract_subgraph: &impl SubGraphLike<Base = linnet::half_edge::subgraph::SuBitGraph>,
+    source_context: Expanded4DSourceContext<'_>,
 ) -> Result<Expanded4DParsedSource> {
     let mut parent = (0..graph.n_nodes()).collect_vec();
     for (pair, _edge_id, edge_data) in graph.underlying.iter_edges() {
-        if edge_data.data.is_dummy || !contract_subgraph.includes(&pair) {
+        if edge_data.data.is_dummy || !source_context.cograph_contract_subgraph.includes(&pair) {
             continue;
         }
         if let HedgePair::Paired { source, sink } = pair {
@@ -834,6 +1071,13 @@ fn build_expanded_4d_parsed_source(
         let root = find_parent(&mut parent, usize::from(*node_id));
         node_to_internal.insert(*node_id, root_to_internal[&root]);
     }
+    let mut next_node_id = root_to_internal.len();
+    let uv_node_to_internal = uv_leading_node_map(
+        graph,
+        denominators,
+        source_context.uv_leading_subgraph,
+        &mut next_node_id,
+    )?;
 
     let active_loop_columns = active_loop_columns_for_denominators(graph, denominators)?;
     let loop_names = active_loop_columns
@@ -854,61 +1098,7 @@ fn build_expanded_4d_parsed_source(
 
     let mut internal_edges = Vec::new();
     let mut denominator_edges = Vec::new();
-    let mut initial_state_cut_edges = Vec::new();
     let mut edge_map_internal = BTreeMap::new();
-    let denominator_source_edges = denominators
-        .iter()
-        .map(|denominator| denominator.source_edge)
-        .collect::<BTreeSet<_>>();
-
-    for (_, edge_index, _) in graph
-        .underlying
-        .iter_edges_of(&graph.initial_state_cut)
-        .sorted_by_key(|(_, edge_index, _)| *edge_index)
-    {
-        let edge_data = &graph.underlying[edge_index];
-        if edge_data.is_dummy || denominator_source_edges.contains(&edge_index) {
-            continue;
-        }
-        let (_, pair) = graph[&edge_index];
-        let HedgePair::Paired { source, sink } = pair else {
-            return Err(eyre!(
-                "expanded 4D initial-state cut edge {edge_index} is not a paired internal edge",
-            ));
-        };
-        let local_edge_id = internal_edges.len();
-        let source_node = *node_to_internal
-            .get(&graph.node_id(source))
-            .ok_or_else(|| eyre!("missing source-node mapping for edge {edge_index}"))?;
-        let sink_node = *node_to_internal
-            .get(&graph.node_id(sink))
-            .ok_or_else(|| eyre!("missing sink-node mapping for edge {edge_index}"))?;
-        let signature = &graph.loop_momentum_basis.edge_signatures[edge_index];
-        let momentum_signature = MomentumSignature {
-            loop_signature: active_loop_columns
-                .iter()
-                .map(|loop_index| sign_to_i32(signature.internal[LoopIndex::from(*loop_index)]))
-                .collect(),
-            external_signature: (&signature.external).into_iter().map(sign_to_i32).collect(),
-        };
-        let (external_id, external_sign) =
-            initial_state_cut_external_alias(usize::from(edge_index), &momentum_signature)?;
-        internal_edges.push(ParsedGraphInternalEdge {
-            edge_id: local_edge_id,
-            tail: source_node,
-            head: sink_node,
-            label: graph.underlying[edge_index].name.value.clone(),
-            mass_key: Some(edge_data.particle.mass_atom().to_canonical_string()),
-            signature: momentum_signature,
-            had_pow: false,
-        });
-        initial_state_cut_edges.push(ParsedGraphInitialStateCutEdge {
-            edge_id: local_edge_id,
-            external_id,
-            external_sign,
-        });
-        edge_map_internal.insert(local_edge_id, usize::from(edge_index));
-    }
 
     for denominator in denominators {
         let (_, pair) = graph[&denominator.source_edge];
@@ -919,20 +1109,57 @@ fn build_expanded_4d_parsed_source(
             ));
         };
         let local_edge_id = internal_edges.len();
-        let source_node = *node_to_internal
-            .get(&graph.node_id(source))
-            .ok_or_else(|| {
+        let (source_node, sink_node) = if denominator_uses_uv_loop_basis(denominator) {
+            let Some(uv_subgraph) = source_context.uv_leading_subgraph else {
+                return Err(eyre!(
+                    "expanded 4D local UV denominator {} uses the UV loop basis, but no UV source subgraph was provided",
+                    denominator.source_edge
+                ));
+            };
+            if !uv_subgraph.includes(&pair) {
+                return Err(eyre!(
+                    "expanded 4D local UV denominator {} uses the UV loop basis, but its source edge is not part of the UV-leading subgraph {}",
+                    denominator.source_edge,
+                    uv_subgraph.string_label()
+                ));
+            }
+            let source_node =
+                *uv_node_to_internal
+                    .get(&graph.node_id(source))
+                    .ok_or_else(|| {
+                        eyre!(
+                            "missing UV source-node mapping for edge {} in UV-leading subgraph {}",
+                            denominator.source_edge,
+                            uv_subgraph.string_label()
+                        )
+                    })?;
+            let sink_node = *uv_node_to_internal
+                .get(&graph.node_id(sink))
+                .ok_or_else(|| {
+                    eyre!(
+                        "missing UV sink-node mapping for edge {} in UV-leading subgraph {}",
+                        denominator.source_edge,
+                        uv_subgraph.string_label()
+                    )
+                })?;
+            (source_node, sink_node)
+        } else {
+            let source_node = *node_to_internal
+                .get(&graph.node_id(source))
+                .ok_or_else(|| {
+                    eyre!(
+                        "missing source-node mapping for edge {}",
+                        denominator.source_edge
+                    )
+                })?;
+            let sink_node = *node_to_internal.get(&graph.node_id(sink)).ok_or_else(|| {
                 eyre!(
-                    "missing source-node mapping for edge {}",
+                    "missing sink-node mapping for edge {}",
                     denominator.source_edge
                 )
             })?;
-        let sink_node = *node_to_internal.get(&graph.node_id(sink)).ok_or_else(|| {
-            eyre!(
-                "missing sink-node mapping for edge {}",
-                denominator.source_edge
-            )
-        })?;
+            (source_node, sink_node)
+        };
         let momentum_signature =
             denominator_momentum_signature(graph, denominator, &active_loop_columns)?;
         let is_preserved_4d = momentum_signature
@@ -959,7 +1186,7 @@ fn build_expanded_4d_parsed_source(
         edge_map_internal.insert(local_edge_id, usize::from(denominator.source_edge));
     }
 
-    let external_edges = graph
+    let mut external_edges = graph
         .underlying
         .iter_edges()
         .filter_map(|(pair, edge_id, _)| {
@@ -981,16 +1208,22 @@ fn build_expanded_4d_parsed_source(
             })
         })
         .collect::<Vec<_>>();
+    complete_external_balance_edges(&mut external_edges, &internal_edges, &external_names);
 
     let parsed = ParsedGraph {
         internal_edges,
         external_edges,
-        initial_state_cut_edges,
+        initial_state_cut_edges: Vec::new(),
         loop_names,
         external_names,
         node_name_to_internal: root_to_internal
             .into_iter()
             .map(|(root, node)| (format!("n{root}"), node))
+            .chain(
+                uv_node_to_internal
+                    .into_iter()
+                    .map(|(node_id, node)| (format!("uv{}", usize::from(node_id)), node)),
+            )
             .collect(),
     };
 
@@ -1011,6 +1244,125 @@ fn build_expanded_4d_parsed_source(
         edge_map,
         denominator_edges,
     })
+}
+
+fn uv_leading_node_map(
+    graph: &Graph,
+    denominators: &[ExpandedDenominator],
+    uv_subgraph: Option<&SuBitGraph>,
+    next_node_id: &mut usize,
+) -> Result<BTreeMap<linnet::half_edge::NodeIndex, usize>> {
+    let Some(uv_subgraph) = uv_subgraph else {
+        return Ok(BTreeMap::new());
+    };
+
+    let mut uv_nodes = BTreeSet::new();
+    for denominator in denominators
+        .iter()
+        .filter(|denominator| denominator_uses_uv_loop_basis(denominator))
+    {
+        let (_, pair) = graph[&denominator.source_edge];
+        let HedgePair::Paired { source, sink } = pair else {
+            return Err(eyre!(
+                "expanded 4D UV-leading denominator edge {} is not a paired internal edge",
+                denominator.source_edge
+            ));
+        };
+        if !uv_subgraph.includes(&pair) {
+            return Err(eyre!(
+                "expanded 4D UV-leading denominator edge {} is outside UV-leading subgraph {}",
+                denominator.source_edge,
+                uv_subgraph.string_label()
+            ));
+        }
+        uv_nodes.insert(graph.node_id(source));
+        uv_nodes.insert(graph.node_id(sink));
+    }
+
+    let mut uv_node_to_internal = BTreeMap::new();
+    for node in uv_nodes {
+        uv_node_to_internal.insert(node, *next_node_id);
+        *next_node_id += 1;
+    }
+    Ok(uv_node_to_internal)
+}
+
+fn complete_external_balance_edges(
+    external_edges: &mut Vec<ParsedGraphExternalEdge>,
+    internal_edges: &[ParsedGraphInternalEdge],
+    external_names: &[String],
+) {
+    let external_count = external_names.len();
+    let mut balances = BTreeMap::<usize, Vec<i32>>::new();
+    for edge in internal_edges {
+        balances
+            .entry(edge.tail)
+            .or_insert_with(|| vec![0; external_count]);
+        balances
+            .entry(edge.head)
+            .or_insert_with(|| vec![0; external_count]);
+        for (external_id, coeff) in edge.signature.external_signature.iter().enumerate() {
+            balances.get_mut(&edge.tail).unwrap()[external_id] -= coeff;
+            balances.get_mut(&edge.head).unwrap()[external_id] += coeff;
+        }
+    }
+    for edge in external_edges.iter() {
+        if let Some(source) = edge.source {
+            balances
+                .entry(source)
+                .or_insert_with(|| vec![0; external_count]);
+            for (external_id, coeff) in edge.external_coefficients.iter().enumerate() {
+                balances.get_mut(&source).unwrap()[external_id] += coeff;
+            }
+        }
+        if let Some(destination) = edge.destination {
+            balances
+                .entry(destination)
+                .or_insert_with(|| vec![0; external_count]);
+            for (external_id, coeff) in edge.external_coefficients.iter().enumerate() {
+                balances.get_mut(&destination).unwrap()[external_id] += coeff;
+            }
+        }
+    }
+
+    let mut next_external_id = external_edges
+        .iter()
+        .map(|edge| edge.edge_id)
+        .max()
+        .map(|edge_id| edge_id + 1)
+        .unwrap_or(0);
+    for (node, balance) in balances {
+        for (external_id, coeff) in balance.into_iter().enumerate() {
+            let name = external_names
+                .get(external_id)
+                .cloned()
+                .unwrap_or_else(|| format!("p{external_id}"));
+            for _ in 0..coeff.max(0) {
+                let mut external_coefficients = vec![0; external_count];
+                external_coefficients[external_id] = -1;
+                external_edges.push(ParsedGraphExternalEdge {
+                    edge_id: next_external_id,
+                    source: Some(node),
+                    destination: None,
+                    label: format!("-{name}"),
+                    external_coefficients,
+                });
+                next_external_id += 1;
+            }
+            for _ in 0..(-coeff).max(0) {
+                let mut external_coefficients = vec![0; external_count];
+                external_coefficients[external_id] = 1;
+                external_edges.push(ParsedGraphExternalEdge {
+                    edge_id: next_external_id,
+                    source: None,
+                    destination: Some(node),
+                    label: name.clone(),
+                    external_coefficients,
+                });
+                next_external_id += 1;
+            }
+        }
+    }
 }
 
 fn active_loop_columns_for_denominators(
@@ -1035,7 +1387,7 @@ fn denominator_momentum_signature(
     active_loop_columns: &[usize],
 ) -> Result<MomentumSignature> {
     let full_signature = full_denominator_momentum_signature(graph, denominator)?;
-    Ok(MomentumSignature {
+    let signature = MomentumSignature {
         loop_signature: active_loop_columns
             .iter()
             .map(|loop_index| {
@@ -1047,7 +1399,8 @@ fn denominator_momentum_signature(
             })
             .collect(),
         external_signature: full_signature.external_signature,
-    })
+    };
+    Ok(signature)
 }
 
 fn full_denominator_momentum_signature(
@@ -1071,14 +1424,9 @@ fn full_denominator_momentum_signature(
             denominator.momentum.log_print(None)
         )
     })?;
-    let signature = MomentumSignature {
+    Ok(MomentumSignature {
         loop_signature,
         external_signature,
-    };
-    Ok(if denominator_uses_uv_loop_basis(denominator) {
-        signature.canonical_up_to_sign().0
-    } else {
-        signature
     })
 }
 

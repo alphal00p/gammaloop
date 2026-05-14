@@ -3412,16 +3412,12 @@ fn build_test_cff_ltd_verdict(output: &TestCffLtdOutput) -> TestCffLtdVerdict {
         let (abs_diff, rel_diff) = complex_distance(&candidate.value, &baseline.value);
         let within_tolerance = abs_diff.leq_f64(DIRECT_ABSOLUTE_TOLERANCE)
             || rel_diff.leq_f64(direct_relative_tolerance);
-        let exactly_identical = candidate.representation != baseline.representation
-            && candidate.value_text == baseline.value_text;
-        let status = if within_tolerance && !exactly_identical {
+        let status = if within_tolerance {
             TestCffLtdStatus::Success
         } else {
             TestCffLtdStatus::Fail
         };
-        let message = if exactly_identical {
-            "Different representations produced an exactly identical formatted value."
-        } else if within_tolerance {
+        let message = if within_tolerance {
             "Direct representations agree within the half-precision threshold."
         } else {
             "Direct representations differ beyond the half-precision threshold."

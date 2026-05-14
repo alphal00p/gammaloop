@@ -21,7 +21,10 @@ use symbolica::{
 use super::{
     esurface::Esurface,
     hsurface::Hsurface,
-    surface::{EsurfaceID, GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, LinearEnergyExpr},
+    surface::{
+        EsurfaceID, GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, HybridSurfaceID,
+        LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind, SurfaceOrigin,
+    },
 };
 use crate::{
     graph::Graph,
@@ -34,8 +37,43 @@ pub type ThreeDExpression<O> =
 pub type CFFExpression<O> =
     three_dimensional_reps::expression::CFFExpression<O, Esurface, Hsurface>;
 
+pub(crate) fn normalize_three_d_expression_cut_support_with_raised_edge_groups<O>(
+    expression: &mut ThreeDExpression<O>,
+    raised_edge_groups: &[Vec<EdgeIndex>],
+) where
+    O: From<usize> + Into<usize>,
+{
+    for orientation in expression.orientations.iter_mut() {
+        for variant in &mut orientation.variants {
+            variant.denominator_edges = normalize_cut_edge_support_with_raised_edge_groups(
+                &variant.denominator_edges,
+                raised_edge_groups,
+            );
+        }
+    }
+}
+
+pub(crate) fn normalize_cut_edge_support_with_raised_edge_groups(
+    edges: &[EdgeIndex],
+    raised_edge_groups: &[Vec<EdgeIndex>],
+) -> Vec<EdgeIndex> {
+    edges
+        .iter()
+        .map(|edge| {
+            raised_edge_groups
+                .iter()
+                .find(|group| group.contains(edge))
+                .and_then(|group| group.first())
+                .copied()
+                .unwrap_or(*edge)
+        })
+        .sorted()
+        .dedup()
+        .collect()
+}
+
 pub(crate) fn remove_ltd_global_contact_completions_from_local_residue(
-    residue: &mut CFFExpression<OrientationID>,
+    residue: &mut ThreeDExpression<OrientationID>,
 ) {
     // Repeated-signature LTD generation may add CFF lower-sector contact
     // completions so that the standalone, globally evaluated 3D expression is
@@ -54,8 +92,8 @@ pub(crate) fn remove_ltd_global_contact_completions_from_local_residue(
     }
 }
 
-pub(crate) fn localize_numerator_energy_maps_on_esurface(
-    residue: &mut CFFExpression<OrientationID>,
+pub(crate) fn localize_three_d_expression_on_esurface(
+    residue: &mut ThreeDExpression<OrientationID>,
     esurface_id: EsurfaceID,
 ) -> Result<()> {
     let esurface = residue.surfaces.esurface_cache[esurface_id].clone();
@@ -67,22 +105,27 @@ pub(crate) fn localize_numerator_energy_maps_on_esurface(
 
     if localized_external_sign.unsigned_abs() != 1 {
         return Err(eyre!(
-            "cannot localize numerator energy maps on E-surface {esurface_id:?}: expected a unit external-energy coefficient, found {localized_external_sign}"
+            "cannot localize 3D expression on E-surface {esurface_id:?}: expected a unit external-energy coefficient, found {localized_external_sign}"
         ));
     }
 
-    let mut replacement = esurface
+    let replacement = esurface
         .energies
         .iter()
         .fold(LinearEnergyExpr::zero(), |acc, edge_id| {
             acc + LinearEnergyExpr::ose(*edge_id, 1)
         });
-    for (external_edge, external_sign) in &esurface.external_shift {
-        if *external_edge != localized_external_edge {
-            replacement = replacement + LinearEnergyExpr::external(*external_edge, *external_sign);
-        }
-    }
-    replacement = replacement.scale(-localized_external_sign);
+    let replacement = esurface
+        .external_shift
+        .iter()
+        .fold(replacement, |acc, (external_edge, external_sign)| {
+            if *external_edge == localized_external_edge {
+                acc
+            } else {
+                acc + LinearEnergyExpr::external(*external_edge, *external_sign)
+            }
+        })
+        .scale(-localized_external_sign);
 
     for orientation in &mut residue.orientations {
         for energy_expr in &mut orientation.loop_energy_map {
@@ -97,7 +140,153 @@ pub(crate) fn localize_numerator_energy_maps_on_esurface(
         }
     }
 
+    let referenced_surfaces = referenced_residue_surfaces(residue);
+    let mut surface_map = std::collections::BTreeMap::new();
+    for (surface_id, expression) in residue_surface_linear_expressions(residue) {
+        if !referenced_surfaces.contains(&surface_id) {
+            continue;
+        }
+        let localized = expression
+            .substitute_external_energy(localized_external_edge, &replacement)
+            .canonical();
+        if localized.is_zero() {
+            return Err(eyre!(
+                "localizing on E-surface {esurface_id:?} made spectator surface {surface_id:?} vanish"
+            ));
+        }
+        let localized_id = intern_localized_linear_surface(residue, localized);
+        surface_map.insert(surface_id, HybridSurfaceID::Linear(localized_id));
+    }
+
+    for orientation in &mut residue.orientations {
+        for variant in &mut orientation.variants {
+            for surface_id in &mut variant.numerator_surfaces {
+                if let Some(localized_id) = surface_map.get(surface_id) {
+                    *surface_id = *localized_id;
+                }
+            }
+            variant.denominator.map_mut(|surface_id| {
+                if let Some(localized_id) = surface_map.get(surface_id) {
+                    *surface_id = *localized_id;
+                }
+            });
+            variant.denominator_surface_signs =
+                std::mem::take(&mut variant.denominator_surface_signs)
+                    .into_iter()
+                    .map(|(surface_id, sign)| {
+                        (
+                            surface_map.get(&surface_id).copied().unwrap_or(surface_id),
+                            sign,
+                        )
+                    })
+                    .collect();
+        }
+    }
+
     Ok(())
+}
+
+fn referenced_residue_surfaces(
+    residue: &ThreeDExpression<OrientationID>,
+) -> std::collections::BTreeSet<HybridSurfaceID> {
+    let mut surfaces = std::collections::BTreeSet::new();
+    for orientation in &residue.orientations {
+        for variant in &orientation.variants {
+            surfaces.extend(variant.numerator_surfaces.iter().copied());
+            surfaces.extend(
+                variant
+                    .denominator
+                    .iter_nodes()
+                    .map(|node| node.data)
+                    .filter(|surface_id| *surface_id != HybridSurfaceID::Unit),
+            );
+        }
+    }
+    surfaces
+}
+
+fn residue_surface_linear_expressions(
+    residue: &ThreeDExpression<OrientationID>,
+) -> Vec<(HybridSurfaceID, LinearEnergyExpr)> {
+    let esurfaces = residue
+        .surfaces
+        .esurface_cache
+        .iter_enumerated()
+        .map(|(id, surface)| (HybridSurfaceID::Esurface(id), esurface_linear_expr(surface)));
+    let hsurfaces = residue
+        .surfaces
+        .hsurface_cache
+        .iter_enumerated()
+        .map(|(id, surface)| (HybridSurfaceID::Hsurface(id), hsurface_linear_expr(surface)));
+    let linear_surfaces =
+        residue
+            .surfaces
+            .linear_surface_cache
+            .iter_enumerated()
+            .map(|(id, surface)| {
+                (
+                    HybridSurfaceID::Linear(id),
+                    surface.expression.clone().canonical(),
+                )
+            });
+    esurfaces.chain(hsurfaces).chain(linear_surfaces).collect()
+}
+
+fn esurface_linear_expr(surface: &Esurface) -> LinearEnergyExpr {
+    surface
+        .energies
+        .iter()
+        .fold(LinearEnergyExpr::zero(), |acc, edge_id| {
+            acc + LinearEnergyExpr::ose(*edge_id, 1)
+        })
+        + surface
+            .external_shift
+            .iter()
+            .fold(LinearEnergyExpr::zero(), |acc, (edge_id, coeff)| {
+                acc + LinearEnergyExpr::external(*edge_id, *coeff)
+            })
+}
+
+fn hsurface_linear_expr(surface: &Hsurface) -> LinearEnergyExpr {
+    let positive = surface
+        .positive_energies
+        .iter()
+        .fold(LinearEnergyExpr::zero(), |acc, edge_id| {
+            acc + LinearEnergyExpr::ose(*edge_id, 1)
+        });
+    let negative = surface
+        .negative_energies
+        .iter()
+        .fold(LinearEnergyExpr::zero(), |acc, edge_id| {
+            acc + LinearEnergyExpr::ose(*edge_id, -1)
+        });
+    let external = surface
+        .external_shift
+        .iter()
+        .fold(LinearEnergyExpr::zero(), |acc, (edge_id, coeff)| {
+            acc + LinearEnergyExpr::external(*edge_id, *coeff)
+        });
+    positive + negative + external
+}
+
+fn intern_localized_linear_surface(
+    residue: &mut ThreeDExpression<OrientationID>,
+    expression: LinearEnergyExpr,
+) -> LinearSurfaceID {
+    let surface = LinearSurface {
+        kind: LinearSurfaceKind::Hsurface,
+        expression,
+        origin: SurfaceOrigin::Helper,
+        numerator_only: false,
+    };
+    residue
+        .surfaces
+        .linear_surface_cache
+        .position(|existing| existing == &surface)
+        .unwrap_or_else(|| {
+            residue.surfaces.linear_surface_cache.push(surface);
+            LinearSurfaceID(residue.surfaces.linear_surface_cache.len() - 1)
+        })
 }
 
 pub trait GammaLoopGraphOrientation: GraphOrientation {

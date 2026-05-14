@@ -126,7 +126,7 @@ impl AmplitudeGraphTerm {
         let mut stats = GraphGenerationStats::default();
         let selected_generation_orientations = graph
             .derived_data
-            .cff_expression
+            .three_d_expression
             .as_ref()
             .unwrap()
             .orientations
@@ -288,9 +288,9 @@ impl AmplitudeGraphTerm {
                 estimated_scale: None,
                 esurfaces: graph
                     .derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
-                    .expect("cff_expression should have been created")
+                    .expect("3D expression should have been created")
                     .surfaces
                     .esurface_cache
                     .clone(),
