@@ -154,3 +154,13 @@
     denominator expanded-4D UV bridge.
 - Slower but important anchors such as `GL06`, `GL09`, and `GL48` remain in the
   slow module. They continue to be covered by the 149-test scalar sweep.
+
+## 2026-05-14 Status Refresh
+
+- The Symbolica-update branch backport now uses the requested CFF/LTD
+  representation consistently for scalar cross-section UV and threshold terms.
+- GL24 and GL48 were rerun as focused slow anchors with rich three-way
+  comparison enabled. Both pass with CFF local-3D, CFF local-4D, and LTD
+  local-4D matching at the event-detail level.
+- The stored GL24 and GL48 total-weight snapshots were refreshed after those
+  rich comparisons succeeded. No `.snap.new` files are pending.

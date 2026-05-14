@@ -324,6 +324,11 @@ Two global convention corrections remain:
   full-graph and reduced-source generalized-CFF sign exponents.  This accounts
   for duplicate-signature excess in reduced UV sources.
 
+Expanded-4D LTD local UV source residues do not receive the reduced-source CFF
+sign-exponent correction. They are already evaluated in the generated source's
+dual convention; the full forward-scattering LTD measure bridge is applied once
+when the local forest term is embedded back into the original graph.
+
 Both corrections are formulaic and representation-convention based.  The code
 contains no graph-label sign patches.
 

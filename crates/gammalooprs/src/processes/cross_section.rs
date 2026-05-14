@@ -505,13 +505,10 @@ impl CrossSectionCut {
             ));
         }
 
-        let mut cut_orientation_sign = 1;
         for (orientation, edge_data) in &cut_edges {
             match *orientation {
                 Orientation::Default => {}
-                Orientation::Reversed => {
-                    cut_orientation_sign *= -1;
-                }
+                Orientation::Reversed => {}
                 Orientation::Undirected => {
                     return Err(eyre!(
                         "Cannot determine LTD Cutkosky residue sign for undirected edge {} in graph {}",
@@ -523,20 +520,16 @@ impl CrossSectionCut {
         }
 
         // The parity (-1)^(n-1) maps an n-propagator simultaneous Cutkosky
-        // residue to branch-local dual residues, while the cut-edge orientation
-        // product converts the graph source-side edge flow to the left-to-right
-        // positive-energy Cutkosky convention. Direct original-integrand LTD
-        // projection ignores this bridge for isolated simple cut groups because
-        // the local dual residue is already in that convention once the selected
-        // E-surface canonicalization sign has been cleared. UV forest projection
-        // and collapsed/raised cut groups retain it because they combine
-        // alternatives in GammaLoop's simultaneous LU convention.
+        // residue to branch-local dual residues. The edge-flow orientation is
+        // already part of the generated E-surface convention and its
+        // canonicalization sign, so applying it again here would double-count
+        // reversed initial-state cut edges.
         let multiplicity_sign = if (cut_edges.len() - 1).is_multiple_of(2) {
             1
         } else {
             -1
         };
-        Ok(multiplicity_sign * cut_orientation_sign)
+        Ok(multiplicity_sign)
     }
 
     pub(crate) fn is_s_channel(&self, cross_section_graph: &CrossSectionGraph) -> Result<bool> {

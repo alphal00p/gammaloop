@@ -895,12 +895,12 @@ fn cross_section_residue_source_global_sign_factor(
         return Atom::num(1);
     }
     if representation == ThreeDRepresentation::Ltd {
-        let source_exponent = three_d_global_sign_exponent_for_expanded_source(source);
-        return if source_exponent.is_multiple_of(2) {
-            Atom::num(1)
-        } else {
-            Atom::num(-1)
-        };
+        // The source LTD residue is already evaluated in the dual convention of
+        // the generated reduced source. The full forward-scattering LTD measure
+        // bridge is applied once outside the UV forest; reduced-source CFF sign
+        // exponent corrections are only needed when converting CFF source
+        // residues back to the full-graph CFF convention.
+        return Atom::num(1);
     }
 
     // Cross-section LU residues are assembled in GammaLoop's full-graph 3D

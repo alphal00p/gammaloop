@@ -5928,3 +5928,22 @@ env RUST_MIN_STACK=33554432 cargo nextest run --cargo-profile dev-optim -P test_
 
 `just test_gammaloop` passed 1090/1090 tests, and the scalar sweep passed
 149/149 retained scalar cross-section tests after the fast-anchor promotion.
+
+## 2026-05-14: LTD cross-section convention cleanup after Symbolica branch backport
+
+- Removed the remaining duplicated cut-edge-orientation factor from the LTD LU
+  Cutkosky bridge. The generated E-surface convention and subsequent surface
+  canonicalization already carry the orientation of reversed initial-state cut
+  edges; multiplying by it again produced relative CFF/LTD sign flips in
+  selected scalar cross-section anchors. The retained bridge is the generic
+  simultaneous-to-dual parity `(-1)^(n-1)` for an `n`-propagator LU cut.
+- Kept expanded-4D LTD local UV source residues in their generated dual
+  convention. The reduced-source generalized-CFF sign-exponent correction is
+  now applied only to CFF expanded-4D UV sources; LTD applies the full
+  forward-scattering measure bridge once when the forest term is embedded in
+  the original graph.
+- The GL24 UV-on/threshold-off and GL48 UV-on/threshold-on scalar anchors now
+  pass the rich three-way local inspect comparison among CFF local-3D, CFF
+  local-4D, and LTD local-4D. Their total-weight snapshots were refreshed only
+  after the detailed event groups, event weights, and additional weights
+  matched across all three modes.

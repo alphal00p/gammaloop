@@ -24,13 +24,13 @@ pub struct ResidueSelector {
     /// GammaLoop cross-section LU cuts are simultaneous Cutkosky residues,
     /// while LTD selects the same support from branch-local dual residues.
     /// For a cut with n on-shell propagators the bridge contains the generic
-    /// simultaneous-residue parity (-1)^(n-1), multiplied by the product of
-    /// cut-edge orientation signs that converts the graph source-side edge
-    /// flow to the left-to-right positive-energy Cutkosky convention. Keeping
-    /// this on the E-surface lets raised Cutkosky groups containing several cut
-    /// alternatives retain branch-local signs before the E-surfaces are
-    /// normalized to their representative. CFF residues are already assembled
-    /// in the GammaLoop Cutkosky convention and ignore this.
+    /// simultaneous-residue parity (-1)^(n-1). Edge-flow orientation is already
+    /// encoded in the generated E-surface convention and its canonicalization
+    /// sign, so it is not multiplied in here. Keeping the bridge on the
+    /// E-surface lets raised Cutkosky groups containing several cut alternatives
+    /// retain branch-local signs before the E-surfaces are normalized to their
+    /// representative. CFF residues are already assembled in the GammaLoop
+    /// Cutkosky convention and ignore this.
     pub ltd_lu_cut_esurface_signs: Vec<(EsurfaceID, i64)>,
     pub left_th_cut: Option<RaisedEsurfaceGroup>,
     pub right_th_cut: Option<RaisedEsurfaceGroup>,
