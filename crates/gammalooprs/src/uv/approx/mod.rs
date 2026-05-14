@@ -445,7 +445,7 @@ impl Approximation {
                         expression,
                         lu_cut,
                         &cutset.residue_selector.lu_cut_edge_sets,
-                        &cutset.residue_selector.ltd_simple_lu_cut_esurface_signs,
+                        &cutset.residue_selector.ltd_lu_cut_esurface_signs,
                         representation,
                     )
                 })
@@ -469,6 +469,9 @@ impl Approximation {
                     true,
                     &settings.orientation_pattern,
                 );
+                if representation == ThreeDRepresentation::Ltd {
+                    atom *= Atom::num(cutset.residue_selector.ltd_lu_cut_residue_prefactor_sign);
+                }
                 if average_for_outer_orientation_projection {
                     // The root term comes from the explicitly summed production
                     // expression, while CFF local-3D forests apply the orientation

@@ -497,7 +497,7 @@ pub struct CrossSectionCut {
 }
 
 impl CrossSectionCut {
-    pub(crate) fn ltd_simple_lu_cut_residue_sign(&self, graph: &Graph) -> Result<i64> {
+    pub(crate) fn ltd_lu_cut_esurface_sign(&self, graph: &Graph) -> Result<i64> {
         let cut_edges = self.cut.iter_edges(graph).collect_vec();
         if cut_edges.is_empty() {
             return Err(eyre!(
@@ -521,16 +521,32 @@ impl CrossSectionCut {
             }
         }
 
+        // Selected LTD E-surface variables follow the canonical generated
+        // E-surface orientation. Cutkosky cuts instead use the positive-energy
+        // direction of the oriented cut, so the selected variable carries one
+        // sign for each reversed cut edge.
+        Ok(cut_orientation_sign)
+    }
+
+    pub(crate) fn ltd_lu_cut_dual_residue_sign(&self, graph: &Graph) -> Result<i64> {
+        let cut_edge_count = self.cut.iter_edges(graph).count();
+        if cut_edge_count == 0 {
+            return Err(eyre!(
+                "Cannot determine LTD Cutkosky residue sign for an empty cut in graph {}",
+                graph.name
+            ));
+        }
+
         // The parity (-1)^(n-1) maps an n-propagator simultaneous Cutkosky
-        // residue to branch-local dual residues. Each cut edge also carries
-        // the sign of the edge flow relative to the positive-energy Cutkosky
-        // direction used by the forward-scattering cut.
-        let multiplicity_sign = if (cut_edges.len() - 1).is_multiple_of(2) {
+        // residue to branch-local dual residues. This is a residue prefactor,
+        // not a sign of the selected E-surface variable, so it must be applied
+        // once to the selected local residue rather than folded into every
+        // selected denominator occurrence.
+        Ok(if (cut_edge_count - 1).is_multiple_of(2) {
             1
         } else {
             -1
-        };
-        Ok(multiplicity_sign * cut_orientation_sign)
+        })
     }
 
     pub(crate) fn is_s_channel(&self, cross_section_graph: &CrossSectionGraph) -> Result<bool> {
@@ -1133,30 +1149,56 @@ impl CrossSectionGraph {
         left_th_cut: Option<RaisedEsurfaceGroup>,
         right_th_cut: Option<RaisedEsurfaceGroup>,
     ) -> Result<ResidueSelector> {
-        let (lu_cut_edge_sets, ltd_simple_lu_cut_residue_signs) = self
-            .cut_edge_sets_with_ltd_simple_residue_signs(raised_cut_group.cuts.iter().copied())?;
-        let ltd_simple_lu_cut_group_basis_sign =
-            self.ltd_simple_lu_cut_group_basis_sign(raised_cut_group);
-        let ltd_simple_lu_cut_esurface_signs = raised_cut_group
+        let apply_simple_dual_residue_parity =
+            raised_cut_group.related_esurface_group.max_occurence == 1;
+        let (lu_cut_edge_sets, ltd_lu_cut_esurface_signs, ltd_lu_cut_dual_residue_sign) = self
+            .cut_edge_sets_with_ltd_lu_cut_signs(
+                raised_cut_group.cuts.iter().copied(),
+                apply_simple_dual_residue_parity,
+            )?;
+        let ltd_lu_cut_basis_sign =
+            self.ltd_lu_cut_group_basis_sign(&raised_cut_group.related_esurface_group);
+        let simple_lu_cut_sign = if apply_simple_dual_residue_parity {
+            ltd_lu_cut_dual_residue_sign * ltd_lu_cut_basis_sign
+        } else {
+            1
+        };
+        let ltd_lu_cut_residue_prefactor_sign = if apply_simple_dual_residue_parity {
+            1
+        } else {
+            ltd_lu_cut_dual_residue_sign
+                * ltd_lu_cut_basis_sign
+                * self.ltd_lu_cut_confluent_variable_sign(
+                    &raised_cut_group.related_esurface_group,
+                    &ltd_lu_cut_esurface_signs,
+                )
+        };
+        let ltd_lu_cut_esurface_signs = raised_cut_group
             .cut_esurface_ids
             .iter()
             .copied()
-            .zip(ltd_simple_lu_cut_residue_signs.iter().copied())
-            .map(|(esurface_id, sign)| (esurface_id, sign * ltd_simple_lu_cut_group_basis_sign))
+            .zip(ltd_lu_cut_esurface_signs.iter().copied())
+            .map(|(esurface_id, sign)| (esurface_id, sign * simple_lu_cut_sign))
             .collect();
         Ok(ResidueSelector {
             lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
             lu_cut_edge_sets,
-            ltd_simple_lu_cut_esurface_signs,
+            ltd_lu_cut_esurface_signs,
+            ltd_lu_cut_residue_prefactor_sign,
             left_th_cut,
             right_th_cut,
         })
     }
 
-    fn cut_edge_sets_with_ltd_simple_residue_signs(
+    fn cut_edge_sets_with_ltd_lu_cut_signs(
         &self,
         cut_ids: impl IntoIterator<Item = CutId>,
-    ) -> Result<(Vec<Vec<linnet::half_edge::involution::EdgeIndex>>, Vec<i64>)> {
+        apply_simple_dual_residue_parity: bool,
+    ) -> Result<(
+        Vec<Vec<linnet::half_edge::involution::EdgeIndex>>,
+        Vec<i64>,
+        i64,
+    )> {
         let raised_edge_groups = self.graph.get_raised_edge_groups();
         let edge_sets_and_signs = cut_ids
             .into_iter()
@@ -1176,32 +1218,77 @@ impl CrossSectionGraph {
                         &cut_edges,
                         &raised_edge_groups,
                     ),
-                    self.cuts[cut_id].ltd_simple_lu_cut_residue_sign(&self.graph)?,
+                    self.cuts[cut_id].ltd_lu_cut_esurface_sign(&self.graph)?,
+                    if apply_simple_dual_residue_parity {
+                        self.cuts[cut_id].ltd_lu_cut_dual_residue_sign(&self.graph)?
+                    } else {
+                        1
+                    },
                 ))
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(edge_sets_and_signs.into_iter().unzip())
+        let dual_residue_sign = edge_sets_and_signs
+            .first()
+            .map(|(_, _, sign)| *sign)
+            .unwrap_or(1);
+        if edge_sets_and_signs
+            .iter()
+            .any(|(_, _, sign)| *sign != dual_residue_sign)
+        {
+            return Err(eyre!(
+                "LTD LU cut group in graph {} contains cuts with different simultaneous-to-dual residue parities; this is not supported by a single residue selector",
+                self.graph.name
+            ));
+        }
+        let (edge_sets, esurface_signs): (Vec<_>, Vec<_>) = edge_sets_and_signs
+            .into_iter()
+            .map(|(edge_set, esurface_sign, _)| (edge_set, esurface_sign))
+            .unzip();
+        Ok((edge_sets, esurface_signs, dual_residue_sign))
     }
 
-    fn ltd_simple_lu_cut_group_basis_sign(&self, raised_cut_group: &RaisedCutGroup) -> i64 {
-        if raised_cut_group.related_esurface_group.max_occurence != 1 {
-            return 1;
-        }
-
+    fn ltd_lu_cut_group_basis_sign(&self, raised_esurface_group: &RaisedEsurfaceGroup) -> i64 {
         // In a forward-scattering cross section the LU cuts are resolved into
         // a global cut basis before the selected E-surface is projected. CFF is
         // assembled directly in that simultaneous Cutkosky basis. LTD selects
-        // branch-local dual residues, so simple cuts need the orientation of
-        // this resolved LU-cut basis in addition to the per-cut
-        // simultaneous-to-dual bridge. Raised/confluent cut groups already
-        // carry their Cauchy derivative convention in the repeated-pole
-        // construction and must not receive this simple-basis factor.
+        // branch-local dual residues, so simple cuts carry this basis
+        // orientation directly. For repeated-pole residues the Cauchy
+        // derivative acts on the local E-surface variable, and the basis
+        // orientation therefore enters through the m-1 derivative variable
+        // changes of an m-th order pole.
         let resolved_lu_cut_group_count = self.derived_data.raised_data.raised_cut_groups.len();
-        if resolved_lu_cut_group_count.is_multiple_of(2) {
+        let basis_sign = if resolved_lu_cut_group_count.is_multiple_of(2) {
             1
         } else {
             -1
+        };
+        if raised_esurface_group.max_occurence == 1 {
+            return basis_sign;
         }
+        if (raised_esurface_group.max_occurence - 1).is_multiple_of(2) {
+            1
+        } else {
+            basis_sign
+        }
+    }
+
+    fn ltd_lu_cut_confluent_variable_sign(
+        &self,
+        raised_esurface_group: &RaisedEsurfaceGroup,
+        esurface_signs: &[i64],
+    ) -> i64 {
+        if raised_esurface_group.max_occurence == 1 {
+            return 1;
+        }
+
+        // In confluent Cutkosky groups the repeated-pole LTD construction
+        // already carries the Cauchy derivative convention. The remaining
+        // bridge from the generated canonical E-surface variables to the
+        // resolved LU-cut basis contains the product of the Cutkosky
+        // positive-energy directions of all alternatives in the confluent
+        // group. This matters when the alternatives are the same generated
+        // E-surface with opposite physical cut orientations.
+        esurface_signs.iter().product()
     }
 
     fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
@@ -1244,7 +1331,7 @@ impl CrossSectionGraph {
                     expression.clone(),
                     &raised_cut_group.related_esurface_group,
                     &cutset.residue_selector.lu_cut_edge_sets,
-                    &cutset.residue_selector.ltd_simple_lu_cut_esurface_signs,
+                    &cutset.residue_selector.ltd_lu_cut_esurface_signs,
                     representation,
                 );
                 if representation == ThreeDRepresentation::Ltd {
@@ -1275,8 +1362,16 @@ impl CrossSectionGraph {
                                 true,
                                 &settings.orientation_pattern,
                             );
+                        let ltd_lu_cut_residue_prefactor =
+                            if representation == ThreeDRepresentation::Ltd {
+                                Atom::num(cutset.residue_selector.ltd_lu_cut_residue_prefactor_sign)
+                            } else {
+                                Atom::num(1)
+                            };
                         self.finalize_parametric_integrand_atom(
-                            atom * &lu_prefactor * &representation_prefactor,
+                            atom * &lu_prefactor
+                                * &representation_prefactor
+                                * ltd_lu_cut_residue_prefactor,
                         )
                     })
                     .collect::<Result<Vec<_>>>()?;

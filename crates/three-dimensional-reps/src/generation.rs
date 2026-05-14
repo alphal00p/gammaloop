@@ -6917,6 +6917,52 @@ mod ltd_tests {
         }
     }
 
+    #[cfg(feature = "eval")]
+    fn gl13_forward_graph_with_repeated_spectator() -> ParsedGraph {
+        let internal_edges = [
+            (0, 0, 1, vec![0, 0, 0], vec![1], "m1"),
+            (1, 0, 1, vec![1, 0, 0], vec![0], "m0"),
+            (2, 0, 5, vec![-1, 0, 0], vec![-1], "m0"),
+            (3, 1, 3, vec![1, 0, 0], vec![1], "m0"),
+            (4, 2, 3, vec![0, 1, 0], vec![0], "m0"),
+            (5, 2, 4, vec![0, 0, 1], vec![0], "m0"),
+            (6, 2, 5, vec![0, -1, -1], vec![0], "m0"),
+            (7, 3, 4, vec![1, 1, 0], vec![1], "m0"),
+            (8, 4, 5, vec![1, 1, 1], vec![1], "m1"),
+        ]
+        .into_iter()
+        .map(
+            |(edge_id, tail, head, loop_signature, external_signature, mass_key)| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass_key.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature,
+                        external_signature,
+                    },
+                    had_pow: false,
+                }
+            },
+        )
+        .collect();
+
+        ParsedGraph {
+            internal_edges,
+            external_edges: Vec::new(),
+            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
+                edge_id: 0,
+                external_id: 0,
+                external_sign: 1,
+            }],
+            loop_names: vec!["k0".to_string(), "k1".to_string(), "k2".to_string()],
+            external_names: vec!["p0".to_string()],
+            node_name_to_internal: (0..6).map(|node| (format!("v{node}"), node)).collect(),
+        }
+    }
+
     #[test]
     fn ltd_generation_builds_normal_box_structure() {
         let parsed = parsed_fixture("box.dot");
@@ -7735,6 +7781,42 @@ mod ltd_tests {
                 result.ltd
             );
         }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn ltd_gl13_forward_repeated_spectator_matches_cff_for_unit_numerator() {
+        use crate::eval::{ComparisonRequest, compare_cff_ltd};
+
+        let parsed = gl13_forward_graph_with_repeated_spectator();
+        let validation = crate::validator::validate_parsed_graph(&parsed);
+        assert!(validation.ok, "{validation:#?}");
+        let result = compare_cff_ltd(ComparisonRequest {
+            parsed: &parsed,
+            cff_options: &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                ..Default::default()
+            },
+            ltd_options: &Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
+                ..Default::default()
+            },
+            numerator_expr: "1",
+            input: None,
+            seed: 17,
+            external_override: Some(vec![[1.0, 0.0, 0.0, 0.0]]),
+            loop_override: None,
+            mass_overrides: &BTreeMap::from([("m0".to_string(), 0.0), ("m1".to_string(), 0.1)]),
+        })
+        .unwrap();
+        let diff = (result.cff - result.ltd).abs();
+        let tolerance = 1.0e-8 * result.cff.abs().max(result.ltd.abs()).max(1.0);
+        assert!(
+            diff < tolerance,
+            "GL13 forward repeated-spectator CFF/LTD mismatch: cff={}, ltd={}, raw={result:?}",
+            result.cff,
+            result.ltd
+        );
     }
 
     #[cfg(feature = "eval")]

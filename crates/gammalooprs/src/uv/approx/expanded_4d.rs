@@ -656,7 +656,7 @@ fn remap_cutset_to_expression_surfaces(
         .as_ref()
         .map(|group| remap_group(group, "Cutkosky"))
         .transpose()?;
-    remapped.residue_selector.ltd_simple_lu_cut_esurface_signs = if let (
+    remapped.residue_selector.ltd_lu_cut_esurface_signs = if let (
         Some(original_lu_cut),
         Some(remapped_lu_cut),
     ) = (
@@ -665,7 +665,7 @@ fn remap_cutset_to_expression_surfaces(
     ) {
         cutset
             .residue_selector
-            .ltd_simple_lu_cut_esurface_signs
+            .ltd_lu_cut_esurface_signs
             .iter()
             .map(|(esurface_id, sign)| {
                 let position = original_lu_cut
@@ -772,7 +772,7 @@ fn select_cut_residues(
                     expression,
                     lu_cut,
                     &cutset.residue_selector.lu_cut_edge_sets,
-                    &cutset.residue_selector.ltd_simple_lu_cut_esurface_signs,
+                    &cutset.residue_selector.ltd_lu_cut_esurface_signs,
                     representation,
                 )
             })
@@ -893,10 +893,10 @@ fn cross_section_residue_source_global_sign_factor(
     if representation == ThreeDRepresentation::Ltd {
         // The source LTD residue is already evaluated in the dual convention of
         // the generated reduced source. The full forward-scattering LTD measure
-        // bridge is applied once outside the UV forest; reduced-source CFF sign
-        // exponent corrections are only needed when converting CFF source
-        // residues back to the full-graph CFF convention.
-        return Atom::num(1);
+        // bridge is applied once outside the UV forest, but the selected
+        // Cutkosky residue still has to be expressed in the same resolved
+        // GammaLoop LU-cut basis as the original integrand.
+        return Atom::num(cutset.residue_selector.ltd_lu_cut_residue_prefactor_sign);
     }
 
     // Cross-section LU residues are assembled in GammaLoop's full-graph 3D
