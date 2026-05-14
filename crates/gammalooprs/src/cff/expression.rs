@@ -154,36 +154,126 @@ pub(crate) fn localize_three_d_expression_on_esurface(
                 "localizing on E-surface {esurface_id:?} made spectator surface {surface_id:?} vanish"
             ));
         }
-        let localized_id = intern_localized_linear_surface(residue, localized);
-        surface_map.insert(surface_id, HybridSurfaceID::Linear(localized_id));
+        // LTD threshold localization can turn a subsequent LU E-surface into
+        // an already known surface with the opposite convention, often an
+        // H-surface. Canonicalize these sign-equivalent surfaces here and carry
+        // the sign explicitly through the residue data.
+        let localized_id = find_matching_localized_surface(
+            residue,
+            &localized,
+            localized_external_edge,
+            &replacement,
+        )
+        .unwrap_or_else(|| {
+            (
+                HybridSurfaceID::Linear(intern_localized_linear_surface(residue, localized)),
+                1,
+            )
+        });
+        surface_map.insert(surface_id, localized_id);
     }
 
     for orientation in &mut residue.orientations {
         for variant in &mut orientation.variants {
+            let numerator_surface_sign = variant
+                .numerator_surfaces
+                .iter()
+                .filter_map(|surface_id| surface_map.get(surface_id).map(|(_, sign)| *sign))
+                .product::<i64>();
             for surface_id in &mut variant.numerator_surfaces {
-                if let Some(localized_id) = surface_map.get(surface_id) {
+                if let Some((localized_id, _)) = surface_map.get(surface_id) {
                     *surface_id = *localized_id;
                 }
             }
+            let localized_denominator_signs = variant
+                .denominator
+                .iter_nodes()
+                .filter_map(|node| surface_map.get(&node.data).copied())
+                .collect::<Vec<_>>();
+            let denominator_surface_sign = localized_denominator_signs
+                .iter()
+                .map(|(_, sign)| *sign)
+                .product::<i64>();
             variant.denominator.map_mut(|surface_id| {
-                if let Some(localized_id) = surface_map.get(surface_id) {
+                if let Some((localized_id, _)) = surface_map.get(surface_id) {
                     *surface_id = *localized_id;
                 }
             });
-            variant.denominator_surface_signs =
-                std::mem::take(&mut variant.denominator_surface_signs)
-                    .into_iter()
-                    .map(|(surface_id, sign)| {
-                        (
-                            surface_map.get(&surface_id).copied().unwrap_or(surface_id),
-                            sign,
-                        )
-                    })
-                    .collect();
+            let localization_sign = numerator_surface_sign * denominator_surface_sign;
+            if localization_sign < 0 {
+                variant.prefactor *= Atom::num(localization_sign);
+            }
+            let mut denominator_surface_signs = std::collections::BTreeMap::new();
+            for (surface_id, sign) in std::mem::take(&mut variant.denominator_surface_signs) {
+                let (localized_id, localization_sign) = surface_map
+                    .get(&surface_id)
+                    .copied()
+                    .unwrap_or((surface_id, 1));
+                let total_sign = sign * localization_sign;
+                denominator_surface_signs
+                    .entry(localized_id)
+                    .and_modify(|existing_sign| *existing_sign *= total_sign)
+                    .or_insert(total_sign);
+            }
+            for (localized_id, localization_sign) in localized_denominator_signs {
+                if localization_sign < 0 {
+                    denominator_surface_signs
+                        .entry(localized_id)
+                        .and_modify(|existing_sign| *existing_sign *= localization_sign)
+                        .or_insert(localization_sign);
+                }
+            }
+            denominator_surface_signs.retain(|_, sign| *sign < 0);
+            variant.denominator_surface_signs = denominator_surface_signs;
         }
     }
 
     Ok(())
+}
+
+fn find_matching_localized_surface(
+    residue: &ThreeDExpression<OrientationID>,
+    localized: &LinearEnergyExpr,
+    localized_external_edge: EdgeIndex,
+    replacement: &LinearEnergyExpr,
+) -> Option<(HybridSurfaceID, i64)> {
+    let negative_localized = localized.clone().scale(-1);
+    for (id, surface) in residue.surfaces.esurface_cache.iter_enumerated() {
+        let expression = esurface_linear_expr(surface)
+            .substitute_external_energy(localized_external_edge, replacement)
+            .canonical();
+        if &expression == localized {
+            return Some((HybridSurfaceID::Esurface(id), 1));
+        }
+        if expression == negative_localized {
+            return Some((HybridSurfaceID::Esurface(id), -1));
+        }
+    }
+    for (id, surface) in residue.surfaces.hsurface_cache.iter_enumerated() {
+        let expression = hsurface_linear_expr(surface)
+            .substitute_external_energy(localized_external_edge, replacement)
+            .canonical();
+        if &expression == localized {
+            return Some((HybridSurfaceID::Hsurface(id), 1));
+        }
+        if expression == negative_localized {
+            return Some((HybridSurfaceID::Hsurface(id), -1));
+        }
+    }
+    for (id, surface) in residue.surfaces.linear_surface_cache.iter_enumerated() {
+        let expression = surface
+            .expression
+            .clone()
+            .substitute_external_energy(localized_external_edge, replacement)
+            .canonical();
+        if &expression == localized {
+            return Some((HybridSurfaceID::Linear(id), 1));
+        }
+        if expression == negative_localized {
+            return Some((HybridSurfaceID::Linear(id), -1));
+        }
+    }
+    None
 }
 
 fn referenced_residue_surfaces(

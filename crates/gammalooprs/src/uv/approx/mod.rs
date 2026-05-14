@@ -428,6 +428,14 @@ impl Approximation {
                 .flat_map(|expression| expression.select_esurface_residue(left_threshold))
                 .collect();
         }
+        if representation == ThreeDRepresentation::Ltd
+            && (cutset.residue_selector.right_th_cut.is_some()
+                || cutset.residue_selector.left_th_cut.is_some())
+        {
+            for residue in &mut residues {
+                self.localize_ltd_threshold_residue_if_needed(residue, cutset)?;
+            }
+        }
         if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
             residues = residues
                 .into_iter()
@@ -450,7 +458,6 @@ impl Approximation {
         if representation == ThreeDRepresentation::Ltd {
             for residue in &mut residues {
                 remove_ltd_global_contact_completions_from_local_residue(residue);
-                self.localize_ltd_threshold_residue_if_needed(residue, cutset)?;
             }
         }
         residues

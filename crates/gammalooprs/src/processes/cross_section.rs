@@ -1121,7 +1121,7 @@ impl CrossSectionGraph {
             .map(|cuts| {
                 Ok(CutSet {
                     residue_selector: self
-                        .residue_selector_for_raised_cut_group(cuts, None, None, None)?,
+                        .residue_selector_for_raised_cut_group(cuts, None, None)?,
                     union: cuts
                         .cuts
                         .iter()
@@ -1138,31 +1138,15 @@ impl CrossSectionGraph {
         raised_cut_group: &RaisedCutGroup,
         left_th_cut: Option<RaisedEsurfaceGroup>,
         right_th_cut: Option<RaisedEsurfaceGroup>,
-        generated_esurfaces: Option<&TiVec<EsurfaceID, Esurface>>,
     ) -> Result<ResidueSelector> {
         let (lu_cut_edge_sets, ltd_lu_cut_residue_signs) =
             self.cut_edge_sets_with_ltd_residue_signs(raised_cut_group.cuts.iter().copied())?;
-        let raised_edge_groups = self.graph.get_raised_edge_groups();
         let ltd_lu_cut_esurface_signs = raised_cut_group
             .cut_esurface_ids
             .iter()
             .copied()
             .zip(ltd_lu_cut_residue_signs.iter().copied())
-            .zip(lu_cut_edge_sets.iter())
-            .map(|((esurface_id, sign), lu_cut_edges)| {
-                let threshold_overlap_sign = generated_esurfaces
-                    .map(|generated_esurfaces| {
-                        self.ltd_threshold_overlap_residue_sign(
-                            lu_cut_edges,
-                            left_th_cut.as_ref(),
-                            right_th_cut.as_ref(),
-                            generated_esurfaces,
-                            &raised_edge_groups,
-                        )
-                    })
-                    .unwrap_or(1);
-                (esurface_id, sign * threshold_overlap_sign)
-            })
+            .map(|(esurface_id, sign)| (esurface_id, sign))
             .collect();
         Ok(ResidueSelector {
             lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
@@ -1171,36 +1155,6 @@ impl CrossSectionGraph {
             left_th_cut,
             right_th_cut,
         })
-    }
-
-    fn ltd_threshold_overlap_residue_sign(
-        &self,
-        lu_cut_edges: &[EdgeIndex],
-        left_th_cut: Option<&RaisedEsurfaceGroup>,
-        right_th_cut: Option<&RaisedEsurfaceGroup>,
-        generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
-        raised_edge_groups: &[Vec<EdgeIndex>],
-    ) -> i64 {
-        [left_th_cut, right_th_cut]
-            .into_iter()
-            .flatten()
-            .flat_map(|threshold| threshold.esurface_ids.iter().copied())
-            .map(|esurface_id| {
-                let threshold_edges = normalize_cut_edge_support_with_raised_edge_groups(
-                    &generated_esurfaces[esurface_id].energies,
-                    raised_edge_groups,
-                );
-                let overlap_count = threshold_edges
-                    .iter()
-                    .filter(|threshold_edge| lu_cut_edges.binary_search(threshold_edge).is_ok())
-                    .count();
-                if overlap_count > 0 && !((overlap_count - 1).is_multiple_of(2)) {
-                    -1
-                } else {
-                    1
-                }
-            })
-            .product()
     }
 
     fn cut_edge_sets_with_ltd_residue_signs(
@@ -2009,7 +1963,6 @@ impl CrossSectionGraph {
                         raised_cut_group,
                         Some(raised_esurface_group.clone()),
                         None,
-                        Some(generated_esurfaces),
                     )?,
                     union: esurface_cut_union,
                 });
@@ -2034,7 +1987,6 @@ impl CrossSectionGraph {
                         raised_cut_group,
                         None,
                         Some(raised_esurface_group.clone()),
-                        Some(generated_esurfaces),
                     )?,
                     union: esurface_cut_union,
                 });
@@ -2077,7 +2029,6 @@ impl CrossSectionGraph {
                         raised_cut_group,
                         Some(left_raised_esurface_group.clone()),
                         Some(right_raised_esurface_group.clone()),
-                        Some(generated_esurfaces),
                     )?,
                     union: esurface_cut_union,
                 });
