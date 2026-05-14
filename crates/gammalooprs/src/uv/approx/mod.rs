@@ -2,6 +2,7 @@ use crate::{
     cff::expression::{
         OrientationID, ThreeDExpression, localize_three_d_expression_on_esurface,
         remove_ltd_global_contact_completions_from_local_residue,
+        select_lu_cut_residue_for_representation,
     },
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
@@ -440,18 +441,13 @@ impl Approximation {
             residues = residues
                 .into_iter()
                 .flat_map(|expression| {
-                    if representation == ThreeDRepresentation::Ltd {
-                        expression.select_esurface_residue_with_cut_edges_and_esurface_signs(
-                            lu_cut,
-                            &cutset.residue_selector.lu_cut_edge_sets,
-                            &cutset.residue_selector.ltd_lu_cut_esurface_signs,
-                        )
-                    } else {
-                        expression.select_esurface_residue_with_cut_edges(
-                            lu_cut,
-                            &cutset.residue_selector.lu_cut_edge_sets,
-                        )
-                    }
+                    select_lu_cut_residue_for_representation(
+                        expression,
+                        lu_cut,
+                        &cutset.residue_selector.lu_cut_edge_sets,
+                        &cutset.residue_selector.ltd_simple_lu_cut_esurface_signs,
+                        representation,
+                    )
                 })
                 .collect();
         }

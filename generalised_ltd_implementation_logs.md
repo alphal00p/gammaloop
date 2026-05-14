@@ -5931,12 +5931,16 @@ env RUST_MIN_STACK=33554432 cargo nextest run --cargo-profile dev-optim -P test_
 
 ## 2026-05-14: LTD cross-section convention cleanup after Symbolica branch backport
 
-- Removed the remaining duplicated cut-edge-orientation factor from the LTD LU
-  Cutkosky bridge. The generated E-surface convention and subsequent surface
-  canonicalization already carry the orientation of reversed initial-state cut
-  edges; multiplying by it again produced relative CFF/LTD sign flips in
-  selected scalar cross-section anchors. The retained bridge is the generic
-  simultaneous-to-dual parity `(-1)^(n-1)` for an `n`-propagator LU cut.
+- Revisited cross-section LU residue signs after comparing the GL06, GL08,
+  GL11, and GL48 rich-inspect anchors. The retained LTD simple-cut bridge is
+  the generic simultaneous-to-dual parity `(-1)^(n-1)` for a simple
+  `n`-propagator LU cut, multiplied by the orientation sign of each cut edge
+  relative to the positive-energy Cutkosky direction and by the resolved LU
+  cut-basis orientation `(-1)^N` for `N` LU cut groups. Raised/confluent LU
+  cuts deliberately bypass this simple-cut bridge because their branch-local
+  Cauchy signs are already part of the repeated-pole LTD construction. This
+  keeps the GL06 and GL48 simple-cut anchors and the GL08/GL11 raised-cut
+  anchors aligned without graph-specific sign handling.
 - Kept expanded-4D LTD local UV source residues in their generated dual
   convention. The reduced-source generalized-CFF sign-exponent correction is
   now applied only to CFF expanded-4D UV sources; LTD applies the full

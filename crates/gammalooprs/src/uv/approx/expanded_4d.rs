@@ -30,6 +30,7 @@ use crate::{
             normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
             remove_ltd_global_contact_completions_from_local_residue,
+            select_lu_cut_residue_for_representation,
         },
         generation::generated_cff_expression_uses_variant_half_edges,
         surface::GammaLoopSurfaceCache,
@@ -655,7 +656,7 @@ fn remap_cutset_to_expression_surfaces(
         .as_ref()
         .map(|group| remap_group(group, "Cutkosky"))
         .transpose()?;
-    remapped.residue_selector.ltd_lu_cut_esurface_signs = if let (
+    remapped.residue_selector.ltd_simple_lu_cut_esurface_signs = if let (
         Some(original_lu_cut),
         Some(remapped_lu_cut),
     ) = (
@@ -663,23 +664,23 @@ fn remap_cutset_to_expression_surfaces(
         remapped_lu_cut.as_ref(),
     ) {
         cutset
-                .residue_selector
-                .ltd_lu_cut_esurface_signs
-                .iter()
-                .map(|(esurface_id, sign)| {
-                    let position = original_lu_cut
-                        .esurface_ids
-                        .iter()
-                        .position(|original_id| original_id == esurface_id)
-                        .ok_or_else(|| {
-                            eyre!(
-                                "Cutkosky LTD orientation sign references E-surface {esurface_id:?}, but the original selector group is {:?}",
-                                original_lu_cut.esurface_ids
-                            )
-                        })?;
-                    Ok((remapped_lu_cut.esurface_ids[position], *sign))
-                })
-                .collect::<Result<Vec<_>>>()?
+            .residue_selector
+            .ltd_simple_lu_cut_esurface_signs
+            .iter()
+            .map(|(esurface_id, sign)| {
+                let position = original_lu_cut
+                    .esurface_ids
+                    .iter()
+                    .position(|original_id| original_id == esurface_id)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Cutkosky LTD orientation sign references E-surface {esurface_id:?}, but the original selector group is {:?}",
+                            original_lu_cut.esurface_ids
+                        )
+                    })?;
+                Ok((remapped_lu_cut.esurface_ids[position], *sign))
+            })
+            .collect::<Result<Vec<_>>>()?
     } else {
         Vec::new()
     };
@@ -767,18 +768,13 @@ fn select_cut_residues(
         residues = residues
             .into_iter()
             .flat_map(|expression| {
-                if representation == ThreeDRepresentation::Ltd {
-                    expression.select_esurface_residue_with_cut_edges_and_esurface_signs(
-                        lu_cut,
-                        &cutset.residue_selector.lu_cut_edge_sets,
-                        &cutset.residue_selector.ltd_lu_cut_esurface_signs,
-                    )
-                } else {
-                    expression.select_esurface_residue_with_cut_edges(
-                        lu_cut,
-                        &cutset.residue_selector.lu_cut_edge_sets,
-                    )
-                }
+                select_lu_cut_residue_for_representation(
+                    expression,
+                    lu_cut,
+                    &cutset.residue_selector.lu_cut_edge_sets,
+                    &cutset.residue_selector.ltd_simple_lu_cut_esurface_signs,
+                    representation,
+                )
             })
             .collect();
     }

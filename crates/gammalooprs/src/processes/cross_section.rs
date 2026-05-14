@@ -28,6 +28,7 @@ use crate::{
             OrientationID, ThreeDExpression, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
             remove_ltd_global_contact_completions_from_local_residue,
+            select_lu_cut_residue_for_representation,
         },
     },
     define_index,
@@ -496,7 +497,7 @@ pub struct CrossSectionCut {
 }
 
 impl CrossSectionCut {
-    pub(crate) fn ltd_lu_cut_residue_sign(&self, graph: &Graph) -> Result<i64> {
+    pub(crate) fn ltd_simple_lu_cut_residue_sign(&self, graph: &Graph) -> Result<i64> {
         let cut_edges = self.cut.iter_edges(graph).collect_vec();
         if cut_edges.is_empty() {
             return Err(eyre!(
@@ -505,10 +506,11 @@ impl CrossSectionCut {
             ));
         }
 
+        let mut cut_orientation_sign = 1;
         for (orientation, edge_data) in &cut_edges {
             match *orientation {
                 Orientation::Default => {}
-                Orientation::Reversed => {}
+                Orientation::Reversed => cut_orientation_sign *= -1,
                 Orientation::Undirected => {
                     return Err(eyre!(
                         "Cannot determine LTD Cutkosky residue sign for undirected edge {} in graph {}",
@@ -520,16 +522,15 @@ impl CrossSectionCut {
         }
 
         // The parity (-1)^(n-1) maps an n-propagator simultaneous Cutkosky
-        // residue to branch-local dual residues. The edge-flow orientation is
-        // already part of the generated E-surface convention and its
-        // canonicalization sign, so applying it again here would double-count
-        // reversed initial-state cut edges.
+        // residue to branch-local dual residues. Each cut edge also carries
+        // the sign of the edge flow relative to the positive-energy Cutkosky
+        // direction used by the forward-scattering cut.
         let multiplicity_sign = if (cut_edges.len() - 1).is_multiple_of(2) {
             1
         } else {
             -1
         };
-        Ok(multiplicity_sign)
+        Ok(multiplicity_sign * cut_orientation_sign)
     }
 
     pub(crate) fn is_s_channel(&self, cross_section_graph: &CrossSectionGraph) -> Result<bool> {
@@ -1132,25 +1133,27 @@ impl CrossSectionGraph {
         left_th_cut: Option<RaisedEsurfaceGroup>,
         right_th_cut: Option<RaisedEsurfaceGroup>,
     ) -> Result<ResidueSelector> {
-        let (lu_cut_edge_sets, ltd_lu_cut_residue_signs) =
-            self.cut_edge_sets_with_ltd_residue_signs(raised_cut_group.cuts.iter().copied())?;
-        let ltd_lu_cut_esurface_signs = raised_cut_group
+        let (lu_cut_edge_sets, ltd_simple_lu_cut_residue_signs) = self
+            .cut_edge_sets_with_ltd_simple_residue_signs(raised_cut_group.cuts.iter().copied())?;
+        let ltd_simple_lu_cut_group_basis_sign =
+            self.ltd_simple_lu_cut_group_basis_sign(raised_cut_group);
+        let ltd_simple_lu_cut_esurface_signs = raised_cut_group
             .cut_esurface_ids
             .iter()
             .copied()
-            .zip(ltd_lu_cut_residue_signs.iter().copied())
-            .map(|(esurface_id, sign)| (esurface_id, sign))
+            .zip(ltd_simple_lu_cut_residue_signs.iter().copied())
+            .map(|(esurface_id, sign)| (esurface_id, sign * ltd_simple_lu_cut_group_basis_sign))
             .collect();
         Ok(ResidueSelector {
             lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
             lu_cut_edge_sets,
-            ltd_lu_cut_esurface_signs,
+            ltd_simple_lu_cut_esurface_signs,
             left_th_cut,
             right_th_cut,
         })
     }
 
-    fn cut_edge_sets_with_ltd_residue_signs(
+    fn cut_edge_sets_with_ltd_simple_residue_signs(
         &self,
         cut_ids: impl IntoIterator<Item = CutId>,
     ) -> Result<(Vec<Vec<linnet::half_edge::involution::EdgeIndex>>, Vec<i64>)> {
@@ -1173,11 +1176,32 @@ impl CrossSectionGraph {
                         &cut_edges,
                         &raised_edge_groups,
                     ),
-                    self.cuts[cut_id].ltd_lu_cut_residue_sign(&self.graph)?,
+                    self.cuts[cut_id].ltd_simple_lu_cut_residue_sign(&self.graph)?,
                 ))
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(edge_sets_and_signs.into_iter().unzip())
+    }
+
+    fn ltd_simple_lu_cut_group_basis_sign(&self, raised_cut_group: &RaisedCutGroup) -> i64 {
+        if raised_cut_group.related_esurface_group.max_occurence != 1 {
+            return 1;
+        }
+
+        // In a forward-scattering cross section the LU cuts are resolved into
+        // a global cut basis before the selected E-surface is projected. CFF is
+        // assembled directly in that simultaneous Cutkosky basis. LTD selects
+        // branch-local dual residues, so simple cuts need the orientation of
+        // this resolved LU-cut basis in addition to the per-cut
+        // simultaneous-to-dual bridge. Raised/confluent cut groups already
+        // carry their Cauchy derivative convention in the repeated-pole
+        // construction and must not receive this simple-basis factor.
+        let resolved_lu_cut_group_count = self.derived_data.raised_data.raised_cut_groups.len();
+        if resolved_lu_cut_group_count.is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
     }
 
     fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
@@ -1216,20 +1240,13 @@ impl CrossSectionGraph {
             .iter()
             .zip(cuts.iter())
             .map(|(raised_cut_group, cutset)| {
-                let mut residues = if representation == ThreeDRepresentation::Ltd {
-                    expression
-                        .clone()
-                        .select_esurface_residue_with_cut_edges_and_esurface_signs(
-                            &raised_cut_group.related_esurface_group,
-                            &cutset.residue_selector.lu_cut_edge_sets,
-                            &cutset.residue_selector.ltd_lu_cut_esurface_signs,
-                        )
-                } else {
-                    expression.clone().select_esurface_residue_with_cut_edges(
-                        &raised_cut_group.related_esurface_group,
-                        &cutset.residue_selector.lu_cut_edge_sets,
-                    )
-                };
+                let mut residues = select_lu_cut_residue_for_representation(
+                    expression.clone(),
+                    &raised_cut_group.related_esurface_group,
+                    &cutset.residue_selector.lu_cut_edge_sets,
+                    &cutset.residue_selector.ltd_simple_lu_cut_esurface_signs,
+                    representation,
+                );
                 if representation == ThreeDRepresentation::Ltd {
                     for residue in &mut residues {
                         remove_ltd_global_contact_completions_from_local_residue(residue);

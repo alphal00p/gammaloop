@@ -1950,21 +1950,26 @@ Canonicalization fixes the sign convention of a surface such as
 \(-\omega_{i_1}-\cdots-\omega_{i_r}+\Delta\) by replacing it with
 \(\omega_{i_1}+\cdots+\omega_{i_r}-\Delta\) and carrying the corresponding
 residue orientation in the surface map.  The LTD projection also carries a
-branch-local Cutkosky residue bridge.  A cut with \(n\) simultaneously on-shell
-propagators contributes the generic parity \((-1)^{n-1}\) when the branch-local
-dual residue is mapped back to GammaLoop's simultaneous Cutkosky residue
-normalization.  Source-side cut-edge orientation is already encoded in the
-generated \(E\)-surface convention and in the sign accumulated when that
-surface is canonicalized; multiplying it again in the Cutkosky bridge would
-double-count reversed initial-state cut edges.  The resulting sign is stored
-on the generated Cutkosky \(E\)-surface id before raised-cut alternatives are
-merged, so different alternatives in the same raised group can keep their
-correct residue orientation.  The remaining representation bridges are global
-convention factors: the LTD LU loop-measure parity \((-1)^{L-1}\), with \(L\)
-the forward-scattering loop count after removing initial-state cut edges, and
-the full-source versus reduced-source CFF sign exponent used for
-expanded-four-dimensional UV counterterms.  None of these signs depends on a
-graph label or on a fitted sign from tests.
+branch-local Cutkosky residue bridge for simple LU cuts.  A cut with \(n\)
+independent simultaneously on-shell propagators contributes the generic parity
+\((-1)^{n-1}\) when the branch-local dual residue is mapped back to
+GammaLoop's simultaneous Cutkosky residue normalization.  This is multiplied
+by the orientation of every cut edge relative to the positive-energy Cutkosky
+direction of the forward-scattering cut.  The \(E\)-surface canonicalization
+sign fixes the denominator variable convention, while this cut-edge factor
+fixes the source-side positive-energy flow convention.  For a resolved
+forward-scattering cut basis with \(N_{\rm LU}\) LU cut groups, simple LTD LU
+cuts also carry the basis-orientation factor \((-1)^{N_{\rm LU}}\) which maps
+the branch-local selected \(E\)-surface basis to GammaLoop's simultaneous
+Cutkosky basis.  Raised or confluent LU cuts do not use this simple-cut bridge:
+their branch-local Cauchy signs are part of the repeated-pole LTD construction
+and applying the simple simultaneous-residue or basis parity again would
+double-count the derivative residue convention.  The remaining representation
+bridges are global convention factors: the LTD LU loop-measure parity
+\((-1)^{L-1}\), with \(L\) the forward-scattering loop count after removing
+initial-state cut edges, and the full-source versus reduced-source CFF sign
+exponent used for expanded-four-dimensional UV counterterms.  None of these
+signs depends on a graph label or on a fitted sign from tests.
 
 \paragraph{Embedding in gammaLoop cross-section integrands.}
 The gammaLoop production path always constructs the three-dimensional

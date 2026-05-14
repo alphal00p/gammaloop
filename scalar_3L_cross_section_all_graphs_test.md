@@ -162,5 +162,12 @@
 - GL24 and GL48 were rerun as focused slow anchors with rich three-way
   comparison enabled. Both pass with CFF local-3D, CFF local-4D, and LTD
   local-4D matching at the event-detail level.
-- The stored GL24 and GL48 total-weight snapshots were refreshed after those
-  rich comparisons succeeded. No `.snap.new` files are pending.
+- The simple-LU Cutkosky bridge is now applied only to simple LTD LU residues
+  and combines the simultaneous-to-dual parity with the cut-edge flow
+  orientation and the resolved LU cut-basis orientation. Raised/confluent LU
+  residues use the repeated-pole LTD convention directly. This keeps
+  GL06/GL48 simple-cut anchors and GL08/GL11 raised-cut anchors simultaneously
+  aligned.
+- The stored GL24, GL48, and GL08 total-weight snapshots were refreshed after
+  the corresponding rich comparisons succeeded. No `.snap.new` files are
+  pending.

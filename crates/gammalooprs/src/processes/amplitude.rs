@@ -1175,7 +1175,7 @@ impl AmplitudeGraph {
                 residue_selector: ResidueSelector {
                     lu_cut: Some(raised_data.clone()),
                     lu_cut_edge_sets: Vec::new(),
-                    ltd_lu_cut_esurface_signs: Vec::new(),
+                    ltd_simple_lu_cut_esurface_signs: Vec::new(),
                     left_th_cut: None,
                     right_th_cut: None,
                 },

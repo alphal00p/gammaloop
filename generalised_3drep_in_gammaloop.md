@@ -477,6 +477,15 @@ Current coverage includes:
   quadratic, and targeted quartic numerator probes;
 - six scalar cross-section rich-inspect anchors in the default test profile.
 
+For scalar cross sections, simple LTD LU residues apply the
+simultaneous-Cutkosky to branch-local-dual parity bridge `(-1)^(n-1)` for an
+`n`-propagator cut, multiplied by the sign of each cut edge flow relative to
+the positive-energy Cutkosky direction and by the resolved LU cut-basis
+orientation `(-1)^N` for `N` LU cut groups. Raised/confluent LTD LU residues do
+not apply that simple-cut bridge; their Cauchy signs are part of the
+repeated-pole LTD construction. This distinction is covered by GL06/GL48
+simple-cut anchors and GL08/GL11 raised-cut anchors.
+
 As of the current branch state, there is no retained scalar cross-section rich
 local-inspect parity failure among the three production modes.  The exhaustive
 slow scalar sweep documents per-graph UV/threshold fallbacks in
