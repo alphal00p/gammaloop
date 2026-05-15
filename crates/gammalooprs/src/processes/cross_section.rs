@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     fs::{self, File},
     io::Write,
@@ -56,7 +56,10 @@ use crate::{
         global::{GenerationSettings, ThreeDRepresentation},
         runtime::LockedRuntimeSettings,
     },
-    utils::{GS, W_, external_energy_atom_from_index, hyperdual_utils::shape_for_t_derivatives},
+    utils::{
+        GS, W_, external_energy_atom_from_index, hyperdual_utils::shape_for_t_derivatives,
+        symbolica_ext::IsNeg,
+    },
     uv::{
         approx::CutStructure,
         forest::{ParametricIntegrands, cff_explicit_sum_needs_outer_orientation_projection},
@@ -909,8 +912,63 @@ impl CrossSectionGraph {
             &settings.generation.evaluator,
         );
 
+        let cff_projection = if representation == ThreeDRepresentation::Ltd {
+            let mut cff_options = self.graph.production_3d_expression_options(
+                ThreeDRepresentation::Cff,
+                &settings.generation,
+            )?;
+            cff_options.energy_degree_bounds.clear();
+            let mut cff_expression = self.graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonize_esurface,
+                &cff_options,
+            )?;
+            normalize_three_d_expression_cut_support_with_raised_edge_groups(
+                &mut cff_expression,
+                &raised_edge_groups,
+            );
+
+            let cff_generated_esurfaces = &cff_expression.surfaces.esurface_cache;
+            let cff_normalized_generated_esurfaces =
+                self.normalized_generated_esurfaces(cff_generated_esurfaces, &raised_edge_groups);
+            let cff_cut_esurface_map = self
+                .cut_esurface
+                .iter()
+                .map(|esurface| {
+                    self.find_generated_esurface_id(
+                        esurface,
+                        cff_generated_esurfaces,
+                        &cff_normalized_generated_esurfaces,
+                        &raised_edge_groups,
+                        "CFF projection Cutkosky cut",
+                    )
+                })
+                .collect::<Result<_>>()?;
+
+            let cff_esurface_raised_data = self
+                .graph
+                .determine_raised_esurfaces_from_expression(&cff_expression);
+            let (cff_raised_data, _) = RaisedCutData::new_from_esurface(
+                &cff_esurface_raised_data,
+                &cff_cut_esurface_map,
+                &settings.generation.evaluator,
+            );
+
+            Some((cff_expression, cff_cut_esurface_map, cff_raised_data))
+        } else {
+            None
+        };
+
         self.derived_data.global_three_d_expression = Some(global_expression);
         self.derived_data.raised_data = raised_cut_data;
+        self.derived_data.cff_projection_three_d_expression = None;
+        self.derived_data.cff_projection_cut_esurface_id_map = TiVec::new();
+        self.derived_data.cff_projection_raised_data = RaisedCutData::new();
+        if let Some((cff_expression, cff_cut_esurface_map, cff_raised_data)) = cff_projection {
+            self.derived_data.cff_projection_three_d_expression = Some(cff_expression);
+            self.derived_data.cff_projection_cut_esurface_id_map = cff_cut_esurface_map;
+            self.derived_data.cff_projection_raised_data = cff_raised_data;
+        }
 
         Ok(raised_cut_stats)
     }
@@ -1179,6 +1237,11 @@ impl CrossSectionGraph {
         let (lu_cut_edge_sets, cut_orientation_signs, simple_ltd_lu_cut_signs) =
             self.lu_cut_edge_sets_with_cutkosky_signs(raised_cut_group.cuts.iter().copied())?;
         let is_simple_lu_cut = raised_cut_group.related_esurface_group.max_occurence == 1;
+        let simple_ltd_lu_cut_surface_family_sign = if is_simple_lu_cut {
+            self.simple_ltd_lu_cut_surface_family_sign(raised_cut_group, &lu_cut_edge_sets)?
+        } else {
+            1
+        };
         let ltd_lu_cut_esurface_signs = if is_simple_lu_cut {
             raised_cut_group
                 .cut_esurface_ids
@@ -1200,7 +1263,7 @@ impl CrossSectionGraph {
                 .collect()
         };
         let ltd_lu_cut_residue_prefactor_sign = if is_simple_lu_cut {
-            1
+            simple_ltd_lu_cut_surface_family_sign
         } else {
             self.repeated_ltd_lu_cut_residue_prefactor_sign(
                 &raised_cut_group.related_esurface_group,
@@ -1215,6 +1278,103 @@ impl CrossSectionGraph {
             left_th_cut,
             right_th_cut,
         })
+    }
+
+    fn simple_ltd_lu_cut_surface_family_sign(
+        &self,
+        raised_cut_group: &RaisedCutGroup,
+        lu_cut_edge_sets: &[Vec<EdgeIndex>],
+    ) -> Result<i64> {
+        let Some(cff_expression) = self.derived_data.cff_projection_three_d_expression.as_ref()
+        else {
+            return Ok(1);
+        };
+
+        let signs = raised_cut_group
+            .cuts
+            .iter()
+            .copied()
+            .zip(lu_cut_edge_sets.iter())
+            .map(|(cut_id, cut_edge_set)| {
+                let cff_cut_esurface_id = self
+                    .derived_data
+                    .cff_projection_cut_esurface_id_map
+                    .get(cut_id)
+                    .copied()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Cannot determine CFF LU surface-family sign for cut {} in graph {}: no CFF projection cut E-surface was recorded",
+                            cut_id.0,
+                            self.graph.name
+                        )
+                    })?;
+                let cff_raised_cut_group = self
+                    .derived_data
+                    .cff_projection_raised_data
+                    .raised_cut_groups
+                    .iter()
+                    .find(|group| {
+                        group.cuts.contains(&cut_id)
+                            && group
+                                .related_esurface_group
+                                .esurface_ids
+                                .contains(&cff_cut_esurface_id)
+                    })
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Cannot determine CFF LU surface-family sign for cut {} in graph {}: no CFF projection raised-cut group contains E-surface {:?}",
+                            cut_id.0,
+                            self.graph.name,
+                            cff_cut_esurface_id
+                        )
+                    })?;
+
+                let residues = cff_expression.clone().select_esurface_residue_with_cut_edges(
+                    &cff_raised_cut_group.related_esurface_group,
+                    std::slice::from_ref(cut_edge_set),
+                );
+                let mut signs = BTreeSet::new();
+                let mut variant_count = 0usize;
+                for residue in residues {
+                    for orientation in residue.orientations {
+                        for variant in orientation.variants {
+                            variant_count += 1;
+                            if variant.prefactor == Atom::Zero {
+                                continue;
+                            }
+                            signs.insert(if variant.prefactor.is_negative() {
+                                -1
+                            } else {
+                                1
+                            });
+                        }
+                    }
+                }
+
+                if signs.len() != 1 {
+                    return Err(eyre!(
+                        "Cannot determine a unique CFF LU surface-family sign for cut {} in graph {}: found signs {:?} across {} selected CFF variants",
+                        cut_id.0,
+                        self.graph.name,
+                        signs,
+                        variant_count
+                    ));
+                }
+
+                Ok(*signs.iter().next().expect("one sign was checked above"))
+            })
+            .collect::<Result<BTreeSet<_>>>()?;
+
+        if signs.len() != 1 {
+            return Err(eyre!(
+                "Cannot determine a unique CFF LU surface-family sign for graph {} and cuts {:?}: found signs {:?}",
+                self.graph.name,
+                raised_cut_group.cuts,
+                signs
+            ));
+        }
+
+        Ok(*signs.iter().next().expect("one sign was checked above"))
     }
 
     fn lu_cut_edge_sets_with_cutkosky_signs(
@@ -2647,6 +2807,9 @@ pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
     pub global_three_d_expression: Option<ThreeDExpression<OrientationID>>,
+    pub cff_projection_three_d_expression: Option<ThreeDExpression<OrientationID>>,
+    pub cff_projection_cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
+    pub cff_projection_raised_data: RaisedCutData,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub threshold_counterterms: TiVec<RaisedCutId, LUCounterTermData>,
@@ -2787,6 +2950,9 @@ impl CrossSectionDerivedData {
         Self {
             orientations: None,
             global_three_d_expression: None,
+            cff_projection_three_d_expression: None,
+            cff_projection_cut_esurface_id_map: TiVec::new(),
+            cff_projection_raised_data: RaisedCutData::new(),
             cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
             multi_channeling_setup: None,
