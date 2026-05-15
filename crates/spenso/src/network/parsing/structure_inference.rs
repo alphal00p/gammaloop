@@ -11,7 +11,8 @@ use symbolica::{
     domains::rational::Rational,
 };
 
-use super::{NetworkParse, ParseSettings, ShadowedStructure, ShorthandParsing};
+use super::{NetworkParse, ParseSettings, ShadowedStructure, ShorthandParsing, StrictTensorFilter};
+use crate::network::library::symbolic::ETS;
 use crate::structure::{
     HasName, NamedStructure, OrderedStructure, PermutedStructure, StructureContract,
     StructureError, TensorStructure,
@@ -53,13 +54,15 @@ pub trait AtomStructureExt {
         mode: StructureInferenceMode,
     ) -> Result<PermutedStructure<S>, StructureError>;
 
-    /// Return true when this expression contains tensor syntax.
+    /// Return true when this expression is valid tensor parser syntax at its root.
     ///
-    /// This is a cheap syntactic test for a symbol tagged with the Spenso
-    /// representation tag. It intentionally does not parse slots or infer
-    /// structure; callers use it only to distinguish scalar functions from
-    /// expressions that should enter the tensor parser boundary.
-    fn is_tensorial(&self) -> bool;
+    /// Ordinary tensor heads expose direct structural arguments: slots,
+    /// `aind(...)` bundles, or compact representation arguments. Shorthand roots
+    /// (`chain`, `trace`, `dot`, and compact metrics) are tensorial because the
+    /// parser gives them explicit semantics. Broadcast functions are tensorial
+    /// only when they have one tensorial argument. Untagged wrappers around tensor
+    /// expressions stay scalar because their head has no tensor semantics.
+    fn is_tensorial(&self, filter: StrictTensorFilter) -> bool;
 }
 
 impl AtomStructureExt for Atom {
@@ -70,8 +73,8 @@ impl AtomStructureExt for Atom {
         self.as_view().infer_structure(mode)
     }
 
-    fn is_tensorial(&self) -> bool {
-        self.as_view().is_tensorial()
+    fn is_tensorial(&self, filter: StrictTensorFilter) -> bool {
+        self.as_view().is_tensorial(filter)
     }
 }
 
@@ -83,16 +86,71 @@ impl AtomStructureExt for AtomView<'_> {
         S::structure_from_atom(*self, mode)
     }
 
-    fn is_tensorial(&self) -> bool {
-        match self {
+    fn is_tensorial(&self, filter: StrictTensorFilter) -> bool {
+        match *self {
+            AtomView::Fun(fun) => TensorialSyntax::function_is_tensorial(fun, filter),
+            AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
+            AtomView::Add(add) => add.iter().any(|arg| arg.is_tensorial(filter)),
+            AtomView::Mul(mul) => mul.iter().any(|arg| arg.is_tensorial(filter)),
+            AtomView::Pow(pow) => pow.get_base_exp().0.is_tensorial(filter),
+            _ => false,
+        }
+    }
+}
+
+struct TensorialSyntax;
+
+impl TensorialSyntax {
+    fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
+        let symbol = fun.get_symbol();
+
+        if symbol == SPENSO_TAG.pure_scalar {
+            return false;
+        }
+
+        if symbol == SPENSO_TAG.bracket {
+            return fun.iter().any(|arg| arg.is_tensorial(filter));
+        }
+
+        if symbol.has_attributes_of(SPENSO_TAG.rep_)
+            || symbol == SPENSO_TAG.chain
+            || symbol == SPENSO_TAG.trace
+            || symbol == SPENSO_TAG.dot
+        {
+            return true;
+        }
+
+        if symbol == ETS.metric {
+            return fun.get_nargs() == 2 && fun.iter().all(|arg| arg.is_tensorial(filter));
+        }
+
+        if symbol.has_tag(&SPENSO_TAG.broadcast) {
+            let args = fun.iter().collect::<Vec<_>>();
+            return matches!(args.as_slice(), [arg] if arg.is_tensorial(filter));
+        }
+
+        match filter {
+            StrictTensorFilter::Tagged => symbol.has_tag(&SPENSO_TAG.tensor),
+            StrictTensorFilter::TaggedChecked => {
+                symbol.has_tag(&SPENSO_TAG.tensor)
+                    && fun.iter().any(Self::contains_representation_syntax)
+            }
+            StrictTensorFilter::ContainsReps => {
+                fun.iter().any(Self::contains_representation_syntax)
+            }
+        }
+    }
+
+    fn contains_representation_syntax(value: AtomView<'_>) -> bool {
+        match value {
             AtomView::Fun(fun) => {
                 fun.get_symbol().has_attributes_of(SPENSO_TAG.rep_)
-                    || fun.iter().any(|arg| arg.is_tensorial())
+                    || fun.iter().any(Self::contains_representation_syntax)
             }
             AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
-            AtomView::Add(add) => add.iter().any(|arg| arg.is_tensorial()),
-            AtomView::Mul(mul) => mul.iter().any(|arg| arg.is_tensorial()),
-            AtomView::Pow(pow) => pow.get_base_exp().0.is_tensorial(),
+            AtomView::Add(add) => add.iter().any(Self::contains_representation_syntax),
+            AtomView::Mul(mul) => mul.iter().any(Self::contains_representation_syntax),
+            AtomView::Pow(pow) => Self::contains_representation_syntax(pow.get_base_exp().0),
             _ => false,
         }
     }
@@ -485,14 +543,14 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
 mod tests {
     use super::*;
     use crate::{
-        chain, slot,
+        bracket, chain, slot,
         structure::{
             TensorStructure,
             abstract_index::AbstractIndex,
             representation::{Lorentz, Minkowski, RepName},
             slot::IsAbstractSlot,
         },
-        trace,
+        tensor_symbol, trace, vector,
     };
     use symbolica::{
         atom::{Atom, AtomCore, FunctionBuilder, Symbol},
@@ -514,14 +572,26 @@ mod tests {
     #[test]
     fn tensorial_syntax_detects_representation_tags() {
         let rep = mink4();
-        let compact = function!(symbol!("structure_inference_p"), rep.to_symbolic([]));
+        let compact = vector!(structure_inference_p, rep.to_symbolic([]));
         let scalar = function!(symbol!("f"), Atom::num(1));
+        let scalar_with_tensor_arg = function!(symbol!("f"), rep.to_symbolic([]));
+        let tagged_scalar = function!(tensor_symbol!(structure_inference_t), Atom::num(1));
+        let bracketed = bracket!(compact.clone());
         let nested = scalar.clone() + compact.clone().pow(2);
 
-        assert!(compact.is_tensorial());
-        assert!(compact.as_view().is_tensorial());
-        assert!(nested.is_tensorial());
-        assert!(!scalar.is_tensorial());
+        assert!(compact.is_tensorial(StrictTensorFilter::Tagged));
+        assert!(compact.as_view().is_tensorial(StrictTensorFilter::Tagged));
+        assert!(bracketed.is_tensorial(StrictTensorFilter::Tagged));
+        assert!(nested.is_tensorial(StrictTensorFilter::Tagged));
+        assert!(tagged_scalar.is_tensorial(StrictTensorFilter::Tagged));
+        assert!(!scalar.is_tensorial(StrictTensorFilter::Tagged));
+        assert!(!scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::Tagged));
+
+        assert!(!tagged_scalar.is_tensorial(StrictTensorFilter::TaggedChecked));
+        assert!(compact.is_tensorial(StrictTensorFilter::TaggedChecked));
+
+        assert!(scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::ContainsReps));
+        assert!(!scalar.is_tensorial(StrictTensorFilter::ContainsReps));
     }
 
     #[test]
@@ -550,8 +620,14 @@ mod tests {
         let expr = chain!(
             slot!(rep, i),
             slot!(rep, j),
-            chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
-            chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
+            chain_factor_with_external(
+                tensor_symbol!(structure_factor_f),
+                slot!(external_rep, a).to_atom()
+            ),
+            chain_factor_with_external(
+                tensor_symbol!(structure_factor_g),
+                slot!(external_rep, b).to_atom()
+            ),
         );
 
         let fast = expr
@@ -571,8 +647,8 @@ mod tests {
     #[test]
     fn chain_with_schoonschipped_term_fast_and_expanded_inference_agree() {
         let rep = mink4();
-        let compact_vector = function!(symbol!("structure_inference_p"), rep.to_symbolic([]));
-        let schoonschipped_term = FunctionBuilder::new(symbol!("f"))
+        let compact_vector = vector!(structure_inference_p, rep.to_symbolic([]));
+        let schoonschipped_term = FunctionBuilder::new(tensor_symbol!(structure_factor_f))
             .add_arg(&compact_vector)
             .add_arg(Atom::var(SPENSO_TAG.chain_in))
             .add_arg(Atom::var(SPENSO_TAG.chain_out))
@@ -599,9 +675,18 @@ mod tests {
         let external_rep = mink4();
         let expr = trace!(
             &trace_rep,
-            chain_factor_with_external(symbol!("f"), slot!(external_rep, a).to_atom()),
-            chain_factor_with_external(symbol!("g"), slot!(external_rep, b).to_atom()),
-            chain_factor_with_external(symbol!("h"), slot!(external_rep, c).to_atom()),
+            chain_factor_with_external(
+                tensor_symbol!(structure_factor_f),
+                slot!(external_rep, a).to_atom()
+            ),
+            chain_factor_with_external(
+                tensor_symbol!(structure_factor_g),
+                slot!(external_rep, b).to_atom()
+            ),
+            chain_factor_with_external(
+                tensor_symbol!(structure_factor_h),
+                slot!(external_rep, c).to_atom()
+            ),
         );
 
         let fast = expr

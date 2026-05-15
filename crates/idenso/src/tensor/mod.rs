@@ -3,7 +3,7 @@ use std::ops::AddAssign;
 use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
 use spenso::{
     algebra::ScalarMul,
-    contraction::{Contract, ContractionError},
+    contraction::{Contract, ContractionError, Trace},
     network::{
         ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
         TensorOrScalarOrKey,
@@ -13,8 +13,8 @@ use spenso::{
             symbolic::{ETS, ExplicitKey, TensorLibrary},
         },
         parsing::{
-            ParseSettings, ShadowedStructure, StructureFromAtom, StructureInferenceMode,
-            TensorFromExpression, TensorLibraryFor,
+            ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom,
+            StructureInferenceMode, TensorFromExpression, TensorLibraryFor,
         },
         store::NetworkStore,
     },
@@ -395,6 +395,16 @@ impl<Aind: AbsInd> StructureContract for SymbolicTensor<Aind> {
     }
 }
 
+impl<Aind: AbsInd> Trace for SymbolicTensor<Aind> {
+    fn internal_contract(&self) -> Self {
+        let mut traced = self.clone();
+        traced.trace_out();
+        traced.is_composite = true;
+        traced.is_metric = false;
+        traced
+    }
+}
+
 // impl<Const> Shadowable<Const> for SymbolicTensor {}
 
 #[allow(dead_code)]
@@ -471,16 +481,15 @@ impl<Aind: AbsInd> SymbolicTensor<Aind> {
         >,
         TensorNetworkError<ExplicitKey<AbstractIndex>, Symbol>,
     > {
+        let settings =
+            ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+
         Network::<
             NetworkStore<MixedTensor<f64, ShadowedStructure<AbstractIndex>>, Atom>,
             ExplicitKey<AbstractIndex>,
             Symbol,
             AbstractIndex,
-        >::try_from_view(
-            self.expression.as_view(),
-            library,
-            &ParseSettings::default(),
-        )
+        >::try_from_view(self.expression.as_view(), library, &settings)
     }
 }
 
@@ -615,8 +624,11 @@ impl SymbolicNetParse for AtomView<'_> {
         settings: &ParseSettings,
     ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>> {
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
+        let settings = settings
+            .clone()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
 
-        SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<Aind>, _>(*self, &lib, settings)
+        SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<Aind>, _>(*self, &lib, &settings)
     }
 }
 

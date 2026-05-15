@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use library::{Library, LibraryError};
 
 use crate::algebra::algebraic_traits::RefOne;
-use crate::contraction::Contract;
+use crate::contraction::{Contract, Trace};
 use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::permuted::PermuteTensor;
@@ -591,18 +591,12 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
     {
         let mut store = S::default();
 
-        let state = if tensor.is_scalar() {
-            NetworkState::Scalar
-        } else if tensor.is_fully_self_dual() {
-            // tensor.structure().dual();
-            NetworkState::SelfDualTensor
-        } else {
-            NetworkState::Tensor
-        };
         let id = store.add_tensor(tensor);
+        let graph = NetworkGraph::tensor(store.get_tensor(id), NetworkLeaf::LocalTensor(id));
+        let state = graph.state();
 
         Network {
-            graph: NetworkGraph::tensor(store.get_tensor(id), NetworkLeaf::LocalTensor(id)),
+            graph,
             store,
             state,
         }
@@ -614,15 +608,10 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
         let indices = tensor.external_indices_iter().collect();
-        let state = if tensor.is_scalar() {
-            NetworkState::Scalar
-        } else if tensor.is_fully_self_dual() {
-            NetworkState::SelfDualTensor
-        } else {
-            NetworkState::Tensor
-        };
+        let graph = NetworkGraph::tensor(tensor, NetworkLeaf::LibraryKey { key, indices });
+        let state = graph.state();
         Network {
-            graph: NetworkGraph::tensor(tensor, NetworkLeaf::LibraryKey { key, indices }),
+            graph,
             store: S::default(),
             state,
         }
@@ -1058,6 +1047,8 @@ where
         FK: Display,
     {
         for _ in 0..N {
+            while executor.execute_self_loop_traces(graph, lib)? {}
+
             // find the *one* ready op
             if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
                 println!(
@@ -1116,6 +1107,8 @@ where
         FK: Display,
     {
         for _ in 0..N {
+            while executor.execute_self_loop_traces(graph, lib)? {}
+
             // find the *one* ready op
             if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
                 // execute + splice
@@ -1145,8 +1138,10 @@ where
         FK: Display,
     {
         while {
+            if executor.execute_self_loop_traces(graph, lib)? {
+                true
             // find the *one* ready op
-            if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
+            } else if let Some((extracted_graph, op)) = graph.extract_next_ready_op() {
                 // execute + splice
                 let replacement = executor.execute::<C>(extracted_graph, lib, fnlib, op)?;
                 graph.splice_descendents_of(replacement);
@@ -1202,6 +1197,16 @@ where
 pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
     // type LibStruct;
     #[allow(clippy::result_large_err)]
+    fn execute_self_loop_traces(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display;
+
+    #[allow(clippy::result_large_err)]
     fn execute<C: ContractionStrategy<Self, L, K, FK, Aind>>(
         &mut self,
         graph: NetworkGraph<K, FK, Aind>,
@@ -1239,10 +1244,65 @@ where
         Store: ExecuteOp<FL, L, K, FK, Aind>,
     {
         self.merge_ops();
-        // println!("Hi");
-        // println!("{}", self.graph.dot());
-        // Ok(())
-        Strat::execute_all::<C>(&mut self.store, &mut self.graph, lib, fn_lib)
+        self.store.execute_self_loop_traces(&mut self.graph, lib)?;
+        Strat::execute_all::<C>(&mut self.store, &mut self.graph, lib, fn_lib)?;
+        self.state = self.graph.state();
+        Ok(())
+    }
+}
+
+impl<T, Sc> NetworkStore<T, Sc> {
+    fn execute_next_self_loop_trace<LT, L, K, FK, Aind>(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        LT: LibraryTensor + Clone,
+        T: HasStructure + TensorStructure + Clone + Trace + From<LT::WithIndices>,
+        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        K: Display + Debug,
+        FK: Display + Debug,
+        Aind: AbsInd,
+        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+            IsAbstractSlot<Aind = Aind>,
+    {
+        let Some(node) = graph.graph.iter_nodes().find_map(|(node, crown, data)| {
+            if !matches!(data, NetworkNode::Leaf(_)) {
+                return None;
+            }
+
+            crown
+                .clone()
+                .any(|hedge| graph.graph[[&hedge]].is_slot() && graph.graph.is_self_loop(hedge))
+                .then_some(node)
+        }) else {
+            return Ok(false);
+        };
+
+        let traced = match &graph.graph[node] {
+            NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
+                self.tensors[*local].internal_contract()
+            }
+            NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => T::from(
+                graph
+                    .get_lib_data(lib, node)
+                    .expect("library node selected for trace must have library data"),
+            )
+            .internal_contract(),
+            NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => return Ok(false),
+            NetworkNode::Op(_) => unreachable!("self-loop trace search only selects tensor leaves"),
+        };
+
+        let traced_position = self.tensors.len();
+        self.tensors.push(traced);
+        graph.replace_node_deleting_self_loop_slots(
+            node,
+            NetworkNode::Leaf(NetworkLeaf::LocalTensor(traced_position)),
+        );
+
+        Ok(true)
     }
 }
 
@@ -1252,6 +1312,7 @@ impl<
         + TensorStructure
         + Neg<Output = T>
         + Clone
+        + Trace
         + Ref
         + Contract<LCM = T>
         + for<'a> AddAssign<T::Ref<'a>>
@@ -1277,6 +1338,20 @@ where
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
+    fn execute_self_loop_traces(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+    ) -> Result<bool, TensorNetworkError<K, FK>> {
+        let mut did_trace = false;
+        while self.execute_next_self_loop_trace(graph, lib)? {
+            did_trace = true;
+            graph.sync_order();
+        }
+
+        Ok(did_trace)
+    }
+
     fn execute<C: ContractionStrategy<Self, L, K, FK, Aind>>(
         &mut self,
         mut graph: NetworkGraph<K, FK, Aind>,

@@ -8,7 +8,7 @@ use spenso::{
     network::{
         ExecutionResult, Sequential, SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
         library::{TensorLibraryData, symbolic::ExplicitKey},
-        parsing::ParseSettings,
+        parsing::{ParseSettings, StrictTensorFilter},
     },
     structure::{
         IndexlessNamedStructure, ScalarTensor,
@@ -85,7 +85,11 @@ impl HepAtomExt for AtomView<'_> {
         &self,
         settings: &ParseSettings,
     ) -> Result<HepNet<AbstractIndex>, TensorNetworkError<ExplicitKey<AbstractIndex>, Symbol>> {
-        HepNet::try_from_view(*self, &*HEP_LIB, settings)
+        let settings = settings
+            .clone()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+
+        HepNet::try_from_view(*self, &*HEP_LIB, &settings)
     }
 }
 

@@ -56,6 +56,7 @@ pub struct SingleSmallestDegree<const D: bool, CStrat = ()> {
 pub struct SingleLargestDegree<const D: bool, CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
 }
+
 pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
     #[allow(clippy::result_large_err, clippy::type_complexity)]
     fn contract(
@@ -397,6 +398,7 @@ where
         K: Display,
     {
         graph.sync_order();
+
         if D {
             println!("Contracting {}", graph.dot());
         }
@@ -581,6 +583,7 @@ where
         K: Display,
     {
         graph.sync_order();
+
         if D {
             println!("Contracting {}", graph.dot());
         }

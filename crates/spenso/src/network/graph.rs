@@ -235,6 +235,50 @@ pub enum NetworkGraphError {
 }
 
 impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
+    fn match_slots(
+        _self_flow: Flow,
+        self_data: EdgeData<&NetworkEdge<Aind>>,
+        _other_flow: Flow,
+        other_data: EdgeData<&NetworkEdge<Aind>>,
+    ) -> bool {
+        match (self_data.data, other_data.data) {
+            (NetworkEdge::Slot(s), NetworkEdge::Slot(o)) => s.matches(o),
+            _ => false,
+        }
+    }
+
+    fn keep_first_edge(
+        self_flow: Flow,
+        self_data: EdgeData<NetworkEdge<Aind>>,
+        _other_flow: Flow,
+        _other_data: EdgeData<NetworkEdge<Aind>>,
+    ) -> (Flow, EdgeData<NetworkEdge<Aind>>) {
+        (self_flow, self_data)
+    }
+
+    fn sew_internal_tensor_slots(&mut self) {
+        self.graph
+            .sew(Self::match_slots, Self::keep_first_edge)
+            .expect("sewing internal tensor slots should only connect dangling slot edges");
+    }
+
+    pub(crate) fn replace_node_deleting_self_loop_slots(
+        &mut self,
+        node: NodeIndex,
+        node_data: NetworkNode<K, FK, Aind>,
+    ) {
+        let mut traced_slots: SuBitGraph = self.graph.empty_subgraph();
+        for hedge in self.graph.iter_crown(node) {
+            if self.graph[[&hedge]].is_slot() && self.graph.is_self_loop(hedge) {
+                traced_slots.add(hedge);
+            }
+        }
+
+        self.graph[node] = node_data;
+        self.delete(&traced_slots);
+        self.graph.node_store.check_and_set_nodes().unwrap();
+    }
+
     fn set_tensor_slot_order(&mut self, node: NodeIndex, slots: &[LibrarySlot<Aind>]) {
         let mut slot_hedges = self
             .graph
@@ -900,6 +944,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
         let mut graph = Self::from(graph);
         graph.set_tensor_slot_order(head, &slots);
+        graph.sew_internal_tensor_slots();
         graph
     }
 
@@ -922,6 +967,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
         let mut graph = Self::from(graph);
         graph.set_tensor_slot_order(head, &slots);
+        graph.sew_internal_tensor_slots();
         graph
     }
 

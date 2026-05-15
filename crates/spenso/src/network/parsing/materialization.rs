@@ -81,6 +81,20 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         Self { state }
     }
 
+    /// Return true when this function root contains compact Schoonschip syntax.
+    ///
+    /// This is the non-allocating counterpart to `materialize_shorthand`: compact
+    /// scalar products are shorthand at the root, while compact vectors become
+    /// shorthand only when they occur as arguments of another function.
+    pub(super) fn contains_schoonschip_shorthand(value: AtomView<'_>) -> bool {
+        let AtomView::Fun(fun) = value else {
+            return false;
+        };
+
+        Self::is_compact_scalar_product(fun)
+            || fun.iter().any(Self::contains_schoonschip_shorthand_arg)
+    }
+
     /// Materialize an expandable shorthand expression, or return it unchanged.
     ///
     /// The root must be a function for rewriting to occur. When rewriting is
@@ -124,6 +138,10 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         }
 
         self.materialize_shorthand_root(value)
+    }
+
+    fn contains_schoonschip_shorthand_arg(value: AtomView<'_>) -> bool {
+        Self::compact_vector_rep(value).is_some() || Self::contains_schoonschip_shorthand(value)
     }
 
     /// Materialize one compact vector argument as `slot` plus `vector(slot)`.
@@ -182,6 +200,25 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     /// representation. They are assigned the same fresh slot, so
     /// `g(p(rep), q(rep))` becomes `p(slot) * q(slot)`.
     fn compact_scalar_product(&self, value: FunView<'_>) -> Option<SchoonschipMaterialization> {
+        let (lhs, rhs, rep) = Self::compact_scalar_product_parts(value)?;
+
+        let slot = self.state.slot(&rep).to_atom();
+        let lhs = Self::materialize_compact_vector_with_slot(lhs, &rep, &slot)?;
+        let rhs = Self::materialize_compact_vector_with_slot(rhs, &rep, &slot)?;
+
+        Some(SchoonschipMaterialization {
+            current: Atom::num(1),
+            additional_factors: vec![lhs, rhs],
+        })
+    }
+
+    fn is_compact_scalar_product(value: FunView<'_>) -> bool {
+        Self::compact_scalar_product_parts(value).is_some()
+    }
+
+    fn compact_scalar_product_parts(
+        value: FunView<'_>,
+    ) -> Option<(AtomView<'_>, AtomView<'_>, Representation<LibraryRep>)> {
         if value.get_symbol() != ETS.metric && value.get_symbol() != SPENSO_TAG.dot {
             return None;
         }
@@ -196,14 +233,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
             return None;
         }
 
-        let slot = self.state.slot(&rep).to_atom();
-        let lhs = Self::materialize_compact_vector_with_slot(*lhs, &rep, &slot)?;
-        let rhs = Self::materialize_compact_vector_with_slot(*rhs, &rep, &slot)?;
-
-        Some(SchoonschipMaterialization {
-            current: Atom::num(1),
-            additional_factors: vec![lhs, rhs],
-        })
+        Some((*lhs, *rhs, rep))
     }
 
     /// Infer the compact representation carried by a rank-one shorthand atom.
@@ -359,6 +389,15 @@ where
     Sc: for<'r> TryFrom<AtomView<'r>> + Clone,
     TensorNetworkError<K, Symbol>: for<'r> From<<Sc as TryFrom<AtomView<'r>>>::Error>,
 {
+    #[allow(clippy::result_large_err)]
+    pub(super) fn is_shorthand_function(value: FunView<'a>) -> bool {
+        let symbol = value.get_symbol();
+        symbol == SPENSO_TAG.chain
+            || symbol == SPENSO_TAG.trace
+            || symbol == SPENSO_TAG.dot
+            || SchoonschipMaterializer::<Aind>::contains_schoonschip_shorthand(value.as_view())
+    }
+
     #[allow(clippy::result_large_err)]
     pub(super) fn materialize_shorthand<S, Lib, FunLib>(
         value: FunView<'a>,
@@ -521,49 +560,6 @@ where
                 function_library,
                 settings,
             );
-        }
-
-        if let [factor] = factors.as_slice() {
-            let left = state.slot(&rep);
-            let right = state.slot(&rep);
-            let bridge = state.slot(&rep);
-            let materialized_factor = ChainExpansion::replace_placeholders(
-                *factor,
-                &left.to_atom(),
-                &right.dual().to_atom(),
-            );
-            let materialized_factor = SchoonschipMaterializer::<Aind>::new(&state)
-                .materialize_shorthand(materialized_factor.as_view());
-            let left_closure = FunctionBuilder::new(ETS.metric)
-                .add_arg(bridge.to_atom())
-                .add_arg(left.dual().to_atom())
-                .finish();
-            let right_closure = FunctionBuilder::new(ETS.metric)
-                .add_arg(right.to_atom())
-                .add_arg(bridge.dual().to_atom())
-                .finish();
-            let factor_net = Self::try_from_view_impl(
-                materialized_factor.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?;
-            let left_net = Self::try_from_view_impl(
-                left_closure.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?;
-            let right_net = Self::try_from_view_impl(
-                right_closure.as_view(),
-                state.clone(),
-                library,
-                function_library,
-                settings,
-            )?;
-            return Ok(factor_net.n_mul([right_net, left_net]));
         }
 
         let links = (0..factors.len())

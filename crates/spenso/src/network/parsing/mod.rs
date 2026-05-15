@@ -55,6 +55,26 @@ impl ShorthandParsing {
             Self::Opaque { inference } => Some(inference),
         }
     }
+
+    fn opaque_composite_inference(
+        self,
+        value: AtomView<'_>,
+        filter: StrictTensorFilter,
+    ) -> Option<StructureInferenceMode> {
+        self.opaque_inference()
+            .filter(|_| value.is_tensorial(filter))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum StrictTensorFilter {
+    /// Only parser syntax and heads tagged as tensors are parsed as tensorial.
+    #[default]
+    Tagged,
+    /// Tensor-tagged heads must also expose representation syntax in their arguments.
+    TaggedChecked,
+    /// Any head with representation syntax in its arguments is parsed as tensorial.
+    ContainsReps,
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +126,15 @@ pub struct ParseSettings {
     /// contraction passes can inspect their internals instead of storing them
     /// as pure scalars.
     pub parse_composite_scalars_as_tensors: bool,
+
+    /// Controls which ordinary function heads are eligible tensor leaves.
+    ///
+    /// Parser-owned syntax such as slots, representations, `chain`, `trace`,
+    /// `dot`, metric heads, and transparent brackets keeps its fixed meaning.
+    /// This setting decides how strict the parser is for ordinary tensor heads:
+    /// require tensor tags, require tensor tags plus visible representation
+    /// arguments, or accept untagged heads that contain representation syntax.
+    pub strict_tensor_filter: StrictTensorFilter,
 }
 
 impl Default for ParseSettings {
@@ -117,7 +146,16 @@ impl Default for ParseSettings {
             depth_is_product_depth: true,
             shorthand_parsing: ShorthandParsing::Expand,
             parse_composite_scalars_as_tensors: false,
+            strict_tensor_filter: StrictTensorFilter::Tagged,
         }
+    }
+}
+
+impl ParseSettings {
+    /// Return these settings with the ordinary tensor-head filter replaced.
+    pub fn with_strict_tensor_filter(mut self, filter: StrictTensorFilter) -> Self {
+        self.strict_tensor_filter = filter;
+        self
     }
 }
 
@@ -249,7 +287,7 @@ where
     {
         let scalar_composite = settings.parse_composite_scalars_as_tensors
             && matches!(value, AtomView::Add(_) | AtomView::Mul(_));
-        if !value.is_tensorial() && !scalar_composite {
+        if !value.is_tensorial(settings.strict_tensor_filter) && !scalar_composite {
             return Ok(Self::from_scalar(value.try_into()?));
         }
 
@@ -320,6 +358,19 @@ where
             // println!("Mul leaf");
             return Self::as_leaf::<S, Lib, FunLib>(
                 value.as_view(),
+                library,
+                function_library,
+                settings,
+            );
+        }
+
+        if let Some(inference) = settings
+            .shorthand_parsing
+            .opaque_composite_inference(value.as_view(), settings.strict_tensor_filter)
+        {
+            return Self::as_inferred_leaf::<S, Lib, FunLib>(
+                value.as_view(),
+                inference,
                 library,
                 function_library,
                 settings,
@@ -433,20 +484,23 @@ where
             ));
         }
 
-        if symbol == SPENSO_TAG.pure_scalar {
-            if value.get_nargs() != 1 {
-                return Err(TensorNetworkError::TooManyArgsFunction(
-                    value.as_view().to_plain_string(),
-                ));
-            }
-
-            return Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?));
-        }
-        if !value.as_view().is_tensorial() {
-            return Ok(Self::from_scalar(value.as_view().try_into()?));
+        if !value.as_view().is_tensorial(settings.strict_tensor_filter) {
+            return Self::parse_scalar_function(value);
         }
 
-        if let Some(inference) = settings.shorthand_parsing.opaque_inference() {
+        if symbol.has_tag(&SPENSO_TAG.broadcast) {
+            return Self::parse_broadcast_function::<S, Lib, FunLib>(
+                value,
+                state,
+                library,
+                function_library,
+                settings,
+            );
+        }
+
+        if let Some(inference) = settings.shorthand_parsing.opaque_inference()
+            && Self::is_shorthand_function(value)
+        {
             return Self::as_inferred_leaf::<S, _, _>(
                 value.as_view(),
                 inference,
@@ -457,6 +511,52 @@ where
         }
 
         Self::parse_expanded_function(value, state, library, function_library, settings)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_scalar_function(value: FunView<'a>) -> Result<Self, TensorNetworkError<K, Symbol>> {
+        if value.get_symbol() == SPENSO_TAG.pure_scalar {
+            if value.get_nargs() != 1 {
+                return Err(TensorNetworkError::TooManyArgsFunction(
+                    value.as_view().to_plain_string(),
+                ));
+            }
+
+            return Ok(Self::from_scalar(value.iter().next().unwrap().try_into()?));
+        }
+
+        Ok(Self::from_scalar(value.as_view().try_into()?))
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_broadcast_function<S, Lib, FunLib>(
+        value: FunView<'a>,
+        state: ParseState<Aind>,
+        library: &Lib,
+        function_library: &FunLib,
+        settings: &ParseSettings,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
+        TensorShell<S>: Concretize<T>,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
+    {
+        if value.get_nargs() != 1 {
+            return Err(TensorNetworkError::TooManyArgsFunction(
+                value.as_view().to_plain_string(),
+            ));
+        }
+
+        let symbol = value.get_symbol();
+        let inner = value.iter().next().unwrap();
+        let inner_tensor =
+            Self::try_from_view_impl(inner, state, library, function_library, settings)?;
+
+        Ok(inner_tensor.fun(symbol))
     }
 
     #[allow(clippy::result_large_err)]
@@ -487,17 +587,13 @@ where
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(n_muls.pop().unwrap().n_mul(n_muls))
         } else if symbol.has_tag(&SPENSO_TAG.broadcast) {
-            if value.get_nargs() != 1 {
-                return Err(TensorNetworkError::TooManyArgsFunction(
-                    value.as_view().to_plain_string(),
-                ));
-            }
-
-            let inner = value.iter().next().unwrap();
-            let inner_tensor =
-                Self::try_from_view_impl(inner, state, library, function_library, settings)?;
-
-            Ok(inner_tensor.fun(symbol))
+            Self::parse_broadcast_function::<S, Lib, FunLib>(
+                value,
+                state,
+                library,
+                function_library,
+                settings,
+            )
         } else {
             Self::materialize_shorthand::<S, Lib, FunLib>(
                 value,
@@ -580,6 +676,19 @@ where
         }
         let (base, exp) = value.get_base_exp();
 
+        if let Some(inference) = settings
+            .shorthand_parsing
+            .opaque_composite_inference(value.as_view(), settings.strict_tensor_filter)
+        {
+            return Self::as_inferred_leaf::<S, Lib, FunLib>(
+                value.as_view(),
+                inference,
+                library,
+                function_library,
+                settings,
+            );
+        }
+
         if let Ok(n) = i8::try_from(exp) {
             // println!("base:{base}");
             let base = Self::try_from_view_impl(base, state, library, function_library, settings)?;
@@ -642,6 +751,19 @@ where
         {
             return Self::as_leaf::<S, Lib, FunLib>(
                 value.as_view(),
+                library,
+                function_library,
+                settings,
+            );
+        }
+
+        if let Some(inference) = settings
+            .shorthand_parsing
+            .opaque_composite_inference(value.as_view(), settings.strict_tensor_filter)
+        {
+            return Self::as_inferred_leaf::<S, Lib, FunLib>(
+                value.as_view(),
+                inference,
                 library,
                 function_library,
                 settings,
