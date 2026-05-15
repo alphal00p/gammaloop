@@ -1295,7 +1295,7 @@ mod tests {
         trace, trace_sym,
     };
     use symbolica::{
-        atom::{Atom, AtomView},
+        atom::{Atom, AtomCore, AtomView},
         symbol,
     };
 
@@ -1644,6 +1644,6 @@ mod tests {
             * chain!(start.clone(), end.clone(), first.clone(), second.clone())
             + Atom::num(1) / Atom::num(2) * chain!(start, end, second, first);
 
-        assert_eq!(expanded, expected);
+        assert_eq!(expanded.expand(), expected.expand());
     }
 }

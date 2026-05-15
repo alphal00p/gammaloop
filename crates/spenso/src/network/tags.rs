@@ -120,17 +120,55 @@ define_numbered_tag_macros!($;
 /// Creates a tensor-head symbol tagged with Spenso's generic tensor tag.
 ///
 /// This expands `symbolica::symbol!` at the call site, so the symbol keeps the
-/// caller's crate namespace while automatically receiving the Spenso tag.
+/// caller's crate namespace while automatically receiving the Spenso tag. Any
+/// Symbolica attributes and settings such as `print = ...` are forwarded, while
+/// `tag`/`tags` remain owned by this macro so the tensor tag cannot be skipped.
 #[macro_export]
 macro_rules! tensor_symbol {
     ($name:ident) => {
+        $crate::tensor_symbol!(stringify!($name))
+    };
+    ($name:ident; $($attr:ident),*) => {
+        $crate::tensor_symbol!(stringify!($name); $($attr),*)
+    };
+    ($name:ident, $($setting:ident = $value:expr),*) => {
+        $crate::tensor_symbol!(stringify!($name), $($setting = $value),*)
+    };
+    ($name:ident; $($attr:ident),+; $($setting:ident = $value:expr),*) => {
+        $crate::tensor_symbol!(stringify!($name); $($attr),+; $($setting = $value),*)
+    };
+    ($id:expr) => {
+        symbolica::symbol!($id, tag = &$crate::network::tags::SPENSO_TAG.tensor)
+    };
+    ($id:expr, tag = $tag:expr $(, $($rest:tt)*)?) => {
+        compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tag = ...")
+    };
+    ($id:expr, tags = $tags:expr $(, $($rest:tt)*)?) => {
+        compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tags = ...")
+    };
+    ($id:expr, $($setting:ident = $value:expr),*) => {
         symbolica::symbol!(
-            stringify!($name),
-            tag = &$crate::network::tags::SPENSO_TAG.tensor
+            $id,
+            tag = &$crate::network::tags::SPENSO_TAG.tensor,
+            $($setting = $value),*
         )
     };
-    ($name:literal) => {
-        symbolica::symbol!($name, tag = &$crate::network::tags::SPENSO_TAG.tensor)
+    ($id:expr; $($attr:ident),*) => {
+        symbolica::symbol!($id; $($attr),*; tag = &$crate::network::tags::SPENSO_TAG.tensor)
+    };
+    ($id:expr; $($attr:ident),+; tag = $tag:expr $(, $($rest:tt)*)?) => {
+        compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tag = ...")
+    };
+    ($id:expr; $($attr:ident),+; tags = $tags:expr $(, $($rest:tt)*)?) => {
+        compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tags = ...")
+    };
+    ($id:expr; $($attr:ident),+; $($setting:ident = $value:expr),*) => {
+        symbolica::symbol!(
+            $id;
+            $($attr),+;
+            tag = &$crate::network::tags::SPENSO_TAG.tensor,
+            $($setting = $value),*
+        )
     };
 }
 

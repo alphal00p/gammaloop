@@ -1,10 +1,9 @@
 use std::sync::LazyLock;
 
-use spenso::{g, network::tags::SPENSO_TAG, symbolica_atom::TensorCollectExt};
+use spenso::{g, symbolica_atom::TensorCollectExt};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
-    symbol,
 };
 
 use crate::metric::MetricSimplifier;
@@ -12,7 +11,7 @@ use crate::metric::MetricSimplifier;
 /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
 /// Symbolica canonicalize argument order and annihilate repeated arguments.
 pub static EPSILON_SYMBOL: LazyLock<Symbol> =
-    LazyLock::new(|| symbol!("spenso::epsilon"; Antisymmetric; tags = [SPENSO_TAG.tensor.clone()]));
+    LazyLock::new(|| spenso::tensor_symbol!("spenso::epsilon"; Antisymmetric));
 
 /// Builds an antisymmetric epsilon tensor with arbitrary rank.
 pub fn epsilon<'a, F>(factors: impl IntoIterator<Item = F>) -> Atom
