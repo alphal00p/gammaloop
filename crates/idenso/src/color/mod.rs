@@ -105,6 +105,13 @@ impl ColorSymbols {
             .finish()
     }
 
+    #[cfg(test)]
+    pub(crate) fn initialize_tensor_symbols(&self) {
+        let _ = self.t;
+        let _ = *COLOR_D_SYMBOL;
+        let _ = *COLOR_D33_SYMBOL;
+    }
+
     // Generator for the adjoint representation of SU(N)
     pub fn t_strct<Aind: AbsInd>(
         &self,
@@ -168,7 +175,7 @@ impl ColorSymbols {
 }
 
 pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
-    t: symbol!("spenso::t";Real;tags = [T.tensor.clone()], print = |a, opt| {
+    t: spenso::tensor_symbol!("spenso::t"; Real; print = |a, opt| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{
@@ -241,7 +248,7 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
             _=>None}
 
     }),
-    f: symbol!("spenso::f";Real;tags = [T.tensor.clone()], print = |a, opt| {
+    f: spenso::tensor_symbol!("spenso::f"; Real; print = |a, opt| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{

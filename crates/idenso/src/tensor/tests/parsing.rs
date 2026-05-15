@@ -189,11 +189,11 @@ fn parse_val() {
       8	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
       9	 [label = "T:Q(5,mink(4,edge_5_1))"];
       10	 [label = "T:Q(6,mink(4,edge_6_1))"];
-      11	 [label = "T:vbar(2,bis(4,hedge_2))"];
-      12	 [label = "T:ebar(0,mink(4,hedge_0))"];
-      13	 [label = "T:ebar(3,mink(4,hedge_3))"];
-      14	 [label = "T:ebar(4,mink(4,hedge_4))"];
-      15	 [label = "T:u(1,bis(4,hedge_1))"];
+      11	 [label = "T:u(1,bis(4,hedge_1))"];
+      12	 [label = "T:vbar(2,bis(4,hedge_2))"];
+      13	 [label = "T:ebar(0,mink(4,hedge_0))"];
+      14	 [label = "T:ebar(3,mink(4,hedge_3))"];
+      15	 [label = "T:ebar(4,mink(4,hedge_4))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       15:55:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
@@ -219,11 +219,11 @@ fn parse_val() {
       5:30:s	-> 10:46:s	 [id=21 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
       5:28:s	-> 8:41:s	 [id=22 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
       5:29:s	-> 6:33:s	 [id=23 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
-      6:34:s	-> 12:50:s	 [id=24 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
-      6:32:s	-> 11:48:s	 [id=25 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
-      7:38:s	-> 13:52:s	 [id=26 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
-      7:36:s	-> 15:56:s	 [id=27 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
-      8:42:s	-> 14:54:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
+      6:34:s	-> 13:52:s	 [id=24 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
+      6:32:s	-> 12:50:s	 [id=25 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
+      7:38:s	-> 14:54:s	 [id=26 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
+      7:36:s	-> 11:48:s	 [id=27 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
+      8:42:s	-> 15:56:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
     }
     "#);
     assert_eq!(net.simple_execute::<()>(), expr);

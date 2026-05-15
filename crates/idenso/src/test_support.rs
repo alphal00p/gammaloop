@@ -30,7 +30,6 @@ symbol_set!(TestSymbols, TS;
 symbol_set!(SpensoTestSymbols, SPENSO_TS, namespace = "spenso";
     l_1 l_2 l_3 l_4 l_5 l_6 l_7 l_8 l_9 l_10 l_20
     EMRID G dummy_ss l r dim
-    vbar
     ebar
     edge_1_1 edge_2_1 edge_3_1 edge_4_1 edge_5_1 edge_6_1 edge_7_1 edge_8_1 edge_9_1 edge_10_1 edge_11_1 edge_12_1 edge_13_1 edge_14_1 edge_15_1 edge_16_1 edge_17_1 edge_18_1 edge_19_1 edge_20_1
     hedge0 hedge1 hedge2 hedge3 hedge4 hedge5 hedge6 hedge7 hedge8 hedge9 hedge10 hedge11 hedge12 hedge13 hedge14 hedge15 hedge16 hedge17 hedge18 hedge19 hedge20
@@ -75,6 +74,11 @@ impl TestReps {
         let _ = spenso::vector_symbol!(P);
         let _ = spenso::vector_symbol!(Q);
         let _ = spenso::vector_symbol!(K);
+
+        crate::color::CS.initialize_tensor_symbols();
+        crate::dirac::AGS.initialize_tensor_symbols();
+        crate::dirac::PS.initialize_tensor_symbols();
+        let _ = *crate::epsilon::EPSILON_SYMBOL;
 
         let _ = TS.A;
         let _ = SPENSO_TS.G;

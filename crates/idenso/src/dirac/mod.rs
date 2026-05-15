@@ -38,9 +38,8 @@ pub struct GammaLibrary {
 }
 
 pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
-    gamma: symbol!(
-        "spenso::gamma";Linear;
-        tags = [SPENSO_TAG.tensor.clone()],
+    gamma: spenso::tensor_symbol!(
+        "spenso::gamma"; Linear;
         print = |a, opt| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
@@ -110,9 +109,8 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
         }
     ),
     gammaadj: spenso::tensor_symbol!("spenso::gammaadj"),
-    projp: symbol!(
+    projp: spenso::tensor_symbol!(
         "spenso::projp",
-        tags = [SPENSO_TAG.tensor.clone()],
         print = |a, opt| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
@@ -164,9 +162,8 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
             }
         }
     ),
-    projm: symbol!(
+    projm: spenso::tensor_symbol!(
         "spenso::projm",
-        tags = [SPENSO_TAG.tensor.clone()],
         print = |a, opt| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
@@ -217,9 +214,8 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
             }
         }
     ),
-    gamma5: symbol!(
+    gamma5: spenso::tensor_symbol!(
         "spenso::gamma5",
-        tags = [SPENSO_TAG.tensor.clone()],
         print = |a, opt| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
@@ -276,7 +272,7 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
         }
     ),
     sigma: spenso::tensor_symbol!("spenso::sigma"),
-    gamma0: symbol!("spenso::gamma0";Real,Symmetric;tags = [SPENSO_TAG.tensor.clone()], print = |a, opt| {
+    gamma0: spenso::tensor_symbol!("spenso::gamma0"; Real, Symmetric; print = |a, opt| {
         match opt.custom_print_mode {
             Some(("spenso", i)) => {
                 let settings = SpensoPrintSettings::from(i);
@@ -332,6 +328,13 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     }),
     gammaconj: spenso::tensor_symbol!("spenso::gammaconj"),
 });
+
+impl GammaLibrary {
+    #[cfg(test)]
+    pub(crate) fn initialize_tensor_symbols(&self) {
+        let _ = self.gamma;
+    }
+}
 
 fn spinor_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
@@ -413,6 +416,13 @@ pub static PS: LazyLock<PolSymbols> = LazyLock::new(|| PolSymbols {
     v: spenso::tensor_symbol!("spenso::v"),
     vbar: spenso::tensor_symbol!("spenso::vbar"),
 });
+
+impl PolSymbols {
+    #[cfg(test)]
+    pub(crate) fn initialize_tensor_symbols(&self) {
+        let _ = self.eps;
+    }
+}
 
 /// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
 ///

@@ -135,7 +135,7 @@ fn separated_generator_casimir_trace() {
 fn two_f_loop_contracts_to_ca_metric() {
     test_initialize();
     let expr = parse_lit!(
-        f(coad(NA, a), coad(NA, c), coad(NA, d)) * f(coad(NA, b), coad(NA, c), coad(NA, d)),
+        f(coad(NA, a), coad(NA, c), coad(NA, x)) * f(coad(NA, b), coad(NA, c), coad(NA, x)),
         default_namespace = "spenso"
     );
 
