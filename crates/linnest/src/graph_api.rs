@@ -227,39 +227,6 @@ pub struct TypstEndpointSpec {
     pub in_subgraph: bool,
 }
 
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct TypstDotGraphBuilder {
-    pub global_data: GlobalData,
-    pub builder: DotBuilder,
-    pub node_count: usize,
-    pub node_positions: Vec<ResolvedPoint>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
-pub struct TypstBuilderSpec {
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub statements: BTreeMap<String, String>,
-    #[serde(default)]
-    pub edge_statements: BTreeMap<String, String>,
-    #[serde(default)]
-    pub source_style_eval: Option<String>,
-    #[serde(default)]
-    pub sink_style_eval: Option<String>,
-    #[serde(default)]
-    pub label_eval: Option<String>,
-    #[serde(default)]
-    pub node_statements: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TypstBuilderNodeResult {
-    pub builder: Vec<u8>,
-    pub node: usize,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct TypstJoinSpec {
     pub key: String,
@@ -284,15 +251,6 @@ fn decode_cbor<T: for<'de> Deserialize<'de>>(arg: &[u8], name: &str) -> Result<T
     ciborium::de::from_reader(arg).map_err(|err| format!("Failed to deserialize {name}: {err}"))
 }
 
-fn decode_builder(arg: &[u8]) -> Result<TypstDotGraphBuilder, String> {
-    unsafe { rkyv::from_bytes_unchecked::<TypstDotGraphBuilder>(arg) }
-        .map_err(|err| format!("Failed to deserialize archived graph builder: {err}"))
-}
-
-fn encode_builder(builder: &TypstDotGraphBuilder) -> Result<Vec<u8>, String> {
-    to_rkyv_bytes::<_, 4096>(builder)
-}
-
 fn decode_subgraph(arg: &[u8]) -> Result<SuBitGraph, String> {
     unsafe { rkyv::from_bytes_unchecked::<SuBitGraph>(arg) }
         .map_err(|err| format!("Failed to deserialize archived subgraph: {err}"))
@@ -302,86 +260,12 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
     to_rkyv_bytes::<_, 256>(subgraph)
 }
 
-pub fn builder_new_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec = if arg.is_empty() {
-        TypstBuilderSpec::default()
-    } else {
-        decode_cbor(arg, "builder spec")?
-    };
-
-    let edge_statements = edge_render_statements(
-        spec.edge_statements,
-        spec.source_style_eval,
-        spec.sink_style_eval,
-        spec.label_eval,
-    );
-
-    encode_builder(&TypstDotGraphBuilder {
-        global_data: global_data_from_parts(
-            spec.name,
-            spec.statements,
-            edge_statements,
-            spec.node_statements,
-        ),
-        builder: HedgeGraphBuilder::new(),
-        node_count: 0,
-        node_positions: Vec::new(),
-    })
-}
-
-pub fn builder_add_node_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let mut graph_builder = decode_builder(arg)?;
-    let node: TypstNodeSpec = decode_cbor(arg2, "node spec")?;
-    let placement = resolve_placement(node.pos.as_ref(), &graph_builder.node_positions, "node")?;
-    let node_data = node_data_from_spec(
-        &graph_builder.global_data,
-        node,
-        graph_builder.node_count,
-        placement.as_ref(),
-    );
-    let node_position = placement
-        .as_ref()
-        .map(|placement| placement.point)
-        .unwrap_or_else(|| resolved_point_from_statements(&node_data.statements));
-    let node_index = graph_builder.builder.add_node(node_data);
-    graph_builder.node_count += 1;
-    graph_builder.node_positions.push(node_position);
-
-    encode_cbor(&TypstBuilderNodeResult {
-        builder: encode_builder(&graph_builder)?,
-        node: node_index.0,
-    })
-}
-
-pub fn builder_add_edge_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let mut graph_builder = decode_builder(arg)?;
-    let edge: TypstEdgeSpec = decode_cbor(arg2, "edge spec")?;
-    add_edge_to_builder(
-        &graph_builder.global_data,
-        &mut graph_builder.builder,
-        graph_builder.node_count,
-        &graph_builder.node_positions,
-        edge,
-    )?;
-    encode_builder(&graph_builder)
-}
-
-pub fn builder_finish_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph_builder = decode_builder(arg)?;
-    let graph = DotGraph {
-        global_data: graph_builder.global_data,
-        graph: graph_builder
-            .builder
-            .build::<DefaultNodeStore<DotVertexData>>(),
-    };
-    graph.to_rkyv_bytes::<4096>().map(|bytes| bytes.to_vec())
-}
-
 pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: TypstGraphSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize graph spec: {err}"))?;
-    let builder = builder_from_spec(spec)?;
-    builder_finish_bytes(&encode_builder(&builder)?)
+    graph_from_spec(spec)?
+        .to_rkyv_bytes::<4096>()
+        .map(|bytes| bytes.to_vec())
 }
 
 pub fn decode_graph_bytes_list(arg: &[u8]) -> Result<Vec<Vec<u8>>, String> {
@@ -617,7 +501,7 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
     }
 }
 
-fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, String> {
+fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
     let node_count = spec.nodes.len();
     let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
     let mut node_positions = Vec::with_capacity(node_count);
@@ -656,11 +540,9 @@ fn builder_from_spec(spec: TypstGraphSpec) -> Result<TypstDotGraphBuilder, Strin
         )?;
     }
 
-    Ok(TypstDotGraphBuilder {
+    Ok(DotGraph {
         global_data,
-        builder,
-        node_count,
-        node_positions,
+        graph: builder.build::<DefaultNodeStore<DotVertexData>>(),
     })
 }
 

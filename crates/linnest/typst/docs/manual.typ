@@ -1,6 +1,7 @@
 #import "@preview/tidy:0.4.3"
 #import "../src/lib.typ": draw, graph, layout, physics, subgraph
 
+
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
 #set text(size: 10pt, font: "Atkinson Hyperlegible Next")
@@ -33,10 +34,13 @@ If a half-edge is glued to itself, we call that an external half-edge.
 
 
 #let g = graph.build(
-  nodes: ((name: "a"), (name: "b")),
-  edges: ((source: (node: 0), target: (node: 1), label: "e"), (source: (node: 0), target: (node: 1), label: "g")),
+  nodes: (graph.node(name: "a"), graph.node(name: "b")),
+  edges: (
+    graph.edge(source: (node: 0), sink: (node: 1), statements: (label: "e")),
+    graph.edge(source: (node: 0), sink: (node: 1), statements: (label: "g")),
+  ),
 )
-#graph.edges(g)
+// #graph.edges(g)
 #draw(layout(g))
 
 = Linnest Typst APIs
@@ -54,26 +58,29 @@ The public surface is intentionally narrow:
 - `draw` for rendering a laid-out graph object with CeTZ.
 - `physics` for reusable particle-line edge styles.
 
-== Minimal Builder Example
+== Minimal Build Example
 
 ```typ
 #import "../src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(name: "demo")
-#let (node: a, builder: b) = graph.node(b, name: "a")
-#let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(
-  b,
-  source: (node: a, compass: "e"),
-  sink: (node: c, compass: "w"),
-  statements: (
-    color: "0055ff",
-    source-color: "d72638",
-    sink-color: "1b7f4c",
-    label: "a-c",
+#let a = 0
+#let c = 1
+#let g = graph.build(
+  name: "demo",
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (
+    graph.edge(
+      source: (node: a, compass: "e"),
+      sink: (node: c, compass: "w"),
+      statements: (
+        color: "0055ff",
+        source-color: "d72638",
+        sink-color: "1b7f4c",
+        label: "a-c",
+      ),
+    ),
   ),
 )
-#let g = graph.finish(b)
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")
 #let edges = graph.edges(g, subgraph: east)
@@ -86,21 +93,24 @@ The public surface is intentionally narrow:
 
 #import "../src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(name: "demo")
-#let (node: a, builder: b) = graph.node(b, name: "a")
-#let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(
-  b,
-  source: (node: a, compass: "e"),
-  sink: (node: c, compass: "w"),
-  statements: (
-    color: "0055ff",
-    source-color: "d72638",
-    sink-color: "1b7f4c",
-    label: "a-c",
+#let a = 0
+#let c = 1
+#let g = graph.build(
+  name: "demo",
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (
+    graph.edge(
+      source: (node: a, compass: "e"),
+      sink: (node: c, compass: "w"),
+      statements: (
+        color: "0055ff",
+        source-color: "d72638",
+        sink-color: "1b7f4c",
+        label: "a-c",
+      ),
+    ),
   ),
 )
-#let g = graph.finish(b)
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")
 #let edges = graph.edges(g, subgraph: east)
@@ -112,31 +122,36 @@ The public surface is intentionally narrow:
 
 == Graph Objects
 
-Graph, builder, and subgraph objects are opaque zero-copy values. Build or parse
+Graph and subgraph objects are opaque zero-copy values. Build or parse
 graph objects with `graph`, transform graph objects with `layout`, and pass
 objects back to `graph` or `subgraph` for inspection.
 
 - `graph.parse(input)` parses one or more DOT digraphs and returns an array of
   graph objects.
-- `graph.build(..)` constructs one graph object from named arguments. This is
-  convenience sugar over the builder functions.
-- `graph.builder(..)` starts a builder object.
-- `graph.node(builder, ..)` returns `(node: index, builder: builder)`.
-- `graph.edge(builder, ..)` returns the updated builder.
-- `graph.finish(builder)` turns a builder into a graph.
+- `graph.build(..)` constructs one graph object from named arguments. Pass
+  `graph.node(..)` and `graph.edge(..)` to create reusable node and edge spec
+  dictionaries.
+- `graph.node(..)` returns a node spec dictionary.
+- `graph.edge(..)` returns an edge spec dictionary.
 - `layout(graph, ..)` runs layout as an explicit
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
 - `draw(graph, ..)` draws a laid-out graph object with CeTZ.
 - `graph.dot(graph)` returns a DOT string for inspection or export.
 
-== Builder Spec
+== Graph Specs
 
-The builder API is the preferred construction API when nodes need to be reused.
-Use destructuring to keep the builder value moving:
+The Typst construction API is data-first: create arrays of node and edge specs,
+then pass them to `graph.build`. Use ordinary Typst bindings for node indices
+when edges need to refer to nodes:
 
 ```typ
-#let (node: a, builder: b) = graph.node(b, name: "a")
+#let a = 0
+#let c = 1
+#let g = graph.build(
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (graph.edge(source: (node: a), sink: (node: c)),),
+)
 ```
 
 `graph.edge` accepts `source` and `sink` half-edge dictionaries. A half edge can
@@ -144,9 +159,8 @@ contain `node`, `statement`, `id`, `port-label`, `compass`, and `in-subgraph`.
 Set `source: none` or `sink: none` to create an external half edge.
 
 String-valued DOT statements may contain `{name}` placeholders. `graph.build`
-and the builder object expand each placeholder while constructing the graph
-object. Use `{{` and `}}` for literal braces. Unknown placeholders are left
-unchanged.
+expands each placeholder while constructing the graph object. Use `{{` and `}}`
+for literal braces. Unknown placeholders are left unchanged.
 
 This is useful for graph-level `edge-statements`: the default edge statement is
 merged into each edge, then expanded against that edge's complete statement
@@ -154,21 +168,23 @@ dictionary. The following default metadata records a display label derived from
 the per-edge `label` statement:
 
 ```typ
-#let b = graph.builder(
+#let a = 0
+#let c = 1
+#let g = graph.build(
   edge-statements: (
     color: "000000",
     display-label: "{label}",
   ),
-)
-#let (node: a, builder: b) = graph.node(b, name: "a")
-#let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(
-  b,
-  source: (node: a),
-  sink: (node: c),
-  statements: (
-    color: "0055ff",
-    label: "a-c",
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (
+    graph.edge(
+      source: (node: a),
+      sink: (node: c),
+      statements: (
+        color: "0055ff",
+        label: "a-c",
+      ),
+    ),
   ),
 )
 ```
@@ -180,9 +196,15 @@ coordinate into a fixed layout constraint and a drawable position. Use
 `mode: "start"` when the coordinate should only seed the layout:
 
 ```typ
-#let (node: a, builder: b) = graph.node(b, name: "a", pos: graph.pos(x: -2, y: 0))
-#let (node: c, builder: b) = graph.node(b, name: "c", pos: graph.pos(ref: a, dx: 4, dy: 0))
-#let b = graph.edge(b, source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.2))
+#let a = 0
+#let c = 1
+#let g = graph.build(
+  nodes: (
+    graph.node(name: "a", pos: graph.pos(x: -2, y: 0)),
+    graph.node(name: "c", pos: graph.pos(ref: a, dx: 4, dy: 0)),
+  ),
+  edges: (graph.edge(source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.2)),),
+)
 ```
 
 `graph.group` links one coordinate across several nodes or edge control points.
@@ -191,17 +213,17 @@ GammaLoop external-edge columns use this to keep incoming and outgoing external
 legs on opposite sides while pairing rows by a shared `y` group:
 
 ```typ
-#let b = graph.edge(
-  b,
-  source: (node: right-ext),
-  sink: (node: center),
-  pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0")),
-)
-#let b = graph.edge(
-  b,
-  source: (node: center),
-  sink: (node: left-ext),
-  pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0")),
+#let edges = (
+  graph.edge(
+    source: (node: right-ext),
+    sink: (node: center),
+    pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0")),
+  ),
+  graph.edge(
+    source: (node: center),
+    sink: (node: left-ext),
+    pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0")),
+  ),
 )
 ```
 
@@ -248,7 +270,7 @@ records, and the edge index:
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display-label]
 #let source-style(edge) = (stroke: red + 0.5pt)
 #let sink-style(edge) = (stroke: blue + 0.5pt)
-#draw(layout(graph.finish(b)), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
+#draw(layout(g), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
 Marks can follow graph orientation as a first-class draw option. Put the same
@@ -263,7 +285,7 @@ flipped, and undirected edges suppress the mark.
   mark-position: "center-if-dangling",
   mark-orientation: "edge",
 )
-#draw(layout(graph.finish(b)), source-style: oriented-arrow, sink-style: oriented-arrow)
+#draw(layout(g), source-style: oriented-arrow, sink-style: oriented-arrow)
 ```
 
 == Physics Edge Styles
@@ -302,23 +324,27 @@ Optional labels can be built from edge metadata with `show-edge-index`,
 ```typ
 #import "../src/lib.typ": draw, graph, layout, physics
 
-#let b = graph.builder(name: "physics")
-#let (node: a, builder: b) = graph.node(b, name: "a")
-#let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(
-  b,
-  source: (node: a),
-  sink: (node: c),
-  statements: (particle: "fermion", id: "7"),
+#let a = 0
+#let c = 1
+#let g = graph.build(
+  name: "physics",
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (
+    graph.edge(
+      source: (node: a),
+      sink: (node: c),
+      statements: (particle: "fermion", id: "7"),
+    ),
+    graph.edge(source: (node: c), sink: none, statements: (particle: "fermion", id: "8")),
+  ),
 )
-#let b = graph.edge(b, source: (node: c), sink: none, statements: (particle: "fermion", id: "8"))
 #let callbacks = physics.style(
   momentum-arrows: true,
   show-edge-index: true,
   show-particle: true,
 )
 #draw(
-  layout(graph.finish(b)),
+  layout(g),
   source-style: callbacks.source-style,
   sink-style: callbacks.sink-style,
   edge-label: callbacks.edge-label,
@@ -356,24 +382,27 @@ receiving `(base-length, length, ratio)`.
 Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
 so the layer is drawn on the same side of the curve as the edge label.
 
-The builder keeps `source-style-eval`, `sink-style-eval`, and `label-eval` as
-ordinary kebab-case edge metadata for downstream renderers or DOT export. They
-can be set as direct arguments on `graph.build`, `graph.builder`, or
-`graph.edge`, instead of being manually nested under `edge-statements` or
-per-edge `statements`:
+`source-style-eval`, `sink-style-eval`, and `label-eval` are ordinary
+kebab-case edge metadata for downstream renderers or DOT export. They can be
+set as direct arguments on `graph.build` or `graph.edge`, instead of being
+manually nested under `edge-statements` or per-edge `statements`:
 
 ```typ
-#let b = graph.builder(
+#let a = 0
+#let c = 1
+#let g = graph.build(
   name: "demo",
   source-style-eval: "(stroke: red + 0.5pt)",
   sink-style-eval: "(stroke: blue + 0.5pt)",
-)
-#let b = graph.edge(
-  b,
-  source: (node: a),
-  sink: (node: c),
-  label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
-  statements: (color: "0055ff", label: "a-c"),
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (
+    graph.edge(
+      source: (node: a),
+      sink: (node: c),
+      label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
+      statements: (color: "0055ff", label: "a-c"),
+    ),
+  ),
 )
 ```
 
@@ -388,12 +417,14 @@ per-edge `statements`:
     color: "000000",
     display-label: "{label}",
   ),
-  nodes: ((name: "a"), (name: "b")),
-  edges: ((
-    source: (node: 0, compass: "e"),
-    sink: (node: 1, compass: "w"),
-    statements: (color: "0055ff", label: "ab"),
-  ),),
+  nodes: (graph.node(name: "a"), graph.node(name: "b")),
+  edges: (
+    graph.edge(
+      source: (node: 0, compass: "e"),
+      sink: (node: 1, compass: "w"),
+      statements: (color: "0055ff", label: "ab"),
+    ),
+  ),
 )
 ```
 

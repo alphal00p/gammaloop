@@ -7,11 +7,14 @@ Typst wrapper package for the `linnest.wasm` graph layout plugin.
 ```typ
 #import "src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(name: "demo")
-#let (node: a, builder: b) = graph.node(b, name: "a")
-#let (node: c, builder: b) = graph.node(b, name: "c")
-#let b = graph.edge(b, source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-c"))
-#let g = layout(graph.finish(b))
+#let a = 0
+#let c = 1
+#let g = graph.build(
+  name: "demo",
+  nodes: (graph.node(name: "a"), graph.node(name: "c")),
+  edges: (graph.edge(source: (node: a), sink: (node: c), statements: (color: "0055ff", label: "a-c")),),
+)
+#let g = layout(g)
 #let dot = graph.dot(g)
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #draw(g, edge-label: edge-label)

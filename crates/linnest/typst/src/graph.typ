@@ -60,6 +60,14 @@
   clean + (statements: statements)
 }
 
+#let _node-args(name: none, index: none, pos: none, shift: none, statements: (:)) = _node-spec((
+  name: name,
+  index: index,
+  pos: pos,
+  shift: shift,
+  statements: statements,
+))
+
 #let _edge-statements(edge) = {
   let statements = _statements-with-value(
     _statements-with-value(
@@ -104,6 +112,38 @@
   }
   clean + (statements: statements)
 }
+
+#let _edge-args(
+  source: none,
+  sink: none,
+  orientation: "default",
+  flow: none,
+  id: none,
+  pos: none,
+  shift: none,
+  label-pos: none,
+  label-angle: none,
+  bend: none,
+  statements: (:),
+  source-style-eval: none,
+  sink-style-eval: none,
+  label-eval: none,
+) = _edge-spec((
+  source: source,
+  sink: sink,
+  orientation: orientation,
+  flow: flow,
+  id: id,
+  pos: pos,
+  shift: shift,
+  label-pos: label-pos,
+  label-angle: label-angle,
+  bend: bend,
+  statements: statements,
+  source-style-eval: source-style-eval,
+  sink-style-eval: sink-style-eval,
+  label-eval: label-eval,
+))
 
 /// Create a grouped placement coordinate.
 ///
@@ -169,13 +209,14 @@
 
 /// Build one graph object from node and edge arrays.
 ///
-/// This is convenience sugar over @builder, @node, @edge, and @finish.
+/// Use @node and @edge to create reusable spec dictionaries, then pass those
+/// arrays to @build.
 ///
 /// ```example
 /// #let g = graph.build(
 ///   name: "demo",
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0), sink: (node: 1)),),
+///   nodes: (graph.node(name: "a"), graph.node(name: "b")),
+///   edges: (graph.edge(source: (node: 0), sink: (node: 1)),),
 /// )
 /// #graph.info(g).name
 /// ```
@@ -238,99 +279,40 @@
   )))
 }
 
-/// Create a builder object.
+/// Create a node spec dictionary for @build.
 ///
-/// `statements`, `node-statements`, and `edge-statements` set graph-level DOT
-/// attributes that are carried into the finished graph. String values may use
-/// `{name}` placeholders; edge defaults expand after per-edge statements are
-/// merged, so an `edge-statements`, `source-style-eval`, or `sink-style-eval` value can
-/// refer to a `label` supplied by @edge.
+/// `shift` is normalized into `statements.shift`.
 ///
 /// ```example
-/// #let b = graph.builder(
-///   name: "demo",
-///   statements: (full_num: "x + y"),
-///   edge-statements: (display-label: "{label}"),
-///   source-style-eval: "(stroke: red + 0.5pt)",
-///   sink-style-eval: "(stroke: blue + 0.5pt)",
-/// )
-/// #let (node: a, builder: b) = graph.node(b, name: "a")
-/// #a
-/// ```
-/// -> bytes
-#let builder(
-  name: none,
-  statements: (:),
-  node-statements: (:),
-  edge-statements: (:),
-  source-style-eval: none,
-  sink-style-eval: none,
-  label-eval: none,
-) = {
-  let edge-statements = _edge-render-statements(
-    edge-statements,
-    source-style-eval: source-style-eval,
-    sink-style-eval: sink-style-eval,
-    label-eval: label-eval,
-  )
-  _plugin.graph_builder(cbor.encode((
-    name: name,
-    statements: statements,
-    node-statements: node-statements,
-    edge-statements: edge-statements,
-  )))
-}
-
-/// Add a node to a builder object.
-///
-/// Returns a dictionary with fields `node` and `builder`, so callers can write
-/// `#let (node: a, builder: b) = graph.node(b, name: "a")`. The returned
-/// builder is the value to pass to the next @node, @edge, or @finish call.
-///
-/// ```example
-/// #let b = graph.builder(name: "demo")
-/// #let (node: a, builder: b) = graph.node(b, name: "a")
-/// #let (node: c, builder: b) = graph.node(b, name: "c")
-/// #repr((a, c))
+/// #let spec = graph.node(name: "a", shift: (1, 0))
+/// #spec.statements.shift
 /// ```
 /// -> dictionary
-#let node(builder, name: none, index: none, pos: none, shift: none, statements: (:)) = {
-  cbor(_plugin.graph_builder_add_node(
-    bytes(builder),
-    cbor.encode((
-      name: name,
-      index: index,
-      pos: pos,
-      statements: _statements-with-point(
-        statements,
-        "shift",
-        shift,
-      ),
-    )),
-  ))
-}
+#let node(name: none, index: none, pos: none, shift: none, statements: (:)) = _node-args(
+  name: name,
+  index: index,
+  pos: pos,
+  shift: shift,
+  statements: statements,
+)
 
-/// Add a paired or external edge to a builder object.
+/// Create a paired or external edge spec dictionary for @build.
 ///
 /// Set `source` to `none` or `sink` to `none` for an external edge.
 /// Half-edge dictionaries accept `node`, `statement`, `id`, `port-label`,
-/// `compass`, and `in-subgraph`.
+/// `compass`, and `in-subgraph`. Drawing helpers like `shift`, `label-pos`,
+/// `bend`, and `label-eval` are normalized into `statements`.
 ///
 /// ```example
-/// #let b = graph.builder(name: "demo")
-/// #let (node: a, builder: b) = graph.node(b, name: "a")
-/// #let (node: c, builder: b) = graph.node(b, name: "c")
-/// #let b = graph.edge(
-///   b,
-///   source: (node: a, compass: "e"),
-///   sink: (node: c, compass: "w"),
+/// #let spec = graph.edge(
+///   source: (node: 0, compass: "e"),
+///   sink: (node: 1, compass: "w"),
 ///   statements: (label: "a-c"),
 /// )
-/// #graph.edges(graph.finish(b)).len()
+/// #spec.statements.label
 /// ```
-/// -> bytes
+/// -> dictionary
 #let edge(
-  builder,
   source: none,
   sink: none,
   orientation: "default",
@@ -345,49 +327,22 @@
   source-style-eval: none,
   sink-style-eval: none,
   label-eval: none,
-) = {
-  let statements = _edge-render-statements(
-    _statements-with-value(
-      _statements-with-value(
-        _statements-with-point(
-          _statements-with-point(statements, "shift", shift),
-          "label-pos",
-          label-pos,
-        ),
-        "label-angle",
-        label-angle,
-      ),
-      "bend",
-      bend,
-    ),
-    source-style-eval: source-style-eval,
-    sink-style-eval: sink-style-eval,
-    label-eval: label-eval,
-  )
-  _plugin.graph_builder_add_edge(
-    bytes(builder),
-    cbor.encode((
-      source: source,
-      sink: sink,
-      orientation: orientation,
-      flow: flow,
-      id: id,
-      pos: pos,
-      statements: statements,
-    )),
-  )
-}
-
-/// Finish a builder object into a graph object.
-///
-/// ```example
-/// #let b = graph.builder(name: "demo")
-/// #let (node: a, builder: b) = graph.node(b, name: "a")
-/// #let g = graph.finish(b)
-/// #graph.info(g).name
-/// ```
-/// -> bytes
-#let finish(builder) = _plugin.graph_builder_finish(bytes(builder))
+) = _edge-args(
+  source: source,
+  sink: sink,
+  orientation: orientation,
+  flow: flow,
+  id: id,
+  pos: pos,
+  shift: shift,
+  label-pos: label-pos,
+  label-angle: label-angle,
+  bend: bend,
+  statements: statements,
+  source-style-eval: source-style-eval,
+  sink-style-eval: sink-style-eval,
+  label-eval: label-eval,
+)
 
 /// Return graph metadata.
 ///

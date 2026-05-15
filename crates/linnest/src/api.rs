@@ -106,30 +106,6 @@ pub fn parse_graph(arg: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
-pub fn graph_builder(arg: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::builder_new_bytes(arg)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_func]
-pub fn graph_builder_add_node(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::builder_add_node_bytes(arg, arg2)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_func]
-pub fn graph_builder_add_edge(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::builder_add_edge_bytes(arg, arg2)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_func]
-pub fn graph_builder_finish(arg: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::builder_finish_bytes(arg)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_func]
 pub fn graph_from_spec(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_from_spec_bytes(arg)
 }

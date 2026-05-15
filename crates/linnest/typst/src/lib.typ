@@ -31,8 +31,7 @@
 /// ```
 /// -> bytes
 #let layout(
-  /// Graph object returned by `graph.build`, `graph.finish`, or
-  /// `graph.parse`.
+  /// Graph object returned by `graph.build` or `graph.parse`.
   /// -> bytes
   graph,
   /// Optional subgraph object to lay out. With `"tree"` and `"dot"`, other

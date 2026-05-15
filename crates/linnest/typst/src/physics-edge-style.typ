@@ -657,18 +657,16 @@
 /// options for `linnest.draw`.
 ///
 /// ```example
-/// #let b = graph.builder(name: "physics")
-/// #let (node: a, builder: b) = graph.node(b, name: "a")
-/// #let (node: b-node, builder: b) = graph.node(b, name: "b")
-/// #let b = graph.edge(
-///   b,
-///   source: (node: a),
-///   sink: (node: b-node),
-///   statements: (particle: "g", id: "7"),
+/// #let a = 0
+/// #let b-node = 1
+/// #let g = graph.build(
+///   name: "physics",
+///   nodes: (graph.node(name: "a"), graph.node(name: "b")),
+///   edges: (graph.edge(source: (node: a), sink: (node: b-node), statements: (particle: "g", id: "7")),),
 /// )
 /// #let callbacks = physics.style(momentum-arrows: true, show-edge-index: true)
 /// #draw(
-///   layout(graph.finish(b)),
+///   layout(g),
 ///   source-style: callbacks.source-style,
 ///   sink-style: callbacks.sink-style,
 ///   edge-label: callbacks.edge-label,
