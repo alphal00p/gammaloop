@@ -8,7 +8,7 @@ use spenso::{
     network::{
         Network,
         library::{DummyLibrary, symbolic::ETS},
-        parsing::{NetworkParse, ParseSettings},
+        parsing::{NetworkParse, ParseSettings, StrictTensorFilter},
         store::NetworkStore,
         tags::SPENSO_TAG,
     },
@@ -48,10 +48,12 @@ pub static MS: LazyLock<MetricSymbols> = LazyLock::new(|| MetricSymbols {
 
 pub fn canonize_impl(view: AtomView) -> Atom {
     let lib = DummyLibrary::<SymbolicTensor>::new();
+    let settings =
+        ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
     let mut net = Network::<NetworkStore<SymbolicTensor, Atom>, _, Symbol>::try_from_view::<
         SymbolicTensor,
         _,
-    >(view, &lib, &ParseSettings::default())
+    >(view, &lib, &settings)
     .unwrap();
 
     let mut redual_reps = vec![];
@@ -448,7 +450,8 @@ impl MetricSimplifier for AtomView<'_> {
     }
 
     fn expand_dots(&self) -> Result<Atom> {
-        let set = ParseSettings::default();
+        let set =
+            ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
         let compact = self.to_dots();
         let pat = function!(SPENSO_TAG.dot, RS.f_, RS.g_).to_pattern();
         let metric_pat = function!(ETS.metric, RS.f_, RS.g_).to_pattern();

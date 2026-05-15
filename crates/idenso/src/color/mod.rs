@@ -5,7 +5,7 @@ use spenso::{
     chain,
     network::{
         library::symbolic::{ETS, ExplicitKey},
-        parsing::AtomStructureExt,
+        parsing::{AtomStructureExt, StrictTensorFilter},
         tags::SPENSO_TAG as T,
     },
     rep_,
@@ -679,7 +679,7 @@ fn simplify_raw_color_tensors(expression: AtomView) -> Atom {
         out
     };
 
-    if out.is_tensorial() {
+    if out.is_tensorial(StrictTensorFilter::Tagged) {
         out
     } else {
         out.collect_scalar_symbols()

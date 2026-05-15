@@ -757,7 +757,7 @@ mod test {
         network::{
             ExecutionResult, Network, Sequential, SmallestDegree, TensorOrScalarOrKey,
             library::panicing::ErroringLibrary,
-            parsing::{ParseSettings, ShadowedStructure},
+            parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
             store::NetworkStore,
         },
         p, q,
@@ -939,6 +939,10 @@ mod test {
 
         let indexed = key.reindex([0, 1, 2]).unwrap().structure;
         let expr = indexed.to_symbolic(None).unwrap();
+        let settings = ParseSettings {
+            strict_tensor_filter: StrictTensorFilter::ContainsReps,
+            ..Default::default()
+        };
         let mut net = Network::<
             NetworkStore<
                 MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
@@ -946,7 +950,7 @@ mod test {
             >,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &lib, &ParseSettings::default())
+        >::try_from_view(expr.as_view(), &lib, &settings)
         .unwrap();
 
         println!(
@@ -1094,6 +1098,10 @@ mod test {
         let expr = parse!(
             " -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*symbolic_lib_test_vbar(1,euc(4,1))*symbolic_lib_test_u(0,euc(4,0))*symbolic_lib_test_epsbar(2,mink(4,2))*symbolic_lib_test_epsbar(3,mink(4,3))*symbolic_lib_test_gamma(euc(4,5),euc(4,4),mink(4,4))"
         );
+        let settings = ParseSettings {
+            strict_tensor_filter: StrictTensorFilter::ContainsReps,
+            ..Default::default()
+        };
         let mut net = Network::<
             NetworkStore<
                 MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
@@ -1101,7 +1109,7 @@ mod test {
             >,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &lib, &ParseSettings::default())
+        >::try_from_view(expr.as_view(), &lib, &settings)
         .map_err(|a| a.to_string())
         .unwrap();
 

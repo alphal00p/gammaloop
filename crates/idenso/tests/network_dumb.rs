@@ -442,7 +442,7 @@ fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
         .with_expanded_contracted_sums();
     let expr = parse!(
         "spenso::g(spenso::mink(4,mu7), spenso::mink(4,mu9))
-         * spenso::g(k(0)-k(1), spenso::mink(4,mu9))"
+         * spenso::g(k(0,spenso::mink(4))-k(1,spenso::mink(4)), spenso::mink(4,mu9))"
     );
 
     assert!(residual_dummy_names(&expr.schoonschip(), &dummies).is_empty());

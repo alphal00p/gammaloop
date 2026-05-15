@@ -1,6 +1,4 @@
-use idenso::{
-    chain::Chain, dirac::GammaSimplifier, representations::Bispinor, schoonschip::Schoonschip,
-};
+use idenso::{dirac::GammaSimplifier, schoonschip::Schoonschip};
 use symbolica::parse_lit;
 
 use crate::{
@@ -50,7 +48,10 @@ fn algebra() {
     println!("{}", expr.log_print(Some(120)));
 
     println!("{}", expr.schoonschip().log_print(Some(120)));
-    println!("{}", expr.schoonschip().log_print(Some(120)));
+    println!(
+        "{}",
+        expr.schoonschip().simplify_gamma().log_print(Some(120))
+    );
     println!(
         "{}",
         expr.schoonschip_net::<Aind>()

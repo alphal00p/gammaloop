@@ -1,4 +1,3 @@
-use indexmap::IndexMap;
 use linnet::{
     half_edge::{
         subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
@@ -575,29 +574,13 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
         }
         let a = self.structure.remove(i);
         let b = self.structure.remove(j);
-        assert_eq!(a, b);
+        assert!(a.matches(&b), "cannot trace unmatched slots {a} and {b}");
     }
 
     fn trace_out(&mut self) {
-        let mut positions = IndexMap::new();
-
-        // Track the positions of each element
-        for (index, &value) in self.structure.iter().enumerate() {
-            positions.entry(value).or_insert_with(Vec::new).push(index);
+        while let Some([i, j]) = self.traces().first().copied() {
+            self.trace(i, j);
         }
-        // Collect only the positions of non- repeated elements
-
-        *self = positions
-            .into_iter()
-            .filter_map(|(value, indices)| {
-                if indices.len() == 1 {
-                    Some(value)
-                } else {
-                    None
-                }
-            })
-            .collect::<PermutedStructure<_>>()
-            .structure;
     }
 
     fn merge(

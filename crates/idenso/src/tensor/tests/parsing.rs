@@ -95,16 +95,22 @@ fn parse_ratio() {
 #[test]
 fn parse_div() {
     test_initialize();
+    let _ = symbol!("parse_div_b"; tags = ["spenso::tensor", "spenso::rank1"]);
+    let _ = symbol!("parse_div_d"; tags = ["spenso::tensor", "spenso::rank1"]);
     let expr = parse_lit!(
         c * a
-            / spenso::bracket(d(spenso::mink(4, 1)) * b(spenso::mink(4, 1)))(
-                spenso::bracket(d(spenso::mink(4, 1)) * b(spenso::mink(4, 1))) ^ -3
-            )(spenso::bracket(d(spenso::mink(4, 1)) * b(spenso::mink(4, 1))) ^ -2)
+            / spenso::bracket(parse_div_d(spenso::mink(4, 1)) * parse_div_b(spenso::mink(4, 1)))(
+                spenso::bracket(parse_div_d(spenso::mink(4, 1)) * parse_div_b(spenso::mink(4, 1)))
+                    ^ -3
+            )(
+                spenso::bracket(parse_div_d(spenso::mink(4, 1)) * parse_div_b(spenso::mink(4, 1)))
+                    ^ -2
+            )
     );
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(), @"(b(mink(4,1)))^(-6)*(d(mink(4,1)))^(-6)*a*c");
+    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(), @"(parse_div_b(mink(4,1)))^(-6)*(parse_div_d(mink(4,1)))^(-6)*a*c");
 
     let expr = parse_lit!(st(Q(1, mink(4, 1)) * Q(2, mink(4, 1))) ^ -1);
     let net = expr
@@ -930,15 +936,24 @@ fn wrapping() {
 #[test]
 fn scalar_mult() {
     test_initialize();
-    let expr = parse_lit!(A * B * C * g(euc(4, hedge_3)), default_namespace = "spenso");
+    let _ = symbol!("spenso::scalar_mult_g"; tags = ["spenso::tensor"]);
+    let _ = symbol!("spenso::scalar_mult_gg"; tags = ["spenso::tensor"]);
+    let _ = symbol!("spenso::scalar_mult_ggg"; tags = ["spenso::tensor"]);
+    let expr = parse_lit!(
+        A * B * C * scalar_mult_g(euc(4, hedge_3)),
+        default_namespace = "spenso"
+    );
 
-    let expr2 = parse_lit!(B * gg(euc(4, hedge_3)), default_namespace = "spenso");
+    let expr2 = parse_lit!(
+        B * scalar_mult_gg(euc(4, hedge_3)),
+        default_namespace = "spenso"
+    );
     let expr3 = parse_lit!(
-        C * ggg(euc(4, hedge_5)) * g(euc(4, hedge_4)),
+        C * scalar_mult_ggg(euc(4, hedge_5)) * scalar_mult_g(euc(4, hedge_4)),
         default_namespace = "spenso"
     );
     let expr4 = parse_lit!(
-        A * B * ggg(euc(4, hedge_5)) * g(euc(4, hedge_4)),
+        A * B * scalar_mult_ggg(euc(4, hedge_5)) * scalar_mult_g(euc(4, hedge_4)),
         default_namespace = "spenso"
     );
     let fnlib = ErroringLibrary::<Symbol>::new();

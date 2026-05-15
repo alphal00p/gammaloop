@@ -706,7 +706,7 @@ mod tests {
     use spenso::{
         network::{
             Network, SingleSmallestDegree, SmallestDegreeIter, Steps,
-            parsing::{ParseSettings, ShadowedStructure},
+            parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
             store::NetworkStore,
         },
         structure::{HasStructure, abstract_index::AbstractIndex},
@@ -736,7 +736,11 @@ mod tests {
             NetworkStore<MixedTensor<f64, ShadowedStructure<AbstractIndex>>, Atom>,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &*HEP_LIB, &ParseSettings::default())
+        >::try_from_view(
+            expr.as_view(),
+            &*HEP_LIB,
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
 
         println!(
@@ -932,7 +936,11 @@ mod tests {
             NetworkStore<MixedTensor<f64, ShadowedStructure<AbstractIndex>>, Atom>,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &*HEP_LIB, &ParseSettings::default())
+        >::try_from_view(
+            expr.as_view(),
+            &*HEP_LIB,
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
 
         net.merge_ops();
