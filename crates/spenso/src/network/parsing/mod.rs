@@ -55,15 +55,6 @@ impl ShorthandParsing {
             Self::Opaque { inference } => Some(inference),
         }
     }
-
-    fn opaque_composite_inference(
-        self,
-        value: AtomView<'_>,
-        filter: StrictTensorFilter,
-    ) -> Option<StructureInferenceMode> {
-        self.opaque_inference()
-            .filter(|_| value.is_tensorial(filter))
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -358,19 +349,6 @@ where
             // println!("Mul leaf");
             return Self::as_leaf::<S, Lib, FunLib>(
                 value.as_view(),
-                library,
-                function_library,
-                settings,
-            );
-        }
-
-        if let Some(inference) = settings
-            .shorthand_parsing
-            .opaque_composite_inference(value.as_view(), settings.strict_tensor_filter)
-        {
-            return Self::as_inferred_leaf::<S, Lib, FunLib>(
-                value.as_view(),
-                inference,
                 library,
                 function_library,
                 settings,
@@ -676,19 +654,6 @@ where
         }
         let (base, exp) = value.get_base_exp();
 
-        if let Some(inference) = settings
-            .shorthand_parsing
-            .opaque_composite_inference(value.as_view(), settings.strict_tensor_filter)
-        {
-            return Self::as_inferred_leaf::<S, Lib, FunLib>(
-                value.as_view(),
-                inference,
-                library,
-                function_library,
-                settings,
-            );
-        }
-
         if let Ok(n) = i8::try_from(exp) {
             // println!("base:{base}");
             let base = Self::try_from_view_impl(base, state, library, function_library, settings)?;
@@ -751,19 +716,6 @@ where
         {
             return Self::as_leaf::<S, Lib, FunLib>(
                 value.as_view(),
-                library,
-                function_library,
-                settings,
-            );
-        }
-
-        if let Some(inference) = settings
-            .shorthand_parsing
-            .opaque_composite_inference(value.as_view(), settings.strict_tensor_filter)
-        {
-            return Self::as_inferred_leaf::<S, Lib, FunLib>(
-                value.as_view(),
-                inference,
                 library,
                 function_library,
                 settings,

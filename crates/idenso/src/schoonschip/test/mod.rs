@@ -88,7 +88,7 @@ fn simple_dot() {
     assert_snapshot!(result.to_bare_ordered_string(), @"(g(p(1,mink(D)),p(1,mink(D))))^2");
 
     let result = p1.clone().pow(Atom::num(3)).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"p(1,mink(D,1))*g(p(1,mink(D)),p(1,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(D)),p(1,mink(D)))*p(1,mink(D,1))");
 
     let metric = g!(slot!(mink, 1), slot!(mink, 2));
     let result = metric.clone().pow(Atom::num(4)).normalize_dots();
@@ -108,7 +108,7 @@ fn simple_dot() {
     let expr = (p1 + q3 * p1_2 * q2_2) * (q2 + p2);
 
     let result = expr.schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
-    assert_snapshot!(result.to_bare_ordered_string(),@"(p(1,mink(D,1))+q(3,mink(D,1))*g(p(1,mink(D)),q(2,bla,mink(D))))*(p(2,mink(D,1))+q(2,bla,mink(D,1)))");
+    assert_snapshot!(result.to_bare_ordered_string(),@"(g(p(1,mink(D)),q(2,bla,mink(D)))*q(3,mink(D,1))+p(1,mink(D,1)))*(p(2,mink(D,1))+q(2,bla,mink(D,1)))");
 
     let result = expr.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::full().with_expanded_contracted_sums(),
