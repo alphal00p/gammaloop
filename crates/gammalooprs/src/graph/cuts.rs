@@ -52,3 +52,23 @@ impl CutSet {
         }
     }
 }
+
+impl ResidueSelector {
+    pub(crate) fn ltd_threshold_residue_prefactor_sign(&self) -> i64 {
+        // The threshold counterterm radial variable is oriented oppositely to
+        // the canonical selected E-surface variable used by the LTD expression.
+        // Each selected threshold residue therefore contributes one parity
+        // conversion. LU residues use their own Cutkosky-oriented bridge above.
+        let threshold_residue_count =
+            usize::from(self.left_th_cut.is_some()) + usize::from(self.right_th_cut.is_some());
+        if threshold_residue_count.is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
+    }
+
+    pub(crate) fn ltd_residue_prefactor_sign(&self) -> i64 {
+        self.ltd_lu_cut_residue_prefactor_sign * self.ltd_threshold_residue_prefactor_sign()
+    }
+}

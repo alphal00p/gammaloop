@@ -895,7 +895,7 @@ fn cross_section_residue_source_global_sign_factor(
         return Atom::num(1);
     }
     if representation == ThreeDRepresentation::Ltd {
-        return Atom::num(cutset.residue_selector.ltd_lu_cut_residue_prefactor_sign);
+        return Atom::num(cutset.residue_selector.ltd_residue_prefactor_sign());
     }
 
     // Cross-section LU residues are assembled in GammaLoop's full-graph 3D

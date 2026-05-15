@@ -1537,7 +1537,13 @@ impl CrossSectionGraph {
                         self.graph.name
                     )
                 })?;
-                coefficients[occurrence - 1] += series.coefficient((-occurrence_i64, 1).into());
+                let selected_variable_parity = if occurrence.is_multiple_of(2) {
+                    1
+                } else {
+                    *selected_sign
+                };
+                coefficients[occurrence - 1] += series.coefficient((-occurrence_i64, 1).into())
+                    * Atom::num(selected_variable_parity);
             }
         }
 
@@ -1578,9 +1584,8 @@ impl CrossSectionGraph {
                         )?
                         .into_iter()
                         .map(|atom| {
-                            let ltd_lu_cut_residue_prefactor = Atom::num(
-                                cutset.residue_selector.ltd_lu_cut_residue_prefactor_sign,
-                            );
+                            let ltd_lu_cut_residue_prefactor =
+                                Atom::num(cutset.residue_selector.ltd_residue_prefactor_sign());
                             // The direct no-UV LTD path extracts the actual
                             // local-series coefficient in the selected
                             // Cutkosky variable. That coefficient already
