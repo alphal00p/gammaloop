@@ -168,7 +168,7 @@ impl ColorSymbols {
 }
 
 pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
-    t: symbol!("spenso::t";Real;print = |a, opt| {
+    t: symbol!("spenso::t";Real;tags = [T.tensor.clone()], print = |a, opt| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{
@@ -241,7 +241,7 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| ColorSymbols {
             _=>None}
 
     }),
-    f: symbol!("spenso::f";Real;print = |a, opt| {
+    f: symbol!("spenso::f";Real;tags = [T.tensor.clone()], print = |a, opt| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{
@@ -704,8 +704,8 @@ static COLOR_ADJOINT_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
     f.get_symbol()
 });
 
-static COLOR_D_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::d"));
-static COLOR_D33_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::d33"));
+static COLOR_D_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| spenso::tensor_symbol!("spenso::d"));
+static COLOR_D33_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| spenso::tensor_symbol!("spenso::d33"));
 static COLOR_TRACE_DUMMY_SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("x"));
 
 static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
