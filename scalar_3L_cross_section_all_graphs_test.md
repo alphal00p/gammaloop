@@ -163,11 +163,15 @@
   comparison enabled. Both pass with CFF local-3D, CFF local-4D, and LTD
   local-4D matching at the event-detail level.
 - The simple-LU Cutkosky bridge is now applied only to simple LTD LU residues
-  and combines the simultaneous-to-dual parity with the cut-edge flow
-  orientation and the resolved LU cut-basis orientation. Raised/confluent LU
-  residues use the repeated-pole LTD convention directly. This keeps
-  GL06/GL48 simple-cut anchors and GL08/GL11 raised-cut anchors simultaneously
-  aligned.
+  and combines the cut-edge flow orientation, the resolved LU coordinate-basis
+  determinant sign, and the generated LU surface-family orientation read from
+  the external-energy coefficients of the selected E-surfaces.
+  Raised/confluent LU residues use the repeated-pole LTD convention directly.
+  This keeps GL06/GL21/GL48 simple-cut anchors and GL08/GL10/GL11 raised-cut
+  anchors simultaneously aligned.
 - The stored GL24, GL48, and GL08 total-weight snapshots were refreshed after
   the corresponding rich comparisons succeeded. No `.snap.new` files are
   pending.
+- A focused rerun after replacing the remaining count-parity sign experiment
+  passed the GL10 simple/raised generated checks, the slow GL21 all-graph
+  anchor, GL02, and the GL16 quartic-energy anchor.

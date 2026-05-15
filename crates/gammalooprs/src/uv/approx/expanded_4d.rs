@@ -718,12 +718,16 @@ fn find_matching_generated_esurface(
 ) -> Result<EsurfaceID> {
     let normalized_requested =
         Graph::normalize_esurface_with_raised_edge_groups(requested, raised_edge_groups);
+    if let Some(position) = generated_esurfaces
+        .iter()
+        .position(|generated| generated == requested)
+    {
+        return Ok(position.into());
+    }
     generated_esurfaces
         .iter()
         .zip(normalized_generated_esurfaces.iter())
-        .position(|(generated, normalized_generated)| {
-            generated == requested || normalized_generated == &normalized_requested
-        })
+        .position(|(_, normalized_generated)| normalized_generated == &normalized_requested)
         .ok_or_else(|| {
             eyre!(
                 "{context} E-surface {requested:?} for graph {} was not present in the expanded 4D generated source expression.\n\
@@ -891,11 +895,6 @@ fn cross_section_residue_source_global_sign_factor(
         return Atom::num(1);
     }
     if representation == ThreeDRepresentation::Ltd {
-        // The source LTD residue is already evaluated in the dual convention of
-        // the generated reduced source. The full forward-scattering LTD measure
-        // bridge is applied once outside the UV forest, but the selected
-        // Cutkosky residue still has to be expressed in the same resolved
-        // GammaLoop LU-cut basis as the original integrand.
         return Atom::num(cutset.residue_selector.ltd_lu_cut_residue_prefactor_sign);
     }
 

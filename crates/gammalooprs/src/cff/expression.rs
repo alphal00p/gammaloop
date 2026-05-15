@@ -104,12 +104,11 @@ where
     usize: From<O>,
 {
     if representation == ThreeDRepresentation::Ltd {
-        // GammaLoop Cutkosky cuts are oriented positive-energy constraints.
-        // LTD residues are selected from the canonical generated E-surface
-        // variables, so both simple and confluent LU cuts need the effective
-        // selected-variable signs supplied by the cross-section cut resolver.
-        // Any LTD bridge factor that cannot be represented as a selected
-        // variable sign is applied outside this selector.
+        // LTD LU cuts are selected from the generated E-surface alternatives
+        // directly. This signed selector preserves selected-denominator
+        // canonicalization signs; the ordinary CFF selector clears them because
+        // CFF residues are already assembled in the positive-energy Cutkosky
+        // convention.
         expression.select_esurface_residue_with_cut_edges_and_esurface_signs(
             lu_cut,
             cut_edge_sets,
