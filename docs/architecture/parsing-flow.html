@@ -1035,6 +1035,16 @@ let slot = self.state.slot(&rep).to_atom();</code></pre>
       This currently requires both compact vectors to have the same self-dual
       representation. <code>dot(p(rep), q(rep))</code> follows the same rule.
     </p>
+    <p>
+      The stripped representation in <code>p(rep)</code> means that the vector
+      replaces an omitted tensor slot. It is valid only where such a slot exists:
+      inside another tensor argument, or inside a recognized compact scalar
+      product head such as <code>g</code> or <code>dot</code>. For example,
+      <code>p!(q!(mink!(4)))</code> is valid shorthand and materializes like
+      <code>p(mink(4, d)) * q(mink(4, d))</code>. A bare product such as
+      <code>p!(mink!(4)) * q!(mink!(4))</code> is malformed input, because the
+      stripped vectors are not replacing slots.
+    </p>
     <h3>Compact Vector Detection</h3>
     <p>
       A compact vector is a function that:

@@ -282,7 +282,7 @@ impl SpensoTags {
             chain_in: symbol!("in"),
             chain_out: symbol!("out"),
             chain: symbol!(
-                "chain",
+                "chain";Linear;
                 print = |a, opt| {
                     match opt.custom_print_mode {
                         Some(("spenso", i)) => {
@@ -316,7 +316,7 @@ impl SpensoTags {
                 }
             ),
             trace: symbol!(
-                "trace",
+                "trace";Linear;
                 print = |a, opt| {
                     match opt.custom_print_mode {
                         Some(("spenso", i)) => {

@@ -8,6 +8,7 @@ use spenso::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
     },
+    symbolica_atom::TensorCollectExt,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -389,24 +390,33 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
         .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
 
     let metric_identified_target = parse!(
-        "spenso::g(k(2)-k(3), spenso::mink(4,mu9))
-         * spenso::g(k(3)-k(2), spenso::mink(4,mu9))
-         + spenso::g(k(4)-k(5), spenso::mink(4,mu9))
-         * spenso::g(k(5)-k(4), spenso::mink(4,mu9))"
+        "spenso::g(k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu9))
+         * spenso::g(k(3,spenso::mink(4))-k(2,spenso::mink(4)), spenso::mink(4,mu9))
+         + spenso::g(k(4,spenso::mink(4))-k(5,spenso::mink(4)), spenso::mink(4,mu9))
+         * spenso::g(k(5,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu9))"
     );
-    assert!(residual_dummy_names(&metric_identified_target.schoonschip(), &dummies).is_empty());
+
+    let simplified = metric_identified_target
+        .normalize_dots()
+        .collect_tensors()
+        .schoonschip();
+
+    let res = residual_dummy_names(&simplified, &dummies);
     assert!(
-        residual_dummy_names(&metric_identified_target.expand().schoonschip(), &dummies).is_empty()
+        res.is_empty(),
+        "residual dummy names: {}, for {}",
+        res.join(","),
+        simplified
     );
 
     let boundary_expression = parse!(
         "(spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
-           + spenso::g(k(0), spenso::mink(4,mu1))
-             * spenso::g(k(1), spenso::mink(4,mu9)))
-         * (spenso::g(k(2)-k(3), spenso::mink(4,mu1))
-           * spenso::g(k(3)-k(2), spenso::mink(4,mu9))
-           + spenso::g(k(4)-k(5), spenso::mink(4,mu1))
-           * spenso::g(k(5)-k(4), spenso::mink(4,mu9)))"
+           + spenso::g(k(0,spenso::mink(4)), spenso::mink(4,mu1))
+             * spenso::g(k(1,spenso::mink(4)), spenso::mink(4,mu9)))
+         * (spenso::g(k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu1))
+           * spenso::g(k(3,spenso::mink(4))-k(2,spenso::mink(4)), spenso::mink(4,mu9))
+           + spenso::g(k(4,spenso::mink(4))-k(5,spenso::mink(4)), spenso::mink(4,mu1))
+           * spenso::g(k(5,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu9)))"
     );
 
     assert!(
@@ -445,7 +455,7 @@ fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
          * spenso::g(k(0,spenso::mink(4))-k(1,spenso::mink(4)), spenso::mink(4,mu9))"
     );
 
-    assert!(residual_dummy_names(&expr.schoonschip(), &dummies).is_empty());
+    assert!(residual_dummy_names(&expr.collect_metrics().schoonschip(), &dummies).is_empty());
     assert!(
         residual_dummy_names(
             &expr.schoonschip_with_net::<false, AbstractIndex>(&settings),

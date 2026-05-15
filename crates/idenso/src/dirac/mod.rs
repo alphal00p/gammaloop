@@ -39,7 +39,7 @@ pub struct GammaLibrary {
 
 pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     gamma: symbol!(
-        "spenso::gamma",
+        "spenso::gamma";Linear;
         print = |a, opt| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
