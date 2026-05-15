@@ -1,7 +1,8 @@
 use insta::assert_snapshot;
 use spenso::{
-    chain,
+    chain, g, mink,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    p, q,
     shadowing::symbolica_utils::AtomCoreExt,
     slot,
     structure::{
@@ -53,45 +54,43 @@ fn is_slot_view(atom: AtomView<'_>) -> bool {
 #[test]
 fn simple_dot() {
     test_initialize();
-    let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
-    let p = T.rank_one_tensor_symbol("P");
-    let q = T.rank_one_tensor_symbol("Q");
+    let dim = symbol!("D");
+    let mink: Representation<_> = Minkowski {}.new_rep(dim.clone());
+    let mink_d = mink!(dim.clone());
 
-    let p1 = function!(p, 1, slot!(mink, 1).to_atom());
-    let p2 = function!(p, 2, slot!(mink, 1).to_atom());
-    let p1_2 = function!(p, 1, slot!(mink, 2).to_atom());
-    let p2_2 = function!(p, 2, slot!(mink, 2).to_atom());
-    let p1_stripped = function!(p, 1, mink.to_symbolic([]));
-    let p2_stripped = function!(p, 2, mink.to_symbolic([]));
+    let p1 = p!(1, slot!(mink, 1));
+    let p2 = p!(2, slot!(mink, 1));
+    let p1_2 = p!(1, slot!(mink, 2));
+    let p2_2 = p!(2, slot!(mink, 2));
+    let p1_stripped = p!(1, mink_d.clone());
+    let p2_stripped = p!(2, mink_d.clone());
 
-    let q2 = function!(q, 2, symbol!("bla"), slot!(mink, 1).to_atom());
-    let q2_2 = function!(q, 2, symbol!("bla"), slot!(mink, 2).to_atom());
+    let q2 = q!(2, symbol!("bla"), slot!(mink, 1));
+    let q2_2 = q!(2, symbol!("bla"), slot!(mink, 2));
 
-    let q3 = function!(q, 3, slot!(mink, 1).to_atom());
-    let q3_2 = function!(q, 3, slot!(mink, 2).to_atom());
+    let q3 = q!(3, slot!(mink, 1));
+    let q3_2 = q!(3, slot!(mink, 2));
 
     let result =
         (&p1 * &q2).schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
-    assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),Q(2,bla,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(),@"g(p(1,mink(D)),q(2,bla,mink(D)))");
 
     let result = (&p1 * &p1).schoonschip();
-    assert_snapshot!(result.to_bare_ordered_string(), @"g(P(1,mink(D)),P(1,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(D)),p(1,mink(D)))");
 
-    let result = function!(p, 1, &p2_stripped).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"g(P(1,mink(D)),P(2,mink(D)))");
+    let result = p!(1, &p2_stripped).normalize_dots();
+    assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(D)),p(2,mink(D)))");
 
-    let result = ETS
-        .metric(slot!(mink, 1).to_atom(), &p1_stripped)
-        .normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"P(1,mink(D,1))");
+    let result = g!(slot!(mink, 1), &p1_stripped).normalize_dots();
+    assert_snapshot!(result.to_bare_ordered_string(), @"p(1,mink(D,1))");
 
     let result = p1.clone().pow(Atom::num(4)).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"(g(P(1,mink(D)),P(1,mink(D))))^2");
+    assert_snapshot!(result.to_bare_ordered_string(), @"(g(p(1,mink(D)),p(1,mink(D))))^2");
 
     let result = p1.clone().pow(Atom::num(3)).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"P(1,mink(D,1))*g(P(1,mink(D)),P(1,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"p(1,mink(D,1))*g(p(1,mink(D)),p(1,mink(D)))");
 
-    let metric = ETS.metric(slot!(mink, 1).to_atom(), slot!(mink, 2).to_atom());
+    let metric = g!(slot!(mink, 1), slot!(mink, 2));
     let result = metric.clone().pow(Atom::num(4)).normalize_dots();
     assert_snapshot!(result.to_bare_ordered_string(), @"D^2");
 
@@ -100,29 +99,29 @@ fn simple_dot() {
 
     let result = (&p1 * (&q2 + &p2 * &q3_2 * &q2_2))
         .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial());
-    assert_snapshot!(result.to_bare_ordered_string(),@"g(P(1,mink(D)),P(2,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(),@"g(p(1,mink(D)),p(2,mink(D)))*g(q(2,bla,mink(D)),q(3,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))");
 
     let result = (&p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2)))
         .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
-    assert_snapshot!(result.to_bare_ordered_string(),@"(g(P(2,mink(D)),Q(2,bla,mink(D)))+g(Q(2,bla,mink(D)),Q(3,mink(D))))*g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(),@"(g(p(2,mink(D)),q(2,bla,mink(D)))+g(q(2,bla,mink(D)),q(3,mink(D))))*g(p(1,mink(D)),p(2,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))");
 
     let expr = (p1 + q3 * p1_2 * q2_2) * (q2 + p2);
 
     let result = expr.schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full());
-    assert_snapshot!(result.to_bare_ordered_string(),@"(P(1,mink(D,1))+Q(3,mink(D,1))*g(P(1,mink(D)),Q(2,bla,mink(D))))*(P(2,mink(D,1))+Q(2,bla,mink(D,1)))");
+    assert_snapshot!(result.to_bare_ordered_string(),@"(p(1,mink(D,1))+q(3,mink(D,1))*g(p(1,mink(D)),q(2,bla,mink(D))))*(p(2,mink(D,1))+q(2,bla,mink(D,1)))");
 
     let result = expr.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::full().with_expanded_contracted_sums(),
     );
     let result = result.to_bare_ordered_string();
-    assert_snapshot!(result, @"g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(P(2,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))");
+    assert_snapshot!(result, @"g(p(1,mink(D)),p(2,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(p(2,mink(D)),q(3,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(q(2,bla,mink(D)),q(3,mink(D)))");
     assert!(!result.contains("mink(D,1)"));
 
     let result = expr.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial().with_expanded_contracted_sums(),
     );
     let result = result.to_bare_ordered_string();
-    assert_snapshot!(result, @"g(P(1,mink(D)),P(2,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(P(2,mink(D)),Q(3,mink(D)))+g(P(1,mink(D)),Q(2,bla,mink(D)))*g(Q(2,bla,mink(D)),Q(3,mink(D)))");
+    assert_snapshot!(result, @"g(p(1,mink(D)),p(2,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(p(2,mink(D)),q(3,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(q(2,bla,mink(D)),q(3,mink(D)))");
     assert!(!result.contains("mink(D,1)"));
 }
 
