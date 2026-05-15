@@ -154,6 +154,15 @@ g(p(mink(D)), q(mink(D))) -> p(mink(D, d)) * q(mink(D, d))
 dot(p(mink(D)), q(mink(D))) -> p(mink(D, d)) * q(mink(D, d))
 ```
 
+The stripped representation in `p(mink(D))` means that `p` replaces a tensor
+slot whose explicit index has been omitted. It is valid only where there is a
+slot to replace: as an argument of another tensor, or under a recognized compact
+scalar-product head such as `g` or `dot`. For example, `p!(q!(mink!(4)))` is
+valid shorthand for replacing the slot of `p` by the compact vector `q`; it
+materializes to `p(mink(4, d)) * q(mink(4, d))`. A bare product such as
+`p!(mink!(4)) * q!(mink!(4))` is malformed Schoonschip input, because neither
+vector is replacing an omitted slot.
+
 The dummy `d` is fresh and local to the materialized expansion.
 
 ## Tagged Builders And Patterns

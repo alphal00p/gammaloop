@@ -2,7 +2,7 @@ use super::*;
 use crate::network::NetworkState;
 use crate::network::library::symbolic::ETS;
 use crate::structure::representation::{Lorentz, Minkowski, RepName};
-use crate::{chain, slot, tensor, tensor_symbol, trace, vector};
+use crate::{chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
 use symbolica::{atom::FunctionBuilder, function, symbol};
 
 fn mink4() -> Representation<Minkowski> {
@@ -264,8 +264,7 @@ fn parse_empty_chain_as_endpoint_metric() {
 
 #[test]
 fn opaque_schoonschip_vectors_parse_as_tensor_scalar() {
-    let rep = mink4();
-    let expr = vector!(compact_p, rep.to_symbolic([])) * vector!(compact_q, rep.to_symbolic([]));
+    let expr = p!(q!(mink!(4)));
 
     let parsed = expr
         .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())

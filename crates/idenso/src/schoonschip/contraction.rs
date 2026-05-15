@@ -177,7 +177,16 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind>(
 
         let remaining = product_excluding(&factors, &consumed);
         let reconstructed = &remaining * &target;
-        let cleaned = reconstructed.schoonschip();
+        let pattern_cleaned = reconstructed.schoonschip();
+        let cleaned = if slot_pairs
+            .iter()
+            .flat_map(|(sum_slot, target_slot)| [sum_slot.to_atom(), target_slot.to_atom()])
+            .any(|slot| pattern_cleaned.replace(slot).match_iter().next().is_some())
+        {
+            recursive_schoonschip::<true, false, Aind>(&reconstructed)
+        } else {
+            pattern_cleaned
+        };
         if trace_terms {
             let residual_slots: Vec<_> = slot_pairs
                 .iter()
@@ -999,7 +1008,7 @@ impl<
             let direct = if disable_direct_sum_contractions() {
                 None
             } else {
-                direct_contract_smallest_expanded_sum_side(
+                direct_contract_smallest_expanded_sum_side::<Aind>(
                     other, self, &pos_other, &pos_self, &oexpr, &sexpr,
                 )
             };

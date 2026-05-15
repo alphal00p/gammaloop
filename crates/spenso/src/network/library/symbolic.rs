@@ -280,7 +280,7 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
 
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: symbol!(METRIC_NAME;Symmetric,Real;print = |a, opt| {
+    metric: symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt| {
 
 
         match opt.custom_print_mode {
