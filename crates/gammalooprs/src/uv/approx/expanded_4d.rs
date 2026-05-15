@@ -907,11 +907,12 @@ fn cross_section_residue_source_global_sign_factor(
     // dependent tuning of individual cuts.
     let full_exponent = graph.three_d_global_sign_exponent();
     let source_exponent = three_d_global_sign_exponent_for_expanded_source(source);
-    if (full_exponent + source_exponent).is_multiple_of(2) {
-        Atom::num(1)
+    let convention_bridge = if (full_exponent + source_exponent).is_multiple_of(2) {
+        1
     } else {
-        Atom::num(-1)
-    }
+        -1
+    };
+    Atom::num(convention_bridge)
 }
 
 fn cff_inverse_energy_product_for_expanded_source(source: &Expanded4DParsedSource) -> Atom {

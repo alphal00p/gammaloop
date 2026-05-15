@@ -1237,12 +1237,7 @@ impl CrossSectionGraph {
         let (lu_cut_edge_sets, cut_orientation_signs, simple_ltd_lu_cut_signs) =
             self.lu_cut_edge_sets_with_cutkosky_signs(raised_cut_group.cuts.iter().copied())?;
         let is_simple_lu_cut = raised_cut_group.related_esurface_group.max_occurence == 1;
-        let simple_ltd_lu_cut_surface_family_sign = if is_simple_lu_cut {
-            self.simple_ltd_lu_cut_surface_family_sign(raised_cut_group, &lu_cut_edge_sets)?
-        } else {
-            1
-        };
-        let ltd_lu_cut_esurface_signs = if is_simple_lu_cut {
+        let ltd_lu_cut_esurface_signs: Vec<_> = if is_simple_lu_cut {
             raised_cut_group
                 .cut_esurface_ids
                 .iter()
@@ -1262,7 +1257,24 @@ impl CrossSectionGraph {
                 .zip(cut_orientation_signs.iter().copied())
                 .collect()
         };
-        let ltd_lu_cut_residue_prefactor_sign = if is_simple_lu_cut {
+        let simple_ltd_lu_cut_surface_family_sign = if is_simple_lu_cut {
+            self.simple_ltd_lu_cut_surface_family_sign(raised_cut_group, &lu_cut_edge_sets)?
+        } else {
+            1
+        };
+        // Simple LU residues use the CFF-projection surface family to identify
+        // the common Cutkosky orientation. Combinatorial LTD residue projection
+        // acts on the production 3D expression and therefore also needs the
+        // global production/projection convention bridge; direct local-series
+        // extraction expands the already assembled production expression and
+        // must not apply this bridge a second time.
+        let full_graph_projection_bridge =
+            if self.graph.three_d_global_sign_exponent().is_multiple_of(2) {
+                1
+            } else {
+                -1
+            };
+        let ltd_lu_cut_local_series_prefactor_sign = if is_simple_lu_cut {
             simple_ltd_lu_cut_surface_family_sign
         } else {
             self.repeated_ltd_lu_cut_residue_prefactor_sign(
@@ -1270,11 +1282,17 @@ impl CrossSectionGraph {
                 &cut_orientation_signs,
             )
         };
+        let ltd_lu_cut_residue_prefactor_sign = if is_simple_lu_cut {
+            ltd_lu_cut_local_series_prefactor_sign * full_graph_projection_bridge
+        } else {
+            ltd_lu_cut_local_series_prefactor_sign
+        };
         Ok(ResidueSelector {
             lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
             lu_cut_edge_sets,
             ltd_lu_cut_esurface_signs,
             ltd_lu_cut_residue_prefactor_sign,
+            ltd_lu_cut_local_series_prefactor_sign,
             left_th_cut,
             right_th_cut,
         })
@@ -1285,12 +1303,13 @@ impl CrossSectionGraph {
         raised_cut_group: &RaisedCutGroup,
         lu_cut_edge_sets: &[Vec<EdgeIndex>],
     ) -> Result<i64> {
-        let Some(cff_expression) = self.derived_data.cff_projection_three_d_expression.as_ref()
+        let Some(cff_projection_expression) =
+            self.derived_data.cff_projection_three_d_expression.as_ref()
         else {
             return Ok(1);
         };
 
-        let signs = raised_cut_group
+        let cff_signs = raised_cut_group
             .cuts
             .iter()
             .copied()
@@ -1329,10 +1348,13 @@ impl CrossSectionGraph {
                         )
                     })?;
 
-                let residues = cff_expression.clone().select_esurface_residue_with_cut_edges(
-                    &cff_raised_cut_group.related_esurface_group,
-                    std::slice::from_ref(cut_edge_set),
-                );
+                let residues =
+                    cff_projection_expression
+                        .clone()
+                        .select_esurface_residue_with_cut_edges(
+                            &cff_raised_cut_group.related_esurface_group,
+                            std::slice::from_ref(cut_edge_set),
+                        );
                 let mut signs = BTreeSet::new();
                 let mut variant_count = 0usize;
                 for residue in residues {
@@ -1365,16 +1387,16 @@ impl CrossSectionGraph {
             })
             .collect::<Result<BTreeSet<_>>>()?;
 
-        if signs.len() != 1 {
+        if cff_signs.len() != 1 {
             return Err(eyre!(
                 "Cannot determine a unique CFF LU surface-family sign for graph {} and cuts {:?}: found signs {:?}",
                 self.graph.name,
                 raised_cut_group.cuts,
-                signs
+                cff_signs
             ));
         }
 
-        Ok(*signs.iter().next().expect("one sign was checked above"))
+        Ok(*cff_signs.iter().next().expect("one sign was checked above"))
     }
 
     fn lu_cut_edge_sets_with_cutkosky_signs(
@@ -1709,7 +1731,6 @@ impl CrossSectionGraph {
 
         Ok(coefficients)
     }
-
     fn build_direct_3d_original_integrand(
         &mut self,
         cuts: &[CutSet],
@@ -1744,8 +1765,11 @@ impl CrossSectionGraph {
                         )?
                         .into_iter()
                         .map(|atom| {
-                            let ltd_lu_cut_residue_prefactor =
-                                Atom::num(cutset.residue_selector.ltd_residue_prefactor_sign());
+                            let ltd_lu_cut_residue_prefactor = Atom::num(
+                                cutset
+                                    .residue_selector
+                                    .ltd_local_series_residue_prefactor_sign(),
+                            );
                             // The direct no-UV LTD path extracts the actual
                             // local-series coefficient in the selected
                             // Cutkosky variable. That coefficient already
