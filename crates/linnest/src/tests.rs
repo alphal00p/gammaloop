@@ -12,7 +12,6 @@ use linnet::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    builder_add_edge_bytes, builder_add_node_bytes, builder_finish_bytes, builder_new_bytes,
     expand_template, graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes,
     graph_cycle_basis_bytes, graph_dot_bytes, graph_edges_bytes,
     graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
@@ -248,24 +247,6 @@ struct TestTemplatedGraphSpec {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "kebab-case")]
-struct TestBuilderSpec {
-    name: String,
-    #[serde(default)]
-    statements: BTreeMap<String, String>,
-    #[serde(default)]
-    edge_statements: BTreeMap<String, String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    source_style_eval: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sink_style_eval: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    label_eval: Option<String>,
-    #[serde(default)]
-    node_statements: BTreeMap<String, String>,
-}
-
-#[derive(Serialize)]
 struct TestNodeSpec {
     name: String,
     #[serde(default)]
@@ -349,12 +330,6 @@ struct TestEndpointSpec {
     compass: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     statement: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct TestBuilderNodeResult {
-    builder: Vec<u8>,
-    node: usize,
 }
 
 #[test]
@@ -707,52 +682,35 @@ fn test_graph_spec_constructor_expands_default_statement_templates() {
 }
 
 #[test]
-fn test_archived_builder_and_subgraph_api() {
-    let builder = builder_new_bytes(&encode_cbor(&BTreeMap::from([(
-        "name".to_string(),
-        "builder".to_string(),
-    )])))
-    .unwrap();
-
-    let a: TestBuilderNodeResult = decode_cbor(
-        &builder_add_node_bytes(
-            &builder,
-            &encode_cbor(&TestNodeSpec {
+fn test_archived_graph_and_subgraph_api() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "constructed".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![
+            TestNodeSpec {
                 name: "a".to_string(),
                 statements: BTreeMap::new(),
-            }),
-        )
-        .unwrap(),
-    );
-    let b: TestBuilderNodeResult = decode_cbor(
-        &builder_add_node_bytes(
-            &a.builder,
-            &encode_cbor(&TestNodeSpec {
+            },
+            TestNodeSpec {
                 name: "b".to_string(),
                 statements: BTreeMap::new(),
-            }),
-        )
-        .unwrap(),
-    );
-
-    let builder = builder_add_edge_bytes(
-        &b.builder,
-        &encode_cbor(&TestEdgeSpec {
+            },
+        ],
+        edges: vec![TestEdgeSpec {
             source: Some(TestEndpointSpec {
-                node: a.node,
+                node: 0,
                 compass: Some("e".to_string()),
                 statement: None,
             }),
             sink: Some(TestEndpointSpec {
-                node: b.node,
+                node: 1,
                 compass: Some("w".to_string()),
                 statement: None,
             }),
             statements: one_statement("join", "ab"),
-        }),
-    )
+        }],
+    }))
     .unwrap();
-    let graph = builder_finish_bytes(&builder).unwrap();
 
     let east = graph_archived_compass_subgraph_bytes(&graph, &encode_cbor(&"e")).unwrap();
     let east_label: String = decode_cbor(&subgraph_label_bytes(&east).unwrap());
@@ -777,9 +735,9 @@ fn test_archived_builder_and_subgraph_api() {
 }
 
 #[test]
-fn test_builder_pattern_expands_default_statement_templates() {
-    let builder = builder_new_bytes(&encode_cbor(&TestBuilderSpec {
-        name: "builder".to_string(),
+fn test_graph_spec_expands_default_statement_templates() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestTemplatedGraphSpec {
+        name: "constructed".to_string(),
         statements: BTreeMap::new(),
         edge_statements: BTreeMap::new(),
         source_style_eval: Some("(stroke: red + 0.5pt)".to_string()),
@@ -789,40 +747,24 @@ fn test_builder_pattern_expands_default_statement_templates() {
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
         )]),
-    }))
-    .unwrap();
-
-    let a: TestBuilderNodeResult = decode_cbor(
-        &builder_add_node_bytes(
-            &builder,
-            &encode_cbor(&TestNodeSpec {
+        nodes: vec![
+            TestNodeSpec {
                 name: "a".to_string(),
                 statements: one_statement("color", "ff0000"),
-            }),
-        )
-        .unwrap(),
-    );
-    let b: TestBuilderNodeResult = decode_cbor(
-        &builder_add_node_bytes(
-            &a.builder,
-            &encode_cbor(&TestNodeSpec {
+            },
+            TestNodeSpec {
                 name: "b".to_string(),
                 statements: one_statement("color", "00aa00"),
-            }),
-        )
-        .unwrap(),
-    );
-
-    let builder = builder_add_edge_bytes(
-        &b.builder,
-        &encode_cbor(&TestEdgeSpec {
+            },
+        ],
+        edges: vec![TestEdgeSpec {
             source: Some(TestEndpointSpec {
-                node: a.node,
+                node: 0,
                 compass: None,
                 statement: None,
             }),
             sink: Some(TestEndpointSpec {
-                node: b.node,
+                node: 1,
                 compass: None,
                 statement: None,
             }),
@@ -830,10 +772,9 @@ fn test_builder_pattern_expands_default_statement_templates() {
                 ("color".to_string(), "0055ff".to_string()),
                 ("label".to_string(), "a-c".to_string()),
             ]),
-        }),
-    )
+        }],
+    }))
     .unwrap();
-    let graph = builder_finish_bytes(&builder).unwrap();
 
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
     assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#ff0000\"))"));
@@ -1469,7 +1410,7 @@ fn test_layout_preserves_hedge_compass_subgraphs() {
 }
 
 #[test]
-fn test_layout_handles_disconnected_builder_nodes() {
+fn test_layout_handles_disconnected_spec_nodes() {
     let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
         name: "demo".to_string(),
         statements: BTreeMap::new(),

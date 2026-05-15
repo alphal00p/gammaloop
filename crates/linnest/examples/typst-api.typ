@@ -1,45 +1,47 @@
 #import "../typst/src/lib.typ": draw, graph, layout, subgraph
 
-#let b = graph.builder(
+#let a = 0
+#let c = 1
+#let raw-graph = graph.build(
   name: "constructed",
   statements: (full_num: "x + y"),
-)
-#let (node: a, builder: b) = graph.node(b, name: "a", statements: (fill-color: "cfe8ff"))
-#let (node: c, builder: b) = graph.node(b, name: "b", statements: (fill-color: "d6f5d6"))
-#let b = graph.edge(
-  b,
-  source: (node: a, compass: "e", statement: "out"),
-  sink: (node: c, compass: "w", statement: "in"),
-  statements: (
-    color: "8a2be2",
-    source-color: "d72638",
-    sink-color: "1b7f4c",
-    label: "a-to-b",
+  nodes: (
+    graph.node(name: "a", statements: (fill-color: "cfe8ff")),
+    graph.node(name: "b", statements: (fill-color: "d6f5d6")),
+  ),
+  edges: (
+    graph.edge(
+      source: (node: a, compass: "e", statement: "out"),
+      sink: (node: c, compass: "w", statement: "in"),
+      statements: (
+        color: "8a2be2",
+        source-color: "d72638",
+        sink-color: "1b7f4c",
+        label: "a-to-b",
+      ),
+    ),
+    graph.edge(
+      source: none,
+      sink: (node: a, compass: "n"),
+      statements: (
+        color: "666666",
+        source-color: "666666",
+        sink-color: "355c9a",
+        label: "incoming",
+      ),
+    ),
+    graph.edge(
+      source: (node: c, compass: "s"),
+      sink: none,
+      statements: (
+        color: "666666",
+        source-color: "8f5d2a",
+        sink-color: "666666",
+        label: "outgoing",
+      ),
+    ),
   ),
 )
-#let b = graph.edge(
-  b,
-  source: none,
-  sink: (node: a, compass: "n"),
-  statements: (
-    color: "666666",
-    source-color: "666666",
-    sink-color: "355c9a",
-    label: "incoming",
-  ),
-)
-#let b = graph.edge(
-  b,
-  source: (node: c, compass: "s"),
-  sink: none,
-  statements: (
-    color: "666666",
-    source-color: "8f5d2a",
-    sink-color: "666666",
-    label: "outgoing",
-  ),
-)
-#let raw-graph = graph.finish(b)
 
 #let g = layout(raw-graph)
 #let info = graph.info(g)
@@ -57,7 +59,7 @@
 
 = Linnest Typst API Example
 
-This example imports the canonical Linnest Typst package source, builds a graph object through the builder object API, lays it out, and queries it through subgraph objects.
+This example imports the canonical Linnest Typst package source, builds a graph object from node and edge specs, lays it out, and queries it through subgraph objects.
 
 #let node-style(node) = (fill: rgb("#" + node.fill-color))
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
