@@ -1,46 +1,42 @@
-#import "../typst/src/lib.typ": draw, graph, layout, subgraph
+#import "../typst/src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
 
-#let a = 0
-#let c = 1
-#let raw-graph = graph.build(
+#let raw-graph = graph.build({
+  node(<a>, statements: (fill-color: "cfe8ff"))
+  node(<b>, statements: (fill-color: "d6f5d6"))
+  edge(
+    source(<a>, compass: "e", statement: "out"),
+    <a-to-b>,
+    sink(<b>, compass: "w", statement: "in"),
+    label: "a-to-b",
+    statements: (
+      color: "8a2be2",
+      source-color: "d72638",
+      sink-color: "1b7f4c",
+    ),
+  )
+  edge(
+    <incoming>,
+    sink(<a>, compass: "n"),
+    label: "incoming",
+    statements: (
+      color: "666666",
+      source-color: "666666",
+      sink-color: "355c9a",
+    ),
+  )
+  edge(
+    source(<b>, compass: "s"),
+    <outgoing>,
+    label: "outgoing",
+    statements: (
+      color: "666666",
+      source-color: "8f5d2a",
+      sink-color: "666666",
+    ),
+  )
+},
   name: "constructed",
   statements: (full_num: "x + y"),
-  nodes: (
-    graph.node(name: "a", statements: (fill-color: "cfe8ff")),
-    graph.node(name: "b", statements: (fill-color: "d6f5d6")),
-  ),
-  edges: (
-    graph.edge(
-      source: (node: a, compass: "e", statement: "out"),
-      sink: (node: c, compass: "w", statement: "in"),
-      statements: (
-        color: "8a2be2",
-        source-color: "d72638",
-        sink-color: "1b7f4c",
-        label: "a-to-b",
-      ),
-    ),
-    graph.edge(
-      source: none,
-      sink: (node: a, compass: "n"),
-      statements: (
-        color: "666666",
-        source-color: "666666",
-        sink-color: "355c9a",
-        label: "incoming",
-      ),
-    ),
-    graph.edge(
-      source: (node: c, compass: "s"),
-      sink: none,
-      statements: (
-        color: "666666",
-        source-color: "8f5d2a",
-        sink-color: "666666",
-        label: "outgoing",
-      ),
-    ),
-  ),
 )
 
 #let g = layout(raw-graph)
@@ -70,16 +66,13 @@ This example imports the canonical Linnest Typst package source, builds a graph 
 
 == Positioned Graph Without Layout
 
-#let positioned = graph.build(
+#let positioned = graph.build({
+  node(<left>, name: "left", pos: graph.pos(x: 0, y: 0))
+  node(<right>, name: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
+  edge(source(<left>), sink(<right>))
+  edge(source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
+},
   name: "positioned",
-  nodes: (
-    (name: "left", pos: graph.pos(x: 0, y: 0)),
-    (name: "right", pos: graph.pos(ref: 0, dx: 2.5, dy: 0)),
-  ),
-  edges: (
-    (source: (node: 0), sink: (node: 1)),
-    (source: (node: 1), sink: none, pos: graph.pos(ref: 1, dx: 0.9, dy: 0.7)),
-  ),
 )
 
 #draw(positioned, source-style: (stroke: black + 0.7pt), sink-style: (stroke: black + 0.7pt))

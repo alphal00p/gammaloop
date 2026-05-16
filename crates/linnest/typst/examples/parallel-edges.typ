@@ -1,20 +1,15 @@
-#import "../src/lib.typ": draw, graph, layout
+#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source
 
 #set page(width: 120mm, height: 75mm, margin: 10mm)
 
-#let a = 0
-#let c = 1
-#let g = graph.build(
+#let g = graph.build({
+  node(<a>, pos: graph.pos(x: -2.0, y: 0, mode: "pin"))
+  node(<c>, pos: graph.pos(ref: <a>, dx: 4.0, dy: 0, mode: "pin"))
+  edge(<e0>, source(<a>), sink(<c>), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))
+  edge(<e1>, source(<a>), sink(<c>), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))
+  edge(<e2>, source(<a>), sink(<c>), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))
+},
   name: "parallel demo",
-  nodes: (
-    graph.node(name: "a", pos: graph.pos(x: -2.0, y: 0, mode: "pin")),
-    graph.node(name: "c", pos: graph.pos(ref: a, dx: 4.0, dy: 0, mode: "pin")),
-  ),
-  edges: (
-    graph.edge(source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.25, mode: "pin")),
-    graph.edge(source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.25, mode: "pin")),
-    graph.edge(source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.25, mode: "pin")),
-  ),
 )
 
 #let offsets = (-0.16, 0, 0.16)

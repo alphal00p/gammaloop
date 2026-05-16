@@ -49,10 +49,174 @@
   result
 }
 
+#let _kind(item) = if type(item) == dictionary { item.at("linnest-kind", default: none) } else { none }
+
+#let _is-label(value) = type(value) == label
+
+#let _expect-no-extra-args(context_, args) = {
+  let named = args.named()
+  if named.len() > 0 {
+    panic(context_ + ": unknown named argument " + repr(named.keys().first()))
+  }
+}
+
+#let _label-key(value, context_) = {
+  if type(value) != label {
+    panic(context_ + ": expected a Typst label")
+  }
+  str(value)
+}
+
+#let _check-id(value, context_) = {
+  if value != none and type(value) != int and type(value) != label {
+    panic(context_ + ": id must be an integer or Typst label")
+  }
+}
+
+#let _collect-id(value, used, labels, context_) = {
+  if value == none {
+    return (used: used, labels: labels)
+  }
+  _check-id(value, context_)
+  if type(value) == int {
+    if used.contains(value) {
+      panic(context_ + ": duplicate numeric id " + repr(value))
+    }
+    used.push(value)
+  } else {
+    let key = str(value)
+    if labels.contains(key) {
+      panic(context_ + ": duplicate symbolic id " + repr(value))
+    }
+    labels.push(key)
+  }
+  (used: used, labels: labels)
+}
+
+#let _allocate-symbolic-ids(used, labels) = {
+  let resolved = (:)
+  let next = 0
+  for key in labels {
+    while used.contains(next) {
+      next += 1
+    }
+    resolved.insert(key, next)
+    used.push(next)
+  }
+  resolved
+}
+
+#let _resolve-id(value, resolved, context_) = {
+  if value == none {
+    none
+  } else if type(value) == int {
+    value
+  } else if type(value) == label {
+    let key = str(value)
+    if key not in resolved.keys() {
+      panic(context_ + ": unresolved symbolic id " + repr(value))
+    }
+    resolved.at(key)
+  } else {
+    panic(context_ + ": id must be an integer or Typst label")
+  }
+}
+
+#let _flatten-items(values) = {
+  let result = ()
+  for value in values {
+    if value == none {
+      continue
+    } else if type(value) == array {
+      result += _flatten-items(value)
+    } else {
+      result.push(value)
+    }
+  }
+  result
+}
+
+#let _node-key-map(nodes) = {
+  let map = (:)
+  for (index, item) in nodes.enumerate() {
+    let key = item.at("key", default: none)
+    if key != none {
+      let key = _label-key(key, "graph.node")
+      if map.keys().contains(key) {
+        panic("graph.node: duplicate node key <" + key + ">")
+      }
+      map.insert(key, index)
+    }
+  }
+  map
+}
+
+#let _resolve-node-ref(value, node-keys, context_) = {
+  if type(value) == int {
+    value
+  } else if type(value) == label {
+    let key = str(value)
+    if key not in node-keys.keys() {
+      panic(context_ + ": unknown node key <" + key + ">")
+    }
+    node-keys.at(key)
+  } else {
+    panic(context_ + ": node reference must be an integer or Typst label")
+  }
+}
+
+#let _resolve-pos(pos, node-keys) = {
+  if type(pos) == dictionary and pos.at("ref", default: none) != none {
+    let resolved = pos
+    resolved.ref = _resolve-node-ref(pos.ref, node-keys, "graph.pos")
+    resolved
+  } else {
+    pos
+  }
+}
+
+#let _collect-node-ids(nodes) = {
+  let used = ()
+  let labels = ()
+  for item in nodes {
+    let state = _collect-id(item.at("id", default: none), used, labels, "graph.node")
+    used = state.used
+    labels = state.labels
+  }
+  _allocate-symbolic-ids(used, labels)
+}
+
+#let _collect-edge-ids(edges) = {
+  let used = ()
+  let labels = ()
+  for item in edges {
+    let state = _collect-id(item.at("id", default: none), used, labels, "graph.edge")
+    used = state.used
+    labels = state.labels
+  }
+  _allocate-symbolic-ids(used, labels)
+}
+
+#let _collect-half-ids(edges) = {
+  let used = ()
+  let labels = ()
+  for item in edges {
+    for side in ("source", "sink") {
+      let half = item.at(side, default: none)
+      if half != none {
+        let state = _collect-id(half.at("id", default: none), used, labels, "graph." + side)
+        used = state.used
+        labels = state.labels
+      }
+    }
+  }
+  _allocate-symbolic-ids(used, labels)
+}
+
 #let _node-spec(node) = {
   let statements = _statements-with-point(node.at("statements", default: (:)), "shift", node.at("shift", default: none))
   let clean = node
-  for key in ("shift",) {
+  for key in ("linnest-kind", "key", "id", "shift") {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -60,13 +224,14 @@
   clean + (statements: statements)
 }
 
-#let _node-args(name: none, index: none, pos: none, shift: none, statements: (:)) = _node-spec((
-  name: name,
-  index: index,
-  pos: pos,
-  shift: shift,
-  statements: statements,
-))
+#let _resolved-node-spec(node, node-ids, node-keys) = {
+  let index = _resolve-id(node.at("id", default: none), node-ids, "graph.node")
+  let item = node + (pos: _resolve-pos(node.at("pos", default: none), node-keys))
+  if index != none {
+    item.insert("index", index)
+  }
+  _node-spec(item)
+}
 
 #let _edge-statements(edge) = {
   let statements = _statements-with-value(
@@ -98,6 +263,7 @@
   let statements = _edge-statements(edge)
   let clean = edge
   for key in (
+    "linnest-kind",
     "shift",
     "label-pos",
     "label-angle",
@@ -113,37 +279,54 @@
   clean + (statements: statements)
 }
 
-#let _edge-args(
-  source: none,
-  sink: none,
-  orientation: "default",
-  flow: none,
-  id: none,
-  pos: none,
-  shift: none,
-  label-pos: none,
-  label-angle: none,
-  bend: none,
-  statements: (:),
-  source-style-eval: none,
-  sink-style-eval: none,
-  label-eval: none,
-) = _edge-spec((
-  source: source,
-  sink: sink,
-  orientation: orientation,
-  flow: flow,
-  id: id,
-  pos: pos,
-  shift: shift,
-  label-pos: label-pos,
-  label-angle: label-angle,
-  bend: bend,
-  statements: statements,
-  source-style-eval: source-style-eval,
-  sink-style-eval: sink-style-eval,
-  label-eval: label-eval,
-))
+#let _resolved-half-spec(half, node-keys, half-ids, context_) = {
+  if half == none {
+    return none
+  }
+  let result = (
+    node: _resolve-node-ref(half.node, node-keys, context_),
+  )
+  let id = _resolve-id(half.at("id", default: none), half-ids, context_)
+  if id != none {
+    result.insert("id", id)
+  }
+  if half.at("statement", default: none) != none {
+    result.insert("statement", _statement-value(half.statement))
+  }
+  if half.at("compass", default: none) != none {
+    result.insert("compass", _statement-value(half.compass))
+  }
+  result
+}
+
+#let _resolved-edge-spec(edge, node-keys, edge-ids, half-ids) = {
+  let id = _resolve-id(edge.at("id", default: none), edge-ids, "graph.edge")
+  let item = edge + (
+    source: _resolved-half-spec(edge.at("source", default: none), node-keys, half-ids, "graph.source"),
+    sink: _resolved-half-spec(edge.at("sink", default: none), node-keys, half-ids, "graph.sink"),
+    pos: _resolve-pos(edge.at("pos", default: none), node-keys),
+  )
+  if id != none {
+    item.id = id
+  }
+  _edge-spec(item)
+}
+
+#let _split-items(items, nodes, edges) = {
+  let resolved-nodes = _flatten-items(nodes)
+  let resolved-edges = _flatten-items(edges)
+  for item in _flatten-items(items) {
+    let kind = _kind(item)
+    if kind == "node" {
+      resolved-nodes.push(item)
+    } else if kind == "edge" {
+      resolved-edges.push(item)
+    } else {
+      panic("graph.build: expected graph.node(..) or graph.edge(..), got " + repr(item))
+    }
+  }
+  (nodes: resolved-nodes, edges: resolved-edges)
+}
 
 /// Create a grouped placement coordinate.
 ///
@@ -207,21 +390,25 @@
 /// -> array
 #let parse(input) = cbor(_plugin.parse_graph(bytes(input)))
 
-/// Build one graph object from node and edge arrays.
+/// Build one graph object from a stream of node and edge items.
 ///
-/// Use @node and @edge to create reusable spec dictionaries, then pass those
-/// arrays to @build.
+/// Use @node, @source, @sink, and @edge to create graph items. Positional items
+/// may be passed as comma-separated arguments or yielded from a Typst code
+/// block.
 ///
 /// ```example
-/// #let g = graph.build(
-///   name: "demo",
-///   nodes: (graph.node(name: "a"), graph.node(name: "b")),
-///   edges: (graph.edge(source: (node: 0), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>))
+/// }, name: "demo")
 /// #graph.info(g).name
 /// ```
 /// -> bytes
 #let build(
+  /// Node and edge items returned by @node and @edge. -> array
+  ..items,
+
   /// Graph name. -> none | string
   name: none,
 
@@ -251,18 +438,18 @@
   /// Default DOT statements for nodes. -> dictionary
   node-statements: (:),
 
-  /// Node specifications. Each node may define `name`, `index`, `pos`, `shift`,
-  /// and `statements`. This matches the per-node parameters accepted by @node.
+  /// Additional node items or raw node specs. -> array
   /// -> array
   nodes: (),
 
-  /// Edge specifications. Each edge may define `source`, `sink`, `orientation`,
-  /// `flow`, `id`, `pos`, `shift`, `label-pos`, `label-angle`, `bend`,
-  /// `statements`, `source-style-eval`, `sink-style-eval`, and `label-eval`.
-  /// The `source` and `sink` fields use the same half-edge dictionaries accepted
-  /// by @edge. -> array
+  /// Additional edge items or raw edge specs. -> array
   edges: (),
 ) = {
+  let split = _split-items(items.pos(), nodes, edges)
+  let node-keys = _node-key-map(split.nodes)
+  let node-ids = _collect-node-ids(split.nodes)
+  let edge-ids = _collect-edge-ids(split.edges)
+  let half-ids = _collect-half-ids(split.edges)
   let edge-statements = _edge-render-statements(
     edge-statements,
     source-style-eval: source-style-eval,
@@ -274,75 +461,214 @@
     statements: statements,
     edge-statements: edge-statements,
     node-statements: node-statements,
-    nodes: nodes.map(_node-spec),
-    edges: edges.map(_edge-spec),
+    nodes: split.nodes.map(node => _resolved-node-spec(node, node-ids, node-keys)),
+    edges: split.edges.map(edge => _resolved-edge-spec(edge, node-keys, edge-ids, half-ids)),
   )))
 }
 
-/// Create a node spec dictionary for @build.
+/// Create a graph node item for @build.
 ///
-/// `shift` is normalized into `statements.shift`.
-///
-/// ```example
-/// #let spec = graph.node(name: "a", shift: (1, 0))
-/// #spec.statements.shift
-/// ```
-/// -> dictionary
-#let node(name: none, index: none, pos: none, shift: none, statements: (:)) = _node-args(
-  name: name,
-  index: index,
-  pos: pos,
-  shift: shift,
-  statements: statements,
-)
-
-/// Create a paired or external edge spec dictionary for @build.
-///
-/// Set `source` to `none` or `sink` to `none` for an external edge.
-/// Half-edge dictionaries accept `node`, `statement`, `id`, `port-label`,
-/// `compass`, and `in-subgraph`. Drawing helpers like `shift`, `label-pos`,
-/// `bend`, and `label-eval` are normalized into `statements`.
+/// A positional Typst label registers a node key for @source and @sink. A
+/// positional string sets the DOT node name. `id` may be an integer or Typst
+/// label and maps to the node id stored in the graph.
 ///
 /// ```example
-/// #let spec = graph.edge(
-///   source: (node: 0, compass: "e"),
-///   sink: (node: 1, compass: "w"),
-///   statements: (label: "a-c"),
-/// )
-/// #spec.statements.label
+/// #let g = graph.build({
+///   graph.node(<a>, id: <na>)
+/// })
+/// #graph.nodes(g).first().name
 /// ```
-/// -> dictionary
-#let edge(
-  source: none,
-  sink: none,
-  orientation: "default",
-  flow: none,
+/// -> array
+#let node(
+  ..args,
+  /// DOT node name. `auto` uses the positional label when present. -> auto | none | string
+  name: auto,
+  /// Typst node key for half-edge references. -> none | label
+  key: none,
+  /// Stable node id. -> none | int | label
   id: none,
+  /// Node placement. -> none | dictionary
   pos: none,
+  /// Drawing shift stored as a statement. -> none | string | array | dictionary
   shift: none,
-  label-pos: none,
-  label-angle: none,
-  bend: none,
+  /// Additional DOT node statements. -> dictionary
   statements: (:),
+) = {
+  _expect-no-extra-args("graph.node", args)
+  let pos-args = args.pos()
+  if pos-args.len() > 1 {
+    panic("graph.node: expected at most one positional key or name")
+  }
+  let resolved-key = key
+  let resolved-name = name
+  if pos-args.len() == 1 {
+    let arg = pos-args.first()
+    if type(arg) == label {
+      if resolved-key != none {
+        panic("graph.node: key specified twice")
+      }
+      resolved-key = arg
+      if resolved-name == auto {
+        resolved-name = str(arg)
+      }
+    } else if type(arg) == str {
+      if resolved-name != auto {
+        panic("graph.node: name specified twice")
+      }
+      resolved-name = arg
+    } else {
+      panic("graph.node: positional argument must be a Typst label or string")
+    }
+  }
+  if resolved-key != none {
+    let _ = _label-key(resolved-key, "graph.node")
+  }
+  _check-id(id, "graph.node")
+  if resolved-name == auto {
+    resolved-name = none
+  }
+  ((
+    linnest-kind: "node",
+    key: resolved-key,
+    id: id,
+    name: resolved-name,
+    pos: pos,
+    shift: shift,
+    statements: statements,
+  ),)
+}
+
+/// Create a source half-edge endpoint.
+///
+/// `node` may be a node key like `<a>` or a numeric node index. `id` may be an
+/// integer or Typst label.
+///
+/// ```example
+/// #graph.source(<a>, id: <h1>, compass: "e")
+/// ```
+/// -> dictionary
+#let source(node, id: none, statement: none, compass: none) = {
+  _check-id(id, "graph.source")
+  (linnest-kind: "source", node: node, id: id, statement: statement, compass: compass)
+}
+
+/// Create a sink half-edge endpoint.
+///
+/// `node` may be a node key like `<a>` or a numeric node index. `id` may be an
+/// integer or Typst label.
+///
+/// ```example
+/// #graph.sink(<b>, id: <h2>, compass: "w")
+/// ```
+/// -> dictionary
+#let sink(node, id: none, statement: none, compass: none) = {
+  _check-id(id, "graph.sink")
+  (linnest-kind: "sink", node: node, id: id, statement: statement, compass: compass)
+}
+
+/// Create a graph edge item for @build.
+///
+/// Positional arguments may contain one @source, one @sink, and optionally one
+/// Typst label used as the edge id. The visible/DOT label is `label`, not the
+/// positional edge id.
+///
+/// ```example
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: "p")
+/// })
+/// ```
+/// -> array
+#let edge(
+  /// Source/sink half-edges and optional edge id label. -> any
+  ..args,
+  /// Stable edge id. -> none | int | label
+  id: none,
+  /// Edge orientation: `"default"`, `"reversed"`, or `"undirected"`. -> string
+  orientation: "default",
+  /// Visible/DOT edge label, stored in `statements.label`. -> none | string
+  label: none,
+  /// Edge placement. -> none | dictionary
+  pos: none,
+  /// Drawing shift stored as a statement. -> none | string | array | dictionary
+  shift: none,
+  /// Edge label position stored as a statement. -> none | string | array | dictionary
+  label-pos: none,
+  /// Edge label angle stored as a statement. -> none | int | float | string
+  label-angle: none,
+  /// Edge bend stored as a statement. -> none | int | float | string
+  bend: none,
+  /// Additional DOT edge statements. -> dictionary
+  statements: (:),
+  /// Always-evaluated Typst style for the source half-edge. -> none | string
   source-style-eval: none,
+  /// Always-evaluated Typst style for the sink half-edge. -> none | string
   sink-style-eval: none,
+  /// Always-evaluated Typst edge label template. -> none | string
   label-eval: none,
-) = _edge-args(
-  source: source,
-  sink: sink,
-  orientation: orientation,
-  flow: flow,
-  id: id,
-  pos: pos,
-  shift: shift,
-  label-pos: label-pos,
-  label-angle: label-angle,
-  bend: bend,
-  statements: statements,
-  source-style-eval: source-style-eval,
-  sink-style-eval: sink-style-eval,
-  label-eval: label-eval,
-)
+) = {
+  _expect-no-extra-args("graph.edge", args)
+  let resolved-id = id
+  let resolved-source = none
+  let resolved-sink = none
+  for arg in args.pos() {
+    let kind = _kind(arg)
+    if kind == "source" {
+      if resolved-source != none {
+        panic("graph.edge: source specified twice")
+      }
+      resolved-source = arg
+    } else if kind == "sink" {
+      if resolved-sink != none {
+        panic("graph.edge: sink specified twice")
+      }
+      resolved-sink = arg
+    } else if _is-label(arg) {
+      if resolved-id != none {
+        panic("graph.edge: id specified twice")
+      }
+      resolved-id = arg
+    } else {
+      panic("graph.edge: positional arguments must be graph.source(..), graph.sink(..), or an edge id label")
+    }
+  }
+  _check-id(resolved-id, "graph.edge")
+  if resolved-source == none and resolved-sink == none {
+    panic("graph.edge: expected a source or sink half-edge")
+  }
+  let flow = if resolved-source != none and resolved-sink == none {
+    "source"
+  } else if resolved-source == none and resolved-sink != none {
+    "sink"
+  } else {
+    none
+  }
+  let resolved-statements = statements
+  if label != none {
+    if resolved-statements.keys().contains("label") {
+      panic("graph.edge: label specified twice")
+    }
+    resolved-statements.insert("label", _statement-value(label))
+  }
+  ((
+    linnest-kind: "edge",
+    source: resolved-source,
+    sink: resolved-sink,
+    orientation: orientation,
+    flow: flow,
+    id: resolved-id,
+    pos: pos,
+    shift: shift,
+    label-pos: label-pos,
+    label-angle: label-angle,
+    bend: bend,
+    statements: resolved-statements,
+    source-style-eval: source-style-eval,
+    sink-style-eval: sink-style-eval,
+    label-eval: label-eval,
+  ),)
+}
 
 /// Return graph metadata.
 ///
@@ -405,8 +731,7 @@
 
 /// Join two graphs by matching dangling half-edge data on `key`.
 ///
-/// Supported key values are `"statement"`, `"port-label"`, `"compass"`, and
-/// `"id"`.
+/// Supported key values are `"statement"`, `"compass"`, and `"id"`.
 ///
 /// ```example
 /// #let left = graph.build(

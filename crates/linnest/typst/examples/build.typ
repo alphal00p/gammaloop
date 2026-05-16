@@ -1,22 +1,21 @@
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
 
-#let a = 0
-#let c = 1
-#let g = graph.build(
-  name: "example",
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (
-    graph.edge(
-      source: (node: a, compass: "e"),
-      sink: (node: c, compass: "w"),
-      statements: (
-        color: "0055ff",
-        source-color: "d72638",
-        sink-color: "1b7f4c",
-        label: "a-c",
-      ),
+#let g = graph.build({
+  node(<a>)
+  node(<c>)
+  edge(
+    source(<a>, compass: "e"),
+    <a-c>,
+    sink(<c>, compass: "w"),
+    label: "a-c",
+    statements: (
+      color: "0055ff",
+      source-color: "d72638",
+      sink-color: "1b7f4c",
     ),
-  ),
+  )
+},
+  name: "example",
 )
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")

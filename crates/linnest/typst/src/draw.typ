@@ -716,31 +716,24 @@
 /// Draw a graph object with CeTZ.
 ///
 /// The graph must already have positions, either from `layout` or from explicit
-/// `pos` values passed to `graph.node`, `graph.edge`, or `graph.build`. Paired
+/// `pos` values passed to graph node or edge items. Paired
 /// edges without an explicit edge position use the midpoint of their endpoint
 /// nodes. Node and edge Typst style dictionaries or callbacks are evaluated and
 /// forwarded to CeTZ.
 ///
 /// #example(`
-/// #let positioned = graph.build(
+/// #let positioned = graph.build({
+///   graph.node(<left>, name: "left", pos: graph.pos(x: 0, y: 0))
+///   graph.node(<right>, name: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
+///   graph.edge(graph.source(<left>), graph.sink(<right>))
+///   graph.edge(graph.source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
+/// },
 ///   name: "positioned",
-///   nodes: (
-///     (name: "left", pos: graph.pos(x: 0, y: 0)),
-///     (name: "right", pos: graph.pos(ref: 0, dx: 2.5, dy: 0)),
-///   ),
-///   edges: (
-///     (source: (node: 0), sink: (node: 1)),
-///     (source: (node: 1), sink: none, pos: graph.pos(ref: 1, dx: 0.9, dy: 0.7)),
-///   ),
 /// )
 /// #draw(positioned, source-style: (stroke: black + 0.7pt), sink-style: (stroke: black + 0.7pt))
 /// `,dir:ttb)
 ///
 /// #example(`
-/// #let a = 0
-/// #let c = 1
-/// #let d = 2
-/// #let e = 3
 /// #let parallel-base-edge = 0
 /// #let source-patterns = (
 ///   "coil",
@@ -803,24 +796,21 @@
 ///   )
 ///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
 /// }
-/// #let g = graph.build(
+/// #let g = graph.build({
+///   graph.node(<a>, name: "a hi")
+///   graph.node(<c>)
+///   graph.node(<d>)
+///   graph.node(<e>)
+///   graph.edge(graph.source(<a>), <ac>, graph.sink(<c>), pos: graph.pos(x: 0, y: 0.75, mode: "pin"))
+///   graph.edge(graph.source(<c>), <ca>, graph.sink(<a>, compass: "e"))
+///   graph.edge(graph.source(<c>), <cd>, graph.sink(<d>, compass: "e"))
+///   graph.edge(graph.source(<e>), <ed>, graph.sink(<d>, compass: "e"))
+///   graph.edge(graph.source(<e>), <ea>, graph.sink(<a>, compass: "e"))
+///   graph.edge(graph.source(<d>), <d-out>)
+///   graph.edge(graph.source(<e>, compass: "e"), <e-out>)
+///   graph.edge(graph.source(<a>), <a-out>)
+/// },
 ///   name: "demo",
-///   nodes: (
-///     graph.node(name: "a hi"),
-///     graph.node(name: "c"),
-///     graph.node(name: "d"),
-///     graph.node(name: "e"),
-///   ),
-///   edges: (
-///     graph.edge(source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 0.75, mode: "pin")),
-///     graph.edge(source: (node: c), sink: (node: a, compass: "e")),
-///     graph.edge(source: (node: c), sink: (node: d, compass: "e")),
-///     graph.edge(source: (node: e), sink: (node: d, compass: "e")),
-///     graph.edge(source: (node: e), sink: (node: a, compass: "e")),
-///     graph.edge(source: (node: d), sink: none),
-///     graph.edge(source: (node: e, compass: "e"), sink: none),
-///     graph.edge(source: (node: a), sink: none),
-///   ),
 /// )
 /// #let layed-out = layout(g)
 /// #let east = subgraph.compass(layed-out, "e")
@@ -828,22 +818,15 @@
 /// `,dir:ttb)
 ///
 /// #example(`
-/// #let pa = 0
-/// #let pc = 1
-/// #let pc1 = 2
-/// #let pc2 = 3
-/// #let p = graph.build(
+/// #let p = graph.build({
+///   graph.node(<pa>, name: "a", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc>, name: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc1>, name: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc2>, name: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.edge(graph.source(<pa>), <e0>, graph.sink(<pc>))
+///   graph.edge(graph.source(<pc2>), <e1>, graph.sink(<pc1>))
+/// },
 ///   name: "parallel demo",
-///   nodes: (
-///     graph.node(name: "a", pos: graph.pos(y: 0, mode: "pin")),
-///     graph.node(name: "c", pos: graph.pos(y: 0, mode: "pin")),
-///     graph.node(name: "c", pos: graph.pos(y: 0, mode: "pin")),
-///     graph.node(name: "c", pos: graph.pos(y: 0, mode: "pin")),
-///   ),
-///   edges: (
-///     graph.edge(source: (node: pa), sink: (node: pc)),
-///     graph.edge(source: (node: pc2), sink: (node: pc1)),
-///   ),
 /// )
 /// #let parallel-edge-style(edge) = (
 ///     offset: -0.5,
@@ -868,20 +851,14 @@
 /// `,dir:ttb)
 ///
 /// #example(`
-/// #let a = 0
-/// #let c = 1
-/// #let d = 2
-/// #let g = graph.build(
+/// #let g = graph.build({
+///   graph.node(<a>, pos: graph.pos(x: 0, y: 0, mode: "pin"))
+///   graph.node(<c>, pos: graph.pos(x: 3, y: 0, mode: "pin"))
+///   graph.node(<d>, pos: graph.pos(x: 3, y: -1, mode: "pin"))
+///   graph.edge(graph.source(<a>), <ac>, graph.sink(<c>), orientation: "default")
+///   graph.edge(graph.source(<a>), <ad>, graph.sink(<d>), orientation: "reversed")
+/// },
 ///   name: "oriented marks",
-///   nodes: (
-///     graph.node(name: "a", pos: graph.pos(x: 0, y: 0, mode: "pin")),
-///     graph.node(name: "c", pos: graph.pos(x: 3, y: 0, mode: "pin")),
-///     graph.node(name: "d", pos: graph.pos(x: 3, y: -1, mode: "pin")),
-///   ),
-///   edges: (
-///     graph.edge(source: (node: a), sink: (node: c), orientation: "default"),
-///     graph.edge(source: (node: a), sink: (node: d), orientation: "reversed"),
-///   ),
 /// )
 /// #let arrow = (
 ///   end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto),

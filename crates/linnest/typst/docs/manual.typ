@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, graph, layout, physics, subgraph
+#import "../src/lib.typ": draw, edge, graph, layout, node, physics, sink, source, subgraph
 
 
 #set document(title: "Linnest Typst API")
@@ -33,13 +33,12 @@ The second map, $iota : H --> H$, is an involution that _glues_ half edges toget
 If a half-edge is glued to itself, we call that an external half-edge.
 
 
-#let g = graph.build(
-  nodes: (graph.node(name: "a"), graph.node(name: "b")),
-  edges: (
-    graph.edge(source: (node: 0), sink: (node: 1), statements: (label: "e")),
-    graph.edge(source: (node: 0), sink: (node: 1), statements: (label: "g")),
-  ),
-)
+#let g = graph.build({
+  node(<a>, name: "bue")
+  node(<b>)
+  edge(source(<a>), <e>, sink(<b>), label: "e")
+  edge(source(<a>), <g>, sink(<b>), label: "g")
+})
 // #graph.edges(g)
 #draw(layout(g))
 
@@ -61,25 +60,24 @@ The public surface is intentionally narrow:
 == Minimal Build Example
 
 ```typ
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
 
-#let a = 0
-#let c = 1
-#let g = graph.build(
-  name: "demo",
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (
-    graph.edge(
-      source: (node: a, compass: "e"),
-      sink: (node: c, compass: "w"),
-      statements: (
-        color: "0055ff",
-        source-color: "d72638",
-        sink-color: "1b7f4c",
-        label: "a-c",
-      ),
+#let g = graph.build({
+  node(<a>)
+  node(<c>)
+  edge(
+    source(<a>, compass: "e"),
+    <a-c>,
+    sink(<c>, compass: "w"),
+    label: "a-c",
+    statements: (
+      color: "0055ff",
+      source-color: "d72638",
+      sink-color: "1b7f4c",
     ),
-  ),
+  )
+},
+  name: "demo",
 )
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")
@@ -91,25 +89,25 @@ The public surface is intentionally narrow:
 #draw(g, subgraph: east, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
 
-#let a = 0
-#let c = 1
 #let g = graph.build(
-  name: "demo",
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (
-    graph.edge(
-      source: (node: a, compass: "e"),
-      sink: (node: c, compass: "w"),
+  {
+    node(<a>)
+    node(<c>)
+    edge(
+      source(<a>, compass: "e"),
+      <a-c>,
+      sink(<c>, compass: "w"),
+      label: "a-c",
       statements: (
         color: "0055ff",
         source-color: "d72638",
         sink-color: "1b7f4c",
-        label: "a-c",
       ),
-    ),
-  ),
+    )
+  },
+  name: "demo",
 )
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")
@@ -128,11 +126,12 @@ objects back to `graph` or `subgraph` for inspection.
 
 - `graph.parse(input)` parses one or more DOT digraphs and returns an array of
   graph objects.
-- `graph.build(..)` constructs one graph object from named arguments. Pass
-  `graph.node(..)` and `graph.edge(..)` to create reusable node and edge spec
-  dictionaries.
-- `graph.node(..)` returns a node spec dictionary.
-- `graph.edge(..)` returns an edge spec dictionary.
+- `graph.build(..)` constructs one graph object from a stream of node and edge
+  items.
+- `node(..)` returns a node item.
+- `source(..)` and `sink(..)` return half-edge endpoints.
+- `edge(..)` returns an edge item built from source/sink endpoints and an
+  optional edge id.
 - `layout(graph, ..)` runs layout as an explicit
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
@@ -141,22 +140,34 @@ objects back to `graph` or `subgraph` for inspection.
 
 == Graph Specs
 
-The Typst construction API is data-first: create arrays of node and edge specs,
-then pass them to `graph.build`. Use ordinary Typst bindings for node indices
-when edges need to refer to nodes:
+The Typst construction API is half-edge first: create node items, create source
+and sink half-edge endpoints, then pass edge items to `graph.build`.
+`graph.build` accepts both comma-separated items and ordinary Typst code
+blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are resolved before the
+wire format is sent to the Rust plugin.
 
 ```typ
-#let a = 0
-#let c = 1
-#let g = graph.build(
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (graph.edge(source: (node: a), sink: (node: c)),),
-)
+#let g = graph.build({
+  node(<a>)
+  node(<c>)
+  edge(source(<a>), <e1>, sink(<c>))
+})
 ```
 
-`graph.edge` accepts `source` and `sink` half-edge dictionaries. A half edge can
-contain `node`, `statement`, `id`, `port-label`, `compass`, and `in-subgraph`.
-Set `source: none` or `sink: none` to create an external half edge.
+`source(..)` and `sink(..)` accept a node reference plus optional `id`,
+`statement`, and `compass`. The `id` may be an integer or a Typst label:
+
+```typ
+edge(source(<a>, id: <h1>), <e1>, sink(<c>, id: 2), label: "a-c")
+```
+
+One half-edge creates an external edge. The side is determined by the
+constructor, so there is no public `flow` argument:
+
+```typ
+edge(<incoming>, sink(<a>))
+edge(source(<c>), <outgoing>)
+```
 
 String-valued DOT statements may contain `{name}` placeholders. `graph.build`
 expands each placeholder while constructing the graph object. Use `{{` and `}}`
@@ -168,23 +179,20 @@ dictionary. The following default metadata records a display label derived from
 the per-edge `label` statement:
 
 ```typ
-#let a = 0
-#let c = 1
-#let g = graph.build(
+#let g = graph.build({
+  node(<a>)
+  node(<c>)
+  edge(
+    source(<a>),
+    <a-c>,
+    sink(<c>),
+    label: "a-c",
+    statements: (color: "0055ff"),
+  )
+},
   edge-statements: (
     color: "000000",
     display-label: "{label}",
-  ),
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (
-    graph.edge(
-      source: (node: a),
-      sink: (node: c),
-      statements: (
-        color: "0055ff",
-        label: "a-c",
-      ),
-    ),
   ),
 )
 ```
@@ -196,15 +204,11 @@ coordinate into a fixed layout constraint and a drawable position. Use
 `mode: "start"` when the coordinate should only seed the layout:
 
 ```typ
-#let a = 0
-#let c = 1
-#let g = graph.build(
-  nodes: (
-    graph.node(name: "a", pos: graph.pos(x: -2, y: 0)),
-    graph.node(name: "c", pos: graph.pos(ref: a, dx: 4, dy: 0)),
-  ),
-  edges: (graph.edge(source: (node: a), sink: (node: c), pos: graph.pos(x: 0, y: 1.2)),),
-)
+#let g = graph.build({
+  node(<a>, pos: graph.pos(x: -2, y: 0))
+  node(<c>, pos: graph.pos(ref: <a>, dx: 4, dy: 0))
+  edge(source(<a>), <a-c>, sink(<c>), pos: graph.pos(x: 0, y: 1.2))
+})
 ```
 
 `graph.group` links one coordinate across several nodes or edge control points.
@@ -214,14 +218,14 @@ legs on opposite sides while pairing rows by a shared `y` group:
 
 ```typ
 #let edges = (
-  graph.edge(
-    source: (node: right-ext),
-    sink: (node: center),
+  edge(
+    source(<right-ext>),
+    sink(<center>),
     pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0")),
   ),
-  graph.edge(
-    source: (node: center),
-    sink: (node: left-ext),
+  edge(
+    source(<center>),
+    sink(<left-ext>),
     pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0")),
   ),
 )
@@ -322,21 +326,24 @@ Optional labels can be built from edge metadata with `show-edge-index`,
 `show-half-edge-index` only emits a value for dangling half edges.
 
 ```typ
-#import "../src/lib.typ": draw, graph, layout, physics
+#import "../src/lib.typ": draw, edge, graph, layout, node, physics, sink, source
 
-#let a = 0
-#let c = 1
-#let g = graph.build(
+#let g = graph.build({
+  node(<a>)
+  node(<c>)
+  edge(
+    source(<a>),
+    <fermion-main>,
+    sink(<c>),
+    statements: (particle: "fermion", id: "7"),
+  )
+  edge(
+    source(<c>),
+    <fermion-out>,
+    statements: (particle: "fermion", id: "8"),
+  )
+},
   name: "physics",
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (
-    graph.edge(
-      source: (node: a),
-      sink: (node: c),
-      statements: (particle: "fermion", id: "7"),
-    ),
-    graph.edge(source: (node: c), sink: none, statements: (particle: "fermion", id: "8")),
-  ),
 )
 #let callbacks = physics.style(
   momentum-arrows: true,
@@ -384,46 +391,46 @@ so the layer is drawn on the same side of the curve as the edge label.
 
 `source-style-eval`, `sink-style-eval`, and `label-eval` are ordinary
 kebab-case edge metadata for downstream renderers or DOT export. They can be
-set as direct arguments on `graph.build` or `graph.edge`, instead of being
+set as direct arguments on `graph.build` or `edge`, instead of being
 manually nested under `edge-statements` or per-edge `statements`:
 
 ```typ
-#let a = 0
-#let c = 1
-#let g = graph.build(
+#let g = graph.build({
+  node(<a>)
+  node(<c>)
+  edge(
+    source(<a>),
+    <a-c>,
+    sink(<c>),
+    label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
+    statements: (color: "0055ff", label: "a-c"),
+  )
+},
   name: "demo",
   source-style-eval: "(stroke: red + 0.5pt)",
   sink-style-eval: "(stroke: blue + 0.5pt)",
-  nodes: (graph.node(name: "a"), graph.node(name: "c")),
-  edges: (
-    graph.edge(
-      source: (node: a),
-      sink: (node: c),
-      label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
-      statements: (color: "0055ff", label: "a-c"),
-    ),
-  ),
 )
 ```
 
-`graph.build` accepts the same data in one dictionary:
+`graph.build` also accepts comma-separated items:
 
 ```typ
 #let g = graph.build(
+  node(<a>),
+  node(<b>),
+  edge(
+    source(<a>, compass: "e"),
+    <ab>,
+    sink(<b>, compass: "w"),
+    label: "ab",
+    statements: (color: "0055ff"),
+  ),
   name: "demo",
   statements: (full_num: "x + y"),
   node-statements: (shape: "circle"),
   edge-statements: (
     color: "000000",
     display-label: "{label}",
-  ),
-  nodes: (graph.node(name: "a"), graph.node(name: "b")),
-  edges: (
-    graph.edge(
-      source: (node: 0, compass: "e"),
-      sink: (node: 1, compass: "w"),
-      statements: (color: "0055ff", label: "ab"),
-    ),
   ),
 )
 ```
@@ -435,8 +442,8 @@ and `graph.edges(g)` returns edge records. Pass `subgraph: sg` to filter nodes
 or edges by an subgraph object.
 
 `graph.join(left, right, key: "statement")` joins matching dangling half edges.
-The key is read from half-edge data and can be `"statement"`, `"port-label"`,
-`"compass"`, or `"id"`.
+The key is read from half-edge data and can be `"statement"`, `"compass"`, or
+`"id"`.
 
 `graph.cycles(g)` returns subgraph objects for a cycle basis.
 `graph.forests(g)` returns subgraph objects for spanning forests.
