@@ -126,6 +126,7 @@ pub struct TypstDotNode {
 pub struct TypstDotEndpoint {
     pub node: usize,
     pub hedge: usize,
+    pub id: Option<usize>,
     pub statement: Option<String>,
     pub port_label: Option<String>,
     pub compass: Option<String>,
@@ -1014,6 +1015,11 @@ fn endpoint_to_output(endpoint: ArchivedDotEndpointView<'_>) -> TypstDotEndpoint
     TypstDotEndpoint {
         node: endpoint.node.0,
         hedge: endpoint.hedge.0,
+        id: endpoint
+            .data
+            .id
+            .as_ref()
+            .map(|value| value.0.try_into().unwrap()),
         statement: endpoint
             .data
             .statement

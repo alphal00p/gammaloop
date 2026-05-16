@@ -501,6 +501,51 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
 }
 
 #[test]
+fn test_graph_spec_exposes_half_edge_ids() {
+    #[derive(Serialize)]
+    struct HalfIdGraphSpec {
+        name: String,
+        nodes: Vec<TestNodeSpec>,
+        edges: Vec<HalfIdEdgeSpec>,
+    }
+
+    #[derive(Serialize)]
+    struct HalfIdEdgeSpec {
+        source: HalfIdEndpointSpec,
+        sink: HalfIdEndpointSpec,
+    }
+
+    #[derive(Serialize)]
+    struct HalfIdEndpointSpec {
+        node: usize,
+        id: usize,
+    }
+
+    let graph = graph_from_spec_bytes(&encode_cbor(&HalfIdGraphSpec {
+        name: "half-ids".to_string(),
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![HalfIdEdgeSpec {
+            source: HalfIdEndpointSpec { node: 0, id: 7 },
+            sink: HalfIdEndpointSpec { node: 1, id: 11 },
+        }],
+    }))
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(edges[0].source.as_ref().unwrap().id, Some(7));
+    assert_eq!(edges[0].sink.as_ref().unwrap().id, Some(11));
+}
+
+#[test]
 fn test_graph_spec_uses_first_class_placements() {
     let spec = TestPlacementGraphSpec {
         name: "placed".to_string(),
