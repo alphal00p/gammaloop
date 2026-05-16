@@ -15,6 +15,10 @@ use super::{
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// A specialized vector-like structure for storing edge data along with its
 /// topological [`Involution`].
 ///
@@ -33,11 +37,11 @@ pub struct SmartEdgeVec<T> {
     /// and the [`HedgePair`] that describes the topological state of the edge
     /// (e.g., paired, unpaired, split). The index into this vector serves as
     /// an `EdgeIndex`.
-    pub(super) data: EdgeVec<(T, HedgePair)>,
+    pub(crate) data: EdgeVec<(T, HedgePair)>,
     /// The [`Involution`] structure that manages the topological relationships of half-edges.
     /// In this context, the `Involution` stores `EdgeIndex` as its data, pointing back
     /// to the `data` vector of this `SmartHedgeVec`.
-    pub(super) involution: Involution,
+    pub(crate) involution: Involution,
 }
 
 impl<T> AsRef<Involution> for SmartEdgeVec<T> {
@@ -845,6 +849,21 @@ impl<T> SmartEdgeVec<T> {
         matching_fn: impl Fn(Flow, EdgeData<&T>, Flow, EdgeData<&T>) -> bool,
         merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
     ) -> Result<Self, HedgeGraphError> {
+        self.join_with_hedges(
+            other,
+            |_, left_flow, left_data, _, right_flow, right_data| {
+                matching_fn(left_flow, left_data, right_flow, right_data)
+            },
+            merge_fn,
+        )
+    }
+
+    pub(crate) fn join_with_hedges(
+        self,
+        other: Self,
+        matching_fn: impl Fn(Hedge, Flow, EdgeData<&T>, Hedge, Flow, EdgeData<&T>) -> bool,
+        merge_fn: impl Fn(Flow, EdgeData<T>, Flow, EdgeData<T>) -> (Flow, EdgeData<T>),
+    ) -> Result<Self, HedgeGraphError> {
         let self_n_h: Hedge = self.len();
         let self_empty_filter = SuBitGraph::empty(self_n_h.0);
         let mut full_self = !self_empty_filter.clone();
@@ -912,8 +931,10 @@ impl<T> SmartEdgeVec<T> {
                             &g.involution.inv[j]
                         {
                             if matching_fn(
+                                i,
                                 *underlyings,
                                 datas.as_ref().map(|a| &g.data[*a].0),
+                                j,
                                 *underlying,
                                 data.as_ref().map(|a| &g.data[*a].0),
                             ) {

@@ -13,7 +13,7 @@ use crate::{
     },
     tree::{
         parent_pointer::{PPNode, ParentPointerStore},
-        Forest, RootData, RootId,
+        Forest, RootData, RootId, TreeNodeId,
     },
 };
 
@@ -22,6 +22,10 @@ use super::{NodeStorage, NodeStorageOps};
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// An implementation of [`NodeStorage`] and [`NodeStorageOps`] that uses `Vec`s
 /// and `BitVec`s to store node information and their incident half-edges.
 ///
@@ -577,8 +581,13 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
                     nodes[i.0] = Some(PPNode::dataless_root(RootId(roots.len())));
                 }
             }
+            let root_id = first.unwrap_or_else(|| {
+                let id = TreeNodeId(nodes.len());
+                nodes.push(Some(PPNode::dataless_root(RootId(roots.len()))));
+                id
+            });
             roots.push(RootData {
-                root_id: first.unwrap(),
+                root_id,
                 data: map_data(d),
             });
         }

@@ -182,6 +182,10 @@ pub mod involution;
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents attributes for an edge when generating Graphviz DOT output.
 ///
 /// This struct allows specifying common DOT attributes like label, color,
@@ -229,6 +233,10 @@ pub mod swap;
     feature = "bincode",
     derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode)
 )]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// The main graph data structure, representing a graph using the half-edge
 /// (or doubly connected edge list - DCEL) principle.
 ///
@@ -249,11 +257,11 @@ pub mod swap;
 ///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
 ///   [`NodeStorageVec<V>`]).
 pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
-    hedge_data: HedgeVec<H>,
+    pub(crate) hedge_data: HedgeVec<H>,
     /// Internal storage for all half-edges, their data, and their topological
     /// relationships (e.g., opposite half-edge, next half-edge around a node).
     /// This is typically a [`SmartHedgeVec<E>`].
-    edge_store: SmartEdgeVec<E>,
+    pub(crate) edge_store: SmartEdgeVec<E>,
     /// Storage for all nodes in the graph, including their data (`V`) and
     /// information about the half-edges incident to them.
     /// The specific implementation is determined by the `S` type parameter.
@@ -265,6 +273,10 @@ pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNo
 #[cfg_attr(
     feature = "bincode",
     derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode)
+)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct NoData {}
 impl Display for NoData {
@@ -650,6 +662,43 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             edge_store: self
                 .edge_store
                 .join(other.edge_store, matching_fn, merge_fn)?,
+        };
+        g.node_store.check_and_set_nodes()?;
+
+        Ok(g)
+    }
+
+    /// Like [`Self::join`], but the matcher also receives the dangling hedge id
+    /// and half-edge data for both candidate endpoints.
+    pub fn join_with_hedge_data(
+        mut self,
+        other: Self,
+        matching_fn: impl Fn(Hedge, Flow, EdgeData<&E>, &H, Hedge, Flow, EdgeData<&E>, &H) -> bool,
+        merge_fn: impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> (Flow, EdgeData<E>),
+    ) -> Result<Self, HedgeGraphError> {
+        self.hedge_data.extend(other.hedge_data);
+        let hedge_data = self.hedge_data;
+        let node_store = self.node_store.extend(other.node_store);
+        let edge_store = self.edge_store.join_with_hedges(
+            other.edge_store,
+            |left_hedge, left_flow, left_data, right_hedge, right_flow, right_data| {
+                matching_fn(
+                    left_hedge,
+                    left_flow,
+                    left_data,
+                    &hedge_data[left_hedge],
+                    right_hedge,
+                    right_flow,
+                    right_data,
+                    &hedge_data[right_hedge],
+                )
+            },
+            merge_fn,
+        )?;
+        let mut g = HedgeGraph {
+            hedge_data,
+            node_store,
+            edge_store,
         };
         g.node_store.check_and_set_nodes()?;
 

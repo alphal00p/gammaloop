@@ -120,6 +120,14 @@ pub(crate) fn strip_quotes(s: &str) -> &str {
 pub mod set;
 pub use set::GraphSet;
 
+#[cfg(feature = "rkyv")]
+pub mod archive;
+#[cfg(feature = "rkyv")]
+pub use archive::{
+    ArchivedDotEdgeEndpointsView, ArchivedDotEdgeView, ArchivedDotEndpointView,
+    ArchivedDotGraphBytesSetView, ArchivedDotGraphView, ArchivedDotVertexView, DotGraphBytesSet,
+};
+
 pub mod global;
 pub use global::GlobalData;
 
@@ -133,6 +141,10 @@ pub mod hedge;
 pub use hedge::DotHedgeData;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {
     pub global_data: GlobalData,
     pub graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, N>,
@@ -269,6 +281,28 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         }
         writeln!(writer, "}}")?;
         Ok(())
+    }
+
+    #[cfg(feature = "rkyv")]
+    pub fn to_rkyv_bytes<const BYTES: usize>(&self) -> Result<rkyv::AlignedVec, String>
+    where
+        Self: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<BYTES>>,
+    {
+        rkyv::to_bytes::<_, BYTES>(self).map_err(|err| err.to_string())
+    }
+
+    #[cfg(feature = "rkyv")]
+    /// Returns the archived graph root without validating the byte buffer.
+    ///
+    /// # Safety
+    ///
+    /// `bytes` must contain a valid rkyv archive produced for this exact
+    /// `DotGraph` type, and the returned reference must not outlive `bytes`.
+    pub unsafe fn archived_from_bytes(bytes: &[u8]) -> &<Self as rkyv::Archive>::Archived
+    where
+        Self: rkyv::Archive,
+    {
+        unsafe { rkyv::archived_root::<Self>(bytes) }
     }
 
     #[allow(clippy::result_large_err, clippy::type_complexity)]

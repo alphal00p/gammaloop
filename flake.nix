@@ -87,6 +87,12 @@
         ./.config
         ./assets
         ./crates/clinnet/templates
+        ./crates/kurvst/typst/kurvst.wasm
+        ./crates/kurvst/typst/src
+        ./crates/kurvst/typst/typst.toml
+        ./crates/linnest/typst/linnest.wasm
+        ./crates/linnest/typst/src
+        ./crates/linnest/typst/typst.toml
         ./crates/vakint/form_src
         ./crates/vakint/templates
       ];
@@ -128,6 +134,10 @@
           ./crates/clinnet/templates/figure.typ
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
+          ./crates/kurvst/typst/src
+          ./crates/kurvst/typst/typst.toml
+          ./crates/linnest/typst/src
+          ./crates/linnest/typst/typst.toml
         ];
       };
 
@@ -186,6 +196,10 @@
 
       apiMeta = craneLib.crateNameFromCargoToml {
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
+      };
+
+      clinnetMeta = craneLib.crateNameFromCargoToml {
+        cargoToml = ./crates/clinnet/Cargo.toml;
       };
 
       linnestMeta = wasmCraneLib.crateNameFromCargoToml {
@@ -304,7 +318,7 @@
         doCheck = false;
         buildType = "release";
         CARGO_BUILD_TARGET = wasmTarget;
-        cargoExtraArgs = "--locked -p linnest --features custom --target ${wasmTarget}";
+        cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/custom --target ${wasmTarget}";
       };
 
       linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (linnestWasmArgs
@@ -317,12 +331,31 @@
           cargoArtifacts = linnestWasmCargoArtifacts;
           cargoBuildCommand = "cargo build --release";
           installPhaseCommand = ''
-            mkdir -p "$out/templates"
+            mkdir -p \
+              "$out/templates" \
+              "$out/templates/crates/linnest/typst" \
+              "$out/templates/crates/kurvst/typst"
             cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
+            cp "target/${wasmTarget}/release/kurvst.wasm" "$out/kurvst.wasm"
             cp crates/clinnet/templates/*.typ "$out/templates/"
-            cp "$out/linnest.wasm" "$out/templates/linnest.wasm"
+            cp -R crates/linnest/typst/src "$out/templates/crates/linnest/typst/"
+            cp crates/linnest/typst/typst.toml "$out/templates/crates/linnest/typst/typst.toml"
+            cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
+            cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
+            cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
+            cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
           '';
         });
+
+      drawingTypstBundleAssets = ''
+        mkdir -p crates/linnest/typst/src crates/kurvst/typst/src
+        cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
+        cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
+        cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+      '';
 
       gammaloop-cli = craneLib.buildPackage (ciArgs
         // {
@@ -333,7 +366,98 @@
           inherit (apiMeta) version;
           cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
+          preBuild = drawingTypstBundleAssets;
         });
+
+      clinnetArgs = commonArgs
+        // {
+          buildType = ciCargoProfile;
+          CARGO_PROFILE = ciCargoProfile;
+          doCheck = false;
+          pname = "clinnet";
+          inherit (clinnetMeta) version;
+          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
+          cargoExtraArgs = "--locked -p clinnet --bin linnet";
+        };
+
+      clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
+        // {
+          pname = "clinnet-deps";
+          preBuild = drawingTypstBundleAssets;
+        });
+
+      clinnet-cli = craneLib.buildPackage (clinnetArgs
+        // {
+          cargoArtifacts = clinnetCargoArtifacts;
+          preBuild = drawingTypstBundleAssets;
+        });
+
+      rscls = pkgs.rustPlatform.buildRustPackage rec {
+        pname = "rscls";
+        version = "0.2.3";
+        src = pkgs.fetchCrate {
+          inherit pname version;
+          sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+        };
+        cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+      };
+
+      devShellPackages = with pkgs; [
+        tdf
+        cargo-flamegraph
+        yaml-language-server
+        just
+        dot-language-server
+        cargo-insta
+        cargo-udeps
+        cargo-machete
+        openssl
+        pyright
+        gmp
+        mpfr
+        libmpc
+        form
+        gnum4
+        nickel
+        nls
+        typst
+        cargo-nextest
+        pkg-config
+        cargo-deny
+        cargo-edit
+        cargo-watch
+        bacon
+        gfortran
+        gcc
+        rust-script
+        uv
+        graphviz
+        mupdf
+        tinymist
+        typstyle
+        poppler-utils
+        rust-analyzer
+        maturin
+        virtualenv
+      ];
+
+      mkDevShell = extraPackages:
+        craneLib.devShell {
+          # checks = self.checks.${system};
+
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+
+          CC = nixCc;
+          CXX = nixCxx;
+          "${cargoLinkerVar}" = nixCc;
+          RUSTFLAGS = "-C linker=${nixCc}";
+
+          LD_LIBRARY_PATH = runtimeLibPath;
+          DYLD_LIBRARY_PATH = runtimeLibPath;
+
+          packages = devShellPackages ++ extraPackages;
+        };
 
       impureCheckRunnerTargets = [
         {
@@ -401,10 +525,17 @@
             nativeBuildInputs = [pkgs.wasm-tools];
           } ''
             test -s ${linnest-wasm}/linnest.wasm
-            test -s ${linnest-wasm}/templates/linnest.wasm
-            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
+            test -s ${linnest-wasm}/kurvst.wasm
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+            test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
+            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+            cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
             wasm-tools validate ${linnest-wasm}/linnest.wasm
+            wasm-tools validate ${linnest-wasm}/kurvst.wasm
             test -s ${linnest-wasm}/templates/layout.typ
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/src/curve.typ
+            test -s ${linnest-wasm}/templates/crates/kurvst/typst/src/lib.typ
             mkdir -p "$out"
           '';
         }
@@ -428,8 +559,9 @@
       packages =
         {
           default = gammaloop-cli;
+          clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
-          inherit linnest-wasm linnestWasmCargoArtifacts;
+          inherit clinnetCargoArtifacts linnest-wasm linnestWasmCargoArtifacts;
           inherit cargoArtifacts;
         }
         // impureCheckRunnerPackages
@@ -449,84 +581,20 @@
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
         };
+        clinnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
+        linnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
       };
 
-      devShells.default = craneLib.devShell {
-        # checks = self.checks.${system};
-
-        RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-        GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
-
-        CC = nixCc;
-        CXX = nixCxx;
-        "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
-
-        LD_LIBRARY_PATH = runtimeLibPath;
-        DYLD_LIBRARY_PATH = runtimeLibPath;
-
-        # shellHook = ''
-        #   export CC="${nixCc}"
-        #   export CXX="${nixCxx}"
-        #   export ${cargoLinkerVar}="${nixCc}"
-        # '';
-
-        packages = with pkgs; [
-          tdf
-          cargo-flamegraph
-          yaml-language-server
-          just
-          dot-language-server
-          cargo-insta
-          cargo-udeps
-          cargo-machete
-          openssl
-          pyright
-          gmp
-          mpfr
-          libmpc
-          form
-          gnum4
-          nickel
-          nls
-          typst
-          cargo-nextest
-          pkg-config
-          cargo-deny
-          cargo-edit
-          cargo-watch
-          bacon
-          gfortran
-          gcc
-          rust-script
-          uv
-          graphviz
-          mupdf
-          tinymist
-          typstyle
-          poppler-utils
-          rust-analyzer
-          maturin
-          virtualenv
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "clinnet";
-            version = "0.1.8";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-            };
-            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-          })
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "rscls";
-            version = "0.2.3";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
-            };
-            cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
-          })
-        ];
+      devShells = {
+        default = mkDevShell [];
+        full = mkDevShell [clinnet-cli rscls];
+        clinnet = mkDevShell [clinnet-cli];
       };
     });
 }

@@ -1,5 +1,31 @@
+mod api;
 pub mod geom;
+mod graph_api;
+mod pin;
+#[cfg(test)]
+mod tests;
+#[cfg(feature = "custom")]
+mod wasm_random;
+
+pub use api::{
+    layout_graph_bytes, layout_parsed_graph_bytes, layout_parsed_graphs_bytes,
+    parse_dot_graphs_bytes,
+};
+pub use graph_api::{
+    builder_add_edge_bytes, builder_add_node_bytes, builder_finish_bytes, builder_new_bytes,
+    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
+    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes, graph_edges_bytes,
+    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
+    graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
+    graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
+    graph_spanning_forests_bytes, graph_subgraph_bytes, subgraph_contains_hedge_bytes,
+    subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge, TypstDotEndpoint, TypstDotGraphInfo,
+    TypstDotNode, TypstPoint,
+};
+pub use pin::{expand_template, PinConstraint};
+
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
+use dot_parser::ast::CompassPt;
 use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::swap::Swap;
 use linnet::{
@@ -14,217 +40,18 @@ use linnet::{
             },
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
-        subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
-        tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
-    tree::child_pointer::ParentChildStore,
 };
 
-#[cfg(target_arch = "wasm32")]
-use linnet::parser::set::DotGraphSet;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum PinConstraint {
-    /// Pin both coordinates to fixed values: pin="1.0,2.0"
-    Fixed(f64, f64),
-    /// Fix only x coordinate: pin="x:1.0"
-    FixX(f64),
-    /// Fix only y coordinate: pin="y:2.0"
-    FixY(f64),
-    /// Link x coordinate to a named group: pin="x:@group1"
-    LinkX(String),
-    /// Link y coordinate to a named group: pin="y:@group1"
-    LinkY(String),
-    /// Link both coordinates to a named group: pin="@group1"
-    LinkBoth(String),
-    /// Combine constraints: pin="x:1.0,y:@group1"
-    Combined(Box<PinConstraint>, Box<PinConstraint>),
-}
-
-impl PinConstraint {
-    pub fn point_constraint(
-        &self,
-        index: usize,
-        map: &mut HashMap<String, usize>,
-    ) -> (Point2<f64>, PointConstraint) {
-        match self {
-            PinConstraint::Fixed(x, y) => (
-                Point2::new(*x, *y),
-                PointConstraint {
-                    x: Constraint::Fixed,
-                    y: Constraint::Fixed,
-                },
-            ),
-            PinConstraint::FixX(x) => (
-                Point2::new(*x, 0.0),
-                PointConstraint {
-                    x: Constraint::Fixed,
-                    y: Constraint::Free,
-                },
-            ),
-            PinConstraint::FixY(y) => (
-                Point2::new(0.0, *y),
-                PointConstraint {
-                    x: Constraint::Free,
-                    y: Constraint::Fixed,
-                },
-            ),
-            PinConstraint::LinkX(group) => {
-                let (group_name, direction) = Self::parse_direction(group);
-                let reference = *map
-                    .entry(format!("link_x_{}", group_name))
-                    .or_insert_with(|| index);
-                (
-                    Point2::new(0.0, 0.0),
-                    PointConstraint {
-                        x: Constraint::Grouped(reference, direction),
-                        y: Constraint::Free,
-                    },
-                )
-            }
-            PinConstraint::LinkY(group) => {
-                let (group_name, direction) = Self::parse_direction(group);
-                let reference = *map
-                    .entry(format!("link_y_{}", group_name))
-                    .or_insert_with(|| index);
-                (
-                    Point2::new(0.0, 0.0),
-                    PointConstraint {
-                        y: Constraint::Grouped(reference, direction),
-                        x: Constraint::Free,
-                    },
-                )
-            }
-            PinConstraint::LinkBoth(group) => {
-                let (group_name, direction) = Self::parse_direction(group);
-                let reference = *map
-                    .entry(format!("link_{}", group_name))
-                    .or_insert_with(|| index);
-                (
-                    Point2::new(0.0, 0.0),
-                    PointConstraint {
-                        x: Constraint::Grouped(reference, direction),
-                        y: Constraint::Grouped(reference, direction),
-                    },
-                )
-            }
-            PinConstraint::Combined(x_constraint, y_constraint) => {
-                let (mut pos, constraintx) = x_constraint.point_constraint(index, map);
-
-                let (pos_y, constrainty) = y_constraint.point_constraint(index, map);
-
-                pos.y = pos_y.y;
-                (
-                    pos,
-                    PointConstraint {
-                        x: constraintx.x,
-                        y: constrainty.y,
-                    },
-                )
-            }
-        }
-    }
-
-    fn parse_direction(group: &str) -> (&str, ShiftDirection) {
-        if let Some(stripped) = group.strip_prefix('+') {
-            (stripped, ShiftDirection::PositiveOnly)
-        } else if let Some(stripped) = group.strip_prefix('-') {
-            (stripped, ShiftDirection::NegativeOnly)
-        } else {
-            (group, ShiftDirection::Any)
-        }
-    }
-
-    pub fn parse(input: &str) -> Option<Self> {
-        let input = input
-            .trim()
-            .trim_matches('"')
-            .trim_matches(|c| c == '(' || c == ')');
-
-        // Handle @group syntax for linking both coordinates
-        if let Some(stripped) = input.strip_prefix('@') {
-            return Some(PinConstraint::LinkBoth(stripped.to_string()));
-        }
-
-        // Handle x:value,y:value syntax or fixed coordinates (comma or space separated)
-        if input.contains(',') || input.split_whitespace().count() == 2 {
-            let parts: Vec<&str> = if input.contains(',') {
-                input.split(',').map(|s| s.trim()).collect()
-            } else {
-                input.split_whitespace().collect()
-            };
-
-            if parts.len() == 2 {
-                // Try to parse as coordinate constraints
-                let x_constraint = Self::parse_single_constraint(parts[0]);
-                let y_constraint = Self::parse_single_constraint(parts[1]);
-
-                match (x_constraint, y_constraint) {
-                    (Some(x), Some(y)) => {
-                        return Some(PinConstraint::Combined(Box::new(x), Box::new(y)))
-                    }
-                    _ => {
-                        // Fall back to parsing as fixed coordinates
-                        if let (Ok(x), Ok(y)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
-                            return Some(PinConstraint::Fixed(x, y));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Handle single constraint
-        Self::parse_single_constraint(input)
-    }
-
-    fn parse_single_constraint(input: &str) -> Option<Self> {
-        let input = input.trim();
-
-        if let Some(value) = input.strip_prefix("x:") {
-            if let Some(stripped) = value.strip_prefix('@') {
-                Some(PinConstraint::LinkX(stripped.to_string()))
-            } else if let Ok(x) = value.parse::<f64>() {
-                Some(PinConstraint::FixX(x))
-            } else {
-                None
-            }
-        } else if let Some(value) = input.strip_prefix("y:") {
-            if let Some(stripped) = value.strip_prefix('@') {
-                Some(PinConstraint::LinkY(stripped.to_string()))
-            } else if let Ok(y) = value.parse::<f64>() {
-                Some(PinConstraint::FixY(y))
-            } else {
-                None
-            }
-        } else {
-            input
-                .strip_prefix('@')
-                .map(|a| PinConstraint::LinkBoth(a.to_string()))
-        }
-    }
-}
-
-impl std::fmt::Display for PinConstraint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PinConstraint::Fixed(x, y) => write!(f, "{},{}", x, y),
-            PinConstraint::FixX(x) => write!(f, "x:{}", x),
-            PinConstraint::FixY(y) => write!(f, "y:{}", y),
-            PinConstraint::LinkX(group) => write!(f, "x:@{}", group),
-            PinConstraint::LinkY(group) => write!(f, "y:@{}", group),
-            PinConstraint::LinkBoth(group) => write!(f, "@{}", group),
-            PinConstraint::Combined(x, y) => write!(f, "{},{}", x, y),
-        }
-    }
-}
-
 use rand::rngs::SmallRng;
+use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::io::BufWriter;
+use std::ops::Deref;
 use std::path::Path;
-use std::{collections::BTreeMap, io::BufWriter};
-use std::{collections::HashMap, ops::Deref};
 use std::{f64, fs::File};
 
 #[cfg(target_arch = "wasm32")]
@@ -236,87 +63,149 @@ initiate_protocol!();
 // Custom getrandom implementation for WASM
 #[cfg(feature = "custom")]
 use getrandom::register_custom_getrandom;
+#[cfg(feature = "custom")]
+use wasm_random::custom_getrandom;
 
 use crate::geom::{tangent_angle_toward_c_side, GeomError};
-
-/// Expand template placeholders in a string using values from statements
-/// This function supports {key} placeholders that get replaced with values from the statements map
-pub fn expand_template(
-    template: &str,
-    statements: &std::collections::BTreeMap<String, String>,
-) -> String {
-    let mut result = template.to_string();
-
-    // Find all placeholders in format {key}
-    let mut chars = template.chars().peekable();
-    let mut placeholders = Vec::new();
-    let mut current_pos = 0;
-
-    while let Some(ch) = chars.next() {
-        if ch == '{' {
-            let start = current_pos;
-            let mut key = String::new();
-            let mut found_closing = false;
-
-            for inner_ch in chars.by_ref() {
-                current_pos += inner_ch.len_utf8();
-                if inner_ch == '}' {
-                    found_closing = true;
-                    break;
-                } else if inner_ch == '{' {
-                    // Nested braces, ignore this placeholder
-                    break;
-                } else {
-                    key.push(inner_ch);
-                }
-            }
-
-            if found_closing && !key.is_empty() {
-                placeholders.push((start, current_pos + 1, key));
-            }
-        }
-        current_pos += ch.len_utf8();
-    }
-
-    // Replace placeholders in reverse order to maintain positions
-    for (start, end, key) in placeholders.iter().rev() {
-        if let Some(value) = statements.get(key) {
-            // Remove quotes from the replacement value
-            let clean_value = value.trim().trim_matches('"');
-            result.replace_range(*start..*end, clean_value);
-        }
-    }
-
-    result
-}
-
-#[cfg(feature = "custom")]
-fn custom_getrandom(buf: &mut [u8]) -> Result<(), getrandom::Error> {
-    // panic!("HHHHH");
-    // Simple deterministic implementation for WASM
-    // In production, you might want a better source of entropy
-    static mut COUNTER: u64 = 42;
-    unsafe {
-        for chunk in buf.chunks_mut(8) {
-            let bytes = COUNTER.to_le_bytes();
-            for (i, &byte) in bytes.iter().enumerate() {
-                if i < chunk.len() {
-                    chunk[i] = byte;
-                }
-            }
-            COUNTER = COUNTER.wrapping_add(1);
-        }
-    }
-    Ok(())
-}
 
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Point2Rkyv;
+
+impl ArchiveWith<Point2<f64>> for Point2Rkyv {
+    type Archived = rkyv::Archived<(f64, f64)>;
+    type Resolver = rkyv::Resolver<(f64, f64)>;
+
+    unsafe fn resolve_with(
+        field: &Point2<f64>,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        rkyv::Archive::resolve(&(field.x, field.y), pos, resolver, out);
+    }
+}
+
+impl<S: rkyv::Fallible + ?Sized> SerializeWith<Point2<f64>, S> for Point2Rkyv
+where
+    (f64, f64): rkyv::Serialize<S>,
+{
+    fn serialize_with(field: &Point2<f64>, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&(field.x, field.y), serializer)
+    }
+}
+
+impl<D: rkyv::Fallible + ?Sized> DeserializeWith<rkyv::Archived<(f64, f64)>, Point2<f64>, D>
+    for Point2Rkyv
+where
+    rkyv::Archived<(f64, f64)>: rkyv::Deserialize<(f64, f64), D>,
+{
+    fn deserialize_with(
+        field: &rkyv::Archived<(f64, f64)>,
+        deserializer: &mut D,
+    ) -> Result<Point2<f64>, D::Error> {
+        let (x, y) = rkyv::Deserialize::deserialize(field, deserializer)?;
+        Ok(Point2::new(x, y))
+    }
+}
+
+struct Vector2Rkyv;
+
+impl ArchiveWith<Vector2<f64>> for Vector2Rkyv {
+    type Archived = rkyv::Archived<(f64, f64)>;
+    type Resolver = rkyv::Resolver<(f64, f64)>;
+
+    unsafe fn resolve_with(
+        field: &Vector2<f64>,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        rkyv::Archive::resolve(&(field.x, field.y), pos, resolver, out);
+    }
+}
+
+impl<S: rkyv::Fallible + ?Sized> SerializeWith<Vector2<f64>, S> for Vector2Rkyv
+where
+    (f64, f64): rkyv::Serialize<S>,
+{
+    fn serialize_with(
+        field: &Vector2<f64>,
+        serializer: &mut S,
+    ) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&(field.x, field.y), serializer)
+    }
+}
+
+impl<D: rkyv::Fallible + ?Sized> DeserializeWith<rkyv::Archived<(f64, f64)>, Vector2<f64>, D>
+    for Vector2Rkyv
+where
+    rkyv::Archived<(f64, f64)>: rkyv::Deserialize<(f64, f64), D>,
+{
+    fn deserialize_with(
+        field: &rkyv::Archived<(f64, f64)>,
+        deserializer: &mut D,
+    ) -> Result<Vector2<f64>, D::Error> {
+        let (x, y) = rkyv::Deserialize::deserialize(field, deserializer)?;
+        Ok(Vector2::new(x, y))
+    }
+}
+
+struct BendRkyv;
+
+impl ArchiveWith<Result<Rad<f64>, GeomError>> for BendRkyv {
+    type Archived = rkyv::Archived<Result<f64, GeomError>>;
+    type Resolver = rkyv::Resolver<Result<f64, GeomError>>;
+
+    unsafe fn resolve_with(
+        field: &Result<Rad<f64>, GeomError>,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        rkyv::Archive::resolve(&field.map(|angle| angle.0), pos, resolver, out);
+    }
+}
+
+impl<S: rkyv::Fallible + ?Sized> SerializeWith<Result<Rad<f64>, GeomError>, S> for BendRkyv
+where
+    Result<f64, GeomError>: rkyv::Serialize<S>,
+{
+    fn serialize_with(
+        field: &Result<Rad<f64>, GeomError>,
+        serializer: &mut S,
+    ) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&field.map(|angle| angle.0), serializer)
+    }
+}
+
+impl<D: rkyv::Fallible + ?Sized>
+    DeserializeWith<rkyv::Archived<Result<f64, GeomError>>, Result<Rad<f64>, GeomError>, D>
+    for BendRkyv
+where
+    rkyv::Archived<Result<f64, GeomError>>: rkyv::Deserialize<Result<f64, GeomError>, D>,
+{
+    fn deserialize_with(
+        field: &rkyv::Archived<Result<f64, GeomError>>,
+        deserializer: &mut D,
+    ) -> Result<Result<Rad<f64>, GeomError>, D::Error> {
+        Ok(rkyv::Deserialize::deserialize(field, deserializer)?.map(Rad))
+    }
+}
+
+#[derive(
+    Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TypstNode {
+    name: Option<String>,
+    index: Option<NodeIndex>,
+    #[with(Point2Rkyv)]
     pos: Point2<f64>,
+    start_x: bool,
+    start_y: bool,
     constraints: PointConstraint,
+    #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
     statements: BTreeMap<String, String>,
     eval: Option<String>,
@@ -325,7 +214,11 @@ pub struct TypstNode {
 impl Default for TypstNode {
     fn default() -> Self {
         TypstNode {
+            name: None,
+            index: None,
             pos: Point2::origin(),
+            start_x: false,
+            start_y: false,
             constraints: PointConstraint::default(),
             shift: None,
             statements: BTreeMap::new(),
@@ -354,7 +247,7 @@ impl HasPointConstraint for TypstNode {
 impl TypstNode {
     /// Convert back to DotVertexData
     fn to_dot(&self) -> DotVertexData {
-        let mut statements = std::collections::BTreeMap::new();
+        let mut statements = self.statements.clone();
 
         // Add position as pos attribute
         statements.insert("pos".to_string(), format!("{},{}", self.pos.x, self.pos.y));
@@ -363,9 +256,13 @@ impl TypstNode {
             statements.insert("shift".to_string(), format!("{},{}", s.x, s.y));
         }
 
+        if let Some(eval) = &self.eval {
+            statements.insert("eval".to_string(), eval.clone());
+        }
+
         DotVertexData {
-            name: None,
-            index: None,
+            name: self.name.clone(),
+            index: self.index,
             statements,
         }
     }
@@ -392,10 +289,15 @@ impl TypstNode {
         });
 
         let (pos, constraints) = init_points[nid];
+        let (start_x, start_y) = Self::parse_position_flags(&data.statements);
 
         Self {
+            name: data.name,
+            index: data.index,
             statements: data.statements,
             pos,
+            start_x,
+            start_y,
             constraints,
             shift,
             eval,
@@ -427,20 +329,49 @@ impl TypstNode {
         }
         None
     }
+
+    fn parse_position_flags(
+        statements: &std::collections::BTreeMap<String, String>,
+    ) -> (bool, bool) {
+        if !statements.contains_key("pos") {
+            return (false, false);
+        }
+        (
+            Self::parse_bool_statement(statements, "pos-x-set").unwrap_or(true),
+            Self::parse_bool_statement(statements, "pos-y-set").unwrap_or(true),
+        )
+    }
+
+    fn parse_bool_statement(
+        statements: &std::collections::BTreeMap<String, String>,
+        key: &str,
+    ) -> Option<bool> {
+        statements
+            .get(key)
+            .and_then(|value| value.trim().trim_matches('"').parse::<bool>().ok())
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TypstEdge {
     from: Option<(NodeIndex, Hedge)>,
     to: Option<(NodeIndex, Hedge)>,
+    #[with(BendRkyv)]
     bend: Result<Rad<f64>, GeomError>,
+    #[with(Point2Rkyv)]
     pos: Point2<f64>,
+    start_x: bool,
+    start_y: bool,
+    #[with(rkyv::with::Map<Point2Rkyv>)]
     label_pos: Option<Point2<f64>>,
     label_angle: Option<f64>,
-    eval_sink: Option<String>,
-    eval_source: Option<String>,
-    eval_label: Option<String>,
+    sink_style_eval: Option<String>,
+    source_style_eval: Option<String>,
+    label_eval: Option<String>,
     mom_eval: Option<String>,
+    #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
     statements: BTreeMap<String, String>,
     pub constraints: PointConstraint,
@@ -468,12 +399,14 @@ impl Default for TypstEdge {
             to: None,
             bend: Err(GeomError::NotComputed),
             pos: Point2::origin(),
+            start_x: false,
+            start_y: false,
             label_pos: None,
             label_angle: None,
             shift: None,
-            eval_label: None,
-            eval_sink: None,
-            eval_source: None,
+            label_eval: None,
+            sink_style_eval: None,
+            source_style_eval: None,
             mom_eval: None,
             statements: BTreeMap::new(),
             constraints: PointConstraint::default(),
@@ -494,18 +427,18 @@ impl TypstEdge {
             let shift =
                 TypstNode::parse_position(&d.statements, "shift").map(|(x, y)| Vector2::new(x, y));
 
-            let label_pos = TypstNode::parse_position(&d.statements, "label_pos")
+            let label_pos = TypstNode::parse_position(&d.statements, "label-pos")
                 .map(|(x, y)| Point2::new(x, y));
-            let label_angle = d.statements.get("label_angle").and_then(|value| {
+            let label_angle = d.statements.get("label-angle").and_then(|value| {
                 let unquoted = value.trim().trim_matches('"');
                 let cleaned = unquoted.trim().trim_end_matches("rad");
                 cleaned.trim().parse::<f64>().ok()
             });
 
-            let mut eval_sink: Option<String> = d.get("eval_sink").transpose().unwrap();
+            let mut sink_style_eval: Option<String> = d.get("sink-style-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
-            eval_sink = eval_sink.map(|template| {
+            sink_style_eval = sink_style_eval.map(|template| {
                 let clean_template = template
                     .strip_prefix('"')
                     .unwrap_or(&template)
@@ -514,10 +447,11 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut eval_source: Option<String> = d.get("eval_source").transpose().unwrap();
+            let mut source_style_eval: Option<String> =
+                d.get("source-style-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
-            eval_source = eval_source.map(|template| {
+            source_style_eval = source_style_eval.map(|template| {
                 let clean_template = template
                     .strip_prefix('"')
                     .unwrap_or(&template)
@@ -526,10 +460,10 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut eval_label: Option<String> = d.get("eval_label").transpose().unwrap();
+            let mut label_eval: Option<String> = d.get("label-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for eval
-            eval_label = eval_label.map(|template| {
+            label_eval = label_eval.map(|template| {
                 let clean_template = template
                     .strip_prefix('"')
                     .unwrap_or(&template)
@@ -538,7 +472,7 @@ impl TypstEdge {
                 expand_template(clean_template, &d.statements)
             });
 
-            let mut mom_eval: Option<String> = d.get("mom_eval").transpose().unwrap();
+            let mut mom_eval: Option<String> = d.get("mom-eval").transpose().unwrap();
 
             // Apply template expansion and clean quotes for mom_eval
             mom_eval = mom_eval.map(|template| {
@@ -572,17 +506,20 @@ impl TypstEdge {
             }
 
             let (pos, constraints) = pin_constaints[eid];
+            let (start_x, start_y) = TypstNode::parse_position_flags(&d.statements);
 
             Self {
                 from,
                 to,
                 pos,
+                start_x,
+                start_y,
                 constraints,
                 label_pos,
                 label_angle,
-                eval_label,
-                eval_sink,
-                eval_source,
+                label_eval,
+                sink_style_eval,
+                source_style_eval,
                 mom_eval,
                 shift,
                 statements: d.statements,
@@ -593,7 +530,7 @@ impl TypstEdge {
 
     /// Convert back to DotEdgeData
     fn to_dot(&self) -> DotEdgeData {
-        let mut statements = std::collections::BTreeMap::new();
+        let mut statements = self.statements.clone();
 
         // Add position as pos attribute
         statements.insert("pos".to_string(), format!("{},{}", self.pos.x, self.pos.y));
@@ -609,19 +546,27 @@ impl TypstEdge {
         }
 
         if let Some(p) = self.label_pos {
-            statements.insert("label_pos".to_string(), format!("{},{}", p.x, p.y));
+            statements.insert("label-pos".to_string(), format!("{},{}", p.x, p.y));
         }
 
         if let Some(a) = self.label_angle {
-            statements.insert("label_angle".to_string(), format!("{a}rad"));
+            statements.insert("label-angle".to_string(), format!("{a}rad"));
         }
 
-        if let Some(eval) = &self.eval_sink {
-            statements.insert("eval".to_string(), eval.clone());
+        if let Some(eval) = &self.sink_style_eval {
+            statements.insert("sink-style-eval".to_string(), eval.clone());
+        }
+
+        if let Some(eval) = &self.source_style_eval {
+            statements.insert("source-style-eval".to_string(), eval.clone());
+        }
+
+        if let Some(eval) = &self.label_eval {
+            statements.insert("label-eval".to_string(), eval.clone());
         }
 
         if let Some(eval) = &self.mom_eval {
-            statements.insert("mom_eval".to_string(), eval.clone());
+            statements.insert("mom-eval".to_string(), eval.clone());
         }
 
         DotEdgeData {
@@ -632,17 +577,25 @@ impl TypstEdge {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TypstHedge {
     from: usize,
     to: usize,
     weight: f64,
+    statement: Option<String>,
+    id: Option<usize>,
+    port_label: Option<String>,
+    compasspt: Option<String>,
 }
 
 impl TypstHedge {
     /// Convert back to DotHedgeData
     fn to_dot(&self) -> DotHedgeData {
-        let statement = if self.weight != 0.0 {
+        let statement = if self.statement.is_some() {
+            self.statement.clone()
+        } else if self.weight != 0.0 {
             Some(format!("weight={}", self.weight))
         } else {
             None
@@ -650,18 +603,61 @@ impl TypstHedge {
 
         DotHedgeData {
             statement,
-            id: None,
-            port_label: None,
-            compasspt: None,
+            id: self.id.map(Hedge),
+            port_label: self.port_label.clone(),
+            compasspt: self
+                .compasspt
+                .as_deref()
+                .and_then(|value| parse_hedge_compass(value).ok())
+                .flatten(),
         }
     }
 
-    fn parse(_h: Hedge, _data: DotHedgeData) -> Self {
-        Self::default()
+    fn parse(_h: Hedge, data: DotHedgeData) -> Self {
+        Self {
+            statement: data.statement,
+            id: data.id.map(|id| id.0),
+            port_label: data.port_label,
+            compasspt: data.compasspt.map(hedge_compass_to_string),
+            ..Default::default()
+        }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+fn parse_hedge_compass(value: &str) -> Result<Option<CompassPt>, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" | "none" => Ok(None),
+        "n" => Ok(Some(CompassPt::N)),
+        "ne" => Ok(Some(CompassPt::NE)),
+        "e" => Ok(Some(CompassPt::E)),
+        "se" => Ok(Some(CompassPt::SE)),
+        "s" => Ok(Some(CompassPt::S)),
+        "sw" => Ok(Some(CompassPt::SW)),
+        "w" => Ok(Some(CompassPt::W)),
+        "nw" => Ok(Some(CompassPt::NW)),
+        "c" => Ok(Some(CompassPt::C)),
+        "_" => Ok(Some(CompassPt::Underscore)),
+        other => Err(format!("Invalid compass point: {other}")),
+    }
+}
+
+fn hedge_compass_to_string(compass: CompassPt) -> String {
+    match compass {
+        CompassPt::N => "n",
+        CompassPt::NE => "ne",
+        CompassPt::E => "e",
+        CompassPt::SE => "se",
+        CompassPt::S => "s",
+        CompassPt::SW => "sw",
+        CompassPt::W => "w",
+        CompassPt::NW => "nw",
+        CompassPt::C => "c",
+        CompassPt::Underscore => "_",
+    }
+    .to_string()
+}
+
+#[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TypstGraph {
     graph: HedgeGraph<TypstEdge, TypstNode, TypstHedge>,
     global_eval: Option<String>,
@@ -677,44 +673,515 @@ impl Deref for TypstGraph {
     }
 }
 
+#[derive(Debug, Clone)]
+enum DotPlacementExpr {
+    Point {
+        point: Point2<f64>,
+        pinned: bool,
+    },
+    Ref {
+        target: DotPlacementRef,
+        offset: Vector2<f64>,
+        pinned: bool,
+    },
+    Axes {
+        x: Option<DotAxisPlacement>,
+        y: Option<DotAxisPlacement>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct DotAxisPlacement {
+    coord: DotAxisCoord,
+    pinned: bool,
+}
+
+#[derive(Debug, Clone)]
+enum DotAxisCoord {
+    Number(f64),
+    Group(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DotPlacementRef {
+    Node(usize),
+    Edge(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DotPlacementTarget {
+    Node(usize),
+    Edge(usize),
+}
+
+#[derive(Debug, Clone)]
+struct DotResolvedPlacement {
+    point: Point2<f64>,
+    x_set: bool,
+    y_set: bool,
+    pin: Option<PinConstraint>,
+}
+
+struct DotPlacementContext {
+    node_exprs: HashMap<usize, DotPlacementExpr>,
+    edge_exprs: HashMap<usize, DotPlacementExpr>,
+    node_id_map: HashMap<usize, usize>,
+    edge_id_map: HashMap<usize, usize>,
+    memo: HashMap<DotPlacementTarget, Option<DotResolvedPlacement>>,
+    visiting: HashSet<DotPlacementTarget>,
+}
+
+impl DotPlacementContext {
+    fn new(dot: &DotGraph) -> Self {
+        let mut node_exprs = HashMap::new();
+        let mut edge_exprs = HashMap::new();
+        let mut node_id_map = HashMap::new();
+        let mut edge_id_map = HashMap::new();
+
+        for (node_id, _, node) in dot.graph.iter_nodes() {
+            if let Some(index) = node.index {
+                node_id_map.insert(index.0, node_id.0);
+            }
+            if let Some(expr) = node.statements.get("pos").and_then(|value| {
+                DotPlacementExpr::parse(value)
+                    .unwrap_or_else(|err| panic!("invalid DOT node pos {value:?}: {err}"))
+            }) {
+                node_exprs.insert(node_id.0, expr);
+            }
+        }
+
+        for (_, edge_id, edge) in dot.graph.iter_edges() {
+            if let Some(index) = edge.data.edge_id {
+                edge_id_map.insert(index.0, edge_id.0);
+            }
+            if let Some(expr) = edge.data.statements.get("pos").and_then(|value| {
+                DotPlacementExpr::parse(value)
+                    .unwrap_or_else(|err| panic!("invalid DOT edge pos {value:?}: {err}"))
+            }) {
+                edge_exprs.insert(edge_id.0, expr);
+            }
+        }
+
+        Self {
+            node_exprs,
+            edge_exprs,
+            node_id_map,
+            edge_id_map,
+            memo: HashMap::new(),
+            visiting: HashSet::new(),
+        }
+    }
+
+    fn resolve_node(&mut self, node_id: NodeIndex) -> Option<DotResolvedPlacement> {
+        self.resolve_target(DotPlacementTarget::Node(node_id.0))
+            .unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    fn resolve_edge(&mut self, edge_id: EdgeIndex) -> Option<DotResolvedPlacement> {
+        self.resolve_target(DotPlacementTarget::Edge(edge_id.0))
+            .unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    fn resolve_target(
+        &mut self,
+        target: DotPlacementTarget,
+    ) -> Result<Option<DotResolvedPlacement>, String> {
+        if let Some(resolved) = self.memo.get(&target) {
+            return Ok(resolved.clone());
+        }
+
+        if !self.visiting.insert(target) {
+            return Err(format!("cyclic DOT pos reference involving {target:?}"));
+        }
+
+        let expr = match target {
+            DotPlacementTarget::Node(index) => self.node_exprs.get(&index).cloned(),
+            DotPlacementTarget::Edge(index) => self.edge_exprs.get(&index).cloned(),
+        };
+
+        let resolved = expr
+            .as_ref()
+            .map(|expr| self.resolve_expr(expr))
+            .transpose()?;
+
+        self.visiting.remove(&target);
+        self.memo.insert(target, resolved.clone());
+        Ok(resolved)
+    }
+
+    fn resolve_expr(&mut self, expr: &DotPlacementExpr) -> Result<DotResolvedPlacement, String> {
+        match expr {
+            DotPlacementExpr::Point { point, pinned } => Ok(DotResolvedPlacement {
+                point: *point,
+                x_set: true,
+                y_set: true,
+                pin: pinned.then_some(PinConstraint::Fixed(point.x, point.y)),
+            }),
+            DotPlacementExpr::Ref {
+                target,
+                offset,
+                pinned,
+            } => {
+                let reference_target = self.resolve_ref(*target)?;
+                let reference = self
+                    .resolve_target(reference_target)?
+                    .ok_or_else(|| format!("DOT pos reference {target:?} has no position"))?;
+                let point = reference.point + *offset;
+                Ok(DotResolvedPlacement {
+                    point,
+                    x_set: true,
+                    y_set: true,
+                    pin: pinned.then_some(PinConstraint::Fixed(point.x, point.y)),
+                })
+            }
+            DotPlacementExpr::Axes { x, y } => {
+                let mut point = Point2::new(0.0, 0.0);
+                let mut x_pin = None;
+                let mut y_pin = None;
+
+                if let Some(axis) = x {
+                    point.x = axis.coord.point_value();
+                    if axis.pinned {
+                        x_pin = Some(axis.coord.x_pin());
+                    }
+                }
+
+                if let Some(axis) = y {
+                    point.y = axis.coord.point_value();
+                    if axis.pinned {
+                        y_pin = Some(axis.coord.y_pin());
+                    }
+                }
+
+                let pin = combine_axis_pins(x_pin, y_pin);
+                Ok(DotResolvedPlacement {
+                    point,
+                    x_set: x.is_some(),
+                    y_set: y.is_some(),
+                    pin,
+                })
+            }
+        }
+    }
+
+    fn resolve_ref(&self, target: DotPlacementRef) -> Result<DotPlacementTarget, String> {
+        match target {
+            DotPlacementRef::Node(index) => self
+                .node_id_map
+                .get(&index)
+                .copied()
+                .map(DotPlacementTarget::Node)
+                .ok_or_else(|| {
+                    format!("DOT pos references node id {index}, but it does not exist")
+                }),
+            DotPlacementRef::Edge(index) => self
+                .edge_id_map
+                .get(&index)
+                .copied()
+                .map(DotPlacementTarget::Edge)
+                .ok_or_else(|| {
+                    format!("DOT pos references edge id {index}, but it does not exist")
+                }),
+        }
+    }
+}
+
+impl DotPlacementExpr {
+    fn parse(input: &str) -> Result<Option<Self>, String> {
+        let input = strip_dot_quotes(input);
+        if input.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(expr) = Self::parse_axes(input)? {
+            return Ok(Some(expr));
+        }
+
+        let (input, pinned) = input
+            .strip_suffix('!')
+            .map(|input| (input.trim(), true))
+            .unwrap_or((input, false));
+
+        if let Some(expr) = Self::parse_ref(input, pinned) {
+            return Ok(Some(expr));
+        }
+
+        if let Some((x, y)) = parse_dot_point(input) {
+            return Ok(Some(DotPlacementExpr::Point {
+                point: Point2::new(x, y),
+                pinned,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    fn parse_axes(input: &str) -> Result<Option<Self>, String> {
+        if !input
+            .split(',')
+            .any(|part| part.trim().starts_with("x:") || part.trim().starts_with("y:"))
+        {
+            return Ok(None);
+        }
+
+        let mut x = None;
+        let mut y = None;
+
+        for part in input.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                return Err("empty axis entry in DOT pos".into());
+            }
+
+            let (axis, value) = part.split_once(':').ok_or_else(|| {
+                format!("axis entry {part:?} must be written as x:<coord> or y:<coord>")
+            })?;
+            let target = match axis.trim() {
+                "x" => &mut x,
+                "y" => &mut y,
+                other => return Err(format!("unknown DOT pos axis {other:?}")),
+            };
+
+            if target.is_some() {
+                return Err(format!("duplicate DOT pos axis {axis:?}"));
+            }
+
+            *target = Some(parse_dot_axis_placement(value.trim())?);
+        }
+
+        Ok(Some(DotPlacementExpr::Axes { x, y }))
+    }
+
+    fn parse_ref(input: &str, pinned: bool) -> Option<Self> {
+        let rest = input.strip_prefix("ref(")?;
+        let close = rest.find(')')?;
+        let target = Self::parse_ref_target(&rest[..close])?;
+        let offset = parse_ref_offset(rest[close + 1..].trim())?;
+        Some(DotPlacementExpr::Ref {
+            target,
+            offset,
+            pinned,
+        })
+    }
+
+    fn parse_ref_target(input: &str) -> Option<DotPlacementRef> {
+        let (kind, index) = input.split_once(':')?;
+        let index = index.trim().parse::<usize>().ok()?;
+        match kind.trim() {
+            "node" => Some(DotPlacementRef::Node(index)),
+            "edge" => Some(DotPlacementRef::Edge(index)),
+            _ => None,
+        }
+    }
+}
+
+impl DotAxisCoord {
+    fn point_value(&self) -> f64 {
+        match self {
+            DotAxisCoord::Number(value) => *value,
+            DotAxisCoord::Group(_) => 0.0,
+        }
+    }
+
+    fn x_pin(&self) -> PinConstraint {
+        match self {
+            DotAxisCoord::Number(value) => PinConstraint::FixX(*value),
+            DotAxisCoord::Group(group) => PinConstraint::LinkX(group.clone()),
+        }
+    }
+
+    fn y_pin(&self) -> PinConstraint {
+        match self {
+            DotAxisCoord::Number(value) => PinConstraint::FixY(*value),
+            DotAxisCoord::Group(group) => PinConstraint::LinkY(group.clone()),
+        }
+    }
+}
+
+fn parse_dot_axis_placement(input: &str) -> Result<DotAxisPlacement, String> {
+    let (input, pinned) = input
+        .strip_suffix('!')
+        .map(|input| (input.trim(), true))
+        .unwrap_or((input, false));
+
+    if let Some(group) = parse_dot_link_group(input) {
+        if !pinned {
+            return Err(format!(
+                "group coordinate {input:?} in DOT pos axis syntax must be pinned with !"
+            ));
+        }
+        return Ok(DotAxisPlacement {
+            coord: DotAxisCoord::Group(group),
+            pinned,
+        });
+    }
+
+    let value = input
+        .parse::<f64>()
+        .map_err(|_| format!("DOT pos axis coordinate {input:?} is not a number or group"))?;
+    Ok(DotAxisPlacement {
+        coord: DotAxisCoord::Number(value),
+        pinned,
+    })
+}
+
+fn parse_dot_link_group(input: &str) -> Option<String> {
+    if let Some(group) = input.strip_prefix('@') {
+        Some(group.to_string())
+    } else if let Some(group) = input.strip_prefix("+@") {
+        Some(format!("+{group}"))
+    } else {
+        input.strip_prefix("-@").map(|group| format!("-{group}"))
+    }
+}
+
+fn combine_axis_pins(
+    x_pin: Option<PinConstraint>,
+    y_pin: Option<PinConstraint>,
+) -> Option<PinConstraint> {
+    match (x_pin, y_pin) {
+        (Some(x_pin), Some(y_pin)) => {
+            Some(PinConstraint::Combined(Box::new(x_pin), Box::new(y_pin)))
+        }
+        (Some(pin), None) | (None, Some(pin)) => Some(pin),
+        (None, None) => None,
+    }
+}
+
+fn parse_ref_offset(input: &str) -> Option<Vector2<f64>> {
+    if input.is_empty() {
+        return Some(Vector2::zero());
+    }
+
+    let input = input.strip_prefix('+').unwrap_or(input);
+    let (dx, dy) = parse_dot_point(input)?;
+    Some(Vector2::new(dx, dy))
+}
+
+fn strip_dot_quotes(input: &str) -> &str {
+    input.trim().trim_matches('"').trim()
+}
+
+fn parse_dot_point(input: &str) -> Option<(f64, f64)> {
+    let cleaned = strip_dot_quotes(input)
+        .trim_matches(|c| c == '(' || c == ')')
+        .trim();
+    let parts: Vec<&str> = cleaned
+        .split([',', ' '])
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    if parts.len() != 2 {
+        return None;
+    }
+
+    Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
+}
+
+fn apply_dot_placement_statements(
+    statements: &mut BTreeMap<String, String>,
+    placement: &DotResolvedPlacement,
+) {
+    statements.insert(
+        "pos".to_string(),
+        format!("{},{}", placement.point.x, placement.point.y),
+    );
+    statements.insert("pos-x-set".to_string(), placement.x_set.to_string());
+    statements.insert("pos-y-set".to_string(), placement.y_set.to_string());
+    statements.insert(
+        "pos-mode".to_string(),
+        if placement.pin.is_some() {
+            "pin"
+        } else {
+            "start"
+        }
+        .to_string(),
+    );
+}
+
+fn initial_point_constraint(
+    index: usize,
+    statements: &BTreeMap<String, String>,
+    placement: Option<&DotResolvedPlacement>,
+    group_map: &mut HashMap<String, usize>,
+) -> (Point2<f64>, PointConstraint) {
+    let explicit_pin = statements
+        .get("pin")
+        .and_then(|value| PinConstraint::parse(value));
+    let pin = explicit_pin.or_else(|| placement.and_then(|placement| placement.pin.clone()));
+
+    if let Some(pin) = pin {
+        let (mut point, constraints) = pin.point_constraint(index, group_map);
+        if let Some(placement) = placement {
+            if matches!(constraints.x, Constraint::Free) && placement.x_set {
+                point.x = placement.point.x;
+            }
+            if matches!(constraints.y, Constraint::Free) && placement.y_set {
+                point.y = placement.point.y;
+            }
+        } else if let Some((x, y)) = TypstNode::parse_position(statements, "pos") {
+            if matches!(constraints.x, Constraint::Free) {
+                point.x = x;
+            }
+            if matches!(constraints.y, Constraint::Free) {
+                point.y = y;
+            }
+        }
+        (point, constraints)
+    } else if let Some(placement) = placement {
+        (placement.point, PointConstraint::default())
+    } else if let Some((x, y)) = TypstNode::parse_position(statements, "pos") {
+        (Point2::new(x, y), PointConstraint::default())
+    } else {
+        (Point2::new(0., 0.), PointConstraint::default())
+    }
+}
+
 impl TypstGraph {
     pub fn from_dot(dot: DotGraph, _figment: &Figment) -> Self {
+        let mut placement_context = DotPlacementContext::new(&dot);
+        let node_placements = dot
+            .graph
+            .new_nodevec(|nid, _, _| placement_context.resolve_node(nid));
+        let edge_placements = dot
+            .graph
+            .new_edgevec(|_, eid, _| placement_context.resolve_edge(eid));
+
         let mut group_map = HashMap::new();
         let edge_pin_constrains: EdgeVec<(Point2<f64>, PointConstraint)> =
             dot.graph.new_edgevec(|e, eid, _| {
-                let a = e
-                    .get::<_, String>("pin")
-                    .transpose()
-                    .unwrap()
-                    .and_then(|a| PinConstraint::parse(&a));
-
-                if let Some(a) = a {
-                    a.point_constraint(eid.0, &mut group_map)
-                } else {
-                    (Point2::new(0., 0.), PointConstraint::default())
-                }
+                initial_point_constraint(
+                    eid.0,
+                    &e.statements,
+                    edge_placements[eid].as_ref(),
+                    &mut group_map,
+                )
             });
 
         let mut group_map = HashMap::new();
 
         let node_pin_constrains: NodeVec<(Point2<f64>, PointConstraint)> =
             dot.graph.new_nodevec(|nid, _, n| {
-                let a = n
-                    .get::<_, String>("pin")
-                    .transpose()
-                    .unwrap()
-                    .and_then(|a| PinConstraint::parse(&a));
-
-                if let Some(a) = a {
-                    a.point_constraint(nid.0, &mut group_map)
-                } else {
-                    (Point2::new(0., 0.), PointConstraint::default())
-                }
+                initial_point_constraint(
+                    nid.0,
+                    &n.statements,
+                    node_placements[nid].as_ref(),
+                    &mut group_map,
+                )
             });
 
         let graph = dot.graph.map(
-            |inv, nid, data| TypstNode::parse(inv, nid, data, &node_pin_constrains),
+            |inv, nid, mut data| {
+                if let Some(placement) = &node_placements[nid] {
+                    apply_dot_placement_statements(&mut data.statements, placement);
+                }
+                TypstNode::parse(inv, nid, data, &node_pin_constrains)
+            },
             |inv, store, p, eid, data| {
+                let mut data = data;
+                if let Some(placement) = &edge_placements[eid] {
+                    apply_dot_placement_statements(&mut data.data.statements, placement);
+                }
                 TypstEdge::parse(inv, store, p, eid, data, &edge_pin_constrains)
             },
             TypstHedge::parse,
@@ -767,7 +1234,9 @@ pub struct TreeInitCfg {
     pub dx: f64, // ≈ 0.9 * L
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 enum LayoutAlgo {
     Anneal,
@@ -775,10 +1244,13 @@ enum LayoutAlgo {
 }
 
 fn default_layout_algo() -> LayoutAlgo {
-    LayoutAlgo::Anneal
+    LayoutAlgo::Force
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 struct LayoutConfig {
     #[serde(default = "default_viewport_w", deserialize_with = "deserialize_f64")]
     viewport_w: f64,
@@ -887,33 +1359,33 @@ impl LayoutConfig {
             };
         }
 
-        insert!("viewport_w", self.viewport_w);
-        insert!("viewport_h", self.viewport_h);
-        insert!("tree_dx", self.tree_dx);
-        insert!("tree_dy", self.tree_dy);
+        insert!("viewport-w", self.viewport_w);
+        insert!("viewport-h", self.viewport_h);
+        insert!("tree-dx", self.tree_dx);
+        insert!("tree-dy", self.tree_dy);
         insert!("step", self.step);
         insert!("temp", self.temp);
         insert!("seed", self.seed);
         insert!("delta", self.delta);
-        insert!("directional_force", self.directional_force);
-        insert!("z_spring", self.z_spring);
-        insert!("z_spring_growth", self.z_spring_growth);
-        insert!("label_steps", self.label_steps);
-        insert!("label_step", self.label_step);
-        insert!("label_length_scale", self.label_length_scale);
-        insert!("label_charge", self.label_charge);
-        insert!("label_spring", self.label_spring);
-        insert!("label_early_tol", self.label_early_tol);
-        insert!("label_max_delta_scale", self.label_max_delta_scale);
+        insert!("directional-force", self.directional_force);
+        insert!("z-spring", self.z_spring);
+        insert!("z-spring-growth", self.z_spring_growth);
+        insert!("label-steps", self.label_steps);
+        insert!("label-step", self.label_step);
+        insert!("label-length-scale", self.label_length_scale);
+        insert!("label-charge", self.label_charge);
+        insert!("label-spring", self.label_spring);
+        insert!("label-early-tol", self.label_early_tol);
+        insert!("label-max-delta-scale", self.label_max_delta_scale);
         insert!(
-            "layout_algo",
+            "layout-algo",
             match self.layout_algo {
                 LayoutAlgo::Anneal => "anneal",
                 LayoutAlgo::Force => "force",
             }
         );
         global_data.statements.insert(
-            "incremental_energy".to_string(),
+            "incremental-energy".to_string(),
             self.incremental_energy.to_string(),
         );
 
@@ -948,15 +1420,15 @@ fn default_tree_dx() -> f64 {
 }
 
 fn default_step() -> f64 {
-    0.2
+    0.81
 }
 
 fn default_temp() -> f64 {
-    1.1
+    0.3
 }
 
 fn default_seed() -> u64 {
-    42
+    2
 }
 
 fn default_delta() -> f64 {
@@ -964,15 +1436,15 @@ fn default_delta() -> f64 {
 }
 
 fn default_directional_force() -> f64 {
-    0.0
+    5.0
 }
 
 fn default_z_spring() -> f64 {
-    0.0
+    0.05
 }
 
 fn default_z_spring_growth() -> f64 {
-    1.0
+    1.3
 }
 
 fn default_label_steps() -> usize {
@@ -984,15 +1456,15 @@ fn default_label_step() -> f64 {
 }
 
 fn default_label_length_scale() -> f64 {
-    0.3
+    0.6
 }
 
 fn default_label_charge() -> f64 {
-    0.2
+    3.0
 }
 
 fn default_label_spring() -> f64 {
-    1.0
+    23.0
 }
 
 fn default_label_early_tol() -> f64 {
@@ -1008,10 +1480,13 @@ fn default_incremental_energy() -> bool {
 }
 
 fn default_crossing_penalty() -> f64 {
-    0.0
+    30.0
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 struct SpringConfig {
     #[serde(default = "default_length_scale", deserialize_with = "deserialize_f64")]
     length_scale: f64,
@@ -1071,7 +1546,10 @@ impl From<&SpringConfig> for ParamTuning {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 struct ScheduleConfig {
     #[serde(default = "default_steps", deserialize_with = "deserialize_usize")]
     steps: usize,
@@ -1114,23 +1592,23 @@ impl From<&ScheduleConfig> for GeoSchedule {
 }
 
 fn default_length_scale() -> f64 {
-    1.0
+    0.5
 }
 
 fn default_k_spring() -> f64 {
-    1.0
+    11.0
 }
 
 fn default_beta() -> f64 {
-    0.14
+    50.0
 }
 
 fn default_gamma_dangling() -> f64 {
-    0.14
+    5.0
 }
 
 fn default_gamma_ev() -> f64 {
-    0.20
+    0.01
 }
 
 fn default_gamma_ee() -> f64 {
@@ -1138,7 +1616,7 @@ fn default_gamma_ee() -> f64 {
 }
 
 fn default_g_center() -> f64 {
-    0.05
+    0.005
 }
 
 fn default_eps() -> f64 {
@@ -1146,11 +1624,11 @@ fn default_eps() -> f64 {
 }
 
 fn default_steps() -> usize {
-    200
+    30
 }
 
 fn default_epochs() -> usize {
-    8
+    30
 }
 
 fn default_cool() -> f64 {
@@ -1162,7 +1640,7 @@ fn default_accept_floor() -> f64 {
 }
 
 fn default_step_shrink() -> f64 {
-    0.7
+    0.21
 }
 
 fn default_early_tol() -> f64 {
@@ -1451,6 +1929,40 @@ impl TypstGraph {
                 }
             }
         }
+
+        for i in 0..node_len {
+            let idx = NodeIndex(i);
+            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_v[idx].x);
+            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_v[idx].y);
+        }
+
+        for i in 0..edge_len {
+            let idx = EdgeIndex(i);
+            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_e[idx].x);
+            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_e[idx].y);
+        }
+    }
+
+    fn apply_directional_constraint(constraint: &Constraint, value: &mut f64) {
+        match constraint {
+            Constraint::Grouped(_, ShiftDirection::PositiveOnly) if *value <= 0.0 => {
+                *value = value.abs().max(f64::EPSILON);
+            }
+            Constraint::Grouped(_, ShiftDirection::NegativeOnly) if *value >= 0.0 => {
+                *value = -value.abs().max(f64::EPSILON);
+            }
+            _ => {}
+        }
+    }
+
+    fn directional_target(value: f64, direction: ShiftDirection, fallback: f64) -> f64 {
+        match direction {
+            ShiftDirection::Any => value,
+            ShiftDirection::PositiveOnly if value > 0.0 => value,
+            ShiftDirection::PositiveOnly => fallback.abs().max(f64::EPSILON),
+            ShiftDirection::NegativeOnly if value < 0.0 => value,
+            ShiftDirection::NegativeOnly => -fallback.abs().max(f64::EPSILON),
+        }
     }
 
     pub fn update_positions(&mut self, node: NodeVec<Point2<f64>>, edge: EdgeVec<Point2<f64>>) {
@@ -1652,35 +2164,40 @@ impl TypstGraph {
     /// 2. Only applies tree positions to coordinates that are free to move
     /// 3. Respects Fixed and Grouped constraints by leaving them unchanged
     /// 4. For directional constraints (+/-), ensures absolute positioning:
-    ///    - `+@group` constraints result in non-negative positions
-    ///    - `-@group` constraints result in non-positive positions
+    ///    - `+@group` constraints result in positive positions
+    ///    - `-@group` constraints result in negative positions
     ///    - This overrides tree layout if necessary to maintain directional requirements
     pub fn new_positions(&self, cfg: TreeInitCfg) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let mut pos_v = self.new_nodevec(|_, _, n| n.pos);
         let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
 
-        let mut visited_edges: SuBitGraph = self.empty_subgraph();
-        let all: SuBitGraph = self.full_filter();
-
-        let mut comps = vec![];
-
-        // Iterate over all edges in the subgraph
-        for hedge_index in all.included_iter() {
-            if visited_edges.includes(&hedge_index) {
-                continue; // Already visited
+        let forest = self
+            .all_spanning_forests_of(&self.full_filter())
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| self.empty_subgraph());
+        let mut adjacency = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
+        for (pair, _, _) in self.iter_edges_of(&forest) {
+            match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let source_node = self.node_id(source);
+                    let sink_node = self.node_id(sink);
+                    if source_node != sink_node {
+                        adjacency[source_node].push(sink_node);
+                        adjacency[sink_node].push(source_node);
+                    }
+                }
+                HedgePair::Unpaired { .. } => {}
             }
-            let root_node = self.node_id(hedge_index);
-            let reachable_edges =
-                SimpleTraversalTree::depth_first_traverse(self, &all, &root_node, None).unwrap();
-            visited_edges.union_with(&reachable_edges.covers(&all));
-            let tree: SimpleTraversalTree<ParentChildStore<()>> = reachable_edges.cast();
-            comps.push((tree, root_node));
         }
 
         let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
         let mut n_per_level: Vec<usize> = vec![];
-        for (tree, root_node) in comps {
-            // 2) compute levels (distance to root)
+        for (root_node, _) in adjacency.iter() {
+            if level[root_node] >= 0 {
+                continue;
+            }
+
             let mut q = std::collections::VecDeque::new();
             level[root_node] = 0;
             if n_per_level.is_empty() {
@@ -1690,9 +2207,10 @@ impl TypstGraph {
             }
             q.push_back(root_node);
             while let Some(v) = q.pop_front() {
-                for u in tree.iter_children(v, &self.as_ref()) {
+                let next_level = level[v] + 1;
+                for &u in &adjacency[v] {
                     if level[u] < 0 {
-                        level[u] = level[v] + 1;
+                        level[u] = next_level;
                         if level[u] == n_per_level.len() as i32 {
                             n_per_level.push(1);
                         } else if level[u] < n_per_level.len() as i32 {
@@ -1728,41 +2246,37 @@ impl TypstGraph {
                 // Handle constraints with proper absolute positioning for directional constraints
                 match (&self[i].constraints.x, &self[i].constraints.y) {
                     (Constraint::Free, Constraint::Free) => {
-                        pos_v[i] = tree_position;
+                        if !self[i].start_x {
+                            pos_v[i].x = tree_position.x;
+                        }
+                        if !self[i].start_y {
+                            pos_v[i].y = tree_position.y;
+                        }
                     }
                     (Constraint::Fixed, Constraint::Fixed) => {
                         // Keep original position - no change needed
                     }
                     (Constraint::Free, Constraint::Fixed) => {
-                        pos_v[i].x = tree_position.x;
+                        if !self[i].start_x {
+                            pos_v[i].x = tree_position.x;
+                        }
                         // y stays as original constraint position
                     }
                     (Constraint::Fixed, Constraint::Free) => {
-                        pos_v[i].y = tree_position.y;
+                        if !self[i].start_y {
+                            pos_v[i].y = tree_position.y;
+                        }
                         // x stays as original constraint position
                     }
                     (Constraint::Grouped(_, x_dir), Constraint::Free) => {
                         // For grouped x with direction, ensure absolute position respects direction
-                        pos_v[i].y = tree_position.y;
+                        if !self[i].start_y {
+                            pos_v[i].y = tree_position.y;
+                        }
                         match x_dir {
-                            ShiftDirection::PositiveOnly => {
-                                // Ensure x position is positive
-                                let target_x = if tree_position.x >= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    cfg.dx.abs()
-                                };
-                                self[i]
-                                    .constraints
-                                    .shift((target_x, 0.0).into(), i, &mut pos_v);
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                // Ensure x position is negative
-                                let target_x = if tree_position.x <= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    -cfg.dx.abs()
-                                };
+                            ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                let target_x =
+                                    Self::directional_target(tree_position.x, *x_dir, cfg.dx);
                                 self[i]
                                     .constraints
                                     .shift((target_x, 0.0).into(), i, &mut pos_v);
@@ -1778,26 +2292,13 @@ impl TypstGraph {
                     }
                     (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
                         // For grouped y with direction, ensure absolute position respects direction
-                        pos_v[i].x = tree_position.x;
+                        if !self[i].start_x {
+                            pos_v[i].x = tree_position.x;
+                        }
                         match y_dir {
-                            ShiftDirection::PositiveOnly => {
-                                // Ensure y position is positive
-                                let target_y = if tree_position.y >= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    cfg.dy.abs()
-                                };
-                                self[i]
-                                    .constraints
-                                    .shift((0.0, target_y).into(), i, &mut pos_v);
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                // Ensure y position is negative
-                                let target_y = if tree_position.y <= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    -cfg.dy.abs()
-                                };
+                            ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                let target_y =
+                                    Self::directional_target(tree_position.y, *y_dir, cfg.dy);
                                 self[i]
                                     .constraints
                                     .shift((0.0, target_y).into(), i, &mut pos_v);
@@ -1813,84 +2314,20 @@ impl TypstGraph {
                     }
                     (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
                         // For both coordinates grouped with direction
-                        let target_x = match x_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.x >= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.x <= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    -cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.x,
-                        };
-                        let target_y = match y_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.y >= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.y <= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    -cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.y,
-                        };
+                        let target_x = Self::directional_target(tree_position.x, *x_dir, cfg.dx);
+                        let target_y = Self::directional_target(tree_position.y, *y_dir, cfg.dy);
                         self[i]
                             .constraints
                             .shift((target_x, target_y).into(), i, &mut pos_v);
                     }
                     (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                        let target_y = match y_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.y >= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.y <= 0.0 {
-                                    tree_position.y
-                                } else {
-                                    -cfg.dy.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.y,
-                        };
+                        let target_y = Self::directional_target(tree_position.y, *y_dir, cfg.dy);
                         self[i]
                             .constraints
                             .shift((0.0, target_y).into(), i, &mut pos_v);
                     }
                     (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                        let target_x = match x_dir {
-                            ShiftDirection::PositiveOnly => {
-                                if tree_position.x >= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::NegativeOnly => {
-                                if tree_position.x <= 0.0 {
-                                    tree_position.x
-                                } else {
-                                    -cfg.dx.abs()
-                                }
-                            }
-                            ShiftDirection::Any => tree_position.x,
-                        };
+                        let target_x = Self::directional_target(tree_position.x, *x_dir, cfg.dx);
                         self[i]
                             .constraints
                             .shift((target_x, 0.0).into(), i, &mut pos_v);
@@ -1913,40 +2350,34 @@ impl TypstGraph {
                     // Handle edge constraints with proper absolute positioning for directional constraints
                     match (&self[eid].constraints.x, &self[eid].constraints.y) {
                         (Constraint::Free, Constraint::Free) => {
-                            pos_e[eid] = mid;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = mid.x;
+                            }
+                            if !self[eid].start_y {
+                                pos_e[eid].y = mid.y;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Fixed) => {
                             // Keep original position
                         }
                         (Constraint::Free, Constraint::Fixed) => {
-                            pos_e[eid].x = mid.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = mid.x;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Free) => {
-                            pos_e[eid].y = mid.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = mid.y;
+                            }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                            pos_e[eid].y = mid.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = mid.y;
+                            }
                             match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure x position is positive
-                                    let target_x = if mid.x >= 0.0 {
-                                        mid.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (target_x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure x position is negative
-                                    let target_x = if mid.x <= 0.0 {
-                                        mid.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    };
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_x =
+                                        Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
                                     self[eid].constraints.shift(
                                         (target_x, 0.0).into(),
                                         eid,
@@ -1963,28 +2394,13 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                            pos_e[eid].x = mid.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = mid.x;
+                            }
                             match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure y position is positive
-                                    let target_y = if mid.y >= 0.0 {
-                                        mid.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (0.0, target_y).into(),
-                                        eid,
-                                        &mut pos_e,
-                                    );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure y position is negative
-                                    let target_y = if mid.y <= 0.0 {
-                                        mid.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    };
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_y =
+                                        Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
                                     self[eid].constraints.shift(
                                         (0.0, target_y).into(),
                                         eid,
@@ -2001,40 +2417,8 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.x >= 0.0 {
-                                        mid.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.x <= 0.0 {
-                                        mid.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.x,
-                            };
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.y >= 0.0 {
-                                        mid.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.y <= 0.0 {
-                                        mid.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.y,
-                            };
+                            let target_x = Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
+                            let target_y = Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
                             self[eid].constraints.shift(
                                 (target_x, target_y).into(),
                                 eid,
@@ -2042,45 +2426,13 @@ impl TypstGraph {
                             );
                         }
                         (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.y >= 0.0 {
-                                        mid.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.y <= 0.0 {
-                                        mid.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.y,
-                            };
+                            let target_y = Self::directional_target(mid.y, *y_dir, cfg.dy * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((0.0, target_y).into(), eid, &mut pos_e);
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if mid.x >= 0.0 {
-                                        mid.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if mid.x <= 0.0 {
-                                        mid.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => mid.x,
-                            };
+                            let target_x = Self::directional_target(mid.x, *x_dir, cfg.dx * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((target_x, 0.0).into(), eid, &mut pos_e);
@@ -2094,40 +2446,37 @@ impl TypstGraph {
                     // Handle unpaired edge constraints with proper absolute positioning for directional constraints
                     match (&self[eid].constraints.x, &self[eid].constraints.y) {
                         (Constraint::Free, Constraint::Free) => {
-                            pos_e[eid] = default_pos;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = default_pos.x;
+                            }
+                            if !self[eid].start_y {
+                                pos_e[eid].y = default_pos.y;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Fixed) => {
                             // Keep original position
                         }
                         (Constraint::Free, Constraint::Fixed) => {
-                            pos_e[eid].x = default_pos.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = default_pos.x;
+                            }
                         }
                         (Constraint::Fixed, Constraint::Free) => {
-                            pos_e[eid].y = default_pos.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = default_pos.y;
+                            }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                            pos_e[eid].y = default_pos.y;
+                            if !self[eid].start_y {
+                                pos_e[eid].y = default_pos.y;
+                            }
                             match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure x position is positive
-                                    let target_x = if default_pos.x >= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (target_x, 0.0).into(),
-                                        eid,
-                                        &mut pos_e,
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_x = Self::directional_target(
+                                        default_pos.x,
+                                        *x_dir,
+                                        cfg.dx * 0.5,
                                     );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure x position is negative
-                                    let target_x = if default_pos.x <= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    };
                                     self[eid].constraints.shift(
                                         (target_x, 0.0).into(),
                                         eid,
@@ -2144,28 +2493,16 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                            pos_e[eid].x = default_pos.x;
+                            if !self[eid].start_x {
+                                pos_e[eid].x = default_pos.x;
+                            }
                             match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    // Ensure y position is positive
-                                    let target_y = if default_pos.y >= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    };
-                                    self[eid].constraints.shift(
-                                        (0.0, target_y).into(),
-                                        eid,
-                                        &mut pos_e,
+                                ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
+                                    let target_y = Self::directional_target(
+                                        default_pos.y,
+                                        *y_dir,
+                                        cfg.dy * 0.5,
                                     );
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    // Ensure y position is negative
-                                    let target_y = if default_pos.y <= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    };
                                     self[eid].constraints.shift(
                                         (0.0, target_y).into(),
                                         eid,
@@ -2182,40 +2519,10 @@ impl TypstGraph {
                             }
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.x >= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.x <= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.x,
-                            };
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.y >= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.y <= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.y,
-                            };
+                            let target_x =
+                                Self::directional_target(default_pos.x, *x_dir, cfg.dx * 0.5);
+                            let target_y =
+                                Self::directional_target(default_pos.y, *y_dir, cfg.dy * 0.5);
                             self[eid].constraints.shift(
                                 (target_x, target_y).into(),
                                 eid,
@@ -2223,45 +2530,15 @@ impl TypstGraph {
                             );
                         }
                         (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                            let target_y = match y_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.y >= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.y <= 0.0 {
-                                        default_pos.y
-                                    } else {
-                                        -cfg.dy.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.y,
-                            };
+                            let target_y =
+                                Self::directional_target(default_pos.y, *y_dir, cfg.dy * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((0.0, target_y).into(), eid, &mut pos_e);
                         }
                         (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                            let target_x = match x_dir {
-                                ShiftDirection::PositiveOnly => {
-                                    if default_pos.x >= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::NegativeOnly => {
-                                    if default_pos.x <= 0.0 {
-                                        default_pos.x
-                                    } else {
-                                        -cfg.dx.abs() * 0.5
-                                    }
-                                }
-                                ShiftDirection::Any => default_pos.x,
-                            };
+                            let target_x =
+                                Self::directional_target(default_pos.x, *x_dir, cfg.dx * 0.5);
                             self[eid]
                                 .constraints
                                 .shift((target_x, 0.0).into(), eid, &mut pos_e);
@@ -2307,54 +2584,20 @@ impl TypstGraph {
         // Reconstruct GlobalData from layout parameters
 
         let mut global_data = GlobalData::from(());
+        global_data.name = self.name.clone();
+        global_data.statements = self.global_statements.clone();
+        if let Some(eval) = &self.global_eval {
+            global_data
+                .statements
+                .insert("eval".to_string(), eval.clone());
+        }
         self.layout_config.add_to_global(&mut global_data);
         DotGraph { graph, global_data }
     }
 }
 
-/// WASM function that takes DOT graph as string bytes, parses it into a TypstGraph,
-/// applies layout, and returns the CBOR-serialized result as bytes
-#[cfg(target_arch = "wasm32")]
-#[wasm_func]
-pub fn layout_graph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    // Convert bytes to string
-    let dot_string = match std::str::from_utf8(arg) {
-        Ok(s) => s,
-        Err(_) => return Err("Invalid UTF-8".to_string()), // Return error on invalid UTF-8
-    };
-    let cbor_map: ciborium::Value = ciborium::de::from_reader(arg2)
-        .map_err(|e| format!("Failed to deserialize CBOR value: {}", e))?;
-
-    let figment = Figment::from(Serialized::from(cbor_map.clone(), Profile::Default));
-
-    let dots = DotGraphSet::from_string_with_figment(dot_string, figment.clone())
-        .map_err(|a| a.to_string())?
-        .into_iter();
-
-    let mut graphs = Vec::new();
-    for g in dots {
-        let mut typst_graph = TypstGraph::from_dot(g, &Figment::new());
-
-        typst_graph.layout();
-        graphs.push((
-            typst_graph.to_cbor(),
-            typst_graph.to_dot_graph().debug_dot(),
-        ));
-    }
-
-    let mut buffer = Vec::new();
-    ciborium::ser::into_writer(&TypstOutput { graphs, cbor_map }, &mut buffer)
-        .map_err(|a| a.to_string())?;
-    Ok(buffer)
-}
-
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TypstOutput {
-    graphs: Vec<(CBORTypstGraph, String)>,
-    cbor_map: ciborium::Value,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct CBORTypstGraph {
     edges: EdgeVec<EdgeData<TypstEdge>>,
     nodes: NodeVec<TypstNode>,
@@ -2380,397 +2623,5 @@ impl CBORTypstGraph {
         let file = File::open(path)?;
         let graph = ciborium::de::from_reader(file)?;
         Ok(graph)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{collections::BTreeMap, fs};
-
-    use figment::providers::Serialized;
-    use figment::{Figment, Profile};
-    use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
-    use linnet::{dot, parser::set::DotGraphSet};
-
-    use linnet::half_edge::swap::Swap;
-
-    use crate::{CBORTypstGraph, TreeInitCfg, TypstGraph};
-
-    fn test_figment() -> Figment {
-        Figment::from(Serialized::from(
-            BTreeMap::<String, String>::new(),
-            Profile::Default,
-        ))
-    }
-
-    #[test]
-    fn dot_cbor() {
-        let figment = test_figment();
-        let g = TypstGraph::from_dot(dot!(digraph{ a; a->b}).unwrap(), &figment);
-
-        let _cbor = g.to_cbor();
-    }
-
-    #[test]
-    fn test_cbor_serialization() {
-        // use std::fs;
-
-        let figment = test_figment();
-        let g = TypstGraph::from_dot(dot!(digraph{ a; a->b; b->c}).unwrap(), &figment);
-        let cbor = g.to_cbor();
-
-        let test_path = "test_graph.cbor";
-
-        // Test serialization
-        cbor.serialize_to_file(test_path)
-            .expect("Failed to serialize to file");
-
-        // Test deserialization
-        let deserialized = CBORTypstGraph::deserialize_from_file(test_path)
-            .expect("Failed to deserialize from file");
-
-        // Verify the deserialized graph has the same structure
-        assert_eq!(cbor.nodes.len(), deserialized.nodes.len());
-        assert_eq!(cbor.edges.len(), deserialized.edges.len());
-
-        // Clean up test file
-        fs::remove_file(test_path).ok();
-    }
-
-    #[test]
-    fn test_typst_graph_convenience_serialization() {
-        use std::fs;
-
-        let figment = test_figment();
-        let g = TypstGraph::from_dot(dot!(digraph{ a->b; b->c}).unwrap(), &figment);
-        let test_path = "test_convenience_graph.cbor";
-
-        // Test convenience method
-        g.serialize_to_file(test_path)
-            .expect("Failed to serialize using convenience method");
-
-        // Verify we can deserialize the result
-        let deserialized = CBORTypstGraph::deserialize_from_file(test_path)
-            .expect("Failed to deserialize from file");
-
-        // Verify the structure
-        assert_eq!(g.to_cbor().nodes.len(), deserialized.nodes.len());
-        assert_eq!(g.to_cbor().edges.len(), deserialized.edges.len());
-
-        // Clean up test file
-        fs::remove_file(test_path).ok();
-    }
-
-    #[test]
-    fn test_pin_parsing() {
-        let figment = test_figment();
-        let mut g = TypstGraph::from_dot(dot!( digraph dot_80_0_GL208 {
-
-           steps=1
-           step=0.4
-           beta =13.1
-           k_spring=20.3;
-           g_center=0
-           gamma_ee=0.3
-           gamma_ev=0.01
-           length_scale = 0.25
-           node[
-             eval="(stroke:blue,fill :black,
-             radius:2pt,
-             outset: -2pt)"
-           ]
-
-           edge[
-             eval=top
-           ]
-           v0[pin="x:@initial,y:@p1", style=invis]
-           v1[pin="x:@initial,y:@p2",style=invis]
-           v2[pin="x:@final,y:@p1",style=invis]
-           v3[pin="x:@final,y:@p2",style=invis]
-           v0 -> v11 [eval=photon]
-           v1 -> v10 [eval="(..photon,label:[$gamma$],label-side: left)", mom_eval="(label:[$p_1$],label-sep:0mm)"]
-           v9 -> v2 [eval=photon]
-           v8 -> v3 [eval=photon]
-           v4 -> v10
-           v10 -> v5
-           v5 -> v11 [dir=back]
-           v11 -> v4
-           v4 -> v7 [eval=gluon]
-           v5 -> v6 [eval=gluon]
-           v6 -> v8
-           v8 -> v7
-           v7 -> v9
-           v9 -> v6
-       }).unwrap(), &figment);
-
-        g.layout();
-        println!("{}", g.to_dot_graph().debug_dot())
-    }
-
-    #[test]
-    fn test_parsing() {
-        let figment = test_figment();
-        let g = TypstGraph::from_dot(
-            dot!(digraph qqx_aaa_pentagon {
-                steps=600
-                step=.2
-                beta =3.1
-                k_spring=15.3;
-                g_center=0
-                gamma_ee=0.3
-                gamma_ev=0.01
-                length_scale = 0.2
-
-                 node[
-                  eval="(stroke:blue,fill :black,
-              radius:2pt,
-              outset: -2pt)"
-                ]
-                // edge[
-                //   // eval="{particle}"
-                // ]
-
-            exte0 [style=invis pin="x:-4"];
-            v3:0 -> exte0;
-             // exte1 [style=invis pin="x:4"];
-            // exte1 -> vl1 [ particle="d"];
-            // exte2 [style=invis pin="x:4"];
-            // exte2 -> vl2:2 [particle="dx"];
-            // exte3 [style=invis pin="x:-4"];
-            // v1:3 -> exte3  [particle="a"];
-            // exte4 [style=invis pin="x:-4"];
-            // v2:4 -> exte4 [particle="a"];
-            // v1:5 -> v2:6 [particle="d"];
-            // v2:7 -> v3:8 [particle="d"];
-            // vl1:11 -> v1:12 [particle="d"];
-            // v3:9 -> vl2:10  [ particle="d"];
-            // vl1:13 -> vl2:14 [particle="g"];
-            })
-            .unwrap(),
-            &figment,
-        );
-
-        println!("{}", g.to_dot_graph().debug_dot())
-    }
-
-    #[test]
-    fn test_directional_constraints() {
-        let figment = test_figment();
-        let typst_graph = TypstGraph::from_dot(
-            dot!(digraph {
-                tree_dy = 2.0
-                tree_dx = 3.0
-                a [pin="x:+@group1"]
-                b [pin="x:-@group1"]
-                c [pin="y:+@group2"]
-                d [pin="y:-@group2"]
-                e -> f [pin="x:+@edge_group"]
-                g -> h [pin="x:-@edge_group"]
-                a -> b
-                c -> d
-            })
-            .unwrap(),
-            &figment,
-        );
-        let cfg = TreeInitCfg { dy: 2.0, dx: 3.0 };
-        let (node_positions, edge_positions) = typst_graph.new_positions(cfg);
-
-        // Find nodes with directional constraints
-        let mut group1_positive = None;
-        let mut group1_negative = None;
-        let mut group2_positive = None;
-        let mut group2_negative = None;
-
-        for (node_idx, _, node) in typst_graph.iter_nodes() {
-            match &node.constraints.x {
-                Constraint::Grouped(_, ShiftDirection::PositiveOnly) => {
-                    group1_positive = Some(node_positions[node_idx].x);
-                }
-                Constraint::Grouped(_, ShiftDirection::NegativeOnly) => {
-                    group1_negative = Some(node_positions[node_idx].x);
-                }
-                _ => {}
-            }
-            match &node.constraints.y {
-                Constraint::Grouped(_, ShiftDirection::PositiveOnly) => {
-                    group2_positive = Some(node_positions[node_idx].y);
-                }
-                Constraint::Grouped(_, ShiftDirection::NegativeOnly) => {
-                    group2_negative = Some(node_positions[node_idx].y);
-                }
-                _ => {}
-            }
-        }
-
-        // Verify directional constraints ensure absolute positioning
-        if let Some(pos_x) = group1_positive {
-            assert!(
-                pos_x >= 0.0,
-                "Positive x constraint should result in non-negative position, got: {}",
-                pos_x
-            );
-        }
-
-        if let Some(neg_x) = group1_negative {
-            assert!(
-                neg_x <= 0.0,
-                "Negative x constraint should result in non-positive position, got: {}",
-                neg_x
-            );
-        }
-
-        if let Some(pos_y) = group2_positive {
-            assert!(
-                pos_y >= 0.0,
-                "Positive y constraint should result in non-negative position, got: {}",
-                pos_y
-            );
-        }
-
-        if let Some(neg_y) = group2_negative {
-            assert!(
-                neg_y <= 0.0,
-                "Negative y constraint should result in non-positive position, got: {}",
-                neg_y
-            );
-        }
-
-        // Also verify relative ordering when both exist
-        if let (Some(pos_x), Some(neg_x)) = (group1_positive, group1_negative) {
-            assert!(
-                pos_x > neg_x,
-                "Positive x constraint should be greater than negative x constraint"
-            );
-        }
-
-        if let (Some(pos_y), Some(neg_y)) = (group2_positive, group2_negative) {
-            assert!(
-                pos_y > neg_y,
-                "Positive y constraint should be greater than negative y constraint"
-            );
-        }
-
-        // Check that edges with directional constraints are also positioned correctly
-        let mut edge_group_positive = None;
-        let mut edge_group_negative = None;
-
-        for (_, eid, edge_data) in typst_graph.iter_edges() {
-            let edge = edge_data.data;
-            match &edge.constraints.x {
-                Constraint::Grouped(_, ShiftDirection::PositiveOnly) => {
-                    edge_group_positive = Some(edge_positions[eid].x);
-                }
-                Constraint::Grouped(_, ShiftDirection::NegativeOnly) => {
-                    edge_group_negative = Some(edge_positions[eid].x);
-                }
-                _ => {}
-            }
-        }
-
-        // Verify edge directional constraints ensure absolute positioning
-        if let Some(pos_edge_x) = edge_group_positive {
-            assert!(
-                pos_edge_x >= 0.0,
-                "Positive edge x constraint should result in non-negative position, got: {}",
-                pos_edge_x
-            );
-        }
-
-        if let Some(neg_edge_x) = edge_group_negative {
-            assert!(
-                neg_edge_x <= 0.0,
-                "Negative edge x constraint should result in non-positive position, got: {}",
-                neg_edge_x
-            );
-        }
-
-        // Also verify relative ordering when both exist
-        if let (Some(pos_edge_x), Some(neg_edge_x)) = (edge_group_positive, edge_group_negative) {
-            assert!(
-                pos_edge_x > neg_edge_x,
-                "Positive edge x constraint should be greater than negative edge x constraint"
-            );
-        }
-    }
-
-    // Note: Test for negative constraint overrides removed due to DOT parsing issues
-    // The implementation correctly handles directional constraints when they are present
-
-    #[test]
-    fn test_full() {
-        let input = stringify!(
-           //  digraph dot_80_0_GL208 {
-
-           //     steps=600
-           //     step=0.4
-           //     beta =13.1
-           //     k_spring=3.3;
-           //     g_center=0
-           //     gamma_dangling=50
-           //     gamma_ee=0.3
-           //     gamma_ev=0.01
-           //     length_scale = 0.25
-           //     node[
-           //       eval="(stroke:blue,fill :black,
-           //       radius:2pt,
-           //       outset: -2pt)"
-           //     ]
-
-           //     edge[
-           //       eval=top
-           //     ]
-           //     v0[pin="x:@initial,y:@p1", style=invis]
-           //     v1[pin="x:@initial,y:@p2",style=invis]
-           //     v2[pin="x:@final,y:@p1",style=invis]
-           //     v3[pin="x:@final,y:@p2",style=invis]
-           //     v0 -> v11 [eval=photon]
-           //     v1 -> v10 [eval="(..photon,label:[$gamma$],label-side: left)", mom_eval="(label:[$p_1$],label-sep:0mm)"]
-           //     v9 -> v2 [eval=photon]
-           //     v8 -> v3 [eval=photon]
-           //     v4 -> v10
-           //     v10 -> v5
-           //     v5 -> v11 [dir=back]
-           //     v11 -> v4
-           //     v4 -> v7 [eval=gluon]
-           //     v5 -> v6 [eval=gluon]
-           //     v6 -> v8
-           //     v8 -> v7
-           //     v7 -> v9
-           //     v9 -> v6
-           // }
-           digraph {
-               steps=600
-               step=0.4
-               beta =13.1
-               k_spring=3.3;
-               g_center=0
-               gamma_dangling=50
-               gamma_ee=0.3
-               gamma_ev=0.01
-               length_scale = 0.25
-               a->b
-           }
-        );
-
-        let figment = Figment::from(Serialized::from(
-            BTreeMap::<String, String>::new(),
-            Profile::Default,
-        ));
-
-        let dots = DotGraphSet::from_string_with_figment(input, figment.clone())
-            .map_err(|a| a.to_string())
-            .unwrap()
-            .into_iter();
-
-        let mut graphs = Vec::new();
-        for g in dots {
-            let mut typst_graph = TypstGraph::from_dot(g, &figment);
-
-            typst_graph.layout();
-            graphs.push((
-                typst_graph.to_cbor(),
-                typst_graph.to_dot_graph().debug_dot(),
-            ));
-        }
     }
 }
