@@ -3070,7 +3070,12 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             || stability_level_result.result.re.is_infinite();
         let im_is_nan = stability_level_result.result.im.is_nan()
             || stability_level_result.result.im.is_infinite();
-        let is_nan = re_is_nan || im_is_nan;
+
+        let jacobian_is_nan = stability_level_result
+            .parameterization_jacobian
+            .is_some_and(|jacobian| jacobian.is_nan() || jacobian.is_infinite());
+
+        let is_nan = re_is_nan || im_is_nan || jacobian_is_nan;
 
         let stability_results = results_of_stability_levels
             .iter()
@@ -3103,12 +3108,15 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             stability_level_result.result
         };
         let mut event_groups = stability_level_result.graph_result.event_groups;
-        let parameterization_jacobian = stability_level_result.parameterization_jacobian;
-        let full_factor = full_event_multiplicative_factor(parameterization_jacobian, wgt);
+        let nanless_jacobian = stability_level_result
+            .parameterization_jacobian
+            .map(|jacobian| if jacobian_is_nan { F(0.0) } else { jacobian });
+
+        let full_factor = full_event_multiplicative_factor(nanless_jacobian, wgt);
         apply_full_event_multiplicative_factor(&mut event_groups, &full_factor);
         Ok(EvaluationResult {
             integrand_result: nanless_result,
-            parameterization_jacobian,
+            parameterization_jacobian: nanless_jacobian,
             integrator_weight: wgt,
             event_groups,
             evaluation_metadata,
