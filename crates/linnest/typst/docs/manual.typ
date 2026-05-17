@@ -1,6 +1,8 @@
 #import "@preview/tidy:0.4.3"
 #import "../src/lib.typ": draw, graph, layout, physics, subgraph
-#import graph: build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink, source, update-edge-data, update-node-data
+#import graph: (
+  build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink, source, update-edge-data, update-node-data,
+)
 
 
 #set document(title: "Linnest Typst API")
@@ -189,6 +191,32 @@ string is needed. Statements are flat metadata used by DOT; they cannot nest.
 Values are scalar strings/numbers/booleans. Use `payload` for structured Typst
 data or content.
 
+`graph.build` and `graph.parse` also accept `default-node-payload`,
+`default-edge-payload`, `default-source-payload`, and `default-sink-payload`.
+These defaults are merged into the corresponding payloads; explicit payload
+fields on a node, edge, source, or sink override the defaults. For drawing, the
+physics helpers read `payload.style` on source and sink half-edges and
+`payload.display-label`/`payload.label` on edges:
+
+```typ
+#let g = build({
+  node(<a>, label: [a])
+  node(<b>, label: [b])
+  edge(source(<a>), <e>, sink(<b>), label: [$p$])
+},
+  default-edge-payload: (kind: "propagator"),
+  default-source-payload: (style: physics.source-stroke(c: red)),
+  default-sink-payload: (style: physics.sink-stroke(c: blue)),
+)
+#let callbacks = physics.style()
+#draw(
+  layout(g),
+  source-style: callbacks.source-style,
+  sink-style: callbacks.sink-style,
+  edge-label: callbacks.edge-label,
+)
+```
+
 When parsing DOT, the same payload channel can be filled from selected string
 fields. Evaluation happens in Typst at parse time; Rust only receives opaque
 payload bytes. The selected fields are evaluated with the record's merged
@@ -215,7 +243,7 @@ fields:
   node(<a>)
   node(<b>)
   edge(source(<a>), sink(<b>), statements: (mom: "p"))
-}, edge-statements: (display-label: "$#mom$"))
+}, default-edge-statements: (display-label: "$#mom$"))
 #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
 #edges(g).first().payload.at("display-label")
 ```
@@ -263,14 +291,11 @@ edge(<incoming>, sink(<a>))
 edge(source(<c>), <outgoing>)
 ```
 
-String-valued statements may contain `{name}` placeholders. `graph.build`
-expands each placeholder while constructing the graph object. Use `{{` and `}}`
-for literal braces. Unknown placeholders are left unchanged.
-
-This is useful for graph-level `edge-statements`: the default edge statement is
-merged into each edge, then expanded against that edge's complete statement
-dictionary. The following default metadata records a string label derived from
-the per-edge `label` statement:
+`graph.build` does not interpolate statement strings on the Rust side. Use
+`graph.eval-fields` or `graph.map` when a default statement should turn into
+Typst content or structured payload data. The evaluation scope includes the
+record's merged fields, so default edge statements can still refer to local edge
+fields:
 
 ```typ
 #let g = build({
@@ -284,11 +309,12 @@ the per-edge `label` statement:
     statements: (color: "0055ff", label: "a-c"),
   )
 },
-  edge-statements: (
+  default-edge-statements: (
     color: "000000",
-    display-label: "{label}",
+    display-label: "$#label$",
   ),
 )
+#let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
 ```
 
 == Placements
@@ -484,10 +510,11 @@ receiving `(base-length, length, ratio)`.
 Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
 so the layer is drawn on the same side of the curve as the edge label.
 
-`source-style-eval`, `sink-style-eval`, and `label-eval` are ordinary
-kebab-case edge metadata for downstream renderers or DOT export. They can be
-set as direct arguments on `graph.build` or `edge`, instead of being
-manually nested under `edge-statements` or per-edge `statements`:
+Payload defaults are also the global styling hook for all sources, sinks,
+nodes, and edges. More specific data can be added with explicit payloads on the
+item or by running `graph.map`/`graph.eval-fields` after construction. This
+keeps evaluated Typst values in the opaque payload channel instead of adding
+renderer-specific eval fields to the graph spec:
 
 ```typ
 #let g = build({
@@ -497,14 +524,16 @@ manually nested under `edge-statements` or per-edge `statements`:
     source(<a>),
     <a-c>,
     sink(<c>),
-    label-eval: "(text(fill: rgb(\"#{color}\"))[{label}])",
-    statements: (color: "0055ff", label: "a-c"),
+    label: [a-c],
+    payload: (kind: "highlight"),
   )
 },
   name: "demo",
-  source-style-eval: "(stroke: red + 0.5pt)",
-  sink-style-eval: "(stroke: blue + 0.5pt)",
+  default-source-payload: (style: (stroke: red + 0.5pt)),
+  default-sink-payload: (style: (stroke: blue + 0.5pt)),
 )
+#let callbacks = physics.style()
+#draw(layout(g), source-style: callbacks.source-style, sink-style: callbacks.sink-style)
 ```
 
 `graph.build` also accepts comma-separated items:
@@ -522,10 +551,10 @@ manually nested under `edge-statements` or per-edge `statements`:
   ),
   name: "demo",
   statements: (full_num: "x + y"),
-  node-statements: (shape: "circle"),
-  edge-statements: (
+  default-node-statements: (shape: "circle"),
+  default-edge-statements: (
     color: "000000",
-    display-label: "{label}",
+    display-label: "$#label$",
   ),
 )
 ```
@@ -658,37 +687,50 @@ Subgraph objects are opaque zero-copy values.
 
 #let tidy-style = dictionary(tidy.styles.default)
 #let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
+#let api-link(prefix, name, display: none) = {
+  link(label(prefix + name + "()"), raw(if display == none { name } else { display }, lang: none))
+}
+#let tidy-scope = (
+  api-link: api-link,
+  draw: draw,
+  graph: graph,
+  layout: layout,
+  physics: physics,
+  subgraph: subgraph,
+)
 
-#let draw-docs = tidy.parse-module(
-  read("../src/draw.typ"),
-  name: "draw",
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
-)
-#let docs = tidy.parse-module(
-  read("../src/lib.typ"),
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
-)
 #let graph-docs = tidy.parse-module(
   read("../src/graph.typ"),
   name: "graph",
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
+  preamble: "#import graph: *\n",
+  scope: tidy-scope,
+)
+#let draw-docs = tidy.parse-module(
+  read("../src/draw.typ"),
+  name: "draw",
+  scope: tidy-scope,
+)
+#let layout-docs = tidy.parse-module(
+  read("../src/layout.typ"),
+  name: "layout",
+  scope: tidy-scope,
 )
 
 #let physics-docs = tidy.parse-module(
   read("../src/physics-edge-style.typ"),
   name: "physics",
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
+  scope: tidy-scope,
 )
 #let subgraph-docs = tidy.parse-module(
   read("../src/subgraph.typ"),
   name: "subgraph",
-  scope: (draw: draw, graph: graph, layout: layout, physics: physics, subgraph: subgraph),
+  scope: tidy-scope,
 )
 
 
 
-#tidy.show-module(graph-docs, style: tidy-style)
-#tidy.show-module(docs, style: tidy-style)
-#tidy.show-module(physics-docs, style: tidy-style)
-#tidy.show-module(draw-docs, style: tidy-style)
-#tidy.show-module(subgraph-docs, style: tidy-style)
+#tidy.show-module(graph-docs, style: tidy-style, sort-functions: none)
+#tidy.show-module(layout-docs, style: tidy-style, sort-functions: none)
+#tidy.show-module(physics-docs, style: tidy-style, sort-functions: none)
+#tidy.show-module(draw-docs, style: tidy-style, sort-functions: none)
+#tidy.show-module(subgraph-docs, style: tidy-style, sort-functions: none)

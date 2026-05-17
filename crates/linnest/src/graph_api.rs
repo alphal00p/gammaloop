@@ -18,8 +18,6 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::expand_template;
-
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
 
@@ -29,8 +27,8 @@ pub struct TypstDotGraphInfo {
     pub name: String,
     pub payload: Option<Vec<u8>>,
     pub global_statements: BTreeMap<String, String>,
-    pub edge_statements: BTreeMap<String, String>,
-    pub node_statements: BTreeMap<String, String>,
+    pub default_edge_statements: BTreeMap<String, String>,
+    pub default_node_statements: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -153,11 +151,6 @@ pub struct TypstDotEdge {
     pub label_pos: Option<TypstPoint>,
     pub label_angle: Option<f64>,
     pub bend: Option<f64>,
-    pub sink_style_eval: Option<String>,
-    pub source_style_eval: Option<String>,
-    pub label_eval: Option<String>,
-    #[serde(rename = "mom-eval")]
-    pub mom_eval: Option<String>,
     pub statements: BTreeMap<String, String>,
 }
 
@@ -171,15 +164,9 @@ pub struct TypstGraphSpec {
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
-    pub edge_statements: BTreeMap<String, String>,
+    pub default_edge_statements: BTreeMap<String, String>,
     #[serde(default)]
-    pub source_style_eval: Option<String>,
-    #[serde(default)]
-    pub sink_style_eval: Option<String>,
-    #[serde(default)]
-    pub label_eval: Option<String>,
-    #[serde(default)]
-    pub node_statements: BTreeMap<String, String>,
+    pub default_node_statements: BTreeMap<String, String>,
     #[serde(default)]
     pub nodes: Vec<TypstNodeSpec>,
     #[serde(default)]
@@ -219,12 +206,6 @@ pub struct TypstEdgeSpec {
     pub pos: Option<TypstPlacementSpec>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
-    #[serde(default)]
-    pub source_style_eval: Option<String>,
-    #[serde(default)]
-    pub sink_style_eval: Option<String>,
-    #[serde(default)]
-    pub label_eval: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -713,12 +694,12 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
             .iter()
             .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
             .collect(),
-        edge_statements: global_data
+        default_edge_statements: global_data
             .edge_statements
             .iter()
             .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
             .collect(),
-        node_statements: global_data
+        default_node_statements: global_data
             .node_statements
             .iter()
             .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
@@ -736,18 +717,12 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
     let node_count = spec.nodes.len();
     let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
     let mut node_positions = Vec::with_capacity(node_count);
-    let edge_statements = edge_render_statements(
-        spec.edge_statements,
-        spec.source_style_eval,
-        spec.sink_style_eval,
-        spec.label_eval,
-    );
     let global_data = global_data_from_parts(
         spec.name,
         spec.payload,
         spec.statements,
-        edge_statements,
-        spec.node_statements,
+        spec.default_edge_statements,
+        spec.default_node_statements,
     );
 
     for (node_index, node) in spec.nodes.into_iter().enumerate() {
@@ -793,15 +768,9 @@ fn add_edge_to_builder(
         .unwrap_or(Orientation::Default);
     let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?;
     let local_statements = apply_placement_statements(edge.statements, placement.as_ref());
-    let local_statements = edge_render_statements(
-        local_statements,
-        edge.source_style_eval,
-        edge.sink_style_eval,
-        edge.label_eval,
-    );
     let edge_data = DotEdgeData {
         payload: edge.payload,
-        statements: merged_expanded_statements(&global_data.edge_statements, &local_statements),
+        statements: merged_statements(&global_data.edge_statements, &local_statements),
         local_statements,
         edge_id: edge.id.map(linnet::half_edge::involution::EdgeIndex::from),
     };
@@ -848,28 +817,10 @@ fn global_data_from_parts(
     GlobalData {
         name: name.unwrap_or_else(|| "constructed".to_string()),
         payload,
-        statements: expanded_statements(statements),
-        edge_statements: expanded_statements(edge_statements),
-        node_statements: expanded_statements(node_statements),
+        statements,
+        edge_statements,
+        node_statements,
     }
-}
-
-fn edge_render_statements(
-    mut statements: BTreeMap<String, String>,
-    source_style_eval: Option<String>,
-    sink_style_eval: Option<String>,
-    label_eval: Option<String>,
-) -> BTreeMap<String, String> {
-    if let Some(source_style_eval) = source_style_eval {
-        statements.insert("source-style-eval".to_string(), source_style_eval);
-    }
-    if let Some(sink_style_eval) = sink_style_eval {
-        statements.insert("sink-style-eval".to_string(), sink_style_eval);
-    }
-    if let Some(label_eval) = label_eval {
-        statements.insert("label-eval".to_string(), label_eval);
-    }
-    statements
 }
 
 fn resolve_placement(
@@ -1096,27 +1047,20 @@ fn node_data_from_spec(
         name: node.name,
         index: node.index.map(NodeIndex).or(Some(NodeIndex(default_index))),
         payload: node.payload,
-        statements: merged_expanded_statements(
+        statements: merged_statements(
             &global_data.node_statements,
             &apply_placement_statements(node.statements, placement),
         ),
     }
 }
 
-fn merged_expanded_statements(
+fn merged_statements(
     defaults: &BTreeMap<String, String>,
     local: &BTreeMap<String, String>,
 ) -> BTreeMap<String, String> {
     let mut statements = defaults.clone();
     statements.extend(local.clone());
-    expanded_statements(statements)
-}
-
-fn expanded_statements(statements: BTreeMap<String, String>) -> BTreeMap<String, String> {
     statements
-        .iter()
-        .map(|(key, value)| (key.clone(), expand_template(value, &statements)))
-        .collect()
 }
 
 fn endpoint_spec_to_hedge_data(
@@ -1240,10 +1184,6 @@ fn edge_view_to_output(
         label_pos: parse_point(&raw_statements, "label-pos"),
         label_angle: parse_rad(&raw_statements, "label-angle"),
         bend: parse_rad(&raw_statements, "bend"),
-        sink_style_eval: raw_statements.get("sink-style-eval").cloned(),
-        source_style_eval: raw_statements.get("source-style-eval").cloned(),
-        label_eval: raw_statements.get("label-eval").cloned(),
-        mom_eval: raw_statements.get("mom-eval").cloned(),
         statements: public_statements(raw_statements),
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use cgmath::Point2;
 use linnet::half_edge::layout::spring::{Constraint, PointConstraint, ShiftDirection};
@@ -192,50 +192,4 @@ impl std::fmt::Display for PinConstraint {
             PinConstraint::Combined(x, y) => write!(f, "{},{}", x, y),
         }
     }
-}
-
-pub fn expand_template(template: &str, statements: &BTreeMap<String, String>) -> String {
-    let chars = template.chars().collect::<Vec<_>>();
-    let mut result = String::new();
-    let mut index = 0;
-
-    while index < chars.len() {
-        match chars[index] {
-            '{' if chars.get(index + 1) == Some(&'{') => {
-                result.push('{');
-                index += 2;
-            }
-            '{' => {
-                let mut end = index + 1;
-                while end < chars.len() && chars[end] != '}' {
-                    end += 1;
-                }
-
-                if end < chars.len() {
-                    let key = chars[index + 1..end].iter().collect::<String>();
-                    if let Some(value) = statements.get(&key) {
-                        result.push_str(value.trim().trim_matches('"'));
-                    } else {
-                        result.push('{');
-                        result.push_str(&key);
-                        result.push('}');
-                    }
-                    index = end + 1;
-                } else {
-                    result.push('{');
-                    index += 1;
-                }
-            }
-            '}' if chars.get(index + 1) == Some(&'}') => {
-                result.push('}');
-                index += 2;
-            }
-            ch => {
-                result.push(ch);
-                index += 1;
-            }
-        }
-    }
-
-    result
 }
