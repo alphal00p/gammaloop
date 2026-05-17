@@ -4,7 +4,9 @@ use dot_parser::ast::CompassPt;
 use linnet::{
     half_edge::{
         builder::{HedgeData, HedgeGraphBuilder},
-        involution::{ArchivedOrientation, EdgeData, Flow, Hedge, Orientation},
+        involution::{
+            ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation,
+        },
         nodestore::DefaultNodeStore,
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         NodeIndex,
@@ -242,6 +244,37 @@ pub struct TypstEndpointSpec {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypstGraphPayloadPatch {
+    #[serde(default)]
+    pub payload: Option<Vec<u8>>,
+    #[serde(default)]
+    pub nodes: Vec<TypstIndexedPayloadPatch>,
+    #[serde(default)]
+    pub edges: Vec<TypstEdgePayloadPatch>,
+    #[serde(default)]
+    pub hedges: Vec<TypstIndexedPayloadPatch>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TypstIndexedPayloadPatch {
+    pub index: usize,
+    #[serde(default)]
+    pub payload: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TypstEdgePayloadPatch {
+    pub index: usize,
+    #[serde(default)]
+    pub payload: Option<Vec<u8>>,
+    #[serde(default)]
+    pub source: Option<Vec<u8>>,
+    #[serde(default)]
+    pub sink: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TypstJoinSpec {
     pub key: String,
 }
@@ -280,6 +313,100 @@ pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     graph_from_spec(spec)?
         .to_rkyv_bytes::<4096>()
         .map(|bytes| bytes.to_vec())
+}
+
+pub fn graph_with_payloads_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
+        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let patch: TypstGraphPayloadPatch = decode_cbor(arg2, "graph payload patch")?;
+    apply_graph_payload_patch(&mut graph, patch)?;
+    graph
+        .to_rkyv_bytes::<4096>()
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())
+}
+
+fn apply_graph_payload_patch(
+    graph: &mut DotGraph,
+    patch: TypstGraphPayloadPatch,
+) -> Result<(), String> {
+    if let Some(payload) = patch.payload {
+        graph.global_data.payload = Some(payload);
+    }
+
+    for node in patch.nodes {
+        if node.index >= graph.graph.n_nodes() {
+            return Err(format!(
+                "Node payload patch index {} is out of bounds for graph with {} nodes",
+                node.index,
+                graph.graph.n_nodes()
+            ));
+        }
+        if let Some(payload) = node.payload {
+            graph.graph[NodeIndex(node.index)].payload = Some(payload);
+        }
+    }
+
+    for edge in patch.edges {
+        if edge.index >= graph.graph.n_edges() {
+            return Err(format!(
+                "Edge payload patch index {} is out of bounds for graph with {} edges",
+                edge.index,
+                graph.graph.n_edges()
+            ));
+        }
+        let edge_index = EdgeIndex(edge.index);
+        let pair = graph
+            .graph
+            .iter_edges()
+            .find_map(|(pair, index, _)| (index == edge_index).then_some(pair))
+            .ok_or_else(|| {
+                format!(
+                    "Edge payload patch index {} could not be resolved",
+                    edge.index
+                )
+            })?;
+
+        if let Some(payload) = edge.payload {
+            graph.graph[edge_index].payload = Some(payload);
+        }
+        if let Some(payload) = edge.source {
+            let hedge = endpoint_hedge(pair, Flow::Source, edge.index)?;
+            graph.graph[hedge].payload = Some(payload);
+        }
+        if let Some(payload) = edge.sink {
+            let hedge = endpoint_hedge(pair, Flow::Sink, edge.index)?;
+            graph.graph[hedge].payload = Some(payload);
+        }
+    }
+
+    for hedge in patch.hedges {
+        if hedge.index >= graph.graph.n_hedges() {
+            return Err(format!(
+                "Half-edge payload patch index {} is out of bounds for graph with {} half-edges",
+                hedge.index,
+                graph.graph.n_hedges()
+            ));
+        }
+        if let Some(payload) = hedge.payload {
+            graph.graph[Hedge(hedge.index)].payload = Some(payload);
+        }
+    }
+
+    Ok(())
+}
+
+fn endpoint_hedge(pair: HedgePair, side: Flow, edge_index: usize) -> Result<Hedge, String> {
+    match (pair, side) {
+        (HedgePair::Paired { source, .. } | HedgePair::Split { source, .. }, Flow::Source) => {
+            Ok(source)
+        }
+        (HedgePair::Paired { sink, .. } | HedgePair::Split { sink, .. }, Flow::Sink) => Ok(sink),
+        (HedgePair::Unpaired { hedge, flow }, side) if flow == side => Ok(hedge),
+        (HedgePair::Unpaired { flow, .. }, side) => Err(format!(
+            "Edge {edge_index} has only a {flow:?} endpoint, cannot patch {side:?} payload"
+        )),
+    }
 }
 
 pub fn decode_graph_bytes_list(arg: &[u8]) -> Result<Vec<Vec<u8>>, String> {

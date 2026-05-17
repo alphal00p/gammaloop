@@ -5,9 +5,10 @@ Typst wrapper package for the `linnest.wasm` graph layout plugin.
 ## Usage
 
 ```typ
-#import "src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
+#import "src/lib.typ": draw, graph, layout, subgraph
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-#let g = graph.build({
+#let g = build({
   node(<a>, label: [A], statements: (fill-color: "cfe8ff"))
   node(<c>, label: [C], statements: (fill-color: "d6f5d6"))
   edge(
@@ -21,7 +22,7 @@ Typst wrapper package for the `linnest.wasm` graph layout plugin.
   name: "demo",
 )
 #let g = layout(g)
-#let dot = graph.dot(g)
+#let dot-text = dot(g)
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #draw(g, edge-label: edge-label)
 ```

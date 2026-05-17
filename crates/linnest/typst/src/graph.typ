@@ -1,26 +1,5 @@
 #let _plugin = plugin("../linnest.wasm")
 
-#let _edge-render-statements(
-  statements,
-  source-style-eval: none,
-  sink-style-eval: none,
-  label-eval: none,
-) = {
-  let result = statements
-  if source-style-eval != none {
-    result = result + (source-style-eval: source-style-eval)
-  }
-  if sink-style-eval != none {
-    result = result + (sink-style-eval: sink-style-eval)
-  }
-  if label-eval != none {
-    result = result + (label-eval: label-eval)
-  }
-  result
-}
-
-#let _statement-value(value) = if type(value) == str { value } else { str(value) }
-
 #let _encode-payload-value(value) = {
   if type(value) == content {
     (linnest-payload-kind: "content", value: cbor.encode(value))
@@ -166,10 +145,54 @@
   result
 }
 
-#let _statements-with-value(statements, key, value) = {
+#let _statements-with-value(statements, key, value, context_) = {
   let result = statements
   if value != none {
-    result.insert(key, _statement-value(value))
+    result.insert(key, _statement-value(value, context_ + "." + key))
+  }
+  result
+}
+
+#let _statement-value(value, context_) = {
+  if type(value) == str {
+    value
+  } else if type(value) == int or type(value) == float or type(value) == bool {
+    str(value)
+  } else {
+    panic(context_ + ": statement values must be flat scalars; use payload for nested data or Typst content")
+  }
+}
+
+#let _flat-statements(statements, context_) = {
+  if type(statements) != dictionary {
+    panic(context_ + ": statements must be a flat dictionary")
+  }
+  let result = (:)
+  for key in statements.keys() {
+    let value = statements.at(key)
+    if value != none {
+      result.insert(key, _statement-value(value, context_ + "." + key))
+    }
+  }
+  result
+}
+
+#let _edge-render-statements(
+  statements,
+  source-style-eval: none,
+  sink-style-eval: none,
+  label-eval: none,
+  context_: "edge statements",
+) = {
+  let result = _flat-statements(statements, context_)
+  if source-style-eval != none {
+    result = result + (source-style-eval: _statement-value(source-style-eval, context_ + ".source-style-eval"))
+  }
+  if sink-style-eval != none {
+    result = result + (sink-style-eval: _statement-value(sink-style-eval, context_ + ".sink-style-eval"))
+  }
+  if label-eval != none {
+    result = result + (label-eval: _statement-value(label-eval, context_ + ".label-eval"))
   }
   result
 }
@@ -353,7 +376,7 @@
 }
 
 #let _node-spec(node) = {
-  let statements = _statements-with-point(node.at("statements", default: (:)), "shift", node.at("shift", default: none))
+  let statements = _statements-with-point(_flat-statements(node.at("statements", default: (:)), "graph.node statements"), "shift", node.at("shift", default: none))
   let payload = _encode-payload(_payload-with-label(node.at("payload", default: none), node.at("label", default: none), "graph.node"))
   let clean = node
   let name = clean.at("name", default: none)
@@ -390,7 +413,7 @@
     _statements-with-value(
       _statements-with-point(
         _statements-with-point(
-          edge.at("statements", default: (:)),
+          _flat-statements(edge.at("statements", default: (:)), "graph.edge statements"),
           "shift",
           edge.at("shift", default: none),
         ),
@@ -399,15 +422,18 @@
       ),
       "label-angle",
       edge.at("label-angle", default: none),
+      "graph.edge statements",
     ),
     "bend",
     edge.at("bend", default: none),
+    "graph.edge statements",
   )
   _edge-render-statements(
     statements,
     source-style-eval: edge.at("source-style-eval", default: none),
     sink-style-eval: edge.at("sink-style-eval", default: none),
     label-eval: edge.at("label-eval", default: none),
+    context_: "graph.edge statements",
   )
 }
 
@@ -454,10 +480,10 @@
     result.insert("payload", payload)
   }
   if half.at("statement", default: none) != none {
-    result.insert("statement", _statement-value(half.statement))
+    result.insert("statement", _statement-value(half.statement, context_ + ".statement"))
   }
   if half.at("compass", default: none) != none {
-    result.insert("compass", _statement-value(half.compass))
+    result.insert("compass", _statement-value(half.compass, context_ + ".compass"))
   }
   result
 }
@@ -505,7 +531,7 @@
   if side != none and not (side == "+" or side == "-" or side == "positive" or side == "negative") {
     panic("graph.group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
   }
-  (kind: "group", name: _statement-value(name), side: side)
+  (kind: "group", name: _statement-value(name, "graph.group name"), side: side)
 }
 
 /// Create a first-class graph placement.
@@ -544,6 +570,288 @@
   result
 }
 
+#let _eval-field-list(fields, context_) = {
+  if fields == none {
+    ()
+  } else if type(fields) == str {
+    (fields,)
+  } else if type(fields) == array {
+    for field in fields {
+      if type(field) != str {
+        panic(context_ + ": eval field names must be strings")
+      }
+    }
+    fields
+  } else {
+    panic(context_ + ": eval fields must be a string or an array of strings")
+  }
+}
+
+#let _eval-dot-value(value, eval-mode, scope) = {
+  if type(value) == str {
+    eval(value, mode: eval-mode, scope: scope)
+  } else {
+    value
+  }
+}
+
+#let _record-fields(record) = {
+  let fields = (:)
+  let statements = record.at("statements", default: (:))
+  if type(statements) == dictionary {
+    fields += statements
+  }
+  for key in record.keys() {
+    if key != "statements" and key != "fields" {
+      let value = record.at(key)
+      if value != none {
+        fields.insert(key, value)
+      }
+    }
+  }
+  fields
+}
+
+#let _record-with-fields(record, base-fields: (:), extra: (:)) = {
+  let fields = base-fields + _record-fields(record)
+  record + extra + (fields: fields)
+}
+
+#let _payload-field-value(record, field) = {
+  let fields = record.at("fields", default: _record-fields(record))
+  if type(fields) == dictionary and field in fields.keys() {
+    fields.at(field)
+  } else {
+    record.at(field, default: none)
+  }
+}
+
+#let _record-eval-scope(record, scope) = {
+  let fields = record.at("fields", default: _record-fields(record))
+  let result = scope + fields
+  for key in record.keys() {
+    if key != "statements" and key != "fields" {
+      let value = record.at(key)
+      if value != none {
+        result.insert(key, value)
+      }
+    }
+  }
+  result + (fields: fields, record: record)
+}
+
+#let _eval-payload-value(record, fields, eval-mode, scope) = {
+  let payload = (:)
+  let local-scope = _record-eval-scope(record, scope)
+  for field in fields {
+    let value = _payload-field-value(record, field)
+    if value != none {
+      payload.insert(field, _eval-dot-value(value, eval-mode, local-scope))
+    }
+  }
+  if payload.len() == 0 {
+    none
+  } else {
+    payload
+  }
+}
+
+#let _mapped-payload(callback, record, context_) = {
+  if callback == none {
+    return none
+  }
+  let result = callback(record)
+  if result == none {
+    none
+  } else if type(result) != dictionary {
+    panic(context_ + ": callback must return none or a dictionary")
+  } else {
+    result.at("payload", default: none)
+  }
+}
+
+#let _payload-patch(callback, record, context_) = {
+  let payload = _mapped-payload(callback, record, context_)
+  if payload == none {
+    none
+  } else {
+    _encode-payload(payload)
+  }
+}
+
+/// Map graph metadata to new opaque payloads.
+///
+/// The callbacks receive decoded records plus a `fields` dictionary containing
+/// merged statements and direct record fields. A callback returns `none` to
+/// leave the record unchanged, or `(payload: value)` to set a new opaque payload.
+///
+/// ```example
+/// #let g = graph.build({ graph.node(<a>) })
+/// #let g = graph.map(g, node: node => (payload: (label: [A])))
+/// #graph.nodes(g).first().payload.label
+/// ```
+/// -> bytes
+#let map(
+  graph_,
+  /// Graph metadata callback. -> none | function
+  graph: none,
+  /// Node metadata callback. -> none | function
+  node: none,
+  /// Edge metadata callback. -> none | function
+  edge: none,
+  /// Source half-edge metadata callback. -> none | function
+  source: none,
+  /// Sink half-edge metadata callback. -> none | function
+  sink: none,
+) = {
+  let patch = (:)
+  let info = _decode-payload-field(cbor(_plugin.graph_info(bytes(graph_))))
+  let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))))
+  let graph-payload = _payload-patch(graph, graph-record, "graph.map graph")
+  if graph-payload != none {
+    patch.insert("payload", graph-payload)
+  }
+
+  let node-patches = ()
+  if node != none {
+    for node-record in cbor(_plugin.graph_nodes(bytes(graph_))).map(_decode-payload-field) {
+      let payload = _payload-patch(node, _record-with-fields(node-record), "graph.map node")
+      if payload != none {
+        node-patches.push((index: node-record.node, payload: payload))
+      }
+    }
+  }
+  if node-patches.len() > 0 {
+    patch.insert("nodes", node-patches)
+  }
+
+  let edge-patches = ()
+  if edge != none or source != none or sink != none {
+    for edge-source in cbor(_plugin.graph_edges(bytes(graph_))).map(_decode-edge-payloads) {
+      let edge-patch = (index: edge-source.edge)
+      let edge-record = _record-with-fields(edge-source)
+      let edge-fields = edge-record.fields
+      let payload = _payload-patch(edge, edge-record, "graph.map edge")
+      if payload != none {
+        edge-patch.insert("payload", payload)
+      }
+
+      let source-record = edge-source.at("source", default: none)
+      if source-record != none {
+        let source-payload = _payload-patch(
+          source,
+          _record-with-fields(source-record, base-fields: edge-fields, extra: (edge: edge-record)),
+          "graph.map source",
+        )
+        if source-payload != none {
+          edge-patch.insert("source", source-payload)
+        }
+      }
+
+      let sink-record = edge-source.at("sink", default: none)
+      if sink-record != none {
+        let sink-payload = _payload-patch(
+          sink,
+          _record-with-fields(sink-record, base-fields: edge-fields, extra: (edge: edge-record)),
+          "graph.map sink",
+        )
+        if sink-payload != none {
+          edge-patch.insert("sink", sink-payload)
+        }
+      }
+
+      if edge-patch.len() > 1 {
+        edge-patches.push(edge-patch)
+      }
+    }
+  }
+  if edge-patches.len() > 0 {
+    patch.insert("edges", edge-patches)
+  }
+
+  if patch.len() == 0 {
+    graph_
+  } else {
+    _plugin.graph_with_payloads(bytes(graph_), cbor.encode(patch))
+  }
+}
+
+/// Evaluate selected fields into opaque payload entries.
+///
+/// Each selected field is read from the record's merged `fields` dictionary,
+/// evaluated in a scope containing those fields, and written to
+/// `payload.<field>`.
+///
+/// ```example
+/// #let g = graph.build(
+///   {
+///     graph.node(<a>)
+///     graph.node(<b>)
+///     graph.edge(graph.source(<a>), graph.sink(<b>), statements: (mom: "p"))
+///   },
+///   edge-statements: (display-label: "$#mom$"),
+/// )
+/// #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
+/// #graph.edges(g).first().payload.at("display-label")
+/// ```
+/// -> bytes
+#let eval-fields(
+  graph_,
+
+  /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
+  eval-graph-fields: (),
+
+  /// Node statement fields to evaluate into `graph.nodes(g).at(i).payload`. -> string | array
+  eval-node-fields: (),
+
+  /// Edge statement fields to evaluate into `graph.edges(g).at(i).payload`. -> string | array
+  eval-edge-fields: (),
+
+  /// Source half-edge fields to evaluate into `edge.source.payload`. -> string | array
+  eval-source-fields: (),
+
+  /// Sink half-edge fields to evaluate into `edge.sink.payload`. -> string | array
+  eval-sink-fields: (),
+
+  /// Typst `eval` mode used for string field values. -> string
+  eval-mode: "markup",
+
+  /// Additional Typst names available while evaluating field values. -> dictionary
+  scope: (:),
+) = {
+  let graph-fields = _eval-field-list(eval-graph-fields, "graph.eval-fields")
+  let node-fields = _eval-field-list(eval-node-fields, "graph.eval-fields")
+  let edge-fields = _eval-field-list(eval-edge-fields, "graph.eval-fields")
+  let source-fields = _eval-field-list(eval-source-fields, "graph.eval-fields")
+  let sink-fields = _eval-field-list(eval-sink-fields, "graph.eval-fields")
+  if graph-fields.len() == 0 and node-fields.len() == 0 and edge-fields.len() == 0 and source-fields.len() == 0 and sink-fields.len() == 0 {
+    return graph_
+  }
+  map(
+    graph_,
+    graph: record => {
+      let payload = _eval-payload-value(record, graph-fields, eval-mode, scope)
+      if payload == none { none } else { (payload: payload) }
+    },
+    node: record => {
+      let payload = _eval-payload-value(record, node-fields, eval-mode, scope)
+      if payload == none { none } else { (payload: payload) }
+    },
+    edge: record => {
+      let payload = _eval-payload-value(record, edge-fields, eval-mode, scope)
+      if payload == none { none } else { (payload: payload) }
+    },
+    source: record => {
+      let payload = _eval-payload-value(record, source-fields, eval-mode, scope)
+      if payload == none { none } else { (payload: payload) }
+    },
+    sink: record => {
+      let payload = _eval-payload-value(record, sink-fields, eval-mode, scope)
+      if payload == none { none } else { (payload: payload) }
+    },
+  )
+}
+
 /// Parse one or more DOT digraphs into graph objects.
 ///
 /// ```example
@@ -551,7 +859,50 @@
 /// #graphs.len()
 /// ```
 /// -> array
-#let parse(input) = cbor(_plugin.parse_graph(bytes(input)))
+#let parse(
+  input,
+
+  /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
+  eval-graph-fields: (),
+
+  /// Node statement fields to evaluate into `graph.nodes(g).at(i).payload`. -> string | array
+  eval-node-fields: (),
+
+  /// Edge statement fields to evaluate into `graph.edges(g).at(i).payload`. -> string | array
+  eval-edge-fields: (),
+
+  /// Source half-edge fields to evaluate into `edge.source.payload`. -> string | array
+  eval-source-fields: (),
+
+  /// Sink half-edge fields to evaluate into `edge.sink.payload`. -> string | array
+  eval-sink-fields: (),
+
+  /// Typst `eval` mode used for string field values. -> string
+  eval-mode: "markup",
+
+  /// Additional Typst names available while evaluating field values. -> dictionary
+  scope: (:),
+) = {
+  let graph-fields = _eval-field-list(eval-graph-fields, "graph.parse")
+  let node-fields = _eval-field-list(eval-node-fields, "graph.parse")
+  let edge-fields = _eval-field-list(eval-edge-fields, "graph.parse")
+  let source-fields = _eval-field-list(eval-source-fields, "graph.parse")
+  let sink-fields = _eval-field-list(eval-sink-fields, "graph.parse")
+  let graphs = cbor(_plugin.parse_graph(bytes(input)))
+  if graph-fields.len() == 0 and node-fields.len() == 0 and edge-fields.len() == 0 and source-fields.len() == 0 and sink-fields.len() == 0 {
+    return graphs
+  }
+  graphs.map(graph => eval-fields(
+    graph,
+    eval-graph-fields: graph-fields,
+    eval-node-fields: node-fields,
+    eval-edge-fields: edge-fields,
+    eval-source-fields: source-fields,
+    eval-sink-fields: sink-fields,
+    eval-mode: eval-mode,
+    scope: scope,
+  ))
+}
 
 /// Build one graph object from a stream of node and edge items.
 ///
@@ -578,10 +929,10 @@
   /// Opaque graph payload. Any CBOR-encodable Typst value. -> any
   payload: none,
 
-  /// Graph-level DOT statements. -> dictionary
+  /// Flat graph statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
 
-  /// Default DOT statements for edges. String values may use `{name}`
+  /// Flat default edge statements. Used by DOT; values cannot nest. String values may use `{name}`
   /// placeholders that expand from each edge's merged statement dictionary.
   /// -> dictionary
   edge-statements: (:),
@@ -601,7 +952,7 @@
   /// -> none | string
   label-eval: none,
 
-  /// Default DOT statements for nodes. -> dictionary
+  /// Flat default node statements. Used by DOT; values cannot nest. -> dictionary
   node-statements: (:),
 
   /// Additional node items or raw node specs. -> array
@@ -621,13 +972,14 @@
     source-style-eval: source-style-eval,
     sink-style-eval: sink-style-eval,
     label-eval: label-eval,
+    context_: "graph.build edge-statements",
   )
   _plugin.graph_from_spec(cbor.encode((
     name: name,
     payload: _encode-payload(payload),
-    statements: statements,
+    statements: _flat-statements(statements, "graph.build statements"),
     edge-statements: edge-statements,
-    node-statements: node-statements,
+    node-statements: _flat-statements(node-statements, "graph.build node-statements"),
     nodes: split.nodes.map(node => _resolved-node-spec(node, node-ids, node-keys)),
     edges: split.edges.map(edge => _resolved-edge-spec(edge, node-keys, edge-ids, half-ids)),
   )))
@@ -660,7 +1012,7 @@
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
   shift: none,
-  /// Additional DOT node statements. -> dictionary
+  /// Additional flat node statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
 ) = {
   _expect-no-extra-args("graph.node", args)
@@ -779,7 +1131,7 @@
   label-angle: none,
   /// Edge bend stored as a statement. -> none | int | float | string
   bend: none,
-  /// Additional DOT edge statements. -> dictionary
+  /// Additional flat edge statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
   /// Always-evaluated Typst style for the source half-edge. -> none | string
   source-style-eval: none,

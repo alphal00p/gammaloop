@@ -16,11 +16,11 @@ use crate::{
     graph_cycle_basis_bytes, graph_dot_bytes, graph_edges_bytes,
     graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
     graph_info_bytes, graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes,
-    graph_nodes_of_bytes, graph_spanning_forests_bytes, graph_subgraph_bytes, layout_graph_bytes,
-    layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes,
-    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph,
-    DotPlacementExpr, PinConstraint, TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode,
-    TypstGraph, TypstPoint,
+    graph_nodes_of_bytes, graph_spanning_forests_bytes, graph_subgraph_bytes,
+    graph_with_payloads_bytes, layout_graph_bytes, layout_parsed_graph_bytes,
+    layout_parsed_graphs_bytes, parse_dot_graphs_bytes, subgraph_contains_hedge_bytes,
+    subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph, DotPlacementExpr, PinConstraint,
+    TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph, TypstPoint,
 };
 
 fn test_figment() -> Figment {
@@ -586,6 +586,81 @@ fn test_graph_spec_payloads_are_opaque_and_survive_layout() {
 
     let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
     assert_payloads(&laid_out);
+}
+
+#[test]
+fn test_parsed_graph_payload_patch_sets_opaque_data() {
+    #[derive(Serialize)]
+    struct PayloadPatch {
+        payload: Vec<u8>,
+        nodes: Vec<IndexedPayloadPatch>,
+        edges: Vec<EdgePayloadPatch>,
+    }
+
+    #[derive(Serialize)]
+    struct IndexedPayloadPatch {
+        index: usize,
+        payload: Vec<u8>,
+    }
+
+    #[derive(Serialize)]
+    struct EdgePayloadPatch {
+        index: usize,
+        payload: Vec<u8>,
+        source: Vec<u8>,
+        sink: Vec<u8>,
+    }
+
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph payloads {
+            graph [label="graph"];
+            a [label="node"];
+            b;
+            a:e -> b:w [label="edge", source="src", sink="snk"];
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let patched = graph_with_payloads_bytes(
+        &graph,
+        &encode_cbor(&PayloadPatch {
+            payload: b"graph-payload".to_vec(),
+            nodes: vec![IndexedPayloadPatch {
+                index: 0,
+                payload: b"node-payload".to_vec(),
+            }],
+            edges: vec![EdgePayloadPatch {
+                index: 0,
+                payload: b"edge-payload".to_vec(),
+                source: b"source-payload".to_vec(),
+                sink: b"sink-payload".to_vec(),
+            }],
+        }),
+    )
+    .unwrap();
+
+    let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(&patched).unwrap());
+    assert_eq!(info.payload.as_deref(), Some(&b"graph-payload"[..]));
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&patched).unwrap());
+    assert_eq!(nodes[0].payload.as_deref(), Some(&b"node-payload"[..]));
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
+    assert_eq!(edges[0].payload.as_deref(), Some(&b"edge-payload"[..]));
+    assert_eq!(
+        edges[0]
+            .source
+            .as_ref()
+            .and_then(|source| source.payload.as_deref()),
+        Some(&b"source-payload"[..])
+    );
+    assert_eq!(
+        edges[0]
+            .sink
+            .as_ref()
+            .and_then(|sink| sink.payload.as_deref()),
+        Some(&b"sink-payload"[..])
+    );
 }
 
 #[test]
