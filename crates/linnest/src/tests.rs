@@ -12,8 +12,8 @@ use linnet::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    expand_template, graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes,
-    graph_cycle_basis_bytes, graph_dot_bytes, graph_edge_payload_by_name_bytes, graph_edges_bytes,
+    graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
+    graph_dot_bytes, graph_edge_payload_by_name_bytes, graph_edges_bytes,
     graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
     graph_info_bytes, graph_node_payload_by_name_bytes, graph_nodes_bytes,
     graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
@@ -210,15 +210,6 @@ fn dot_pos_group_axis_requires_axis_bang() {
     assert!(err.contains("must be pinned with !"));
 }
 
-#[test]
-fn test_template_expansion_replaces_known_keys_and_escapes_braces() {
-    let statements = BTreeMap::from([("label".to_string(), "\"a-c\"".to_string())]);
-
-    assert_eq!(expand_template("[{label}]", &statements), "[a-c]");
-    assert_eq!(expand_template("{{label}}", &statements), "{label}");
-    assert_eq!(expand_template("{missing}", &statements), "{missing}");
-}
-
 #[derive(Serialize)]
 struct TestGraphSpec {
     name: String,
@@ -235,15 +226,9 @@ struct TestTemplatedGraphSpec {
     #[serde(default)]
     statements: BTreeMap<String, String>,
     #[serde(default)]
-    edge_statements: BTreeMap<String, String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    source_style_eval: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sink_style_eval: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    label_eval: Option<String>,
+    default_edge_statements: BTreeMap<String, String>,
     #[serde(default)]
-    node_statements: BTreeMap<String, String>,
+    default_node_statements: BTreeMap<String, String>,
     nodes: Vec<TestNodeSpec>,
     edges: Vec<TestEdgeSpec>,
 }
@@ -905,15 +890,25 @@ fn test_graph_spec_placement_defaults_to_pin() {
 }
 
 #[test]
-fn test_graph_spec_constructor_expands_default_statement_templates() {
+fn test_graph_spec_constructor_preserves_default_statements() {
     let spec = TestTemplatedGraphSpec {
         name: "templated".to_string(),
         statements: BTreeMap::new(),
-        edge_statements: BTreeMap::new(),
-        source_style_eval: Some("(stroke: red + 0.5pt)".to_string()),
-        sink_style_eval: Some("(stroke: blue + 0.5pt)".to_string()),
-        label_eval: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
-        node_statements: BTreeMap::from([(
+        default_edge_statements: BTreeMap::from([
+            (
+                "source-style".to_string(),
+                "(stroke: red + 0.5pt)".to_string(),
+            ),
+            (
+                "sink-style".to_string(),
+                "(stroke: blue + 0.5pt)".to_string(),
+            ),
+            (
+                "display-label".to_string(),
+                "(text(fill: rgb(\"#{color}\"))[{label}])".to_string(),
+            ),
+        ]),
+        default_node_statements: BTreeMap::from([(
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
         )]),
@@ -947,25 +942,21 @@ fn test_graph_spec_constructor_expands_default_statement_templates() {
 
     let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
-    assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#ff0000\"))"));
-    assert_eq!(nodes[1].eval.as_deref(), Some("(fill: rgb(\"#00aa00\"))"));
+    assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#{color}\"))"));
+    assert_eq!(nodes[1].eval.as_deref(), Some("(fill: rgb(\"#{color}\"))"));
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(
-        edges[0].label_eval.as_deref(),
-        Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
+        edges[0].statements.get("display-label").map(String::as_str),
+        Some("(text(fill: rgb(\"#{color}\"))[{label}])")
     );
     assert_eq!(
-        edges[0].source_style_eval.as_deref(),
+        edges[0].statements.get("source-style").map(String::as_str),
         Some("(stroke: red + 0.5pt)")
     );
     assert_eq!(
-        edges[0].sink_style_eval.as_deref(),
+        edges[0].statements.get("sink-style").map(String::as_str),
         Some("(stroke: blue + 0.5pt)")
-    );
-    assert_eq!(
-        edges[0].statements.get("label-eval").map(String::as_str),
-        Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
     );
 }
 
@@ -1023,15 +1014,25 @@ fn test_archived_graph_and_subgraph_api() {
 }
 
 #[test]
-fn test_graph_spec_expands_default_statement_templates() {
+fn test_graph_spec_preserves_default_statements() {
     let graph = graph_from_spec_bytes(&encode_cbor(&TestTemplatedGraphSpec {
         name: "constructed".to_string(),
         statements: BTreeMap::new(),
-        edge_statements: BTreeMap::new(),
-        source_style_eval: Some("(stroke: red + 0.5pt)".to_string()),
-        sink_style_eval: Some("(stroke: blue + 0.5pt)".to_string()),
-        label_eval: Some("(text(fill: rgb(\"#{color}\"))[{label}])".to_string()),
-        node_statements: BTreeMap::from([(
+        default_edge_statements: BTreeMap::from([
+            (
+                "source-style".to_string(),
+                "(stroke: red + 0.5pt)".to_string(),
+            ),
+            (
+                "sink-style".to_string(),
+                "(stroke: blue + 0.5pt)".to_string(),
+            ),
+            (
+                "display-label".to_string(),
+                "(text(fill: rgb(\"#{color}\"))[{label}])".to_string(),
+            ),
+        ]),
+        default_node_statements: BTreeMap::from([(
             "eval".to_string(),
             "(fill: rgb(\"#{color}\"))".to_string(),
         )]),
@@ -1065,18 +1066,18 @@ fn test_graph_spec_expands_default_statement_templates() {
     .unwrap();
 
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
-    assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#ff0000\"))"));
+    assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#{color}\"))"));
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(
-        edges[0].label_eval.as_deref(),
-        Some("(text(fill: rgb(\"#0055ff\"))[a-c])")
+        edges[0].statements.get("display-label").map(String::as_str),
+        Some("(text(fill: rgb(\"#{color}\"))[{label}])")
     );
     assert_eq!(
-        edges[0].source_style_eval.as_deref(),
+        edges[0].statements.get("source-style").map(String::as_str),
         Some("(stroke: red + 0.5pt)")
     );
     assert_eq!(
-        edges[0].sink_style_eval.as_deref(),
+        edges[0].statements.get("sink-style").map(String::as_str),
         Some("(stroke: blue + 0.5pt)")
     );
 }

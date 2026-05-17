@@ -23,7 +23,7 @@ pub use graph_api::{
     subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge,
     TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstPoint,
 };
-pub use pin::{expand_template, PinConstraint};
+pub use pin::PinConstraint;
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
 use dot_parser::ast::CompassPt;
@@ -281,17 +281,7 @@ impl TypstNode {
         let shift =
             Self::parse_position(&data.statements, "shift").map(|(x, y)| Vector2::new(x, y));
 
-        let mut eval: Option<String> = data.get("eval").transpose().unwrap();
-
-        // Apply template expansion and clean quotes
-        eval = eval.map(|template| {
-            let clean_template = template
-                .strip_prefix('"')
-                .unwrap_or(&template)
-                .strip_suffix('"')
-                .unwrap_or(&template);
-            expand_template(clean_template, &data.statements)
-        });
+        let eval: Option<String> = data.get("eval").transpose().unwrap();
 
         let (pos, constraints) = init_points[nid];
         let (start_x, start_y) = Self::parse_position_flags(&data.statements);
@@ -374,10 +364,6 @@ pub struct TypstEdge {
     #[with(rkyv::with::Map<Point2Rkyv>)]
     label_pos: Option<Point2<f64>>,
     label_angle: Option<f64>,
-    sink_style_eval: Option<String>,
-    source_style_eval: Option<String>,
-    label_eval: Option<String>,
-    mom_eval: Option<String>,
     #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
     statements: BTreeMap<String, String>,
@@ -412,10 +398,6 @@ impl Default for TypstEdge {
             label_pos: None,
             label_angle: None,
             shift: None,
-            label_eval: None,
-            sink_style_eval: None,
-            source_style_eval: None,
-            mom_eval: None,
             statements: BTreeMap::new(),
             constraints: PointConstraint::default(),
         }
@@ -443,54 +425,6 @@ impl TypstEdge {
                 cleaned.trim().parse::<f64>().ok()
             });
 
-            let mut sink_style_eval: Option<String> = d.get("sink-style-eval").transpose().unwrap();
-
-            // Apply template expansion and clean quotes for eval
-            sink_style_eval = sink_style_eval.map(|template| {
-                let clean_template = template
-                    .strip_prefix('"')
-                    .unwrap_or(&template)
-                    .strip_suffix('"')
-                    .unwrap_or(&template);
-                expand_template(clean_template, &d.statements)
-            });
-
-            let mut source_style_eval: Option<String> =
-                d.get("source-style-eval").transpose().unwrap();
-
-            // Apply template expansion and clean quotes for eval
-            source_style_eval = source_style_eval.map(|template| {
-                let clean_template = template
-                    .strip_prefix('"')
-                    .unwrap_or(&template)
-                    .strip_suffix('"')
-                    .unwrap_or(&template);
-                expand_template(clean_template, &d.statements)
-            });
-
-            let mut label_eval: Option<String> = d.get("label-eval").transpose().unwrap();
-
-            // Apply template expansion and clean quotes for eval
-            label_eval = label_eval.map(|template| {
-                let clean_template = template
-                    .strip_prefix('"')
-                    .unwrap_or(&template)
-                    .strip_suffix('"')
-                    .unwrap_or(&template);
-                expand_template(clean_template, &d.statements)
-            });
-
-            let mut mom_eval: Option<String> = d.get("mom-eval").transpose().unwrap();
-
-            // Apply template expansion and clean quotes for mom_eval
-            mom_eval = mom_eval.map(|template| {
-                let clean_template = template
-                    .strip_prefix('"')
-                    .unwrap_or(&template)
-                    .strip_suffix('"')
-                    .unwrap_or(&template);
-                expand_template(clean_template, &d.statements)
-            });
             let mut from = None;
             let mut to = None;
             match p {
@@ -525,10 +459,6 @@ impl TypstEdge {
                 constraints,
                 label_pos,
                 label_angle,
-                label_eval,
-                sink_style_eval,
-                source_style_eval,
-                mom_eval,
                 shift,
                 payload: d.payload,
                 statements: d.statements,
@@ -560,22 +490,6 @@ impl TypstEdge {
 
         if let Some(a) = self.label_angle {
             statements.insert("label-angle".to_string(), format!("{a}rad"));
-        }
-
-        if let Some(eval) = &self.sink_style_eval {
-            statements.insert("sink-style-eval".to_string(), eval.clone());
-        }
-
-        if let Some(eval) = &self.source_style_eval {
-            statements.insert("source-style-eval".to_string(), eval.clone());
-        }
-
-        if let Some(eval) = &self.label_eval {
-            statements.insert("label-eval".to_string(), eval.clone());
-        }
-
-        if let Some(eval) = &self.mom_eval {
-            statements.insert("mom-eval".to_string(), eval.clone());
         }
 
         DotEdgeData {
@@ -1209,16 +1123,7 @@ impl TypstGraph {
 
         let config = LayoutConfig::from_figment(&graph_figment);
 
-        let mut global_eval: Option<String> = dot.global_data.statements.get("eval").cloned();
-
-        if let Some(g) = &mut global_eval {
-            let clean_template = g
-                .strip_prefix('"')
-                .unwrap_or(g)
-                .strip_suffix('"')
-                .unwrap_or(g);
-            *g = expand_template(clean_template, &dot.global_data.statements);
-        }
+        let global_eval: Option<String> = dot.global_data.statements.get("eval").cloned();
 
         Self {
             graph,

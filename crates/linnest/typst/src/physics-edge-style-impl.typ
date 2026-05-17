@@ -175,25 +175,6 @@
 /// -> string
 #let text-value(value) = str(value).trim("\"")
 
-/// Replace `{field}` placeholders in a string-valued style template.
-/// `{{` and `}}` produce literal braces.
-/// -> none | string
-#let interpolate-template(template, edge) = {
-  if template == none {
-    none
-  } else {
-    let text = text-value(template)
-    text = text.replace("{{", "\u{e000}").replace("}}", "\u{e001}")
-    for key in edge.keys() {
-      let value = edge.at(key)
-      if value != none {
-        text = text.replace("{" + str(key) + "}", text-value(value))
-      }
-    }
-    text.replace("\u{e000}", "{").replace("\u{e001}", "}")
-  }
-}
-
 #let eval-scope(map: default-map) = (
   mi: mi,
   massive: massive,
@@ -213,10 +194,10 @@
   map: map,
 )
 
-/// Evaluate a string-valued style template after placeholder interpolation.
+/// Evaluate a string-valued style expression in the edge scope.
 /// -> any
-#let eval-template(template, edge, map: default-map, scope: (:)) = {
-  eval(interpolate-template(template, edge), scope: eval-scope(map: map) + scope + edge)
+#let eval-expression(value, edge, map: default-map, scope: (:)) = {
+  eval(text-value(value), scope: eval-scope(map: map) + scope + edge)
 }
 
 #let _assert-typst-fields-mode(mode) = {
@@ -226,7 +207,7 @@
 }
 
 /// Convert a style label value to content. In `mode: "eval"`, string values are
-/// evaluated after placeholder interpolation.
+/// evaluated in the edge scope.
 /// -> none | content
 #let label-content(value, edge, mode: "plain", map: default-map, scope: (:)) = {
   _assert-typst-fields-mode(mode)
@@ -234,18 +215,15 @@
     none
   } else if type(value) == content {
     value
+  } else if mode == "eval" {
+    eval-expression(value, edge, map: map, scope: scope)
   } else {
-    let text = interpolate-template(value, edge)
-    if mode == "eval" {
-      eval(text, scope: eval-scope(map: map) + scope + edge)
-    } else {
-      [#text]
-    }
+    [#text-value(value)]
   }
 }
 
 /// Convert a style value to a dictionary. In `mode: "eval"`, string values are
-/// evaluated after placeholder interpolation.
+/// evaluated in the edge scope.
 /// -> dictionary
 #let style-dict(value, edge, mode: "plain", map: default-map, scope: (:)) = {
   _assert-typst-fields-mode(mode)
@@ -254,10 +232,41 @@
   } else if type(value) == dictionary {
     value
   } else if mode == "eval" {
-    eval-template(value, edge, map: map, scope: scope)
+    eval-expression(value, edge, map: map, scope: scope)
   } else {
     (:)
   }
+}
+
+#let _record-payload(record) = {
+  if type(record) != dictionary {
+    (:)
+  } else {
+    let payload = record.at("payload", default: none)
+    if type(payload) == dictionary { payload } else { (:) }
+  }
+}
+
+#let _payload-field(record, field, default: none) = {
+  _record-payload(record).at(field, default: default)
+}
+
+#let _edge-payload-field(edge, field, default: none) = {
+  _payload-field(edge, field, default: default)
+}
+
+#let _half-record(edge, half) = {
+  let half-edge = edge.at(half + "-half-edge", default: none)
+  if half-edge != none {
+    half-edge
+  } else {
+    let value = edge.at(half, default: none)
+    if type(value) == dictionary { value } else { none }
+  }
+}
+
+#let _half-payload-field(edge, half, field, default: none) = {
+  _payload-field(_half-record(edge, half), field, default: default)
 }
 
 #let _base-half-style(edge, half, map: default-map, default: default-edge, orientation-split: true) = {
@@ -382,7 +391,7 @@
 ) = {
   let style = _base-half-style(edge, half, map: map, default: default, orientation-split: orientation-split)
   style = style + style-dict(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
-  style = style + style-dict(edge.at(half + "-style-eval", default: none), edge, mode: "eval", map: map, scope: scope)
+  style = style + style-dict(_half-payload-field(edge, half, "style"), edge, mode: typst-fields, map: map, scope: scope)
   if momentum-arrows {
     let show-mark = _momentum-arrow-half(edge) == half
     (
@@ -578,16 +587,20 @@
 }
 
 #let _default-label(edge, map: default-map, default: default-edge, typst-fields: "plain", scope: (:)) = {
-  let label-eval = edge.at("label-eval", default: none)
-  if label-eval != none {
-    label-content(label-eval, edge, mode: "eval", map: map, scope: scope)
+  let payload-label = _edge-payload-field(
+    edge,
+    "display-label",
+    default: _edge-payload-field(edge, "label", default: none),
+  )
+  if payload-label != none {
+    label-content(payload-label, edge, mode: typst-fields, map: map, scope: scope)
   } else {
-    let label-template = edge.at(
+    let label-value = edge.at(
       "display-label",
-      default: edge.at("label-template", default: edge.at("label", default: none)),
+      default: edge.at("label", default: none),
     )
-    if label-template != none {
-      label-content(label-template, edge, mode: typst-fields, map: map, scope: scope)
+    if label-value != none {
+      label-content(label-value, edge, mode: typst-fields, map: map, scope: scope)
     } else {
       label-content(
         edge-entry(edge, map: map, default: default).at("label", default: none),
@@ -601,9 +614,9 @@
 
 /// Edge-label callback.
 ///
-/// By default this preserves explicit `label-eval`, `display-label`,
-/// `label-template`, `label`, and particle-map labels. Set any `show-*` option
-/// to build a label from selected metadata instead:
+/// By default this preserves payload `display-label` or `label`, then explicit
+/// `display-label`, `label`, and particle-map labels. Set any
+/// `show-*` option to build a label from selected metadata instead:
 ///
 /// ```example
 /// #let callbacks = physics.style(
@@ -656,19 +669,14 @@
   }
 }
 
-/// Return a dictionary bundling `source-style`, `sink-style`, and `edge-label`
-/// callbacks with shared options for `linnest.draw`.
+/// Bundle source-style, sink-style, and edge-label callbacks with shared
+/// options for `linnest.draw`.
 ///
 /// ```example
 /// #let g = graph.build({
 ///   graph.node(<a>)
 ///   graph.node(<b>)
-///   graph.edge(
-///     graph.source(<a>),
-///     <g-edge>,
-///     graph.sink(<b>),
-///     statements: (particle: "g", id: "7"),
-///   )
+///   graph.edge(graph.source(<a>), <g-edge>, graph.sink(<b>), statements: (particle: "g", id: "7"))
 /// },
 ///   name: "physics",
 /// )
