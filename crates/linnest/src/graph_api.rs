@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::expand_template;
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
+const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -141,6 +142,7 @@ pub struct TypstDotEndpoint {
 #[serde(rename_all = "kebab-case")]
 pub struct TypstDotEdge {
     pub edge: usize,
+    pub name: Option<String>,
     pub id: Option<usize>,
     pub payload: Option<Vec<u8>>,
     pub orientation: String,
@@ -275,6 +277,12 @@ pub struct TypstEdgePayloadPatch {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct TypstNamedPayloadPatch {
+    pub name: String,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TypstJoinSpec {
     pub key: String,
 }
@@ -320,6 +328,81 @@ pub fn graph_with_payloads_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Str
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
     let patch: TypstGraphPayloadPatch = decode_cbor(arg2, "graph payload patch")?;
     apply_graph_payload_patch(&mut graph, patch)?;
+    graph
+        .to_rkyv_bytes::<4096>()
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())
+}
+
+pub fn graph_node_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let name: String = decode_cbor(arg2, "node name")?;
+    let graph = DotGraph::archived_view(arg);
+    let payload = graph
+        .vertex_data()
+        .find(|node| {
+            node.data
+                .name
+                .as_ref()
+                .is_some_and(|value| value.as_str() == name)
+        })
+        .ok_or_else(|| format!("No node named {name:?}"))?
+        .data
+        .payload
+        .as_ref()
+        .map(|value| value.to_vec());
+    encode_cbor(&payload)
+}
+
+pub fn graph_edge_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let name: String = decode_cbor(arg2, "edge name")?;
+    let graph = DotGraph::archived_view(arg);
+    let payload = graph
+        .edge_data()
+        .find(|edge| archived_edge_name(*edge).as_deref() == Some(name.as_str()))
+        .ok_or_else(|| format!("No edge named {name:?}"))?
+        .data
+        .payload
+        .as_ref()
+        .map(|value| value.to_vec());
+    encode_cbor(&payload)
+}
+
+pub fn graph_set_node_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
+        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let patch: TypstNamedPayloadPatch = decode_cbor(arg2, "named node payload patch")?;
+    let node = graph
+        .graph
+        .iter_nodes()
+        .find_map(|(index, _, data)| {
+            (data.name.as_deref() == Some(patch.name.as_str())).then_some(index)
+        })
+        .ok_or_else(|| format!("No node named {:?}", patch.name))?;
+    graph.graph[node].payload = Some(patch.payload);
+    graph
+        .to_rkyv_bytes::<4096>()
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())
+}
+
+pub fn graph_set_edge_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
+        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let patch: TypstNamedPayloadPatch = decode_cbor(arg2, "named edge payload patch")?;
+    let edge = graph
+        .graph
+        .iter_edges()
+        .find_map(|(_, index, data)| {
+            (data
+                .data
+                .statements
+                .get(TYPST_EDGE_NAME_KEY)
+                .map(String::as_str)
+                == Some(patch.name.as_str()))
+            .then_some(index)
+        })
+        .ok_or_else(|| format!("No edge named {:?}", patch.name))?;
+    graph.graph[edge].payload = Some(patch.payload);
     graph
         .to_rkyv_bytes::<4096>()
         .map(|bytes| bytes.to_vec())
@@ -641,6 +724,12 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
             .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
             .collect(),
     }
+}
+
+fn archived_edge_name(edge: ArchivedDotEdgeView<'_>) -> Option<String> {
+    edge.data.statements.iter().find_map(|(key, value)| {
+        (key.as_str() == TYPST_EDGE_NAME_KEY).then(|| value.as_str().to_string())
+    })
 }
 
 fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
@@ -1136,6 +1225,7 @@ fn edge_view_to_output(
 
     TypstDotEdge {
         edge: edge.edge.0,
+        name: archived_edge_name(edge),
         id: edge
             .data
             .edge_id
@@ -1159,7 +1249,14 @@ fn edge_view_to_output(
 }
 
 fn public_statements(mut statements: BTreeMap<String, String>) -> BTreeMap<String, String> {
-    for key in ["pos", "pos-x-set", "pos-y-set", "pos-mode", "pin"] {
+    for key in [
+        "pos",
+        "pos-x-set",
+        "pos-y-set",
+        "pos-mode",
+        "pin",
+        TYPST_EDGE_NAME_KEY,
+    ] {
         statements.remove(key);
     }
     statements

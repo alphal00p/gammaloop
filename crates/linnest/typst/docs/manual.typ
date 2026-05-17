@@ -1,6 +1,6 @@
 #import "@preview/tidy:0.4.3"
 #import "../src/lib.typ": draw, graph, layout, physics, subgraph
-#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
+#import graph: build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink, source, update-edge-data, update-node-data
 
 
 #set document(title: "Linnest Typst API")
@@ -36,10 +36,9 @@ If a half-edge is glued to itself, we call that an external half-edge. This mean
 #let g = build({
   node(<a>, label: [$v$])
   node(<b>)
-  edge(source(<a>), <e>, sink(<b>), label: [e])
-  edge(source(<a>), <w>, label: [e])
-  edge(source(<a>), <1>, label: [e])
-  // edge(source(<a>), <g>, sink(<b>), label: [g])
+  edge(source(<a>), <a-b>, sink(<b>), label: [e])
+  edge(source(<a>), <in-a1>, label: [e])
+  edge(source(<a>), <in-a2>, label: [e])
 })
 // #edges(g)
 #align(center, draw(layout(g, g-center: 0.005, length-scale: .3)))
@@ -59,12 +58,16 @@ Graphs can be constructed in two ways, parsing from a dot string using `parse`:
 or building from edges and nodes using `build`, with a fletcher inspired syntax:
 ```typ
 #let g = build({
-  node(<a>)
-  node(<c>)
-  edge( source(<a>), <a-c>, sink(<c>), label: [a-c] )
+  node(<a>, label: [$v$])
+  node(<b>)
+  edge(source(<a>), <a-b>, sink(<b>), label: [e])
+  edge(source(<a>), <in-a1>, label: [e])
+  edge(source(<a>), <in-a2>, label: [e])
 })```
 
 In either case, ```typst type(g)```=#type(g), because they both return an  opaque zero-copy value that corresponds to a linnet graph struct. However none of the data is lost, as you can query this value for information about the graph, such as the edges and the nodes.
+
+The main usecase however is of course to automatically place the nodes and edges on a canvas, using the `layout` function.
 
 
 
@@ -151,6 +154,12 @@ objects back to `graph` or `subgraph` for inspection.
   items.
 - `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
   new opaque payloads without changing topology.
+- `graph.node-data(graph, <name>)` and `graph.edge-data(graph, <name>)` return
+  one named node or edge payload.
+- `graph.update-node-data(graph, <name>, data)` and
+  `graph.update-edge-data(graph, <name>, data)` update one named node or edge
+  payload. Direct replacements use a Rust-side lookup; callbacks still run in
+  Typst with `(data, record)`.
 - `graph.eval-fields(graph, ..)` evaluates selected record fields into payload
   entries. It works on parsed and built graph objects.
 - `node(..)` returns a node item.
@@ -217,6 +226,25 @@ fields:
   node(<c>)
   edge(source(<a>), <e1>, sink(<c>))
 })
+```
+
+Named nodes and edges can be updated after construction without scanning in the
+caller. The update replaces the opaque payload, or it can be a callback receiving
+`(data, record)`:
+
+```typ
+#let g = build({
+  node(<a>)
+  node(<c>)
+  edge(source(<a>), <e1>, sink(<c>))
+})
+#let g = update-node-data(g, <a>, (label: [A]))
+#let g = update-edge-data(g, <e1>, (data, edge) => (
+  label: [$p$],
+  source: edge.source.node,
+))
+#node-data(g, <a>).label
+#edge-data(g, <e1>).label
 ```
 
 `source(..)` and `sink(..)` accept a node reference plus optional `name`, `id`,
@@ -659,8 +687,8 @@ Subgraph objects are opaque zero-copy values.
 
 
 
-#tidy.show-module(draw-docs, style: tidy-style)
-#tidy.show-module(docs, style: tidy-style)
 #tidy.show-module(graph-docs, style: tidy-style)
+#tidy.show-module(docs, style: tidy-style)
 #tidy.show-module(physics-docs, style: tidy-style)
+#tidy.show-module(draw-docs, style: tidy-style)
 #tidy.show-module(subgraph-docs, style: tidy-style)

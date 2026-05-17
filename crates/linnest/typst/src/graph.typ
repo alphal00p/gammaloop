@@ -439,6 +439,10 @@
 
 #let _edge-spec(edge) = {
   let statements = _edge-statements(edge)
+  let name = edge.at("name", default: none)
+  if name != none {
+    statements.insert("__linnest-edge-name", _label-key(name, "graph.edge"))
+  }
   let payload = _encode-payload(_payload-with-label(edge.at("payload", default: none), edge.at("label", default: none), "graph.edge"))
   let clean = edge
   for key in (
@@ -1263,6 +1267,142 @@
     cbor(_plugin.graph_edges_of_subgraph(bytes(graph), bytes(subgraph)))
   }
   records.map(_decode-edge-payloads)
+}
+
+#let _name-key(value, context_) = {
+  if type(value) == label {
+    _label-key(value, context_)
+  } else if type(value) == str {
+    value
+  } else {
+    panic(context_ + ": expected a Typst label or string name")
+  }
+}
+
+#let _find-record-by-name(records, key) = {
+  let found = false
+  for record in records {
+    if record.at("name", default: none) == key {
+      found = true
+    }
+  }
+  found
+}
+
+#let _data-update(update, record, context_) = {
+  let data = record.at("payload", default: none)
+  let result = if type(update) == function {
+    update(data, record)
+  } else {
+    update
+  }
+  if result == none {
+    none
+  } else {
+    (payload: result)
+  }
+}
+
+#let _named-data-callback(key, update, context_) = record => {
+  if record.at("name", default: none) == key {
+    _data-update(update, record, context_)
+  } else {
+    none
+  }
+}
+
+/// Return one named node's opaque payload.
+///
+/// `name` is a Typst label such as `<a>` or the corresponding string name.
+///
+/// ```example
+/// #let g = graph.build({ graph.node(<a>, payload: (label: [A])) })
+/// #graph.node-data(g, <a>).label
+/// ```
+/// -> any
+#let node-data(graph_, name) = {
+  let key = _name-key(name, "graph.node-data")
+  decode-payload(cbor(_plugin.graph_node_payload_by_name(bytes(graph_), cbor.encode(key))))
+}
+
+/// Return one named edge's opaque payload.
+///
+/// `name` is a Typst label such as `<e>` or the corresponding string name.
+///
+/// ```example
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), payload: (label: [$p$]))
+/// })
+/// #graph.edge-data(g, <e>).label
+/// ```
+/// -> any
+#let edge-data(graph_, name) = {
+  let key = _name-key(name, "graph.edge-data")
+  decode-payload(cbor(_plugin.graph_edge_payload_by_name(bytes(graph_), cbor.encode(key))))
+}
+
+/// Update one named node's opaque payload.
+///
+/// `name` is a Typst label such as `<a>` or the corresponding string name.
+/// `update` may be a replacement data value or a function
+/// `(data, node) => new-data`.
+///
+/// ```example
+/// #let g = graph.build({ graph.node(<a>) })
+/// #let g = graph.update-node-data(g, <a>, (label: [A]))
+/// #graph.nodes(g).first().payload.label
+/// ```
+/// -> bytes
+#let update-node-data(graph_, name, update) = {
+  let key = _name-key(name, "graph.update-node-data")
+  if update == none {
+    return graph_
+  }
+  if type(update) != function {
+    return _plugin.graph_set_node_payload_by_name(
+      bytes(graph_),
+      cbor.encode((name: key, payload: _encode-payload(update))),
+    )
+  }
+  if not _find-record-by-name(nodes(graph_), key) {
+    panic("graph.update-node-data: no node named " + repr(name))
+  }
+  map(graph_, node: _named-data-callback(key, update, "graph.update-node-data"))
+}
+
+/// Update one named edge's opaque payload.
+///
+/// `name` is a Typst label such as `<e>` or the corresponding string name.
+/// `update` may be a replacement data value or a function
+/// `(data, edge) => new-data`.
+///
+/// ```example
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>))
+/// })
+/// #let g = graph.update-edge-data(g, <e>, (label: [$p$]))
+/// #graph.edges(g).first().payload.label
+/// ```
+/// -> bytes
+#let update-edge-data(graph_, name, update) = {
+  let key = _name-key(name, "graph.update-edge-data")
+  if update == none {
+    return graph_
+  }
+  if type(update) != function {
+    return _plugin.graph_set_edge_payload_by_name(
+      bytes(graph_),
+      cbor.encode((name: key, payload: _encode-payload(update))),
+    )
+  }
+  if not _find-record-by-name(edges(graph_), key) {
+    panic("graph.update-edge-data: no edge named " + repr(name))
+  }
+  map(graph_, edge: _named-data-callback(key, update, "graph.update-edge-data"))
 }
 
 /// Join two graphs by matching dangling half-edge data on `key`.

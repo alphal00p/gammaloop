@@ -13,14 +13,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     expand_template, graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes,
-    graph_cycle_basis_bytes, graph_dot_bytes, graph_edges_bytes,
+    graph_cycle_basis_bytes, graph_dot_bytes, graph_edge_payload_by_name_bytes, graph_edges_bytes,
     graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
-    graph_info_bytes, graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes,
-    graph_nodes_of_bytes, graph_spanning_forests_bytes, graph_subgraph_bytes,
-    graph_with_payloads_bytes, layout_graph_bytes, layout_parsed_graph_bytes,
-    layout_parsed_graphs_bytes, parse_dot_graphs_bytes, subgraph_contains_hedge_bytes,
-    subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph, DotPlacementExpr, PinConstraint,
-    TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph, TypstPoint,
+    graph_info_bytes, graph_node_payload_by_name_bytes, graph_nodes_bytes,
+    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
+    graph_set_edge_payload_by_name_bytes, graph_set_node_payload_by_name_bytes,
+    graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_payloads_bytes,
+    layout_graph_bytes, layout_parsed_graph_bytes, layout_parsed_graphs_bytes,
+    parse_dot_graphs_bytes, subgraph_contains_hedge_bytes, subgraph_hedges_bytes,
+    subgraph_label_bytes, CBORTypstGraph, DotPlacementExpr, PinConstraint, TreeInitCfg,
+    TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph, TypstPoint,
 };
 
 fn test_figment() -> Figment {
@@ -661,6 +663,81 @@ fn test_parsed_graph_payload_patch_sets_opaque_data() {
             .and_then(|sink| sink.payload.as_deref()),
         Some(&b"sink-payload"[..])
     );
+}
+
+#[test]
+fn test_named_node_and_edge_payload_api() {
+    #[derive(Serialize)]
+    struct NamedPayload<'a> {
+        name: &'a str,
+        payload: Vec<u8>,
+    }
+
+    let mut edge_statements = one_statement("__linnest-edge-name", "e1");
+    edge_statements.insert("label".to_string(), "a-b".to_string());
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "named-payloads".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: 1,
+                compass: None,
+                statement: None,
+            }),
+            statements: edge_statements,
+        }],
+    }))
+    .unwrap();
+
+    let node_payload: Option<Vec<u8>> =
+        decode_cbor(&graph_node_payload_by_name_bytes(&graph, &encode_cbor(&"a")).unwrap());
+    assert_eq!(node_payload, None);
+
+    let graph = graph_set_node_payload_by_name_bytes(
+        &graph,
+        &encode_cbor(&NamedPayload {
+            name: "a",
+            payload: b"node-payload".to_vec(),
+        }),
+    )
+    .unwrap();
+    let graph = graph_set_edge_payload_by_name_bytes(
+        &graph,
+        &encode_cbor(&NamedPayload {
+            name: "e1",
+            payload: b"edge-payload".to_vec(),
+        }),
+    )
+    .unwrap();
+
+    let node_payload: Option<Vec<u8>> =
+        decode_cbor(&graph_node_payload_by_name_bytes(&graph, &encode_cbor(&"a")).unwrap());
+    assert_eq!(node_payload.as_deref(), Some(&b"node-payload"[..]));
+    let edge_payload: Option<Vec<u8>> =
+        decode_cbor(&graph_edge_payload_by_name_bytes(&graph, &encode_cbor(&"e1")).unwrap());
+    assert_eq!(edge_payload.as_deref(), Some(&b"edge-payload"[..]));
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(edges[0].name.as_deref(), Some("e1"));
+    assert!(!edges[0].statements.contains_key("__linnest-edge-name"));
+
+    let dot: String = decode_cbor(&graph_dot_bytes(&graph).unwrap());
+    assert!(!dot.contains("__linnest-edge-name"));
 }
 
 #[test]
