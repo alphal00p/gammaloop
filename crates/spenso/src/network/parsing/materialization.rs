@@ -695,48 +695,6 @@ impl ChainExpansion {
             _ => value.to_owned(),
         }
     }
-
-    /// Multiply the first actual chain/trace factor by a scalar.
-    ///
-    /// For open chains the first factor starts after the two endpoint slots. For
-    /// traces it starts after the representation argument. Empty chains/traces
-    /// have no factor to scale and are left to their dedicated parser cases.
-    pub(super) fn scale_first_factor(value: AtomView<'_>, scalar: &Atom) -> Option<Atom> {
-        let AtomView::Fun(fun) = value else {
-            return None;
-        };
-
-        if fun.get_symbol() == SPENSO_TAG.trace {
-            let (rep, factors) = symbolica_atom::trace_parts(fun)?;
-            let mut factors = factors
-                .into_iter()
-                .map(|factor| factor.to_owned())
-                .collect::<Vec<_>>();
-            let first = factors.first_mut()?;
-            *first = scalar.clone() * first.clone();
-            return Some(symbolica_atom::trace(rep, factors));
-        }
-
-        let offset = if fun.get_symbol() == SPENSO_TAG.chain {
-            2
-        } else {
-            return None;
-        };
-
-        if fun.get_nargs() <= offset {
-            return None;
-        }
-
-        let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-        for (position, arg) in fun.iter().enumerate() {
-            if position == offset {
-                rebuilt = rebuilt.add_arg(scalar.clone() * arg.to_owned());
-            } else {
-                rebuilt = rebuilt.add_arg(arg);
-            }
-        }
-        Some(rebuilt.finish())
-    }
 }
 
 #[cfg(test)]

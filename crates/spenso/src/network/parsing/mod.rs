@@ -32,7 +32,6 @@ pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep,
 mod structure_inference;
 pub use structure_inference::{AtomStructureExt, StructureFromAtom, StructureInferenceMode};
 mod materialization;
-use materialization::ChainExpansion;
 mod tensor_from_expression;
 pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
 
@@ -404,18 +403,6 @@ where
 
             if res.is_empty() {
                 Ok(Self::from_scalar(value.as_view().try_into()?))
-            } else if scalars != Atom::num(1)
-                && res.len() == 1
-                && let Some(scaled) =
-                    ChainExpansion::scale_first_factor(res[0].0.as_view(), &scalars)
-            {
-                Self::try_from_view_impl(
-                    scaled.as_view(),
-                    state.clone(),
-                    library,
-                    function_library,
-                    settings,
-                )
             } else {
                 let s = if scalars != Atom::num(1) {
                     Self::from_scalar(scalars.as_view().try_into()?)
