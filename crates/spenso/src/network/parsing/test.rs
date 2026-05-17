@@ -80,6 +80,24 @@ fn parse_chain_as_opaque_tensor_with_expanded_structure() {
 }
 
 #[test]
+fn parse_scalar_prefixed_chain_keeps_scalar_outside_chain() {
+    let rep = mink4();
+    let expr = Atom::num(-2)
+        * chain!(
+            slot!(rep, i),
+            slot!(rep, j),
+            chain_factor(tensor_symbol!(parse_prefixed_chain_f)),
+        );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
 fn parse_trace_materializes_closed_links() {
     let rep = mink4();
     let expr = trace!(
@@ -98,6 +116,19 @@ fn parse_trace_materializes_closed_links() {
         parsed.state,
         parsed.graph.dangling_indices()
     );
+    assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn parse_scalar_prefixed_trace_keeps_scalar_outside_trace() {
+    let rep = mink4();
+    let expr = Atom::num(-2) * trace!(&rep, chain_factor(tensor_symbol!(parse_prefixed_trace_f)));
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert!(parsed.state.is_scalar());
     assert!(parsed.graph.dangling_indices().is_empty());
 }
 
