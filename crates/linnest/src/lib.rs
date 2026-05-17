@@ -200,6 +200,7 @@ where
 pub struct TypstNode {
     name: Option<String>,
     index: Option<NodeIndex>,
+    payload: Option<Vec<u8>>,
     #[with(Point2Rkyv)]
     pos: Point2<f64>,
     start_x: bool,
@@ -216,6 +217,7 @@ impl Default for TypstNode {
         TypstNode {
             name: None,
             index: None,
+            payload: None,
             pos: Point2::origin(),
             start_x: false,
             start_y: false,
@@ -263,6 +265,7 @@ impl TypstNode {
         DotVertexData {
             name: self.name.clone(),
             index: self.index,
+            payload: self.payload.clone(),
             statements,
         }
     }
@@ -294,6 +297,7 @@ impl TypstNode {
         Self {
             name: data.name,
             index: data.index,
+            payload: data.payload,
             statements: data.statements,
             pos,
             start_x,
@@ -358,6 +362,7 @@ impl TypstNode {
 pub struct TypstEdge {
     from: Option<(NodeIndex, Hedge)>,
     to: Option<(NodeIndex, Hedge)>,
+    payload: Option<Vec<u8>>,
     #[with(BendRkyv)]
     bend: Result<Rad<f64>, GeomError>,
     #[with(Point2Rkyv)]
@@ -397,6 +402,7 @@ impl Default for TypstEdge {
         Self {
             from: None,
             to: None,
+            payload: None,
             bend: Err(GeomError::NotComputed),
             pos: Point2::origin(),
             start_x: false,
@@ -522,6 +528,7 @@ impl TypstEdge {
                 source_style_eval,
                 mom_eval,
                 shift,
+                payload: d.payload,
                 statements: d.statements,
                 ..Default::default()
             }
@@ -570,6 +577,7 @@ impl TypstEdge {
         }
 
         DotEdgeData {
+            payload: self.payload.clone(),
             local_statements: statements.clone(),
             statements,
             edge_id: None,
@@ -586,6 +594,7 @@ pub struct TypstHedge {
     weight: f64,
     statement: Option<String>,
     id: Option<usize>,
+    payload: Option<Vec<u8>>,
     port_label: Option<String>,
     compasspt: Option<String>,
 }
@@ -604,6 +613,7 @@ impl TypstHedge {
         DotHedgeData {
             statement,
             id: self.id.map(Hedge),
+            payload: self.payload.clone(),
             port_label: self.port_label.clone(),
             compasspt: self
                 .compasspt
@@ -617,6 +627,7 @@ impl TypstHedge {
         Self {
             statement: data.statement,
             id: data.id.map(|id| id.0),
+            payload: data.payload,
             port_label: data.port_label,
             compasspt: data.compasspt.map(hedge_compass_to_string),
             ..Default::default()
@@ -662,6 +673,7 @@ pub struct TypstGraph {
     graph: HedgeGraph<TypstEdge, TypstNode, TypstHedge>,
     global_eval: Option<String>,
     name: String,
+    global_payload: Option<Vec<u8>>,
     global_statements: BTreeMap<String, String>,
     layout_config: LayoutConfig,
 }
@@ -1210,6 +1222,7 @@ impl TypstGraph {
             graph,
             global_eval,
             name: dot.global_data.name,
+            global_payload: dot.global_data.payload,
             global_statements: dot
                 .global_data
                 .statements
@@ -2937,6 +2950,7 @@ impl TypstGraph {
             nodes: self.new_nodevec(|_id, _h, v| v.clone()),
             global_eval: self.global_eval.clone(),
             name: self.name.clone(),
+            global_payload: self.global_payload.clone(),
             global_statements: self.global_statements.clone(),
         }
     }
@@ -2957,6 +2971,7 @@ impl TypstGraph {
 
         let mut global_data = GlobalData::from(());
         global_data.name = self.name.clone();
+        global_data.payload = self.global_payload.clone();
         global_data.statements = self
             .global_statements
             .iter()
@@ -2979,6 +2994,7 @@ pub struct CBORTypstGraph {
     nodes: NodeVec<TypstNode>,
     global_eval: Option<String>,
     name: String,
+    global_payload: Option<Vec<u8>>,
     global_statements: BTreeMap<String, String>,
 }
 

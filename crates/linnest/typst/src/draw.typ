@@ -170,6 +170,17 @@
   }
 }
 
+#let _as-content(value) = if value == none { none } else if type(value) == str { [#value] } else { value }
+
+#let _payload-label(record) = {
+  let payload = record.at("payload", default: none)
+  if type(payload) == dictionary {
+    payload.at("label", default: none)
+  } else {
+    none
+  }
+}
+
 #let _pattern-name(style) = _style-value(style, "pattern")
 
 #let _has-pattern(style) = {
@@ -723,8 +734,8 @@
 ///
 /// #example(`
 /// #let positioned = graph.build({
-///   graph.node(<left>, label: "left", pos: graph.pos(x: 0, y: 0))
-///   graph.node(<right>, label: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
+///   graph.node(<left>, label: [left], pos: graph.pos(x: 0, y: 0))
+///   graph.node(<right>, label: [right], pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
 ///   graph.edge(graph.source(<left>), graph.sink(<right>))
 ///   graph.edge(graph.source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
 /// },
@@ -797,7 +808,7 @@
 ///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
 /// }
 /// #let g = graph.build({
-///   graph.node(<a>, label: "a hi")
+///   graph.node(<a>, label: [a hi])
 ///   graph.node(<c>)
 ///   graph.node(<d>)
 ///   graph.node(<e>)
@@ -819,10 +830,10 @@
 ///
 /// #example(`
 /// #let p = graph.build({
-///   graph.node(<pa>, label: "a", pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc>, label: "c", pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc1>, label: "c", pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc2>, label: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pa>, label: [a], pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc>, label: [c], pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc1>, label: [c], pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc2>, label: [c], pos: graph.pos(y: 0, mode: "pin"))
 ///   graph.edge(graph.source(<pa>), <e0>, graph.sink(<pc>))
 ///   graph.edge(graph.source(<pc2>), <e1>, graph.sink(<pc1>))
 /// },
@@ -987,6 +998,9 @@
         for (i, v) in nodes.enumerate() {
           let pos = _node-pos(v)
           let node = v + (pos: pos)
+          let payload-label = _payload-label(v)
+          let statement-label = v.statements.at("label", default: none)
+          let data-label = if payload-label == none { statement-label } else { payload-label }
           let node-data = (
             scope
               + v.statements
@@ -994,10 +1008,12 @@
                 vid: i,
                 node: node,
                 name: node.name,
+                payload: v.at("payload", default: none),
+                label: data-label,
               )
           )
           let default-label-value = node-data.at("label", default: node.name)
-          let default-label = if default-label-value == none { none } else { [#default-label-value] }
+          let default-label = _as-content(default-label-value)
           let label = _content(node-label, node-data, default: default-label)
           let node-style-value = (
             (
@@ -1035,6 +1051,9 @@
           let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
           let ext = source-half-edge == none or sink-half-edge == none
           let data = edge.statements
+          let payload-label = _payload-label(edge)
+          let statement-label = data.at("label", default: none)
+          let data-label = if payload-label == none { statement-label } else { payload-label }
           let orientation = edge.orientation
           let edge-id = edge.at("id", default: none)
           let eid = if edge-id == none { i } else { edge-id }
@@ -1048,6 +1067,8 @@
                 sink-statement: sink-statement,
                 source-half-edge: source-half-edge,
                 sink-half-edge: sink-half-edge,
+                payload: edge.at("payload", default: none),
+                label: data-label,
                 orientation: orientation,
                 ext: ext,
               )
@@ -1066,7 +1087,7 @@
           let source-style-layers = _style-layers(source-style, edge-data)
           let sink-style-layers = _style-layers(sink-style, edge-data)
           let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
-          let ev-label = _content(edge-label, edge-data, default: none)
+          let ev-label = _content(edge-label, edge-data, default: _as-content(data-label))
           let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
 
           for layer-index in range(0, layer-count) {

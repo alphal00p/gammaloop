@@ -7,7 +7,7 @@
     source(<a>, compass: "e", statement: "out"),
     <a-to-b>,
     sink(<b>, compass: "w", statement: "in"),
-    label: "a-to-b",
+    label: [a-to-b],
     statements: (
       color: "8a2be2",
       source-color: "d72638",
@@ -17,7 +17,7 @@
   edge(
     <incoming>,
     sink(<a>, compass: "n"),
-    label: "incoming",
+    label: [incoming],
     statements: (
       color: "666666",
       source-color: "666666",
@@ -27,7 +27,7 @@
   edge(
     source(<b>, compass: "s"),
     <outgoing>,
-    label: "outgoing",
+    label: [outgoing],
     statements: (
       color: "666666",
       source-color: "8f5d2a",
@@ -67,8 +67,8 @@ This example imports the canonical Linnest Typst package source, builds a graph 
 == Positioned Graph Without Layout
 
 #let positioned = graph.build({
-  node(<left>, label: "left", pos: graph.pos(x: 0, y: 0))
-  node(<right>, label: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
+  node(<left>, label: [left], pos: graph.pos(x: 0, y: 0))
+  node(<right>, label: [right], pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
   edge(source(<left>), sink(<right>))
   edge(source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
 },
