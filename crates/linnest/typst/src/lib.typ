@@ -213,22 +213,6 @@
 /// -> module
 #let graph = graph-module
 
-/// Create a graph node item for `graph.build`.
-/// -> array
-#let node = graph-module.node
-
-/// Create a graph edge item for `graph.build`.
-/// -> array
-#let edge = graph-module.edge
-
-/// Create a source half-edge endpoint for `edge`.
-/// -> dictionary
-#let source = graph-module.source
-
-/// Create a sink half-edge endpoint for `edge`.
-/// -> dictionary
-#let sink = graph-module.sink
-
 /// Curve namespace.
 ///
 /// Helpers for splitting and drawing Bezier edge geometry.

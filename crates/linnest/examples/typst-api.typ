@@ -1,6 +1,7 @@
-#import "../typst/src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
+#import "../typst/src/lib.typ": draw, graph, layout, subgraph
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-#let raw-graph = graph.build({
+#let raw-graph = build({
   node(<a>, statements: (fill-color: "cfe8ff"))
   node(<b>, statements: (fill-color: "d6f5d6"))
   edge(
@@ -41,16 +42,16 @@
 
 #let g = layout(raw-graph)
 #let info = graph.info(g)
-#let nodes = graph.nodes(g)
-#let edges = graph.edges(g)
-#let dot = graph.dot(g)
+#let node-records = nodes(g)
+#let edge-records = edges(g)
+#let dot-text = dot(g)
 #let north = subgraph.compass(g, "n")
 #let internal-edge = subgraph.bits(g, (true, true, false, false))
 #let north-label = subgraph.to-label(north)
 #let north-hedges = subgraph.hedges(north)
 #let internal-label = subgraph.to-label(internal-edge)
-#let north-edges = graph.edges(g, subgraph: north)
-#let internal-nodes = graph.nodes(g, subgraph: internal-edge)
+#let north-edges = edges(g, subgraph: north)
+#let internal-nodes = nodes(g, subgraph: internal-edge)
 #let internal-has-hedge-zero = subgraph.contains(internal-edge, 0)
 
 = Linnest Typst API Example
@@ -66,7 +67,7 @@ This example imports the canonical Linnest Typst package source, builds a graph 
 
 == Positioned Graph Without Layout
 
-#let positioned = graph.build({
+#let positioned = build({
   node(<left>, label: [left], pos: graph.pos(x: 0, y: 0))
   node(<right>, label: [right], pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
   edge(source(<left>), sink(<right>))
@@ -82,9 +83,9 @@ This example imports the canonical Linnest Typst package source, builds a graph 
   inset: 6pt,
   stroke: 0.5pt,
 [graph name], [#info.name],
-[nodes], [#nodes.len()],
-[edges], [#edges.len()],
-[DOT characters], [#dot.len()],
+[nodes], [#node-records.len()],
+[edges], [#edge-records.len()],
+[DOT characters], [#dot-text.len()],
 [north subgraph], [#north-label],
   [north hedges], [#north-hedges.join(", ")],
   [north edges], [#north-edges.len()],
@@ -100,7 +101,7 @@ This example imports the canonical Linnest Typst package source, builds a graph 
   inset: 4pt,
   stroke: 0.5pt,
   [node], [name], [x], [y],
-  ..nodes.slice(0, calc.min(5, nodes.len())).map(node => (
+  ..node-records.slice(0, calc.min(5, node-records.len())).map(node => (
     [#node.node],
     [#node.name],
     [#node.pos.x],
@@ -115,7 +116,7 @@ This example imports the canonical Linnest Typst package source, builds a graph 
   inset: 4pt,
   stroke: 0.5pt,
   [edge], [orientation], [source], [sink],
-  ..edges.slice(0, calc.min(5, edges.len())).map(edge => (
+  ..edge-records.slice(0, calc.min(5, edge-records.len())).map(edge => (
     [#edge.edge],
     [#edge.orientation],
     [#if edge.source == none { "none" } else { edge.source.node }],

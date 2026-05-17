@@ -1,6 +1,7 @@
-#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-#let g = graph.build({
+#let g = build({
   node(<a>, label: [A])
   node(<c>, label: [C])
   edge(
@@ -29,8 +30,8 @@
 
 #table(
   columns: (auto, 1fr),
-  [nodes], [#graph.nodes(g).len()],
-  [edges], [#graph.edges(g).len()],
+  [nodes], [#nodes(g).len()],
+  [edges], [#edges(g).len()],
   [east hedges], [#subgraph.hedges(east).join(", ")],
-  [dot chars], [#graph.dot(g).len()],
+  [dot chars], [#dot(g).len()],
 )

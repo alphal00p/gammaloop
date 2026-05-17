@@ -112,6 +112,12 @@ pub fn graph_from_spec(arg: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
+pub fn graph_with_payloads(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_with_payloads_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
 pub fn layout_parsed_graph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     layout_parsed_graph_bytes(arg, arg2)
 }

@@ -1,8 +1,9 @@
-#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source
+#import "../src/lib.typ": draw, graph, layout
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
 #set page(width: 120mm, height: 75mm, margin: 10mm)
 
-#let g = graph.build({
+#let g = build({
   node(<a>, pos: graph.pos(x: -2.0, y: 0, mode: "pin"))
   node(<c>, pos: graph.pos(ref: <a>, dx: 4.0, dy: 0, mode: "pin"))
   edge(<e0>, source(<a>), sink(<c>), pos: graph.pos(x: 0, y: 1.25, mode: "pin"))

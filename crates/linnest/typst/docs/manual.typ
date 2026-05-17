@@ -1,5 +1,6 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, edge, graph, layout, node, physics, sink, source, subgraph
+#import "../src/lib.typ": draw, graph, layout, physics, subgraph
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
 
 #set document(title: "Linnest Typst API")
@@ -30,30 +31,42 @@ The graph structure is then encoded through two maps.
 The first map, $partial : H --> V$ maps each half-edge to its corresponding vertex.
 The preimage of any vertex $v$ is the set of half-edges that map to it, called the crown of $v$.
 The second map, $iota : H --> H$, is an involution that _glues_ half edges together to form edges.
-If a half-edge is glued to itself, we call that an external half-edge.
+If a half-edge is glued to itself, we call that an external half-edge. This means that linnet graphs are strictly more capable than normal edge and vertex graphs.
 
-
-
-
-#let g = graph.build({
-  node(<a>, label: [s])
+#let g = build({
+  node(<a>, label: [$v$])
   node(<b>)
   edge(source(<a>), <e>, sink(<b>), label: [e])
   edge(source(<a>), <w>, label: [e])
   edge(source(<a>), <1>, label: [e])
   // edge(source(<a>), <g>, sink(<b>), label: [g])
 })
-// #graph.edges(g)
-#align(center, draw(layout(g, g-center: 0.005,length-scale: .3)))
+// #edges(g)
+#align(center, draw(layout(g, g-center: 0.005, length-scale: .3)))
 
-= Linnest Typst APIs
 
-Linnest exposes the `linnest.wasm` graph layout plugin through a small Typst
-API. Its drawing layer imports the sibling Kurvst package; the standalone
-Kurvst manual documents the full curve and path-pattern API. Derived edge
-layers use Kurvst's CeTZ-compatible path wire format internally, so path data
-can move through Linnest, Kurvst, and CeTZ-style tooling without an extra shape.
-The public surface is intentionally narrow:
+A side effect of natively supporting half-edges, is that subgraphs can be more granular, as we can encode them as sets of half-edges. This naturally supports vertex induced subgraphs (the union of the crowns of a set of vertices).
+
+
+= Linnest
+
+Linnest is the typst plugin + API to integrate with linnet and access some of its capabilities. This means layouting algorithms, and dot parsing (all through wasm, so no dependencies/ external tooling required) along with a selection of graph algorithms (that can be expanded upon as needed).
+
+Graphs can be constructed in two ways, parsing from a dot string using `parse`:
+```typ
+#let g = parse("digraph { a -> b }")
+```
+or building from edges and nodes using `build`, with a fletcher inspired syntax:
+```typ
+#let g = build({
+  node(<a>)
+  node(<c>)
+  edge( source(<a>), <a-c>, sink(<c>), label: [a-c] )
+})```
+
+In either case, ```typst type(g)```=#type(g), because they both return an  opaque zero-copy value that corresponds to a linnet graph struct. However none of the data is lost, as you can query this value for information about the graph, such as the edges and the nodes.
+
+
 
 - `graph` for construction, parsing, inspection, joins, and graph algorithms.
 - `subgraph` for subgraph object construction and inspection.
@@ -64,9 +77,10 @@ The public surface is intentionally narrow:
 == Minimal Build Example
 
 ```typ
-#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-#let g = graph.build({
+#let g = build({
   node(<a>)
   node(<c>)
   edge(
@@ -85,17 +99,18 @@ The public surface is intentionally narrow:
 )
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")
-#let edges = graph.edges(g, subgraph: east)
-#let dot = graph.dot(g)
+#let edge-records = edges(g, subgraph: east)
+#let dot-text = dot(g)
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
 #draw(g, subgraph: east, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
 
-#import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-#let g = graph.build(
+#let g = build(
   {
     node(<a>)
     node(<c>)
@@ -115,8 +130,8 @@ The public surface is intentionally narrow:
 )
 #let g = layout(g)
 #let east = subgraph.compass(g, "e")
-#let edges = graph.edges(g, subgraph: east)
-#let dot = graph.dot(g)
+#let edge-records = edges(g, subgraph: east)
+#let dot-text = dot(g)
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
@@ -129,9 +144,15 @@ graph objects with `graph`, transform graph objects with `layout`, and pass
 objects back to `graph` or `subgraph` for inspection.
 
 - `graph.parse(input)` parses one or more DOT digraphs and returns an array of
-  graph objects.
+  graph objects. Its `eval-graph-fields`, `eval-node-fields`,
+  `eval-edge-fields`, `eval-source-fields`, and `eval-sink-fields` arguments
+  are convenience arguments for `graph.eval-fields`.
 - `graph.build(..)` constructs one graph object from a stream of node and edge
   items.
+- `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
+  new opaque payloads without changing topology.
+- `graph.eval-fields(graph, ..)` evaluates selected record fields into payload
+  entries. It works on parsed and built graph objects.
 - `node(..)` returns a node item.
 - `source(..)` and `sink(..)` return half-edge endpoints.
 - `edge(..)` returns an edge item built from source/sink endpoints and an
@@ -140,7 +161,7 @@ objects back to `graph` or `subgraph` for inspection.
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
 - `draw(graph, ..)` draws a laid-out graph object with CeTZ.
-- `graph.dot(graph)` returns a DOT string for inspection or export.
+- `dot(graph)` returns a DOT string for inspection or export.
 
 == Graph Specs
 
@@ -154,11 +175,44 @@ edges, sources, and sinks is opaque Typst metadata: Typst CBOR-encodes it before
 the Rust plugin boundary, Rust archives the bytes without inspecting them, and
 Typst decodes it again in `graph.info`, `graph.nodes`, and `graph.edges`. The
 `label` convenience argument on nodes and edges is display content stored as
-`payload.label`; use `statements: (label: "...")` when a DOT/template label
-string is needed.
+`payload.label`; use `statements: (label: "...")` when a flat metadata label
+string is needed. Statements are flat metadata used by DOT; they cannot nest.
+Values are scalar strings/numbers/booleans. Use `payload` for structured Typst
+data or content.
+
+When parsing DOT, the same payload channel can be filled from selected string
+fields. Evaluation happens in Typst at parse time; Rust only receives opaque
+payload bytes. The selected fields are evaluated with the record's merged
+`fields` dictionary in scope:
 
 ```typ
-#let g = graph.build({
+#let g = parse(
+  "digraph g { a [label=\"A\"]; a -> b [label=\"$p$\", source=\"out\", sink=\"in\"] }",
+  eval-node-fields: ("label",),
+  eval-edge-fields: ("label",),
+  eval-source-fields: ("statement",),
+  eval-sink-fields: ("statement",),
+).first()
+#nodes(g).first().payload.label
+#edges(g).first().payload.label
+```
+
+The same transform can run after construction. This is useful for global edge
+statements that should apply to every edge while still seeing local edge
+fields:
+
+```typ
+#let g = build({
+  node(<a>)
+  node(<b>)
+  edge(source(<a>), sink(<b>), statements: (mom: "p"))
+}, edge-statements: (display-label: "$#mom$"))
+#let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
+#edges(g).first().payload.at("display-label")
+```
+
+```typ
+#let g = build({
   node(<a>)
   node(<c>)
   edge(source(<a>), <e1>, sink(<c>))
@@ -181,17 +235,17 @@ edge(<incoming>, sink(<a>))
 edge(source(<c>), <outgoing>)
 ```
 
-String-valued DOT statements may contain `{name}` placeholders. `graph.build`
+String-valued statements may contain `{name}` placeholders. `graph.build`
 expands each placeholder while constructing the graph object. Use `{{` and `}}`
 for literal braces. Unknown placeholders are left unchanged.
 
 This is useful for graph-level `edge-statements`: the default edge statement is
 merged into each edge, then expanded against that edge's complete statement
 dictionary. The following default metadata records a string label derived from
-the per-edge DOT `label` statement:
+the per-edge `label` statement:
 
 ```typ
-#let g = graph.build({
+#let g = build({
   node(<a>)
   node(<c>)
   edge(
@@ -216,7 +270,7 @@ coordinate into a fixed layout constraint and a drawable position. Use
 `mode: "start"` when the coordinate should only seed the layout:
 
 ```typ
-#let g = graph.build({
+#let g = build({
   node(<a>, pos: graph.pos(x: -2, y: 0))
   node(<c>, pos: graph.pos(ref: <a>, dx: 4, dy: 0))
   edge(source(<a>), <a-c>, sink(<c>), pos: graph.pos(x: 0, y: 1.2))
@@ -229,7 +283,7 @@ GammaLoop external-edge columns use this to keep incoming and outgoing external
 legs on opposite sides while pairing rows by a shared `y` group:
 
 ```typ
-#let edges = (
+#let edge-items = (
   edge(
     source(<right-ext>),
     sink(<center>),
@@ -338,9 +392,10 @@ Optional labels can be built from edge metadata with `show-edge-index`,
 `show-half-edge-index` only emits a value for dangling half edges.
 
 ```typ
-#import "../src/lib.typ": draw, edge, graph, layout, node, physics, sink, source
+#import "../src/lib.typ": draw, graph, layout, physics
+#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-#let g = graph.build({
+#let g = build({
   node(<a>)
   node(<c>)
   edge(
@@ -407,7 +462,7 @@ set as direct arguments on `graph.build` or `edge`, instead of being
 manually nested under `edge-statements` or per-edge `statements`:
 
 ```typ
-#let g = graph.build({
+#let g = build({
   node(<a>)
   node(<c>)
   edge(
@@ -427,7 +482,7 @@ manually nested under `edge-statements` or per-edge `statements`:
 `graph.build` also accepts comma-separated items:
 
 ```typ
-#let g = graph.build(
+#let g = build(
   node(<a>),
   node(<b>),
   edge(
@@ -449,8 +504,8 @@ manually nested under `edge-statements` or per-edge `statements`:
 
 == Graph Queries
 
-`graph.info(g)` returns graph metadata. `graph.nodes(g)` returns node records,
-and `graph.edges(g)` returns edge records. Pass `subgraph: sg` to filter nodes
+`graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
+and `edges(g)` returns edge records. Pass `subgraph: sg` to filter nodes
 or edges by an subgraph object.
 
 `graph.join(left, right, key: "statement")` joins matching dangling half edges.
@@ -479,7 +534,7 @@ placement when the selected edges contain a cycle. Both modes also work on a
 subgraph:
 
 ```typ
-#let g = graph.parse("digraph partial { a -> b; b -> c; c -> d; d -> a }").at(0)
+#let g = parse("digraph partial { a -> b; b -> c; c -> d; d -> a }").at(0)
 #let tree = graph.forests(g).at(0)
 #let g = layout(g, layout-algo: "tree", subgraph: tree)
 #draw(g)
@@ -504,7 +559,7 @@ the resulting coordinates as `pos`, but it does not turn them into persistent
 should route or relax selected edges without disturbing the node layout:
 
 ```typ
-#let g = graph.parse("digraph partial { a [pos=\"0,0\"]; b [pos=\"4,0\"]; c [pos=\"8,0\"]; a -> b; b -> c }").at(0)
+#let g = parse("digraph partial { a [pos=\"0,0\"]; b [pos=\"4,0\"]; c [pos=\"8,0\"]; a -> b; b -> c }").at(0)
 #let first = subgraph.bits(g, (true, true, false, false))
 #let g = layout(g, layout-algo: "tree", layout-nodes: "fixed", subgraph: first)
 #draw(g)
