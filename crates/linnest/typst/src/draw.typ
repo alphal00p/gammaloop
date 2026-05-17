@@ -723,8 +723,8 @@
 ///
 /// #example(`
 /// #let positioned = graph.build({
-///   graph.node(<left>, name: "left", pos: graph.pos(x: 0, y: 0))
-///   graph.node(<right>, name: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
+///   graph.node(<left>, label: "left", pos: graph.pos(x: 0, y: 0))
+///   graph.node(<right>, label: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
 ///   graph.edge(graph.source(<left>), graph.sink(<right>))
 ///   graph.edge(graph.source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
 /// },
@@ -797,7 +797,7 @@
 ///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
 /// }
 /// #let g = graph.build({
-///   graph.node(<a>, name: "a hi")
+///   graph.node(<a>, label: "a hi")
 ///   graph.node(<c>)
 ///   graph.node(<d>)
 ///   graph.node(<e>)
@@ -819,10 +819,10 @@
 ///
 /// #example(`
 /// #let p = graph.build({
-///   graph.node(<pa>, name: "a", pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc>, name: "c", pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc1>, name: "c", pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc2>, name: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pa>, label: "a", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc>, label: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc1>, label: "c", pos: graph.pos(y: 0, mode: "pin"))
+///   graph.node(<pc2>, label: "c", pos: graph.pos(y: 0, mode: "pin"))
 ///   graph.edge(graph.source(<pa>), <e0>, graph.sink(<pc>))
 ///   graph.edge(graph.source(<pc2>), <e1>, graph.sink(<pc1>))
 /// },
@@ -996,7 +996,8 @@
                 name: node.name,
               )
           )
-          let default-label = if node.name == none { none } else { [#node.name] }
+          let default-label-value = node-data.at("label", default: node.name)
+          let default-label = if default-label-value == none { none } else { [#default-label-value] }
           let label = _content(node-label, node-data, default: default-label)
           let node-style-value = (
             (
@@ -1035,11 +1036,13 @@
           let ext = source-half-edge == none or sink-half-edge == none
           let data = edge.statements
           let orientation = edge.orientation
+          let edge-id = edge.at("id", default: none)
+          let eid = if edge-id == none { i } else { edge-id }
           let edge-data = (
             scope
               + data
               + (
-                eid: i,
+                eid: eid,
                 edge: edge,
                 source-statement: source-statement,
                 sink-statement: sink-statement,

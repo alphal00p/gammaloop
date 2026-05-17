@@ -34,7 +34,7 @@ If a half-edge is glued to itself, we call that an external half-edge.
 
 
 #let g = graph.build({
-  node(<a>, name: "bue")
+  node(<a>, label: "bue")
   node(<b>)
   edge(source(<a>), <e>, sink(<b>), label: "e")
   edge(source(<a>), <g>, sink(<b>), label: "g")
@@ -131,7 +131,7 @@ objects back to `graph` or `subgraph` for inspection.
 - `node(..)` returns a node item.
 - `source(..)` and `sink(..)` return half-edge endpoints.
 - `edge(..)` returns an edge item built from source/sink endpoints and an
-  optional edge id.
+  optional edge name.
 - `layout(graph, ..)` runs layout as an explicit
   second step. Its settings are named parameters so calls stay descriptive and
   Tidy can document each field.
@@ -143,8 +143,10 @@ objects back to `graph` or `subgraph` for inspection.
 The Typst construction API is half-edge first: create node items, create source
 and sink half-edge endpoints, then pass edge items to `graph.build`.
 `graph.build` accepts both comma-separated items and ordinary Typst code
-blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are resolved before the
-wire format is sent to the Rust plugin.
+blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; they are
+resolved before the wire format is sent to the Rust plugin. Numeric `id`
+arguments are order/index overrides. The `label` argument is display metadata
+and becomes the DOT `label` statement for both nodes and edges.
 
 ```typ
 #let g = graph.build({
@@ -154,11 +156,12 @@ wire format is sent to the Rust plugin.
 })
 ```
 
-`source(..)` and `sink(..)` accept a node reference plus optional `id`,
-`statement`, and `compass`. The `id` may be an integer or a Typst label:
+`source(..)` and `sink(..)` accept a node reference plus optional `name`, `id`,
+`statement`, and `compass`. `name` is a Typst label name for the half-edge;
+`id` is numeric:
 
 ```typ
-edge(source(<a>, id: <h1>), <e1>, sink(<c>, id: 2), label: "a-c")
+edge(source(<a>, name: <h1>, id: 0), <e1>, sink(<c>, id: 2), label: "a-c")
 ```
 
 One half-edge creates an external edge. The side is determined by the
