@@ -18,6 +18,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     function,
+    get_symbol,
     id::Replacement,
     printer::PrintState,
     symbol,
@@ -815,7 +816,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = symbol!("Q").f(&[eid, cind.as_view()])
+                        **out = get_symbol!("Q").unwrap().f(&[eid, cind.as_view()])
                     }
                 }
             }
