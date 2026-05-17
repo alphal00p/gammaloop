@@ -3,10 +3,11 @@
 /// Construct an subgraph object from a base62 label.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0, compass: "e"), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>, compass: "e"), graph.sink(<b>))
+/// })
 /// #let east = subgraph.compass(g, "e")
 /// #let same = subgraph.label(g, subgraph.to-label(east))
 /// #subgraph.hedges(same).len()
@@ -17,10 +18,11 @@
 /// Construct an subgraph object from a boolean hedge array.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), graph.sink(<b>))
+/// })
 /// #let first = subgraph.bits(g, (true, false))
 /// #subgraph.contains(first, 0)
 /// ```
@@ -31,10 +33,11 @@
 /// `"s"`.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0, compass: "e"), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>, compass: "e"), graph.sink(<b>))
+/// })
 /// #subgraph.hedges(subgraph.compass(g, "e")).len()
 /// ```
 /// -> bytes
@@ -45,10 +48,11 @@
 /// Convert an subgraph object to its base62 label.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), graph.sink(<b>))
+/// })
 /// #subgraph.to-label(subgraph.bits(g, (true, false)))
 /// ```
 /// -> string
@@ -57,10 +61,11 @@
 /// Return the hedge indices included in an subgraph object.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), graph.sink(<b>))
+/// })
 /// #subgraph.hedges(subgraph.bits(g, (true, false)))
 /// ```
 /// -> array
@@ -69,10 +74,11 @@
 /// Test whether an subgraph object includes a hedge.
 ///
 /// ```example
-/// #let g = graph.build(
-///   nodes: ((name: "a"), (name: "b")),
-///   edges: ((source: (node: 0), sink: (node: 1)),),
-/// )
+/// #let g = graph.build({
+///   graph.node(<a>)
+///   graph.node(<b>)
+///   graph.edge(graph.source(<a>), graph.sink(<b>))
+/// })
 /// #subgraph.contains(subgraph.bits(g, (true, false)), 0)
 /// ```
 /// -> bool

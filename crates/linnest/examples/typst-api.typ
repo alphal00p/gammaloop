@@ -67,8 +67,8 @@ This example imports the canonical Linnest Typst package source, builds a graph 
 == Positioned Graph Without Layout
 
 #let positioned = graph.build({
-  node(<left>, name: "left", pos: graph.pos(x: 0, y: 0))
-  node(<right>, name: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
+  node(<left>, label: "left", pos: graph.pos(x: 0, y: 0))
+  node(<right>, label: "right", pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
   edge(source(<left>), sink(<right>))
   edge(source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
 },

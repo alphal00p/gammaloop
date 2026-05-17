@@ -1,12 +1,12 @@
 #import "../src/lib.typ": draw, edge, graph, layout, node, sink, source, subgraph
 
 #let g = graph.build({
-  node(<a>)
-  node(<c>)
+  node(<a>, label: "A")
+  node(<c>, label: "C")
   edge(
-    source(<a>, compass: "e"),
+    source(<a>, name: <a-c-source>, id: 0, compass: "e"),
     <a-c>,
-    sink(<c>, compass: "w"),
+    sink(<c>, name: <a-c-sink>, id: 1, compass: "w"),
     label: "a-c",
     statements: (
       color: "0055ff",

@@ -136,6 +136,7 @@ pub struct TypstDotEndpoint {
 #[serde(rename_all = "kebab-case")]
 pub struct TypstDotEdge {
     pub edge: usize,
+    pub id: Option<usize>,
     pub orientation: String,
     pub source: Option<TypstDotEndpoint>,
     pub sink: Option<TypstDotEndpoint>,
@@ -988,6 +989,11 @@ fn edge_view_to_output(
 
     TypstDotEdge {
         edge: edge.edge.0,
+        id: edge
+            .data
+            .edge_id
+            .as_ref()
+            .map(|value| value.0.try_into().unwrap()),
         orientation: orientation_to_string(edge.orientation).to_string(),
         source: endpoints.source.map(endpoint_to_output),
         sink: endpoints.sink.map(endpoint_to_output),

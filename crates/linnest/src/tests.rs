@@ -511,6 +511,7 @@ fn test_graph_spec_exposes_half_edge_ids() {
 
     #[derive(Serialize)]
     struct HalfIdEdgeSpec {
+        id: usize,
         source: HalfIdEndpointSpec,
         sink: HalfIdEndpointSpec,
     }
@@ -534,6 +535,7 @@ fn test_graph_spec_exposes_half_edge_ids() {
             },
         ],
         edges: vec![HalfIdEdgeSpec {
+            id: 5,
             source: HalfIdEndpointSpec { node: 0, id: 7 },
             sink: HalfIdEndpointSpec { node: 1, id: 11 },
         }],
@@ -541,6 +543,7 @@ fn test_graph_spec_exposes_half_edge_ids() {
     .unwrap();
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(edges[0].id, Some(5));
     assert_eq!(edges[0].source.as_ref().unwrap().id, Some(7));
     assert_eq!(edges[0].sink.as_ref().unwrap().id, Some(11));
 }
