@@ -501,6 +501,94 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
 }
 
 #[test]
+fn test_graph_spec_payloads_are_opaque_and_survive_layout() {
+    #[derive(Serialize)]
+    struct PayloadGraphSpec {
+        name: String,
+        payload: Vec<u8>,
+        nodes: Vec<PayloadNodeSpec>,
+        edges: Vec<PayloadEdgeSpec>,
+    }
+
+    #[derive(Serialize)]
+    struct PayloadNodeSpec {
+        name: String,
+        payload: Vec<u8>,
+    }
+
+    #[derive(Serialize)]
+    struct PayloadEdgeSpec {
+        payload: Vec<u8>,
+        source: PayloadEndpointSpec,
+        sink: PayloadEndpointSpec,
+    }
+
+    #[derive(Serialize)]
+    struct PayloadEndpointSpec {
+        node: usize,
+        payload: Vec<u8>,
+    }
+
+    fn assert_payloads(graph: &[u8]) {
+        let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(graph).unwrap());
+        assert_eq!(info.payload.as_deref(), Some(&b"graph"[..]));
+
+        let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(graph).unwrap());
+        assert_eq!(nodes[0].payload.as_deref(), Some(&b"node-a"[..]));
+        assert_eq!(nodes[1].payload.as_deref(), Some(&b"node-b"[..]));
+
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(graph).unwrap());
+        assert_eq!(edges[0].payload.as_deref(), Some(&b"edge"[..]));
+        assert_eq!(
+            edges[0]
+                .source
+                .as_ref()
+                .and_then(|source| source.payload.as_deref()),
+            Some(&b"source"[..])
+        );
+        assert_eq!(
+            edges[0]
+                .sink
+                .as_ref()
+                .and_then(|sink| sink.payload.as_deref()),
+            Some(&b"sink"[..])
+        );
+    }
+
+    let spec = PayloadGraphSpec {
+        name: "payloads".to_string(),
+        payload: b"graph".to_vec(),
+        nodes: vec![
+            PayloadNodeSpec {
+                name: "a".to_string(),
+                payload: b"node-a".to_vec(),
+            },
+            PayloadNodeSpec {
+                name: "b".to_string(),
+                payload: b"node-b".to_vec(),
+            },
+        ],
+        edges: vec![PayloadEdgeSpec {
+            payload: b"edge".to_vec(),
+            source: PayloadEndpointSpec {
+                node: 0,
+                payload: b"source".to_vec(),
+            },
+            sink: PayloadEndpointSpec {
+                node: 1,
+                payload: b"sink".to_vec(),
+            },
+        }],
+    };
+
+    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    assert_payloads(&graph);
+
+    let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
+    assert_payloads(&laid_out);
+}
+
+#[test]
 fn test_graph_spec_exposes_half_edge_ids() {
     #[derive(Serialize)]
     struct HalfIdGraphSpec {

@@ -21,6 +21,131 @@
 
 #let _statement-value(value) = if type(value) == str { value } else { str(value) }
 
+#let _encode-payload-value(value) = {
+  if type(value) == content {
+    (linnest-payload-kind: "content", value: cbor.encode(value))
+  } else if type(value) == array {
+    value.map(_encode-payload-value)
+  } else if type(value) == dictionary {
+    let result = (:)
+    for key in value.keys() {
+      result.insert(key, _encode-payload-value(value.at(key)))
+    }
+    result
+  } else {
+    value
+  }
+}
+
+#let _encode-payload(value) = if value == none { none } else { cbor.encode(_encode-payload-value(value)) }
+
+#let _payload-bytes(value) = if type(value) == array { bytes(value) } else { value }
+
+#let _sequence-content(children) = {
+  let result = []
+  for child in children {
+    result += _decode-payload-value(child)
+  }
+  result
+}
+
+#let _math-source(value) = {
+  if type(value) != dictionary {
+    none
+  } else {
+    let func = value.at("func", default: none)
+    if func == "symbol" or func == "text" {
+      value.at("text", default: "")
+    } else if func == "space" {
+      " "
+    } else if func == "sequence" {
+      value.children.map(_math-source).join("")
+    } else {
+      none
+    }
+  }
+}
+
+#let _decode-content(value) = {
+  let func = value.at("func", default: none)
+  if func == "text" {
+    text(value.text)
+  } else if func == "space" {
+    [ ]
+  } else if func == "sequence" {
+    _sequence-content(value.children)
+  } else if func == "strong" {
+    strong(_decode-payload-value(value.body))
+  } else if func == "emph" {
+    emph(_decode-payload-value(value.body))
+  } else if func == "equation" {
+    let source = _math-source(value.body)
+    if source == none {
+      text(repr(value))
+    } else {
+      eval("$" + source + "$", mode: "markup")
+    }
+  } else {
+    text(repr(value))
+  }
+}
+
+#let _decode-payload-value(value) = {
+  if type(value) == array {
+    value.map(_decode-payload-value)
+  } else if type(value) == dictionary {
+    let kind = value.at("linnest-payload-kind", default: none)
+    if kind == "content" {
+      _decode-content(cbor(_payload-bytes(value.value)))
+    } else {
+      let result = (:)
+      for key in value.keys() {
+        result.insert(key, _decode-payload-value(value.at(key)))
+      }
+      result
+    }
+  } else {
+    value
+  }
+}
+
+#let decode-payload(value) = if value == none { none } else { _decode-payload-value(cbor(_payload-bytes(value))) }
+
+#let _payload-with-label(payload, label, context_) = {
+  if label == none {
+    payload
+  } else if payload == none {
+    (label: label)
+  } else if type(payload) == dictionary {
+    if payload.keys().contains("label") {
+      panic(context_ + ": label specified twice")
+    }
+    payload + (label: label)
+  } else {
+    panic(context_ + ": label requires payload to be a dictionary")
+  }
+}
+
+#let _decode-payload-field(record) = {
+  let result = record
+  let payload = result.at("payload", default: none)
+  if payload != none {
+    result.payload = decode-payload(payload)
+  }
+  result
+}
+
+#let _decode-edge-payloads(edge) = {
+  let result = _decode-payload-field(edge)
+  for side in ("source", "sink") {
+    let endpoint = result.at(side, default: none)
+    if endpoint != none {
+      result.insert(side, _decode-payload-field(endpoint))
+    }
+  }
+  result
+}
+
 #let _point-statement(point) = {
   if type(point) == str {
     point
@@ -229,9 +354,10 @@
 
 #let _node-spec(node) = {
   let statements = _statements-with-point(node.at("statements", default: (:)), "shift", node.at("shift", default: none))
+  let payload = _encode-payload(_payload-with-label(node.at("payload", default: none), node.at("label", default: none), "graph.node"))
   let clean = node
   let name = clean.at("name", default: none)
-  for key in ("linnest-kind", "key", "id", "shift", "name") {
+  for key in ("linnest-kind", "key", "id", "shift", "name", "label", "payload") {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -242,6 +368,9 @@
     } else {
       clean.insert("name", name)
     }
+  }
+  if payload != none {
+    clean.insert("payload", payload)
   }
   clean + (statements: statements)
 }
@@ -284,6 +413,7 @@
 
 #let _edge-spec(edge) = {
   let statements = _edge-statements(edge)
+  let payload = _encode-payload(_payload-with-label(edge.at("payload", default: none), edge.at("label", default: none), "graph.edge"))
   let clean = edge
   for key in (
     "linnest-kind",
@@ -294,11 +424,16 @@
     "source-style-eval",
     "sink-style-eval",
     "label-eval",
+    "label",
+    "payload",
     "name",
   ) {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
+  }
+  if payload != none {
+    clean.insert("payload", payload)
   }
   clean + (statements: statements)
 }
@@ -313,6 +448,10 @@
   let id = _resolve-named-id(half.at("name", default: none), half.at("id", default: none), half-ids, context_)
   if id != none {
     result.insert("id", id)
+  }
+  let payload = _encode-payload(half.at("payload", default: none))
+  if payload != none {
+    result.insert("payload", payload)
   }
   if half.at("statement", default: none) != none {
     result.insert("statement", _statement-value(half.statement))
@@ -436,6 +575,9 @@
   /// Graph name. -> none | string
   name: none,
 
+  /// Opaque graph payload. Any CBOR-encodable Typst value. -> any
+  payload: none,
+
   /// Graph-level DOT statements. -> dictionary
   statements: (:),
 
@@ -482,6 +624,7 @@
   )
   _plugin.graph_from_spec(cbor.encode((
     name: name,
+    payload: _encode-payload(payload),
     statements: statements,
     edge-statements: edge-statements,
     node-statements: node-statements,
@@ -493,12 +636,12 @@
 /// Create a graph node item for @build.
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` chooses the node order/index. `label` is display
-/// metadata stored in the DOT `label` statement.
+/// optional numeric `id` chooses the node order/index. `payload` is opaque
+/// Typst-side metadata; `label` is stored as `payload.label`.
 ///
 /// ```example
 /// #let g = graph.build({
-///   graph.node(<a>, id: 0, label: "A")
+///   graph.node(<a>, id: 0, label: [A])
 /// })
 /// #graph.nodes(g).first().name
 /// ```
@@ -509,8 +652,10 @@
   name: none,
   /// Numeric node order/index override. -> none | int
   id: none,
-  /// Visible/DOT node label, stored in `statements.label`. -> none | string
+  /// Visible node label, stored as `payload.label`. -> any
   label: none,
+  /// Opaque node payload. Any CBOR-encodable Typst value. -> any
+  payload: none,
   /// Node placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -537,20 +682,15 @@
   }
   _check-name(resolved-name, "graph.node")
   _check-id(id, "graph.node")
-  let resolved-statements = statements
-  if label != none {
-    if resolved-statements.keys().contains("label") {
-      panic("graph.node: label specified twice")
-    }
-    resolved-statements.insert("label", _statement-value(label))
-  }
   ((
     linnest-kind: "node",
     id: id,
     name: resolved-name,
+    payload: payload,
+    label: label,
     pos: pos,
     shift: shift,
-    statements: resolved-statements,
+    statements: statements,
   ),)
 }
 
@@ -558,45 +698,61 @@
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index
-/// override.
+/// override; `payload` is opaque Typst-side metadata.
 ///
 /// ```example
-/// #graph.source(<a>, name: <h1>, id: 0, compass: "e")
+/// #graph.source(<a>, name: <h1>, id: 0, payload: (kind: "out"), compass: "e")
 /// ```
 /// -> dictionary
-#let source(node, name: none, id: none, statement: none, compass: none) = {
+#let source(
+  node,
+  name: none,
+  id: none,
+  /// Opaque source half-edge payload. Any CBOR-encodable Typst value. -> any
+  payload: none,
+  statement: none,
+  compass: none,
+) = {
   _check-name(name, "graph.source")
   _check-id(id, "graph.source")
-  (linnest-kind: "source", node: node, name: name, id: id, statement: statement, compass: compass)
+  (linnest-kind: "source", node: node, name: name, id: id, payload: payload, statement: statement, compass: compass)
 }
 
 /// Create a sink half-edge endpoint.
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index
-/// override.
+/// override; `payload` is opaque Typst-side metadata.
 ///
 /// ```example
-/// #graph.sink(<b>, name: <h2>, id: 1, compass: "w")
+/// #graph.sink(<b>, name: <h2>, id: 1, payload: (kind: "in"), compass: "w")
 /// ```
 /// -> dictionary
-#let sink(node, name: none, id: none, statement: none, compass: none) = {
+#let sink(
+  node,
+  name: none,
+  id: none,
+  /// Opaque sink half-edge payload. Any CBOR-encodable Typst value. -> any
+  payload: none,
+  statement: none,
+  compass: none,
+) = {
   _check-name(name, "graph.sink")
   _check-id(id, "graph.sink")
-  (linnest-kind: "sink", node: node, name: name, id: id, statement: statement, compass: compass)
+  (linnest-kind: "sink", node: node, name: name, id: id, payload: payload, statement: statement, compass: compass)
 }
 
 /// Create a graph edge item for @build.
 ///
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order
-/// and the visible/DOT label is `label`.
+/// and the visible label is `label`, stored as `payload.label`.
 ///
 /// ```example
 /// #let g = graph.build({
 ///   graph.node(<a>)
 ///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: "p")
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: [$p$])
 /// })
 /// ```
 /// -> array
@@ -609,8 +765,10 @@
   id: none,
   /// Edge orientation: `"default"`, `"reversed"`, or `"undirected"`. -> string
   orientation: "default",
-  /// Visible/DOT edge label, stored in `statements.label`. -> none | string
+  /// Visible edge label, stored as `payload.label`. -> any
   label: none,
+  /// Opaque edge payload. Any CBOR-encodable Typst value. -> any
+  payload: none,
   /// Edge placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -668,13 +826,6 @@
   } else {
     none
   }
-  let resolved-statements = statements
-  if label != none {
-    if resolved-statements.keys().contains("label") {
-      panic("graph.edge: label specified twice")
-    }
-    resolved-statements.insert("label", _statement-value(label))
-  }
   ((
     linnest-kind: "edge",
     source: resolved-source,
@@ -683,12 +834,14 @@
     flow: flow,
     name: resolved-name,
     id: resolved-id,
+    payload: payload,
+    label: label,
     pos: pos,
     shift: shift,
     label-pos: label-pos,
     label-angle: label-angle,
     bend: bend,
-    statements: resolved-statements,
+    statements: statements,
     source-style-eval: source-style-eval,
     sink-style-eval: sink-style-eval,
     label-eval: label-eval,
@@ -705,7 +858,7 @@
 /// #graph.info(g).name
 /// ```
 /// -> dictionary
-#let info(graph) = cbor(_plugin.graph_info(graph))
+#let info(graph) = _decode-payload-field(cbor(_plugin.graph_info(bytes(graph))))
 
 /// Serialize a graph object to DOT.
 ///
@@ -731,11 +884,12 @@
 /// ```
 /// -> array
 #let nodes(graph, subgraph: none) = {
-  if subgraph == none {
-    cbor(_plugin.graph_nodes(graph))
+  let records = if subgraph == none {
+    cbor(_plugin.graph_nodes(bytes(graph)))
   } else {
     cbor(_plugin.graph_nodes_of_subgraph(bytes(graph), bytes(subgraph)))
   }
+  records.map(_decode-payload-field)
 }
 
 /// Return edge records, optionally filtered by an subgraph object.
@@ -751,11 +905,12 @@
 /// ```
 /// -> array
 #let edges(graph, subgraph: none) = {
-  if subgraph == none {
-    cbor(_plugin.graph_edges(graph))
+  let records = if subgraph == none {
+    cbor(_plugin.graph_edges(bytes(graph)))
   } else {
     cbor(_plugin.graph_edges_of_subgraph(bytes(graph), bytes(subgraph)))
   }
+  records.map(_decode-edge-payloads)
 }
 
 /// Join two graphs by matching dangling half-edge data on `key`.

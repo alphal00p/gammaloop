@@ -15,6 +15,7 @@ use super::{strip_quotes, subgraph_free::Edge, DotHedgeData, GlobalData, NodeIdO
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct DotEdgeData {
+    pub payload: Option<Vec<u8>>,
     pub statements: BTreeMap<String, String>,
     pub local_statements: BTreeMap<String, String>,
     pub edge_id: Option<EdgeIndex>,
@@ -35,6 +36,7 @@ impl FromIterator<(String, String)> for DotEdgeData {
             .collect();
 
         DotEdgeData {
+            payload: None,
             local_statements: BTreeMap::new(),
             statements,
 
@@ -74,6 +76,7 @@ impl DotEdgeData {
     }
     pub fn empty() -> Self {
         DotEdgeData {
+            payload: None,
             statements: BTreeMap::new(),
             local_statements: BTreeMap::new(),
             edge_id: None,

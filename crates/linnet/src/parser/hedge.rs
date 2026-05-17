@@ -91,6 +91,7 @@ pub(crate) const fn u8_to_compass_pt(value: u8) -> CompassPt {
 pub struct DotHedgeData {
     pub statement: Option<String>,
     pub id: Option<Hedge>,
+    pub payload: Option<Vec<u8>>,
     pub port_label: Option<String>,
     #[cfg_attr(feature = "rkyv", with(rkyv::with::Map<CompassPtRkyv>))]
     pub compasspt: Option<CompassPt>,
@@ -100,6 +101,7 @@ impl DotHedgeData {
     pub fn is_none(&self) -> bool {
         self.statement.is_none()
             && self.id.is_none()
+            && self.payload.is_none()
             && self.port_label.is_none()
             && self.compasspt.is_none()
     }

@@ -33,14 +33,18 @@ The second map, $iota : H --> H$, is an involution that _glues_ half edges toget
 If a half-edge is glued to itself, we call that an external half-edge.
 
 
+
+
 #let g = graph.build({
-  node(<a>, label: "bue")
+  node(<a>, label: [s])
   node(<b>)
-  edge(source(<a>), <e>, sink(<b>), label: "e")
-  edge(source(<a>), <g>, sink(<b>), label: "g")
+  edge(source(<a>), <e>, sink(<b>), label: [e])
+  edge(source(<a>), <w>, label: [e])
+  edge(source(<a>), <1>, label: [e])
+  // edge(source(<a>), <g>, sink(<b>), label: [g])
 })
 // #graph.edges(g)
-#draw(layout(g))
+#align(center, draw(layout(g, g-center: 0.005,length-scale: .3)))
 
 = Linnest Typst APIs
 
@@ -69,7 +73,7 @@ The public surface is intentionally narrow:
     source(<a>, compass: "e"),
     <a-c>,
     sink(<c>, compass: "w"),
-    label: "a-c",
+    label: [a-c],
     statements: (
       color: "0055ff",
       source-color: "d72638",
@@ -99,7 +103,7 @@ The public surface is intentionally narrow:
       source(<a>, compass: "e"),
       <a-c>,
       sink(<c>, compass: "w"),
-      label: "a-c",
+      label: [a-c],
       statements: (
         color: "0055ff",
         source-color: "d72638",
@@ -145,8 +149,13 @@ and sink half-edge endpoints, then pass edge items to `graph.build`.
 `graph.build` accepts both comma-separated items and ordinary Typst code
 blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; they are
 resolved before the wire format is sent to the Rust plugin. Numeric `id`
-arguments are order/index overrides. The `label` argument is display metadata
-and becomes the DOT `label` statement for both nodes and edges.
+arguments are order/index overrides. The `payload` argument on graphs, nodes,
+edges, sources, and sinks is opaque Typst metadata: Typst CBOR-encodes it before
+the Rust plugin boundary, Rust archives the bytes without inspecting them, and
+Typst decodes it again in `graph.info`, `graph.nodes`, and `graph.edges`. The
+`label` convenience argument on nodes and edges is display content stored as
+`payload.label`; use `statements: (label: "...")` when a DOT/template label
+string is needed.
 
 ```typ
 #let g = graph.build({
@@ -161,7 +170,7 @@ and becomes the DOT `label` statement for both nodes and edges.
 `id` is numeric:
 
 ```typ
-edge(source(<a>, name: <h1>, id: 0), <e1>, sink(<c>, id: 2), label: "a-c")
+edge(source(<a>, name: <h1>, id: 0), <e1>, sink(<c>, id: 2), label: [a-c])
 ```
 
 One half-edge creates an external edge. The side is determined by the
@@ -178,8 +187,8 @@ for literal braces. Unknown placeholders are left unchanged.
 
 This is useful for graph-level `edge-statements`: the default edge statement is
 merged into each edge, then expanded against that edge's complete statement
-dictionary. The following default metadata records a display label derived from
-the per-edge `label` statement:
+dictionary. The following default metadata records a string label derived from
+the per-edge DOT `label` statement:
 
 ```typ
 #let g = graph.build({
@@ -189,8 +198,8 @@ the per-edge `label` statement:
     source(<a>),
     <a-c>,
     sink(<c>),
-    label: "a-c",
-    statements: (color: "0055ff"),
+    label: [a-c],
+    statements: (color: "0055ff", label: "a-c"),
   )
 },
   edge-statements: (
@@ -425,8 +434,8 @@ manually nested under `edge-statements` or per-edge `statements`:
     source(<a>, compass: "e"),
     <ab>,
     sink(<b>, compass: "w"),
-    label: "ab",
-    statements: (color: "0055ff"),
+    label: [ab],
+    statements: (color: "0055ff", label: "ab"),
   ),
   name: "demo",
   statements: (full_num: "x + y"),

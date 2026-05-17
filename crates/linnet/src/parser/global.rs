@@ -13,6 +13,7 @@ use super::strip_quotes;
 )]
 pub struct GlobalData {
     pub name: String,
+    pub payload: Option<Vec<u8>>,
     pub statements: BTreeMap<String, String>,
     pub edge_statements: BTreeMap<String, String>,
     pub node_statements: BTreeMap<String, String>,
@@ -76,6 +77,7 @@ impl From<()> for GlobalData {
     fn from(_: ()) -> Self {
         GlobalData {
             name: String::new(),
+            payload: None,
             statements: BTreeMap::new(),
             edge_statements: BTreeMap::new(),
             node_statements: BTreeMap::new(),
@@ -188,6 +190,7 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
 
         Ok(GlobalData {
             name,
+            payload: None,
             statements,
             edge_statements,
             node_statements,

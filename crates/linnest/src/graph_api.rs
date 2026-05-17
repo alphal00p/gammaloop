@@ -24,6 +24,7 @@ type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 #[serde(rename_all = "kebab-case")]
 pub struct TypstDotGraphInfo {
     pub name: String,
+    pub payload: Option<Vec<u8>>,
     pub global_statements: BTreeMap<String, String>,
     pub edge_statements: BTreeMap<String, String>,
     pub node_statements: BTreeMap<String, String>,
@@ -115,6 +116,7 @@ pub struct TypstDotNode {
     pub node: usize,
     pub name: Option<String>,
     pub index: Option<usize>,
+    pub payload: Option<Vec<u8>>,
     pub pos: Option<TypstPoint>,
     pub shift: Option<TypstPoint>,
     pub eval: Option<String>,
@@ -127,6 +129,7 @@ pub struct TypstDotEndpoint {
     pub node: usize,
     pub hedge: usize,
     pub id: Option<usize>,
+    pub payload: Option<Vec<u8>>,
     pub statement: Option<String>,
     pub port_label: Option<String>,
     pub compass: Option<String>,
@@ -137,6 +140,7 @@ pub struct TypstDotEndpoint {
 pub struct TypstDotEdge {
     pub edge: usize,
     pub id: Option<usize>,
+    pub payload: Option<Vec<u8>>,
     pub orientation: String,
     pub source: Option<TypstDotEndpoint>,
     pub sink: Option<TypstDotEndpoint>,
@@ -158,6 +162,8 @@ pub struct TypstDotEdge {
 pub struct TypstGraphSpec {
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub payload: Option<Vec<u8>>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
@@ -183,6 +189,8 @@ pub struct TypstNodeSpec {
     #[serde(default)]
     pub index: Option<usize>,
     #[serde(default)]
+    pub payload: Option<Vec<u8>>,
+    #[serde(default)]
     pub pos: Option<TypstPlacementSpec>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
@@ -195,6 +203,8 @@ pub struct TypstEdgeSpec {
     pub source: Option<TypstEndpointSpec>,
     #[serde(default)]
     pub sink: Option<TypstEndpointSpec>,
+    #[serde(default)]
+    pub payload: Option<Vec<u8>>,
     #[serde(default)]
     pub orientation: Option<String>,
     #[serde(default)]
@@ -221,6 +231,8 @@ pub struct TypstEndpointSpec {
     pub statement: Option<String>,
     #[serde(default)]
     pub id: Option<usize>,
+    #[serde(default)]
+    pub payload: Option<Vec<u8>>,
     #[serde(default)]
     pub port_label: Option<String>,
     #[serde(default)]
@@ -485,6 +497,7 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
     let global_data = graph.global_data();
     TypstDotGraphInfo {
         name: global_data.name.as_str().to_string(),
+        payload: global_data.payload.as_ref().map(|value| value.to_vec()),
         global_statements: global_data
             .statements
             .iter()
@@ -515,6 +528,7 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
     );
     let global_data = global_data_from_parts(
         spec.name,
+        spec.payload,
         spec.statements,
         edge_statements,
         spec.node_statements,
@@ -570,6 +584,7 @@ fn add_edge_to_builder(
         edge.label_eval,
     );
     let edge_data = DotEdgeData {
+        payload: edge.payload,
         statements: merged_expanded_statements(&global_data.edge_statements, &local_statements),
         local_statements,
         edge_id: edge.id.map(linnet::half_edge::involution::EdgeIndex::from),
@@ -609,12 +624,14 @@ fn add_edge_to_builder(
 
 fn global_data_from_parts(
     name: Option<String>,
+    payload: Option<Vec<u8>>,
     statements: BTreeMap<String, String>,
     edge_statements: BTreeMap<String, String>,
     node_statements: BTreeMap<String, String>,
 ) -> GlobalData {
     GlobalData {
         name: name.unwrap_or_else(|| "constructed".to_string()),
+        payload,
         statements: expanded_statements(statements),
         edge_statements: expanded_statements(edge_statements),
         node_statements: expanded_statements(node_statements),
@@ -862,6 +879,7 @@ fn node_data_from_spec(
     DotVertexData {
         name: node.name,
         index: node.index.map(NodeIndex).or(Some(NodeIndex(default_index))),
+        payload: node.payload,
         statements: merged_expanded_statements(
             &global_data.node_statements,
             &apply_placement_statements(node.statements, placement),
@@ -900,6 +918,7 @@ fn endpoint_spec_to_hedge_data(
         data: DotHedgeData {
             statement: endpoint.statement,
             id: endpoint.id.map(Hedge),
+            payload: endpoint.payload,
             port_label: endpoint.port_label,
             compasspt: endpoint
                 .compass
@@ -968,6 +987,7 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
             .index
             .as_ref()
             .map(|value| value.0.try_into().unwrap()),
+        payload: vertex.data.payload.as_ref().map(|value| value.to_vec()),
         pos: parse_point(&raw_statements, "pos"),
         shift: parse_point(&raw_statements, "shift"),
         eval: raw_statements.get("eval").cloned(),
@@ -994,6 +1014,7 @@ fn edge_view_to_output(
             .edge_id
             .as_ref()
             .map(|value| value.0.try_into().unwrap()),
+        payload: edge.data.payload.as_ref().map(|value| value.to_vec()),
         orientation: orientation_to_string(edge.orientation).to_string(),
         source: endpoints.source.map(endpoint_to_output),
         sink: endpoints.sink.map(endpoint_to_output),
@@ -1026,6 +1047,7 @@ fn endpoint_to_output(endpoint: ArchivedDotEndpointView<'_>) -> TypstDotEndpoint
             .id
             .as_ref()
             .map(|value| value.0.try_into().unwrap()),
+        payload: endpoint.data.payload.as_ref().map(|value| value.to_vec()),
         statement: endpoint
             .data
             .statement
