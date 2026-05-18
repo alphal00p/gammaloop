@@ -155,14 +155,14 @@ objects back to `graph` or `subgraph` for inspection.
 - `graph.build(..)` constructs one graph object from a stream of node and edge
   items.
 - `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
-  new opaque payloads without changing topology.
+  new opaque data without changing topology.
 - `graph.node-data(graph, <name>)` and `graph.edge-data(graph, <name>)` return
-  one named node or edge payload.
+  one named node or edge data.
 - `graph.update-node-data(graph, <name>, data)` and
   `graph.update-edge-data(graph, <name>, data)` update one named node or edge
-  payload. Direct replacements use a Rust-side lookup; callbacks still run in
+  data. Direct replacements use a Rust-side lookup; callbacks still run in
   Typst with `(data, record)`.
-- `graph.eval-fields(graph, ..)` evaluates selected record fields into payload
+- `graph.eval-fields(graph, ..)` evaluates selected record fields into data
   entries. It works on parsed and built graph objects.
 - `node(..)` returns a node item.
 - `source(..)` and `sink(..)` return half-edge endpoints.
@@ -183,25 +183,25 @@ blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; they are
 resolved before the wire format is sent to the Rust plugin. Numeric `id`
 arguments choose graph indexes or ordering: on nodes, `id` fixes the resulting
 node index and must be unique and in bounds. On nodes, edges, sources, and
-sinks, extra named arguments are captured as opaque Typst payload fields:
+sinks, extra named arguments are captured as opaque Typst data fields:
 `edge(source(<a>, style: physics.source-stroke()), sink(<b>), particle: "g")`
-stores `(style: ..)` in the source payload and `(particle: "g")` in the edge
-payload. Typst CBOR-encodes payloads before the Rust plugin boundary, Rust
+stores `(style: ..)` in the source data and `(particle: "g")` in the edge
+data. Typst CBOR-encodes data before the Rust plugin boundary, Rust
 archives the bytes without inspecting them, and Typst decodes them again in
-`graph.info`, `graph.nodes`, and `graph.edges`. A captured `label` payload field
+`graph.info`, `graph.nodes`, and `graph.edges`. A captured `label` data field
 on nodes and edges is display content used by the default drawing style; use
 `statements: (label: "...")` when a flat metadata label string is needed.
 Statements are flat metadata used by DOT; they cannot nest. Values are scalar
-strings/numbers/booleans. Use payload fields for structured Typst data or
+strings/numbers/booleans. Use data fields for structured Typst data or
 content.
 
-`graph.build` and `graph.parse` also accept `default-node-payload`,
-`default-edge-payload`, `default-source-payload`, and `default-sink-payload`.
-These defaults are merged into the corresponding payloads; captured payload
+`graph.build` and `graph.parse` also accept `default-node-data`,
+`default-edge-data`, `default-source-data`, and `default-sink-data`.
+These defaults are merged into the corresponding data; captured data
 fields on nodes, edges, sources, and sinks override the defaults. For drawing,
 the
-physics helpers read `payload.style` on source and sink half-edges and
-`payload.display-label`/`payload.label` on edges:
+physics helpers read `data.style` on source and sink half-edges and
+`data.display-label`/`data.label` on edges:
 
 ```typ
 #let g = build({
@@ -215,7 +215,7 @@ physics helpers read `payload.style` on source and sink half-edges and
     particle: "g",
   )
 },
-  default-edge-payload: (kind: "propagator"),
+  default-edge-data: (kind: "propagator"),
 )
 #let callbacks = physics.style()
 #draw(
@@ -226,9 +226,9 @@ physics helpers read `payload.style` on source and sink half-edges and
 )
 ```
 
-When parsing DOT, the same payload channel can be filled from selected string
+When parsing DOT, the same data channel can be filled from selected string
 fields. Evaluation happens in Typst at parse time; Rust only receives opaque
-payload bytes. The selected fields are evaluated with the record's merged
+data bytes. The selected fields are evaluated with the record's merged
 `fields` dictionary in scope:
 
 ```typ
@@ -239,8 +239,8 @@ payload bytes. The selected fields are evaluated with the record's merged
   eval-source-fields: ("statement",),
   eval-sink-fields: ("statement",),
 ).first()
-#nodes(g).first().payload.label
-#edges(g).first().payload.label
+#nodes(g).first().data.label
+#edges(g).first().data.label
 ```
 
 The same transform can run after construction. This is useful for global edge
@@ -254,7 +254,7 @@ fields:
   edge(source(<a>), sink(<b>), statements: (mom: "p"))
 }, default-edge-statements: (display-label: "$#mom$"))
 #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
-#edges(g).first().payload.at("display-label")
+#edges(g).first().data.at("display-label")
 ```
 
 ```typ
@@ -266,7 +266,7 @@ fields:
 ```
 
 Named nodes and edges can be updated after construction without scanning in the
-caller. The update replaces the opaque payload, or it can be a callback receiving
+caller. The update replaces the opaque data, or it can be a callback receiving
 `(data, record)`:
 
 ```typ
@@ -302,7 +302,7 @@ edge(source(<c>), <outgoing>)
 
 `graph.build` does not interpolate statement strings on the Rust side. Use
 `graph.eval-fields` or `graph.map` when a default statement should turn into
-Typst content or structured payload data. The evaluation scope includes the
+Typst content or structured data data. The evaluation scope includes the
 record's merged fields, so default edge statements can still refer to local edge
 fields:
 
@@ -521,11 +521,11 @@ receiving `(base-length, length, ratio)`.
 Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
 so the layer is drawn on the same side of the curve as the edge label.
 
-Payload defaults are also the global styling hook for all sources, sinks,
+Data defaults are also the global styling hook for all sources, sinks,
 nodes, and edges. More specific data can be added with captured named arguments
 on node, edge, source, and sink items, or by running
 `graph.map`/`graph.eval-fields` after construction. This keeps evaluated Typst
-values in the opaque payload channel instead of adding renderer-specific eval
+values in the opaque data channel instead of adding renderer-specific eval
 fields to the graph spec:
 
 ```typ
@@ -541,8 +541,8 @@ fields to the graph spec:
   )
 },
   name: "demo",
-  default-source-payload: (style: (stroke: red + 0.5pt)),
-  default-sink-payload: (style: (stroke: blue + 0.5pt)),
+  default-source-data: (style: (stroke: red + 0.5pt)),
+  default-sink-data: (style: (stroke: blue + 0.5pt)),
 )
 #let callbacks = physics.style()
 #draw(layout(g), source-style: callbacks.source-style, sink-style: callbacks.sink-style)

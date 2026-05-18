@@ -174,18 +174,18 @@
 
 #let _as-content(value) = if value == none { none } else if type(value) == str { [#value] } else { value }
 
-#let _payload-label(record) = {
-  let payload = record.at("payload", default: none)
-  if type(payload) == dictionary {
-    payload.at("label", default: none)
+#let _data-label(record) = {
+  let data = record.at("data", default: none)
+  if type(data) == dictionary {
+    data.at("label", default: none)
   } else {
     none
   }
 }
 
-#let _payload-fields(record) = {
-  let payload = record.at("payload", default: none)
-  if type(payload) == dictionary { payload } else { (:) }
+#let _data-fields(record) = {
+  let data = record.at("data", default: none)
+  if type(data) == dictionary { data } else { (:) }
 }
 
 #let _pattern-name(style) = _style-value(style, "pattern")
@@ -1005,18 +1005,18 @@
         for (i, v) in nodes.enumerate() {
           let pos = _node-pos(v)
           let node = v + (pos: pos)
-          let payload-label = _payload-label(v)
+          let record-label = _data-label(v)
           let statement-label = v.statements.at("label", default: none)
-          let data-label = if payload-label == none { statement-label } else { payload-label }
+          let data-label = if record-label == none { statement-label } else { record-label }
           let node-data = (
             scope
               + v.statements
-              + _payload-fields(v)
+              + _data-fields(v)
               + (
                 vid: i,
                 node: node,
                 name: node.name,
-                payload: v.at("payload", default: none),
+                data: v.at("data", default: none),
                 label: data-label,
               )
           )
@@ -1059,24 +1059,22 @@
           let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
           let ext = source-half-edge == none or sink-half-edge == none
           let data = edge.statements
-          let payload-label = _payload-label(edge)
+          let record-label = _data-label(edge)
           let statement-label = data.at("label", default: none)
-          let data-label = if payload-label == none { statement-label } else { payload-label }
+          let data-label = if record-label == none { statement-label } else { record-label }
           let orientation = edge.orientation
-          let edge-id = edge.at("id", default: none)
-          let eid = if edge-id == none { i } else { edge-id }
           let edge-data = (
             scope
               + data
-              + _payload-fields(edge)
+              + _data-fields(edge)
               + (
-                eid: eid,
+                eid: edge.edge,
                 edge: edge,
                 source-statement: source-statement,
                 sink-statement: sink-statement,
                 source-half-edge: source-half-edge,
                 sink-half-edge: sink-half-edge,
-                payload: edge.at("payload", default: none),
+                data: edge.at("data", default: none),
                 label: data-label,
                 orientation: orientation,
                 ext: ext,

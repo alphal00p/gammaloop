@@ -437,11 +437,19 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         };
 
         // println!("Built: {}", g.debug_dot());
+        g.apply_explicit_id_ordering();
+        g
+    }
+}
+
+impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
+    pub fn apply_explicit_id_ordering(&mut self) {
+        // println!("Built: {}", self.debug_dot());
 
         let mut used_edges = HashSet::new();
-        let n_edges = g.n_edges();
+        let n_edges = self.n_edges();
 
-        let mut edge_map = g.new_edgevec(|d, e, _| {
+        let mut edge_map = self.new_edgevec(|d, e, _| {
             d.edge_id.inspect(|d| {
                 assert!(
                     used_edges.insert(*d),
@@ -453,8 +461,8 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
 
         let mut used_hedges = HashSet::new();
 
-        let n_hedges = g.n_hedges();
-        let mut hedge_map = g.new_hedgevec(|h, d| {
+        let n_hedges = self.n_hedges();
+        let mut hedge_map = self.new_hedgevec(|h, d| {
             d.id.inspect(|d| {
                 assert!(
                     used_hedges.insert(*d),
@@ -465,8 +473,8 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         });
 
         let mut used_nodes = HashSet::new();
-        let n_nodes = g.n_nodes();
-        let mut node_map = g.new_nodevec(|ni, _, v| {
+        let n_nodes = self.n_nodes();
+        let mut node_map = self.new_nodevec(|ni, _, v| {
             v.index.inspect(|i| {
                 assert!(
                     used_nodes.insert(*i),
@@ -510,13 +518,12 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         // println!("Edge Perm: {edge_perm}");
         // println!("Node Perm: {node_perm}");
 
-        <HedgeGraph<_, _, _, _> as Swap<Hedge>>::permute(&mut g, &hedge_perm);
+        <HedgeGraph<_, _, _, _> as Swap<Hedge>>::permute(&mut self.graph, &hedge_perm);
         // println!("Permuted Hedge Graph: {}", g.debug_dot());
-        <HedgeGraph<_, _, _, _> as Swap<EdgeIndex>>::permute(&mut g, &edge_perm);
+        <HedgeGraph<_, _, _, _> as Swap<EdgeIndex>>::permute(&mut self.graph, &edge_perm);
         // println!("Permuted Edge Graph: {}", g.debug_dot());
-        <HedgeGraph<_, _, _, _> as Swap<NodeIndex>>::permute(&mut g, &node_perm);
+        <HedgeGraph<_, _, _, _> as Swap<NodeIndex>>::permute(&mut self.graph, &node_perm);
         // println!("Permuted Node Graph:{}", g.debug_dot());
-        g
     }
 }
 

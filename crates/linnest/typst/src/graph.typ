@@ -36,15 +36,15 @@
   /// ```
   ///  -> none | string
   name: none,
-  /// Opaque graph payload. Any CBOR-encodable Typst value.
+  /// Opaque graph data. Any CBOR-encodable Typst value.
   ///
   /// ```example
-  /// #let g = build(payload: (a:(b:(1, ))), {
+  /// #let g = build(data: (a:(b:(1, ))), {
   /// })
-  /// #info(g).payload
+  /// #info(g).data
   /// ```
   /// -> any
-  payload: none,
+  data: none,
   /// Flat graph statements, that get turned into a string to string dictionary in rust. Used by DOT parsing; values cannot nest.
   /// ```example
   /// #let g = build(statements: (a:1), {
@@ -66,60 +66,60 @@
   /// ```
   ///-> dictionary
   default-edge-statements: (:),
-  /// Default payload merged into every node payload. Captured node payload fields override it.
+  /// Default data merged into every node data. Captured node data fields override it.
   /// ```example
-  /// #let g = build(default-node-payload: (a:1), {
+  /// #let g = build(default-node-data: (a:1), {
   ///    node(<a>)
   ///    node(<b>,a:2)
   ///    node(<c>,b:(a:1))
   /// })
-  /// #nodes(g).map(n=>n.payload)
+  /// #nodes(g).map(n=>n.data)
   /// ```
   ///  -> any
-  default-node-payload: none,
-  /// Default payload merged into every edge payload. Captured edge payload fields override it.
+  default-node-data: none,
+  /// Default data merged into every edge data. Captured edge data fields override it.
   /// ```example
-  /// #let g = build(default-edge-payload: (a:1), {
+  /// #let g = build(default-edge-data: (a:1), {
   ///    node(<a>)
   ///    edge(source(<a>))
   ///    edge(sink(<a>))
   /// })
-  /// #edges(g).map(e=>e.payload)
+  /// #edges(g).map(e=>e)
   /// ```
   /// -> any
-  default-edge-payload: none,
-  /// Default payload merged into every source half-edge payload. Captured source payload fields override it.
+  default-edge-data: none,
+  /// Default data merged into every source half-edge data. Captured source data fields override it.
   /// ```example
-  /// #let g = build(default-source-payload: (a:1), {
+  /// #let g = build(default-source-data: (a:1), {
   ///    node(<a>)
   ///    edge(source(<a>))
   ///    edge(sink(<a>))
   /// })
-  /// #edges(g).map(e=>if e.source != none {e.source.payload} else {none})
+  /// #edges(g).map(e=>if e.source != none {e.source.data} else {none})
   /// ```
   /// -> any
-  default-source-payload: none,
-  /// Default payload merged into every sink half-edge payload. Captured sink payload fields override it.
+  default-source-data: none,
+  /// Default data merged into every sink half-edge data. Captured sink data fields override it.
   /// ```example
-  /// #let g = build(default-sink-payload: (a:1), {
+  /// #let g = build(default-sink-data: (a:1), {
   ///    node(<a>)
   ///    edge(source(<a>))
   ///    edge(sink(<a>))
   /// })
-  /// #edges(g).map(e=>if e.sink != none {e.sink.payload} else {none})
+  /// #edges(g).map(e=>if e.sink != none {e.sink.data} else {none})
   /// ```
   /// -> any
-  default-sink-payload: none,
+  default-sink-data: none,
 ) = _impl.build(
   ..items,
   name: name,
-  payload: payload,
+  data: data,
   statements: statements,
   default-edge-statements: default-edge-statements,
-  default-node-payload: default-node-payload,
-  default-edge-payload: default-edge-payload,
-  default-source-payload: default-source-payload,
-  default-sink-payload: default-sink-payload,
+  default-node-data: default-node-data,
+  default-edge-data: default-edge-data,
+  default-source-data: default-source-data,
+  default-sink-data: default-sink-data,
   default-node-statements: default-node-statements,
   nodes: (),
   edges: (),
@@ -127,10 +127,10 @@
 
 /// Parse one or more DOT digraphs into graph objects.
 ///
-/// Default payloads are applied before `eval-*` fields are evaluated, so
-/// default payload strings can refer to parsed record fields such as `#name`.
-/// Parsed fields take precedence over default payload fields, so DOT
-/// `label="..."` overrides `default-node-payload: (label: ...)`.
+/// Default data are applied before `eval-*` fields are evaluated, so
+/// default data strings can refer to parsed record fields such as `#name`.
+/// Parsed fields take precedence over default data fields, so DOT
+/// `label="..."` overrides `default-node-data: (label: ...)`.
 /// ````example
 /// #let a = ```dot
 /// digraph {
@@ -144,7 +144,7 @@
 /// ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
 /// }
 /// ```
-/// #let g = parse(a.text,default-node-payload:(label:"#name"),eval-node-fields:"label")
+/// #let g = parse(a.text,default-node-data:(label:"#name"),eval-node-fields:"label")
 /// >>>#align(center+horizon, draw(layout(g.at(0))))
 ///
 /// ````
@@ -152,7 +152,7 @@
 #let parse(
   /// DOT source text containing one or more `digraph` definitions. -> string | bytes
   input,
-  /// Default payload merged into every node payload. Captured node payload fields override it.
+  /// Default data merged into every node data. Captured node data fields override it.
   ///
   /// ````example
   /// #let a = ```dot
@@ -164,12 +164,12 @@
   /// c [particle="q"]
   /// }
   /// ```
-  /// #let g = parse(a.text,default-node-payload:(particle:"g"),eval-node-fields:"particle").at(0)
+  /// #let g = parse(a.text,default-node-data:(particle:"g"),eval-node-fields:"particle").at(0)
   /// #nodes(g).map(n=>n)
   /// ````
   ///   -> any
-  default-node-payload: none,
-  /// Node statement fields to evaluate into `graph.nodes(g).at(i).payload`.
+  default-node-data: none,
+  /// Node statement fields to evaluate into `graph.nodes(g).at(i).data`.
   /// ````example
   /// #let a = ```dot
   /// digraph {
@@ -178,25 +178,25 @@
   /// b -> d
   /// }
   /// ```
-  /// #let g = parse(a.text,default-node-payload:(label:"#name"),eval-node-fields:"label")
+  /// #let g = parse(a.text,default-node-data:(label:"#name"),eval-node-fields:"label")
   /// >>>#align(center+horizon, draw(layout(g.at(0))))
   ///
   /// ````
   /// -> string | array
   eval-node-fields: (),
-  /// Default payload merged into every edge payload. Captured edge payload fields override it. -> any
-  default-edge-payload: none,
-  /// Default payload merged into every source half-edge payload. Captured source payload fields override it. -> any
-  default-source-payload: none,
-  /// Default payload merged into every sink half-edge payload. Captured sink payload fields override it. -> any
-  default-sink-payload: none,
-  /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
+  /// Default data merged into every edge data. Captured edge data fields override it. -> any
+  default-edge-data: none,
+  /// Default data merged into every source half-edge data. Captured source data fields override it. -> any
+  default-source-data: none,
+  /// Default data merged into every sink half-edge data. Captured sink data fields override it. -> any
+  default-sink-data: none,
+  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
   eval-graph-fields: (),
-  /// Edge statement fields to evaluate into `graph.edges(g).at(i).payload`. -> string | array
+  /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. -> string | array
   eval-edge-fields: (),
-  /// Source half-edge fields to evaluate into `edge.source.payload`. -> string | array
+  /// Source half-edge fields to evaluate into `edge.source.data`. -> string | array
   eval-source-fields: (),
-  /// Sink half-edge fields to evaluate into `edge.sink.payload`. -> string | array
+  /// Sink half-edge fields to evaluate into `edge.sink.data`. -> string | array
   eval-sink-fields: (),
   /// Typst `eval` mode used for string field values. -> string
   eval-mode: "markup",
@@ -204,10 +204,10 @@
   scope: (:),
 ) = _impl.parse(
   input,
-  default-node-payload: default-node-payload,
-  default-edge-payload: default-edge-payload,
-  default-source-payload: default-source-payload,
-  default-sink-payload: default-sink-payload,
+  default-node-data: default-node-data,
+  default-edge-data: default-edge-data,
+  default-source-data: default-source-data,
+  default-sink-data: default-sink-data,
   eval-graph-fields: eval-graph-fields,
   eval-node-fields: eval-node-fields,
   eval-edge-fields: eval-edge-fields,
@@ -221,13 +221,13 @@
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
 /// optional numeric `id` fixes the resulting graph node index. Extra named
-/// arguments are captured as node payload fields, so
+/// arguments are captured as node data fields, so
 /// `node(<a>, label: [A], color: red)` stores `(label: [A], color: red)`.
-/// The default draw style uses `payload.label` as the visible node label when
+/// The default draw style uses `data.label` as the visible node label when
 /// present.
 /// -> array
 #let node(
-  /// Optional positional node name. Must be a Typst label when provided; extra named arguments become payload fields. -> label
+  /// Optional positional node name. Must be a Typst label when provided; extra named arguments become data fields. -> label
   ..args,
   /// Typst node name for references. -> none | label
   name: none,
@@ -252,12 +252,12 @@
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index override.
-/// Extra named arguments are captured as source payload fields.
+/// Extra named arguments are captured as source data fields.
 /// -> dictionary
 #let source(
   /// Referenced node, either by Typst label name or numeric node index. -> label | int
   node,
-  /// Extra named arguments become source payload fields. -> any
+  /// Extra named arguments become source data fields. -> any
   ..args,
   /// Optional half-edge name used for later references. -> none | label
   name: none,
@@ -275,12 +275,12 @@
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index override.
-/// Extra named arguments are captured as sink payload fields.
+/// Extra named arguments are captured as sink data fields.
 /// -> dictionary
 #let sink(
   /// Referenced node, either by Typst label name or numeric node index. -> label | int
   node,
-  /// Extra named arguments become sink payload fields. -> any
+  /// Extra named arguments become sink data fields. -> any
   ..args,
   /// Optional half-edge name used for later references. -> none | label
   name: none,
@@ -298,13 +298,13 @@
 ///
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order.
-/// Extra named arguments are captured as edge payload fields, so
+/// Extra named arguments are captured as edge data fields, so
 /// `edge(source(<a>), sink(<b>), particle: "g")` stores
-/// `(particle: "g")`. The default draw style uses `payload.label` as the
+/// `(particle: "g")`. The default draw style uses `data.label` as the
 /// visible edge label when present.
 /// -> array
 #let edge(
-  /// Source/sink half-edges and optional edge name; extra named arguments become payload fields. -> any
+  /// Source/sink half-edges and optional edge name; extra named arguments become data fields. -> any
   ..args,
   /// Typst edge name. -> none | label
   name: none,
@@ -365,7 +365,7 @@
   _impl.pos(x: x, y: y, ref: ref, dx: dx, dy: dy, mode: mode)
 }
 
-/// Map graph metadata to new opaque payloads.
+/// Map graph metadata to new opaque data.
 /// -> bytes
 #let map(
   /// Graph object to transform. -> bytes
@@ -384,20 +384,20 @@
   _impl.map(graph_, graph: graph, node: node, edge: edge, source: source, sink: sink)
 }
 
-/// Evaluate selected fields into opaque payload entries.
+/// Evaluate selected fields into opaque data entries.
 /// -> bytes
 #let eval-fields(
   /// Graph object whose selected statement fields should be evaluated. -> bytes
   graph_,
-  /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
+  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
   eval-graph-fields: (),
-  /// Node statement fields to evaluate into node payloads. -> string | array
+  /// Node statement fields to evaluate into node data. -> string | array
   eval-node-fields: (),
-  /// Edge statement fields to evaluate into edge payloads. -> string | array
+  /// Edge statement fields to evaluate into edge data. -> string | array
   eval-edge-fields: (),
-  /// Source half-edge fields to evaluate into source payloads. -> string | array
+  /// Source half-edge fields to evaluate into source data. -> string | array
   eval-source-fields: (),
-  /// Sink half-edge fields to evaluate into sink payloads. -> string | array
+  /// Sink half-edge fields to evaluate into sink data. -> string | array
   eval-sink-fields: (),
   /// Typst `eval` mode used for string field values. -> string
   eval-mode: "markup",
@@ -446,7 +446,7 @@
   subgraph: none,
 ) = _impl.edges(graph, subgraph: subgraph)
 
-/// Return one named node's opaque payload.
+/// Return one named node's opaque data.
 /// -> any
 #let node-data(
   /// Graph object to inspect. -> bytes
@@ -455,7 +455,7 @@
   name,
 ) = _impl.node-data(graph_, name)
 
-/// Return one named edge's opaque payload.
+/// Return one named edge's opaque data.
 /// -> any
 #let edge-data(
   /// Graph object to inspect. -> bytes
@@ -464,25 +464,25 @@
   name,
 ) = _impl.edge-data(graph_, name)
 
-/// Update one named node's opaque payload.
+/// Update one named node's opaque data.
 /// -> bytes
 #let update-node-data(
   /// Graph object to update. -> bytes
   graph_,
   /// Node name as a Typst label or its string form. -> label | string
   name,
-  /// Replacement payload or `(data, node) => new-data` callback. -> any | function
+  /// Replacement data or `(data, node) => new-data` callback. -> any | function
   update,
 ) = _impl.update-node-data(graph_, name, update)
 
-/// Update one named edge's opaque payload.
+/// Update one named edge's opaque data.
 /// -> bytes
 #let update-edge-data(
   /// Graph object to update. -> bytes
   graph_,
   /// Edge name as a Typst label or its string form. -> label | string
   name,
-  /// Replacement payload or `(data, edge) => new-data` callback. -> any | function
+  /// Replacement data or `(data, edge) => new-data` callback. -> any | function
   update,
 ) = _impl.update-edge-data(graph_, name, update)
 
@@ -511,9 +511,9 @@
   graph,
 ) = _impl.forests(graph)
 
-/// Decode an opaque payload returned by low-level graph APIs.
+/// Decode an opaque data returned by low-level graph APIs.
 /// -> any
-#let decode-payload(
-  /// Payload bytes or byte array produced by the graph API. -> bytes | array | none
+#let decode-data(
+  /// Data bytes or byte array produced by the graph API. -> bytes | array | none
   value,
-) = _impl.decode-payload(value)
+) = _impl.decode-data(value)

@@ -112,32 +112,32 @@ pub fn graph_from_spec(arg: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
-pub fn graph_with_payloads(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::graph_with_payloads_bytes(arg, arg2)
+pub fn graph_with_data(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_with_data_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
-pub fn graph_node_payload_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::graph_node_payload_by_name_bytes(arg, arg2)
+pub fn graph_node_data_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_node_data_by_name_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
-pub fn graph_edge_payload_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::graph_edge_payload_by_name_bytes(arg, arg2)
+pub fn graph_edge_data_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_edge_data_by_name_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
-pub fn graph_set_node_payload_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::graph_set_node_payload_by_name_bytes(arg, arg2)
+pub fn graph_set_node_data_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_set_node_data_by_name_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
-pub fn graph_set_edge_payload_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    crate::graph_api::graph_set_edge_payload_by_name_bytes(arg, arg2)
+pub fn graph_set_edge_data_by_name(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_set_edge_data_by_name_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]

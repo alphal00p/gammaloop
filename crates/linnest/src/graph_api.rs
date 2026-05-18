@@ -25,7 +25,7 @@ const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
 #[serde(rename_all = "kebab-case")]
 pub struct TypstDotGraphInfo {
     pub name: String,
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     pub global_statements: BTreeMap<String, String>,
     pub default_edge_statements: BTreeMap<String, String>,
     pub default_node_statements: BTreeMap<String, String>,
@@ -116,10 +116,9 @@ struct ResolvedPlacement {
 pub struct TypstDotNode {
     pub node: usize,
     pub name: Option<String>,
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     pub pos: Option<TypstPoint>,
     pub shift: Option<TypstPoint>,
-    pub eval: Option<String>,
     pub statements: BTreeMap<String, String>,
 }
 
@@ -128,8 +127,7 @@ pub struct TypstDotNode {
 pub struct TypstDotEndpoint {
     pub node: usize,
     pub hedge: usize,
-    pub id: Option<usize>,
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     pub statement: Option<String>,
     pub port_label: Option<String>,
     pub compass: Option<String>,
@@ -140,8 +138,7 @@ pub struct TypstDotEndpoint {
 pub struct TypstDotEdge {
     pub edge: usize,
     pub name: Option<String>,
-    pub id: Option<usize>,
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     pub orientation: String,
     pub source: Option<TypstDotEndpoint>,
     pub sink: Option<TypstDotEndpoint>,
@@ -159,7 +156,7 @@ pub struct TypstGraphSpec {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
     #[serde(default)]
@@ -179,7 +176,7 @@ pub struct TypstNodeSpec {
     #[serde(default)]
     pub index: Option<usize>,
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     #[serde(default)]
     pub pos: Option<TypstPlacementSpec>,
     #[serde(default)]
@@ -194,7 +191,7 @@ pub struct TypstEdgeSpec {
     #[serde(default)]
     pub sink: Option<TypstEndpointSpec>,
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     #[serde(default)]
     pub orientation: Option<String>,
     #[serde(default)]
@@ -216,7 +213,7 @@ pub struct TypstEndpointSpec {
     #[serde(default)]
     pub id: Option<usize>,
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     #[serde(default)]
     pub port_label: Option<String>,
     #[serde(default)]
@@ -227,29 +224,29 @@ pub struct TypstEndpointSpec {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct TypstGraphPayloadPatch {
+pub struct TypstGraphDataPatch {
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     #[serde(default)]
-    pub nodes: Vec<TypstIndexedPayloadPatch>,
+    pub nodes: Vec<TypstIndexedDataPatch>,
     #[serde(default)]
-    pub edges: Vec<TypstEdgePayloadPatch>,
+    pub edges: Vec<TypstEdgeDataPatch>,
     #[serde(default)]
-    pub hedges: Vec<TypstIndexedPayloadPatch>,
+    pub hedges: Vec<TypstIndexedDataPatch>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TypstIndexedPayloadPatch {
+pub struct TypstIndexedDataPatch {
     pub index: usize,
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TypstEdgePayloadPatch {
+pub struct TypstEdgeDataPatch {
     pub index: usize,
     #[serde(default)]
-    pub payload: Option<Vec<u8>>,
+    pub data: Option<Vec<u8>>,
     #[serde(default)]
     pub source: Option<Vec<u8>>,
     #[serde(default)]
@@ -257,9 +254,9 @@ pub struct TypstEdgePayloadPatch {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct TypstNamedPayloadPatch {
+pub struct TypstNamedDataPatch {
     pub name: String,
-    pub payload: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -303,21 +300,21 @@ pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
         .map(|bytes| bytes.to_vec())
 }
 
-pub fn graph_with_payloads_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+pub fn graph_with_data_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
-    let patch: TypstGraphPayloadPatch = decode_cbor(arg2, "graph payload patch")?;
-    apply_graph_payload_patch(&mut graph, patch)?;
+    let patch: TypstGraphDataPatch = decode_cbor(arg2, "graph data patch")?;
+    apply_graph_data_patch(&mut graph, patch)?;
     graph
         .to_rkyv_bytes::<4096>()
         .map(|bytes| bytes.to_vec())
         .map_err(|err| err.to_string())
 }
 
-pub fn graph_node_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+pub fn graph_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let name: String = decode_cbor(arg2, "node name")?;
     let graph = DotGraph::archived_view(arg);
-    let payload = graph
+    let data = graph
         .vertex_data()
         .find(|node| {
             node.data
@@ -330,13 +327,13 @@ pub fn graph_node_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u
         .payload
         .as_ref()
         .map(|value| value.to_vec());
-    encode_cbor(&payload)
+    encode_cbor(&data)
 }
 
-pub fn graph_edge_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+pub fn graph_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let name: String = decode_cbor(arg2, "edge name")?;
     let graph = DotGraph::archived_view(arg);
-    let payload = graph
+    let data = graph
         .edge_data()
         .find(|edge| archived_edge_name(*edge).as_deref() == Some(name.as_str()))
         .ok_or_else(|| format!("No edge named {name:?}"))?
@@ -344,13 +341,13 @@ pub fn graph_edge_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u
         .payload
         .as_ref()
         .map(|value| value.to_vec());
-    encode_cbor(&payload)
+    encode_cbor(&data)
 }
 
-pub fn graph_set_node_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+pub fn graph_set_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
-    let patch: TypstNamedPayloadPatch = decode_cbor(arg2, "named node payload patch")?;
+    let patch: TypstNamedDataPatch = decode_cbor(arg2, "named node data patch")?;
     let node = graph
         .graph
         .iter_nodes()
@@ -358,17 +355,17 @@ pub fn graph_set_node_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<V
             (data.name.as_deref() == Some(patch.name.as_str())).then_some(index)
         })
         .ok_or_else(|| format!("No node named {:?}", patch.name))?;
-    graph.graph[node].payload = Some(patch.payload);
+    graph.graph[node].payload = Some(patch.data);
     graph
         .to_rkyv_bytes::<4096>()
         .map(|bytes| bytes.to_vec())
         .map_err(|err| err.to_string())
 }
 
-pub fn graph_set_edge_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
-    let patch: TypstNamedPayloadPatch = decode_cbor(arg2, "named edge payload patch")?;
+    let patch: TypstNamedDataPatch = decode_cbor(arg2, "named edge data patch")?;
     let edge = graph
         .graph
         .iter_edges()
@@ -382,38 +379,35 @@ pub fn graph_set_edge_payload_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<V
             .then_some(index)
         })
         .ok_or_else(|| format!("No edge named {:?}", patch.name))?;
-    graph.graph[edge].payload = Some(patch.payload);
+    graph.graph[edge].payload = Some(patch.data);
     graph
         .to_rkyv_bytes::<4096>()
         .map(|bytes| bytes.to_vec())
         .map_err(|err| err.to_string())
 }
 
-fn apply_graph_payload_patch(
-    graph: &mut DotGraph,
-    patch: TypstGraphPayloadPatch,
-) -> Result<(), String> {
-    if let Some(payload) = patch.payload {
-        graph.global_data.payload = Some(payload);
+fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> Result<(), String> {
+    if let Some(data) = patch.data {
+        graph.global_data.payload = Some(data);
     }
 
     for node in patch.nodes {
         if node.index >= graph.graph.n_nodes() {
             return Err(format!(
-                "Node payload patch index {} is out of bounds for graph with {} nodes",
+                "Node data patch index {} is out of bounds for graph with {} nodes",
                 node.index,
                 graph.graph.n_nodes()
             ));
         }
-        if let Some(payload) = node.payload {
-            graph.graph[NodeIndex(node.index)].payload = Some(payload);
+        if let Some(data) = node.data {
+            graph.graph[NodeIndex(node.index)].payload = Some(data);
         }
     }
 
     for edge in patch.edges {
         if edge.index >= graph.graph.n_edges() {
             return Err(format!(
-                "Edge payload patch index {} is out of bounds for graph with {} edges",
+                "Edge data patch index {} is out of bounds for graph with {} edges",
                 edge.index,
                 graph.graph.n_edges()
             ));
@@ -423,36 +417,31 @@ fn apply_graph_payload_patch(
             .graph
             .iter_edges()
             .find_map(|(pair, index, _)| (index == edge_index).then_some(pair))
-            .ok_or_else(|| {
-                format!(
-                    "Edge payload patch index {} could not be resolved",
-                    edge.index
-                )
-            })?;
+            .ok_or_else(|| format!("Edge data patch index {} could not be resolved", edge.index))?;
 
-        if let Some(payload) = edge.payload {
-            graph.graph[edge_index].payload = Some(payload);
+        if let Some(data) = edge.data {
+            graph.graph[edge_index].payload = Some(data);
         }
-        if let Some(payload) = edge.source {
+        if let Some(data) = edge.source {
             let hedge = endpoint_hedge(pair, Flow::Source, edge.index)?;
-            graph.graph[hedge].payload = Some(payload);
+            graph.graph[hedge].payload = Some(data);
         }
-        if let Some(payload) = edge.sink {
+        if let Some(data) = edge.sink {
             let hedge = endpoint_hedge(pair, Flow::Sink, edge.index)?;
-            graph.graph[hedge].payload = Some(payload);
+            graph.graph[hedge].payload = Some(data);
         }
     }
 
     for hedge in patch.hedges {
         if hedge.index >= graph.graph.n_hedges() {
             return Err(format!(
-                "Half-edge payload patch index {} is out of bounds for graph with {} half-edges",
+                "Half-edge data patch index {} is out of bounds for graph with {} half-edges",
                 hedge.index,
                 graph.graph.n_hedges()
             ));
         }
-        if let Some(payload) = hedge.payload {
-            graph.graph[Hedge(hedge.index)].payload = Some(payload);
+        if let Some(data) = hedge.data {
+            graph.graph[Hedge(hedge.index)].payload = Some(data);
         }
     }
 
@@ -467,7 +456,7 @@ fn endpoint_hedge(pair: HedgePair, side: Flow, edge_index: usize) -> Result<Hedg
         (HedgePair::Paired { sink, .. } | HedgePair::Split { sink, .. }, Flow::Sink) => Ok(sink),
         (HedgePair::Unpaired { hedge, flow }, side) if flow == side => Ok(hedge),
         (HedgePair::Unpaired { flow, .. }, side) => Err(format!(
-            "Edge {edge_index} has only a {flow:?} endpoint, cannot patch {side:?} payload"
+            "Edge {edge_index} has only a {flow:?} endpoint, cannot patch {side:?} data"
         )),
     }
 }
@@ -687,7 +676,7 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
     let global_data = graph.global_data();
     TypstDotGraphInfo {
         name: global_data.name.as_str().to_string(),
-        payload: global_data.payload.as_ref().map(|value| value.to_vec()),
+        data: global_data.payload.as_ref().map(|value| value.to_vec()),
         global_statements: global_data
             .statements
             .iter()
@@ -718,7 +707,7 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
     let mut node_positions = Vec::with_capacity(node_count);
     let global_data = global_data_from_parts(
         spec.name,
-        spec.payload,
+        spec.data,
         spec.statements,
         spec.default_edge_statements,
         spec.default_node_statements,
@@ -746,10 +735,12 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
         )?;
     }
 
-    Ok(DotGraph {
+    let mut graph = DotGraph {
         global_data,
         graph: builder.build::<DefaultNodeStore<DotVertexData>>(),
-    })
+    };
+    graph.apply_explicit_id_ordering();
+    Ok(graph)
 }
 
 fn add_edge_to_builder(
@@ -768,7 +759,7 @@ fn add_edge_to_builder(
     let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?;
     let local_statements = apply_placement_statements(edge.statements, placement.as_ref());
     let edge_data = DotEdgeData {
-        payload: edge.payload,
+        payload: edge.data,
         statements: merged_statements(&global_data.edge_statements, &local_statements),
         local_statements,
         edge_id: edge.id.map(linnet::half_edge::involution::EdgeIndex::from),
@@ -808,14 +799,14 @@ fn add_edge_to_builder(
 
 fn global_data_from_parts(
     name: Option<String>,
-    payload: Option<Vec<u8>>,
+    data: Option<Vec<u8>>,
     statements: BTreeMap<String, String>,
     edge_statements: BTreeMap<String, String>,
     node_statements: BTreeMap<String, String>,
 ) -> GlobalData {
     GlobalData {
         name: name.unwrap_or_else(|| "constructed".to_string()),
-        payload,
+        payload: data,
         statements,
         edge_statements,
         node_statements,
@@ -1045,7 +1036,7 @@ fn node_data_from_spec(
     DotVertexData {
         name: node.name,
         index: node.index.map(NodeIndex).or(Some(NodeIndex(default_index))),
-        payload: node.payload,
+        payload: node.data,
         statements: merged_statements(
             &global_data.node_statements,
             &apply_placement_statements(node.statements, placement),
@@ -1077,7 +1068,7 @@ fn endpoint_spec_to_hedge_data(
         data: DotHedgeData {
             statement: endpoint.statement,
             id: endpoint.id.map(Hedge),
-            payload: endpoint.payload,
+            payload: endpoint.data,
             port_label: endpoint.port_label,
             compasspt: endpoint
                 .compass
@@ -1141,10 +1132,9 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
             .name
             .as_ref()
             .map(|value| value.as_str().to_string()),
-        payload: vertex.data.payload.as_ref().map(|value| value.to_vec()),
+        data: vertex.data.payload.as_ref().map(|value| value.to_vec()),
         pos: parse_point(&raw_statements, "pos"),
         shift: parse_point(&raw_statements, "shift"),
-        eval: raw_statements.get("eval").cloned(),
         statements: public_statements(raw_statements),
     }
 }
@@ -1164,12 +1154,7 @@ fn edge_view_to_output(
     TypstDotEdge {
         edge: edge.edge.0,
         name: archived_edge_name(edge),
-        id: edge
-            .data
-            .edge_id
-            .as_ref()
-            .map(|value| value.0.try_into().unwrap()),
-        payload: edge.data.payload.as_ref().map(|value| value.to_vec()),
+        data: edge.data.payload.as_ref().map(|value| value.to_vec()),
         orientation: orientation_to_string(edge.orientation).to_string(),
         source: endpoints.source.map(endpoint_to_output),
         sink: endpoints.sink.map(endpoint_to_output),
@@ -1200,12 +1185,7 @@ fn endpoint_to_output(endpoint: ArchivedDotEndpointView<'_>) -> TypstDotEndpoint
     TypstDotEndpoint {
         node: endpoint.node.0,
         hedge: endpoint.hedge.0,
-        id: endpoint
-            .data
-            .id
-            .as_ref()
-            .map(|value| value.0.try_into().unwrap()),
-        payload: endpoint.data.payload.as_ref().map(|value| value.to_vec()),
+        data: endpoint.data.payload.as_ref().map(|value| value.to_vec()),
         statement: endpoint
             .data
             .statement
