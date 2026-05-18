@@ -68,6 +68,12 @@ pub struct LuResiduePlan {
     /// derivative bridge belongs only to the combinatorial residue-selection
     /// path above.
     pub ltd_lu_cut_local_series_prefactor_sign: i64,
+    /// LTD-only bridge for the direct original/root integrand extracted with a
+    /// Laurent parameter. Simple LU cuts use the generated selected
+    /// E-surface orientation; the auxiliary local-series denominator
+    /// orientation is not part of the final original-integrand residue.
+    /// Repeated/confluent cuts use the ordinary residue bridge.
+    pub ltd_lu_cut_direct_original_prefactor_sign: i64,
     /// LTD-only direct local-series coordinates. Each entry identifies the
     /// generated E-surface variable and the external-energy localization
     /// variable solved for when introducing the Laurent parameter. The separate
@@ -104,6 +110,7 @@ impl LuResiduePlan {
         ltd_lu_cut_local_series_esurface_signs: Vec<(EsurfaceID, i64)>,
         ltd_lu_cut_residue_prefactor_sign: i64,
         ltd_lu_cut_local_series_prefactor_sign: i64,
+        ltd_lu_cut_direct_original_prefactor_sign: i64,
         ltd_lu_cut_local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
     ) -> Self {
         Self {
@@ -113,6 +120,7 @@ impl LuResiduePlan {
             ltd_lu_cut_local_series_esurface_signs,
             ltd_lu_cut_residue_prefactor_sign,
             ltd_lu_cut_local_series_prefactor_sign,
+            ltd_lu_cut_direct_original_prefactor_sign,
             ltd_lu_cut_local_series_coordinates,
         }
     }
@@ -125,6 +133,7 @@ impl LuResiduePlan {
             ltd_lu_cut_local_series_esurface_signs: Vec::new(),
             ltd_lu_cut_residue_prefactor_sign: 1,
             ltd_lu_cut_local_series_prefactor_sign: 1,
+            ltd_lu_cut_direct_original_prefactor_sign: 1,
             ltd_lu_cut_local_series_coordinates: Vec::new(),
         }
     }
@@ -142,6 +151,7 @@ impl ResidueSelector {
         ltd_lu_cut_local_series_esurface_signs: Vec<(EsurfaceID, i64)>,
         ltd_lu_cut_residue_prefactor_sign: i64,
         ltd_lu_cut_local_series_prefactor_sign: i64,
+        ltd_lu_cut_direct_original_prefactor_sign: i64,
         ltd_lu_cut_local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
         left_th_cut: Option<RaisedEsurfaceGroup>,
         right_th_cut: Option<RaisedEsurfaceGroup>,
@@ -154,6 +164,7 @@ impl ResidueSelector {
                 ltd_lu_cut_local_series_esurface_signs,
                 ltd_lu_cut_residue_prefactor_sign,
                 ltd_lu_cut_local_series_prefactor_sign,
+                ltd_lu_cut_direct_original_prefactor_sign,
                 ltd_lu_cut_local_series_coordinates,
             )),
             left_th_cut,
@@ -271,10 +282,10 @@ impl ResidueSelector {
     }
 
     pub(crate) fn ltd_direct_original_residue_prefactor_sign(&self) -> i64 {
-        if self.lu_cut().is_some_and(|lu_cut| lu_cut.max_occurence > 1) {
-            self.ltd_residue_prefactor_sign()
-        } else {
-            self.ltd_local_series_residue_prefactor_sign()
-        }
+        self.lu_plan
+            .as_ref()
+            .map(|plan| plan.ltd_lu_cut_direct_original_prefactor_sign)
+            .unwrap_or(1)
+            * self.ltd_threshold_residue_prefactor_sign()
     }
 }

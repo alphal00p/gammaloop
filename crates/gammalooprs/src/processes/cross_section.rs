@@ -159,6 +159,142 @@ struct LuCutCoordinateSigns {
     local_series_coordinate: LuLocalSeriesCoordinate,
 }
 
+struct LuResiduePlanComponents<'a> {
+    raised_cut_group: &'a RaisedCutGroup,
+    lu_cut_signs: LuCutResidueSigns,
+    full_graph_projection_bridge: i64,
+    ltd_repeated_channel_bridge_sign: i64,
+    repeated_channel_edge_support_bridge: i64,
+    simple_surface_family_sign: i64,
+    repeated_residue_prefactor_sign: i64,
+    repeated_local_series_orientation_sign: i64,
+    simple_mixed_repeated_channel_contact: bool,
+}
+
+impl LuResiduePlanComponents<'_> {
+    fn is_simple_lu_cut(&self) -> bool {
+        self.raised_cut_group.related_esurface_group.max_occurence == 1
+    }
+
+    fn selected_denominator_variable_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            self.lu_cut_signs
+                .selected_denominator_signs
+                .iter()
+                .product()
+        } else {
+            1
+        }
+    }
+
+    fn selected_esurface_signs(&self) -> Vec<(EsurfaceID, i64)> {
+        self.raised_cut_group
+            .cut_esurface_ids
+            .iter()
+            .copied()
+            .zip(self.lu_cut_signs.selected_denominator_signs.iter().copied())
+            .collect()
+    }
+
+    fn local_series_esurface_signs(&self) -> Vec<(EsurfaceID, i64)> {
+        if self.is_simple_lu_cut() {
+            self.raised_cut_group
+                .cut_esurface_ids
+                .iter()
+                .copied()
+                .zip(
+                    self.lu_cut_signs
+                        .local_series_denominator_signs
+                        .iter()
+                        .copied(),
+                )
+                .collect()
+        } else {
+            self.raised_cut_group
+                .cut_esurface_ids
+                .iter()
+                .copied()
+                .map(|esurface_id| (esurface_id, 1))
+                .collect()
+        }
+    }
+
+    fn local_series_prefactor_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            self.full_graph_projection_bridge
+                * self.simple_surface_family_sign
+                * self
+                    .lu_cut_signs
+                    .local_series_denominator_signs
+                    .iter()
+                    .product::<i64>()
+        } else {
+            self.full_graph_projection_bridge * self.repeated_local_series_orientation_sign
+        }
+    }
+
+    fn residue_prefactor_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            let repeated_channel_cutkosky_bridge = if self.ltd_repeated_channel_bridge_sign < 0 {
+                self.lu_cut_signs.cut_orientation_signs.iter().product()
+            } else {
+                1
+            };
+            self.local_series_prefactor_sign()
+                * self.selected_denominator_variable_sign()
+                * repeated_channel_cutkosky_bridge
+        } else {
+            self.full_graph_projection_bridge
+                * self.ltd_repeated_channel_bridge_sign
+                * self.repeated_channel_edge_support_bridge
+                * self.repeated_residue_prefactor_sign
+        }
+    }
+
+    fn direct_original_prefactor_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            if self.simple_mixed_repeated_channel_contact {
+                self.full_graph_projection_bridge
+                    * self.simple_surface_family_sign
+                    * self
+                        .lu_cut_signs
+                        .selected_denominator_signs
+                        .iter()
+                        .product::<i64>()
+            } else {
+                self.local_series_prefactor_sign()
+            }
+        } else {
+            self.residue_prefactor_sign()
+        }
+    }
+
+    fn into_residue_selector(
+        self,
+        left_th_cut: Option<RaisedEsurfaceGroup>,
+        right_th_cut: Option<RaisedEsurfaceGroup>,
+    ) -> ResidueSelector {
+        let local_series_prefactor_sign = self.local_series_prefactor_sign();
+        let residue_prefactor_sign = self.residue_prefactor_sign();
+        let direct_original_prefactor_sign = self.direct_original_prefactor_sign();
+        let selected_esurface_signs = self.selected_esurface_signs();
+        let local_series_esurface_signs = self.local_series_esurface_signs();
+
+        ResidueSelector::new_lu_cut(
+            self.raised_cut_group.related_esurface_group.clone(),
+            self.lu_cut_signs.edge_sets,
+            selected_esurface_signs,
+            local_series_esurface_signs,
+            residue_prefactor_sign,
+            local_series_prefactor_sign,
+            direct_original_prefactor_sign,
+            self.lu_cut_signs.local_series_coordinates,
+            left_th_cut,
+            right_th_cut,
+        )
+    }
+}
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermData {
@@ -957,7 +1093,6 @@ impl CrossSectionGraph {
                     LuResidueSelectionBasis::PositiveEnergyCutkosky
                 }
             };
-
         let raised_edge_groups = self.graph.get_raised_edge_groups();
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
             &mut global_expression,
@@ -1330,41 +1465,8 @@ impl CrossSectionGraph {
         right_th_cut: Option<RaisedEsurfaceGroup>,
     ) -> Result<ResidueSelector> {
         let is_simple_lu_cut = raised_cut_group.related_esurface_group.max_occurence == 1;
-        let ltd_repeated_channel_bridge_sign = self
-            .graph
-            .three_d_ltd_repeated_channel_residue_bridge_sign();
         let lu_cut_signs =
             self.lu_cut_edge_sets_with_cutkosky_signs(raised_cut_group.cuts.iter().copied())?;
-        let ltd_lu_cut_esurface_signs: Vec<_> = if is_simple_lu_cut {
-            raised_cut_group
-                .cut_esurface_ids
-                .iter()
-                .copied()
-                .zip(lu_cut_signs.selected_denominator_signs.iter().copied())
-                .collect()
-        } else {
-            raised_cut_group
-                .cut_esurface_ids
-                .iter()
-                .copied()
-                .zip(lu_cut_signs.selected_denominator_signs.iter().copied())
-                .collect()
-        };
-        let ltd_lu_cut_local_series_esurface_signs: Vec<_> = if is_simple_lu_cut {
-            raised_cut_group
-                .cut_esurface_ids
-                .iter()
-                .copied()
-                .zip(lu_cut_signs.local_series_denominator_signs.iter().copied())
-                .collect()
-        } else {
-            raised_cut_group
-                .cut_esurface_ids
-                .iter()
-                .copied()
-                .map(|esurface_id| (esurface_id, 1))
-                .collect()
-        };
         let simple_ltd_lu_cut_surface_family_sign = if is_simple_lu_cut {
             unique_lu_sign(
                 &lu_cut_signs.surface_family_signs,
@@ -1375,15 +1477,10 @@ impl CrossSectionGraph {
         } else {
             1
         };
-        let simple_selected_denominator_variable_sign = if is_simple_lu_cut {
-            lu_cut_signs
-                .selected_denominator_signs
-                .iter()
-                .product::<i64>()
-        } else {
-            1
-        };
         let full_graph_projection_bridge = self.graph.three_d_ltd_projection_bridge_sign();
+        let ltd_repeated_channel_bridge_sign = self
+            .graph
+            .three_d_ltd_repeated_channel_residue_bridge_sign();
         let repeated_channel_edge_support_bridge =
             self.repeated_ltd_lu_cut_edge_support_bridge_sign(&lu_cut_signs.edge_sets)?;
         let repeated_local_series_orientation_sign = if is_simple_lu_cut {
@@ -1394,45 +1491,92 @@ impl CrossSectionGraph {
                 &lu_cut_signs.selected_denominator_signs,
             )
         };
-        let ltd_lu_cut_local_series_prefactor_sign = if is_simple_lu_cut {
-            full_graph_projection_bridge
-                * simple_ltd_lu_cut_surface_family_sign
-                * lu_cut_signs
-                    .local_series_denominator_signs
-                    .iter()
-                    .product::<i64>()
+        let repeated_residue_prefactor_sign = if is_simple_lu_cut {
+            1
         } else {
-            full_graph_projection_bridge * repeated_local_series_orientation_sign
+            self.repeated_ltd_lu_cut_residue_prefactor_sign(
+                &raised_cut_group.related_esurface_group,
+                &lu_cut_signs.cut_orientation_signs,
+            )
         };
-        let ltd_lu_cut_residue_prefactor_sign = if is_simple_lu_cut {
-            let repeated_channel_cutkosky_bridge = if ltd_repeated_channel_bridge_sign < 0 {
-                lu_cut_signs.cut_orientation_signs.iter().product::<i64>()
-            } else {
-                1
-            };
-            ltd_lu_cut_local_series_prefactor_sign
-                * simple_selected_denominator_variable_sign
-                * repeated_channel_cutkosky_bridge
-        } else {
-            full_graph_projection_bridge
-                * ltd_repeated_channel_bridge_sign
-                * repeated_channel_edge_support_bridge
-                * self.repeated_ltd_lu_cut_residue_prefactor_sign(
-                    &raised_cut_group.related_esurface_group,
-                    &lu_cut_signs.cut_orientation_signs,
-                )
+        let simple_mixed_repeated_channel_contact =
+            self.simple_lu_cut_has_mixed_repeated_channel_contact(raised_cut_group, &lu_cut_signs)?;
+        let components = LuResiduePlanComponents {
+            raised_cut_group,
+            lu_cut_signs,
+            full_graph_projection_bridge,
+            ltd_repeated_channel_bridge_sign,
+            repeated_channel_edge_support_bridge,
+            simple_surface_family_sign: simple_ltd_lu_cut_surface_family_sign,
+            repeated_residue_prefactor_sign,
+            repeated_local_series_orientation_sign,
+            simple_mixed_repeated_channel_contact,
         };
-        Ok(ResidueSelector::new_lu_cut(
-            raised_cut_group.related_esurface_group.clone(),
-            lu_cut_signs.edge_sets,
-            ltd_lu_cut_esurface_signs,
-            ltd_lu_cut_local_series_esurface_signs,
-            ltd_lu_cut_residue_prefactor_sign,
-            ltd_lu_cut_local_series_prefactor_sign,
-            lu_cut_signs.local_series_coordinates,
-            left_th_cut,
-            right_th_cut,
-        ))
+        Ok(components.into_residue_selector(left_th_cut, right_th_cut))
+    }
+
+    fn simple_lu_cut_has_mixed_repeated_channel_contact(
+        &self,
+        raised_cut_group: &RaisedCutGroup,
+        lu_cut_signs: &LuCutResidueSigns,
+    ) -> Result<bool> {
+        if raised_cut_group.related_esurface_group.max_occurence != 1
+            || lu_cut_signs.edge_sets.len() != 1
+        {
+            return Ok(false);
+        }
+
+        let simple_cut_edges = lu_cut_signs.edge_sets[0].iter().copied().collect_vec();
+        let mut contacted_supports = 0usize;
+        let mut contacted_edges = BTreeSet::new();
+
+        for repeated_group in self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .filter(|group| group.related_esurface_group.max_occurence > 1)
+        {
+            let repeated_support =
+                self.normalized_cut_edge_support_union(repeated_group.cuts.iter().copied())?;
+            let intersection = simple_cut_edges
+                .iter()
+                .copied()
+                .filter(|edge| repeated_support.contains(edge))
+                .collect_vec();
+            if intersection.is_empty() {
+                continue;
+            }
+            contacted_supports += 1;
+            contacted_edges.extend(intersection);
+        }
+
+        Ok(contacted_supports > 1 && contacted_edges.len() > 1)
+    }
+
+    fn normalized_cut_edge_support_union(
+        &self,
+        cut_ids: impl IntoIterator<Item = CutId>,
+    ) -> Result<BTreeSet<EdgeIndex>> {
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let mut support = BTreeSet::new();
+        for cut_id in cut_ids {
+            let cut_edges = self.cuts[cut_id]
+                .cut
+                .iter_edges(&self.graph)
+                .map(|(_, edge_data)| {
+                    self.graph
+                        .edge_name_to_index(&edge_data.data.name)
+                        .expect("Cut edge should belong to the graph")
+                })
+                .sorted()
+                .collect_vec();
+            support.extend(normalize_cut_edge_support_with_raised_edge_groups(
+                &cut_edges,
+                &raised_edge_groups,
+            ));
+        }
+        Ok(support)
     }
 
     fn repeated_ltd_lu_cut_edge_support_bridge_sign(
