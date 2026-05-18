@@ -22,10 +22,10 @@
 
 #let _payload-bytes(value) = if type(value) == array { bytes(value) } else { value }
 
-#let _sequence-content(children) = {
+#let _sequence-content(children, decode-content) = {
   let result = []
   for child in children {
-    result += _decode-payload-value(child)
+    result += decode-content(child)
   }
   result
 }
@@ -47,18 +47,18 @@
   }
 }
 
-#let _decode-content(value) = {
+#let _decode-content(value, decode) = {
   let func = value.at("func", default: none)
   if func == "text" {
     text(value.text)
   } else if func == "space" {
     [ ]
   } else if func == "sequence" {
-    _sequence-content(value.children)
+    _sequence-content(value.children, child => _decode-content(child, decode))
   } else if func == "strong" {
-    strong(_decode-payload-value(value.body))
+    strong(_decode-content(value.body, decode))
   } else if func == "emph" {
-    emph(_decode-payload-value(value.body))
+    emph(_decode-content(value.body, decode))
   } else if func == "equation" {
     let source = _math-source(value.body)
     if source == none {
@@ -77,7 +77,7 @@
   } else if type(value) == dictionary {
     let kind = value.at("linnest-payload-kind", default: none)
     if kind == "content" {
-      _decode-content(cbor(_payload-bytes(value.value)))
+      _decode-content(cbor(_payload-bytes(value.value)), _decode-payload-value)
     } else {
       let result = (:)
       for key in value.keys() {
@@ -195,10 +195,15 @@
 
 #let _is-label(value) = type(value) == label
 
-#let _expect-no-extra-args(context_, args) = {
+#let _payload-from-args(context_, args) = {
   let named = args.named()
-  if named.len() > 0 {
-    panic(context_ + ": unknown named argument " + repr(named.keys().first()))
+  if named.keys().contains("payload") {
+    panic(context_ + ": use direct named payload fields instead of payload: (...)")
+  }
+  if named.len() == 0 {
+    none
+  } else {
+    named
   }
 }
 
@@ -612,6 +617,10 @@
 
 #let _record-fields(record) = {
   let fields = (:)
+  let payload = record.at("payload", default: none)
+  if type(payload) == dictionary {
+    fields += payload
+  }
   let statements = record.at("statements", default: (:))
   if type(statements) == dictionary {
     fields += statements
@@ -656,15 +665,18 @@
 }
 
 #let _eval-payload-value(record, fields, eval-mode, scope) = {
-  let payload = (:)
+  let existing = record.at("payload", default: none)
+  let payload = if type(existing) == dictionary { existing } else { (:) }
+  let changed = false
   let local-scope = _record-eval-scope(record, scope)
   for field in fields {
     let value = _payload-field-value(record, field)
     if value != none {
       payload.insert(field, _eval-dot-value(value, eval-mode, local-scope))
+      changed = true
     }
   }
-  if payload.len() == 0 {
+  if not changed {
     none
   } else {
     payload
@@ -701,30 +713,6 @@
   } else {
     (payload: payload)
   }
-}
-
-#let _apply-default-payloads(
-  graph_,
-  default-node-payload: none,
-  default-edge-payload: none,
-  default-source-payload: none,
-  default-sink-payload: none,
-) = {
-  if (
-    default-node-payload == none
-      and default-edge-payload == none
-      and default-source-payload == none
-      and default-sink-payload == none
-  ) {
-    return graph_
-  }
-  map(
-    graph_,
-    node: record => _default-payload-patch(default-node-payload, record),
-    edge: record => _default-payload-patch(default-edge-payload, record),
-    source: record => _default-payload-patch(default-source-payload, record),
-    sink: record => _default-payload-patch(default-sink-payload, record),
-  )
 }
 
 /// Map graph metadata to new opaque payloads.
@@ -824,6 +812,30 @@
   }
 }
 
+#let _apply-default-payloads(
+  graph_,
+  default-node-payload: none,
+  default-edge-payload: none,
+  default-source-payload: none,
+  default-sink-payload: none,
+) = {
+  if (
+    default-node-payload == none
+      and default-edge-payload == none
+      and default-source-payload == none
+      and default-sink-payload == none
+  ) {
+    return graph_
+  }
+  map(
+    graph_,
+    node: record => _default-payload-patch(default-node-payload, record),
+    edge: record => _default-payload-patch(default-edge-payload, record),
+    source: record => _default-payload-patch(default-source-payload, record),
+    sink: record => _default-payload-patch(default-sink-payload, record),
+  )
+}
+
 /// Evaluate selected fields into opaque payload entries.
 ///
 /// Each selected field is read from the record's merged `fields` dictionary,
@@ -902,6 +914,9 @@
 
 /// Parse one or more DOT digraphs into graph objects.
 ///
+/// Default payloads are applied before `eval-*` fields are evaluated.
+/// Parsed fields take precedence over default payload fields.
+///
 /// ```example
 /// #let graphs = graph.parse("digraph first { a -> b }")
 /// #graphs.len()
@@ -910,16 +925,16 @@
 #let parse(
   input,
 
-  /// Default payload merged into every node payload. Explicit node payload fields override it. -> any
+  /// Default payload merged into every node payload. Captured node payload fields override it. -> any
   default-node-payload: none,
 
-  /// Default payload merged into every edge payload. Explicit edge payload fields override it. -> any
+  /// Default payload merged into every edge payload. Captured edge payload fields override it. -> any
   default-edge-payload: none,
 
-  /// Default payload merged into every source half-edge payload. Explicit source payload fields override it. -> any
+  /// Default payload merged into every source half-edge payload. Captured source payload fields override it. -> any
   default-source-payload: none,
 
-  /// Default payload merged into every sink half-edge payload. Explicit sink payload fields override it. -> any
+  /// Default payload merged into every sink half-edge payload. Captured sink payload fields override it. -> any
   default-sink-payload: none,
 
   /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
@@ -961,6 +976,15 @@
   }
   graphs.map(graph => {
     let result = graph
+    if needs-defaults {
+      result = _apply-default-payloads(
+        result,
+        default-node-payload: default-node-payload,
+        default-edge-payload: default-edge-payload,
+        default-source-payload: default-source-payload,
+        default-sink-payload: default-sink-payload,
+      )
+    }
     if needs-eval {
       result = eval-fields(
         result,
@@ -973,13 +997,7 @@
         scope: scope,
       )
     }
-    _apply-default-payloads(
-      result,
-      default-node-payload: default-node-payload,
-      default-edge-payload: default-edge-payload,
-      default-source-payload: default-source-payload,
-      default-sink-payload: default-sink-payload,
-    )
+    result
   })
 }
 
@@ -1015,16 +1033,16 @@
   /// -> dictionary
   default-edge-statements: (:),
 
-  /// Default payload merged into every node payload. Explicit node payload fields override it. -> any
+  /// Default payload merged into every node payload. Captured node payload fields override it. -> any
   default-node-payload: none,
 
-  /// Default payload merged into every edge payload. Explicit edge payload fields override it. -> any
+  /// Default payload merged into every edge payload. Captured edge payload fields override it. -> any
   default-edge-payload: none,
 
-  /// Default payload merged into every source half-edge payload. Explicit source payload fields override it. -> any
+  /// Default payload merged into every source half-edge payload. Captured source payload fields override it. -> any
   default-source-payload: none,
 
-  /// Default payload merged into every sink half-edge payload. Explicit sink payload fields override it. -> any
+  /// Default payload merged into every sink half-edge payload. Captured sink payload fields override it. -> any
   default-sink-payload: none,
 
   /// Flat default node statements. Used by DOT; values cannot nest. -> dictionary
@@ -1069,8 +1087,8 @@
 /// Create a graph node item for @build.
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` chooses the node order/index. `payload` is opaque
-/// Typst-side metadata; `label` is stored as `payload.label`.
+/// optional numeric `id` chooses the node order/index. `label` is stored as
+/// `payload.label`. Extra named arguments are captured as node payload fields.
 ///
 /// ```example
 /// #let g = graph.build({
@@ -1087,8 +1105,6 @@
   id: none,
   /// Visible node label, stored as `payload.label`. -> any
   label: none,
-  /// Opaque node payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   /// Node placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -1096,7 +1112,7 @@
   /// Additional flat node statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
 ) = {
-  _expect-no-extra-args("graph.node", args)
+  let resolved-payload = _payload-from-args("graph.node", args)
   let pos-args = args.pos()
   if pos-args.len() > 1 {
     panic("graph.node: expected at most one positional name")
@@ -1119,7 +1135,7 @@
     linnest-kind: "node",
     id: id,
     name: resolved-name,
-    payload: payload,
+    payload: resolved-payload,
     label: label,
     pos: pos,
     shift: shift,
@@ -1131,21 +1147,24 @@
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index
-/// override; `payload` is opaque Typst-side metadata.
+/// override. Extra named arguments are captured as source payload fields.
 ///
 /// ```example
-/// #graph.source(<a>, name: <h1>, id: 0, payload: (kind: "out"), compass: "e")
+/// #graph.source(<a>, name: <h1>, id: 0, kind: "out", compass: "e")
 /// ```
 /// -> dictionary
 #let source(
   node,
+  ..args,
   name: none,
   id: none,
-  /// Opaque source half-edge payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   statement: none,
   compass: none,
 ) = {
+  if args.pos().len() > 0 {
+    panic("graph.source: expected only one positional node reference")
+  }
+  let payload = _payload-from-args("graph.source", args)
   _check-name(name, "graph.source")
   _check-id(id, "graph.source")
   (linnest-kind: "source", node: node, name: name, id: id, payload: payload, statement: statement, compass: compass)
@@ -1155,21 +1174,24 @@
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index
-/// override; `payload` is opaque Typst-side metadata.
+/// override. Extra named arguments are captured as sink payload fields.
 ///
 /// ```example
-/// #graph.sink(<b>, name: <h2>, id: 1, payload: (kind: "in"), compass: "w")
+/// #graph.sink(<b>, name: <h2>, id: 1, kind: "in", compass: "w")
 /// ```
 /// -> dictionary
 #let sink(
   node,
+  ..args,
   name: none,
   id: none,
-  /// Opaque sink half-edge payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   statement: none,
   compass: none,
 ) = {
+  if args.pos().len() > 0 {
+    panic("graph.sink: expected only one positional node reference")
+  }
+  let payload = _payload-from-args("graph.sink", args)
   _check-name(name, "graph.sink")
   _check-id(id, "graph.sink")
   (linnest-kind: "sink", node: node, name: name, id: id, payload: payload, statement: statement, compass: compass)
@@ -1179,13 +1201,14 @@
 ///
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order
-/// and the visible label is `label`, stored as `payload.label`.
+/// and the visible label is `label`, stored as `payload.label`. Extra named
+/// arguments are captured as edge payload fields.
 ///
 /// ```example
 /// #let g = graph.build({
 ///   graph.node(<a>)
 ///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: [$p$])
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: [$p$], particle: "g")
 /// })
 /// ```
 /// -> array
@@ -1200,8 +1223,6 @@
   orientation: "default",
   /// Visible edge label, stored as `payload.label`. -> any
   label: none,
-  /// Opaque edge payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   /// Edge placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -1215,7 +1236,7 @@
   /// Additional flat edge statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
 ) = {
-  _expect-no-extra-args("graph.edge", args)
+  let resolved-payload = _payload-from-args("graph.edge", args)
   let resolved-id = id
   let resolved-name = name
   let resolved-source = none
@@ -1261,7 +1282,7 @@
     flow: flow,
     name: resolved-name,
     id: resolved-id,
-    payload: payload,
+    payload: resolved-payload,
     label: label,
     pos: pos,
     shift: shift,
@@ -1384,7 +1405,7 @@
 /// `name` is a Typst label such as `<a>` or the corresponding string name.
 ///
 /// ```example
-/// #let g = graph.build({ graph.node(<a>, payload: (label: [A])) })
+/// #let g = graph.build({ graph.node(<a>, label: [A]) })
 /// #graph.node-data(g, <a>).label
 /// ```
 /// -> any
@@ -1401,7 +1422,7 @@
 /// #let g = graph.build({
 ///   graph.node(<a>)
 ///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), payload: (label: [$p$]))
+///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: [$p$])
 /// })
 /// #graph.edge-data(g, <e>).label
 /// ```

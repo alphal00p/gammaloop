@@ -154,6 +154,12 @@
 #let particle-name(edge) = {
   let particle = edge.at("particle", default: none)
   if particle == none {
+    let payload = edge.at("payload", default: none)
+    if type(payload) == dictionary {
+      particle = payload.at("particle", default: none)
+    }
+  }
+  if particle == none {
     none
   } else {
     str(particle).trim("\"")
@@ -667,7 +673,7 @@
 ///     graph.source(<a>),
 ///     <g-edge>,
 ///     graph.sink(<b>),
-///     statements: (particle: "g", id: "7"),
+///     particle: "g",
 ///   )
 /// },
 ///   name: "physics",

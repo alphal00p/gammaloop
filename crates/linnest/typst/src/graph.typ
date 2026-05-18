@@ -53,6 +53,8 @@
   /// ```
   ///  -> dictionary
   statements: (:),
+  /// Flat default node statements. Used by DOT; values cannot nest. -> dictionary
+  default-node-statements: (:),
   /// Flat default edge statements. Used by DOT parsing; values cannot nest. These are applied/delegated to all edges.
   /// ```example
   /// #let g = build(default-edge-statements: (a:1), {
@@ -64,20 +66,50 @@
   /// ```
   ///-> dictionary
   default-edge-statements: (:),
-  /// Default payload merged into every node payload. Explicit node payload fields override it. -> any
+  /// Default payload merged into every node payload. Captured node payload fields override it.
+  /// ```example
+  /// #let g = build(default-node-payload: (a:1), {
+  ///    node(<a>)
+  ///    node(<b>,a:2)
+  ///    node(<c>,b:(a:1))
+  /// })
+  /// #nodes(g).map(n=>n.payload)
+  /// ```
+  ///  -> any
   default-node-payload: none,
-  /// Default payload merged into every edge payload. Explicit edge payload fields override it. -> any
+  /// Default payload merged into every edge payload. Captured edge payload fields override it.
+  /// ```example
+  /// #let g = build(default-edge-payload: (a:1), {
+  ///    node(<a>)
+  ///    edge(source(<a>))
+  ///    edge(sink(<a>))
+  /// })
+  /// #edges(g).map(e=>e.payload)
+  /// ```
+  /// -> any
   default-edge-payload: none,
-  /// Default payload merged into every source half-edge payload. Explicit source payload fields override it. -> any
+  /// Default payload merged into every source half-edge payload. Captured source payload fields override it.
+  /// ```example
+  /// #let g = build(default-source-payload: (a:1), {
+  ///    node(<a>)
+  ///    edge(source(<a>))
+  ///    edge(sink(<a>))
+  /// })
+  /// #edges(g).map(e=>if e.source != none {e.source.payload} else {none})
+  /// ```
+  /// -> any
   default-source-payload: none,
-  /// Default payload merged into every sink half-edge payload. Explicit sink payload fields override it. -> any
+  /// Default payload merged into every sink half-edge payload. Captured sink payload fields override it.
+  /// ```example
+  /// #let g = build(default-sink-payload: (a:1), {
+  ///    node(<a>)
+  ///    edge(source(<a>))
+  ///    edge(sink(<a>))
+  /// })
+  /// #edges(g).map(e=>if e.sink != none {e.sink.payload} else {none})
+  /// ```
+  /// -> any
   default-sink-payload: none,
-  /// Flat default node statements. Used by DOT; values cannot nest. -> dictionary
-  default-node-statements: (:),
-  /// Additional node items or raw node specs. -> array
-  nodes: (),
-  /// Additional edge items or raw edge specs. -> array
-  edges: (),
 ) = _impl.build(
   ..items,
   name: name,
@@ -89,22 +121,44 @@
   default-source-payload: default-source-payload,
   default-sink-payload: default-sink-payload,
   default-node-statements: default-node-statements,
-  nodes: nodes,
-  edges: edges,
+  nodes: (),
+  edges: (),
 )
 
 /// Parse one or more DOT digraphs into graph objects.
+///
+/// Default payloads are applied before `eval-*` fields are evaluated, so
+/// default payload strings can refer to parsed record fields such as `#name`.
+/// Parsed fields take precedence over default payload fields, so DOT
+/// `label="..."` overrides `default-node-payload: (label: ...)`.
+/// ````example
+/// #let a = ```dot
+/// digraph {
+/// ext [style=invis]
+/// a [id=0 pos="0,0!"]
+/// b [id=1 pos="ref(node:0)+4,0!"]
+/// a -> b [id=0 pos="ref(node:1)+0,1!"]
+/// b -> c [id=1 pos="ref(edge:0)+1,0!"]
+/// c [id=2 pos="x:2!" label="$c_m$"]
+/// d [id=3 pos="x:2!,y:0.1"]
+/// ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
+/// }
+/// ```
+/// #let g = parse(a.text,default-node-payload:(label:"#name"),eval-node-fields:"label")
+/// #draw(layout(g.at(0)))
+///
+/// ````
 /// -> array
 #let parse(
   /// DOT source text containing one or more `digraph` definitions. -> string | bytes
   input,
-  /// Default payload merged into every node payload. Explicit node payload fields override it. -> any
+  /// Default payload merged into every node payload. Captured node payload fields override it. -> any
   default-node-payload: none,
-  /// Default payload merged into every edge payload. Explicit edge payload fields override it. -> any
+  /// Default payload merged into every edge payload. Captured edge payload fields override it. -> any
   default-edge-payload: none,
-  /// Default payload merged into every source half-edge payload. Explicit source payload fields override it. -> any
+  /// Default payload merged into every source half-edge payload. Captured source payload fields override it. -> any
   default-source-payload: none,
-  /// Default payload merged into every sink half-edge payload. Explicit sink payload fields override it. -> any
+  /// Default payload merged into every sink half-edge payload. Captured sink payload fields override it. -> any
   default-sink-payload: none,
   /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
   eval-graph-fields: (),
@@ -139,10 +193,11 @@
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
 /// optional numeric `id` chooses the node order/index. `label` is stored as
-/// `payload.label`.
+/// `payload.label`. Extra named arguments are captured as node payload fields,
+/// so `node(<a>, label: [A], color: red)` stores `(label: [A], color: red)`.
 /// -> array
 #let node(
-  /// Optional positional node name. Must be a Typst label when provided. -> label
+  /// Optional positional node name. Must be a Typst label when provided; extra named arguments become payload fields. -> label
   ..args,
   /// Typst node name for references. -> none | label
   name: none,
@@ -150,8 +205,6 @@
   id: none,
   /// Visible node label, stored as `payload.label`. -> any
   label: none,
-  /// Opaque node payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   /// Node placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -163,7 +216,6 @@
   name: name,
   id: id,
   label: label,
-  payload: payload,
   pos: pos,
   shift: shift,
   statements: statements,
@@ -173,53 +225,58 @@
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index override.
+/// Extra named arguments are captured as source payload fields.
 /// -> dictionary
 #let source(
   /// Referenced node, either by Typst label name or numeric node index. -> label | int
   node,
+  /// Extra named arguments become source payload fields. -> any
+  ..args,
   /// Optional half-edge name used for later references. -> none | label
   name: none,
   /// Optional numeric half-edge index/order override. -> none | int
   id: none,
-  /// Opaque source half-edge payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   /// DOT-ish flat statement used for matching/joining dangling half edges. -> none | string
   statement: none,
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> none | string
   compass: none,
 ) = {
-  _impl.source(node, name: name, id: id, payload: payload, statement: statement, compass: compass)
+  _impl.source(node, ..args, name: name, id: id, statement: statement, compass: compass)
 }
 
 /// Create a sink half-edge endpoint.
 ///
 /// `node` may be a node name like `<a>` or a numeric node index. `name` gives
 /// the half-edge a Typst name; `id` is a numeric half-edge order/index override.
+/// Extra named arguments are captured as sink payload fields.
 /// -> dictionary
 #let sink(
   /// Referenced node, either by Typst label name or numeric node index. -> label | int
   node,
+  /// Extra named arguments become sink payload fields. -> any
+  ..args,
   /// Optional half-edge name used for later references. -> none | label
   name: none,
   /// Optional numeric half-edge index/order override. -> none | int
   id: none,
-  /// Opaque sink half-edge payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   /// DOT-ish flat statement used for matching/joining dangling half edges. -> none | string
   statement: none,
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> none | string
   compass: none,
 ) = {
-  _impl.sink(node, name: name, id: id, payload: payload, statement: statement, compass: compass)
+  _impl.sink(node, ..args, name: name, id: id, statement: statement, compass: compass)
 }
 
 /// Create a graph edge item for @build.
 ///
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order.
+/// Extra named arguments are captured as edge payload fields, so
+/// `edge(source(<a>), sink(<b>), particle: "g")` stores
+/// `(particle: "g")`.
 /// -> array
 #let edge(
-  /// Source/sink half-edges and optional edge name. -> any
+  /// Source/sink half-edges and optional edge name; extra named arguments become payload fields. -> any
   ..args,
   /// Typst edge name. -> none | label
   name: none,
@@ -229,8 +286,6 @@
   orientation: "default",
   /// Visible edge label, stored as `payload.label`. -> any
   label: none,
-  /// Opaque edge payload. Any CBOR-encodable Typst value. -> any
-  payload: none,
   /// Edge placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -249,7 +304,6 @@
   id: id,
   orientation: orientation,
   label: label,
-  payload: payload,
   pos: pos,
   shift: shift,
   label-pos: label-pos,
