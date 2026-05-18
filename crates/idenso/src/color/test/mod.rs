@@ -189,6 +189,17 @@ fn color_structure_symbol_is_antisymmetric() {
 }
 
 #[test]
+fn permuted_structure_constant_square_simplifies_with_sign() {
+    test_initialize();
+    let atom = parse_lit!(
+        f(coad(8, a), coad(8, b), coad(8, c)) * f(coad(8, a), coad(8, c), coad(8, b)),
+        default_namespace = "spenso"
+    );
+
+    assert_snapshot!(atom.simplify_color().to_bare_ordered_string(), @"-8*CA");
+}
+
+#[test]
 fn color_casimir_basis_rewrites_dimensions() {
     test_initialize();
     let expr = parse_lit!(Nc ^ -1 + Nc ^ 2 - 1 + NA, default_namespace = "spenso");

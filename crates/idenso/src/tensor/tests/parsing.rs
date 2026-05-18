@@ -3,14 +3,14 @@ use spenso::network::parsing::{
 };
 use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
-    SingleSmallestDegree, SmallestDegree, Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
+    SingleSmallestDegree, SmallestDegree, Steps, tags::SPENSO_TAG,
 };
 use symbolica::atom::{Atom, AtomCore, Symbol};
 
 use symbolica::symbol;
 
-use spenso::network::library::panicing::ErroringLibrary;
 use spenso::network::library::DummyLibrary;
+use spenso::network::library::panicing::ErroringLibrary;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::abstract_index::AbstractIndex;
 
@@ -24,7 +24,7 @@ use spenso::{
     chain, chain_factor, mink,
     shadowing::symbolica_utils::TypstSettings,
     structure::{
-        HasName, TensorStructure, ToSymbolic,
+        HasName, ToSymbolic,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::IsAbstractSlot,
     },
@@ -35,20 +35,17 @@ use crate::tensor::{SymbolicNet, SymbolicNetExt, SymbolicNetParse, SymbolicTenso
 use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
-fn symbolic_net_result_string(net: &SymbolicNet<AbstractIndex>) -> String {
-    match net.result().unwrap() {
-        ExecutionResult::One => "1".to_string(),
-        ExecutionResult::Zero => "0".to_string(),
-        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
-            scalar.to_bare_ordered_string()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
-            tensor.expression.to_bare_ordered_string()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
-            panic!("unexpected library key result")
-        }
+fn symbolic_net_result_atom(net: &SymbolicNet<AbstractIndex>) -> Atom {
+    let lib = DummyLibrary::<SymbolicTensor<AbstractIndex>>::new();
+    match net.result_tensor(&lib).unwrap() {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(tensor) => tensor.expression.clone(),
     }
+}
+
+fn symbolic_net_result_string(net: &SymbolicNet<AbstractIndex>) -> String {
+    symbolic_net_result_atom(net).to_bare_ordered_string()
 }
 
 fn schoonschip_only_settings() -> ParseSettings {
@@ -493,21 +490,8 @@ fn parse_scalar_tensors_step_by() {
     }
     "#
     );
-    let net_expression = match net.result().unwrap() {
-        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(s)) => s.clone(),
-        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) if tensor.is_scalar() => {
-            tensor.expression.clone()
-        }
-        _ => panic!("expected scalar result"),
-    };
-
-    let netc_expression = match netc.result().unwrap() {
-        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(s)) => s.clone(),
-        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) if tensor.is_scalar() => {
-            tensor.expression.clone()
-        }
-        _ => panic!("expected scalar result"),
-    };
+    let net_expression = symbolic_net_result_atom(&net);
+    let netc_expression = symbolic_net_result_atom(&netc);
 
     assert_eq!(net_expression, netc_expression);
 }
@@ -1101,14 +1085,9 @@ fn scalar_mult() {
 
         println!("{}", acc.snapshot_dot());
 
-        if let ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) =
-            acc.result().unwrap()
-        {
-            // println!("YaY:{}", (&expr - &tensor.expression).expand());
-            assert_eq!(ex, tensor.expression);
-        } else {
-            panic!("Not tensor")
-        }
+        let tensor_expression = symbolic_net_result_atom(&acc);
+        // println!("YaY:{}", (&expr - &tensor_expression).expand());
+        assert_eq!(ex, tensor_expression);
     }
 }
 

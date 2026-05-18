@@ -433,6 +433,22 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.graph.node_store.check_and_set_nodes().unwrap();
     }
 
+    pub(crate) fn replace_node_ignoring_self_loop_slots(
+        &mut self,
+        node: NodeIndex,
+        node_data: NetworkNode<K, FK, Aind>,
+        ignored: &mut SuBitGraph,
+    ) {
+        for hedge in self.graph.iter_crown(node) {
+            if self.graph[[&hedge]].is_slot() && self.graph.is_self_loop(hedge) {
+                ignored.add(hedge);
+            }
+        }
+
+        self.graph[node] = node_data;
+        self.graph.node_store.check_and_set_nodes().unwrap();
+    }
+
     fn set_tensor_slot_order(&mut self, node: NodeIndex, slots: &[LibrarySlot<Aind>]) {
         let mut slot_hedges = self
             .graph

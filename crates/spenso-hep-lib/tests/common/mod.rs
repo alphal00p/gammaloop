@@ -6,7 +6,7 @@ use idenso::{
 };
 use spenso::{
     network::{
-        ExecutionResult, Sequential, SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
+        ExecutionResult, Sequential, SmallestDegree, TensorNetworkError,
         library::{TensorLibraryData, symbolic::ExplicitKey},
         parsing::{ParseSettings, StrictTensorFilter},
     },
@@ -43,23 +43,10 @@ impl NetExt for HepNet<AbstractIndex> {
     ) -> Result<HepTensor<AbstractIndex>, TensorNetworkError<ExplicitKey<AbstractIndex>, Symbol>>
     {
         self.execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &*FUN_LIB)?;
-        match self.result()? {
+        match self.result_tensor(&*HEP_LIB)? {
             ExecutionResult::One => Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::one()))),
             ExecutionResult::Zero => Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::zero()))),
-            ExecutionResult::Val(a) => match a {
-                TensorOrScalarOrKey::Scalar(a) => {
-                    Ok(HepTensor::Param(ParamTensor::new_scalar(a.clone())))
-                }
-                _ => match self.result_tensor(&*HEP_LIB)? {
-                    ExecutionResult::One => {
-                        Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::one())))
-                    }
-                    ExecutionResult::Zero => {
-                        Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::zero())))
-                    }
-                    ExecutionResult::Val(t) => Ok(t.into_owned()),
-                },
-            },
+            ExecutionResult::Val(tensor) => Ok(tensor.into_owned()),
         }
     }
 }

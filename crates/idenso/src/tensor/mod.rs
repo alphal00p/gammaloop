@@ -6,41 +6,40 @@ use spenso::{
     contraction::{Contract, ContractionError, Trace},
     iterators::IteratableTensor,
     network::{
+        ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
         library::{
-            function_lib::Wrap,
-            symbolic::{ExplicitKey, TensorLibrary, ETS},
             DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError, TensorLibraryData,
+            function_lib::Wrap,
+            symbolic::{ETS, ExplicitKey, TensorLibrary},
         },
         parsing::{
             ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom,
             StructureInferenceMode, TensorFromExpression, TensorLibraryFor,
         },
         store::NetworkStore,
-        ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
-        TensorOrScalarOrKey,
     },
     shadowing::{
-        symbolica_utils::{AtomCoreExt, IntoArgs, IntoSymbol, SpensoPrintSettings},
         Concretize,
+        symbolica_utils::{AtomCoreExt, IntoArgs, IntoSymbol, SpensoPrintSettings},
     },
     structure::{
+        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
+        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorShell, TensorStructure,
+        ToSymbolic,
         abstract_index::AIND_SYMBOLS,
         concrete_index::{ExpandedIndex, FlatIndex},
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
-        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorShell, TensorStructure,
-        ToSymbolic,
     },
     tensors::parametric::MixedTensor,
 };
 
 use delegate::delegate;
+use spenso::structure::StructureError;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::dimension::Dimension;
 use spenso::structure::representation::Representation;
-use spenso::structure::StructureError;
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -587,14 +586,10 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> SymbolicNetExt<Aind>
         self.execute::<Sequential, SmallestDegree<CStrat>, _, _, _>(&lib, &Wrap {})
             .unwrap();
 
-        match self.result().unwrap() {
+        match self.result_tensor(&lib).unwrap() {
             ExecutionResult::One => Atom::num(1),
             ExecutionResult::Zero => Atom::Zero,
-            ExecutionResult::Val(a) => match a {
-                TensorOrScalarOrKey::Key { .. } => panic!("aaa"),
-                TensorOrScalarOrKey::Scalar(s) => s.clone(),
-                TensorOrScalarOrKey::Tensor { tensor, .. } => tensor.expression.clone(),
-            },
+            ExecutionResult::Val(tensor) => tensor.expression.clone(),
         }
     }
 }

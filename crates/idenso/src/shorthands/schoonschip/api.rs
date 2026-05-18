@@ -1,6 +1,6 @@
 use spenso::{
     network::{
-        ExecutionResult, Sequential, TensorOrScalarOrKey,
+        ExecutionResult, Sequential,
         library::{DummyLibrary, function_lib::Wrap},
         parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
     },
@@ -264,14 +264,10 @@ impl NetworkSchoonschip<'_> {
                 .unwrap(),
         };
 
-        match net.result().unwrap() {
+        match net.result_tensor(&lib).unwrap() {
             ExecutionResult::One => Atom::num(1),
             ExecutionResult::Zero => Atom::Zero,
-            ExecutionResult::Val(a) => match a {
-                TensorOrScalarOrKey::Key { .. } => panic!("unexpected library key result"),
-                TensorOrScalarOrKey::Scalar(s) => s.clone(),
-                TensorOrScalarOrKey::Tensor { tensor, .. } => tensor.expression.clone(),
-            },
+            ExecutionResult::Val(tensor) => tensor.expression.clone(),
         }
     }
 }

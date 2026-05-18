@@ -4,7 +4,7 @@ use graph::{
 };
 use linnet::half_edge::{
     NodeIndex,
-    subgraph::{SuBitGraph, SubSetLike},
+    subgraph::{Inclusion, SuBitGraph, SubSetLike},
 };
 use profile::{Counter, Timer};
 use rayon::prelude::*;
@@ -1962,12 +1962,11 @@ where
             + FastTensorSum
             + ScalarMul<S, Output = T>
             + for<'b> AddAssign<<T as Ref>::Ref<'b>>,
-        S: Clone,
+        S: Clone + Into<T::Scalar>,
         K: Display + Debug,
         FK: Display + Debug + Clone,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
         T: PermuteTensor<Permuted = T>,
-        for<'b> &'b S: Into<T::Scalar>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -2027,7 +2026,7 @@ where
             ExecutionResult::Zero => ExecutionResult::Zero,
             ExecutionResult::Val(v) => ExecutionResult::Val(match v {
                 TensorOrScalarOrKey::Tensor { tensor, .. } => Cow::Borrowed(tensor),
-                TensorOrScalarOrKey::Scalar(s) => Cow::Owned(T::new_scalar(s.into())),
+                TensorOrScalarOrKey::Scalar(s) => Cow::Owned(T::new_scalar(s.clone().into())),
                 TensorOrScalarOrKey::Key { nodeid, .. } => {
                     let less = self.graph.get_lib_data(lib, nodeid).unwrap();
 
@@ -3212,7 +3211,7 @@ where
         let mut batch_index = 0usize;
 
         loop {
-            if executor.execute_self_loop_traces(graph, lib)? {
+            if executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
                 continue;
             }
 
@@ -3478,6 +3477,17 @@ pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
         FK: Display;
 
     #[allow(clippy::result_large_err)]
+    fn execute_self_loop_traces_ignoring(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+        ignored: &mut SuBitGraph,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display;
+
+    #[allow(clippy::result_large_err)]
     fn execute<C: ContractionStrategy<Self, L, K, FK, Aind>>(
         &mut self,
         graph: &NetworkGraph<K, FK, Aind>,
@@ -3610,6 +3620,96 @@ where
     Ok(true)
 }
 
+fn execute_next_self_loop_trace_ignoring<LT, L, K, FK, Aind, Store>(
+    store: &mut Store,
+    graph: &mut NetworkGraph<K, FK, Aind>,
+    lib: &L,
+    ignored: &mut SuBitGraph,
+) -> Result<bool, TensorNetworkError<K, FK>>
+where
+    Store: NetworkStoreAccess,
+    Store::Tensor: HasStructure
+        + TensorStructure
+        + Clone
+        + Trace
+        + Ref
+        + FastTensorSum
+        + ScalarMul<Store::Scalar, Output = Store::Tensor>
+        + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
+        + From<LT::WithIndices>,
+    Store::Scalar: Clone,
+    LT: LibraryTensor + Clone,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    K: Display + Debug,
+    FK: Display + Debug,
+    Aind: AbsInd,
+    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+        IsAbstractSlot<Aind = Aind>,
+{
+    let Some(node) = graph.graph.iter_nodes().find_map(|(node, crown, data)| {
+        if !matches!(data, NetworkNode::Leaf(_)) {
+            return None;
+        }
+
+        crown
+            .clone()
+            .any(|hedge| {
+                !ignored.includes(&hedge)
+                    && graph.graph[[&hedge]].is_slot()
+                    && graph.graph.is_self_loop(hedge)
+            })
+            .then_some(node)
+    }) else {
+        return Ok(false);
+    };
+
+    let traced = match &graph.graph[node] {
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
+            store.tensor(*local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => Store::Tensor::from(
+            graph
+                .get_lib_data(lib, node)
+                .expect("library node selected for trace must have library data"),
+        )
+        .internal_contract(),
+        NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
+            let materialized = materialize_tensor_sum::<K, Aind, Store>(store, indices, None);
+            let NetworkLeaf::LocalTensor(local) = materialized else {
+                unreachable!("materialized tensor sum is a local tensor")
+            };
+            store.tensor(local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::TensorTerm(term)) => {
+            let materialized =
+                materialize_tensor_terms::<K, Aind, Store>(store, std::slice::from_ref(term), None);
+            let NetworkLeaf::LocalTensor(local) = materialized else {
+                unreachable!("materialized tensor term is a local tensor")
+            };
+            store.tensor(local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::TensorTermSum(terms)) => {
+            let materialized = materialize_tensor_terms::<K, Aind, Store>(store, terms, None);
+            let NetworkLeaf::LocalTensor(local) = materialized else {
+                unreachable!("materialized tensor terms are a local tensor")
+            };
+            store.tensor(local).internal_contract()
+        }
+        NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => return Ok(false),
+        NetworkNode::Op(_) => unreachable!("self-loop trace search only selects tensor leaves"),
+    };
+
+    let traced_position = store.push_tensor(traced);
+    graph.replace_node_ignoring_self_loop_slots(
+        node,
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(traced_position)),
+        ignored,
+    );
+
+    Ok(true)
+}
+
 impl<S, T, Sc, K, FK, Aind: AbsInd> Network<NetworkStore<T, Sc>, K, FK, Aind>
 where
     T: HasStructure<Structure = S>,
@@ -3691,6 +3791,23 @@ where
     ) -> Result<bool, TensorNetworkError<K, FK>> {
         let mut did_trace = false;
         while execute_next_self_loop_trace::<LT, L, K, FK, Aind, Self>(self, graph, lib)? {
+            did_trace = true;
+            graph.sync_order();
+        }
+
+        Ok(did_trace)
+    }
+
+    fn execute_self_loop_traces_ignoring(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+        ignored: &mut SuBitGraph,
+    ) -> Result<bool, TensorNetworkError<K, FK>> {
+        let mut did_trace = false;
+        while execute_next_self_loop_trace_ignoring::<LT, L, K, FK, Aind, Self>(
+            self, graph, lib, ignored,
+        )? {
             did_trace = true;
             graph.sync_order();
         }
