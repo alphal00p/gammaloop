@@ -77,29 +77,20 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTen
         value: AtomView<'_>,
         mode: StructureInferenceMode,
     ) -> Result<PermutedStructure<Self>, StructureError> {
-        match mode {
-            StructureInferenceMode::Fast => {
-                let structure = OrderedStructure::from_syntactic_atom(value)?;
-                Ok(Self::from_parsed_atom(value, structure))
+        let structure = OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)?;
+        Ok(structure.map_structure(|structure| {
+            let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
+                (false, f.get_symbol() == ETS.metric)
+            } else {
+                (true, false)
+            };
+            SymbolicTensor {
+                structure,
+                is_composite,
+                is_metric,
+                expression: value.to_owned(),
             }
-            StructureInferenceMode::Expanded => {
-                let structure =
-                    OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)?;
-                Ok(structure.map_structure(|structure| {
-                    let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
-                        (false, f.get_symbol() == ETS.metric)
-                    } else {
-                        (true, false)
-                    };
-                    SymbolicTensor {
-                        structure,
-                        is_composite,
-                        is_metric,
-                        expression: value.to_owned(),
-                    }
-                }))
-            }
-        }
+        }))
     }
 }
 
@@ -155,25 +146,6 @@ pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {
     pub is_metric: bool,
     pub is_composite: bool,
     pub expression: symbolica::atom::Atom,
-}
-
-impl<Aind: AbsInd> SymbolicTensor<Aind> {
-    fn from_parsed_atom(
-        value: AtomView,
-        structure: OrderedStructure<LibraryRep, Aind>,
-    ) -> PermutedStructure<Self> {
-        let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
-            (false, f.get_symbol() == ETS.metric)
-        } else {
-            (true, false)
-        };
-        PermutedStructure::identity(SymbolicTensor {
-            structure,
-            is_composite,
-            is_metric,
-            expression: value.to_owned(),
-        })
-    }
 }
 
 impl<Aind: AbsInd> Ref for SymbolicTensor<Aind> {

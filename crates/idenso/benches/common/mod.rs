@@ -2,7 +2,7 @@
 
 use idenso::{
     representations::initialize,
-    schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
+    shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
     tensor::{SymbolicNet, SymbolicNetParse},
 };
 use spenso::{

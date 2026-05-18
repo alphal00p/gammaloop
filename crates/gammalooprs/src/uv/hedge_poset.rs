@@ -5,7 +5,7 @@ use std::{
 
 use ahash::AHashMap;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,

@@ -17,8 +17,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
-    function,
-    get_symbol,
+    function, get_symbol,
     id::Replacement,
     printer::PrintState,
     symbol,

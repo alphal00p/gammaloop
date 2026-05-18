@@ -1,4 +1,7 @@
-use idenso::{metric::MetricSimplifier, representations::initialize, schoonschip::Schoonschip};
+use idenso::{
+    representations::initialize,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+};
 use spenso::structure::abstract_index::AbstractIndex;
 use symbolica::{atom::AtomCore, id::Pattern, parse, symbol, transformer::Transformer};
 

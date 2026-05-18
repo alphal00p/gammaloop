@@ -17,11 +17,13 @@ use symbolica::{
 
 use crate::{
     W_,
-    chain::Chain,
     epsilon::{EpsilonSimplifier, epsilon4},
-    metric::MetricSimplifier,
     representations::Bispinor,
-    schoonschip::{Schoonschip, SchoonschipSettings},
+    shorthands::{
+        chain::Chain,
+        metric::MetricSimplifier,
+        schoonschip::{Schoonschip, SchoonschipSettings},
+    },
 };
 
 use super::{AGS, id_atom};

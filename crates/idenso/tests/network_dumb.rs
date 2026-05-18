@@ -1,6 +1,6 @@
 use idenso::{
     representations::initialize,
-    schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
+    shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
 };
 use spenso::{
     shadowing::symbolica_utils::{AtomCoreExt, SpensoPrintSettings},

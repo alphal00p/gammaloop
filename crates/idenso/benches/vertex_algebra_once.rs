@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use idenso::schoonschip::SchoonschipContractionOrder;
+use idenso::shorthands::schoonschip::SchoonschipContractionOrder;
 
 mod common;
 

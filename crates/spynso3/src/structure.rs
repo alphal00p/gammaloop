@@ -55,7 +55,8 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 use thiserror::Error;
 
 use idenso::{
-    Cookable, color::CS, dirac::AGS, metric::PermuteWithMetric, representations::Bispinor,
+    Cookable, color::CS, dirac::AGS, representations::Bispinor,
+    shorthands::metric::PermuteWithMetric,
 };
 
 use super::{ModuleInit, SliceOrIntOrExpanded};

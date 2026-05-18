@@ -1,7 +1,7 @@
 mod common;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use idenso::schoonschip::SchoonschipSettings;
+use idenso::shorthands::schoonschip::SchoonschipSettings;
 
 fn bench_mode(
     group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,

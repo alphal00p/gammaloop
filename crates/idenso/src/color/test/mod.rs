@@ -26,9 +26,9 @@ use spenso::{
 use symbolica::{parse, parse_lit};
 
 use crate::dirac::PS;
-use crate::schoonschip::Schoonschip;
+use crate::shorthands::schoonschip::Schoonschip;
 use crate::tensor::SymbolicTensor;
-use crate::{Cookable, IndexTooling, dirac::GammaSimplifier, metric::MetricSimplifier};
+use crate::{Cookable, IndexTooling, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier};
 
 use super::*;
 

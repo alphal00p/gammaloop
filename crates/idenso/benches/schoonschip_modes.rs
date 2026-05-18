@@ -3,7 +3,7 @@ use std::hint::black_box;
 mod common;
 
 use gungraun::prelude::*;
-use idenso::schoonschip::SchoonschipSettings;
+use idenso::shorthands::schoonschip::SchoonschipSettings;
 use symbolica::atom::Atom;
 
 fn run(expr: Atom, settings: SchoonschipSettings) -> Atom {

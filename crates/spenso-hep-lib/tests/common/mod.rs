@@ -1,7 +1,7 @@
 use idenso::{
     dirac::AGS,
-    metric::{MetricSimplifier, PermuteWithMetric},
     representations::{Bispinor, initialize},
+    shorthands::metric::{MetricSimplifier, PermuteWithMetric},
     tensor::SymbolicTensor,
 };
 use spenso::{

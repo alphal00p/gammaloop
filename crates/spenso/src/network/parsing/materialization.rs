@@ -28,7 +28,10 @@ use symbolica::{
 
 use std::fmt::{Debug, Display};
 
-use super::{ParseSettings, ParseState, StructureFromAtom, TensorFromExpression, TensorLibraryFor};
+use super::{
+    ParseSettings, ParseState, SchoonschipExpansionMode, StructureFromAtom, TensorFromExpression,
+    TensorLibraryFor,
+};
 use crate::{
     network::{
         Network, NetworkState, TensorNetworkError,
@@ -73,12 +76,13 @@ impl SchoonschipMaterialization {
 /// the surrounding network parse.
 pub(super) struct SchoonschipMaterializer<'a, Aind> {
     state: &'a ParseState<Aind>,
+    mode: SchoonschipExpansionMode,
 }
 
 impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, Aind> {
-    /// Build a materializer for the current parse recursion.
-    pub(super) fn new(state: &'a ParseState<Aind>) -> Self {
-        Self { state }
+    /// Build a materializer with explicit Schoonschip expansion controls.
+    pub(super) fn with_mode(state: &'a ParseState<Aind>, mode: SchoonschipExpansionMode) -> Self {
+        Self { state, mode }
     }
 
     /// Return true when this function root contains compact Schoonschip syntax.
@@ -120,8 +124,17 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
             return None;
         };
 
-        if let Some(materialized) = self.compact_scalar_product(fun) {
-            return Some(materialized);
+        if Self::is_chain_like_head(fun) && !self.mode.expand_inside_chains {
+            return None;
+        }
+
+        if Self::is_inner_product_head(fun) {
+            if !self.mode.inner_products {
+                return None;
+            }
+            if let Some(materialized) = self.compact_scalar_product(fun) {
+                return Some(materialized);
+            }
         }
 
         self.materialize_shorthand_function(fun)
@@ -133,7 +146,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     /// contributes a fresh slot at that position and an extra rank-one tensor
     /// factor. Non-compact functions are scanned recursively.
     fn materialize_shorthand_arg(&self, value: AtomView<'_>) -> Option<SchoonschipMaterialization> {
-        if let Some(materialized) = self.materialize_compact_vector_arg(value) {
+        if self.mode.expand_schoonship
+            && let Some(materialized) = self.materialize_compact_vector_arg(value)
+        {
             return Some(materialized);
         }
 
@@ -216,10 +231,20 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         Self::compact_scalar_product_parts(value).is_some()
     }
 
+    fn is_inner_product_head(value: FunView<'_>) -> bool {
+        let symbol = value.get_symbol();
+        symbol == ETS.metric || symbol == SPENSO_TAG.dot
+    }
+
+    fn is_chain_like_head(value: FunView<'_>) -> bool {
+        let symbol = value.get_symbol();
+        symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace
+    }
+
     fn compact_scalar_product_parts(
         value: FunView<'_>,
     ) -> Option<(AtomView<'_>, AtomView<'_>, Representation<LibraryRep>)> {
-        if value.get_symbol() != ETS.metric && value.get_symbol() != SPENSO_TAG.dot {
+        if !Self::is_inner_product_head(value) {
             return None;
         }
 
@@ -416,7 +441,12 @@ where
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let symbol = value.get_symbol();
-        if symbol == SPENSO_TAG.chain {
+        let root_chain_disabled =
+            symbol == SPENSO_TAG.chain && !settings.shorthand_parsing.expands_chain();
+        let root_trace_disabled =
+            symbol == SPENSO_TAG.trace && !settings.shorthand_parsing.expands_trace();
+
+        if symbol == SPENSO_TAG.chain && !root_chain_disabled {
             return Self::materialize_chain_shorthand(
                 value,
                 state,
@@ -426,7 +456,7 @@ where
             );
         }
 
-        if symbol == SPENSO_TAG.trace {
+        if symbol == SPENSO_TAG.trace && !root_trace_disabled {
             return Self::materialize_trace_shorthand(
                 value,
                 state,
@@ -436,10 +466,35 @@ where
             );
         }
 
-        let materialized =
-            SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(value.as_view());
+        let has_schoonschip_shorthand =
+            SchoonschipMaterializer::<Aind>::contains_schoonschip_shorthand(value.as_view());
+        let schoonschip_mode = settings
+            .shorthand_parsing
+            .schoonschip_expansion()
+            .unwrap_or_else(SchoonschipExpansionMode::none);
+        let effective_schoonschip_mode = if root_chain_disabled || root_trace_disabled {
+            schoonschip_mode.for_chain_like_root()
+        } else {
+            schoonschip_mode
+        };
+        let materialized = if effective_schoonschip_mode.any() {
+            SchoonschipMaterializer::<Aind>::with_mode(&state, effective_schoonschip_mode)
+                .materialize_shorthand(value.as_view())
+        } else {
+            value.as_view().to_owned()
+        };
+
         if materialized == value.as_view().to_owned() {
             // The atom rewriter is at a fixed point; recurse only after an actual rewrite.
+            if root_chain_disabled || root_trace_disabled || has_schoonschip_shorthand {
+                return Self::as_inferred_leaf::<S, Lib, FunLib>(
+                    value.as_view(),
+                    super::StructureInferenceMode::Fast,
+                    library,
+                    function_library,
+                    settings,
+                );
+            }
             return Self::parse_regular_function_leaf::<S, Lib>(value, library);
         }
 
@@ -496,6 +551,15 @@ where
             );
         }
 
+        let factor_schoonschip_mode = settings
+            .shorthand_parsing
+            .schoonschip_expansion()
+            .unwrap_or_else(SchoonschipExpansionMode::none)
+            .for_chain_like_root();
+        let factor_settings = settings
+            .clone()
+            .with_schoonschip_expansion(factor_schoonschip_mode);
+
         let mut factor_networks = Vec::new();
         let mut left = start;
         for (position, factor) in factors.iter().enumerate() {
@@ -509,14 +573,18 @@ where
                 &left.to_atom(),
                 &right.dual().to_atom(),
             );
-            let factor = SchoonschipMaterializer::<Aind>::new(&state)
-                .materialize_shorthand(factor.as_view());
+            let factor = if factor_schoonschip_mode.any() {
+                SchoonschipMaterializer::<Aind>::with_mode(&state, factor_schoonschip_mode)
+                    .materialize_shorthand(factor.as_view())
+            } else {
+                factor
+            };
             factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
                 factor,
                 state.clone(),
                 library,
                 function_library,
-                settings,
+                &factor_settings,
             )?);
             left = right;
         }
@@ -565,6 +633,14 @@ where
         let links = (0..factors.len())
             .map(|_| state.slot(&rep))
             .collect::<Vec<_>>();
+        let factor_schoonschip_mode = settings
+            .shorthand_parsing
+            .schoonschip_expansion()
+            .unwrap_or_else(SchoonschipExpansionMode::none)
+            .for_chain_like_root();
+        let factor_settings = settings
+            .clone()
+            .with_schoonschip_expansion(factor_schoonschip_mode);
 
         let materialized_factors = factors
             .iter()
@@ -573,7 +649,12 @@ where
                 let left = links[position].to_atom();
                 let right = links[(position + 1) % factors.len()].dual().to_atom();
                 let factor = ChainExpansion::replace_placeholders(*factor, &left, &right);
-                SchoonschipMaterializer::<Aind>::new(&state).materialize_shorthand(factor.as_view())
+                if factor_schoonschip_mode.any() {
+                    SchoonschipMaterializer::<Aind>::with_mode(&state, factor_schoonschip_mode)
+                        .materialize_shorthand(factor.as_view())
+                } else {
+                    factor
+                }
             })
             .collect::<Vec<_>>();
 
@@ -584,7 +665,7 @@ where
                 state.clone(),
                 library,
                 function_library,
-                settings,
+                &factor_settings,
             )?);
         }
         Ok(Self::chain_like_network_product(factor_networks))
@@ -718,7 +799,8 @@ mod tests {
     #[test]
     fn standalone_compact_vector_is_not_materialized() {
         let state = ParseState::<AbstractIndex>::default();
-        let materializer = SchoonschipMaterializer::new(&state);
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
 
         let expression = compact_vector(symbol!("materialized_p"));
 
@@ -731,7 +813,8 @@ mod tests {
     #[test]
     fn compact_vector_argument_becomes_slot_and_factor() {
         let state = ParseState::<AbstractIndex>::default();
-        let materializer = SchoonschipMaterializer::new(&state);
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
         let visible_slot = mink4()
             .slot::<AbstractIndex, _>(AbstractIndex::from(1))
             .to_atom();
@@ -774,7 +857,8 @@ mod tests {
     #[test]
     fn compact_scalar_product_still_materializes_to_two_factors() {
         let state = ParseState::<AbstractIndex>::default();
-        let materializer = SchoonschipMaterializer::new(&state);
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
         let expression = function!(
             ETS.metric,
             compact_vector(symbol!("materialized_p")),

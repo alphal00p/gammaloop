@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
-use metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
+use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
 use spenso::{
     network::{graph::NetworkEdge, library::function_lib::INBUILTS, parsing::ParseSettings},
     structure::{
@@ -23,28 +23,26 @@ use thiserror::Error;
 
 use crate::{
     dirac::{AGS, GammaSimplifier},
-    metric::MetricSimplifier,
     rep_symbols::RS,
     representations::Bispinor,
+    shorthands::metric::MetricSimplifier,
     tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
 pub mod tensor;
 
-pub mod chain;
 pub mod color;
 pub mod cook;
 pub mod dirac;
 pub mod epsilon;
-pub mod metric;
-pub mod parsing_ind;
+// pub mod parsing_ind;
 #[cfg(feature = "python")]
 pub mod python;
 #[cfg(any(test, feature = "reference-cases"))]
 pub mod reference_cases;
 pub mod rep_symbols;
 pub mod representations;
-pub mod schoonschip;
+pub mod shorthands;
 #[cfg(test)]
 pub(crate) mod test_support;
 

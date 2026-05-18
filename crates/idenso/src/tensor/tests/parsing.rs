@@ -1,9 +1,11 @@
-use spenso::network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom};
-use spenso::network::{
-    ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
-    Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
+use spenso::network::parsing::{
+    ParseSettings, SchoonschipExpansionMode, ShadowedStructure, ShorthandParsing, StructureFromAtom,
 };
-use symbolica::atom::{AtomCore, Symbol};
+use spenso::network::{
+    ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SingleSmallestDegree,
+    SmallestDegree, Steps, TensorOrScalarOrKey, tags::SPENSO_TAG,
+};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 
 use symbolica::symbol;
 
@@ -14,25 +16,81 @@ use spenso::structure::abstract_index::AbstractIndex;
 
 // use log::trace;
 
-use symbolica::atom::Atom;
-
 use crate::test_support::test_initialize;
 
 use core::panic;
 
 use spenso::{
+    chain, chain_factor, mink,
     shadowing::symbolica_utils::TypstSettings,
     structure::{
-        TensorStructure, ToSymbolic,
+        HasName, TensorStructure, ToSymbolic,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::IsAbstractSlot,
     },
+    tensor_symbol, vector, vector_symbol,
 };
 
 use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
 use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
+
+fn schoonschip_only_settings() -> ParseSettings {
+    ParseSettings {
+        shorthand_parsing: ShorthandParsing::expand_schoonschip_only(),
+        ..Default::default()
+    }
+}
+
+fn no_schoonschip_inside_chain_settings() -> ParseSettings {
+    ParseSettings {
+        shorthand_parsing: ShorthandParsing::Expand {
+            schoonschip: SchoonschipExpansionMode::full().outside_chains(),
+            trace: true,
+            chain: true,
+        },
+        ..Default::default()
+    }
+}
+
+#[test]
+fn schoonschip_only_symbolic_chain_without_compact_vector_stays_opaque() {
+    let expr = chain!(
+        mink!(4, i),
+        mink!(4, j),
+        chain_factor!(schoonschip_only_factor)
+    );
+
+    let net = expr
+        .parse_to_symbolic_net::<AbstractIndex>(&schoonschip_only_settings())
+        .unwrap();
+
+    assert_eq!(net.state, NetworkState::SelfDualTensor);
+    assert_eq!(net.graph.n_nodes(), 1);
+    assert_eq!(net.graph.dangling_indices().len(), 2);
+    assert_eq!(net.store.tensors.len(), 1);
+    assert_eq!(net.store.tensors[0].name(), Some(SPENSO_TAG.chain));
+}
+
+#[test]
+fn symbolic_chain_can_keep_compact_vector_argument_opaque() {
+    let factor_name = tensor_symbol!(parse_factor_f);
+    let expr = chain!(
+        mink!(4, i),
+        mink!(4, j),
+        chain_factor!(parse_factor_f, in, out, (vector!(compact_p, mink!(4))))
+    );
+
+    let net = expr
+        .parse_to_symbolic_net::<AbstractIndex>(&no_schoonschip_inside_chain_settings())
+        .unwrap();
+
+    assert_eq!(net.state, NetworkState::SelfDualTensor);
+    assert_eq!(net.graph.dangling_indices().len(), 2);
+    assert_eq!(net.store.tensors.len(), 1);
+    assert_eq!(net.store.tensors[0].name(), Some(factor_name));
+}
 
 #[test]
 fn parse_scalar() {

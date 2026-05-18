@@ -31,12 +31,16 @@ use symbolica::{
     utils::Settable,
 };
 
-use crate::{W_, chain::Chain, metric::PermuteWithMetric, representations::ColorAntiFundamental};
+use crate::{
+    W_,
+    representations::ColorAntiFundamental,
+    shorthands::{chain::Chain, metric::PermuteWithMetric},
+};
 
 use super::rep_symbols::RS;
 use super::{
-    metric::MetricSimplifier,
     representations::{Bispinor, ColorAdjoint, ColorFundamental},
+    shorthands::metric::MetricSimplifier,
 };
 
 #[derive(Debug)]
