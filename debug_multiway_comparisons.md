@@ -14,16 +14,22 @@ but no graph-specific or unexplained sign modifiers are allowed.
 
 ## Current Checkpoint
 
-The scalar cross-section local inspect matrix is green at this checkpoint. The
-current checkpoint deliberately restores the pure-CFF production path for true
-repeated denominator channels, while keeping the denominator-edge-coordinate
-source map for pure-CFF numerator localization. The previous automatic
-redirection of all repeated CFF graphs through the confluent/LTD-like bounded
-path made the 3Drep repeated comparison matrix greener, but it spoiled the
-slow scalar cross-section local-inspect sweep. The scalar sweep is therefore
-the guardrail: repeated-channel CFF/LTD diagnostic comparisons must be repaired
-through an explicit, centralized comparison normal form, not by changing the
-GammaLoop production CFF local-UV basis.
+The scalar cross-section local inspect matrix is green at this checkpoint and
+has been pushed at commit `c714ef9b`. That commit deliberately restores the
+pure-CFF production path for true repeated denominator channels, while keeping
+the denominator-edge-coordinate source map for pure-CFF numerator localization.
+The previous automatic redirection of all repeated CFF graphs through the
+confluent/LTD-like bounded path made the 3Drep repeated comparison matrix
+greener, but it spoiled the slow scalar cross-section local-inspect sweep. The
+scalar sweep is therefore the guardrail: repeated-channel CFF/LTD diagnostic
+comparisons must be repaired through an explicit, centralized comparison normal
+form, not by changing the GammaLoop production CFF local-UV basis.
+
+The current working revision after `c714ef9b` only fixes the macOS build/link
+environment coverage. Crates that can link Symbolica/GMP/MPFR-backed tests now
+honor `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` themselves, including subcrates that
+previously had no `build.rs`. This removes the need for manual `RUSTFLAGS=-L...`
+or `-l...` workarounds when running `just test_gammaloop`.
 
 The 3Drep CFF/LTD diagnostic path now does exactly that.  The centralized
 entry point is `generate_cff_ltd_comparison_expression`.  For non-repeated
@@ -58,6 +64,16 @@ This keeps the scalar cross-section sign logic graph/LMB-derived. The current
 checkpoint still has no GL-specific branches, no loop-number fudge factors, no
 production use of `graph_from_signature`, and no temporary
 `GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics in the touched Rust code.
+
+The `143/143` scalar sweep is not a diagnostic self-comparison. The GammaLoop
+cross-section tests still generate the three production modes separately:
+pure-CFF local UV from 3D expansions, pure-CFF local UV from expanded 4D
+integrands, and LTD local UV from expanded 4D integrands. The helper
+`generate_cff_ltd_comparison_expression` is wired only into 3Drep diagnostics
+(`test-cff-ltd`, `eval::compare_cff_ltd`, and the old Python probe matrix), not
+into GammaLoop production CFF local-UV generation. `INSTA_FORCE_PASS=1` was used
+only to prevent snapshot write gating from hiding numerical mismatches; the
+generated `.snap.new` files were deleted and not accepted.
 
 ## Validation Matrix
 
@@ -122,7 +138,8 @@ env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
 The previous sign-only GL38/GL46 failures are now green. Earlier GL24 and GL35
 local-UV drift failures also remain green.
 
-Most recent full selected GammaLoop suite status before this checkpoint:
+Most recent full selected GammaLoop suite status before the 3Drep diagnostic
+fix:
 
 ```text
 just test_gammaloop
@@ -146,6 +163,63 @@ important buckets are:
 
 The checkpoint should therefore be read as a scalar cross-section multi-way
 local-inspect parity checkpoint, not as a full-suite clean point.
+
+Most recent full selected GammaLoop suite status after the macOS build-link
+cleanup:
+
+```text
+env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T \
+  just test_gammaloop -- --no-fail-fast --final-status-level=fail \
+  --status-level=fail
+
+1131 tests run: 1101 passed, 30 failed, 271 skipped
+```
+
+The current 30 failures group as follows:
+
+- `test_evaluation_api` LU event/integration metadata tests: 12 failures. These
+  all stop during generation with
+  `Cannot determine a unique LTD LU cut local-series external coordinate`.
+  The ambiguous candidates are the two incoming external half-edges of a
+  forward-scattering cut carrying the same external energy shift.
+- `test_runs::differential` LU differential tests: 4 failures. Same
+  forward-scattering local-series coordinate ambiguity.
+- `test_runs::spin_sums`: 2 failures. Same generation ambiguity in the
+  spin-summed cross-section construction.
+- Generated forward cross-section inspect tests: 3 aborts:
+  `ltd_generated_forward_cross_section_quartic_numerator_matches_cff_and_energy_trade`,
+  `ltd_generated_forward_cross_section_threshold_inspects_match_cff`, and
+  `ltd_generated_forward_cross_section_threshold_and_4d_uv_inspects_match_cff`.
+  These are expected to share the same forward-scattering coordinate root until
+  proven otherwise by a targeted trace.
+- Divergent/amplitude-like scalar bubble inspect/profile tests: 6 failures:
+  `cff_local_uv_from_expanded_4d_works_without_explicit_orientation_sum`,
+  `divergent_bubble_local_uv_from_expanded_4d_inspects_match_cff_and_ltd`,
+  `divergent_bubble_integrated_uv_from_expanded_4d_inspects_match_cff_and_ltd`,
+  `dotted_bubble_amp_bulk_profile_passes`,
+  `double_dotted_bubble_amp_bulk_profile_passes`, and
+  `scalar_self_energy_amp_bulk_profile_passes`.
+- One scalar cross-section default snapshot drift:
+  `scalar_3l_cross_section_gl24_quartic_energy_inspects_match::q1_quartic`.
+  The visible drift is numerical, e.g. `8.39312238214002094e-12` to
+  `8.38188823800568133e-12`, and must not be accepted until its source is
+  understood.
+- 3Drep unit diagnostics: 2 failures:
+  `ltd_equal_signature_vacuum_hexagon_matches_cff_through_quintic_numerator`
+  and
+  `ltd_gl06_forward_with_initial_state_cut_square_energy_numerator_matches_cff`.
+  These are not part of the GammaLoop production scalar sweep, but they are
+  useful probes for the remaining CFF/LTD diagnostic and forward-cut theory.
+
+The build-link fix was validated independently with:
+
+```text
+env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T \
+  RUST_MIN_STACK=33554432 \
+  cargo test -p idenso --profile dev-optim --no-run
+
+Finished dev-optim profile
+```
 
 ## 3Drep Status At This Checkpoint
 
@@ -247,32 +321,69 @@ propagators.
 
 ## Remaining Follow-Up
 
-The scalar cross-section matrix no longer has a known multi-way local-inspect
-parity failure. The remaining work should proceed in dependency order rather
-than by toggling signs graph by graph.
+The scalar cross-section slow matrix remains the protected anchor. The remaining
+work must proceed in dependency order, with explicit regression gates after
+each principled change rather than by toggling signs graph by graph.
 
-1. Fix the LU coordinate ambiguity generically. When multiple external
-   half-edges represent the same forward-scattering energy shift, the selected
-   coordinate should be chosen from a canonical external half-edge orbit, not by
-   failing uniqueness. This belongs in the local coordinate construction, using
-   graph/LMB data and the `is_cut` half-edge interpretation.
-2. Re-run the failing LU/evaluation/spin-sum smoke tests and then the scalar
-   cross-section guardrails to ensure the ambiguity fix does not perturb the
-   now-green scalar inspect matrix.
-3. Address the amplitude-like divergent scalar bubble CFF local-UV behavior
-   with a small first-principles comparison:
-
-   - evaluate the original bubble graph in CFF and LTD at the same sample and
-   confirm the common original-integrand reference.
-   - extract the CFF 3D local UV, CFF expanded-4D local UV, and LTD expanded-4D
-   local UV limits term by term before event assembly.
-   - classify any mismatch as one of: source-basis projection sign, repeated or
-   duplicate-channel collapse, integrated/local UV normalization, or numerator
-   localization.
-   - fix only the shared source-basis construction if the mismatch is in CFF
-   local UV generation. Do not change the cross-section LU residue bridge unless
-   the bubble reduction exposes the same graph/LMB invariant.
-4. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
-   scalar cross-section sweep after each principled fix. The repeated-channel
-   descriptor is shared and should remain a single implementation rather than a
-   special-case branch.
+1. Freeze the anchor before any more algorithmic edits.
+   - Run the slow scalar cross-section sweep on the current build-link revision
+     after deleting `.snap.new` files.
+   - Inspect the multi-way harness once more to confirm it still compares the
+     three independent GammaLoop production modes and is not routed through the
+     3Drep diagnostic common projection.
+   - Keep `INSTA_FORCE_PASS=1` only as a snapshot gating bypass; never stage
+     `.snap.new` files unless a drift is deliberately accepted.
+2. Repair the forward-scattering LU coordinate ambiguity first.
+   - Treat every `is_cut` edge as two external half-edges with the same momentum,
+     one incoming and one outgoing.
+   - Build one canonical external half-edge orbit for equal-energy
+     forward-scattering candidates, using graph/LMB/linnet data rather than
+     external edge index order.
+   - Make the local coordinate construction choose that canonical orbit instead
+     of requiring a unique raw candidate.
+   - Targeted gate:
+     `lu_rust_default_clustered_pdgs_match_explicit_massless_qcd_list` plus one
+     differential LU test and one spin-sum test.
+   - Regression gate immediately after the targeted fix: full slow scalar
+     `143/143`.
+3. Re-run all currently coordinate-blocked tests.
+   - The expected bucket is the 12 evaluation API tests, 4 differential tests,
+     2 spin-sum tests, and likely the 3 generated forward inspect tests.
+   - If any generated forward inspect test remains after coordinate selection,
+     trace threshold-residue selection and Cutkosky support normalization before
+     touching signs.
+   - Regression gate: full slow scalar `143/143` again if any code touched
+     cross-section generation, residue selectors, LU coordinates, or threshold
+     selection.
+4. Address amplitude-like scalar bubble UV behavior separately.
+   - First evaluate the original divergent bubble in CFF and LTD at the same
+     sample and confirm the original graph reference agrees.
+   - Then compare CFF 3D local UV, CFF expanded-4D local UV, and LTD expanded-4D
+     local UV before event assembly, term by term.
+   - Classify the mismatch as source-basis projection, duplicate/contact
+     channel collapse, local/integrated UV normalization, or numerator
+     localization.
+   - Fix only the shared mathematical source of the mismatch. Do not modify the
+     now-green scalar LU residue bridge unless the bubble exposes the same
+     graph/LMB invariant.
+   - Regression gate after any UV-generation fix: full slow scalar `143/143`,
+     then the divergent-bubble inspect/profile bucket.
+5. Revisit the two remaining 3Drep unit diagnostics after the production
+   forward-cut and bubble issues are understood.
+   - The equal-signature vacuum hexagon likely probes diagnostic CFF/LTD
+     high-power numerator canonicalization.
+   - The GL06 initial-state-cut square numerator likely probes the same
+     forward-cut half-edge coordinate/orientation theory as the GammaLoop
+     coordinate ambiguity, but in the standalone 3Drep diagnostic path.
+   - Fix through the centralized diagnostic entry point or the shared graph/LMB
+     coordinate construction only; do not route GammaLoop production CFF through
+     diagnostic projection.
+6. Final acceptance sequence after every bucket is green:
+   - `cargo fmt`
+   - `env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T cargo check`
+   - `env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T just test_gammaloop`
+   - full slow scalar cross-section sweep `143/143`
+   - broad 3Drep integration sweep
+   - remove all generated `.snap.new` files unless deliberately accepted
+   - update this markdown and the theory note for any mathematical construction
+     that changed.
