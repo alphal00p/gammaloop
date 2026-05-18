@@ -181,8 +181,9 @@ and sink half-edge endpoints, then pass edge items to `graph.build`.
 `graph.build` accepts both comma-separated items and ordinary Typst code
 blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; they are
 resolved before the wire format is sent to the Rust plugin. Numeric `id`
-arguments are order/index overrides. On nodes, edges, sources, and sinks, extra
-named arguments are captured as opaque Typst payload fields:
+arguments choose graph indexes or ordering: on nodes, `id` fixes the resulting
+node index and must be unique and in bounds. On nodes, edges, sources, and
+sinks, extra named arguments are captured as opaque Typst payload fields:
 `edge(source(<a>, style: physics.source-stroke()), sink(<b>), particle: "g")`
 stores `(style: ..)` in the source payload and `(particle: "g")` in the edge
 payload. Typst CBOR-encodes payloads before the Rust plugin boundary, Rust

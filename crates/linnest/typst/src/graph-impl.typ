@@ -245,6 +245,8 @@
 #let _check-id(value, context_) = {
   if value != none and type(value) != int {
     panic(context_ + ": id must be an integer")
+  } else if value != none and value < 0 {
+    panic(context_ + ": id must be non-negative")
   }
 }
 
@@ -333,6 +335,38 @@
   map
 }
 
+#let _order-nodes(nodes) = {
+  let slots = (:)
+  let remaining = ()
+  let len = nodes.len()
+  for item in nodes {
+    let id = item.at("id", default: none)
+    _check-id(id, "graph.node")
+    if id == none {
+      remaining.push(item)
+    } else if id >= len {
+      panic("graph.node: id " + repr(id) + " is out of bounds for " + repr(len) + " nodes")
+    } else if slots.keys().contains(str(id)) {
+      panic("graph.node: duplicate id " + repr(id))
+    } else {
+      slots.insert(str(id), item)
+    }
+  }
+
+  let ordered = ()
+  let remaining-index = 0
+  for index in range(len) {
+    let key = str(index)
+    if slots.keys().contains(key) {
+      ordered.push(slots.at(key))
+    } else {
+      ordered.push(remaining.at(remaining-index))
+      remaining-index += 1
+    }
+  }
+  ordered
+}
+
 #let _resolve-node-ref(value, node-keys, context_) = {
   if type(value) == int {
     value
@@ -355,18 +389,6 @@
   } else {
     pos
   }
-}
-
-#let _collect-node-ids(nodes) = {
-  let used = ()
-  let names = ()
-  for item in nodes {
-    let name = if type(item.at("name", default: none)) == label { item.name } else { none }
-    let state = _collect-named-id(name, item.at("id", default: none), used, names, "graph.node")
-    used = state.used
-    names = state.names
-  }
-  _allocate-named-ids(used, names)
 }
 
 #let _collect-edge-ids(edges) = {
@@ -419,9 +441,8 @@
   clean + (statements: statements)
 }
 
-#let _resolved-node-spec(node, node-ids, node-keys, default-payload: none) = {
-  let name = if type(node.at("name", default: none)) == label { node.name } else { none }
-  let index = _resolve-named-id(name, node.at("id", default: none), node-ids, "graph.node")
+#let _resolved-node-spec(node, node-keys, default-payload: none) = {
+  let index = node.at("id", default: none)
   let item = node + (pos: _resolve-pos(node.at("pos", default: none), node-keys))
   if index != none {
     item.insert("index", index)
@@ -1071,8 +1092,8 @@
   edges: (),
 ) = {
   let split = _split-items(items.pos(), nodes, edges)
-  let node-keys = _node-name-map(split.nodes)
-  let node-ids = _collect-node-ids(split.nodes)
+  let ordered-nodes = _order-nodes(split.nodes)
+  let node-keys = _node-name-map(ordered-nodes)
   let edge-ids = _collect-edge-ids(split.edges)
   let half-ids = _collect-half-ids(split.edges)
   _plugin.graph_from_spec(cbor.encode((
@@ -1081,9 +1102,8 @@
     statements: _flat-statements(statements, "graph.build statements"),
     default-edge-statements: _flat-statements(default-edge-statements, "graph.build default-edge-statements"),
     default-node-statements: _flat-statements(default-node-statements, "graph.build default-node-statements"),
-    nodes: split.nodes.map(node => _resolved-node-spec(
+    nodes: ordered-nodes.map(node => _resolved-node-spec(
       node,
-      node-ids,
       node-keys,
       default-payload: default-node-payload,
     )),
@@ -1102,8 +1122,8 @@
 /// Create a graph node item for @build.
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` chooses the node order/index. Extra named arguments
-/// are captured as node payload fields. The default draw style uses
+/// optional numeric `id` fixes the resulting graph node index. Extra named
+/// arguments are captured as node payload fields. The default draw style uses
 /// `payload.label` as the visible node label when present.
 ///
 /// ```example
@@ -1117,7 +1137,7 @@
   ..args,
   /// Typst node name for references. -> none | label
   name: none,
-  /// Numeric node order/index override. -> none | int
+  /// Numeric graph node index. Must be unique and in bounds when provided. -> none | int
   id: none,
   /// Node placement. -> none | dictionary
   pos: none,

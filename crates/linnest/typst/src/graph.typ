@@ -220,8 +220,8 @@
 /// Create a graph node item for @build.
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` chooses the node order/index. Extra named arguments
-/// are captured as node payload fields, so
+/// optional numeric `id` fixes the resulting graph node index. Extra named
+/// arguments are captured as node payload fields, so
 /// `node(<a>, label: [A], color: red)` stores `(label: [A], color: red)`.
 /// The default draw style uses `payload.label` as the visible node label when
 /// present.
@@ -231,7 +231,7 @@
   ..args,
   /// Typst node name for references. -> none | label
   name: none,
-  /// Numeric node order/index override. -> none | int
+  /// Numeric graph node index. Must be unique and in bounds when provided. -> none | int
   id: none,
   /// Node placement. -> none | dictionary
   pos: none,

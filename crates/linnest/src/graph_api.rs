@@ -116,7 +116,6 @@ struct ResolvedPlacement {
 pub struct TypstDotNode {
     pub node: usize,
     pub name: Option<String>,
-    pub index: Option<usize>,
     pub payload: Option<Vec<u8>>,
     pub pos: Option<TypstPoint>,
     pub shift: Option<TypstPoint>,
@@ -1142,11 +1141,6 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
             .name
             .as_ref()
             .map(|value| value.as_str().to_string()),
-        index: vertex
-            .data
-            .index
-            .as_ref()
-            .map(|value| value.0.try_into().unwrap()),
         payload: vertex.data.payload.as_ref().map(|value| value.to_vec()),
         pos: parse_point(&raw_statements, "pos"),
         shift: parse_point(&raw_statements, "shift"),
