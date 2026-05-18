@@ -154,9 +154,9 @@
 #let particle-name(edge) = {
   let particle = edge.at("particle", default: none)
   if particle == none {
-    let payload = edge.at("payload", default: none)
-    if type(payload) == dictionary {
-      particle = payload.at("particle", default: none)
+    let data = edge.at("data", default: none)
+    if type(data) == dictionary {
+      particle = data.at("particle", default: none)
     }
   }
   if particle == none {
@@ -244,21 +244,21 @@
   }
 }
 
-#let _record-payload(record) = {
+#let _record-data(record) = {
   if type(record) != dictionary {
     (:)
   } else {
-    let payload = record.at("payload", default: none)
-    if type(payload) == dictionary { payload } else { (:) }
+    let data = record.at("data", default: none)
+    if type(data) == dictionary { data } else { (:) }
   }
 }
 
-#let _payload-field(record, field, default: none) = {
-  _record-payload(record).at(field, default: default)
+#let _data-field(record, field, default: none) = {
+  _record-data(record).at(field, default: default)
 }
 
-#let _edge-payload-field(edge, field, default: none) = {
-  _payload-field(edge, field, default: default)
+#let _edge-data-field(edge, field, default: none) = {
+  _data-field(edge, field, default: default)
 }
 
 #let _half-record(edge, half) = {
@@ -271,8 +271,8 @@
   }
 }
 
-#let _half-payload-field(edge, half, field, default: none) = {
-  _payload-field(_half-record(edge, half), field, default: default)
+#let _half-data-field(edge, half, field, default: none) = {
+  _data-field(_half-record(edge, half), field, default: default)
 }
 
 #let _base-half-style(edge, half, map: default-map, default: default-edge, orientation-split: true) = {
@@ -397,7 +397,7 @@
 ) = {
   let style = _base-half-style(edge, half, map: map, default: default, orientation-split: orientation-split)
   style = style + style-dict(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
-  style = style + style-dict(_half-payload-field(edge, half, "style"), edge, mode: typst-fields, map: map, scope: scope)
+  style = style + style-dict(_half-data-field(edge, half, "style"), edge, mode: typst-fields, map: map, scope: scope)
   if momentum-arrows {
     let show-mark = _momentum-arrow-half(edge) == half
     (
@@ -593,13 +593,13 @@
 }
 
 #let _default-label(edge, map: default-map, default: default-edge, typst-fields: "plain", scope: (:)) = {
-  let payload-label = _edge-payload-field(
+  let data-label = _edge-data-field(
     edge,
     "display-label",
-    default: _edge-payload-field(edge, "label", default: none),
+    default: _edge-data-field(edge, "label", default: none),
   )
-  if payload-label != none {
-    label-content(payload-label, edge, mode: typst-fields, map: map, scope: scope)
+  if data-label != none {
+    label-content(data-label, edge, mode: typst-fields, map: map, scope: scope)
   } else {
     let label-value = edge.at(
       "display-label",
@@ -620,7 +620,7 @@
 
 /// Edge-label callback.
 ///
-/// By default this preserves payload `display-label` or `label`, then explicit
+/// By default this preserves data `display-label` or `label`, then explicit
 /// `display-label`, `label`, and particle-map labels. Set any
 /// `show-*` option to build a label from selected metadata instead:
 ///

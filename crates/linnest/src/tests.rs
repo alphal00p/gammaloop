@@ -13,16 +13,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
-    graph_dot_bytes, graph_edge_payload_by_name_bytes, graph_edges_bytes,
+    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
     graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
-    graph_info_bytes, graph_node_payload_by_name_bytes, graph_nodes_bytes,
+    graph_info_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
     graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
-    graph_set_edge_payload_by_name_bytes, graph_set_node_payload_by_name_bytes,
-    graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_payloads_bytes,
-    layout_graph_bytes, layout_parsed_graph_bytes, layout_parsed_graphs_bytes,
-    parse_dot_graphs_bytes, subgraph_contains_hedge_bytes, subgraph_hedges_bytes,
-    subgraph_label_bytes, CBORTypstGraph, DotPlacementExpr, PinConstraint, TreeInitCfg,
-    TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph, TypstPoint,
+    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
+    graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes, layout_graph_bytes,
+    layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes,
+    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, CBORTypstGraph,
+    DotPlacementExpr, PinConstraint, TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode,
+    TypstGraph, TypstPoint,
 };
 
 fn test_figment() -> Figment {
@@ -488,118 +488,115 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
 }
 
 #[test]
-fn test_graph_spec_payloads_are_opaque_and_survive_layout() {
+fn test_graph_spec_data_are_opaque_and_survive_layout() {
     #[derive(Serialize)]
-    struct PayloadGraphSpec {
+    struct DataGraphSpec {
         name: String,
-        payload: Vec<u8>,
-        nodes: Vec<PayloadNodeSpec>,
-        edges: Vec<PayloadEdgeSpec>,
+        data: Vec<u8>,
+        nodes: Vec<DataNodeSpec>,
+        edges: Vec<DataEdgeSpec>,
     }
 
     #[derive(Serialize)]
-    struct PayloadNodeSpec {
+    struct DataNodeSpec {
         name: String,
-        payload: Vec<u8>,
+        data: Vec<u8>,
     }
 
     #[derive(Serialize)]
-    struct PayloadEdgeSpec {
-        payload: Vec<u8>,
-        source: PayloadEndpointSpec,
-        sink: PayloadEndpointSpec,
+    struct DataEdgeSpec {
+        data: Vec<u8>,
+        source: DataEndpointSpec,
+        sink: DataEndpointSpec,
     }
 
     #[derive(Serialize)]
-    struct PayloadEndpointSpec {
+    struct DataEndpointSpec {
         node: usize,
-        payload: Vec<u8>,
+        data: Vec<u8>,
     }
 
-    fn assert_payloads(graph: &[u8]) {
+    fn assert_data(graph: &[u8]) {
         let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(graph).unwrap());
-        assert_eq!(info.payload.as_deref(), Some(&b"graph"[..]));
+        assert_eq!(info.data.as_deref(), Some(&b"graph"[..]));
 
         let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(graph).unwrap());
-        assert_eq!(nodes[0].payload.as_deref(), Some(&b"node-a"[..]));
-        assert_eq!(nodes[1].payload.as_deref(), Some(&b"node-b"[..]));
+        assert_eq!(nodes[0].data.as_deref(), Some(&b"node-a"[..]));
+        assert_eq!(nodes[1].data.as_deref(), Some(&b"node-b"[..]));
 
         let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(graph).unwrap());
-        assert_eq!(edges[0].payload.as_deref(), Some(&b"edge"[..]));
+        assert_eq!(edges[0].data.as_deref(), Some(&b"edge"[..]));
         assert_eq!(
             edges[0]
                 .source
                 .as_ref()
-                .and_then(|source| source.payload.as_deref()),
+                .and_then(|source| source.data.as_deref()),
             Some(&b"source"[..])
         );
         assert_eq!(
-            edges[0]
-                .sink
-                .as_ref()
-                .and_then(|sink| sink.payload.as_deref()),
+            edges[0].sink.as_ref().and_then(|sink| sink.data.as_deref()),
             Some(&b"sink"[..])
         );
     }
 
-    let spec = PayloadGraphSpec {
-        name: "payloads".to_string(),
-        payload: b"graph".to_vec(),
+    let spec = DataGraphSpec {
+        name: "data".to_string(),
+        data: b"graph".to_vec(),
         nodes: vec![
-            PayloadNodeSpec {
+            DataNodeSpec {
                 name: "a".to_string(),
-                payload: b"node-a".to_vec(),
+                data: b"node-a".to_vec(),
             },
-            PayloadNodeSpec {
+            DataNodeSpec {
                 name: "b".to_string(),
-                payload: b"node-b".to_vec(),
+                data: b"node-b".to_vec(),
             },
         ],
-        edges: vec![PayloadEdgeSpec {
-            payload: b"edge".to_vec(),
-            source: PayloadEndpointSpec {
+        edges: vec![DataEdgeSpec {
+            data: b"edge".to_vec(),
+            source: DataEndpointSpec {
                 node: 0,
-                payload: b"source".to_vec(),
+                data: b"source".to_vec(),
             },
-            sink: PayloadEndpointSpec {
+            sink: DataEndpointSpec {
                 node: 1,
-                payload: b"sink".to_vec(),
+                data: b"sink".to_vec(),
             },
         }],
     };
 
     let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
-    assert_payloads(&graph);
+    assert_data(&graph);
 
     let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
-    assert_payloads(&laid_out);
+    assert_data(&laid_out);
 }
 
 #[test]
-fn test_parsed_graph_payload_patch_sets_opaque_data() {
+fn test_parsed_graph_data_patch_sets_opaque_data() {
     #[derive(Serialize)]
-    struct PayloadPatch {
-        payload: Vec<u8>,
-        nodes: Vec<IndexedPayloadPatch>,
-        edges: Vec<EdgePayloadPatch>,
+    struct DataPatch {
+        data: Vec<u8>,
+        nodes: Vec<IndexedDataPatch>,
+        edges: Vec<EdgeDataPatch>,
     }
 
     #[derive(Serialize)]
-    struct IndexedPayloadPatch {
+    struct IndexedDataPatch {
         index: usize,
-        payload: Vec<u8>,
+        data: Vec<u8>,
     }
 
     #[derive(Serialize)]
-    struct EdgePayloadPatch {
+    struct EdgeDataPatch {
         index: usize,
-        payload: Vec<u8>,
+        data: Vec<u8>,
         source: Vec<u8>,
         sink: Vec<u8>,
     }
 
     let parsed = parse_dot_graphs_bytes(
-        br#"digraph payloads {
+        br#"digraph data {
             graph [label="graph"];
             a [label="node"];
             b;
@@ -608,60 +605,57 @@ fn test_parsed_graph_payload_patch_sets_opaque_data() {
     )
     .unwrap();
     let graph = decode_graphs(&parsed).remove(0);
-    let patched = graph_with_payloads_bytes(
+    let patched = graph_with_data_bytes(
         &graph,
-        &encode_cbor(&PayloadPatch {
-            payload: b"graph-payload".to_vec(),
-            nodes: vec![IndexedPayloadPatch {
+        &encode_cbor(&DataPatch {
+            data: b"graph-data".to_vec(),
+            nodes: vec![IndexedDataPatch {
                 index: 0,
-                payload: b"node-payload".to_vec(),
+                data: b"node-data".to_vec(),
             }],
-            edges: vec![EdgePayloadPatch {
+            edges: vec![EdgeDataPatch {
                 index: 0,
-                payload: b"edge-payload".to_vec(),
-                source: b"source-payload".to_vec(),
-                sink: b"sink-payload".to_vec(),
+                data: b"edge-data".to_vec(),
+                source: b"source-data".to_vec(),
+                sink: b"sink-data".to_vec(),
             }],
         }),
     )
     .unwrap();
 
     let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(&patched).unwrap());
-    assert_eq!(info.payload.as_deref(), Some(&b"graph-payload"[..]));
+    assert_eq!(info.data.as_deref(), Some(&b"graph-data"[..]));
 
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&patched).unwrap());
-    assert_eq!(nodes[0].payload.as_deref(), Some(&b"node-payload"[..]));
+    assert_eq!(nodes[0].data.as_deref(), Some(&b"node-data"[..]));
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
-    assert_eq!(edges[0].payload.as_deref(), Some(&b"edge-payload"[..]));
+    assert_eq!(edges[0].data.as_deref(), Some(&b"edge-data"[..]));
     assert_eq!(
         edges[0]
             .source
             .as_ref()
-            .and_then(|source| source.payload.as_deref()),
-        Some(&b"source-payload"[..])
+            .and_then(|source| source.data.as_deref()),
+        Some(&b"source-data"[..])
     );
     assert_eq!(
-        edges[0]
-            .sink
-            .as_ref()
-            .and_then(|sink| sink.payload.as_deref()),
-        Some(&b"sink-payload"[..])
+        edges[0].sink.as_ref().and_then(|sink| sink.data.as_deref()),
+        Some(&b"sink-data"[..])
     );
 }
 
 #[test]
-fn test_named_node_and_edge_payload_api() {
+fn test_named_node_and_edge_data_api() {
     #[derive(Serialize)]
-    struct NamedPayload<'a> {
+    struct NamedData<'a> {
         name: &'a str,
-        payload: Vec<u8>,
+        data: Vec<u8>,
     }
 
     let mut edge_statements = one_statement("__linnest-edge-name", "e1");
     edge_statements.insert("label".to_string(), "a-b".to_string());
     let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
-        name: "named-payloads".to_string(),
+        name: "named-data".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
             TestNodeSpec {
@@ -689,33 +683,33 @@ fn test_named_node_and_edge_payload_api() {
     }))
     .unwrap();
 
-    let node_payload: Option<Vec<u8>> =
-        decode_cbor(&graph_node_payload_by_name_bytes(&graph, &encode_cbor(&"a")).unwrap());
-    assert_eq!(node_payload, None);
+    let node_data: Option<Vec<u8>> =
+        decode_cbor(&graph_node_data_by_name_bytes(&graph, &encode_cbor(&"a")).unwrap());
+    assert_eq!(node_data, None);
 
-    let graph = graph_set_node_payload_by_name_bytes(
+    let graph = graph_set_node_data_by_name_bytes(
         &graph,
-        &encode_cbor(&NamedPayload {
+        &encode_cbor(&NamedData {
             name: "a",
-            payload: b"node-payload".to_vec(),
+            data: b"node-data".to_vec(),
         }),
     )
     .unwrap();
-    let graph = graph_set_edge_payload_by_name_bytes(
+    let graph = graph_set_edge_data_by_name_bytes(
         &graph,
-        &encode_cbor(&NamedPayload {
+        &encode_cbor(&NamedData {
             name: "e1",
-            payload: b"edge-payload".to_vec(),
+            data: b"edge-data".to_vec(),
         }),
     )
     .unwrap();
 
-    let node_payload: Option<Vec<u8>> =
-        decode_cbor(&graph_node_payload_by_name_bytes(&graph, &encode_cbor(&"a")).unwrap());
-    assert_eq!(node_payload.as_deref(), Some(&b"node-payload"[..]));
-    let edge_payload: Option<Vec<u8>> =
-        decode_cbor(&graph_edge_payload_by_name_bytes(&graph, &encode_cbor(&"e1")).unwrap());
-    assert_eq!(edge_payload.as_deref(), Some(&b"edge-payload"[..]));
+    let node_data: Option<Vec<u8>> =
+        decode_cbor(&graph_node_data_by_name_bytes(&graph, &encode_cbor(&"a")).unwrap());
+    assert_eq!(node_data.as_deref(), Some(&b"node-data"[..]));
+    let edge_data: Option<Vec<u8>> =
+        decode_cbor(&graph_edge_data_by_name_bytes(&graph, &encode_cbor(&"e1")).unwrap());
+    assert_eq!(edge_data.as_deref(), Some(&b"edge-data"[..]));
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(edges[0].name.as_deref(), Some("e1"));
@@ -726,12 +720,20 @@ fn test_named_node_and_edge_payload_api() {
 }
 
 #[test]
-fn test_graph_spec_exposes_half_edge_ids() {
+fn test_graph_spec_applies_explicit_edge_and_half_edge_ids() {
     #[derive(Serialize)]
     struct HalfIdGraphSpec {
         name: String,
-        nodes: Vec<TestNodeSpec>,
+        nodes: Vec<IndexedNodeSpec>,
         edges: Vec<HalfIdEdgeSpec>,
+    }
+
+    #[derive(Serialize)]
+    struct IndexedNodeSpec {
+        name: String,
+        index: usize,
+        #[serde(default)]
+        statements: BTreeMap<String, String>,
     }
 
     #[derive(Serialize)]
@@ -750,27 +752,47 @@ fn test_graph_spec_exposes_half_edge_ids() {
     let graph = graph_from_spec_bytes(&encode_cbor(&HalfIdGraphSpec {
         name: "half-ids".to_string(),
         nodes: vec![
-            TestNodeSpec {
+            IndexedNodeSpec {
                 name: "a".to_string(),
+                index: 1,
                 statements: BTreeMap::new(),
             },
-            TestNodeSpec {
+            IndexedNodeSpec {
                 name: "b".to_string(),
+                index: 0,
                 statements: BTreeMap::new(),
             },
         ],
-        edges: vec![HalfIdEdgeSpec {
-            id: 5,
-            source: HalfIdEndpointSpec { node: 0, id: 7 },
-            sink: HalfIdEndpointSpec { node: 1, id: 11 },
-        }],
+        edges: vec![
+            HalfIdEdgeSpec {
+                id: 1,
+                source: HalfIdEndpointSpec { node: 0, id: 2 },
+                sink: HalfIdEndpointSpec { node: 1, id: 3 },
+            },
+            HalfIdEdgeSpec {
+                id: 0,
+                source: HalfIdEndpointSpec { node: 1, id: 0 },
+                sink: HalfIdEndpointSpec { node: 0, id: 1 },
+            },
+        ],
     }))
     .unwrap();
 
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    assert_eq!(nodes[0].name.as_deref(), Some("b"));
+    assert_eq!(nodes[1].name.as_deref(), Some("a"));
+
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
-    assert_eq!(edges[0].id, Some(5));
-    assert_eq!(edges[0].source.as_ref().unwrap().id, Some(7));
-    assert_eq!(edges[0].sink.as_ref().unwrap().id, Some(11));
+    assert_eq!(edges[0].edge, 0);
+    assert_eq!(edges[0].source.as_ref().unwrap().hedge, 0);
+    assert_eq!(edges[0].sink.as_ref().unwrap().hedge, 1);
+    assert_eq!(edges[0].source.as_ref().unwrap().node, 0);
+    assert_eq!(edges[0].sink.as_ref().unwrap().node, 1);
+    assert_eq!(edges[1].edge, 1);
+    assert_eq!(edges[1].source.as_ref().unwrap().hedge, 2);
+    assert_eq!(edges[1].sink.as_ref().unwrap().hedge, 3);
+    assert_eq!(edges[1].source.as_ref().unwrap().node, 1);
+    assert_eq!(edges[1].sink.as_ref().unwrap().node, 0);
 }
 
 #[test]
@@ -942,8 +964,14 @@ fn test_graph_spec_constructor_preserves_default_statements() {
 
     let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
-    assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#{color}\"))"));
-    assert_eq!(nodes[1].eval.as_deref(), Some("(fill: rgb(\"#{color}\"))"));
+    assert_eq!(
+        nodes[0].statements.get("eval").map(String::as_str),
+        Some("(fill: rgb(\"#{color}\"))")
+    );
+    assert_eq!(
+        nodes[1].statements.get("eval").map(String::as_str),
+        Some("(fill: rgb(\"#{color}\"))")
+    );
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(
@@ -1066,7 +1094,10 @@ fn test_graph_spec_preserves_default_statements() {
     .unwrap();
 
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
-    assert_eq!(nodes[0].eval.as_deref(), Some("(fill: rgb(\"#{color}\"))"));
+    assert_eq!(
+        nodes[0].statements.get("eval").map(String::as_str),
+        Some("(fill: rgb(\"#{color}\"))")
+    );
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(
         edges[0].statements.get("display-label").map(String::as_str),
