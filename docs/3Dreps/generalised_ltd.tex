@@ -854,6 +854,16 @@ minus twice the number of denominators depending on that direction must be
 strictly smaller than \(-1\).  If this check fails, finite pole data are not
 enough and the command refuses to build a representation.
 
+The production dispatcher uses one repeated-channel construction for every
+true repeated denominator channel.  Thus a requested \texttt{CFF}
+representation with repeated denominators is no longer forced through an
+independent repeated-pole CFF formula: it is built by the same derivative-free
+confluent repeated-channel normal form used by the LTD branch, with the
+requested CFF representation retained in the source metadata.  This is a
+representation choice, not a sign convention.  Non-repeated CFF sectors still
+use the ordinary CFF residue formula, and generalized bounded non-repeated
+sectors use the finite-pole completions described below.
+
 \phantomsection
 \subsection*{1.3.1.a Quadratic Bounds}
 \addcontentsline{toc}{subsection}{1.3.1.a Quadratic Bounds}
@@ -1116,20 +1126,54 @@ now contain a unit node, represented by a node with no surfaces and no
 children.  Such a node evaluates to \(1\) and represents a terminal tadpole or
 unit lower-sector contact.
 
-The implementation exposes the following pure-CFF higher-power cases:
+For non-confluent CFF sectors the implementation exposes the following
+higher-power cases:
 \begin{enumerate}[leftmargin=2em]
   \item arbitrary quadratic-or-lower caps \(d_e\le2\), on one-loop,
-        multiloop, split-mass, and repeated-signature graphs, provided the
-        loop-energy UV check is satisfied;
+        multiloop, and split-mass graphs, provided the loop-energy UV check is
+        satisfied;
   \item arbitrary UV-convergent higher caps on non-repeated edges, using the
         recursive lower-contact completion described below;
-  \item arbitrary UV-convergent higher caps on repeated-signature channels,
-        using a channel normal form before any individual copy is deleted.
+  \item multi-active or initial-state-cut bounded sectors without duplicate
+        energy channels, using the tensor-product interpolation
+        \eqref{eq:multi-active-cff-interpolation}.
 \end{enumerate}
-In all accepted pure-CFF cases every denominator tree is built only from
+In these accepted CFF cases every denominator tree is built only from
 \(E\)-surfaces.  Numerator-side cached factors may be \(E\)- or \(H\)-type
 linear forms, but the JSON marks them as numerator-only and the evaluator
-multiplies them in the numerator.
+multiplies them in the numerator.  If the graph contains a true repeated
+denominator channel, the dispatcher instead enters the shared confluent
+repeated-channel builder described in Sec.~1.2.2.
+
+\subsection{Tensor-Product Bounded CFF Interpolation}
+
+Some bounded CFF graphs have more than one active edge-energy bound, or have
+initial-state cut edges that make the lower-contact recursion depend on several
+sampled edge energies at once.  Let
+\[
+  A_d=\{e\mid d_e>0\},\qquad
+  X_e=\Samples_{d_e}=(1,-1,0,2,-2,\ldots)\big|_{d_e+1\ {\rm nodes}}
+\]
+be the active bounded edges and their deterministic interpolation nodes.  The
+black-box numerator is reconstructed as
+\begin{equation}
+  N(\{q_e^0\})
+  =
+  \sum_{x\in\prod_{e\in A_d}X_e}
+  N\!\left(q_e^0=x_e\omega_e\ \hbox{for }e\in A_d\right)
+  \prod_{e\in A_d}
+  \prod_{\substack{y\in X_e\\y\ne x_e}}
+  \frac{q_e^0-y\omega_e}{(x_e-y)\omega_e}.
+  \label{eq:multi-active-cff-interpolation}
+\end{equation}
+Each factor \(\omega_e^{-1}\) is serialized as one ordinary half-edge
+\((2\omega_e)^{-1}\), and the explicit coefficient contributes
+\(2/(x_e-y)\).  The linear numerator factor \(q_e^0-y\omega_e\) is then passed
+to the same known-factor CFF recursion as any other numerator-side linear
+factor.  Before that recursion starts, the consumed active bounds are cleared;
+the tensor-product interpolation has already accounted for the complete
+black-box degree.  This gives one generic path for initial-state-cut bounded
+CFF and for bounded CFF with several active non-duplicate edge energies.
 
 The repeated-channel case needs one extra algebraic step.  Let
 \[
@@ -1198,11 +1242,13 @@ CFF expression of the graph with the whole repeated channel deleted.  This is
 still an \(E\)-surface-only denominator representation; the additional factors
 are explicitly numerator-side objects.
 
-This channel normal form is the reason pure CFF can now handle high powers on
-repeated propagators without ever invoking LTD contact denominators.  It also
-makes the ordinary finite-pole/contact recursion a limiting case: for
-\(\nu=1\), \eqref{eq:channel-normal-form} is precisely the division of a
-single higher-power edge into a pole remainder and a lower contact sector.
+This channel normal form is an algebraic way of viewing repeated CFF powers.
+The production dispatcher now uses the shared derivative-free confluent
+repeated-channel builder whenever the requested CFF graph has a true repeated
+denominator channel.  The ordinary finite-pole/contact recursion is still the
+\(\nu=1\) limiting case: for one denominator copy,
+\eqref{eq:channel-normal-form} is precisely the division of a single
+higher-power edge into a pole remainder and a lower contact sector.
 
 \subsection{Uniform-Scale Repeated-Channel Sampling}
 
@@ -1359,9 +1405,9 @@ For \texttt{box\_pow3.dot} with
   \texttt{--energy-degree-bounds 3:4},
 \]
 the repeated channel is \(C=\{3,4,5\}\), \(\nu=3\), \(d_C=4\), and
-\(\Samples_4=(1,-1,0,2,-2)\).  The first numerator map printed by
-\texttt{build --family cff --pretty} has orientation label
-\(\texttt{-+++++}\).  For its sample \(a=1\), the actual variants are:
+\(\Samples_4=(1,-1,0,2,-2)\).  In the algebraic pure-CFF channel normal form,
+the first numerator map has orientation label \(\texttt{-+++++}\).  For its
+sample \(a=1\), the variants are:
 \[
 \begin{array}{c|c|c|c|c|c}
 \texttt{pref} & \texttt{remaining\_power} & p &
@@ -1376,8 +1422,11 @@ the repeated channel is \(C=\{3,4,5\}\), \(\nu=3\), \(d_C=4\), and
 \end{array}
 \]
 Here surface \(19\) is numerator-only and is the cached linear form for the
-canonical repeated energy \(y_C\) in that orientation.  The denominator
-surfaces referenced by the factorization trees are all \(E\)-surfaces.
+canonical repeated energy \(y_C\) in that orientation.  This table is kept as
+the channel-normal-form reference.  The production CFF path for true repeated
+denominators uses the shared derivative-free repeated-channel expression, so a
+bounded repeated CFF graph may intentionally serialize to the same expression
+as the corresponding LTD construction.
 
 For the mixed box command
 \[
@@ -1448,13 +1497,15 @@ copies are identified as a repeated channel; it only needs the total channel
 degree \(d_C=6\) and the individual numerator sample map for every original
 edge copy.
 
-Pure CFF does not need a separate repeated-pole derivative construction:
-repeated propagators are repeated denominator factors in the CFF contour
-integral.  The channel normal form above simply performs the finite polynomial
-division at the level of the repeated denominator power before CFF denominator
-trees are generated.  The hybrid formula remains useful for the LTD-like
-repeated-channel organization, but it is not needed to make the pure-CFF
-higher-power lift well-defined.
+Mathematically, repeated propagators can also be treated as repeated
+denominator factors in the CFF contour integral.  The channel normal form above
+performs the finite polynomial division at the level of the repeated
+denominator power before CFF denominator trees are generated.  The production
+implementation nevertheless chooses the shared derivative-free repeated-channel
+construction for true repeated denominator channels, because it gives one
+confluent limit for CFF and LTD and avoids a second repeated-pole sign path.
+No graph-dependent sign or loop-number correction is introduced in this
+dispatch.
 
 Hybrid mode has a different status.  The hybrid repeated-channel formula is
 not constrained to keep pure-CFF denominator trees \(E\)-only: \(H\)-surfaces
@@ -1917,14 +1968,18 @@ JSON grammar and evaluator semantics do not require a separate fallback branch.
 \paragraph{Production representation names.}
 The implementation-level family names above separate the mathematical building
 blocks.  In gammaLoop user settings the production choices are only
-\texttt{CFF} and \texttt{LTD}.  The public \texttt{LTD} path uses the
-derivative-free repeated-channel construction where needed, and therefore
-agrees with the split-mass LTD limit without differentiating the numerator.
-\texttt{pure\_ltd} remains a diagnostic/testing object for the 3D-representation
-CLI and is not the production formula for unsplit repeated propagators with
-non-trivial numerator dependence.  The feature-gated \texttt{old\_cff} object is
-kept only inside the \texttt{three-dimensional-reps} crate for legacy parity
-tests.
+\texttt{CFF} and \texttt{LTD}.  Both public paths use the derivative-free
+repeated-channel construction for true repeated denominator channels, and
+therefore agree with the split-mass LTD limit without differentiating the
+numerator.  A repeated high-power CFF graph can consequently have the same
+serialized expression as the LTD graph; the difference between CFF and LTD is
+then only the requested production role and any auxiliary projection metadata
+used by gammaLoop.  Ordinary non-repeated CFF still uses the pure CFF residue
+formula.  \texttt{pure\_ltd} remains a diagnostic/testing object for the
+3D-representation CLI and is not the production formula for unsplit repeated
+propagators with non-trivial numerator dependence.  The feature-gated
+\texttt{old\_cff} object is kept only inside the \texttt{three-dimensional-reps}
+crate for legacy parity tests.
 
 \paragraph{Uniform \(E\)-surface characterization for LU cuts.}
 Local unitarity cut selection and threshold counterterm construction must not

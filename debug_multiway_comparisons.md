@@ -85,16 +85,16 @@ env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
 The previous sign-only GL38/GL46 failures are now green. Earlier GL24 and GL35
 local-UV drift failures also remain green.
 
-Full selected GammaLoop suite status:
+Full selected GammaLoop suite status before the 3Drep fixture refresh:
 
 ```text
 just test_gammaloop
 
-1131 tests run: 1089 passed, 42 failed, 271 skipped
+1131 tests run: 1096 passed, 35 failed, 271 skipped
 ```
 
 Those failures are outside the now-green slow scalar cross-section matrix. The
-important buckets are:
+important remaining buckets are:
 
 - forward-scattering LU generation tests where the local-series external
   coordinate selector finds two equivalent initial-state candidates with the
@@ -102,7 +102,6 @@ important buckets are:
 - the divergent/amplitude-like scalar bubble local/integrated UV inspect tests;
 - generated forward cross-section smoke tests that currently hit the same
   coordinate ambiguity;
-- 3Drep high-power CFF/LTD parity tests and the old Python 3Drep case matrix;
 - amplitude profile-bulk tests;
 - spin-sum cross-section generation tests that also stop at the coordinate
   ambiguity;
@@ -111,9 +110,43 @@ important buckets are:
 The checkpoint should therefore be read as a scalar cross-section multi-way
 local-inspect parity checkpoint, not as a full-suite clean point.
 
+## 3Drep Broad Revisit
+
+The broad 3Drep tests were rerun after the CFF repeated/high-power fixes. The
+remaining failure was not numerical parity: the imported `box_pow3` fixture
+still expected the old pure-CFF shape (`62` CFF orientations). The fixed
+generator now routes repeated high-power CFF through the same derivative-free
+bounded repeated-channel expression as LTD for that case, giving `17` CFF
+orientations, `17` LTD orientations, and identical CFF/LTD expression JSON.
+The fixture now asserts that shared expression explicitly.
+
+Validated 3Drep commands:
+
+```text
+cargo test -p three-dimensional-reps --features eval -- --nocapture
+
+60 passed, 0 failed
+```
+
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(/test_3d_reps/)' --no-capture --retries 0
+
+17 tests run: 17 passed, 250 skipped
+```
+
+The old Python matrix remains green inside that run:
+
+```text
+old Python 3Drep case matrix: 310 ok, 0 failed, 310 total
+```
+
 ## Theory Anchor
 
-`docs/3dreps/generalised_ltd.tex` states that local unitarity cut selection and
+`docs/3Dreps/generalised_ltd.tex` states that local unitarity cut selection and
 threshold counterterm construction should use a representation-neutral
 canonical causal `E`-surface catalogue. CFF exposes this catalogue directly.
 LTD may contain additional `H`-surfaces, but those are not physical threshold
@@ -181,10 +214,7 @@ than by toggling signs graph by graph.
    - fix only the shared source-basis construction if the mismatch is in CFF
    local UV generation. Do not change the cross-section LU residue bridge unless
    the bubble reduction exposes the same graph/LMB invariant.
-4. Reassess the broad 3Drep high-power failures after the bubble/source-basis
-   fix. They should be handled through the same source and numerator
-   localization machinery, not through separate CFF/LTD special cases.
-5. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
+4. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
    scalar cross-section sweep after each principled fix. The repeated-channel
    descriptor is shared and should remain a single implementation rather than a
    special-case branch.
