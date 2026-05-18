@@ -80,6 +80,77 @@ pub struct ThreeDRepMassShift {
     pub shifted_mass: f64,
 }
 
+#[derive(Clone, Debug)]
+struct ThreeDRepeatedChannelMember {
+    source_edge_id: EdgeIndex,
+    relative_sign: i32,
+}
+
+#[derive(Clone, Debug)]
+struct ThreeDRepeatedChannel {
+    members: Vec<ThreeDRepeatedChannelMember>,
+}
+
+impl ThreeDRepeatedChannel {
+    fn duplicate_signature_excess(&self) -> usize {
+        self.members.len().saturating_sub(1)
+    }
+
+    fn channel_routing_sign(&self) -> i64 {
+        let Some(reference_sign) = self.members.first().map(|member| member.relative_sign) else {
+            return 1;
+        };
+        i64::from(
+            self.members
+                .iter()
+                .map(|member| member.relative_sign * reference_sign)
+                .product::<i32>(),
+        )
+    }
+
+    fn residue_bridge_sign(&self) -> i64 {
+        if self.duplicate_signature_excess().is_multiple_of(2) {
+            1
+        } else {
+            self.channel_routing_sign()
+        }
+    }
+
+    fn source_duplicate_bridge_sign(&self) -> i64 {
+        let Some(reference_sign) = self.members.first().map(|member| member.relative_sign) else {
+            return 1;
+        };
+        if self
+            .members
+            .iter()
+            .any(|member| member.relative_sign != reference_sign)
+        {
+            return 1;
+        }
+        if self.duplicate_signature_excess().is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
+    }
+
+    fn normalized_support_edges(&self, raised_edge_groups: &[Vec<EdgeIndex>]) -> Vec<EdgeIndex> {
+        self.members
+            .iter()
+            .map(|member| member.source_edge_id)
+            .map(|edge_id| {
+                raised_edge_groups
+                    .iter()
+                    .find(|group| group.contains(&edge_id))
+                    .and_then(|group| group.first().copied())
+                    .unwrap_or(edge_id)
+            })
+            .sorted()
+            .dedup()
+            .collect()
+    }
+}
+
 // impl Deref for Graph {
 //     type Target = HedgeGraph<Edge, Vertex>;
 // }
@@ -103,30 +174,55 @@ impl Graph {
             ParamBuilder::new(self, model, &loop_momentum_basis, additional_params);
     }
 
-    pub(crate) fn three_d_global_sign_exponent(&self) -> usize {
+    fn active_three_d_repeated_channels(&self) -> Vec<ThreeDRepeatedChannel> {
         let parsed = self
             .to_three_d_parsed_graph()
             .expect("GammaLoop graph should convert to generalized 3D-rep input");
-        let source_to_local = self
+        let local_to_source = self
             .energy_edge_index_map(&parsed)
             .expect("GammaLoop graph source should expose an energy-edge map")
-            .internal_to_local();
+            .internal;
+        let source_to_local = local_to_source
+            .iter()
+            .map(|(local, source)| (*source, *local))
+            .collect::<BTreeMap<_, _>>();
         let preserved_edges = self
             .external_tree_4d_denominator_edges()
             .into_iter()
             .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
             .collect_vec();
 
-        let duplicate_signature_excess = three_dimensional_reps::repeated_groups(&parsed)
+        three_dimensional_reps::repeated_groups(&parsed)
             .into_iter()
-            .map(|group| {
-                group
+            .filter_map(|group| {
+                let members = group
                     .edge_ids
                     .into_iter()
-                    .filter(|edge_id| !preserved_edges.contains(edge_id))
-                    .count()
-                    .saturating_sub(1)
+                    .zip(group.relative_signs)
+                    .filter(|(edge_id, _)| !preserved_edges.contains(edge_id))
+                    .filter_map(|(edge_id, relative_sign)| {
+                        local_to_source
+                            .get(&edge_id)
+                            .copied()
+                            .map(|source_edge_id| ThreeDRepeatedChannelMember {
+                                source_edge_id: EdgeIndex(source_edge_id),
+                                relative_sign,
+                            })
+                    })
+                    .collect_vec();
+                (members.len() > 1).then_some(ThreeDRepeatedChannel { members })
             })
+            .collect()
+    }
+
+    pub(crate) fn three_d_global_sign_exponent(&self) -> usize {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        let duplicate_signature_excess = self
+            .active_three_d_repeated_channels()
+            .into_iter()
+            .map(|channel| channel.duplicate_signature_excess())
             .sum::<usize>();
 
         parsed.loop_names.len().saturating_sub(1) + duplicate_signature_excess
@@ -152,97 +248,38 @@ impl Graph {
         // channel. Copies with opposite canonical routing carry the channel
         // routing sign, but an order-p repeated denominator contributes that
         // orientation to residues only through the p - 1 derivative parity.
-        let parsed = self
-            .to_three_d_parsed_graph()
-            .expect("GammaLoop graph should convert to generalized 3D-rep input");
-        let source_to_local = self
-            .energy_edge_index_map(&parsed)
-            .expect("GammaLoop graph source should expose an energy-edge map")
-            .internal_to_local();
-        let preserved_edges = self
-            .external_tree_4d_denominator_edges()
+        self.active_three_d_repeated_channels()
             .into_iter()
-            .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
-            .collect_vec();
+            .map(|channel| channel.residue_bridge_sign())
+            .product()
+    }
 
-        three_dimensional_reps::repeated_groups(&parsed)
+    pub(crate) fn three_d_ltd_repeated_channel_source_bridge_sign(&self) -> i64 {
+        // Ordinary full-source LTD residues are compared to the CFF projection
+        // convention of the same source. An unselected same-routing repeated
+        // block leaves the duplicate-collapse parity in ordinary simple
+        // residues. Mixed-routing channels already carry their source
+        // orientation through the generated repeated-LTD channel routing; when
+        // those channels are selected, the derivative residue bridge and
+        // edge-support bridge below carry the remaining orientation.
+        self.active_three_d_repeated_channels()
             .into_iter()
-            .map(|group| {
-                let members = group
-                    .edge_ids
-                    .into_iter()
-                    .zip(group.relative_signs)
-                    .filter(|(edge_id, _)| !preserved_edges.contains(edge_id))
-                    .collect_vec();
-                let Some((_, reference_sign)) = members.first() else {
-                    return 1;
-                };
-                let channel_routing_sign = members
-                    .iter()
-                    .map(|(_, sign)| *sign * *reference_sign)
-                    .product::<i32>();
-                if (members.len() - 1).is_multiple_of(2) {
-                    1
-                } else {
-                    i64::from(channel_routing_sign)
-                }
-            })
+            .map(|channel| channel.source_duplicate_bridge_sign())
             .product()
     }
 
     pub(crate) fn three_d_ltd_repeated_channel_edge_support_signs(
         &self,
     ) -> BTreeMap<Vec<EdgeIndex>, i64> {
-        let parsed = self
-            .to_three_d_parsed_graph()
-            .expect("GammaLoop graph should convert to generalized 3D-rep input");
-        let local_to_source = self
-            .energy_edge_index_map(&parsed)
-            .expect("GammaLoop graph source should expose an energy-edge map")
-            .internal;
-        let source_to_local = local_to_source
-            .iter()
-            .map(|(local, source)| (*source, *local))
-            .collect::<BTreeMap<_, _>>();
-        let preserved_edges = self
-            .external_tree_4d_denominator_edges()
-            .into_iter()
-            .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
-            .collect_vec();
         let raised_edge_groups = self.get_raised_edge_groups();
 
-        three_dimensional_reps::repeated_groups(&parsed)
+        self.active_three_d_repeated_channels()
             .into_iter()
-            .filter_map(|group| {
-                let members = group
-                    .edge_ids
-                    .into_iter()
-                    .zip(group.relative_signs)
-                    .filter(|(edge_id, _)| !preserved_edges.contains(edge_id))
-                    .collect_vec();
-                if members.len() <= 1 {
-                    return None;
-                }
-                let reference_sign = members[0].1;
-                let sign = members
-                    .iter()
-                    .map(|(_, relative_sign)| *relative_sign * reference_sign)
-                    .product::<i32>();
-                let support_edges = members
-                    .into_iter()
-                    .filter_map(|(edge_id, _)| local_to_source.get(&edge_id).copied())
-                    .map(EdgeIndex)
-                    .map(|edge_id| {
-                        raised_edge_groups
-                            .iter()
-                            .find(|group| group.contains(&edge_id))
-                            .and_then(|group| group.first().copied())
-                            .unwrap_or(edge_id)
-                    })
-                    .sorted()
-                    .dedup()
-                    .collect_vec();
-                Some((support_edges, i64::from(sign)))
+            .map(|channel| {
+                (
+                    channel.normalized_support_edges(&raised_edge_groups),
+                    channel.channel_routing_sign(),
+                )
             })
             .collect()
     }

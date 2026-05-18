@@ -14,86 +14,102 @@ but no graph-specific or unexplained sign modifiers are allowed.
 
 ## Current Checkpoint
 
-The current implementation keeps LU residue metadata centralized in
-`CrossSectionGraph::residue_selector_for_raised_cut_group`. The LU residue
-plan separates:
+The scalar cross-section local inspect matrix is green at this checkpoint. The
+last source change centralizes active repeated-channel metadata in
+`Graph::active_three_d_repeated_channels()` and derives all repeated-channel
+bridges from that single source:
 
-- selected generated LTD `E`-surface denominator signs;
-- local-series denominator signs used for Laurent extraction;
-- CFF/LTD surface-family projection bridges;
-- positive-energy Cutkosky edge-flow orientation signs;
-- repeated-channel source-basis bridges;
-- direct-original prefactors, which are distinct from expanded-source residue
-  prefactors.
+- duplicate-signature excess for the global 3D sign exponent;
+- repeated-pole residue bridge signs;
+- normalized raised-edge support signs;
+- the ordinary full-source same-routing duplicate bridge used by simple LTD LU
+  direct-original residues.
 
-Two sign conclusions are now encoded in production code:
+The extra direct-original bridge is deliberately narrow. It applies only to
+unselected active repeated channels whose copies have the same canonical
+routing, where the full-source LTD residue must still be compared to the CFF
+projection convention of the same source. Mixed-routing channels already carry
+their source orientation in the generated repeated-LTD routing. When such a
+channel is selected, the repeated-pole derivative bridge and normalized
+edge-support bridge carry the remaining orientation.
 
-- Expanded-4D LTD UV-leading local sources use the same repeated-channel
-  source-basis bridge as finite cograph residues. The bridge is a property of
-  the reduced source basis, and UV rescaling can collapse distinct original
-  denominators onto the same equal-energy channel.
-- Ordinary simple direct-original LU cuts use their own resolved
-  Laurent-coordinate Jacobian. An unrelated repeated channel elsewhere in the
-  graph belongs to that repeated residue, not to this simple local series. The
-  repeated-channel bridge remains active for repeated residues and for explicit
-  simple cuts whose support spans repeated-channel supports.
-
-This is still a graph/LMB-derived construction. There are no GL-specific
-branches, no loop-number fudge factors, and no temporary
-`GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics in the touched Rust code.
+This keeps the scalar cross-section sign logic graph/LMB-derived. There are no
+GL-specific branches, no loop-number fudge factors, no production use of
+`graph_from_signature`, and no temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS`
+diagnostics in the touched Rust code.
 
 ## Validation Matrix
 
 Commands below were run with `INSTA_FORCE_PASS=1` so snapshot drift did not
-hide numerical parity failures. Generated `.snap.new` files were not accepted
-or staged at this checkpoint.
+hide numerical parity failures. Generated `.snap.new` files were removed and
+were not accepted as new references.
 
-Passing guardrail after the current direct-original sign cleanup:
-
-```text
-GL03 no numerator, GL03 q1, GL03 q7
-GL12 no numerator, GL12 q1, GL12 q7
-GL07, GL08, GL21 q1, GL23 no numerator, GL23 q1, GL23 q7
-GL24 no numerator, GL24 q1, GL24 q7
-GL35 no numerator, GL35 q1
-GL47
-
-18/18 passed
-```
-
-Interrupted broad slow scalar cross-section sweep:
+Focused repeated-channel guardrail:
 
 ```text
-122/143 tests run before manual cancellation
-117 passed
-4 real failures
-1 SIGTERM from cancellation
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc INSTA_FORCE_PASS=1 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E '<21 focused scalar inspect tests>' --no-capture --retries 0
+
+21 tests run: 21 passed, 246 skipped
 ```
 
-Real failures observed in that sweep:
+Focused crossing and mixed repeated-channel set:
 
 ```text
-quadratic_energy_numerators::GL38 q1_squared
-quadratic_energy_numerators::GL38 q7_squared
-quadratic_energy_numerators::GL46 q1_squared
-quadratic_energy_numerators::GL46 q7_squared
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc INSTA_FORCE_PASS=1 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E '<GL21, GL38, GL40, GL46 focused scalar inspect tests>' \
+  --no-capture --retries 0
+
+8 tests run: 8 passed, 259 skipped
 ```
 
-The GL46 q1 failure was inspected in the run output. It is a pure relative sign
-mismatch in `Original` for `LTD local-4D vs CFF local-3D`:
+Full slow scalar cross-section local inspect sweep:
 
 ```text
-group 0 event 1, cut_id 1
-FullMultiplicativeFactor matches
-ThresholdCounterterm { subset_index: 0 } is zero in both modes
-Original actual   = +2.6279245830775977e-9
-Original expected = -2.6279245830775977e-9
-event weight differs by the same sign
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc INSTA_FORCE_PASS=1 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(/scalar_3l_cross_section_inspects::slow/)' \
+  --no-capture --retries 0
+
+143 tests run: 143 passed, 124 skipped
 ```
 
-GL24 and GL35, which were the previous non-sign local-UV drift failures, are
-now green in the current guardrail. The remaining known failures are sign-only
-quadratic numerator cases in the GL38/GL46 family.
+The previous sign-only GL38/GL46 failures are now green. Earlier GL24 and GL35
+local-UV drift failures also remain green.
+
+Full selected GammaLoop suite status:
+
+```text
+just test_gammaloop
+
+1131 tests run: 1089 passed, 42 failed, 271 skipped
+```
+
+Those failures are outside the now-green slow scalar cross-section matrix. The
+important buckets are:
+
+- forward-scattering LU generation tests where the local-series external
+  coordinate selector finds two equivalent initial-state candidates with the
+  same external signature;
+- the divergent/amplitude-like scalar bubble local/integrated UV inspect tests;
+- generated forward cross-section smoke tests that currently hit the same
+  coordinate ambiguity;
+- 3Drep high-power CFF/LTD parity tests and the old Python 3Drep case matrix;
+- amplitude profile-bulk tests;
+- spin-sum cross-section generation tests that also stop at the coordinate
+  ambiguity;
+- one default quartic scalar snapshot drift when `INSTA_FORCE_PASS` is not set.
+
+The checkpoint should therefore be read as a scalar cross-section multi-way
+local-inspect parity checkpoint, not as a full-suite clean point.
 
 ## Theory Anchor
 
@@ -103,8 +119,8 @@ canonical causal `E`-surface catalogue. CFF exposes this catalogue directly.
 LTD may contain additional `H`-surfaces, but those are not physical threshold
 surfaces after the orientation sum.
 
-The implementation should identify LU cuts and threshold residues once from
-graph/LMB/linnet and canonical `E`-surface data, then map the selected residue
+The implementation identifies LU cuts and threshold residues once from
+graph/LMB/linnet and canonical `E`-surface data, then maps the selected residue
 variables back to the requested representation. Simple, raised, confluent,
 threshold, and expanded-4D UV sources should not use separate ad-hoc sign
 algorithms.
@@ -117,8 +133,11 @@ propagators.
 
 ## Sensitive Code Paths
 
+- `Graph::active_three_d_repeated_channels()` is the single repeated-channel
+  descriptor used for global 3D sign excess, residue bridges, source duplicate
+  bridges, and raised-edge support normalization.
 - `CrossSectionGraph::residue_selector_for_raised_cut_group` builds the LU
-  residue plan and is the main entry point to keep centralized.
+  residue plan and is the main cross-section entry point to keep centralized.
 - `CrossSectionGraph::lu_cut_edge_sets_with_cutkosky_signs` maps raised LU
   groups to positive-energy Cutkosky edge support and signs.
 - `CrossSectionGraph::simple_ltd_lu_cut_local_coordinate_signs` computes the
@@ -135,25 +154,37 @@ propagators.
   selection by representation and must remain LTD-expression-facing for LTD
   output.
 
-## Next Debugging Plan
+## Remaining Follow-Up
 
-1. Re-run a narrow GL38/GL46 diagnostic set with sign tracing restored only
-   locally and remove the trace before committing. Capture, for each failing
-   event, the residue selector signs, selected denominator signs, Cutkosky
-   orientation signs, local-series prefactor, direct-original prefactor, and
-   source-basis bridge.
-2. Classify GL38/GL46 by the same graph/LMB invariants used by the green
-   guardrails: simple vs repeated cut, mixed repeated-channel support, raised
-   support normalization, threshold enabled state, and numerator support. Do
-   not introduce graph-name conditionals.
-3. Compare GL38/GL46 against the green neighbors GL37/GL40/GL45/GL47. The
-   question is whether the remaining sign is attached to the numerator-induced
-   expanded-4D source basis, the direct-original simple local-series Jacobian,
-   or a Cutkosky orientation convention for a specific support type.
-4. Accept a change only if it can be phrased as a single construction in the
-   centralized residue plan. After any change, re-run the 18-test guardrail
-   above first, then the GL38/GL46 focused set, then the full slow scalar sweep.
-5. Before final handoff, run `cargo fmt`, `cargo check`, `just test_gammaloop`,
-   and the full slow scalar cross-section sweep. Do not stage generated
-   `.snap.new` files unless they are deliberately accepted as references after
-   the implementation is fixed.
+The scalar cross-section matrix no longer has a known multi-way local-inspect
+parity failure. The remaining work should proceed in dependency order rather
+than by toggling signs graph by graph.
+
+1. Fix the LU coordinate ambiguity generically. When multiple external
+   half-edges represent the same forward-scattering energy shift, the selected
+   coordinate should be chosen from a canonical external half-edge orbit, not by
+   failing uniqueness. This belongs in the local coordinate construction, using
+   graph/LMB data and the `is_cut` half-edge interpretation.
+2. Re-run the failing LU/evaluation/spin-sum smoke tests and then the scalar
+   cross-section guardrails to ensure the ambiguity fix does not perturb the
+   now-green scalar inspect matrix.
+3. Address the amplitude-like divergent scalar bubble CFF local-UV behavior
+   with a small first-principles comparison:
+
+   - evaluate the original bubble graph in CFF and LTD at the same sample and
+   confirm the common original-integrand reference.
+   - extract the CFF 3D local UV, CFF expanded-4D local UV, and LTD expanded-4D
+   local UV limits term by term before event assembly.
+   - classify any mismatch as one of: source-basis projection sign, repeated or
+   duplicate-channel collapse, integrated/local UV normalization, or numerator
+   localization.
+   - fix only the shared source-basis construction if the mismatch is in CFF
+   local UV generation. Do not change the cross-section LU residue bridge unless
+   the bubble reduction exposes the same graph/LMB invariant.
+4. Reassess the broad 3Drep high-power failures after the bubble/source-basis
+   fix. They should be handled through the same source and numerator
+   localization machinery, not through separate CFF/LTD special cases.
+5. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
+   scalar cross-section sweep after each principled fix. The repeated-channel
+   descriptor is shared and should remain a single implementation rather than a
+   special-case branch.

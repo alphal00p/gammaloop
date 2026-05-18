@@ -164,6 +164,7 @@ struct LuResiduePlanComponents<'a> {
     lu_cut_signs: LuCutResidueSigns,
     full_graph_projection_bridge: i64,
     ltd_repeated_channel_bridge_sign: i64,
+    ltd_repeated_channel_source_bridge_sign: i64,
     repeated_channel_edge_support_bridge: i64,
     simple_surface_family_sign: i64,
     repeated_residue_prefactor_sign: i64,
@@ -273,10 +274,11 @@ impl LuResiduePlanComponents<'_> {
                         .product::<i64>()
             } else {
                 // Ordinary simple cuts are fixed by their own resolved
-                // Laurent-coordinate Jacobian. An unrelated repeated channel
-                // elsewhere in the graph is a property of that repeated
-                // residue, not of this direct original local series.
-                self.local_series_prefactor_sign()
+                // Laurent-coordinate Jacobian and by the full-source
+                // same-routing duplicate convention. The latter is separate
+                // from the derivative bridge used by selected repeated
+                // residues.
+                self.local_series_prefactor_sign() * self.ltd_repeated_channel_source_bridge_sign
             }
         } else {
             self.full_graph_projection_bridge
@@ -1510,6 +1512,8 @@ impl CrossSectionGraph {
         let ltd_repeated_channel_bridge_sign = self
             .graph
             .three_d_ltd_repeated_channel_residue_bridge_sign();
+        let ltd_repeated_channel_source_bridge_sign =
+            self.graph.three_d_ltd_repeated_channel_source_bridge_sign();
         let repeated_channel_edge_support_bridge =
             self.repeated_ltd_lu_cut_edge_support_bridge_sign(&lu_cut_signs.edge_sets)?;
         let repeated_local_series_orientation_sign = if is_simple_lu_cut {
@@ -1535,6 +1539,7 @@ impl CrossSectionGraph {
             lu_cut_signs,
             full_graph_projection_bridge,
             ltd_repeated_channel_bridge_sign,
+            ltd_repeated_channel_source_bridge_sign,
             repeated_channel_edge_support_bridge,
             simple_surface_family_sign: simple_ltd_lu_cut_surface_family_sign,
             repeated_residue_prefactor_sign,
