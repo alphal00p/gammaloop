@@ -5,7 +5,7 @@ use ahash::HashMapExt;
 use ahash::HashSet;
 use idenso::IndexTooling;
 use idenso::dirac::AGS;
-use idenso::metric::PermuteWithMetric;
+use idenso::shorthands::metric::PermuteWithMetric;
 use insta::assert_snapshot;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeData;

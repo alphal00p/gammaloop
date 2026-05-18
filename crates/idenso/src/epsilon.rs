@@ -6,7 +6,7 @@ use symbolica::{
     coefficient::CoefficientView,
 };
 
-use crate::metric::MetricSimplifier;
+use crate::shorthands::metric::MetricSimplifier;
 
 /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
 /// Symbolica canonicalize argument order and annihilate repeated arguments.

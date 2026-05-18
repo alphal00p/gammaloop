@@ -1,7 +1,10 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{dirac::GammaSimplifier, metric::MetricSimplifier, schoonschip::Schoonschip};
+use idenso::{
+    dirac::GammaSimplifier, shorthands::metric::MetricSimplifier,
+    shorthands::schoonschip::Schoonschip,
+};
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,

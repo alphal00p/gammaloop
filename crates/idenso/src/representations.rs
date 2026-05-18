@@ -8,7 +8,7 @@ use spenso::{
 use spenso_macros::SimpleRepresentation;
 use symbolica::atom::Atom;
 
-use super::{color::CS, dirac::AGS, metric::MS, rep_symbols::RS};
+use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
 
 #[cfg(feature = "python")]
 use pyo3::pyfunction;

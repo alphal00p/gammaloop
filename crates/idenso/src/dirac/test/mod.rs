@@ -10,7 +10,7 @@ use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
 
-use crate::metric::MetricSimplifier;
+use crate::shorthands::metric::MetricSimplifier;
 use crate::{gamma, gamma0, gamma5, u, v};
 
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {

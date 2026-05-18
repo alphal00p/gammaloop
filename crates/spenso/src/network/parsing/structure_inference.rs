@@ -196,8 +196,8 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// The dispatcher is intentionally shallow: sums, products, powers, and
     /// functions each have their own convention below. Scalar syntax is carried
     /// internally as `OrderedStructure::empty()` and converted to
-    /// `EmptyStructure` only at this public leaf boundary.
-    pub fn from_syntactic_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
+    /// `EmptyStructure` only at this leaf boundary.
+    fn from_syntactic_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
         let structure = Self::syntactic_structure_from_atom(value)?;
         if structure.is_scalar() {
             Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
@@ -318,7 +318,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     {
         let network = value
             .parse_to_atom_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand,
+                shorthand_parsing: ShorthandParsing::expand_all(),
                 ..Default::default()
             })
             .map_err(|err| StructureError::ParsingError(err.to_string()))?;

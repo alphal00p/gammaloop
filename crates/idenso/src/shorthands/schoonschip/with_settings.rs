@@ -13,7 +13,7 @@ use symbolica::{
     id::Replacement,
 };
 
-use crate::{W_, metric::not_slot};
+use crate::{W_, shorthands::metric::not_slot};
 
 use super::{api::Schoonschip, settings::SchoonschipSettings};
 

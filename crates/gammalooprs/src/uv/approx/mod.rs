@@ -13,7 +13,7 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 

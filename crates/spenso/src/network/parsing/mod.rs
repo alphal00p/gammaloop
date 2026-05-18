@@ -37,20 +37,139 @@ pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShorthandParsing {
-    /// Expand shorthand notation into an explicit network.
-    Expand,
+    /// Expand selected shorthand notation into explicit network structure.
+    Expand {
+        /// Controls compact Schoonschip vector materialization.
+        schoonschip: SchoonschipExpansionMode,
+        /// Expand `trace(...)` topology into explicit closed links.
+        trace: bool,
+        /// Expand `chain(...)` topology into explicit open links.
+        chain: bool,
+    },
     /// Keep shorthand notation as a leaf and infer its exposed structure.
     Opaque { inference: StructureInferenceMode },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SchoonschipExpansionMode {
+    /// Expand compact vector products such as `dot(p(rep), q(rep))` or
+    /// `g(p(rep), q(rep))` into explicit rank-one tensor factors.
+    pub inner_products: bool,
+
+    /// Expand compact vector arguments, for example
+    /// `T(..., p(rep), ...)` into `T(..., slot, ...) * p(slot)`.
+    pub expand_schoonship: bool,
+
+    /// Expand compact Schoonschip notation inside `chain(...)` and `trace(...)`
+    /// factors.
+    pub expand_inside_chains: bool,
+}
+
+impl Default for SchoonschipExpansionMode {
+    fn default() -> Self {
+        Self::full()
+    }
+}
+
+impl SchoonschipExpansionMode {
+    /// Expand every compact Schoonschip shorthand recognized by the parser.
+    pub const fn full() -> Self {
+        Self {
+            inner_products: true,
+            expand_schoonship: true,
+            expand_inside_chains: true,
+        }
+    }
+
+    /// Keep all compact Schoonschip shorthand opaque.
+    pub const fn none() -> Self {
+        Self {
+            inner_products: false,
+            expand_schoonship: false,
+            expand_inside_chains: false,
+        }
+    }
+
+    /// Return this mode with chain/trace factor materialization disabled.
+    pub const fn outside_chains(self) -> Self {
+        Self {
+            expand_inside_chains: false,
+            ..self
+        }
+    }
+
+    fn any(self) -> bool {
+        self.inner_products || self.expand_schoonship || self.expand_inside_chains
+    }
+
+    fn for_chain_like_root(self) -> Self {
+        if self.expand_inside_chains {
+            self
+        } else {
+            Self::none()
+        }
+    }
+}
+
+impl Default for ShorthandParsing {
+    fn default() -> Self {
+        Self::expand_all()
+    }
+}
+
 impl ShorthandParsing {
+    /// Expand all shorthand families. This matches the historical default.
+    pub const fn expand_all() -> Self {
+        Self::Expand {
+            schoonschip: SchoonschipExpansionMode::full(),
+            trace: true,
+            chain: true,
+        }
+    }
+
+    /// Expand only compact Schoonschip notation while keeping chain and trace
+    /// topology opaque.
+    pub const fn expand_schoonschip_only() -> Self {
+        Self::Expand {
+            schoonschip: SchoonschipExpansionMode::full(),
+            trace: false,
+            chain: false,
+        }
+    }
+
     pub fn expands(self) -> bool {
-        matches!(self, Self::Expand)
+        matches!(self, Self::Expand { .. })
+    }
+
+    pub(super) fn expands_chain(self) -> bool {
+        matches!(self, Self::Expand { chain: true, .. })
+    }
+
+    pub(super) fn expands_trace(self) -> bool {
+        matches!(self, Self::Expand { trace: true, .. })
+    }
+
+    pub(super) fn schoonschip_expansion(self) -> Option<SchoonschipExpansionMode> {
+        match self {
+            Self::Expand { schoonschip, .. } => Some(schoonschip),
+            Self::Opaque { .. } => None,
+        }
+    }
+
+    pub(super) fn with_schoonschip_expansion(self, schoonschip: SchoonschipExpansionMode) -> Self {
+        match self {
+            Self::Expand { trace, chain, .. } => Self::Expand {
+                schoonschip,
+                trace,
+                chain,
+            },
+            Self::Opaque { inference } => Self::Opaque { inference },
+        }
     }
 
     fn opaque_inference(self) -> Option<StructureInferenceMode> {
         match self {
-            Self::Expand => None,
+            Self::Expand { .. } => None,
             Self::Opaque { inference } => Some(inference),
         }
     }
@@ -99,9 +218,9 @@ pub struct ParseSettings {
 
     /// Selects how shorthand notation is represented in the parsed network.
     ///
-    /// `Expand` turns shorthand such as compact dot products, chains, traces,
-    /// and Schoonschip vector notation into explicit graph structure. Fresh
-    /// dummies created by this lowering are local to the expansion.
+    /// `Expand` turns the selected shorthand families into explicit graph
+    /// structure. Fresh dummies created by this lowering are local to the
+    /// expansion.
     ///
     /// `Opaque` keeps shorthand as a leaf tensor or scalar. Its inference mode
     /// controls whether the exposed structure comes from a fast syntactic walk
@@ -134,7 +253,7 @@ impl Default for ParseSettings {
             take_first_term_from_sum: false,
             depth_limit: None,
             depth_is_product_depth: true,
-            shorthand_parsing: ShorthandParsing::Expand,
+            shorthand_parsing: ShorthandParsing::default(),
             parse_composite_scalars_as_tensors: false,
             strict_tensor_filter: StrictTensorFilter::Tagged,
         }
@@ -145,6 +264,11 @@ impl ParseSettings {
     /// Return these settings with the ordinary tensor-head filter replaced.
     pub fn with_strict_tensor_filter(mut self, filter: StrictTensorFilter) -> Self {
         self.strict_tensor_filter = filter;
+        self
+    }
+
+    fn with_schoonschip_expansion(mut self, mode: SchoonschipExpansionMode) -> Self {
+        self.shorthand_parsing = self.shorthand_parsing.with_schoonschip_expansion(mode);
         self
     }
 }

@@ -356,7 +356,7 @@ impl TryFrom<AtomView<'_>> for Aind {
 mod tests {
     use idenso::{
         dirac::AGS,
-        metric::MetricSimplifier,
+        shorthands::metric::MetricSimplifier,
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
     use spenso::{

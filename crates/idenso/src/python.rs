@@ -1,7 +1,7 @@
 use crate::color::{ColorSimplifier, SelectiveExpand};
 use crate::dirac::GammaSimplifier;
-use crate::metric::MetricSimplifier;
 use crate::representations::initialize;
+use crate::shorthands::metric::MetricSimplifier;
 
 use pyo3::{
     Bound, PyResult, Python,

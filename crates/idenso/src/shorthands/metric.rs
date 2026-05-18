@@ -1,9 +1,8 @@
 use std::{collections::HashSet, sync::LazyLock};
 
-use crate::{
-    schoonschip::Schoonschip,
-    tensor::{SymbolicNetParse, SymbolicTensor},
-};
+use crate::tensor::{SymbolicNetParse, SymbolicTensor};
+
+use super::schoonschip::Schoonschip;
 use spenso::{
     network::{
         Network,
@@ -34,7 +33,7 @@ use symbolica::{
 
 use eyre::Result;
 
-use super::rep_symbols::RS;
+use crate::rep_symbols::RS;
 
 pub struct MetricSymbols {
     pub dim: Symbol,

@@ -118,7 +118,7 @@ where
         symbolica::atom::Symbol: Display,
     {
         let mut expanded_settings = settings.clone();
-        expanded_settings.shorthand_parsing = ShorthandParsing::Expand;
+        expanded_settings.shorthand_parsing = ShorthandParsing::expand_all();
 
         let mut network =
             Network::<NetworkStore<T, Sc>, K, symbolica::atom::Symbol, Aind>::try_from_view_with_function_library::<

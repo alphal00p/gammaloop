@@ -1,4 +1,4 @@
-use idenso::{dirac::GammaSimplifier, schoonschip::Schoonschip};
+use idenso::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
 use symbolica::parse_lit;
 
 use crate::{

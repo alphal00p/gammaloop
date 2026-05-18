@@ -13,7 +13,7 @@ use gammalooprs::{
 use idenso::{
     color::{CS, ColorSimplifier},
     dirac::GammaSimplifier,
-    metric::MetricSimplifier,
+    shorthands::metric::MetricSimplifier,
 };
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::{

@@ -42,6 +42,13 @@ fn opaque_expanded_settings() -> ParseSettings {
     }
 }
 
+fn schoonschip_only_settings() -> ParseSettings {
+    ParseSettings {
+        shorthand_parsing: ShorthandParsing::expand_schoonschip_only(),
+        ..Default::default()
+    }
+}
+
 #[test]
 fn parse_chain_as_opaque_tensor() {
     let rep = mink4();
@@ -399,6 +406,25 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
 
     let parsed = expr
         .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert!(parsed.graph.n_nodes() > 1);
+    assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
+fn schoonschip_only_expands_compact_vectors() {
+    let rep = mink4();
+    let expr = tensor!(
+        F,
+        slot!(rep, i).to_atom(),
+        vector!(compact_p, rep.to_symbolic([])),
+        slot!(rep, j).to_atom()
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&schoonschip_only_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
