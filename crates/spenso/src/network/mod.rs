@@ -2014,7 +2014,7 @@ where
                 NetworkLeaf::TensorTermSum(terms) => {
                     return Ok(ExecutionResult::Val(Cow::Owned(tensor_terms_owned(terms)?)));
                 }
-                NetworkLeaf::LibraryKey(_) => {
+                NetworkLeaf::LibraryKey { .. } => {
                     let less = self.graph.get_lib_data(lib, nodeid).unwrap();
                     return Ok(ExecutionResult::Val(Cow::Owned(less)));
                 }
