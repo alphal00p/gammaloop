@@ -181,20 +181,24 @@ and sink half-edge endpoints, then pass edge items to `graph.build`.
 `graph.build` accepts both comma-separated items and ordinary Typst code
 blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; they are
 resolved before the wire format is sent to the Rust plugin. Numeric `id`
-arguments are order/index overrides. The `payload` argument on graphs, nodes,
-edges, sources, and sinks is opaque Typst metadata: Typst CBOR-encodes it before
-the Rust plugin boundary, Rust archives the bytes without inspecting them, and
-Typst decodes it again in `graph.info`, `graph.nodes`, and `graph.edges`. The
-`label` convenience argument on nodes and edges is display content stored as
-`payload.label`; use `statements: (label: "...")` when a flat metadata label
-string is needed. Statements are flat metadata used by DOT; they cannot nest.
-Values are scalar strings/numbers/booleans. Use `payload` for structured Typst
-data or content.
+arguments are order/index overrides. On nodes, edges, sources, and sinks, extra
+named arguments are captured as opaque Typst payload fields:
+`edge(source(<a>, style: physics.source-stroke()), sink(<b>), particle: "g")`
+stores `(style: ..)` in the source payload and `(particle: "g")` in the edge
+payload. Typst CBOR-encodes payloads before the Rust plugin boundary, Rust
+archives the bytes without inspecting them, and Typst decodes them again in
+`graph.info`, `graph.nodes`, and `graph.edges`. The `label` convenience argument
+on nodes and edges is display content stored as `payload.label`; use
+`statements: (label: "...")` when a flat metadata label string is needed.
+Statements are flat metadata used by DOT; they cannot nest. Values are scalar
+strings/numbers/booleans. Use payload fields for structured Typst data or
+content.
 
 `graph.build` and `graph.parse` also accept `default-node-payload`,
 `default-edge-payload`, `default-source-payload`, and `default-sink-payload`.
-These defaults are merged into the corresponding payloads; explicit payload
-fields on a node, edge, source, or sink override the defaults. For drawing, the
+These defaults are merged into the corresponding payloads; captured payload
+fields on nodes, edges, sources, and sinks override the defaults. For drawing,
+the
 physics helpers read `payload.style` on source and sink half-edges and
 `payload.display-label`/`payload.label` on edges:
 
@@ -202,11 +206,15 @@ physics helpers read `payload.style` on source and sink half-edges and
 #let g = build({
   node(<a>, label: [a])
   node(<b>, label: [b])
-  edge(source(<a>), <e>, sink(<b>), label: [$p$])
+  edge(
+    source(<a>, style: physics.source-stroke(c: red)),
+    <e>,
+    sink(<b>, style: physics.sink-stroke(c: blue)),
+    label: [$p$],
+    particle: "g",
+  )
 },
   default-edge-payload: (kind: "propagator"),
-  default-source-payload: (style: physics.source-stroke(c: red)),
-  default-sink-payload: (style: physics.sink-stroke(c: blue)),
 )
 #let callbacks = physics.style()
 #draw(
@@ -456,12 +464,14 @@ Optional labels can be built from edge metadata with `show-edge-index`,
     source(<a>),
     <fermion-main>,
     sink(<c>),
-    statements: (particle: "fermion", id: "7"),
+    id: 7,
+    particle: "fermion",
   )
   edge(
     source(<c>),
     <fermion-out>,
-    statements: (particle: "fermion", id: "8"),
+    id: 8,
+    particle: "fermion",
   )
 },
   name: "physics",
@@ -511,10 +521,11 @@ Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
 so the layer is drawn on the same side of the curve as the edge label.
 
 Payload defaults are also the global styling hook for all sources, sinks,
-nodes, and edges. More specific data can be added with explicit payloads on the
-item or by running `graph.map`/`graph.eval-fields` after construction. This
-keeps evaluated Typst values in the opaque payload channel instead of adding
-renderer-specific eval fields to the graph spec:
+nodes, and edges. More specific data can be added with captured named arguments
+on node, edge, source, and sink items, or by running
+`graph.map`/`graph.eval-fields` after construction. This keeps evaluated Typst
+values in the opaque payload channel instead of adding renderer-specific eval
+fields to the graph spec:
 
 ```typ
 #let g = build({
@@ -525,7 +536,7 @@ renderer-specific eval fields to the graph spec:
     <a-c>,
     sink(<c>),
     label: [a-c],
-    payload: (kind: "highlight"),
+    kind: "highlight",
   )
 },
   name: "demo",

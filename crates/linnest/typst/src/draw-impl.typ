@@ -183,6 +183,11 @@
   }
 }
 
+#let _payload-fields(record) = {
+  let payload = record.at("payload", default: none)
+  if type(payload) == dictionary { payload } else { (:) }
+}
+
 #let _pattern-name(style) = _style-value(style, "pattern")
 
 #let _has-pattern(style) = {
@@ -1006,6 +1011,7 @@
           let node-data = (
             scope
               + v.statements
+              + _payload-fields(v)
               + (
                 vid: i,
                 node: node,
@@ -1062,6 +1068,7 @@
           let edge-data = (
             scope
               + data
+              + _payload-fields(edge)
               + (
                 eid: eid,
                 edge: edge,
