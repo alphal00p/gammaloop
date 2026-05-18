@@ -1,3 +1,5 @@
+#import "graph.typ" as graph-module
+
 #let _plugin = plugin("../linnest.wasm")
 
 /// Construct an subgraph object from a base62 label.
@@ -14,11 +16,11 @@
 /// ```
 /// -> bytes
 #let label(
-  /// Graph object whose half-edge set the label refers to. -> bytes
+  /// Graph object whose half-edge set the label refers to. -> dictionary
   graph,
   /// Base62 subgraph label returned by @to-label or produced by Linnest. -> string
   label,
-) = _plugin.graph_archived_subgraph(bytes(graph), cbor.encode(label))
+) = _plugin.graph_archived_subgraph(graph-module.graph-bytes(graph), cbor.encode(label))
 
 /// Construct an subgraph object from a boolean hedge array.
 ///
@@ -33,11 +35,11 @@
 /// ```
 /// -> bytes
 #let bits(
-  /// Graph object whose half-edge order defines the bit array. -> bytes
+  /// Graph object whose half-edge order defines the bit array. -> dictionary
   graph,
   /// Boolean array selecting half edges by graph half-edge index. -> array
   bits,
-) = _plugin.graph_archived_subgraph(bytes(graph), cbor.encode(bits))
+) = _plugin.graph_archived_subgraph(graph-module.graph-bytes(graph), cbor.encode(bits))
 
 /// Construct an subgraph object from a DOT compass point such as `"n"` or
 /// `"s"`.
@@ -52,12 +54,12 @@
 /// ```
 /// -> bytes
 #let compass(
-  /// Graph object to filter by half-edge compass statement. -> bytes
+  /// Graph object to filter by half-edge compass statement. -> dictionary
   graph,
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> string
   compass,
 ) = {
-  _plugin.graph_archived_compass_subgraph(bytes(graph), cbor.encode(compass))
+  _plugin.graph_archived_compass_subgraph(graph-module.graph-bytes(graph), cbor.encode(compass))
 }
 
 /// Convert an subgraph object to its base62 label.

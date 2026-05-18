@@ -1,3 +1,4 @@
+#import "graph.typ" as graph-module
 #import "subgraph.typ" as subgraph-module
 
 #let _plugin = plugin("../linnest.wasm")
@@ -10,11 +11,11 @@
 /// tree placement, or `"dot"` for a layered directed placement.
 ///
 /// ```example
-/// #let g = graph.parse("digraph partial { a:s -> b:s;a -> b;a -> b; b:s -> c:s; c:s -> d:s; d:s -> a:s }").at(0)
+/// #let g = graph.parse("digraph partial { a -> b;a -> b;a:s -> b:s; b:s -> c:s; c:s -> d:s; d:s -> a:s }").at(0)
 /// #let south = subgraph.compass(g,"s")
 /// #let gf = layout(layout(g, layout-algo: "force"), layout-algo: "tree", layout-nodes: "fixed",subgraph:south)
-/// #let ga = layout(g, layout-algo: "anneal")
-/// #let gt = layout(layout(g, layout-algo: "tree",layout-roots: (2)), layout-algo: "anneal", layout-nodes: "fixed",gamma-ee:0.1,gamma-ev:1.5,beta:20,length-scale:0.4)
+/// #let ga = layout(g, layout-algo: "force")
+/// #let gt = layout(layout(g, layout-algo: "tree",layout-roots: (2)), layout-algo: "anneal", layout-nodes: "fixed",gamma-ee:0.1,gamma-ev:.75,beta:5,length-scale:0.4)
 /// #grid(columns: 3, gutter: 2cm, draw(gf), draw(ga), draw(gt))
 ///
 /// ```
@@ -25,10 +26,10 @@
 /// #let g = layout(g, layout-algo: "tree", subgraph: tree)
 /// #graph.edges(g).map(edge => edge.pos)
 /// ```
-/// -> bytes
+/// -> dictionary
 #let layout(
   /// Graph object returned by `graph.build` or `graph.parse`.
-  /// -> bytes
+  /// -> dictionary
   graph,
   /// Optional subgraph object to lay out. With `"tree"` and `"dot"`, other
   /// edges are drawn from the resulting node positions as straight lines. With
@@ -199,5 +200,6 @@
   if subgraph != none {
     settings.insert("subgraph", subgraph-module.to-label(subgraph))
   }
-  _plugin.layout_parsed_graph(bytes(graph), cbor.encode(settings))
+  let graph-bytes = _plugin.layout_parsed_graph(graph-module.graph-bytes(graph), cbor.encode(settings))
+  graph-module.with-bytes(graph, graph-bytes)
 }

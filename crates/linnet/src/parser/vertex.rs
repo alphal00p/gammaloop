@@ -141,9 +141,9 @@ impl Display for DotVertexData {
         //     write!(f, "name={id}")?;
         // }
         for (key, value) in &self.statements {
-            // if key == "name" {
-            //     continue;
-            // }
+            if key.starts_with("__linnest-") {
+                continue;
+            }
             if !first {
                 write!(f, " ")?;
             }

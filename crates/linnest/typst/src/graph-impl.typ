@@ -2,132 +2,104 @@
 
 #let _plugin = plugin("../linnest.wasm")
 
-#let _encode-data-value(value) = {
-  if type(value) == content {
-    (linnest-data-kind: "content", value: cbor.encode(value))
-  } else if type(value) == array {
-    value.map(_encode-data-value)
-  } else if type(value) == dictionary {
-    let result = (:)
-    for key in value.keys() {
-      result.insert(key, _encode-data-value(value.at(key)))
-    }
-    result
-  } else {
-    value
+#let _graph-kind = "linnest-graph"
+
+#let _empty-native-data() = (
+  graph: none,
+  nodes: (),
+  edges: (),
+  hedges: (),
+)
+
+#let _is-graph(value) = type(value) == dictionary and value.at("linnest-kind", default: none) == _graph-kind
+
+#let _assert-graph(graph) = {
+  if not _is-graph(graph) {
+    panic("graph: expected a Linnest graph object returned by graph.build or graph.parse")
   }
+  graph
 }
 
-#let _encode-data(value) = if value == none { none } else { cbor.encode(_encode-data-value(value)) }
+#let graph-bytes(graph) = _assert-graph(graph).bytes
 
-#let _data-bytes(value) = if type(value) == array { bytes(value) } else { value }
+#let _native-data(graph) = _assert-graph(graph).native-data
 
-#let _math-text-source(text_) = "\"" + text_.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+#let _as-bytes(value) = if type(value) == array { bytes(value) } else { value }
 
-#let _sequence-content(children, decode-content) = {
-  let result = []
-  for child in children {
-    result += decode-content(child)
+#let _graph-object(graph-bytes, native-data: _empty-native-data()) = (
+  linnest-kind: _graph-kind,
+  bytes: _as-bytes(graph-bytes),
+  native-data: native-data,
+)
+
+#let with-bytes(graph, graph-bytes) = _graph-object(graph-bytes, native-data: _native-data(graph))
+
+#let _array-at(values, index) = if index == none {
+  none
+} else if type(values) == array {
+  values.at(index, default: none)
+} else {
+  none
+}
+
+#let _array-set(values, index, value) = {
+  let result = ()
+  let len = calc.max(values.len(), index + 1)
+  for i in range(len) {
+    result.push(if i == index { value } else { values.at(i, default: none) })
   }
   result
 }
 
-#let _math-source(value) = {
-  let atom = value => {
-    let source = _math-source(value)
-    if source == none {
-      none
-    } else if type(value) == dictionary and value.at("func", default: none) in ("symbol", "text") {
-      source
-    } else {
-      "(" + source + ")"
-    }
-  }
-  if type(value) != dictionary {
+#let _with-native-data(graph, native-data) = _graph-object(_assert-graph(graph).bytes, native-data: native-data)
+
+#let _payload(value) = if value == none { none } else { cbor.encode(value) }
+
+#let _decode-payload(value) = if value == none { none } else { cbor(_as-bytes(value)) }
+
+#let _payload-field(payload, key) = if type(payload) == dictionary {
+  payload.at(key, default: none)
+} else {
+  none
+}
+
+#let _get-native-data(native-data, kind, index: none) = {
+  if kind == "graph" {
+    native-data.graph
+  } else if kind == "node" {
+    _array-at(native-data.nodes, index)
+  } else if kind == "edge" {
+    _array-at(native-data.edges, index)
+  } else if kind == "hedge" {
+    _array-at(native-data.hedges, index)
+  } else {
     none
-  } else {
-    let func = value.at("func", default: none)
-    if func == "symbol" {
-      value.at("text", default: "")
-    } else if func == "text" {
-      _math-text-source(value.at("text", default: ""))
-    } else if func == "space" {
-      " "
-    } else if func == "sequence" {
-      value.children.map(_math-source).join("")
-    } else if func == "attach" {
-      let base = atom(value.base)
-      if base == none {
-        return none
-      }
-      let result = base
-      let bottom = value.at("b", default: none)
-      if bottom != none {
-        let source = atom(bottom)
-        if source == none {
-          return none
-        }
-        result += "_" + source
-      }
-      let top = value.at("t", default: none)
-      if top != none {
-        let source = atom(top)
-        if source == none {
-          return none
-        }
-        result += "^" + source
-      }
-      result
-    } else {
-      none
-    }
   }
 }
 
-#let _decode-content(value, decode) = {
-  let func = value.at("func", default: none)
-  if func == "text" {
-    text(value.text)
-  } else if func == "space" {
-    [ ]
-  } else if func == "sequence" {
-    _sequence-content(value.children, child => _decode-content(child, decode))
-  } else if func == "strong" {
-    strong(_decode-content(value.body, decode))
-  } else if func == "emph" {
-    emph(_decode-content(value.body, decode))
-  } else if func == "equation" {
-    let source = _math-source(value.body)
-    if source == none {
-      text(repr(value))
-    } else {
-      eval("$" + source + "$", mode: "markup")
+#let _clean-statements(statements) = statements
+
+#let _with-build-payload(item, data-key) = {
+  let result = item
+  let payload = (data-key: data-key)
+  let name = result.at("name", default: none)
+  if result.at("linnest-kind", default: none) == "edge" and name != none {
+    if type(name) != label {
+      panic("graph.edge: name must be a Typst label")
     }
-  } else {
-    text(repr(value))
+    payload.name = str(name)
   }
+  result.payload = _payload(payload)
+  result
 }
 
-#let _decode-data-value(value) = {
-  if type(value) == array {
-    value.map(_decode-data-value)
-  } else if type(value) == dictionary {
-    let kind = value.at("linnest-data-kind", default: none)
-    if kind == "content" {
-      _decode-content(cbor(_data-bytes(value.value)), _decode-data-value)
-    } else {
-      let result = (:)
-      for key in value.keys() {
-        result.insert(key, _decode-data-value(value.at(key)))
-      }
-      result
-    }
-  } else {
-    value
+#let _with-build-payloads(items) = {
+  let result = ()
+  for (index, item) in items.enumerate() {
+    result.push(_with-build-payload(item, index))
   }
+  result
 }
-
-#let decode-data(value) = if value == none { none } else { _decode-data-value(cbor(_data-bytes(value))) }
 
 #let _merge-data(default, data) = {
   if default == none {
@@ -139,26 +111,6 @@
   } else {
     data
   }
-}
-
-#let _decode-data-field(record) = {
-  let result = record
-  let data = result.at("data", default: none)
-  if data != none {
-    result.data = decode-data(data)
-  }
-  result
-}
-
-#let _decode-edge-data(edge) = {
-  let result = _decode-data-field(edge)
-  for side in ("source", "sink") {
-    let endpoint = result.at(side, default: none)
-    if endpoint != none {
-      result.insert(side, _decode-data-field(endpoint))
-    }
-  }
-  result
 }
 
 #let _point-statement(point) = {
@@ -234,6 +186,18 @@
     panic(context_ + ": expected a Typst label")
   }
   str(value)
+}
+
+#let _name-label(value, context_) = {
+  if value == none {
+    none
+  } else if type(value) == label {
+    value
+  } else if type(value) == str {
+    label(value)
+  } else {
+    panic(context_ + ": name must be a Typst label or string")
+  }
 }
 
 #let _check-name(value, context_) = {
@@ -317,12 +281,12 @@
   }
 }
 
-#let _node-spec(node, default-data: none) = {
+#let _node-spec(node) = {
   let statements = _statements-with-point(_flat-statements(node.at("statements", default: (:)), "graph.node statements"), "shift", node.at("shift", default: none))
-  let data = _encode-data(_merge-data(default-data, node.at("data", default: none)))
   let clean = node
   let name = clean.at("name", default: none)
-  for key in ("linnest-kind", "key", "id", "shift", "name", "data") {
+  let payload = clean.at("payload", default: none)
+  for key in ("linnest-kind", "key", "id", "shift", "name", "data", "payload") {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -334,19 +298,19 @@
       clean.insert("name", name)
     }
   }
-  if data != none {
-    clean.insert("data", data)
+  if payload != none {
+    clean.insert("data", payload)
   }
   clean + (statements: statements)
 }
 
-#let _resolved-node-spec(node, node-keys, default-data: none) = {
+#let _resolved-node-spec(node, node-keys) = {
   let index = node.at("id", default: none)
   let item = node + (pos: _resolve-pos(node.at("pos", default: none), node-keys))
   if index != none {
     item.insert("index", index)
   }
-  _node-spec(item, default-data: default-data)
+  _node-spec(item)
 }
 
 #let _edge-statements(edge) = {
@@ -372,13 +336,9 @@
   statements
 }
 
-#let _edge-spec(edge, default-data: none) = {
+#let _edge-spec(edge) = {
   let statements = _edge-statements(edge)
-  let name = edge.at("name", default: none)
-  if name != none {
-    statements.insert("__linnest-edge-name", _label-key(name, "graph.edge"))
-  }
-  let data = _encode-data(_merge-data(default-data, edge.at("data", default: none)))
+  let payload = edge.at("payload", default: none)
   let clean = edge
   for key in (
     "linnest-kind",
@@ -388,18 +348,19 @@
     "bend",
     "data",
     "name",
+    "payload",
   ) {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
   }
-  if data != none {
-    clean.insert("data", data)
+  if payload != none {
+    clean.insert("data", payload)
   }
   clean + (statements: statements)
 }
 
-#let _resolved-half-spec(half, node-keys, context_, default-data: none) = {
+#let _resolved-half-spec(half, node-keys, context_) = {
   if half == none {
     return none
   }
@@ -409,10 +370,6 @@
   let id = half.at("id", default: none)
   if id != none {
     result.insert("id", id)
-  }
-  let data = _encode-data(_merge-data(default-data, half.at("data", default: none)))
-  if data != none {
-    result.insert("data", data)
   }
   if half.at("statement", default: none) != none {
     result.insert("statement", _statement-value(half.statement, context_ + ".statement"))
@@ -426,26 +383,21 @@
 #let _resolved-edge-spec(
   edge,
   node-keys,
-  default-edge-data: none,
-  default-source-data: none,
-  default-sink-data: none,
 ) = {
   let item = edge + (
     source: _resolved-half-spec(
       edge.at("source", default: none),
       node-keys,
       "graph.source",
-      default-data: default-source-data,
     ),
     sink: _resolved-half-spec(
       edge.at("sink", default: none),
       node-keys,
       "graph.sink",
-      default-data: default-sink-data,
     ),
     pos: _resolve-pos(edge.at("pos", default: none), node-keys),
   )
-  _edge-spec(item, default-data: default-edge-data)
+  _edge-spec(item)
 }
 
 #let _split-items(items, nodes, edges) = {
@@ -624,15 +576,6 @@
   }
 }
 
-#let _data-patch(callback, record, context_) = {
-  let data = _mapped-data(callback, record, context_)
-  if data == none {
-    none
-  } else {
-    _encode-data(data)
-  }
-}
-
 #let _default-data-patch(default, record) = {
   let data = _merge-data(default, record.at("data", default: none))
   if data == none {
@@ -642,18 +585,132 @@
   }
 }
 
-/// Map graph metadata to new opaque data.
+#let _native-data-from-build(
+  graph-bytes_,
+  graph-data,
+  nodes,
+  edges,
+  default-node-data: none,
+  default-edge-data: none,
+  default-source-data: none,
+  default-sink-data: none,
+) = {
+  let native-data = _empty-native-data()
+  native-data.graph = graph-data
+
+  for node-record in cbor(_plugin.graph_nodes(graph-bytes_)) {
+    let payload = _decode-payload(node-record.at("data", default: none))
+    let key = _payload-field(payload, "data-key")
+    if key != none {
+      let node = nodes.at(key)
+      let data = _merge-data(default-node-data, node.at("data", default: none))
+      if data != none {
+        native-data.nodes = _array-set(native-data.nodes, node-record.node, data)
+      }
+    }
+  }
+
+  for edge-record in cbor(_plugin.graph_edges(graph-bytes_)) {
+    let payload = _decode-payload(edge-record.at("data", default: none))
+    let key = _payload-field(payload, "data-key")
+    if key != none {
+      let edge = edges.at(key)
+      let data = _merge-data(default-edge-data, edge.at("data", default: none))
+      if data != none {
+        native-data.edges = _array-set(native-data.edges, edge-record.edge, data)
+      }
+
+      let source-record = edge-record.at("source", default: none)
+      let source-item = edge.at("source", default: none)
+      if source-record != none and source-item != none {
+        let source-data = _merge-data(default-source-data, source-item.at("data", default: none))
+        if source-data != none {
+          native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-data)
+        }
+      }
+
+      let sink-record = edge-record.at("sink", default: none)
+      let sink-item = edge.at("sink", default: none)
+      if sink-record != none and sink-item != none {
+        let sink-data = _merge-data(default-sink-data, sink-item.at("data", default: none))
+        if sink-data != none {
+          native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-data)
+        }
+      }
+    }
+  }
+
+  native-data
+}
+
+#let _info-record(graph) = {
+  let result = cbor(_plugin.graph_info(graph-bytes(graph)))
+  result.data = _native-data(graph).graph
+  result
+}
+
+#let _native-record-data(record, native-data, kind, index) = {
+  let result = record
+  if result.at("statements", default: none) != none {
+    result.statements = _clean-statements(result.statements)
+  }
+  if kind == "node" and result.at("name", default: none) != none {
+    result.name = _name-label(result.name, "graph.nodes")
+  }
+  result.data = _get-native-data(native-data, kind, index: index)
+  result
+}
+
+#let _native-edge-record(record, native-data) = {
+  let payload = _decode-payload(record.at("data", default: none))
+  let result = _native-record-data(record, native-data, "edge", record.edge)
+  let name = _payload-field(payload, "name")
+  if name != none {
+    result.name = _name-label(name, "graph.edges")
+  } else if result.at("name", default: none) != none {
+    result.name = _name-label(result.name, "graph.edges")
+  }
+  for side in ("source", "sink") {
+    let endpoint = result.at(side, default: none)
+    if endpoint != none {
+      result.insert(side, _native-record-data(endpoint, native-data, "hedge", endpoint.hedge))
+    }
+  }
+  result
+}
+
+#let _node-records(graph, subgraph: none) = {
+  let native-data = _native-data(graph)
+  let records = if subgraph == none {
+    cbor(_plugin.graph_nodes(graph-bytes(graph)))
+  } else {
+    cbor(_plugin.graph_nodes_of_subgraph(graph-bytes(graph), bytes(subgraph)))
+  }
+  records.map(record => _native-record-data(record, native-data, "node", record.node))
+}
+
+#let _edge-records(graph, subgraph: none) = {
+  let native-data = _native-data(graph)
+  let records = if subgraph == none {
+    cbor(_plugin.graph_edges(graph-bytes(graph)))
+  } else {
+    cbor(_plugin.graph_edges_of_subgraph(graph-bytes(graph), bytes(subgraph)))
+  }
+  records.map(record => _native-edge-record(record, native-data))
+}
+
+/// Map graph metadata to new native data.
 ///
 /// The callbacks receive decoded records plus a `fields` dictionary containing
 /// merged statements and direct record fields. A callback returns `none` to
-/// leave the record unchanged, or `(data: value)` to set a new opaque data.
+/// leave the record unchanged, or `(data: value)` to set new native data.
 ///
 /// ```example
 /// #let g = graph.build({ graph.node(<a>) })
 /// #let g = graph.map(g, node: node => (data: (label: [A])))
 /// #graph.nodes(g).first().data.label
 /// ```
-/// -> bytes
+/// -> dictionary
 #let map(
   graph_,
   /// Graph metadata callback. -> none | function
@@ -667,75 +724,68 @@
   /// Sink half-edge metadata callback. -> none | function
   sink: none,
 ) = {
-  let patch = (:)
-  let info = _decode-data-field(cbor(_plugin.graph_info(bytes(graph_))))
+  let changed = false
+  let native-data = _native-data(graph_)
+  let info = _info-record(graph_)
   let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))))
-  let graph-data = _data-patch(graph, graph-record, "graph.map graph")
+  let graph-data = _mapped-data(graph, graph-record, "graph.map graph")
   if graph-data != none {
-    patch.insert("data", graph-data)
+    native-data.graph = graph-data
+    changed = true
   }
 
-  let node-patches = ()
   if node != none {
-    for node-record in cbor(_plugin.graph_nodes(bytes(graph_))).map(_decode-data-field) {
-      let data = _data-patch(node, _record-with-fields(node-record), "graph.map node")
+    for node-record in _node-records(graph_) {
+      let data = _mapped-data(node, _record-with-fields(node-record), "graph.map node")
       if data != none {
-        node-patches.push((index: node-record.node, data: data))
+        native-data.nodes = _array-set(native-data.nodes, node-record.node, data)
+        changed = true
       }
     }
   }
-  if node-patches.len() > 0 {
-    patch.insert("nodes", node-patches)
-  }
 
-  let edge-patches = ()
   if edge != none or source != none or sink != none {
-    for edge-source in cbor(_plugin.graph_edges(bytes(graph_))).map(_decode-edge-data) {
-      let edge-patch = (index: edge-source.edge)
+    for edge-source in _edge-records(graph_) {
       let edge-record = _record-with-fields(edge-source)
       let edge-fields = edge-record.fields
-      let data = _data-patch(edge, edge-record, "graph.map edge")
+      let data = _mapped-data(edge, edge-record, "graph.map edge")
       if data != none {
-        edge-patch.insert("data", data)
+        native-data.edges = _array-set(native-data.edges, edge-source.edge, data)
+        changed = true
       }
 
       let source-record = edge-source.at("source", default: none)
       if source-record != none {
-        let source-data = _data-patch(
+        let source-data = _mapped-data(
           source,
           _record-with-fields(source-record, base-fields: edge-fields, extra: (edge: edge-record)),
           "graph.map source",
         )
         if source-data != none {
-          edge-patch.insert("source", source-data)
+          native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-data)
+          changed = true
         }
       }
 
       let sink-record = edge-source.at("sink", default: none)
       if sink-record != none {
-        let sink-data = _data-patch(
+        let sink-data = _mapped-data(
           sink,
           _record-with-fields(sink-record, base-fields: edge-fields, extra: (edge: edge-record)),
           "graph.map sink",
         )
         if sink-data != none {
-          edge-patch.insert("sink", sink-data)
+          native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-data)
+          changed = true
         }
-      }
-
-      if edge-patch.len() > 1 {
-        edge-patches.push(edge-patch)
       }
     }
   }
-  if edge-patches.len() > 0 {
-    patch.insert("edges", edge-patches)
-  }
 
-  if patch.len() == 0 {
+  if not changed {
     graph_
   } else {
-    _plugin.graph_with_data(bytes(graph_), cbor.encode(patch))
+    _with-native-data(graph_, native-data)
   }
 }
 
@@ -763,7 +813,7 @@
   )
 }
 
-/// Evaluate selected fields into opaque data entries.
+/// Evaluate selected fields into native data entries.
 ///
 /// Each selected field is read from the record's merged `fields` dictionary,
 /// evaluated in a scope containing those fields, and written to
@@ -781,7 +831,7 @@
 /// #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
 /// #graph.edges(g).first().data.at("display-label")
 /// ```
-/// -> bytes
+/// -> dictionary
 #let eval-fields(
   graph_,
 
@@ -890,7 +940,7 @@
   let edge-fields = _eval-field-list(eval-edge-fields, "graph.parse")
   let source-fields = _eval-field-list(eval-source-fields, "graph.parse")
   let sink-fields = _eval-field-list(eval-sink-fields, "graph.parse")
-  let graphs = cbor(_plugin.parse_graph(bytes(input)))
+  let graphs = cbor(_plugin.parse_graph(bytes(input))).map(graph => _graph-object(graph))
   let needs-eval = graph-fields.len() != 0 or node-fields.len() != 0 or edge-fields.len() != 0 or source-fields.len() != 0 or sink-fields.len() != 0
   let needs-defaults = (
     default-node-data != none
@@ -942,7 +992,7 @@
 /// }, name: "demo")
 /// #graph.info(g).name
 /// ```
-/// -> bytes
+/// -> dictionary
 #let build(
   /// Node and edge items returned by @node and @edge. -> array
   ..items,
@@ -950,7 +1000,7 @@
   /// Graph name. -> none | string
   name: none,
 
-  /// Opaque graph data. Any CBOR-encodable Typst value. -> any
+  /// Native Typst graph data. -> any
   data: none,
 
   /// Flat graph statements. Used by DOT; values cannot nest. -> dictionary
@@ -983,27 +1033,36 @@
   edges: (),
 ) = {
   let split = _split-items(items.pos(), nodes, edges)
-  let node-keys = _node-name-map(split.nodes)
-  _check-edge-names(split.edges)
-  _plugin.graph_from_spec(cbor.encode((
+  let keyed-nodes = _with-build-payloads(split.nodes)
+  let keyed-edges = _with-build-payloads(split.edges)
+  let node-keys = _node-name-map(keyed-nodes)
+  _check-edge-names(keyed-edges)
+  let graph-bytes_ = _plugin.graph_from_spec(cbor.encode((
     name: name,
-    data: _encode-data(data),
+    data: none,
     statements: _flat-statements(statements, "graph.build statements"),
     default-edge-statements: _flat-statements(default-edge-statements, "graph.build default-edge-statements"),
     default-node-statements: _flat-statements(default-node-statements, "graph.build default-node-statements"),
-    nodes: split.nodes.map(node => _resolved-node-spec(
+    nodes: keyed-nodes.map(node => _resolved-node-spec(
       node,
       node-keys,
-      default-data: default-node-data,
     )),
-    edges: split.edges.map(edge => _resolved-edge-spec(
+    edges: keyed-edges.map(edge => _resolved-edge-spec(
       edge,
       node-keys,
-      default-edge-data: default-edge-data,
-      default-source-data: default-source-data,
-      default-sink-data: default-sink-data,
     )),
   )))
+  let native-data = _native-data-from-build(
+    graph-bytes_,
+    data,
+    keyed-nodes,
+    keyed-edges,
+    default-node-data: default-node-data,
+    default-edge-data: default-edge-data,
+    default-source-data: default-source-data,
+    default-sink-data: default-sink-data,
+  )
+  _graph-object(graph-bytes_, native-data: native-data)
 }
 
 /// Create a graph node item for @build.
@@ -1220,7 +1279,7 @@
 /// #graph.info(g).name
 /// ```
 /// -> dictionary
-#let info(graph) = _decode-data-field(cbor(_plugin.graph_info(bytes(graph))))
+#let info(graph) = _info-record(graph)
 
 /// Serialize a graph object to DOT.
 ///
@@ -1233,28 +1292,25 @@
 /// #graph.dot(g).contains("digraph demo")
 /// ```
 /// -> string
-#let dot(graph) = cbor(_plugin.graph_dot(bytes(graph)))
+#let dot(graph) = cbor(_plugin.graph_dot(graph-bytes(graph)))
 
 /// Return node records, optionally filtered by an subgraph object.
+///
+/// Node `name` values are Typst labels when present.
 ///
 /// ```example
 /// #let g = graph.build({
 ///   graph.node(<a>)
 ///   graph.node(<b>)
 /// })
-/// #graph.nodes(g).map(node => node.name).join(", ")
+/// #graph.nodes(g).map(node => str(node.name)).join(", ")
 /// ```
 /// -> array
-#let nodes(graph, subgraph: none) = {
-  let records = if subgraph == none {
-    cbor(_plugin.graph_nodes(bytes(graph)))
-  } else {
-    cbor(_plugin.graph_nodes_of_subgraph(bytes(graph), bytes(subgraph)))
-  }
-  records.map(_decode-data-field)
-}
+#let nodes(graph, subgraph: none) = _node-records(graph, subgraph: subgraph)
 
 /// Return edge records, optionally filtered by an subgraph object.
+///
+/// Edge `name` values are Typst labels when present.
 ///
 /// ```example
 /// #let g = graph.build({
@@ -1266,14 +1322,7 @@
 /// #graph.edges(g, subgraph: east).len()
 /// ```
 /// -> array
-#let edges(graph, subgraph: none) = {
-  let records = if subgraph == none {
-    cbor(_plugin.graph_edges(bytes(graph)))
-  } else {
-    cbor(_plugin.graph_edges_of_subgraph(bytes(graph), bytes(subgraph)))
-  }
-  records.map(_decode-edge-data)
-}
+#let edges(graph, subgraph: none) = _edge-records(graph, subgraph: subgraph)
 
 #let _name-key(value, context_) = {
   if type(value) == label {
@@ -1285,14 +1334,14 @@
   }
 }
 
-#let _find-record-by-name(records, key) = {
-  let found = false
+#let _record-by-name(records, key, context_) = {
   for record in records {
-    if record.at("name", default: none) == key {
-      found = true
+    let name = record.at("name", default: none)
+    if name != none and _name-key(name, context_) == key {
+      return record
     }
   }
-  found
+  panic(context_ + ": no record named " + repr(key))
 }
 
 #let _data-update(update, record, context_) = {
@@ -1310,14 +1359,15 @@
 }
 
 #let _named-data-callback(key, update, context_) = record => {
-  if record.at("name", default: none) == key {
+  let name = record.at("name", default: none)
+  if name != none and _name-key(name, context_) == key {
     _data-update(update, record, context_)
   } else {
     none
   }
 }
 
-/// Return one named node's opaque data.
+/// Return one named node's native data.
 ///
 /// `name` is a Typst label such as `<a>` or the corresponding string name.
 ///
@@ -1328,10 +1378,10 @@
 /// -> any
 #let node-data(graph_, name) = {
   let key = _name-key(name, "graph.node-data")
-  decode-data(cbor(_plugin.graph_node_data_by_name(bytes(graph_), cbor.encode(key))))
+  _record-by-name(nodes(graph_), key, "graph.node-data").data
 }
 
-/// Return one named edge's opaque data.
+/// Return one named edge's native data.
 ///
 /// `name` is a Typst label such as `<e>` or the corresponding string name.
 ///
@@ -1346,10 +1396,10 @@
 /// -> any
 #let edge-data(graph_, name) = {
   let key = _name-key(name, "graph.edge-data")
-  decode-data(cbor(_plugin.graph_edge_data_by_name(bytes(graph_), cbor.encode(key))))
+  _record-by-name(edges(graph_), key, "graph.edge-data").data
 }
 
-/// Update one named node's opaque data.
+/// Update one named node's native data.
 ///
 /// `name` is a Typst label such as `<a>` or the corresponding string name.
 /// `update` may be a replacement data value or a function
@@ -1360,25 +1410,17 @@
 /// #let g = graph.update-node-data(g, <a>, (label: [A]))
 /// #graph.nodes(g).first().data.label
 /// ```
-/// -> bytes
+/// -> dictionary
 #let update-node-data(graph_, name, update) = {
   let key = _name-key(name, "graph.update-node-data")
   if update == none {
     return graph_
   }
-  if type(update) != function {
-    return _plugin.graph_set_node_data_by_name(
-      bytes(graph_),
-      cbor.encode((name: key, data: _encode-data(update))),
-    )
-  }
-  if not _find-record-by-name(nodes(graph_), key) {
-    panic("graph.update-node-data: no node named " + repr(name))
-  }
+  let _ = _record-by-name(nodes(graph_), key, "graph.update-node-data")
   map(graph_, node: _named-data-callback(key, update, "graph.update-node-data"))
 }
 
-/// Update one named edge's opaque data.
+/// Update one named edge's native data.
 ///
 /// `name` is a Typst label such as `<e>` or the corresponding string name.
 /// `update` may be a replacement data value or a function
@@ -1393,25 +1435,17 @@
 /// #let g = graph.update-edge-data(g, <e>, (label: [$p$]))
 /// #graph.edges(g).first().data.label
 /// ```
-/// -> bytes
+/// -> dictionary
 #let update-edge-data(graph_, name, update) = {
   let key = _name-key(name, "graph.update-edge-data")
   if update == none {
     return graph_
   }
-  if type(update) != function {
-    return _plugin.graph_set_edge_data_by_name(
-      bytes(graph_),
-      cbor.encode((name: key, data: _encode-data(update))),
-    )
-  }
-  if not _find-record-by-name(edges(graph_), key) {
-    panic("graph.update-edge-data: no edge named " + repr(name))
-  }
+  let _ = _record-by-name(edges(graph_), key, "graph.update-edge-data")
   map(graph_, edge: _named-data-callback(key, update, "graph.update-edge-data"))
 }
 
-/// Join two graphs by matching dangling half-edge data on `key`.
+/// Join two graphs by matching dangling half-edge statements or ids on `key`.
 ///
 /// Supported key values are `"statement"`, `"compass"`, and `"id"`.
 ///
@@ -1426,9 +1460,9 @@
 /// })
 /// #graph.edges(graph.join(left, right, key: "statement")).len()
 /// ```
-/// -> bytes
+/// -> dictionary
 #let join(left, right, key: "statement") = {
-  _plugin.graph_join_by_hedge_key(bytes(left), bytes(right), cbor.encode((key: key)))
+  _graph-object(_plugin.graph_join_by_hedge_key(graph-bytes(left), graph-bytes(right), cbor.encode((key: key))))
 }
 
 /// Return subgraph objects for the graph's cycle basis.
@@ -1442,7 +1476,7 @@
 /// #graph.cycles(g).len()
 /// ```
 /// -> array
-#let cycles(graph) = cbor(_plugin.graph_cycle_basis(bytes(graph)))
+#let cycles(graph) = cbor(_plugin.graph_cycle_basis(graph-bytes(graph)))
 
 /// Return subgraph objects for the graph's spanning forests.
 ///
@@ -1455,4 +1489,4 @@
 /// #graph.forests(g).len()
 /// ```
 /// -> array
-#let forests(graph) = cbor(_plugin.graph_spanning_forests(bytes(graph)))
+#let forests(graph) = cbor(_plugin.graph_spanning_forests(graph-bytes(graph)))
