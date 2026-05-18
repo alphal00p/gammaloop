@@ -1966,6 +1966,16 @@ energy maps are localized and event weights are assembled.  This keeps CFF and
 LTD aligned at the level of event groups, individual event weights, and
 additional counterterm weights.
 
+An edge marked as an initial-state cut is therefore not treated as an ordinary
+internal denominator in the local coordinate problem.  It is a pair of
+correlated external half-edge coordinates, one incoming and one outgoing, with
+the same momentum.  If a generated LU \(E\)-surface and the omitted
+positive-energy Cutkosky edge have identical unit derivatives with respect to
+several such half-edge coordinates, those coordinates are equivalent local
+charts for the same simple pole.  The implementation chooses one canonical
+representative in the loop-momentum-basis external coordinate order; the
+resolved LU coordinate determinant remains the source of the Jacobian sign.
+
 Canonicalization fixes the sign convention of a surface such as
 \(-\omega_{i_1}-\cdots-\omega_{i_r}+\Delta\) by replacing it with
 \(\omega_{i_1}+\cdots+\omega_{i_r}-\Delta\) and carrying the corresponding
@@ -2029,6 +2039,16 @@ their reduced source is evaluated directly in the generated dual convention,
 and the full LTD measure bridge is applied once when the local UV forest term
 is embedded back into the original graph.  These signs are
 representation-convention factors, not graph-name patches.
+
+The same separation applies to direct LTD original/root LU residues.  Those
+terms are extracted from the requested LTD production expression, while the
+companion CFF expression is only a surface-identification and canonicalization
+catalogue.  Their local prefactor therefore contains the Cutkosky
+local-coordinate orientation and any full-source repeated-channel source
+bridge, but not the auxiliary CFF full-graph projection bridge.  Including that
+projection bridge would count a CFF comparison convention inside an LTD
+production residue; the LTD loop-measure bridge already accounts for the
+representation-level measure convention when the branch is embedded.
 
 The hybrid high-power tests are not pure-CFF tests.  They compare the hybrid
 value with a split-mass LTD proxy and verify convergence as the mass split is

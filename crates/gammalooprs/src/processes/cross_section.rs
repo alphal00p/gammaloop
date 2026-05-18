@@ -253,14 +253,19 @@ impl LuResiduePlanComponents<'_> {
     }
 
     fn direct_original_prefactor_sign(&self) -> i64 {
+        // Direct original/root terms are extracted from the requested LTD
+        // production expression, not from the auxiliary CFF projection used to
+        // identify and canonicalize LU surfaces. The global LTD measure bridge
+        // is applied by the embedding code, so this local bridge contains only
+        // the Cutkosky/local-coordinate orientation and repeated-channel source
+        // conventions.
         if self.is_simple_lu_cut() {
             if self.simple_mixed_repeated_channel_contact {
                 // A simple cut whose support spans repeated-channel supports
                 // is not an ordinary one-surface Laurent coordinate: its
                 // support-local bridge is the repeated-channel routing bridge
                 // times the selected Cutkosky/surface-family orientation.
-                self.full_graph_projection_bridge
-                    * self.ltd_repeated_channel_bridge_sign
+                self.ltd_repeated_channel_bridge_sign
                     * self.simple_surface_family_sign
                     * self
                         .lu_cut_signs
@@ -278,15 +283,19 @@ impl LuResiduePlanComponents<'_> {
                 // same-routing duplicate convention. The latter is separate
                 // from the derivative bridge used by selected repeated
                 // residues.
-                self.local_series_prefactor_sign() * self.ltd_repeated_channel_source_bridge_sign
+                self.simple_surface_family_sign
+                    * self
+                        .lu_cut_signs
+                        .local_series_denominator_signs
+                        .iter()
+                        .product::<i64>()
+                    * self.ltd_repeated_channel_source_bridge_sign
             }
         } else {
-            self.full_graph_projection_bridge
-                * self
-                    .lu_cut_signs
-                    .cut_orientation_signs
-                    .iter()
-                    .product::<i64>()
+            self.lu_cut_signs
+                .cut_orientation_signs
+                .iter()
+                .product::<i64>()
                 * if self
                     .raised_cut_group
                     .related_esurface_group
@@ -1847,24 +1856,59 @@ impl CrossSectionGraph {
                 ))
             })
             .collect_vec();
-        if external_candidates.len() != 1 {
-            return Err(eyre!(
-                "Cannot determine a unique LTD LU cut local-series external coordinate for cut {} in graph {}: generated E-surface {:?} has external shift {:?}, omitted cut edge {} has external signature {:?}, candidates {:?}",
-                cut_id.0,
-                self.graph.name,
-                generated_esurface_id,
-                generated_esurface.external_shift,
-                usize::from(*omitted_cut_edge),
-                omitted_external_signature,
-                external_candidates,
-            ));
-        }
+        let selected_external_candidate = if external_candidates.len() == 1 {
+            external_candidates[0]
+        } else {
+            let initial_state_cut_edges = self
+                .graph
+                .get_edges_in_initial_state_cut()
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            let equivalent_initial_state_cut_candidates =
+                external_candidates
+                    .first()
+                    .is_some_and(|(_, surface_sign, _, omitted_sign)| {
+                        external_candidates.iter().all(
+                            |(external_edge, candidate_surface_sign, _, candidate_omitted_sign)| {
+                                initial_state_cut_edges.contains(external_edge)
+                                    && candidate_surface_sign == surface_sign
+                                    && candidate_omitted_sign == omitted_sign
+                            },
+                        )
+                    });
+
+            if equivalent_initial_state_cut_candidates {
+                // Initial-state cut carriers are external half-edge coordinates
+                // for forward-scattering edges. When the selected surface and
+                // the omitted Cutkosky edge have the same derivative with
+                // respect to several such coordinates, these are equivalent
+                // local charts for the same simple pole. Pick the canonical
+                // LMB external-coordinate representative; the determinant
+                // below supplies the physical Jacobian.
+                external_candidates
+                    .iter()
+                    .copied()
+                    .min_by_key(|(_, _, localized_external_index, _)| *localized_external_index)
+                    .expect("equivalent candidates are non-empty")
+            } else {
+                return Err(eyre!(
+                    "Cannot determine a unique LTD LU cut local-series external coordinate for cut {} in graph {}: generated E-surface {:?} has external shift {:?}, omitted cut edge {} has external signature {:?}, candidates {:?}",
+                    cut_id.0,
+                    self.graph.name,
+                    generated_esurface_id,
+                    generated_esurface.external_shift,
+                    usize::from(*omitted_cut_edge),
+                    omitted_external_signature,
+                    external_candidates,
+                ));
+            }
+        };
         let (
             localized_external_edge,
             localized_external_surface_sign,
             localized_external_index,
             omitted_external_sign,
-        ) = external_candidates[0];
+        ) = selected_external_candidate;
 
         // Rows define the signed local coordinate map from branch coordinates,
         // Cutkosky positive-energy variables, and the selected external-energy
