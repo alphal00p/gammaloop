@@ -187,8 +187,8 @@ named arguments are captured as opaque Typst payload fields:
 stores `(style: ..)` in the source payload and `(particle: "g")` in the edge
 payload. Typst CBOR-encodes payloads before the Rust plugin boundary, Rust
 archives the bytes without inspecting them, and Typst decodes them again in
-`graph.info`, `graph.nodes`, and `graph.edges`. The `label` convenience argument
-on nodes and edges is display content stored as `payload.label`; use
+`graph.info`, `graph.nodes`, and `graph.edges`. A captured `label` payload field
+on nodes and edges is display content used by the default drawing style; use
 `statements: (label: "...")` when a flat metadata label string is needed.
 Statements are flat metadata used by DOT; they cannot nest. Values are scalar
 strings/numbers/booleans. Use payload fields for structured Typst data or
