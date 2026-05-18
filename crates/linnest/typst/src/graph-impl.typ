@@ -129,21 +129,6 @@
 
 #let decode-payload(value) = if value == none { none } else { _decode-payload-value(cbor(_payload-bytes(value))) }
 
-#let _payload-with-label(payload, label, context_) = {
-  if label == none {
-    payload
-  } else if payload == none {
-    (label: label)
-  } else if type(payload) == dictionary {
-    if payload.keys().contains("label") {
-      panic(context_ + ": label specified twice")
-    }
-    payload + (label: label)
-  } else {
-    panic(context_ + ": label requires payload to be a dictionary")
-  }
-}
-
 #let _merge-payload(default, payload) = {
   if default == none {
     payload
@@ -413,13 +398,10 @@
 
 #let _node-spec(node, default-payload: none) = {
   let statements = _statements-with-point(_flat-statements(node.at("statements", default: (:)), "graph.node statements"), "shift", node.at("shift", default: none))
-  let payload = _encode-payload(_merge-payload(
-    default-payload,
-    _payload-with-label(node.at("payload", default: none), node.at("label", default: none), "graph.node"),
-  ))
+  let payload = _encode-payload(_merge-payload(default-payload, node.at("payload", default: none)))
   let clean = node
   let name = clean.at("name", default: none)
-  for key in ("linnest-kind", "key", "id", "shift", "name", "label", "payload") {
+  for key in ("linnest-kind", "key", "id", "shift", "name", "payload") {
     if clean.keys().contains(key) {
       let _ = clean.remove(key)
     }
@@ -476,10 +458,7 @@
   if name != none {
     statements.insert("__linnest-edge-name", _label-key(name, "graph.edge"))
   }
-  let payload = _encode-payload(_merge-payload(
-    default-payload,
-    _payload-with-label(edge.at("payload", default: none), edge.at("label", default: none), "graph.edge"),
-  ))
+  let payload = _encode-payload(_merge-payload(default-payload, edge.at("payload", default: none)))
   let clean = edge
   for key in (
     "linnest-kind",
@@ -487,7 +466,6 @@
     "label-pos",
     "label-angle",
     "bend",
-    "label",
     "payload",
     "name",
   ) {
@@ -1124,8 +1102,9 @@
 /// Create a graph node item for @build.
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` chooses the node order/index. `label` is stored as
-/// `payload.label`. Extra named arguments are captured as node payload fields.
+/// optional numeric `id` chooses the node order/index. Extra named arguments
+/// are captured as node payload fields. The default draw style uses
+/// `payload.label` as the visible node label when present.
 ///
 /// ```example
 /// #let g = graph.build({
@@ -1140,8 +1119,6 @@
   name: none,
   /// Numeric node order/index override. -> none | int
   id: none,
-  /// Visible node label, stored as `payload.label`. -> any
-  label: none,
   /// Node placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -1173,7 +1150,6 @@
     id: id,
     name: resolved-name,
     payload: resolved-payload,
-    label: label,
     pos: pos,
     shift: shift,
     statements: statements,
@@ -1238,8 +1214,8 @@
 ///
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order
-/// and the visible label is `label`, stored as `payload.label`. Extra named
-/// arguments are captured as edge payload fields.
+/// and extra named arguments are captured as edge payload fields. The default
+/// draw style uses `payload.label` as the visible edge label when present.
 ///
 /// ```example
 /// #let g = graph.build({
@@ -1258,8 +1234,6 @@
   id: none,
   /// Edge orientation: `"default"`, `"reversed"`, or `"undirected"`. -> string
   orientation: "default",
-  /// Visible edge label, stored as `payload.label`. -> any
-  label: none,
   /// Edge placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -1320,7 +1294,6 @@
     name: resolved-name,
     id: resolved-id,
     payload: resolved-payload,
-    label: label,
     pos: pos,
     shift: shift,
     label-pos: label-pos,

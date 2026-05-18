@@ -139,21 +139,51 @@
 /// b [id=1 pos="ref(node:0)+4,0!"]
 /// a -> b [id=0 pos="ref(node:1)+0,1!"]
 /// b -> c [id=1 pos="ref(edge:0)+1,0!"]
-/// c [id=2 pos="x:2!" label="$c_m$"]
+/// c [id=2 pos="x:2!" label="$c_nu$"]
 /// d [id=3 pos="x:2!,y:0.1"]
 /// ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
 /// }
 /// ```
 /// #let g = parse(a.text,default-node-payload:(label:"#name"),eval-node-fields:"label")
-/// #draw(layout(g.at(0)))
+/// >>>#align(center+horizon, draw(layout(g.at(0))))
 ///
 /// ````
 /// -> array
 #let parse(
   /// DOT source text containing one or more `digraph` definitions. -> string | bytes
   input,
-  /// Default payload merged into every node payload. Captured node payload fields override it. -> any
+  /// Default payload merged into every node payload. Captured node payload fields override it.
+  ///
+  /// ````example
+  /// #let a = ```dot
+  /// digraph {
+  /// node [particle="g"]
+  /// a -> b -> c -> d -> a
+  /// a -> a
+  /// b -> d
+  /// c [particle="q"]
+  /// }
+  /// ```
+  /// #let g = parse(a.text,default-node-payload:(particle:"g"),eval-node-fields:"particle").at(0)
+  /// #nodes(g).map(n=>n)
+  /// ````
+  ///   -> any
   default-node-payload: none,
+  /// Node statement fields to evaluate into `graph.nodes(g).at(i).payload`.
+  /// ````example
+  /// #let a = ```dot
+  /// digraph {
+  /// a -> b -> c -> d -> a
+  /// a -> a
+  /// b -> d
+  /// }
+  /// ```
+  /// #let g = parse(a.text,default-node-payload:(label:"#name"),eval-node-fields:"label")
+  /// >>>#align(center+horizon, draw(layout(g.at(0))))
+  ///
+  /// ````
+  /// -> string | array
+  eval-node-fields: (),
   /// Default payload merged into every edge payload. Captured edge payload fields override it. -> any
   default-edge-payload: none,
   /// Default payload merged into every source half-edge payload. Captured source payload fields override it. -> any
@@ -162,8 +192,6 @@
   default-sink-payload: none,
   /// Graph statement fields to evaluate into `graph.info(g).payload`. -> string | array
   eval-graph-fields: (),
-  /// Node statement fields to evaluate into `graph.nodes(g).at(i).payload`. -> string | array
-  eval-node-fields: (),
   /// Edge statement fields to evaluate into `graph.edges(g).at(i).payload`. -> string | array
   eval-edge-fields: (),
   /// Source half-edge fields to evaluate into `edge.source.payload`. -> string | array
@@ -192,9 +220,11 @@
 /// Create a graph node item for @build.
 ///
 /// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` chooses the node order/index. `label` is stored as
-/// `payload.label`. Extra named arguments are captured as node payload fields,
-/// so `node(<a>, label: [A], color: red)` stores `(label: [A], color: red)`.
+/// optional numeric `id` chooses the node order/index. Extra named arguments
+/// are captured as node payload fields, so
+/// `node(<a>, label: [A], color: red)` stores `(label: [A], color: red)`.
+/// The default draw style uses `payload.label` as the visible node label when
+/// present.
 /// -> array
 #let node(
   /// Optional positional node name. Must be a Typst label when provided; extra named arguments become payload fields. -> label
@@ -203,8 +233,6 @@
   name: none,
   /// Numeric node order/index override. -> none | int
   id: none,
-  /// Visible node label, stored as `payload.label`. -> any
-  label: none,
   /// Node placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -215,7 +243,6 @@
   ..args,
   name: name,
   id: id,
-  label: label,
   pos: pos,
   shift: shift,
   statements: statements,
@@ -273,7 +300,8 @@
 /// Typst label used as the edge name. The numeric `id` chooses the edge order.
 /// Extra named arguments are captured as edge payload fields, so
 /// `edge(source(<a>), sink(<b>), particle: "g")` stores
-/// `(particle: "g")`.
+/// `(particle: "g")`. The default draw style uses `payload.label` as the
+/// visible edge label when present.
 /// -> array
 #let edge(
   /// Source/sink half-edges and optional edge name; extra named arguments become payload fields. -> any
@@ -284,8 +312,6 @@
   id: none,
   /// Edge orientation: `"default"`, `"reversed"`, or `"undirected"`. -> string
   orientation: "default",
-  /// Visible edge label, stored as `payload.label`. -> any
-  label: none,
   /// Edge placement. -> none | dictionary
   pos: none,
   /// Drawing shift stored as a statement. -> none | string | array | dictionary
@@ -303,7 +329,6 @@
   name: name,
   id: id,
   orientation: orientation,
-  label: label,
   pos: pos,
   shift: shift,
   label-pos: label-pos,
