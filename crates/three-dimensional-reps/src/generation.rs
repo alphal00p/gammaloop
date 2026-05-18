@@ -236,17 +236,11 @@ pub fn generate_3d_expression_from_parsed(
     } else {
         false
     };
-    let cff_has_repeated_denominators =
-        options.representation == RepresentationMode::Cff && !repeated_groups(parsed).is_empty();
 
     let expression = match options.representation {
         RepresentationMode::Ltd => generate_ltd_expression_from_parsed(parsed, options),
-        RepresentationMode::Cff
-            if cff_needs_bounded_expression || cff_has_repeated_denominators =>
-        {
-            BoundedCffBuilder::new(parsed, options)?
-                .with_confluent_duplicate_channels(cff_has_repeated_denominators)
-                .build()
+        RepresentationMode::Cff if cff_needs_bounded_expression => {
+            BoundedCffBuilder::new(parsed, options)?.build()
         }
         RepresentationMode::Cff => generate_pure_cff_expression_from_parsed_with_duplicate_sign(
             parsed,
@@ -2341,26 +2335,20 @@ impl<'a> BoundedCffBuilder<'a> {
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
         let needs_generalized_expression = cff_bounds_need_generalized_expression(&self.bounds);
         let has_duplicate_energy_channel = self.has_duplicate_signature_ignoring_mass();
-        let has_repeated_denominator_channel = !repeated_groups(self.parsed).is_empty();
         let has_initial_state_cut = !self.parsed.initial_state_cut_edges.is_empty();
-        let repeated_channel_needs_confluent_bounds =
-            RepeatedLtdBuilder::logical_channels(self.parsed)
-                .iter()
-                .filter(|channel| channel.members.len() > 1)
-                .any(|channel| {
-                    let channel_degree = channel
-                        .members
-                        .iter()
-                        .map(|edge_id| self.bounds[*edge_id])
-                        .sum::<usize>();
-                    channel_degree > 2
-                        || self
-                            .sampling_scale_mode
-                            .is_active_for_degree(channel_degree)
-                });
-        let use_confluent_duplicate_channels = has_repeated_denominator_channel
-            && (self.confluent_duplicate_channels || repeated_channel_needs_confluent_bounds);
-        if use_confluent_duplicate_channels {
+        let use_confluent_duplicate_channels =
+            self.confluent_duplicate_channels && has_duplicate_energy_channel;
+        let use_initial_state_cut_fallback = needs_generalized_expression && has_initial_state_cut;
+        if use_confluent_duplicate_channels || use_initial_state_cut_fallback {
+            let include_duplicate_signature_excess_sign = if use_initial_state_cut_fallback {
+                // This branch delegates the generalized initial-state-cut CFF
+                // sector to the repeated-channel LTD construction. The pure CFF
+                // duplicate-sign convention belongs to the actual pure-CFF
+                // residue basis, not to this LTD-style fallback.
+                false
+            } else {
+                self.include_duplicate_signature_excess_sign
+            };
             let options = Generate3DExpressionOptions {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: self
@@ -2370,8 +2358,8 @@ impl<'a> BoundedCffBuilder<'a> {
                     .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
                     .collect(),
                 numerator_sampling_scale: self.sampling_scale_mode,
-                include_cff_duplicate_signature_excess_sign: self
-                    .include_duplicate_signature_excess_sign,
+                include_cff_duplicate_signature_excess_sign:
+                    include_duplicate_signature_excess_sign,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
             };
             return RepeatedLtdBuilder::new(self.parsed, &options).build();
@@ -2381,14 +2369,6 @@ impl<'a> BoundedCffBuilder<'a> {
                 self.parsed,
                 self.include_duplicate_signature_excess_sign,
             );
-        }
-        let active_bound_count = self.bounds.iter().filter(|degree| **degree > 0).count();
-        if active_bound_count > 0
-            && !has_duplicate_energy_channel
-            && (has_initial_state_cut || active_bound_count > 1)
-        {
-            return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
-                .build_blackbox_interpolation();
         }
         let uniform_sampling_for_nonlinear_degree = self
             .bounds
@@ -2419,7 +2399,6 @@ impl<'a> BoundedCffBuilder<'a> {
     fn supports_quadratic_recursive(&self) -> bool {
         self.bounds.iter().any(|degree| *degree > 1)
             && self.bounds.iter().all(|degree| *degree <= 2)
-            && !self.has_duplicate_signature_ignoring_mass()
             && (self.parsed.loop_names.len() == 1
                 || self.bounds.iter().filter(|degree| **degree > 1).count() == 1)
     }
@@ -3115,71 +3094,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
             0,
             recursion_budget,
         )?;
-        self.finalize_numerator_map_labels();
-        Ok(self.expression)
-    }
-
-    fn build_blackbox_interpolation(mut self) -> Result<ThreeDExpression<OrientationID>> {
-        let active_edges = self
-            .bounds
-            .iter()
-            .enumerate()
-            .filter_map(|(edge_id, degree)| (*degree > 0).then_some((edge_id, *degree)))
-            .collect::<Vec<_>>();
-        let node_sets = active_edges
-            .iter()
-            .map(|(_, degree)| Self::interpolation_nodes(*degree))
-            .collect::<Vec<_>>();
-        let local_to_orig = (0..self.original.internal_edges.len()).collect::<Vec<_>>();
-        let recursion_budget = self.recursion_budget();
-        self.bounds.fill(0);
-
-        for samples in node_sets
-            .iter()
-            .map(|nodes| nodes.iter().copied())
-            .multi_cartesian_product()
-        {
-            let mut replacements = BTreeMap::new();
-            let mut known_factors = Vec::new();
-            let mut extra_half_edges = Vec::new();
-            let mut prefactor = Rational::one();
-
-            for ((edge_id, degree), sample) in active_edges.iter().zip(samples) {
-                replacements.insert(
-                    *edge_id,
-                    Self::channel_replacement_expr(*edge_id, sample, 1, false),
-                );
-                for other in Self::interpolation_nodes(*degree) {
-                    if other == sample {
-                        continue;
-                    }
-                    known_factors.push(
-                        KnownLinearExpr::var(*edge_id, 1)
-                            + KnownLinearExpr::ose(*edge_id, -i64::from(other)),
-                    );
-                    extra_half_edges.push(*edge_id);
-                    prefactor *= Rational::from(2) / Rational::from(i64::from(sample - other));
-                }
-            }
-
-            if prefactor.is_zero() {
-                continue;
-            }
-
-            self.recursive_terms(
-                self.original,
-                &local_to_orig,
-                &replacements,
-                &known_factors,
-                &extra_half_edges,
-                0,
-                prefactor,
-                false,
-                0,
-                recursion_budget,
-            )?;
-        }
-
         self.finalize_numerator_map_labels();
         Ok(self.expression)
     }
@@ -5080,6 +4994,12 @@ impl<'a> RepeatedLtdBuilder<'a> {
         if repeated_channel_routing_sign < 0 {
             residue_sign = -residue_sign;
         }
+        if self.options.representation == RepresentationMode::Cff
+            && self.options.include_cff_duplicate_signature_excess_sign
+            && cff_same_routing_duplicate_signature_excess(self.parsed) % 2 == 1
+        {
+            residue_sign = -residue_sign;
+        }
         for (sigma, order) in cut_signs.iter().zip(&alpha) {
             if order % 2 == 1 {
                 residue_sign *= Rational::from(*sigma);
@@ -6897,6 +6817,22 @@ fn cff_duplicate_signature_excess(parsed: &ParsedGraph) -> usize {
     counts.values().map(|count| count.saturating_sub(1)).sum()
 }
 
+fn cff_same_routing_duplicate_signature_excess(parsed: &ParsedGraph) -> usize {
+    repeated_groups(parsed)
+        .into_iter()
+        .map(|group| {
+            let mut counts = BTreeMap::<i32, usize>::new();
+            for relative_sign in group.relative_signs {
+                *counts.entry(relative_sign).or_default() += 1;
+            }
+            counts
+                .values()
+                .map(|count| count.saturating_sub(1))
+                .sum::<usize>()
+        })
+        .sum()
+}
+
 fn has_duplicate_signature_ignoring_mass(parsed: &ParsedGraph) -> bool {
     let mut counts = BTreeMap::<MomentumSignature, usize>::new();
     for edge in &parsed.internal_edges {
@@ -7016,6 +6952,9 @@ fn cff_bounds_need_generalized_expression_from_options(
 }
 
 fn cff_bounds_need_generalized_expression(bounds: &[usize]) -> bool {
+    if bounds.iter().all(|degree| *degree == 0) {
+        return false;
+    }
     bounds.iter().any(|degree| *degree > 1)
 }
 
@@ -7302,33 +7241,6 @@ mod ltd_tests {
             "sunrise_pow4.dot" => crate::graph_io::test_graphs::sunrise_pow4_graph(),
             other => panic!("unknown parsed fixture {other}"),
         }
-    }
-
-    fn denominator_linear_surface_ids(
-        expression: &ThreeDExpression<OrientationID>,
-    ) -> BTreeSet<LinearSurfaceID> {
-        expression
-            .orientations
-            .iter()
-            .flat_map(|orientation| &orientation.variants)
-            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
-            .flatten()
-            .filter_map(|surface_id| match surface_id {
-                HybridSurfaceID::Linear(id) => Some(id),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn assert_denominator_surfaces_are_e_surfaces(expression: &ThreeDExpression<OrientationID>) {
-        assert!(
-            denominator_linear_surface_ids(expression)
-                .into_iter()
-                .all(|surface_id| {
-                    expression.surfaces.linear_surface_cache[surface_id].kind
-                        == LinearSurfaceKind::Esurface
-                })
-        );
     }
 
     fn penta_contact_graph() -> ParsedGraph {
@@ -7957,6 +7869,12 @@ mod ltd_tests {
             expression
                 .orientations
                 .iter()
+                .all(|orientation| orientation.variants.len() == 1)
+        );
+        assert!(
+            expression
+                .orientations
+                .iter()
                 .flat_map(|orientation| &orientation.variants)
                 .any(|variant| variant.denominator.get_bottom_layer().len() > 1)
         );
@@ -8240,13 +8158,30 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        let denominator_surface_ids = expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
+            .flatten()
+            .filter_map(|surface_id| match surface_id {
+                HybridSurfaceID::Linear(id) => Some(id.0),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(denominator_surface_ids.into_iter().all(|surface_id| {
+            expression.surfaces.linear_surface_cache[LinearSurfaceID(surface_id)].kind
+                == LinearSurfaceKind::Esurface
+        }));
         assert!(
             expression
                 .orientations
                 .iter()
                 .flat_map(|orientation| &orientation.variants)
-                .any(|variant| !variant.numerator_surfaces.is_empty())
+                .any(|variant| {
+                    variant.origin.as_deref() == Some("bounded_degree_known_factor_cff")
+                        && !variant.numerator_surfaces.is_empty()
+                })
         );
     }
 
@@ -8273,7 +8208,13 @@ mod ltd_tests {
         .unwrap();
 
         assert!(bounded.orientations.len() > ordinary.orientations.len());
-        assert_denominator_surfaces_are_e_surfaces(&bounded);
+        assert!(
+            bounded
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
         assert!(
             bounded
                 .orientations
@@ -8299,7 +8240,21 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        let denominator_surface_ids = expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
+            .flatten()
+            .filter_map(|surface_id| match surface_id {
+                HybridSurfaceID::Linear(id) => Some(id.0),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(denominator_surface_ids.into_iter().all(|surface_id| {
+            expression.surfaces.linear_surface_cache[LinearSurfaceID(surface_id)].kind
+                == LinearSurfaceKind::Esurface
+        }));
         assert!(
             expression
                 .orientations
@@ -8926,7 +8881,13 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
         assert!(
             expression
                 .orientations
@@ -8953,7 +8914,13 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
         assert!(
             expression
                 .orientations
@@ -8979,7 +8946,21 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert_denominator_surfaces_are_e_surfaces(&expression);
+        let denominator_surface_ids = expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
+            .flatten()
+            .filter_map(|surface_id| match surface_id {
+                HybridSurfaceID::Linear(id) => Some(id.0),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(denominator_surface_ids.into_iter().all(|surface_id| {
+            expression.surfaces.linear_surface_cache[LinearSurfaceID(surface_id)].kind
+                == LinearSurfaceKind::Esurface
+        }));
     }
 
     #[test]
@@ -8996,23 +8977,30 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
         assert!(
             expression
-                .orientations
+                .surfaces
+                .linear_surface_cache
                 .iter()
-                .flat_map(|orientation| &orientation.variants)
-                .any(|variant| variant
-                    .origin
-                    .as_deref()
-                    .is_some_and(|origin| { origin.starts_with("bounded_degree") }))
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
         );
         assert!(
             expression
                 .orientations
                 .iter()
                 .flat_map(|orientation| &orientation.variants)
-                .any(|variant| !variant.numerator_surfaces.is_empty())
+                .any(|variant| variant.origin.as_deref().is_some_and(|origin| {
+                    origin.starts_with("bounded_degree_quadratic_recursive_contact")
+                }))
+        );
+        assert!(
+            expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .any(|variant| variant.origin.as_deref().is_some_and(|origin| {
+                    origin.starts_with("bounded_degree_quadratic_recursive_remainder")
+                }))
         );
     }
 
@@ -9029,8 +9017,22 @@ mod ltd_tests {
         )
         .unwrap();
 
-        let denominator_surface_ids = denominator_linear_surface_ids(&expression);
+        let denominator_surface_ids = expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
+            .flatten()
+            .filter_map(|surface_id| match surface_id {
+                HybridSurfaceID::Linear(id) => Some(id.0),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
         assert!(!denominator_surface_ids.is_empty());
+        assert!(denominator_surface_ids.into_iter().all(|surface_id| {
+            expression.surfaces.linear_surface_cache[LinearSurfaceID(surface_id)].kind
+                == LinearSurfaceKind::Esurface
+        }));
     }
 
     #[test]
@@ -9047,7 +9049,13 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
         assert!(
             expression
                 .orientations
@@ -9086,7 +9094,13 @@ mod ltd_tests {
                 .flat_map(|orientation| &orientation.variants)
                 .any(|variant| variant.uniform_scale_power > 0)
         );
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
     }
 
     #[test]
@@ -9103,13 +9117,21 @@ mod ltd_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
-        assert!(!denominator_linear_surface_ids(&expression).is_empty());
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+        );
         assert!(
             expression
                 .orientations
                 .iter()
                 .flat_map(|orientation| &orientation.variants)
-                .any(|variant| variant.origin.as_deref().is_some())
+                .any(|variant| {
+                    variant.origin.as_deref() == Some("bounded_degree_known_factor_cff")
+                })
         );
     }
 

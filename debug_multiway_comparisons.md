@@ -15,9 +15,19 @@ but no graph-specific or unexplained sign modifiers are allowed.
 ## Current Checkpoint
 
 The scalar cross-section local inspect matrix is green at this checkpoint. The
-last source change centralizes active repeated-channel metadata in
-`Graph::active_three_d_repeated_channels()` and derives all repeated-channel
-bridges from that single source:
+current checkpoint deliberately restores the pure-CFF production path for true
+repeated denominator channels, while keeping the denominator-edge-coordinate
+source map for pure-CFF numerator localization. The previous automatic
+redirection of all repeated CFF graphs through the confluent/LTD-like bounded
+path made the 3Drep repeated comparison matrix greener, but it spoiled the
+slow scalar cross-section local-inspect sweep. The scalar sweep is therefore
+the guardrail: repeated-channel CFF/LTD diagnostic comparisons must be repaired
+through an explicit, centralized comparison normal form, not by changing the
+GammaLoop production CFF local-UV basis.
+
+The already-committed scalar sign work centralizes active repeated-channel
+metadata in `Graph::active_three_d_repeated_channels()` and derives all
+repeated-channel bridges from that single source:
 
 - duplicate-signature excess for the global 3D sign exponent;
 - repeated-pole residue bridge signs;
@@ -33,10 +43,10 @@ their source orientation in the generated repeated-LTD routing. When such a
 channel is selected, the repeated-pole derivative bridge and normalized
 edge-support bridge carry the remaining orientation.
 
-This keeps the scalar cross-section sign logic graph/LMB-derived. There are no
-GL-specific branches, no loop-number fudge factors, no production use of
-`graph_from_signature`, and no temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS`
-diagnostics in the touched Rust code.
+This keeps the scalar cross-section sign logic graph/LMB-derived. The current
+checkpoint still has no GL-specific branches, no loop-number fudge factors, no
+production use of `graph_from_signature`, and no temporary
+`GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics in the touched Rust code.
 
 ## Validation Matrix
 
@@ -82,19 +92,35 @@ env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
 143 tests run: 143 passed, 124 skipped
 ```
 
+The checkpoint was revalidated on 2026-05-18 after the pure-CFF restoration and
+the denominator-edge-coordinate source map change:
+
+```text
+find tests/tests/test_runs/snapshots -name '*.snap.new' -delete
+
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc INSTA_FORCE_PASS=1 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(/scalar_3l_cross_section_inspects::slow/)' \
+  --no-capture --retries 0
+
+143 tests run: 143 passed (2 slow), 124 skipped
+```
+
 The previous sign-only GL38/GL46 failures are now green. Earlier GL24 and GL35
 local-UV drift failures also remain green.
 
-Full selected GammaLoop suite status before the 3Drep fixture refresh:
+Most recent full selected GammaLoop suite status before this checkpoint:
 
 ```text
 just test_gammaloop
 
-1131 tests run: 1096 passed, 35 failed, 271 skipped
+1131 tests run: 1089 passed, 42 failed, 271 skipped
 ```
 
 Those failures are outside the now-green slow scalar cross-section matrix. The
-important remaining buckets are:
+important buckets are:
 
 - forward-scattering LU generation tests where the local-series external
   coordinate selector finds two equivalent initial-state candidates with the
@@ -102,6 +128,7 @@ important remaining buckets are:
 - the divergent/amplitude-like scalar bubble local/integrated UV inspect tests;
 - generated forward cross-section smoke tests that currently hit the same
   coordinate ambiguity;
+- 3Drep high-power CFF/LTD parity tests and the old Python 3Drep case matrix;
 - amplitude profile-bulk tests;
 - spin-sum cross-section generation tests that also stop at the coordinate
   ambiguity;
@@ -110,39 +137,52 @@ important remaining buckets are:
 The checkpoint should therefore be read as a scalar cross-section multi-way
 local-inspect parity checkpoint, not as a full-suite clean point.
 
-## 3Drep Broad Revisit
+## 3Drep Status At This Checkpoint
 
-The broad 3Drep tests were rerun after the CFF repeated/high-power fixes. The
-remaining failure was not numerical parity: the imported `box_pow3` fixture
-still expected the old pure-CFF shape (`62` CFF orientations). The fixed
-generator now routes repeated high-power CFF through the same derivative-free
-bounded repeated-channel expression as LTD for that case, giving `17` CFF
-orientations, `17` LTD orientations, and identical CFF/LTD expression JSON.
-The fixture now asserts that shared expression explicitly.
-
-Validated 3Drep commands:
-
-```text
-cargo test -p three-dimensional-reps --features eval -- --nocapture
-
-60 passed, 0 failed
-```
+The pure-CFF source-map correction fixes the broad non-repeated and
+initial-state-cut 3Drep mismatches without changing the scalar sweep:
 
 ```text
 env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
   RUSTFLAGS=-L/opt/local/lib/libgcc \
   cargo nextest run -p gammaloop-integration-tests --test test_runs \
   --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
-  -E 'test(/test_3d_reps/)' --no-capture --retries 0
+  -E 'test(=test_3d_reps::cli_aa_aa_box_and_double_box_multibackend_threedrep_comparisons) | test(=test_3d_reps::cli_physical_hexagon_high_power_energy_sectors_match_ltd)' \
+  --no-capture --retries 0
 
-17 tests run: 17 passed, 250 skipped
+2 tests run: 2 passed, 265 skipped
 ```
 
-The old Python matrix remains green inside that run:
+The imported `box_pow3` repeated-channel fixture now has direct CFF/LTD
+numerical parity in the restored pure-CFF production path: CFF serializes as
+the pure-CFF channel-normal-form expression with `62` orientations, while LTD
+uses the derivative-free repeated-channel expression with `17` orientations.
+The fixture therefore asserts numeric parity and the actual five-variant LTD
+repeated-channel structure, rather than requiring byte-identical CFF/LTD JSON.
 
 ```text
-old Python 3Drep case matrix: 310 ok, 0 failed, 310 total
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(=test_3d_reps::cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path)' \
+  --no-capture --retries 0
+
+1 test run: 1 passed, 266 skipped
 ```
+
+The old Python 3Drep case matrix is not green at this checkpoint:
+
+```text
+old Python 3Drep case matrix: 285 ok, 25 failed, 310 total
+```
+
+Those remaining failures are concentrated in repeated/high-power CFF/LTD
+diagnostic comparisons and a small all-edge-linear numerator sign-basis bucket.
+They should be fixed by one centralized comparison-generation entry point that
+selects a common confluent normal form for repeated CFF/LTD diagnostics, while
+leaving the production CFF local-UV path used by GammaLoop scalar cross-section
+inspection unchanged.
 
 ## Theory Anchor
 
@@ -214,7 +254,12 @@ than by toggling signs graph by graph.
    - fix only the shared source-basis construction if the mismatch is in CFF
    local UV generation. Do not change the cross-section LU residue bridge unless
    the bubble reduction exposes the same graph/LMB invariant.
-4. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
+4. Reassess the broad 3Drep high-power failures through a single diagnostic
+   CFF/LTD comparison entry point. Repeated diagnostics may use a shared
+   confluent normal form, but production CFF scalar local UV must remain in the
+   pure-CFF source basis unless the first-principles bubble comparison proves
+   that basis wrong.
+5. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
    scalar cross-section sweep after each principled fix. The repeated-channel
    descriptor is shared and should remain a single implementation rather than a
    special-case branch.

@@ -3610,14 +3610,19 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
         ],
     );
 
-    assert_manifest_case(manifest, "cff", 17, 24)?;
+    assert_manifest_case(manifest, "cff", 62, 27)?;
     assert_manifest_case(manifest, "ltd", 17, 24)?;
     assert_manifest_case(manifest, "pureltd", 6, 57)?;
 
     assert_eq!(
-        serde_json::to_value(&run.cff.expression)?,
-        serde_json::to_value(&run.ltd.expression)?,
-        "bounded repeated-channel CFF should use the same derivative-free expression as LTD"
+        compact_orientation_labels(&run.cff.expression, &run.source_internal_edges),
+        nontrivial_sign_labels(6)
+    );
+    assert_unit_or_minus_one_prefactors(&run.cff.expression, (1, 1))?;
+    assert!(
+        half_edges(&run.cff.expression)
+            .iter()
+            .all(|edges| edges == &[4, 5, 6, 7, 8, 9])
     );
     assert_eq!(
         compact_base_orientation_labels(&run.ltd.expression, &run.source_internal_edges),
@@ -3698,7 +3703,7 @@ fn cli_imported_box_pow3_3drep_test_uses_gammaloop_graph_path() -> Result<()> {
     let python_reference = 0.338_108_873_066_020_44_f64;
     let repeated_numeric_tolerance = 1.0e-10;
     assert!(
-        (cff_value - python_reference).abs() < repeated_numeric_tolerance,
+        (cff_value - python_reference).abs() < 1.0e-13,
         "cff_value={cff_value:.17e}, python_reference={python_reference:.17e}"
     );
     assert!(
