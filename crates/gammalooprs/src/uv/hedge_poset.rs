@@ -107,7 +107,11 @@ impl Wood {
         let mut spinneys = Vec::new();
 
         for cut in cuts.cuts.iter() {
-            let cut_sub = subgraph.subtract(&cut.union);
+            let cut_sub = if cut.residue_selector.is_threshold_esurface_residue() {
+                subgraph.clone()
+            } else {
+                subgraph.subtract(&cut.union)
+            };
             spinneys.extend(graph.classified_spinneys(
                 &cut_sub,
                 settings,
@@ -315,7 +319,8 @@ pub struct ForestNode<'a> {
 
 impl OperationNode {
     pub fn is_compatible_with(&self, cut: &CutSet) -> bool {
-        self.covers().is_none_or(|c| !c.intersects(&cut.union))
+        cut.residue_selector.is_threshold_esurface_residue()
+            || self.covers().is_none_or(|c| !c.intersects(&cut.union))
     }
 
     pub fn current<'a>(&'a self, wood: &'a Wood, topo_order: usize) -> Option<Vec<ForestNode<'a>>> {

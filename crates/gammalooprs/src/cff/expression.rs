@@ -16,7 +16,9 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder},
     function,
     id::Replacement,
+    symbol,
 };
+use three_dimensional_reps::tree::{NodeId, Tree};
 
 use super::{
     esurface::{Esurface, RaisedEsurfaceGroup as GammaLoopRaisedEsurfaceGroup},
@@ -27,9 +29,14 @@ use super::{
     },
 };
 use crate::{
-    graph::Graph,
+    graph::{
+        Graph,
+        cuts::{CutSet, LuLocalSeriesCoordinate, LuResidueSelectionBasis},
+    },
     settings::global::{OrientationPattern, ThreeDRepresentation},
-    utils::{GS, W_, ose_atom_from_index, symbolica_ext::CallSymbol},
+    utils::{
+        GS, W_, external_energy_atom_from_index, ose_atom_from_index, symbolica_ext::CallSymbol,
+    },
 };
 
 pub type ThreeDExpression<O> =
@@ -87,9 +94,420 @@ pub(crate) fn remove_ltd_global_contact_completions_from_local_residue(
             !variant.origin.as_deref().is_some_and(|origin| {
                 origin.starts_with("bounded_degree_quadratic_recursive_contact")
                     || origin.starts_with("bounded_degree_known_factor_cff_contact")
+                    || origin.starts_with("bounded_degree_ltd_finite_pole_contact")
             })
         });
     }
+}
+
+pub(crate) fn retain_three_d_variants_supporting_any_cut_edges(
+    expression: &mut ThreeDExpression<OrientationID>,
+    cut_edge_sets: &[Vec<EdgeIndex>],
+) {
+    if cut_edge_sets.is_empty() {
+        return;
+    }
+
+    for orientation in &mut expression.orientations {
+        orientation.variants.retain(|variant| {
+            cut_edge_sets.iter().any(|cut_edges| {
+                cut_edges
+                    .iter()
+                    .all(|cut_edge| variant.denominator_edges.contains(cut_edge))
+            })
+        });
+    }
+}
+
+pub(crate) fn prepare_ltd_lu_local_series_expression(
+    expression: &mut ThreeDExpression<OrientationID>,
+    cutset: &CutSet,
+) {
+    remove_ltd_global_contact_completions_from_local_residue(expression);
+    retain_three_d_variants_supporting_any_cut_edges(
+        expression,
+        cutset.residue_selector.lu_cut_edge_sets(),
+    );
+}
+
+pub(crate) fn cutset_has_repeated_lu_pole(cutset: &CutSet) -> bool {
+    cutset
+        .residue_selector
+        .lu_cut()
+        .is_some_and(|lu_cut| lu_cut.max_occurence > 1)
+}
+
+pub(crate) fn cff_expression_uses_ltd_lu_residue_basis(
+    expression: &ThreeDExpression<OrientationID>,
+) -> bool {
+    expression
+        .orientations
+        .iter()
+        .flat_map(|orientation| &orientation.variants)
+        .any(|variant| {
+            variant
+                .origin
+                .as_deref()
+                .is_some_and(|origin| origin.starts_with("ltd_confluent"))
+        })
+}
+
+pub(crate) fn ltd_lu_local_series_prefactor_sign(cutset: &CutSet) -> i64 {
+    cutset
+        .residue_selector
+        .ltd_local_series_residue_prefactor_sign()
+}
+
+pub(crate) fn ltd_lu_local_series_coefficients_from_parametric_atom(
+    graph_name: &str,
+    expression: &ThreeDExpression<OrientationID>,
+    atom: Atom,
+    lu_cut: &GammaLoopRaisedEsurfaceGroup,
+    selected_esurface_signs: &[(EsurfaceID, i64)],
+    local_series_coordinates: &[LuLocalSeriesCoordinate],
+    _allow_orientation_dependent_surface_family_sign: bool,
+) -> Result<Vec<Atom>> {
+    ltd_lu_local_series_coefficients(
+        graph_name,
+        expression,
+        lu_cut,
+        selected_esurface_signs,
+        local_series_coordinates,
+        |selected_context| {
+            let surface_family_sign = ltd_lu_local_series_surface_family_sign_atom(
+                graph_name,
+                expression,
+                lu_cut,
+                selected_context.esurface_id,
+                selected_context.localized_external_edge,
+                selected_context.localized_external_coeff,
+            )?;
+            Ok(atom.clone() * surface_family_sign)
+        },
+    )
+}
+
+struct LtdLuLocalSeriesSelectedSurface {
+    esurface_id: EsurfaceID,
+    localized_external_edge: EdgeIndex,
+    localized_external_coeff: i64,
+    surface_without_localized_external: Atom,
+}
+
+fn ltd_lu_local_series_coefficients(
+    graph_name: &str,
+    expression: &ThreeDExpression<OrientationID>,
+    lu_cut: &GammaLoopRaisedEsurfaceGroup,
+    selected_esurface_signs: &[(EsurfaceID, i64)],
+    local_series_coordinates: &[LuLocalSeriesCoordinate],
+    mut parametric_atom_for_selected_surface: impl FnMut(
+        &LtdLuLocalSeriesSelectedSurface,
+    ) -> Result<Atom>,
+) -> Result<Vec<Atom>> {
+    let residue_parameter = symbol!("ltd_lu_residue_parameter");
+    let residue_parameter_atom = Atom::var(residue_parameter);
+    let max_occurrence = lu_cut.max_occurence;
+    let mut coefficients = vec![Atom::Zero; max_occurrence];
+
+    let selected_surfaces = if max_occurrence == 1 {
+        selected_esurface_signs.to_vec()
+    } else {
+        lu_cut
+            .esurface_ids
+            .iter()
+            .copied()
+            .map(|esurface_id| (esurface_id, 1))
+            .collect_vec()
+    };
+
+    for (esurface_id, selected_sign) in &selected_surfaces {
+        let esurface = expression.surfaces.esurface_cache[*esurface_id].clone();
+        let coordinate = local_series_coordinates
+            .iter()
+            .find(|coordinate| coordinate.esurface_id == *esurface_id)
+            .ok_or_else(|| {
+                eyre!(
+                    "cannot take an LTD LU residue for graph {graph_name} on E-surface {esurface_id:?}: no local-series coordinate was recorded"
+                )
+            })?;
+        let localized_external_edge = coordinate.external_edge;
+        let localized_external_coeff = esurface
+            .external_shift
+            .iter()
+            .filter_map(|(edge_id, sign)| (*edge_id == localized_external_edge).then_some(*sign))
+            .sum::<i64>();
+        if localized_external_coeff == 0 {
+            return Err(eyre!(
+                "cannot take an LTD LU residue for graph {graph_name} on E-surface {esurface_id:?}: local-series external coordinate {} is not part of the generated E-surface external shift {:?}",
+                usize::from(localized_external_edge),
+                esurface.external_shift,
+            ));
+        }
+
+        let surface_without_localized_external_expr =
+            surface_without_localized_external_expr(&esurface, localized_external_edge);
+        let surface_without_localized_external =
+            surface_without_localized_external_expr.to_atom_gs(&[]);
+        let selected_context = LtdLuLocalSeriesSelectedSurface {
+            esurface_id: *esurface_id,
+            localized_external_edge,
+            localized_external_coeff,
+            surface_without_localized_external,
+        };
+        let localized_external_replacement = (Atom::num(*selected_sign)
+            * residue_parameter_atom.clone()
+            - &selected_context.surface_without_localized_external)
+            / Atom::num(localized_external_coeff);
+        let localized_atom = parametric_atom_for_selected_surface(&selected_context)?
+            .replace(external_energy_atom_from_index(localized_external_edge))
+            .with(localized_external_replacement)
+            .expand();
+        let series = localized_atom
+            .series(residue_parameter, Atom::Zero, 0)
+            .map_err(|error| {
+                eyre!(
+                    "failed to extract LTD LU residue for graph {graph_name} on E-surface {esurface_id:?}: {error}"
+                )
+            })?;
+        for occurrence in 1..=max_occurrence {
+            let occurrence_i64 = i64::try_from(occurrence).map_err(|_| {
+                eyre!(
+                    "failed to extract LTD LU residue for graph {graph_name} on E-surface {esurface_id:?}: occurrence does not fit in i64"
+                )
+            })?;
+            coefficients[occurrence - 1] += series.coefficient((-occurrence_i64, 1).into());
+        }
+    }
+
+    Ok(coefficients)
+}
+
+fn surface_without_localized_external_expr(
+    esurface: &Esurface,
+    localized_external_edge: EdgeIndex,
+) -> LinearEnergyExpr {
+    let surface_without_localized_external = esurface
+        .energies
+        .iter()
+        .fold(LinearEnergyExpr::zero(), |acc, edge_id| {
+            acc + LinearEnergyExpr::ose(*edge_id, 1)
+        });
+    esurface.external_shift.iter().fold(
+        surface_without_localized_external,
+        |acc, (external_edge, external_sign)| {
+            if *external_edge == localized_external_edge {
+                acc
+            } else {
+                acc + LinearEnergyExpr::external(*external_edge, *external_sign)
+            }
+        },
+    )
+}
+
+fn ltd_lu_local_series_surface_family_sign_atom(
+    graph_name: &str,
+    expression: &ThreeDExpression<OrientationID>,
+    lu_cut: &GammaLoopRaisedEsurfaceGroup,
+    selected_esurface_id: EsurfaceID,
+    localized_external_edge: EdgeIndex,
+    localized_external_coeff: i64,
+) -> Result<Atom> {
+    let selected_surface_ids = lu_cut.esurface_ids.iter().copied().collect_vec();
+    let replacement = selected_lu_surface_zero_replacement(
+        expression,
+        selected_esurface_id,
+        localized_external_edge,
+        localized_external_coeff,
+    )?;
+
+    let mut global_signs = std::collections::BTreeSet::new();
+    for orientation in &expression.orientations {
+        let mut signs = std::collections::BTreeSet::new();
+        for variant in &orientation.variants {
+            let selected_numerator_count = variant
+                .numerator_surfaces
+                .iter()
+                .filter(|surface_id| {
+                    matches!(
+                        surface_id,
+                        HybridSurfaceID::Esurface(esurface_id)
+                            if selected_surface_ids.contains(esurface_id)
+                    )
+                })
+                .count();
+
+            for chain in denominator_tree_chains_gs(&variant.denominator) {
+                let selected_denominator_count = chain
+                    .iter()
+                    .filter(|surface_id| {
+                        matches!(
+                            surface_id,
+                            HybridSurfaceID::Esurface(esurface_id)
+                                if selected_surface_ids.contains(esurface_id)
+                        )
+                    })
+                    .count();
+                if selected_denominator_count <= selected_numerator_count {
+                    continue;
+                }
+                signs.insert(localized_variant_surface_family_sign(
+                    graph_name,
+                    expression,
+                    &chain,
+                    &variant.numerator_surfaces,
+                    &selected_surface_ids,
+                    selected_esurface_id,
+                    localized_external_edge,
+                    &replacement,
+                )?);
+            }
+        }
+        global_signs.insert(unique_or_unfactorable_surface_family_sign(&signs));
+    }
+
+    Ok(Atom::num(unique_or_unfactorable_surface_family_sign(
+        &global_signs,
+    )))
+}
+
+fn unique_or_unfactorable_surface_family_sign(signs: &std::collections::BTreeSet<i64>) -> i64 {
+    if signs.len() == 1 {
+        *signs.iter().next().expect("one sign was checked above")
+    } else {
+        // Branch-dependent signs cannot be pulled in front of the branch-summed
+        // local atom. They require per-branch Laurent extraction, so keep the
+        // exact atom-level branch signs unchanged at this level.
+        1
+    }
+}
+
+fn selected_lu_surface_zero_replacement(
+    expression: &ThreeDExpression<OrientationID>,
+    esurface_id: EsurfaceID,
+    localized_external_edge: EdgeIndex,
+    localized_external_coeff: i64,
+) -> Result<LinearEnergyExpr> {
+    if localized_external_coeff.unsigned_abs() != 1 {
+        return Err(eyre!(
+            "cannot build local zero-surface replacement for E-surface {esurface_id:?}: expected a unit localized external coefficient, found {localized_external_coeff}"
+        ));
+    }
+    let esurface = &expression.surfaces.esurface_cache[esurface_id];
+    let surface_without_localized_external =
+        surface_without_localized_external_expr(esurface, localized_external_edge);
+    Ok(surface_without_localized_external.scale(-localized_external_coeff.signum()))
+}
+
+fn localized_variant_surface_family_sign(
+    graph_name: &str,
+    expression: &ThreeDExpression<OrientationID>,
+    denominator_chain: &[HybridSurfaceID],
+    numerator_surfaces: &[HybridSurfaceID],
+    selected_surface_ids: &[EsurfaceID],
+    selected_esurface_id: EsurfaceID,
+    localized_external_edge: EdgeIndex,
+    replacement: &LinearEnergyExpr,
+) -> Result<i64> {
+    let denominator_sign = denominator_chain
+        .iter()
+        .filter(|surface_id| !is_selected_lu_surface(**surface_id, selected_surface_ids))
+        .map(|surface_id| {
+            localized_surface_family_sign(
+                graph_name,
+                expression,
+                *surface_id,
+                selected_esurface_id,
+                localized_external_edge,
+                replacement,
+            )
+        })
+        .product::<Result<i64>>()?;
+    let numerator_sign = numerator_surfaces
+        .iter()
+        .filter(|surface_id| !is_selected_lu_surface(**surface_id, selected_surface_ids))
+        .map(|surface_id| {
+            localized_surface_family_sign(
+                graph_name,
+                expression,
+                *surface_id,
+                selected_esurface_id,
+                localized_external_edge,
+                replacement,
+            )
+        })
+        .product::<Result<i64>>()?;
+    Ok(denominator_sign * numerator_sign)
+}
+
+fn is_selected_lu_surface(
+    surface_id: HybridSurfaceID,
+    selected_surface_ids: &[EsurfaceID],
+) -> bool {
+    matches!(
+        surface_id,
+        HybridSurfaceID::Esurface(esurface_id) if selected_surface_ids.contains(&esurface_id)
+    )
+}
+
+fn localized_surface_family_sign(
+    graph_name: &str,
+    expression: &ThreeDExpression<OrientationID>,
+    surface_id: HybridSurfaceID,
+    selected_esurface_id: EsurfaceID,
+    localized_external_edge: EdgeIndex,
+    replacement: &LinearEnergyExpr,
+) -> Result<i64> {
+    if surface_id == HybridSurfaceID::Unit {
+        return Ok(1);
+    }
+    let Some(expression_for_surface) = residue_surface_linear_expression(expression, surface_id)
+    else {
+        return Ok(1);
+    };
+    let localized = expression_for_surface
+        .substitute_external_energy(localized_external_edge, replacement)
+        .canonical();
+    if localized.is_zero() {
+        return Err(eyre!(
+            "localizing graph {graph_name} on LU E-surface {selected_esurface_id:?} made spectator surface {surface_id:?} vanish"
+        ));
+    }
+    Ok(find_matching_localized_surface(
+        expression,
+        &localized,
+        localized_external_edge,
+        replacement,
+    )
+    .map(|(_, sign)| sign)
+    .unwrap_or(1))
+}
+
+fn denominator_tree_chains_gs(tree: &Tree<HybridSurfaceID>) -> Vec<Vec<HybridSurfaceID>> {
+    fn walk(
+        tree: &Tree<HybridSurfaceID>,
+        node_id: NodeId,
+        current: &mut Vec<HybridSurfaceID>,
+        out: &mut Vec<Vec<HybridSurfaceID>>,
+    ) {
+        let node = tree.get_node(node_id);
+        if node.data != HybridSurfaceID::Unit {
+            current.push(node.data);
+        }
+        if node.children.is_empty() {
+            out.push(current.clone());
+        } else {
+            for child in &node.children {
+                walk(tree, *child, current, out);
+            }
+        }
+        if node.data != HybridSurfaceID::Unit {
+            current.pop();
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(tree, NodeId::root(), &mut Vec::new(), &mut out);
+    out
 }
 
 pub(crate) fn select_lu_cut_residue_for_representation<O>(
@@ -103,19 +521,45 @@ where
     O: Clone + From<usize> + Into<usize>,
     usize: From<O>,
 {
-    if representation == ThreeDRepresentation::Ltd {
-        // LTD LU cuts are selected from the generated E-surface alternatives
-        // directly. This signed selector preserves selected-denominator
-        // canonicalization signs; the ordinary CFF selector clears them because
-        // CFF residues are already assembled in the positive-energy Cutkosky
-        // convention.
-        expression.select_esurface_residue_with_cut_edges_and_esurface_signs(
-            lu_cut,
-            cut_edge_sets,
-            ltd_lu_cut_esurface_signs,
-        )
-    } else {
-        expression.select_esurface_residue_with_cut_edges(lu_cut, cut_edge_sets)
+    let selection_basis = match representation {
+        ThreeDRepresentation::Cff => LuResidueSelectionBasis::PositiveEnergyCutkosky,
+        ThreeDRepresentation::Ltd => LuResidueSelectionBasis::GeneratedEsurface,
+    };
+    select_lu_cut_residue_for_basis(
+        expression,
+        lu_cut,
+        cut_edge_sets,
+        ltd_lu_cut_esurface_signs,
+        selection_basis,
+    )
+}
+
+pub(crate) fn select_lu_cut_residue_for_basis<O>(
+    expression: ThreeDExpression<O>,
+    lu_cut: &GammaLoopRaisedEsurfaceGroup,
+    cut_edge_sets: &[Vec<EdgeIndex>],
+    ltd_lu_cut_esurface_signs: &[(EsurfaceID, i64)],
+    selection_basis: LuResidueSelectionBasis,
+) -> Vec<ThreeDExpression<O>>
+where
+    O: Clone + From<usize> + Into<usize>,
+    usize: From<O>,
+{
+    match selection_basis {
+        LuResidueSelectionBasis::PositiveEnergyCutkosky => {
+            expression.select_esurface_residue_with_cut_edges(lu_cut, cut_edge_sets)
+        }
+        LuResidueSelectionBasis::GeneratedEsurface => {
+            // LTD and confluent-generated CFF expressions expose LU residues in
+            // the generated E-surface variables. Keep the selected-denominator
+            // orientation signs with that basis; pure CFF expressions are
+            // already assembled in the positive-energy Cutkosky convention.
+            expression.select_esurface_residue_with_cut_edges_and_esurface_signs(
+                lu_cut,
+                cut_edge_sets,
+                ltd_lu_cut_esurface_signs,
+            )
+        }
     }
 }
 
@@ -347,6 +791,31 @@ fn residue_surface_linear_expressions(
                 )
             });
     esurfaces.chain(hsurfaces).chain(linear_surfaces).collect()
+}
+
+fn residue_surface_linear_expression(
+    residue: &ThreeDExpression<OrientationID>,
+    surface_id: HybridSurfaceID,
+) -> Option<LinearEnergyExpr> {
+    match surface_id {
+        HybridSurfaceID::Unit => Some(LinearEnergyExpr::zero()),
+        HybridSurfaceID::Infinite => None,
+        HybridSurfaceID::Esurface(id) => residue
+            .surfaces
+            .esurface_cache
+            .get(id)
+            .map(esurface_linear_expr),
+        HybridSurfaceID::Hsurface(id) => residue
+            .surfaces
+            .hsurface_cache
+            .get(id)
+            .map(hsurface_linear_expr),
+        HybridSurfaceID::Linear(id) => residue
+            .surfaces
+            .linear_surface_cache
+            .get(id)
+            .map(|surface| surface.expression.clone().canonical()),
+    }
 }
 
 fn esurface_linear_expr(surface: &Esurface) -> LinearEnergyExpr {

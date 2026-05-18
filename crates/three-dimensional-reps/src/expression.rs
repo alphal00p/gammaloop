@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     fmt::Display,
 };
 
@@ -421,6 +421,74 @@ impl CFFVariant {
             })
     }
 
+    pub fn selected_denominator_bookkeeping_signs(
+        &self,
+        selected_esurfaces: &[EsurfaceID],
+        cut_edge_sets: &[Vec<EdgeIndex>],
+        occurrence: usize,
+    ) -> Vec<i64> {
+        if !self.supports_any_cut(cut_edge_sets) {
+            return Vec::new();
+        }
+
+        let selected_numerator_count = self
+            .numerator_surfaces
+            .iter()
+            .filter(|surface_id| {
+                matches!(
+                    surface_id,
+                    HybridSurfaceID::Esurface(esurface_id)
+                        if selected_esurfaces.contains(esurface_id)
+                )
+            })
+            .count();
+        let required_denominator_count = occurrence + selected_numerator_count;
+        let selected_edge_support_sign = self
+            .denominator_edge_support_signs
+            .iter()
+            .filter(|(support, _)| {
+                cut_edge_sets.iter().any(|cut_edges| {
+                    cut_edges
+                        .iter()
+                        .all(|cut_edge| support.binary_search(cut_edge).is_ok())
+                })
+            })
+            .map(|(_, sign)| *sign)
+            .product::<i64>();
+
+        denominator_tree_chains(&self.denominator)
+            .into_iter()
+            .filter_map(|chain| {
+                let selected_denominator_esurfaces = chain
+                    .iter()
+                    .filter_map(|surface_id| match surface_id {
+                        HybridSurfaceID::Esurface(esurface_id)
+                            if selected_esurfaces.contains(esurface_id) =>
+                        {
+                            Some(*esurface_id)
+                        }
+                        _ => None,
+                    })
+                    .collect_vec();
+
+                if selected_denominator_esurfaces.len() != required_denominator_count {
+                    return None;
+                }
+
+                let selected_surface_sign = selected_denominator_esurfaces
+                    .iter()
+                    .map(|esurface_id| {
+                        self.denominator_surface_signs
+                            .get(&HybridSurfaceID::Esurface(*esurface_id))
+                            .copied()
+                            .unwrap_or(1)
+                    })
+                    .product::<i64>();
+                Some(selected_surface_sign * selected_edge_support_sign)
+            })
+            .collect()
+    }
+
     fn signed_esurface_residue_variants(
         &self,
         raised_esurface_group: &impl RaisedEsurfaceGroupView,
@@ -572,6 +640,7 @@ struct VariantFusionKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct VariantChainKey {
+    origin: Option<String>,
     half_edges: Vec<usize>,
     denominator_edges: Vec<usize>,
     denominator_surface_signs: BTreeMap<HybridSurfaceID, i64>,
@@ -584,7 +653,6 @@ struct VariantChainKey {
 #[derive(Debug, Clone)]
 struct VariantChainContribution {
     prefactor: symbolica::domains::rational::Rational,
-    origins: BTreeSet<Option<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
@@ -651,6 +719,7 @@ impl OrientationExpression {
             variant.numerator_surfaces.sort();
             for chain in denominator_tree_chains(&variant.denominator) {
                 let key = VariantChainKey {
+                    origin: variant.origin.clone(),
                     half_edges: variant.half_edges.iter().map(|edge| edge.0).collect(),
                     denominator_edges: variant
                         .denominator_edges
@@ -668,10 +737,8 @@ impl OrientationExpression {
                         .entry(key)
                         .or_insert_with(|| VariantChainContribution {
                             prefactor: symbolica::domains::rational::Rational::zero(),
-                            origins: BTreeSet::new(),
                         });
                 entry.prefactor += variant.prefactor.rational_coeff();
-                entry.origins.insert(variant.origin.clone());
             }
         }
 
@@ -680,15 +747,10 @@ impl OrientationExpression {
             if contribution.prefactor.is_zero() {
                 continue;
             }
-            let origin = if contribution.origins.len() == 1 {
-                contribution.origins.into_iter().next().flatten()
-            } else {
-                Some("mixed".to_string())
-            };
             groups
                 .entry(VariantFusionKey {
                     prefactor: rational_coeff_atom(contribution.prefactor).to_canonical_string(),
-                    origin,
+                    origin: key.origin,
                     half_edges: key.half_edges,
                     denominator_edges: key.denominator_edges,
                     denominator_surface_signs: key.denominator_surface_signs,
@@ -1120,10 +1182,10 @@ where
         H: Clone,
     {
         // Threshold residues are taken with respect to the canonical
-        // E-surface variable used by the local counterterm, so canonicalization
-        // signs attached to the selected denominator remain part of the
-        // residue.
-        self.select_esurface_residue_impl(raised_esurface_group, &[], false)
+        // E-surface variable used by the local counterterm. If the selected
+        // generated denominator carries an overall sign, consuming the
+        // denominator must move that sign into the residue prefactor.
+        self.select_esurface_residue_impl(raised_esurface_group, &[], true)
     }
 
     pub fn select_esurface_residue_with_cut_edges(

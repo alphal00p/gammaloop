@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     cff::{
@@ -54,6 +54,7 @@ impl Graph {
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
         options: &Generate3DExpressionOptions,
+        use_confluent_cff: bool,
     ) -> Result<CFFExpression<OrientationID>> {
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
@@ -86,8 +87,14 @@ impl Graph {
         let source = GraphThreeDSource::new(self, &source_contract_edges);
 
         let expression = {
-            three_dimensional_reps::generate_3d_expression(&source, &local_options).map_err(
-                |error| {
+            let generated = if use_confluent_cff
+                && local_options.representation == RepresentationMode::Cff
+            {
+                three_dimensional_reps::generate_confluent_cff_expression(&source, &local_options)
+            } else {
+                three_dimensional_reps::generate_3d_expression(&source, &local_options)
+            };
+            generated.map_err(|error| {
                     let source_summary = source
                         .to_three_d_parsed_graph()
                         .map(|parsed| three_d_source_summary(&parsed))
@@ -100,8 +107,7 @@ impl Graph {
                         local_options.representation,
                         local_options.energy_degree_bounds,
                     )
-                },
-            )
+                })
         }?;
 
         let use_generated_cff_half_edges =
@@ -145,6 +151,64 @@ impl Graph {
             options.energy_degree_bounds.clear();
         }
         Ok(options)
+    }
+
+    pub(crate) fn production_cff_needs_confluent_repeated_channels(
+        &self,
+        options: &Generate3DExpressionOptions,
+    ) -> Result<bool> {
+        if std::env::var_os("GAMMALOOP_DISABLE_CONFLUENT_CFF").is_some() {
+            return Ok(false);
+        }
+        if options.representation != RepresentationMode::Cff
+            || options.energy_degree_bounds.is_empty()
+        {
+            return Ok(false);
+        }
+
+        let source = GraphThreeDSource::new(self, &[]);
+        let parsed = source.to_three_d_parsed_graph()?;
+        let Some(edge_map) = source.energy_edge_index_map(&parsed) else {
+            return Ok(false);
+        };
+
+        let bounded_local_edges = edge_map
+            .remap_bounds_to_local(&options.energy_degree_bounds)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(edge_id, _)| edge_id)
+            .collect::<BTreeSet<_>>();
+        if bounded_local_edges.is_empty() {
+            return Ok(false);
+        }
+
+        let preserved_local_edges = edge_map
+            .remap_bounds_to_local(
+                &self
+                    .normalized_preserved_4d_denominator_edges(options)
+                    .into_iter()
+                    .map(|edge_id| (usize::from(edge_id), 0))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(edge_id, _)| edge_id)
+            .collect::<BTreeSet<_>>();
+
+        Ok(three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .any(|group| {
+                let active_members = group
+                    .edge_ids
+                    .iter()
+                    .copied()
+                    .filter(|edge_id| !preserved_local_edges.contains(edge_id))
+                    .collect::<Vec<_>>();
+                active_members.len() > 1
+                    && active_members
+                        .iter()
+                        .any(|edge_id| bounded_local_edges.contains(edge_id))
+            }))
     }
 
     pub fn three_d_expression_options(
@@ -227,17 +291,16 @@ impl Graph {
                 excluded_edges.iter().copied(),
                 1,
             )?;
-        if representation != RepresentationMode::Cff {
-            return Ok(source_edge_bounds);
-        }
-
         let quadratic_bounds = self
             .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
                 numerator,
                 excluded_edges,
                 2,
             )?;
-        if self.energy_degree_bounds_are_convergent_for_3d_source(&quadratic_bounds)? {
+        if representation == RepresentationMode::Cff
+            && !quadratic_bounds.is_empty()
+            && self.energy_degree_bounds_are_convergent_for_3d_source(&quadratic_bounds)?
+        {
             return Ok(quadratic_bounds);
         }
 

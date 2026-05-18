@@ -345,7 +345,8 @@ impl<'a> ExpressionEvaluator<'a> {
                     numerator_cache.insert(num_key, value);
                     value
                 };
-                total += denom * numerator_surface_factor * numerator_value;
+                let contribution = denom * numerator_surface_factor * numerator_value;
+                total += contribution;
             }
         }
         Ok(EvaluationResult {

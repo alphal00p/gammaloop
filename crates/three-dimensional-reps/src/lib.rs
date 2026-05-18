@@ -31,7 +31,8 @@ pub use expression::{
 pub use generation::{
     Generate3DExpressionOptions, GenerationDiagnostic, GenerationWarning,
     NumeratorSamplingScaleMode, RepresentationMode, generate_3d_expression,
-    generate_3d_expression_from_parsed,
+    generate_3d_expression_from_parsed, generate_confluent_cff_expression,
+    generate_confluent_cff_expression_from_parsed,
 };
 pub use graph_io::{
     EnergyEdgeIndexMap, GraphInfo, ParsedGraph, RepeatedGroup, ThreeDGraphSource, graph_info,

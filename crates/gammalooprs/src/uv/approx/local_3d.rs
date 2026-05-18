@@ -156,7 +156,9 @@ impl Local3DApproximation {
         let reduced = current.reduced_subgraph(given);
 
         // only apply replacements for edges in the reduced graph
-        let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        let mut mom_reps =
+            graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        mom_reps.extend(graph.uv_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]));
 
         let mut atomarg = integrand.replace_multiple(&mom_reps);
 
@@ -166,6 +168,9 @@ impl Local3DApproximation {
             atomarg = atomarg
                 .replace(GS.emr_vec_index(*e, W_.x___))
                 .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
+            atomarg = atomarg
+                .replace(GS.emr_mom(*e, W_.x___))
+                .with(GS.emr_mom(*e, W_.x___) * GS.rescale);
         }
 
         // (re-)expand OSEs from the subgraph only

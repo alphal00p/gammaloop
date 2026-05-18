@@ -9,8 +9,7 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{LibraryRep, Minkowski, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot},
+        representation::{LibraryRep, Minkowski, RepName},
     },
     utils::{to_subscript, to_superscript},
 };
@@ -23,7 +22,7 @@ use symbolica::{
     symbol,
 };
 
-use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
+use crate::cff::expression::GraphOrientation;
 
 use super::symbolica_ext::CallSymbol;
 
@@ -1032,27 +1031,34 @@ impl GammaloopSymbols {
         e: EdgeIndex,
         e_mass: Atom,
         index: Option<Atom>,
-        inner_product: bool,
+        _inner_product: bool,
     ) -> Atom {
         let eidc = usize::from(e) as i64;
         let m2 = &e_mass * &e_mass;
 
-        let mink: Representation<Minkowski> = Minkowski {}.new_rep(4); //.slot(Aind::new_dummy());
-        let q3q3 = if inner_product {
-            mink.inner_product(self.emr_vec(e), self.emr_vec(e))
-        } else {
-            let mink = mink.slot::<Aind, Aind>(Aind::new_dummy()).to_atom();
-
-            self.emr_vec_index(e, mink.as_view()) * self.emr_vec_index(e, mink.as_view())
-        };
-
-        let ose = function!(self.ose, eidc, GS.emr_vec(e), m2, (m2 - q3q3)).pow((1, 2));
+        let ose = function!(
+            self.ose,
+            eidc,
+            GS.emr_vec(e),
+            m2.clone(),
+            m2 + self.emr_vec_spatial_norm_sq(e)
+        )
+        .pow((1, 2));
 
         if let Some(index) = index {
             ose * self.energy_delta(index)
         } else {
             ose
         }
+    }
+
+    pub(crate) fn emr_vec_spatial_norm_sq(&self, e: EdgeIndex) -> Atom {
+        let mut norm = Atom::Zero;
+        for spatial_index in 1..=3 {
+            let component = self.emr_vec_index(e, self.cind(spatial_index));
+            norm += component.clone() * component;
+        }
+        norm
     }
 
     pub(crate) fn split_mom_pattern(

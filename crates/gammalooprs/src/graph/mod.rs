@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{collections::BTreeMap, ops::Index};
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
@@ -132,6 +132,121 @@ impl Graph {
         parsed.loop_names.len().saturating_sub(1) + duplicate_signature_excess
     }
 
+    pub(crate) fn three_d_ltd_projection_bridge_sign(&self) -> i64 {
+        // The full LTD production basis and the CFF projection basis differ by
+        // the orientation of the resolved loop-energy coordinate map. Repeated
+        // signature channels have their own residue/routing bridges below and
+        // are intentionally not folded into this global projection sign.
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        if parsed.loop_names.len().saturating_sub(1).is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
+    }
+
+    pub(crate) fn three_d_ltd_repeated_channel_residue_bridge_sign(&self) -> i64 {
+        // LTD generation collapses repeated signatures into one logical
+        // channel. Copies with opposite canonical routing carry the channel
+        // routing sign, but an order-p repeated denominator contributes that
+        // orientation to residues only through the p - 1 derivative parity.
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        let source_to_local = self
+            .energy_edge_index_map(&parsed)
+            .expect("GammaLoop graph source should expose an energy-edge map")
+            .internal_to_local();
+        let preserved_edges = self
+            .external_tree_4d_denominator_edges()
+            .into_iter()
+            .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
+            .collect_vec();
+
+        three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .map(|group| {
+                let members = group
+                    .edge_ids
+                    .into_iter()
+                    .zip(group.relative_signs)
+                    .filter(|(edge_id, _)| !preserved_edges.contains(edge_id))
+                    .collect_vec();
+                let Some((_, reference_sign)) = members.first() else {
+                    return 1;
+                };
+                let channel_routing_sign = members
+                    .iter()
+                    .map(|(_, sign)| *sign * *reference_sign)
+                    .product::<i32>();
+                if (members.len() - 1).is_multiple_of(2) {
+                    1
+                } else {
+                    i64::from(channel_routing_sign)
+                }
+            })
+            .product()
+    }
+
+    pub(crate) fn three_d_ltd_repeated_channel_edge_support_signs(
+        &self,
+    ) -> BTreeMap<Vec<EdgeIndex>, i64> {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        let local_to_source = self
+            .energy_edge_index_map(&parsed)
+            .expect("GammaLoop graph source should expose an energy-edge map")
+            .internal;
+        let source_to_local = local_to_source
+            .iter()
+            .map(|(local, source)| (*source, *local))
+            .collect::<BTreeMap<_, _>>();
+        let preserved_edges = self
+            .external_tree_4d_denominator_edges()
+            .into_iter()
+            .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
+            .collect_vec();
+        let raised_edge_groups = self.get_raised_edge_groups();
+
+        three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .filter_map(|group| {
+                let members = group
+                    .edge_ids
+                    .into_iter()
+                    .zip(group.relative_signs)
+                    .filter(|(edge_id, _)| !preserved_edges.contains(edge_id))
+                    .collect_vec();
+                if members.len() <= 1 {
+                    return None;
+                }
+                let reference_sign = members[0].1;
+                let sign = members
+                    .iter()
+                    .map(|(_, relative_sign)| *relative_sign * reference_sign)
+                    .product::<i32>();
+                let support_edges = members
+                    .into_iter()
+                    .filter_map(|(edge_id, _)| local_to_source.get(&edge_id).copied())
+                    .map(EdgeIndex)
+                    .map(|edge_id| {
+                        raised_edge_groups
+                            .iter()
+                            .find(|group| group.contains(&edge_id))
+                            .and_then(|group| group.first().copied())
+                            .unwrap_or(edge_id)
+                    })
+                    .sorted()
+                    .dedup()
+                    .collect_vec();
+                Some((support_edges, i64::from(sign)))
+            })
+            .collect()
+    }
+
     pub fn split_repeated_masses_for_three_drep(
         &self,
         model: &Model,
@@ -213,8 +328,8 @@ impl Graph {
             .get_single_atom()
             .expect("Graph numerator should be available")
             * self.global_atom();
-        let momentum_replacements = self.normal_emr_replacement(
-            &self.full_filter(),
+        let momentum_replacements = self.underlying.normal_emr_replacement(
+            &self.underlying.full_filter(),
             &self.loop_momentum_basis,
             &[W_.x___],
             HedgePair::is_paired,

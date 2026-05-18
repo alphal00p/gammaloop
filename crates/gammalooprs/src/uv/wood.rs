@@ -33,7 +33,9 @@ impl CutWoods {
         for cut in cuts.cuts.iter() {
             let mut subgraph = graph.full_filter();
             subgraph.subtract_with(&graph.initial_state_cut.left);
-            subgraph.subtract_with(&cut.union);
+            if !cut.residue_selector.is_threshold_esurface_residue() {
+                subgraph.subtract_with(&cut.union);
+            }
 
             let spinneys =
                 graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);

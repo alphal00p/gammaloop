@@ -517,7 +517,6 @@ impl AmplitudeGraphTerm {
             context.record_primary_timing,
         )?;
         let sum_of_cts = counterterm_evaluation.total.clone();
-
         crate::debug_tags!(#integration, #subtraction;
             bare_cff = format!("{result:16e}"),
             "{}: {result:16e}",

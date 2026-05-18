@@ -1302,7 +1302,6 @@ fn ltd_generated_gl48_uv_threshold_repeated_inspects_match_cff_local_uv_modes() 
             true,
             false,
         )?;
-
     let point = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
     let cff_3d_result = evaluate_xspace_process_with_events(
         &mut cff_3d,
@@ -1325,7 +1324,6 @@ fn ltd_generated_gl48_uv_threshold_repeated_inspects_match_cff_local_uv_modes() 
         &point,
         &[],
     )?;
-
     assert_evaluation_outputs_match(
         &ltd_4d_result.sample.evaluation,
         &cff_4d_result.sample.evaluation,

@@ -1,10 +1,14 @@
 use crate::{
     cff::expression::{
         OrientationID, ThreeDExpression, localize_three_d_expression_on_esurface,
-        remove_ltd_global_contact_completions_from_local_residue,
-        select_lu_cut_residue_for_representation,
+        ltd_lu_local_series_coefficients_from_parametric_atom,
+        prepare_ltd_lu_local_series_expression,
+        remove_ltd_global_contact_completions_from_local_residue, select_lu_cut_residue_for_basis,
     },
-    graph::{Graph, LoopMomentumBasis, cuts::CutSet},
+    graph::{
+        Graph, LoopMomentumBasis,
+        cuts::{CutSet, LuResidueSelectionBasis},
+    },
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
     settings::global::{GenerationSettings, ThreeDRepresentation},
@@ -360,6 +364,8 @@ impl Approximation {
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
         root_expression: Option<&ThreeDExpression<OrientationID>>,
+        root_lu_residue_selection_basis: LuResidueSelectionBasis,
+        root_lu_residue_reference_basis: LuResidueSelectionBasis,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
@@ -387,6 +393,8 @@ impl Approximation {
                     valid_orientations,
                     settings,
                     ThreeDRepresentation::Cff,
+                    root_lu_residue_selection_basis,
+                    root_lu_residue_reference_basis,
                     true,
                 )?);
             } else {
@@ -412,6 +420,8 @@ impl Approximation {
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
         representation: ThreeDRepresentation,
+        lu_residue_selection_basis: LuResidueSelectionBasis,
+        lu_residue_reference_basis: LuResidueSelectionBasis,
         average_for_outer_orientation_projection: bool,
     ) -> Result<Vec<Atom>> {
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
@@ -429,23 +439,89 @@ impl Approximation {
                 .flat_map(|expression| expression.select_esurface_residue(left_threshold))
                 .collect();
         }
-        if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+        if representation == ThreeDRepresentation::Ltd
+            && cutset.residue_selector.has_lu_cut_residue()
+            && let Some(lu_cut) = cutset.residue_selector.lu_cut()
+        {
+            let residue_prefactor_sign = cutset
+                .residue_selector
+                .ltd_direct_original_residue_prefactor_sign();
+            let mut atoms = Vec::new();
+            for mut residue in residues {
+                prepare_ltd_lu_local_series_expression(&mut residue, cutset);
+                self.localize_ltd_threshold_residue_if_needed(&mut residue, cutset)?;
+                let atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
+                    &residue,
+                    &numerator,
+                    RepresentationMode::Ltd,
+                    true,
+                    &settings.orientation_pattern,
+                );
+                atoms.extend(
+                    ltd_lu_local_series_coefficients_from_parametric_atom(
+                        &graph.name,
+                        &residue,
+                        atom,
+                        lu_cut,
+                        cutset
+                            .residue_selector
+                            .ltd_lu_cut_local_series_esurface_signs(),
+                        cutset
+                            .residue_selector
+                            .ltd_lu_cut_local_series_coordinates(),
+                        false,
+                    )?
+                    .into_iter()
+                    .map(|coefficient| coefficient * Atom::num(residue_prefactor_sign)),
+                );
+            }
+            return atoms
+                .into_iter()
+                .map(|mut atom| {
+                    if average_for_outer_orientation_projection {
+                        // The root term comes from the explicitly summed
+                        // production expression, while CFF local-3D forests
+                        // apply the orientation projector once to the whole
+                        // forest after all local terms are assembled. Embed
+                        // the root as a uniform orientation average so that
+                        // this later projector acts as the identity on it.
+                        if valid_orientations.is_empty() {
+                            return Err(eyre!(
+                                "cannot embed explicitly summed root 3D expression into an empty orientation projector"
+                            ));
+                        }
+                        atom /= Atom::num(valid_orientations.len() as i64);
+                    }
+                    Ok(atom
+                        .replace(GS.dim)
+                        .with(4)
+                        .simplify_color()
+                        .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                        .with(W_.d_)
+                        .expand_dots()?
+                        .collect_factors())
+                })
+                .collect();
+        }
+        if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
             residues = residues
                 .into_iter()
                 .flat_map(|expression| {
-                    select_lu_cut_residue_for_representation(
+                    select_lu_cut_residue_for_basis(
                         expression,
                         lu_cut,
-                        &cutset.residue_selector.lu_cut_edge_sets,
-                        &cutset.residue_selector.ltd_lu_cut_esurface_signs,
-                        representation,
+                        cutset.residue_selector.lu_cut_edge_sets(),
+                        cutset.residue_selector.ltd_lu_cut_esurface_signs(),
+                        lu_residue_selection_basis,
                     )
                 })
                 .collect();
         }
         if representation == ThreeDRepresentation::Ltd {
             for residue in &mut residues {
-                remove_ltd_global_contact_completions_from_local_residue(residue);
+                if cutset.residue_selector.lu_cut().is_some() {
+                    remove_ltd_global_contact_completions_from_local_residue(residue);
+                }
                 self.localize_ltd_threshold_residue_if_needed(residue, cutset)?;
             }
         }
@@ -463,7 +539,15 @@ impl Approximation {
                     &settings.orientation_pattern,
                 );
                 if representation == ThreeDRepresentation::Ltd {
-                    atom *= Atom::num(cutset.residue_selector.ltd_residue_prefactor_sign());
+                    let residue_prefactor_sign = match lu_residue_reference_basis {
+                        LuResidueSelectionBasis::GeneratedEsurface => cutset
+                            .residue_selector
+                            .ltd_local_series_residue_prefactor_sign(),
+                        LuResidueSelectionBasis::PositiveEnergyCutkosky => {
+                            cutset.residue_selector.ltd_residue_prefactor_sign()
+                        }
+                    };
+                    atom *= Atom::num(residue_prefactor_sign);
                 }
                 if average_for_outer_orientation_projection {
                     // The root term comes from the explicitly summed production
@@ -478,14 +562,15 @@ impl Approximation {
                     }
                     atom /= Atom::num(valid_orientations.len() as i64);
                 }
-                Ok(atom
+                let atom = atom
                     .replace(GS.dim)
                     .with(4)
                     .simplify_color()
                     .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                     .with(W_.d_)
                     .expand_dots()?
-                    .collect_factors())
+                    .collect_factors();
+                Ok(atom)
             })
             .collect()
     }
@@ -516,6 +601,8 @@ impl Approximation {
         settings: &crate::settings::global::GenerationSettings,
         representation: ThreeDRepresentation,
         root_expression: Option<&ThreeDExpression<OrientationID>>,
+        root_lu_residue_selection_basis: LuResidueSelectionBasis,
+        root_lu_residue_reference_basis: LuResidueSelectionBasis,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
@@ -539,6 +626,8 @@ impl Approximation {
                     valid_orientations,
                     settings,
                     representation,
+                    root_lu_residue_selection_basis,
+                    root_lu_residue_reference_basis,
                     representation == ThreeDRepresentation::Cff
                         && !settings.explicit_orientation_sum_only,
                 )?);

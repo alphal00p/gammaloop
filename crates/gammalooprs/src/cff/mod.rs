@@ -173,10 +173,14 @@ impl Graph {
         inverse_energy_excluded_edges.dedup();
 
         let cff_options = self.denominator_only_cff_3d_expression_options();
+        let use_confluent_cff = cutset.residue_selector.right_th_cut.is_none()
+            && cutset.residue_selector.left_th_cut.is_none()
+            && cutset.residue_selector.lu_cut().is_none();
         let cff = self.generate_3d_expression_for_integrand(
             &contract_edges,
             &canonize_esurface,
             &cff_options,
+            use_confluent_cff,
         )?;
         let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
             let residues = cff.select_esurface_residue(right_threshold);
@@ -192,11 +196,15 @@ impl Graph {
             residue
         };
 
-        let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-            residue.select_esurface_residue_with_cut_edges(
-                lu_cut,
-                &cutset.residue_selector.lu_cut_edge_sets,
-            )
+        let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
+            if cutset.residue_selector.is_threshold_esurface_residue() {
+                residue.select_esurface_residue(lu_cut)
+            } else {
+                residue.select_esurface_residue_with_cut_edges(
+                    lu_cut,
+                    cutset.residue_selector.lu_cut_edge_sets(),
+                )
+            }
         } else {
             vec![residue]
         };

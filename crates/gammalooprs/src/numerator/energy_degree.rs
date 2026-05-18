@@ -237,7 +237,12 @@ impl EnergyPowerAnalyzer {
         }
 
         if function.get_symbol() == self.minkowski_symbol && function.get_nargs() == 2 {
-            return usize::try_from(function.get(1)).map_or(true, |index| index == 0);
+            // `mink(4, n)` is an abstract Lorentz-index label in the numerator
+            // algebra, not a concrete component selection. Concrete components
+            // use `cind(n)` and are handled above. Any abstract Minkowski index
+            // can contract onto the temporal component, so it contributes to the
+            // conservative energy-power bound.
+            return true;
         }
 
         false
@@ -479,13 +484,13 @@ mod tests {
     }
 
     #[test]
-    fn emr_concrete_spatial_minkowski_index_does_not_count_as_energy_power() {
+    fn emr_numeric_minkowski_label_counts_as_abstract_energy_power() {
         let expression = function!(GS.emr_mom, 3, mink_component(1));
-        assert!(bounds(expression).is_empty());
+        assert_eq!(bounds(expression), vec![(3, 1)]);
     }
 
     #[test]
-    fn emr_concrete_temporal_minkowski_index_counts_as_energy_power() {
+    fn emr_numeric_zero_minkowski_label_counts_as_abstract_energy_power() {
         let expression = function!(GS.emr_mom, 3, mink_component(0));
         assert_eq!(bounds(expression), vec![(3, 1)]);
     }

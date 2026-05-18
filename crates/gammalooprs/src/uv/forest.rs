@@ -1,7 +1,10 @@
 use crate::{
     GammaLoopContext,
     cff::expression::{GammaLoopGraphOrientation, OrientationID, ThreeDExpression},
-    graph::{Graph, cuts::CutSet},
+    graph::{
+        Graph,
+        cuts::{CutSet, LuResidueSelectionBasis},
+    },
     settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
@@ -20,10 +23,7 @@ use symbolica::{
     function,
 };
 
-use linnet::half_edge::{
-    involution::HedgePair,
-    subgraph::{SubSetLike, SubSetOps},
-};
+use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
 use tracing::{debug, instrument};
 
 use vakint::Vakint;
@@ -139,8 +139,7 @@ pub(crate) fn uses_expanded_4d_forest_path(
         && representation == ThreeDRepresentation::Cff
         && (cut_data
             .residue_selector
-            .lu_cut
-            .as_ref()
+            .lu_cut()
             .is_some_and(|lu_cut| lu_cut.max_occurence > 1)
             || graph
                 .get_raised_edge_groups()
@@ -173,6 +172,8 @@ impl CutForests {
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
         root_expression: Option<&ThreeDExpression<OrientationID>>,
+        root_lu_residue_selection_basis: LuResidueSelectionBasis,
+        root_lu_residue_reference_basis: LuResidueSelectionBasis,
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
@@ -189,6 +190,8 @@ impl CutForests {
                 valid_orientations,
                 settings,
                 root_expression,
+                root_lu_residue_selection_basis,
+                root_lu_residue_reference_basis,
                 representation,
                 explicit_orientation_sum_only,
             )?;
@@ -255,6 +258,8 @@ impl Forest {
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
         root_expression: Option<&ThreeDExpression<OrientationID>>,
+        root_lu_residue_selection_basis: LuResidueSelectionBasis,
+        root_lu_residue_reference_basis: LuResidueSelectionBasis,
         representation: ThreeDRepresentation,
         explicit_orientation_sum_only: bool,
     ) -> Result<()> {
@@ -288,6 +293,8 @@ impl Forest {
                             settings,
                             representation,
                             root_expression,
+                            root_lu_residue_selection_basis,
+                            root_lu_residue_reference_basis,
                         )?;
                     } else {
                         self.dag.nodes[n].data.root(
@@ -296,6 +303,8 @@ impl Forest {
                             valid_orientations,
                             settings,
                             root_expression,
+                            root_lu_residue_selection_basis,
+                            root_lu_residue_reference_basis,
                         )?;
                     }
                 }
@@ -404,31 +413,12 @@ impl Forest {
         add_sigma: bool,
     ) -> Result<Vec<Atom>> {
         let mut sum = None;
-        let mut node_dump_terms = std::env::var("GAMMALOOP_DUMP_UV_FOREST_NODE_TERMS")
-            .ok()
-            .map(|dump_dir| (dump_dir, Vec::<(String, Vec<Atom>)>::new()));
-        let node_filter = std::env::var("GAMMALOOP_UV_FOREST_NODE_FILTER").ok();
-
         for (node_id, n) in &self.dag.nodes {
             let simple_approx = n.data.simple_approx.as_ref().ok_or_else(|| {
                 eyre!("UV forest node {node_id:?} simple approximation was not computed")
             })?;
             let simple_expr = simple_approx.expr(&graph.full_filter());
-            let node_header = format!(
-                "node {node_id:?}; topo_order {}; dod {}; subgraph {}; simple {}",
-                n.data.topo_order,
-                n.data.dod(),
-                n.data.spinney.subgraph.string_label(),
-                simple_expr.to_canonical_string()
-            );
-            if node_filter
-                .as_ref()
-                .is_some_and(|filter| !node_header.contains(filter))
-            {
-                continue;
-            }
             debug!(dod = %n.data.dod(), simple = %simple_expr, "Terms");
-            let mut node_terms = Vec::new();
 
             let first = sum.is_none();
             let sum = sum.get_or_insert_with(Vec::new);
@@ -455,51 +445,16 @@ impl Forest {
                 } else {
                     sum[i] += a.clone();
                 }
-                node_terms.push(a);
-            }
-
-            if let Some((_, dump_terms)) = node_dump_terms.as_mut() {
-                dump_terms.push((node_header, node_terms));
             }
         }
 
         let mut sum = if let Some(sum) = sum {
             sum
-        } else if node_filter.is_some() {
-            vec![Atom::Zero]
         } else {
             return Err(eyre!("No terms in forest"));
         };
 
         Self::finalize_parametric_terms(graph, &mut sum);
-
-        if let Some((dump_dir, mut dump_terms)) = node_dump_terms {
-            static FOREST_DUMP_COUNTER: std::sync::atomic::AtomicUsize =
-                std::sync::atomic::AtomicUsize::new(0);
-            let dump_id = FOREST_DUMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let mode = std::env::var("GAMMALOOP_DUMP_UV_FOREST_NODE_MODE")
-                .unwrap_or_else(|_| "unknown".to_string());
-            let path = std::path::Path::new(&dump_dir)
-                .join(format!("{}_{}_forest_{dump_id:03}.txt", graph.name, mode));
-            let mut dump = String::new();
-            use std::fmt::Write;
-            writeln!(dump, "graph {}", graph.name).ok();
-            writeln!(dump, "mode {mode}").ok();
-            writeln!(dump, "forest {dump_id}").ok();
-            for (header, terms) in &mut dump_terms {
-                Self::finalize_parametric_terms(graph, terms);
-                writeln!(dump, "{header}").ok();
-                for (term_id, term) in terms.iter().enumerate() {
-                    writeln!(dump, "term {term_id}: {}", term.to_canonical_string()).ok();
-                }
-            }
-            writeln!(dump, "sum").ok();
-            for (term_id, term) in sum.iter().enumerate() {
-                writeln!(dump, "term {term_id}: {}", term.to_canonical_string()).ok();
-            }
-            std::fs::create_dir_all(&dump_dir).ok();
-            std::fs::write(path, dump).ok();
-        }
 
         Ok(sum)
     }

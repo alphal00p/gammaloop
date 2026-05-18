@@ -31,7 +31,7 @@ use crate::{
     },
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
-        cuts::{CutSet, ResidueSelector},
+        cuts::{CutSet, LuResidueSelectionBasis, ResidueSelector},
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup,
@@ -611,7 +611,7 @@ impl AmplitudeGraph {
 
         let expression =
             self.graph
-                .generate_3d_expression_for_integrand(&[], &shift_rewrite, options)?;
+                .generate_3d_expression_for_integrand(&[], &shift_rewrite, options, true)?;
         self.derived_data.three_d_expression = Some(expression);
 
         Ok(())
@@ -1029,6 +1029,8 @@ impl AmplitudeGraph {
             &valid_orientations,
             settings,
             self.derived_data.three_d_expression.as_ref(),
+            LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            LuResidueSelectionBasis::PositiveEnergyCutkosky,
             global_settings.three_d_representation,
             settings.explicit_orientation_sum_only,
         )?;
@@ -1172,15 +1174,7 @@ impl AmplitudeGraph {
             }
 
             let cutset = CutSet {
-                residue_selector: ResidueSelector {
-                    lu_cut: Some(raised_data.clone()),
-                    lu_cut_edge_sets: Vec::new(),
-                    ltd_lu_cut_esurface_signs: Vec::new(),
-                    ltd_lu_cut_residue_prefactor_sign: 1,
-                    ltd_lu_cut_local_series_prefactor_sign: 1,
-                    left_th_cut: None,
-                    right_th_cut: None,
-                },
+                residue_selector: ResidueSelector::new_threshold_esurface(raised_data.clone()),
                 union: cut_union,
             };
 
@@ -1197,6 +1191,8 @@ impl AmplitudeGraph {
             &valid_orientations,
             settings,
             self.derived_data.three_d_expression.as_ref(),
+            LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            LuResidueSelectionBasis::PositiveEnergyCutkosky,
             representation,
             settings.explicit_orientation_sum_only,
         )?;
@@ -1225,7 +1221,11 @@ impl AmplitudeGraph {
             let counterterm_atom = AmplitudeCountertermAtom {
                 parametric: expr.integrands,
             };
-            let raised_group = expr.cuts.residue_selector.lu_cut.unwrap();
+            let raised_group = expr
+                .cuts
+                .residue_selector
+                .lu_cut()
+                .expect("amplitude threshold counterterms carry an E-surface residue");
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 

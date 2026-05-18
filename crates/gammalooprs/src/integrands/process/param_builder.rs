@@ -1420,20 +1420,14 @@ impl<T: FloatLike> ParamBuilder<T> {
         .unwrap();
 
         for e in graph.iter_edge_ids() {
-            if lmb.edge_signatures[e]
-                .internal
-                .iter()
-                .any(|sign| sign.is_sign())
-            {
-                new.add_tagged_function(
-                    GS.ose,
-                    vec![Atom::num(e.0 as i64)],
-                    format!("OSE{e}"),
-                    Vec::<Symbol>::new(),
-                    graph.explicit_ose_atom(e),
-                )
-                .unwrap();
-            }
+            new.add_tagged_function(
+                GS.ose,
+                vec![Atom::num(e.0 as i64)],
+                format!("OSE{e}"),
+                Vec::<Symbol>::new(),
+                graph.explicit_ose_atom(e),
+            )
+            .unwrap();
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {

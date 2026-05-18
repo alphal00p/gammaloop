@@ -88,6 +88,8 @@ fn scalar_bubble_root_integrand_reference(
             &valid_orientations,
             &reference_settings,
             amplitude_graph.derived_data.three_d_expression.as_ref(),
+            crate::graph::cuts::LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            crate::graph::cuts::LuResidueSelectionBasis::PositiveEnergyCutkosky,
             crate::settings::global::ThreeDRepresentation::Cff,
             false,
         )

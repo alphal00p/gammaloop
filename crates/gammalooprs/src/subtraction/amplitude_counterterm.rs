@@ -366,7 +366,10 @@ impl AmplitudeCountertermData {
 
                 let raised_esurface_id = esurface_builder.raised_esurface_id;
                 self.ensure_active_raised_esurface(raised_esurface_id)?;
-                let single_result = esurface_builder.solve_rstar().rstar_samples().evaluate(
+                let Some(rstar_solution) = esurface_builder.solve_rstar() else {
+                    continue;
+                };
+                let single_result = rstar_solution.rstar_samples().evaluate(
                     param_builder,
                     orientation,
                     evaluation_metadata,
@@ -434,14 +437,16 @@ impl AmplitudeCountertermData {
             let mut loop_momenta_at_esurface: TiVec<ExistingEsurfaceId, Option<MomentumSample<T>>> =
                 ti_vec![];
             for existing_esurface_id in group.existing_esurfaces.iter() {
-                let single_result = overlap_builder
-                    .new_esurface_builder(*existing_esurface_id)
-                    .map(|esurface_builder| -> Result<_> {
-                        self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
-                        let rstar_sample = esurface_builder.solve_rstar().rstar_samples();
-                        Result::Ok(rstar_sample.rstar_sample)
-                    })
-                    .transpose()?;
+                let single_result = if let Some(esurface_builder) =
+                    overlap_builder.new_esurface_builder(*existing_esurface_id)
+                {
+                    self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
+                    esurface_builder
+                        .solve_rstar()
+                        .map(|solution| solution.rstar_samples().rstar_sample)
+                } else {
+                    None
+                };
 
                 loop_momenta_at_esurface.push(single_result);
             }
@@ -577,7 +582,6 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
         })
     }
 }
-
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     _existing_esurface_id: ExistingEsurfaceId,
@@ -587,7 +591,7 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
-    fn solve_rstar(self) -> RstarSolution<'a, T> {
+    fn solve_rstar(self) -> Option<RstarSolution<'a, T>> {
         let (radius_guess, _) = self.esurface.get_radius_guess(
             &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
@@ -627,10 +631,23 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             &self.overlap_builder.counterterm_builder.e_cm,
         );
 
-        RstarSolution {
+        let convergence_tolerance = radius_guess.epsilon()
+            * F::from_f64(TOLERANCE)
+            * &self.overlap_builder.counterterm_builder.e_cm;
+        if solution.solution <= radius_guess.zero()
+            || solution.error_of_function.abs() > convergence_tolerance
+        {
+            debug!(
+                "Skipping amplitude threshold counterterm for E-surface {}: no positive converged r* solution ({solution:?})",
+                self.esurface_id.0
+            );
+            return None;
+        }
+
+        Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
-        }
+        })
     }
 }
 
