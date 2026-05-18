@@ -1188,6 +1188,21 @@ where
         self.select_esurface_residue_impl(raised_esurface_group, &[], true)
     }
 
+    pub fn select_esurface_residue_in_generated_basis(
+        mut self,
+        raised_esurface_group: &impl RaisedEsurfaceGroupView,
+    ) -> Vec<ThreeDExpression<O, E, H>>
+    where
+        E: Clone,
+        H: Clone,
+    {
+        // Generated-basis residues consume the denominator in the generated
+        // surface variable. Any bridge to a canonical physical convention must
+        // be supplied by the caller as residue metadata, not by moving the
+        // generated denominator sign into this local residue.
+        self.select_esurface_residue_impl(raised_esurface_group, &[], false)
+    }
+
     pub fn select_esurface_residue_with_cut_edges(
         mut self,
         raised_esurface_group: &impl RaisedEsurfaceGroupView,

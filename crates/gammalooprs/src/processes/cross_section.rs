@@ -169,6 +169,7 @@ struct LuResiduePlanComponents<'a> {
     repeated_residue_prefactor_sign: i64,
     repeated_local_series_orientation_sign: i64,
     simple_mixed_repeated_channel_contact: bool,
+    graph_has_repeated_lu_cut_group: bool,
 }
 
 impl LuResiduePlanComponents<'_> {
@@ -261,11 +262,35 @@ impl LuResiduePlanComponents<'_> {
                         .selected_denominator_signs
                         .iter()
                         .product::<i64>()
+                    * self
+                        .lu_cut_signs
+                        .cut_orientation_signs
+                        .iter()
+                        .product::<i64>()
             } else {
-                self.local_series_prefactor_sign()
+                if self.graph_has_repeated_lu_cut_group {
+                    self.full_graph_projection_bridge
+                } else {
+                    self.local_series_prefactor_sign()
+                }
             }
         } else {
-            self.residue_prefactor_sign()
+            self.full_graph_projection_bridge
+                * self
+                    .lu_cut_signs
+                    .cut_orientation_signs
+                    .iter()
+                    .product::<i64>()
+                * if self
+                    .raised_cut_group
+                    .related_esurface_group
+                    .max_occurence
+                    .is_multiple_of(2)
+                {
+                    -1
+                } else {
+                    1
+                }
         }
     }
 
@@ -1501,6 +1526,12 @@ impl CrossSectionGraph {
         };
         let simple_mixed_repeated_channel_contact =
             self.simple_lu_cut_has_mixed_repeated_channel_contact(raised_cut_group, &lu_cut_signs)?;
+        let graph_has_repeated_lu_cut_group = self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .any(|group| group.related_esurface_group.max_occurence > 1);
         let components = LuResiduePlanComponents {
             raised_cut_group,
             lu_cut_signs,
@@ -1511,6 +1542,7 @@ impl CrossSectionGraph {
             repeated_residue_prefactor_sign,
             repeated_local_series_orientation_sign,
             simple_mixed_repeated_channel_contact,
+            graph_has_repeated_lu_cut_group,
         };
         Ok(components.into_residue_selector(left_th_cut, right_th_cut))
     }

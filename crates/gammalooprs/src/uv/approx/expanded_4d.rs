@@ -263,7 +263,7 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
     if representation == ThreeDRepresentation::Ltd
         && source_cutset.residue_selector.has_lu_cut_residue()
     {
-        let residues = select_threshold_residues(expression, &source_cutset)?;
+        let residues = select_threshold_residues(expression, &source_cutset, representation)?;
         let mut coefficients = Vec::new();
         let lu_cut = source_cutset
             .residue_selector
@@ -654,7 +654,7 @@ fn select_cut_residues(
     cutset: &CutSet,
     representation: ThreeDRepresentation,
 ) -> Result<Vec<crate::cff::expression::ThreeDExpression<OrientationID>>> {
-    let mut residues = select_threshold_residues(expression, cutset)?;
+    let mut residues = select_threshold_residues(expression, cutset, representation)?;
 
     if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
         residues = residues
@@ -686,6 +686,7 @@ fn select_cut_residues(
 fn select_threshold_residues(
     expression: crate::cff::expression::ThreeDExpression<OrientationID>,
     cutset: &CutSet,
+    representation: ThreeDRepresentation,
 ) -> Result<Vec<crate::cff::expression::ThreeDExpression<OrientationID>>> {
     let mut residues = vec![expression];
 
@@ -693,7 +694,11 @@ fn select_threshold_residues(
         residues = residues
             .into_iter()
             .map(|residue| {
-                let residues = residue.select_esurface_residue(right_threshold);
+                let residues = select_threshold_residue_for_representation(
+                    residue,
+                    right_threshold,
+                    representation,
+                );
                 expect_single_threshold_residue(residues, "right")
             })
             .collect::<Result<Vec<_>>>()?;
@@ -703,13 +708,30 @@ fn select_threshold_residues(
         residues = residues
             .into_iter()
             .map(|residue| {
-                let residues = residue.select_esurface_residue(left_threshold);
+                let residues = select_threshold_residue_for_representation(
+                    residue,
+                    left_threshold,
+                    representation,
+                );
                 expect_single_threshold_residue(residues, "left")
             })
             .collect::<Result<Vec<_>>>()?;
     };
 
     Ok(residues)
+}
+
+fn select_threshold_residue_for_representation(
+    expression: crate::cff::expression::ThreeDExpression<OrientationID>,
+    threshold: &crate::cff::esurface::RaisedEsurfaceGroup,
+    representation: ThreeDRepresentation,
+) -> Vec<crate::cff::expression::ThreeDExpression<OrientationID>> {
+    match representation {
+        ThreeDRepresentation::Cff => expression.select_esurface_residue(threshold),
+        ThreeDRepresentation::Ltd => {
+            expression.select_esurface_residue_in_generated_basis(threshold)
+        }
+    }
 }
 
 fn localize_ltd_threshold_residue_if_needed(

@@ -69,10 +69,8 @@ pub struct LuResiduePlan {
     /// path above.
     pub ltd_lu_cut_local_series_prefactor_sign: i64,
     /// LTD-only bridge for the direct original/root integrand extracted with a
-    /// Laurent parameter. Simple LU cuts use the generated selected
-    /// E-surface orientation; the auxiliary local-series denominator
-    /// orientation is not part of the final original-integrand residue.
-    /// Repeated/confluent cuts use the ordinary residue bridge.
+    /// Laurent parameter. This is a local-series bridge, not the ordinary
+    /// combinatorial residue bridge used by expanded-source residues.
     pub ltd_lu_cut_direct_original_prefactor_sign: i64,
     /// LTD-only direct local-series coordinates. Each entry identifies the
     /// generated E-surface variable and the external-energy localization
@@ -229,16 +227,13 @@ impl ResidueSelector {
 
     pub(crate) fn ltd_threshold_residue_prefactor_sign(&self) -> i64 {
         if self.left_th_cut.is_some() || self.right_th_cut.is_some() {
-            // Cross-section threshold counterterms are first localized on the
-            // threshold E-surface and then on the LU surface. The threshold
-            // Cauchy orientation therefore bridges to the same branch-local
-            // coordinate as the direct LU Laurent series, canceling that
-            // coordinate orientation from the threshold term without
-            // reintroducing a graph-dependent rule.
-            self.lu_plan
-                .as_ref()
-                .map(|plan| plan.ltd_lu_cut_local_series_prefactor_sign)
-                .unwrap_or(1)
+            // Cross-section threshold counterterms are selected in their
+            // generated LTD threshold-surface variable before the LU local
+            // series is extracted. Their subtractive Cauchy orientation is
+            // supplied by the LU threshold counterterm evaluator itself; the
+            // threshold residue selector must not reapply the LU local-series
+            // coordinate bridge.
+            1
         } else if self.is_threshold_esurface_residue() {
             // Amplitude threshold counterterms store the selected threshold
             // E-surface in `lu_cut` to reuse the raised-surface residue

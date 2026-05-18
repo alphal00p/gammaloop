@@ -14,28 +14,37 @@ but no graph-specific or unexplained sign modifiers are allowed.
 
 ## Current Checkpoint
 
-The latest implementation centralizes the LU sign pieces for each raised LU
-group in one plan component before constructing `ResidueSelector`. The direct
-LTD original-integrand prefactor is now stored explicitly in the LU residue
-plan, separate from the local-series extraction prefactor and the ordinary
-multi-residue prefactor.
+The current implementation keeps LU residue metadata centralized in
+`CrossSectionGraph::residue_selector_for_raised_cut_group`. The plan now stores
+separate signs for:
 
-The simple-cut oscillation between GL07, GL21, and GL47 was resolved by making
-the simple-cut bridge depend on normalized edge-support contact with repeated
-channels:
+- the selected generated LTD `E`-surface denominator;
+- the LU local-series denominator used for Laurent extraction;
+- the CFF/LTD surface-family projection bridge;
+- the positive-energy Cutkosky edge-flow orientation;
+- the direct original-integrand prefactor, which is distinct from the ordinary
+  multi-residue prefactor used by expanded-source residues.
 
-- a simple LU cut that touches multiple distinct repeated channel supports
-  through multiple distinct cut edges uses the generated selected `E`-surface
-  orientation;
-- an ordinary simple LU cut uses the local-series coordinate orientation;
-- raised/confluent LU cuts use the repeated-channel residue bridge.
+The direct original-integrand path is now stable on the previously oscillating
+simple/repeated guardrails. Simple mixed contacts with repeated channel support
+use the generated selected-surface orientation and Cutkosky edge flow. Simple
+cuts in graphs with repeated LU groups use the full-graph projection bridge.
+Repeated/confluent cuts use the repeated-channel local Laurent wedge parity.
+This is still a single graph/LMB-derived construction; there are no GL-specific
+branches.
 
-This is still an intermediate checkpoint. It is not yet commit-ready for the
-final parity goal because the full slow scalar sweep still has failures, but the
-change is useful because it removes the previous sign regression loop.
+Threshold residues are now representation-aware:
 
-Temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics were removed from the
-checkpointed code.
+- CFF threshold selection uses canonical CFF surface-family residue selection.
+- LTD threshold selection consumes the generated LTD threshold-surface
+  denominator directly through `select_esurface_residue_in_generated_basis`.
+- Cross-section threshold `ResidueSelector` prefactors are neutral for
+  left/right threshold counterterms because the LU threshold evaluator supplies
+  the subtractive Cauchy orientation after threshold localization.
+
+This checkpoint is useful because it improves the full slow scalar sweep to
+132/143 passing without temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics.
+It is not the final parity state.
 
 ## Validation Snapshot
 
@@ -44,43 +53,35 @@ hide numerical parity failures.
 
 Passing:
 
-- `cargo check -p gammalooprs --profile dev-optim`
-- Focused simple/repeated LU guardrail:
-  GL07 no numerator, GL47 no numerator, GL06 q1, GL21 q1, GL27 q1, GL40 no
-  numerator.
-- Slow scalar cross-section sweep improved from the previous 91/143 pass count
-  to:
+- Focused threshold cluster: GL28, GL29, GL32, GL38, GL39, GL41.
+- Focused direct-original cluster: GL08, GL21, GL37, GL38, GL44, GL45, GL46,
+  GL47.
+- Original simple/repeated LU guardrail: GL07, GL47, GL06 q1, GL21 q1, GL27
+  q1, GL40.
+- Full slow scalar cross-section sweep:
 
 ```text
-143 tests run: 109 passed, 34 failed, 124 skipped
+143 tests run: 132 passed, 11 failed, 124 skipped
 ```
 
-Slow sweep failures:
+Remaining slow sweep failures:
 
 ```text
-GL08 q7, no_numerator
+GL03 q1, q7, no_numerator
+GL12 q1, q7, no_numerator
 GL24 q1, q7, no_numerator
-GL28 q7, no_numerator
-GL29 q1, no_numerator
-GL32 q7, no_numerator
 GL35 q1, no_numerator
-GL37 q1, q7, no_numerator
-GL38 q1, q7, no_numerator
-GL39 q1, q7, no_numerator
-GL41 q1, q7, no_numerator
-GL44 q1, q7, no_numerator
-GL45 q1, q7, no_numerator
-GL46 q1, q7, no_numerator
 ```
 
-The failures currently split into three categories:
+The failures split into two clean categories:
 
-- Direct `Original` pure sign mismatches with matching event/cut metadata and
-  matching full multiplicative factors: GL08, GL37, GL38, GL44, GL45, GL46.
-- Threshold counterterm sign or threshold normalization mismatches while
-  `Original` usually matches: GL28, GL29, GL32, GL39, GL41.
-- Small non-sign `Original` drift with matching event/cut metadata and matching
-  full multiplicative factors: GL24 and GL35.
+- GL03 and GL12 are pure sign mismatches in `Original`. GL12 threshold
+  counterterms follow the same overall sign as `Original`, so the immediate
+  issue is not threshold selection.
+- GL24 and GL35 are small non-sign `Original` drifts with matching event/cut
+  metadata and matching full multiplicative factors. Threshold subtraction is
+  disabled in these tests; this points at the expanded-4D local UV/original
+  extraction path rather than threshold normalization.
 
 Generated `.snap.new` files were produced by forced-pass runs and should not be
 staged unless accepted deliberately as new references.
@@ -98,7 +99,7 @@ graph/LMB/linnet and canonical `E`-surface data, then map the selected residue
 variables back to the requested representation. Simple, raised, confluent,
 threshold, and expanded-4D UV sources should not use separate sign algorithms.
 
-Edges with `is_cut` are forward-scattering cut edges: for graph manipulation
+Edges with `is_cut` are forward-scattering cut edges. For graph manipulation
 they should behave as two external half-edges with the same momentum, one
 incoming and one outgoing. LU/Cutkosky and threshold support normalization must
 therefore treat them as cut/external boundaries rather than ordinary internal
@@ -106,43 +107,38 @@ propagators.
 
 ## Sensitive Code Paths
 
-- `CrossSectionGraph::residue_selector_for_raised_cut_group`
-  builds the LU residue plan and is the main entry point to keep centralized.
-- `CrossSectionGraph::lu_cut_edge_sets_with_cutkosky_signs`
-  maps raised LU groups to positive-energy Cutkosky edge support and signs.
-- `CrossSectionGraph::simple_ltd_lu_cut_local_coordinate_signs`
-  computes the generated selected `E`-surface sign, the local-series
-  denominator sign, and the surface-family bridge from the resolved LMB
-  coordinate determinant.
+- `CrossSectionGraph::residue_selector_for_raised_cut_group` builds the LU
+  residue plan and is the main entry point to keep centralized.
+- `CrossSectionGraph::lu_cut_edge_sets_with_cutkosky_signs` maps raised LU
+  groups to positive-energy Cutkosky edge support and signs.
+- `CrossSectionGraph::simple_ltd_lu_cut_local_coordinate_signs` computes the
+  generated selected `E`-surface sign, the local-series denominator sign, and
+  the surface-family bridge from the resolved LMB coordinate determinant.
 - `CrossSectionGraph::simple_lu_cut_has_mixed_repeated_channel_contact`
-  identifies the support-local case where a simple cut must use generated
-  selected `E`-surface orientation because it bridges multiple repeated
-  channels.
+  identifies the support-local case where a simple cut bridges multiple
+  repeated channels.
 - `ResidueSelector` stores selected signs, local-series signs, ordinary residue
   prefactors, direct-original prefactors, and threshold prefactors.
 - `cff/expression.rs::ltd_lu_local_series_coefficients_from_parametric_atom`
   consumes the LTD LU local-series coordinates and signs.
-- `uv/approx/mod.rs` and `uv/approx/expanded_4d.rs` consume the selector for
-  expanded-4D UV counterterms and must remain LTD-expression-facing.
+- `uv/approx/mod.rs` and `uv/approx/expanded_4d.rs` now dispatch threshold
+  residue selection by representation and must remain LTD-expression-facing for
+  LTD output.
 
 ## Next Debugging Order
 
-1. Lock the direct original-integrand signs before touching thresholds.
-   Use representatives GL08, GL37, GL38, GL44, GL45, and GL46. These are clean
-   pure sign mismatches with matching event metadata, so any fix should be a
-   determinant/Jacobian correction in the centralized LU plan, not a
-   threshold/UV change.
-2. Once direct `Original` parity is stable, isolate threshold counterterm
-   residues with GL28, GL29, GL32, GL39, and GL41. The likely target is the
-   threshold residue prefactor path or threshold support normalization, not the
-   already-matching original residue.
-3. After sign issues are stable, inspect GL24 and GL35 as non-sign `Original`
-   drift. Start by checking event selection, selected support, representation
-   choice, numerator completion, and local UV/threshold contribution separation
-   before changing any normalization.
-4. Re-run the guardrail set after each principled fix, then the slow scalar
-   sweep. A fix is not accepted if it reopens GL06, GL07, GL21, GL27, GL40, or
-   GL47.
+1. Resolve GL03/GL12 first because they are pure signs with matching event
+   metadata. Re-derive the direct `Original` prefactor for their cut support
+   from the same local-coordinate determinant, paying special attention to
+   forward-scattering `is_cut` edges as external half-edge boundaries.
+2. Re-run the guardrails after any sign change: GL06 q1, GL07, GL21 q1, GL27
+   q1, GL40, GL47, plus GL08/GL37/GL38/GL44/GL45/GL46.
+3. Only after the pure signs are stable, debug GL24/GL35 as non-sign drift.
+   Start from event selection, selected support, representation choice,
+   numerator completion, and expanded-4D local UV/original separation before
+   touching any normalization.
+4. Run the full slow scalar sweep after each accepted principled fix. A change
+   is not accepted if it reopens an already green guardrail.
 5. Before final handoff, run `cargo fmt`, `cargo check`, `just test_gammaloop`,
-   and the full slow scalar cross-section sweep without committing generated
-   `.snap.new` files unless they are explicitly accepted.
+   and the full slow scalar cross-section sweep. Do not stage generated
+   `.snap.new` files unless they are deliberately accepted as references.

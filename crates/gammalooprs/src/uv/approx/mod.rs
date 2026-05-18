@@ -308,6 +308,19 @@ fn localized_integrated_reduced_factor(
     Ok(IntegrandExpr { integrands })
 }
 
+fn select_threshold_residue_for_representation(
+    expression: ThreeDExpression<OrientationID>,
+    threshold: &crate::cff::esurface::RaisedEsurfaceGroup,
+    representation: ThreeDRepresentation,
+) -> Vec<ThreeDExpression<OrientationID>> {
+    match representation {
+        ThreeDRepresentation::Cff => expression.select_esurface_residue(threshold),
+        ThreeDRepresentation::Ltd => {
+            expression.select_esurface_residue_in_generated_basis(threshold)
+        }
+    }
+}
+
 impl Approximation {
     fn filtered_integrated_uv_mode_is_active(settings: &UVgenerationSettings) -> bool {
         settings.generate_integrated && settings.filtered_integrated_uv_loop_count().is_some()
@@ -430,13 +443,25 @@ impl Approximation {
         if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
             residues = residues
                 .into_iter()
-                .flat_map(|expression| expression.select_esurface_residue(right_threshold))
+                .flat_map(|expression| {
+                    select_threshold_residue_for_representation(
+                        expression,
+                        right_threshold,
+                        representation,
+                    )
+                })
                 .collect();
         }
         if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
             residues = residues
                 .into_iter()
-                .flat_map(|expression| expression.select_esurface_residue(left_threshold))
+                .flat_map(|expression| {
+                    select_threshold_residue_for_representation(
+                        expression,
+                        left_threshold,
+                        representation,
+                    )
+                })
                 .collect();
         }
         if representation == ThreeDRepresentation::Ltd
