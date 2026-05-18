@@ -10,7 +10,7 @@ use idenso::{
 };
 use spenso::{
     network::{
-        ExecutionResult, Sequential, SmallestDegree, TensorOrScalarOrKey,
+        ExecutionResult, Sequential, SmallestDegree,
         library::{DummyLibrary, function_lib::Wrap},
         parsing::{ParseSettings, StructureFromAtom},
     },
@@ -217,16 +217,11 @@ fn time_symbolic_network_parse_and_execute(label: &str, expr: &Atom, settings: &
 }
 
 fn symbolic_network_result_atom(net: &SymbolicNet<Parsind>) -> Atom {
-    match net.result().unwrap() {
+    let lib = DummyLibrary::<SymbolicTensor<Parsind>>::new();
+    match net.result_tensor(&lib).unwrap() {
         ExecutionResult::One => Atom::num(1),
         ExecutionResult::Zero => Atom::Zero,
-        ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => scalar.clone(),
-        ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => {
-            tensor.expression.clone()
-        }
-        ExecutionResult::Val(TensorOrScalarOrKey::Key { .. }) => {
-            panic!("unexpected library key result")
-        }
+        ExecutionResult::Val(tensor) => tensor.expression.clone(),
     }
 }
 

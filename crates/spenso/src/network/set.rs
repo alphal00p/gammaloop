@@ -163,9 +163,8 @@ impl<
             + FastTensorSum
             + ScalarMul<S, Output = T>
             + for<'b> AddAssign<<T as Ref>::Ref<'b>>,
-        S: Clone,
+        S: Clone + Into<T::Scalar>,
         T::Scalar: One + Zero,
-        for<'b> &'b S: Into<T::Scalar>,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
         T: PermuteTensor<Permuted = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
