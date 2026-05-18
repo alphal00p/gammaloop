@@ -739,19 +739,19 @@ impl ColorAlgebraSimplifier {
         let use_raw_tensor_simplifier =
             !contains_chain_or_trace(expression) && contains_raw_color_generator(expression);
 
-        let mut expr = expression.to_owned().collect_tensors().simplify_metrics();
+        let mut expr = expression.to_owned().collect_metrics().simplify_metrics();
         // Keep legacy raw `t(a,i,j)` expressions on the old pattern path; chain
         // collection is only unambiguous once generators use chain endpoints.
         if use_raw_tensor_simplifier {
             return simplify_raw_color_tensors(expr.as_view())
-                .collect_tensors()
+                .collect_metrics()
                 .simplify_metrics();
         }
 
         loop {
             let collected = Self::collect_lines(expr.as_view());
             let next = Self::rewrite_terms(collected.as_view())
-                .collect_tensors()
+                .collect_metrics()
                 .simplify_metrics();
 
             if next == expr {

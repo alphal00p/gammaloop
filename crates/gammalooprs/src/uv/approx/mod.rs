@@ -617,9 +617,9 @@ impl Approximation {
             .subtract(&graph.initial_state_cut);
 
         let mut integrands = BTreeMap::new();
+        let final_integrand_terms = t.iter().zip(integrated_t.integrands.iter()).enumerate();
 
-        for ((local_index, local), (integrated_index, integ)) in
-            t.iter().zip(integrated_t.integrands.iter())
+        for (term_index, ((local_index, local), (integrated_index, integ))) in final_integrand_terms
         {
             let mut cff = s * (local - integ);
 
@@ -660,7 +660,62 @@ impl Approximation {
             resnum = resnum.replace_multiple(&reps);
             resnum *= cff * &global_num;
 
-            resnum = resnum.replace(GS.dim).with(4).simplify_color(); //.to_dots();
+            let color_simplify_input = resnum.replace(GS.dim).with(4);
+            if let Ok(dump_dir) = std::env::var("GAMMALOOP_DUMP_UV_COLOR_SIMPLIFY_INPUTS")
+                && !dump_dir.is_empty()
+            {
+                let dump_dir = std::path::PathBuf::from(dump_dir);
+                std::fs::create_dir_all(&dump_dir)?;
+
+                let safe_graph_name = graph
+                    .name
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() || matches!(c, '_' | '-') {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect::<String>();
+                let stem = format!(
+                    "uv-final-integrand-color-input-{}-topo{}-dod{}-term{}",
+                    safe_graph_name, self.topo_order, self.spinney.dod, term_index
+                );
+                let expr_path = dump_dir.join(format!("{stem}.sym"));
+                let meta_path = dump_dir.join(format!("{stem}.meta.txt"));
+                let simple_approx = self
+                    .simple_approx
+                    .as_ref()
+                    .expect("final-integrand approximations should have a simple approximation")
+                    .expr(&graph.full_filter());
+
+                std::fs::write(
+                    &expr_path,
+                    format!("{}\n", color_simplify_input.to_plain_string()),
+                )?;
+                std::fs::write(
+                    &meta_path,
+                    format!(
+                        "graph = {}\ntopo_order = {}\ndod = {}\nterm_index = {}\napproximation = {}\nexpression = {}\n",
+                        graph.name,
+                        self.topo_order,
+                        self.spinney.dod,
+                        term_index,
+                        simple_approx.to_plain_string(),
+                        expr_path.display(),
+                    ),
+                )?;
+                debug_tags!(#generation, #uv, #inspect, #dump;
+                    expression = %expr_path.display(),
+                    metadata = %meta_path.display(),
+                    dod = self.spinney.dod,
+                    term_index = term_index,
+                    "Dumped final-integrand color simplification input"
+                );
+            }
+
+            resnum = color_simplify_input.simplify_color(); //.to_dots();
             // println!(
             //     "Resnum {}",
             //     resnum.printer(

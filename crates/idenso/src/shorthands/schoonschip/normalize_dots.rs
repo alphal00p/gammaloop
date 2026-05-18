@@ -1,14 +1,11 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    dualizable_, dualizable_dual_,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    rank1_, rep_, self_dual_,
+    dualizable_, dualizable_dual_, g, network::tags::SPENSO_TAG as T, rank1_, rep_, self_dual_,
     tensors::parametric::atomcore::PatternReplacement,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    function,
     id::Replacement,
 };
 
@@ -22,7 +19,7 @@ static ASYMMETRIC_SCHOONSCHIP_VECTOR_IN_VECTOR: LazyLock<[Replacement; 1]> = Laz
         //  p(...,q(..,rep)) => g(p(...,rep), q(..,rep))
         Replacement::new(
             rank1_!(0; W_.c___, rank1_!(1; W_.a___, &stripped)).to_pattern(),
-            ETS.metric(
+            g!(
                 rank1_!(0; W_.c___, &stripped),
                 rank1_!(1; W_.a___, &stripped),
             ),
@@ -41,18 +38,12 @@ static REDUNDANT_METRIC_SCHOONSCHIPS: LazyLock<[Replacement; 4]> = LazyLock::new
         // g(mu,p(...,rep)) is redundant:
         // g(mu,p(...,rep)) => p(...,mu)
         Replacement::new(
-            function!(
-                ETS.metric,
-                &self_dual,
-                rank1_!(0; W_.c___, self_dual_stripped)
-            )
-            .to_pattern(),
+            g!(&self_dual, rank1_!(0; W_.c___, self_dual_stripped)).to_pattern(),
             rank1_!(0; W_.c___, self_dual.clone()),
         ),
         // Same thing but for dualizable
         Replacement::new(
-            function!(
-                ETS.metric,
+            g!(
                 &dualizable,
                 rank1_!(0; W_.c___, dualizable_stripped.clone())
             )
@@ -61,17 +52,12 @@ static REDUNDANT_METRIC_SCHOONSCHIPS: LazyLock<[Replacement; 4]> = LazyLock::new
         ),
         // Same thing but for dual dualizable
         Replacement::new(
-            function!(
-                ETS.metric,
-                &dualizable_dual,
-                rank1_!(0; W_.c___, dualizable_stripped)
-            )
-            .to_pattern(),
+            g!(&dualizable_dual, rank1_!(0; W_.c___, dualizable_stripped)).to_pattern(),
             rank1_!(0; W_.c___, dualizable_dual),
         ),
         // g(mu,p(...)) is also allowed (although a bit weird), here we normalize it to p(...,mu)
         Replacement::new(
-            function!(ETS.metric, &self_dual, rank1_!(0; W_.c___)).to_pattern(),
+            g!(&self_dual, rank1_!(0; W_.c___)).to_pattern(),
             rank1_!(0; W_.c___, self_dual),
         ),
     ]
@@ -81,7 +67,7 @@ static VECTOR_POWER_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_stripped = T.self_dual_::<0, _>([W_.d_]);
     let self_dual_vector = T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual]);
-    let self_dual_square = ETS.metric(
+    let self_dual_square = g!(
         T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
         T.rank1_::<0, _>([&Atom::var(W_.c___), &self_dual_stripped]),
     );
@@ -105,7 +91,7 @@ static VECTOR_POWER_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
 static METRIC_POWER_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let self_dual_j = T.self_dual_::<0, _>([W_.d_, W_.j_]);
-    let self_dual_metric = function!(ETS.metric, &self_dual, &self_dual_j);
+    let self_dual_metric = g!(&self_dual, &self_dual_j);
 
     [
         // Normalize even powers of a metric g(rep(dim,i),rep(dim,j))^2n -> dim^(n/2)
@@ -130,13 +116,10 @@ static METRIC_TRACE_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
 
     [
         // g(i,i) -> d
-        Replacement::new(
-            function!(ETS.metric, &self_dual, &self_dual).to_pattern(),
-            Atom::var(W_.d_),
-        ),
+        Replacement::new(g!(&self_dual, &self_dual).to_pattern(), Atom::var(W_.d_)),
         // g(i,dind(i)) -> d
         Replacement::new(
-            function!(ETS.metric, &dualizable, &dualizable_dual).to_pattern(),
+            g!(&dualizable, &dualizable_dual).to_pattern(),
             Atom::var(W_.d_),
         ),
     ]
