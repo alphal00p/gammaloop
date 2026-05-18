@@ -25,6 +25,17 @@ the guardrail: repeated-channel CFF/LTD diagnostic comparisons must be repaired
 through an explicit, centralized comparison normal form, not by changing the
 GammaLoop production CFF local-UV basis.
 
+The 3Drep CFF/LTD diagnostic path now does exactly that.  The centralized
+entry point is `generate_cff_ltd_comparison_expression`.  For non-repeated
+graphs, and for non-CFF requested representations, it falls through to ordinary
+`generate_3d_expression`.  For true repeated CFF channels it uses the common
+derivative-free confluent normal form used by the LTD-like comparison basis and
+disables the pure-CFF duplicate-signature excess convention.  That duplicate
+sign belongs to the independent pure-CFF residue/source basis; it is not part
+of the shared CFF/LTD diagnostic projection.  This affects `3Drep
+test-cff-ltd`, `eval::compare_cff_ltd`, and the old Python probe matrix only.
+It does not redirect GammaLoop production CFF local-UV generation.
+
 The already-committed scalar sign work centralizes active repeated-channel
 metadata in `Graph::active_three_d_repeated_channels()` and derives all
 repeated-channel bridges from that single source:
@@ -128,7 +139,6 @@ important buckets are:
 - the divergent/amplitude-like scalar bubble local/integrated UV inspect tests;
 - generated forward cross-section smoke tests that currently hit the same
   coordinate ambiguity;
-- 3Drep high-power CFF/LTD parity tests and the old Python 3Drep case matrix;
 - amplitude profile-bulk tests;
 - spin-sum cross-section generation tests that also stop at the coordinate
   ambiguity;
@@ -154,11 +164,10 @@ env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
 ```
 
 The imported `box_pow3` repeated-channel fixture now has direct CFF/LTD
-numerical parity in the restored pure-CFF production path: CFF serializes as
-the pure-CFF channel-normal-form expression with `62` orientations, while LTD
-uses the derivative-free repeated-channel expression with `17` orientations.
-The fixture therefore asserts numeric parity and the actual five-variant LTD
-repeated-channel structure, rather than requiring byte-identical CFF/LTD JSON.
+diagnostic parity through the centralized comparison normal form: both CFF and
+LTD serialize to the derivative-free repeated-channel comparison expression
+with `17` orientations and `24` nodes.  The fixture also still asserts the
+actual five-variant LTD repeated-channel structure.
 
 ```text
 env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
@@ -171,18 +180,24 @@ env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
 1 test run: 1 passed, 266 skipped
 ```
 
-The old Python 3Drep case matrix is not green at this checkpoint:
+The old Python 3Drep case matrix is now green:
 
 ```text
-old Python 3Drep case matrix: 285 ok, 25 failed, 310 total
+old Python 3Drep case matrix: 310 ok, 0 failed, 310 total
 ```
 
-Those remaining failures are concentrated in repeated/high-power CFF/LTD
-diagnostic comparisons and a small all-edge-linear numerator sign-basis bucket.
-They should be fixed by one centralized comparison-generation entry point that
-selects a common confluent normal form for repeated CFF/LTD diagnostics, while
-leaving the production CFF local-UV path used by GammaLoop scalar cross-section
-inspection unchanged.
+The broad 3Drep integration sweep is also green after the diagnostic entry
+point change:
+
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 RUST_MIN_STACK=33554432 \
+  RUSTFLAGS=-L/opt/local/lib/libgcc \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(/test_3d_reps/)' --no-capture --retries 0
+
+17 tests run: 17 passed (8 slow), 250 skipped
+```
 
 ## Theory Anchor
 
@@ -226,6 +241,9 @@ propagators.
 - `uv/approx/mod.rs` and `uv/approx/expanded_4d.rs` dispatch threshold residue
   selection by representation and must remain LTD-expression-facing for LTD
   output.
+- `three-dimensional-reps::generate_cff_ltd_comparison_expression` is the only
+  diagnostic CFF/LTD comparison entry point.  It is intentionally not the
+  GammaLoop production CFF local-UV generator.
 
 ## Remaining Follow-Up
 
@@ -254,12 +272,7 @@ than by toggling signs graph by graph.
    - fix only the shared source-basis construction if the mismatch is in CFF
    local UV generation. Do not change the cross-section LU residue bridge unless
    the bubble reduction exposes the same graph/LMB invariant.
-4. Reassess the broad 3Drep high-power failures through a single diagnostic
-   CFF/LTD comparison entry point. Repeated diagnostics may use a shared
-   confluent normal form, but production CFF scalar local UV must remain in the
-   pure-CFF source basis unless the first-principles bubble comparison proves
-   that basis wrong.
-5. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
+4. Re-run `cargo fmt`, `cargo check`, `just test_gammaloop`, and the slow
    scalar cross-section sweep after each principled fix. The repeated-channel
    descriptor is shared and should remain a single implementation rather than a
    special-case branch.

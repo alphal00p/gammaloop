@@ -199,6 +199,44 @@ pub fn generate_confluent_cff_expression<G: ThreeDGraphSource + ?Sized>(
     Ok(expression)
 }
 
+pub fn generate_cff_ltd_comparison_expression<G: ThreeDGraphSource + ?Sized>(
+    graph: &G,
+    options: &Generate3DExpressionOptions,
+) -> Result<ThreeDExpression<OrientationID>> {
+    if options.representation != RepresentationMode::Cff {
+        return generate_3d_expression(graph, options);
+    }
+
+    let parsed = graph.to_three_d_parsed_graph()?;
+    if repeated_groups(&parsed).is_empty() {
+        return generate_3d_expression(graph, options);
+    }
+    let Some(edge_map) = graph.energy_edge_index_map(&parsed) else {
+        return generate_cff_ltd_comparison_expression_from_parsed(&parsed, options);
+    };
+    let mut local_options = options.clone();
+    local_options.energy_degree_bounds = edge_map
+        .remap_bounds_to_local(&options.energy_degree_bounds)
+        .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })?;
+    let reverse_internal = edge_map.internal_to_local();
+    local_options.preserve_internal_edges_as_four_d_denominators = options
+        .preserve_internal_edges_as_four_d_denominators
+        .iter()
+        .map(|edge_id| {
+            reverse_internal
+                .get(edge_id)
+                .copied()
+                .ok_or(GenerationError::UnknownCffPreservedInternalEdge { edge_id: *edge_id })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut expression =
+        generate_cff_ltd_comparison_expression_from_parsed(&parsed, &local_options)?
+            .remap_energy_edge_indices(&edge_map)
+            .fuse_compatible_variants();
+    assign_numerator_map_labels(&mut expression.orientations);
+    Ok(expression)
+}
+
 #[allow(unreachable_patterns)]
 pub fn generate_3d_expression_from_parsed(
     parsed: &ParsedGraph,
@@ -282,6 +320,22 @@ pub fn generate_confluent_cff_expression_from_parsed(
     BoundedCffBuilder::new(parsed, &options)?
         .with_confluent_duplicate_channels(true)
         .build()
+}
+
+pub fn generate_cff_ltd_comparison_expression_from_parsed(
+    parsed: &ParsedGraph,
+    options: &Generate3DExpressionOptions,
+) -> Result<ThreeDExpression<OrientationID>> {
+    if options.representation == RepresentationMode::Cff && !repeated_groups(parsed).is_empty() {
+        let mut comparison_options = options.clone();
+        // The comparison normal form is the LTD-like derivative-free repeated
+        // channel basis. The pure-CFF duplicate-sign convention belongs to the
+        // independent pure-CFF residue basis, not to this common projection.
+        comparison_options.include_cff_duplicate_signature_excess_sign = false;
+        generate_confluent_cff_expression_from_parsed(parsed, &comparison_options)
+    } else {
+        generate_3d_expression_from_parsed(parsed, options)
+    }
 }
 
 fn build_expression_preserving_internal_edges(

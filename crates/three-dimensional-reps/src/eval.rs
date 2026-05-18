@@ -241,10 +241,16 @@ pub fn compare_cff_ltd(request: ComparisonRequest<'_>) -> Result<ComparisonResul
             request.parsed,
         )?,
     };
-    let cff = crate::generate_3d_expression_from_parsed(request.parsed, request.cff_options)
-        .map_err(|error| EvaluationError::NumeratorEval(error.to_string()))?;
-    let ltd = crate::generate_3d_expression_from_parsed(request.parsed, request.ltd_options)
-        .map_err(|error| EvaluationError::NumeratorEval(error.to_string()))?;
+    let cff = crate::generate_cff_ltd_comparison_expression_from_parsed(
+        request.parsed,
+        request.cff_options,
+    )
+    .map_err(|error| EvaluationError::NumeratorEval(error.to_string()))?;
+    let ltd = crate::generate_cff_ltd_comparison_expression_from_parsed(
+        request.parsed,
+        request.ltd_options,
+    )
+    .map_err(|error| EvaluationError::NumeratorEval(error.to_string()))?;
     let cff_value =
         evaluate_expression(request.parsed, &cff, request.numerator_expr, &input)?.value;
     let ltd_value =

@@ -1926,6 +1926,26 @@ non-trivial numerator dependence.  The feature-gated \texttt{old\_cff} object is
 kept only inside the \texttt{three-dimensional-reps} crate for legacy parity
 tests.
 
+\paragraph{Diagnostic CFF/LTD comparison normal form.}
+The production CFF representation and the diagnostic CFF/LTD comparison basis
+are intentionally different objects for true repeated denominator channels.
+Production CFF keeps the pure-CFF source basis and its channel/contact normal
+form, because that basis is the local-UV object used by gammaLoop.  A diagnostic
+comparison, however, should compare the two representations after projecting
+both sides onto a common repeated-channel coordinate system.  The implementation
+therefore uses a single comparison entry point: for non-repeated graphs it is
+the ordinary representation generator, while for repeated CFF diagnostics it
+returns the derivative-free confluent repeated-channel normal form also used by
+the LTD-like comparison basis.
+
+In that common projection the pure-CFF duplicate-signature excess factor is not
+applied.  That sign is part of the independent pure-CFF contour/source
+orientation convention.  It is required when the pure-CFF expression is used as
+its own production basis, but it would be counted against the wrong basis in a
+shared CFF/LTD diagnostic projection.  This separation is what allows repeated
+high-power CFF/LTD diagnostics to be byte-for-byte or pointwise comparable
+without changing gammaLoop's production CFF local-UV construction.
+
 \paragraph{Uniform \(E\)-surface characterization for LU cuts.}
 Local unitarity cut selection and threshold counterterm construction must not
 depend on whether the original integrand is eventually evaluated as CFF or LTD.

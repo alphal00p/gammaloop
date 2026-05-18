@@ -66,10 +66,11 @@ use symbolica::{
 };
 use tabled::{builder::Builder, settings::Style};
 use three_dimensional_reps::{
-    generate_3d_expression, graph_info, reconstruct_dot_from_expression, render_expression_summary,
-    validate_parsed_graph, DisplayOptions, GraphInfo, GraphValidation, NumeratorDisplay,
-    OrientationID, ReconstructDotFormat, ReconstructDotOptions, RepresentationMode,
-    ThreeDExpression, ThreeDGraphSource,
+    generate_3d_expression, generate_cff_ltd_comparison_expression, graph_info,
+    reconstruct_dot_from_expression, render_expression_summary, validate_parsed_graph,
+    DisplayOptions, GraphInfo, GraphValidation, NumeratorDisplay, OrientationID,
+    ReconstructDotFormat, ReconstructDotOptions, RepresentationMode, ThreeDExpression,
+    ThreeDGraphSource,
 };
 use typed_index_collections::TiVec;
 
@@ -1922,7 +1923,7 @@ impl TestCffLtd {
         let symbolica_expression_pretty_path = case_dir.join("symbolica_expression_pretty.txt");
         let mut options = graph.three_d_expression_options(representation, scale_mode)?;
         options.energy_degree_bounds = energy_degree_bounds.to_vec();
-        let expression = match generate_3d_expression(graph, &options) {
+        let expression = match generate_cff_ltd_comparison_expression(graph, &options) {
             Ok(expression) => expression,
             Err(error) => {
                 let generation_error_path = case_dir.join("generation_error.txt");
