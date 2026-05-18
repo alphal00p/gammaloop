@@ -5,12 +5,15 @@
 
 #import "graph-impl.typ" as _impl
 
+#let graph-bytes(graph) = _impl.graph-bytes(graph)
+#let with-bytes(graph, graph-bytes) = _impl.with-bytes(graph, graph-bytes)
+
 /// Build one graph object from a stream of node and edge items.
 ///
 /// Use @node, @source, @sink, and @edge to create graph items. Positional items
 /// may be passed as comma-separated arguments or yielded from a Typst code
 /// block.
-/// -> bytes
+/// -> dictionary
 #let build(
   /// Node and edge items returned by @node and @edge.
   /// The best way to use these is to use a code scope, so that the edges and nodes append each other:
@@ -36,7 +39,7 @@
   /// ```
   ///  -> none | string
   name: none,
-  /// Opaque graph data. Any CBOR-encodable Typst value.
+  /// Native Typst graph data.
   ///
   /// ```example
   /// #let g = build(data: (a:(b:(1, ))), {
@@ -79,12 +82,13 @@
   default-node-data: none,
   /// Default data merged into every edge data. Captured edge data fields override it.
   /// ```example
-  /// #let g = build(default-edge-data: (a:1), {
-  ///    node(<a>)
-  ///    edge(source(<a>))
-  ///    edge(sink(<a>))
+  /// #let g = build(default-edge-data: (a:1,b:[$m_mu$]), {
+  ///    node(<a>,id:0)
+  ///    edge(source(<a>),id:1)
+  ///    edge(sink(<a>),<e>,id:0,b:[#set text(font:"Reforma")
+  ///    This is a test: ])
   /// })
-  /// #edges(g).map(e=>e)
+  /// #edges(g).map(e=>e.data.b).join()
   /// ```
   /// -> any
   default-edge-data: none,
@@ -128,13 +132,14 @@
 /// Parse one or more DOT digraphs into graph objects.
 ///
 /// Default data are applied before `eval-*` fields are evaluated, so
-/// default data strings can refer to parsed record fields such as `#name`.
+/// default data strings can refer to parsed record fields such as `#str(name)`.
 /// Parsed fields take precedence over default data fields, so DOT
 /// `label="..."` overrides `default-node-data: (label: ...)`.
 /// ````example
 /// #let a = ```dot
 /// digraph {
 /// ext [style=invis]
+/// node[label="#str(name)"]
 /// a [id=0 pos="0,0!"]
 /// b [id=1 pos="ref(node:0)+4,0!"]
 /// a -> b [id=0 pos="ref(node:1)+0,1!"]
@@ -144,7 +149,7 @@
 /// ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
 /// }
 /// ```
-/// #let g = parse(a.text,default-node-data:(label:"#name"),eval-node-fields:"label")
+/// #let g = parse(a.text,eval-node-fields:"label")
 /// >>>#align(center+horizon, draw(layout(g.at(0))))
 ///
 /// ````
@@ -152,24 +157,23 @@
 #let parse(
   /// DOT source text containing one or more `digraph` definitions. -> string | bytes
   input,
-  /// Default data merged into every node data. Captured node data fields override it.
+  /// Default data merged into every node data. Captured node data fields override it, but bare dot statements don't set data fields. To turn statements into data fields, use `eval-node-fields`.
   ///
   /// ````example
   /// #let a = ```dot
   /// digraph {
-  /// node [particle="g"]
   /// a -> b -> c -> d -> a
   /// a -> a
   /// b -> d
   /// c [particle="q"]
   /// }
   /// ```
-  /// #let g = parse(a.text,default-node-data:(particle:"g"),eval-node-fields:"particle").at(0)
-  /// #nodes(g).map(n=>n)
+  /// #let g = parse(a.text,default-node-data:(particle:"g")).at(0)
+  /// #nodes(g).map(n=>n.data.particle)
   /// ````
   ///   -> any
   default-node-data: none,
-  /// Node statement fields to evaluate into `graph.nodes(g).at(i).data`.
+  /// Node fields to evaluate into node data.
   /// ````example
   /// #let a = ```dot
   /// digraph {
@@ -178,26 +182,28 @@
   /// b -> d
   /// }
   /// ```
-  /// #let g = parse(a.text,default-node-data:(label:"#name"),eval-node-fields:"label")
+  /// #let g = parse(a.text,default-node-data:(label:"#str(name)"),eval-node-fields:"label")
   /// >>>#align(center+horizon, draw(layout(g.at(0))))
   ///
   /// ````
   /// -> string | array
   eval-node-fields: (),
-  /// Default data merged into every edge data. Captured edge data fields override it. -> any
+  /// Default data merged into every edge data. Captured edge data fields override it, but bare dot statements don't set data fields. To turn statements into data fields, use `eval-edge-fields`.
+  /// 
+  /// -> any
   default-edge-data: none,
-  /// Default data merged into every source half-edge data. Captured source data fields override it. -> any
-  default-source-data: none,
-  /// Default data merged into every sink half-edge data. Captured sink data fields override it. -> any
-  default-sink-data: none,
-  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
-  eval-graph-fields: (),
   /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. -> string | array
   eval-edge-fields: (),
+  /// Default data merged into every source half-edge data. Captured source data fields override it. -> any
+  default-source-data: none,
   /// Source half-edge fields to evaluate into `edge.source.data`. -> string | array
   eval-source-fields: (),
+  /// Default data merged into every sink half-edge data. Captured sink data fields override it. -> any
+  default-sink-data: none,
   /// Sink half-edge fields to evaluate into `edge.sink.data`. -> string | array
   eval-sink-fields: (),
+  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
+  eval-graph-fields: (),
   /// Typst `eval` mode used for string field values. -> string
   eval-mode: "markup",
   /// Additional Typst names available while evaluating field values. -> dictionary
@@ -365,10 +371,10 @@
   _impl.pos(x: x, y: y, ref: ref, dx: dx, dy: dy, mode: mode)
 }
 
-/// Map graph metadata to new opaque data.
-/// -> bytes
+/// Map graph metadata to new native data.
+/// -> dictionary
 #let map(
-  /// Graph object to transform. -> bytes
+  /// Graph object to transform. -> dictionary
   graph_,
   /// Callback for graph metadata records. -> none | function
   graph: none,
@@ -384,10 +390,10 @@
   _impl.map(graph_, graph: graph, node: node, edge: edge, source: source, sink: sink)
 }
 
-/// Evaluate selected fields into opaque data entries.
-/// -> bytes
+/// Evaluate selected fields into native data entries.
+/// -> dictionary
 #let eval-fields(
-  /// Graph object whose selected statement fields should be evaluated. -> bytes
+  /// Graph object whose selected statement fields should be evaluated. -> dictionary
   graph_,
   /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
   eval-graph-fields: (),
@@ -417,57 +423,61 @@
 /// Return graph metadata.
 /// -> dictionary
 #let info(
-  /// Graph object returned by @build, @parse, #api-link("layout-", "layout"), or another graph API. -> bytes
+  /// Graph object returned by @build, @parse, #api-link("layout-", "layout"), or another graph API. -> dictionary
   graph,
 ) = _impl.info(graph)
 
 /// Serialize a graph object to DOT.
 /// -> string
 #let dot(
-  /// Graph object to serialize. -> bytes
+  /// Graph object to serialize. -> dictionary
   graph,
 ) = _impl.dot(graph)
 
 /// Return node records, optionally filtered by a subgraph object.
+///
+/// Node `name` values are Typst labels when present.
 /// -> array
 #let nodes(
-  /// Graph object to inspect. -> bytes
+  /// Graph object to inspect. -> dictionary
   graph,
   /// Optional subgraph filter; only nodes incident to selected half edges are returned. -> none | bytes
   subgraph: none,
 ) = _impl.nodes(graph, subgraph: subgraph)
 
 /// Return edge records, optionally filtered by a subgraph object.
+///
+/// Edge `name` values are Typst labels when present.
 /// -> array
 #let edges(
-  /// Graph object to inspect. -> bytes
+  /// Graph object to inspect. -> dictionary
   graph,
   /// Optional subgraph filter; only selected edges/half-edges are returned. -> none | bytes
   subgraph: none,
 ) = _impl.edges(graph, subgraph: subgraph)
 
-/// Return one named node's opaque data.
+/// Return one named node's native data.
 /// -> any
 #let node-data(
-  /// Graph object to inspect. -> bytes
+  /// Graph object to inspect. -> dictionary
   graph_,
   /// Node name as a Typst label or its string form. -> label | string
   name,
 ) = _impl.node-data(graph_, name)
 
-/// Return one named edge's opaque data.
+/// Return one named edge's native data.
 /// -> any
 #let edge-data(
-  /// Graph object to inspect. -> bytes
+  /// Graph object to inspect. -> dictionary
   graph_,
   /// Edge name as a Typst label or its string form. -> label | string
   name,
 ) = _impl.edge-data(graph_, name)
 
-/// Update one named node's opaque data.
-/// -> bytes
+/// Update one named node's native data.
+/// -> dictionary
 #let update-node-data(
-  /// Graph object to update. -> bytes
+  /// Graph object to update. -> dictionary
   graph_,
   /// Node name as a Typst label or its string form. -> label | string
   name,
@@ -475,10 +485,10 @@
   update,
 ) = _impl.update-node-data(graph_, name, update)
 
-/// Update one named edge's opaque data.
-/// -> bytes
+/// Update one named edge's native data.
+/// -> dictionary
 #let update-edge-data(
-  /// Graph object to update. -> bytes
+  /// Graph object to update. -> dictionary
   graph_,
   /// Edge name as a Typst label or its string form. -> label | string
   name,
@@ -486,12 +496,12 @@
   update,
 ) = _impl.update-edge-data(graph_, name, update)
 
-/// Join two graphs by matching dangling half-edge data on `key`.
-/// -> bytes
+/// Join two graphs by matching dangling half-edge statements or ids on `key`.
+/// -> dictionary
 #let join(
-  /// Left graph object. -> bytes
+  /// Left graph object. -> dictionary
   left,
-  /// Right graph object. -> bytes
+  /// Right graph object. -> dictionary
   right,
   /// Dangling half-edge match key: `"statement"`, `"compass"`, or `"id"`. -> string
   key: "statement",
@@ -500,20 +510,13 @@
 /// Return subgraph objects for the graph's cycle basis.
 /// -> array
 #let cycles(
-  /// Graph object to analyze. -> bytes
+  /// Graph object to analyze. -> dictionary
   graph,
 ) = _impl.cycles(graph)
 
 /// Return subgraph objects for the graph's spanning forests.
 /// -> array
 #let forests(
-  /// Graph object to analyze. -> bytes
+  /// Graph object to analyze. -> dictionary
   graph,
 ) = _impl.forests(graph)
-
-/// Decode an opaque data returned by low-level graph APIs.
-/// -> any
-#let decode-data(
-  /// Data bytes or byte array produced by the graph API. -> bytes | array | none
-  value,
-) = _impl.decode-data(value)

@@ -49,7 +49,7 @@ impl Display for DotEdgeData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut first = true;
         for (key, value) in &self.statements {
-            if key == "__linnest-edge-name" {
+            if key.starts_with("__linnest-") {
                 continue;
             }
             if !first {

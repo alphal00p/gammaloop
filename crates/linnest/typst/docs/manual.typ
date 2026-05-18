@@ -67,7 +67,7 @@ or building from edges and nodes using `build`, with a fletcher inspired syntax:
   edge(source(<a>), <in-a2>, label: [e])
 })```
 
-In either case, ```typst type(g)```=#type(g), because they both return an  opaque zero-copy value that corresponds to a linnet graph struct. However none of the data is lost, as you can query this value for information about the graph, such as the edges and the nodes.
+In either case, ```typst type(g)```=#type(g), because graph values are Typst dictionaries that wrap an archived linnet graph plus native Typst data. Rust owns topology, layout state, statement metadata, and internal opaque payload bytes; user data captured from Typst stays in Typst and is merged back into query records.
 
 The main usecase however is of course to automatically place the nodes and edges on a canvas, using the `layout` function.
 
@@ -144,9 +144,13 @@ The main usecase however is of course to automatically place the nodes and edges
 
 == Graph Objects
 
-Graph and subgraph objects are opaque zero-copy values. Build or parse
-graph objects with `graph`, transform graph objects with `layout`, and pass
-objects back to `graph` or `subgraph` for inspection.
+Graph objects are Typst dictionaries wrapping archived Rust graph bytes plus
+native Typst data arrays for graph, node, edge, source, and sink data. The Rust
+graph may also carry an internal opaque payload, but that payload is used only
+by the Typst wrapper and is not exposed in public records. Build or parse graph
+objects with `graph`, transform graph objects with `layout`, and pass objects
+back to `graph` or `subgraph` for inspection. Subgraph objects are still opaque
+zero-copy values.
 
 - `graph.parse(input)` parses one or more DOT digraphs and returns an array of
   graph objects. Its `eval-graph-fields`, `eval-node-fields`,
@@ -155,13 +159,12 @@ objects back to `graph` or `subgraph` for inspection.
 - `graph.build(..)` constructs one graph object from a stream of node and edge
   items.
 - `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
-  new opaque data without changing topology.
+  new native data without changing topology.
 - `graph.node-data(graph, <name>)` and `graph.edge-data(graph, <name>)` return
   one named node or edge data.
 - `graph.update-node-data(graph, <name>, data)` and
   `graph.update-edge-data(graph, <name>, data)` update one named node or edge
-  data. Direct replacements use a Rust-side lookup; callbacks still run in
-  Typst with `(data, record)`.
+  data. Direct replacements and callbacks run in Typst with `(data, record)`.
 - `graph.eval-fields(graph, ..)` evaluates selected record fields into data
   entries. It works on parsed and built graph objects.
 - `node(..)` returns a node item.
@@ -179,17 +182,21 @@ objects back to `graph` or `subgraph` for inspection.
 The Typst construction API is half-edge first: create node items, create source
 and sink half-edge endpoints, then pass edge items to `graph.build`.
 `graph.build` accepts both comma-separated items and ordinary Typst code
-blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; they are
-resolved before the wire format is sent to the Rust plugin. Numeric `id`
+blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; node and
+edge names are emitted back from `nodes(g)` and `edges(g)` as Typst labels.
+They are resolved before the wire format is sent to the Rust plugin. Numeric `id`
 arguments choose graph indexes or ordering: on nodes, `id` fixes the resulting
 node index and must be unique and in bounds. On nodes, edges, sources, and
 sinks, extra named arguments are captured as opaque Typst data fields:
 `edge(source(<a>, style: physics.source-stroke()), sink(<b>), particle: "g")`
 stores `(style: ..)` in the source data and `(particle: "g")` in the edge
-data. Typst CBOR-encodes data before the Rust plugin boundary, Rust
-archives the bytes without inspecting them, and Typst decodes them again in
-`graph.info`, `graph.nodes`, and `graph.edges`. A captured `label` data field
-on nodes and edges is display content used by the default drawing style; use
+data. These user data values are not sent through the Rust plugin boundary.
+Typst sends an internal opaque payload with correlation data, asks Rust to
+resolve the graph indexes, then stores user data in arrays at those resolved
+graph, node, edge, and half-edge ids. `graph.info`, `graph.nodes`, and
+`graph.edges` merge those native values into the returned records. A captured
+`label` data field on nodes
+and edges is display content used by the default drawing style; use
 `statements: (label: "...")` when a flat metadata label string is needed.
 Statements are flat metadata used by DOT; they cannot nest. Values are scalar
 strings/numbers/booleans. Use data fields for structured Typst data or
@@ -226,10 +233,11 @@ physics helpers read `data.style` on source and sink half-edges and
 )
 ```
 
-When parsing DOT, the same data channel can be filled from selected string
-fields. Evaluation happens in Typst at parse time; Rust only receives opaque
-data bytes. The selected fields are evaluated with the record's merged
-`fields` dictionary in scope:
+When parsing DOT, the same native data arrays can be filled from selected
+string fields. Rust parses DOT into topology and statement metadata; Typst
+applies defaults and evaluates selected fields afterward. The selected fields
+are evaluated with the record's merged `fields` dictionary in scope. Since node
+names are labels, use `#str(name)` when a name should become visible text:
 
 ```typ
 #let g = parse(
@@ -266,7 +274,7 @@ fields:
 ```
 
 Named nodes and edges can be updated after construction without scanning in the
-caller. The update replaces the opaque data, or it can be a callback receiving
+caller. The update replaces the native data, or it can be a callback receiving
 `(data, record)`:
 
 ```typ
@@ -525,8 +533,8 @@ Data defaults are also the global styling hook for all sources, sinks,
 nodes, and edges. More specific data can be added with captured named arguments
 on node, edge, source, and sink items, or by running
 `graph.map`/`graph.eval-fields` after construction. This keeps evaluated Typst
-values in the opaque data channel instead of adding renderer-specific eval
-fields to the graph spec:
+values in the native data channel instead of adding renderer-specific eval
+fields to the Rust topology spec:
 
 ```typ
 #let g = build({
@@ -574,12 +582,13 @@ fields to the graph spec:
 == Graph Queries
 
 `graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
-and `edges(g)` returns edge records. Pass `subgraph: sg` to filter nodes
+and `edges(g)` returns edge records. Node and edge record `name` values are
+Typst labels when present. Pass `subgraph: sg` to filter nodes
 or edges by an subgraph object.
 
 `graph.join(left, right, key: "statement")` joins matching dangling half edges.
-The key is read from half-edge data and can be `"statement"`, `"compass"`, or
-`"id"`.
+The key is read from half-edge statements or numeric ids and can be
+`"statement"`, `"compass"`, or `"id"`.
 
 `graph.cycles(g)` returns subgraph objects for a cycle basis.
 `graph.forests(g)` returns subgraph objects for spanning forests.
@@ -730,7 +739,7 @@ Subgraph objects are opaque zero-copy values.
 
 #let physics-docs = tidy.parse-module(
   read("../src/physics-edge-style.typ"),
-  name: "physics",
+  name: "physics",preamble: "#import graph: *\n",
   scope: tidy-scope,
 )
 #let subgraph-docs = tidy.parse-module(

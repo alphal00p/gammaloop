@@ -163,16 +163,21 @@
   }
 }
 
+#let _as-content(value) = if value == none {
+  none
+} else if type(value) == str or type(value) == label {
+  [#str(value)]
+} else {
+  value
+}
+
 #let _content(value, data, default: none) = {
   if value == auto {
     default
   } else {
-    let value = _call(value, data)
-    if type(value) == str { [#value] } else { value }
+    _as-content(_call(value, data))
   }
 }
-
-#let _as-content(value) = if value == none { none } else if type(value) == str { [#value] } else { value }
 
 #let _data-label(record) = {
   let data = record.at("data", default: none)
