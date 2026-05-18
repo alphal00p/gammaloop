@@ -22,6 +22,8 @@
 
 #let _payload-bytes(value) = if type(value) == array { bytes(value) } else { value }
 
+#let _math-text-source(text_) = "\"" + text_.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 #let _sequence-content(children, decode-content) = {
   let result = []
   for child in children {
@@ -31,16 +33,51 @@
 }
 
 #let _math-source(value) = {
+  let atom = value => {
+    let source = _math-source(value)
+    if source == none {
+      none
+    } else if type(value) == dictionary and value.at("func", default: none) in ("symbol", "text") {
+      source
+    } else {
+      "(" + source + ")"
+    }
+  }
   if type(value) != dictionary {
     none
   } else {
     let func = value.at("func", default: none)
-    if func == "symbol" or func == "text" {
+    if func == "symbol" {
       value.at("text", default: "")
+    } else if func == "text" {
+      _math-text-source(value.at("text", default: ""))
     } else if func == "space" {
       " "
     } else if func == "sequence" {
       value.children.map(_math-source).join("")
+    } else if func == "attach" {
+      let base = atom(value.base)
+      if base == none {
+        return none
+      }
+      let result = base
+      let bottom = value.at("b", default: none)
+      if bottom != none {
+        let source = atom(bottom)
+        if source == none {
+          return none
+        }
+        result += "_" + source
+      }
+      let top = value.at("t", default: none)
+      if top != none {
+        let source = atom(top)
+        if source == none {
+          return none
+        }
+        result += "^" + source
+      }
+      result
     } else {
       none
     }
