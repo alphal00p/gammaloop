@@ -169,7 +169,6 @@ struct LuResiduePlanComponents<'a> {
     repeated_residue_prefactor_sign: i64,
     repeated_local_series_orientation_sign: i64,
     simple_mixed_repeated_channel_contact: bool,
-    graph_has_repeated_lu_cut_group: bool,
 }
 
 impl LuResiduePlanComponents<'_> {
@@ -254,14 +253,13 @@ impl LuResiduePlanComponents<'_> {
 
     fn direct_original_prefactor_sign(&self) -> i64 {
         if self.is_simple_lu_cut() {
-            let unselected_repeated_channel_bridge = if self.graph_has_repeated_lu_cut_group {
-                self.ltd_repeated_channel_bridge_sign
-            } else {
-                1
-            };
             if self.simple_mixed_repeated_channel_contact {
+                // A simple cut whose support spans repeated-channel supports
+                // is not an ordinary one-surface Laurent coordinate: its
+                // support-local bridge is the repeated-channel routing bridge
+                // times the selected Cutkosky/surface-family orientation.
                 self.full_graph_projection_bridge
-                    * unselected_repeated_channel_bridge
+                    * self.ltd_repeated_channel_bridge_sign
                     * self.simple_surface_family_sign
                     * self
                         .lu_cut_signs
@@ -274,15 +272,11 @@ impl LuResiduePlanComponents<'_> {
                         .iter()
                         .product::<i64>()
             } else {
-                if self.graph_has_repeated_lu_cut_group {
-                    // Direct original extraction has not selected the
-                    // repeated channel residue. Its generated-LTD routing
-                    // bridge therefore remains as a global convention factor
-                    // for simple cuts in the same graph.
-                    self.full_graph_projection_bridge * unselected_repeated_channel_bridge
-                } else {
-                    self.local_series_prefactor_sign()
-                }
+                // Ordinary simple cuts are fixed by their own resolved
+                // Laurent-coordinate Jacobian. An unrelated repeated channel
+                // elsewhere in the graph is a property of that repeated
+                // residue, not of this direct original local series.
+                self.local_series_prefactor_sign()
             }
         } else {
             self.full_graph_projection_bridge
@@ -1536,12 +1530,6 @@ impl CrossSectionGraph {
         };
         let simple_mixed_repeated_channel_contact =
             self.simple_lu_cut_has_mixed_repeated_channel_contact(raised_cut_group, &lu_cut_signs)?;
-        let graph_has_repeated_lu_cut_group = self
-            .derived_data
-            .raised_data
-            .raised_cut_groups
-            .iter()
-            .any(|group| group.related_esurface_group.max_occurence > 1);
         let components = LuResiduePlanComponents {
             raised_cut_group,
             lu_cut_signs,
@@ -1552,7 +1540,6 @@ impl CrossSectionGraph {
             repeated_residue_prefactor_sign,
             repeated_local_series_orientation_sign,
             simple_mixed_repeated_channel_contact,
-            graph_has_repeated_lu_cut_group,
         };
         Ok(components.into_residue_selector(left_th_cut, right_th_cut))
     }

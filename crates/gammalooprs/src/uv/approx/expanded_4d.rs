@@ -906,12 +906,12 @@ fn expanded_source_full_graph_convention_bridge(
 
 fn ltd_expanded_source_residue_bridge_sign(
     source: &Expanded4DParsedSource,
-    source_context: Expanded4DSourceContext<'_>,
+    _source_context: Expanded4DSourceContext<'_>,
 ) -> i64 {
-    if source_context.is_uv_leading_local_source() {
-        return 1;
-    }
-
+    // The bridge is a property of the reduced source basis: UV rescaling can
+    // collapse distinct original denominators onto the same equal-energy
+    // channel, so UV-leading sources need the same routing convention bridge
+    // as finite cograph residues.
     ltd_expanded_source_repeated_channel_bridge_sign(source)
 }
 
