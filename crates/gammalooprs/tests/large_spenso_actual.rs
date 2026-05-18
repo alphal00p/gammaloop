@@ -177,12 +177,12 @@ fn apply_sum46_prepass(label: &str, expr: Atom) -> Atom {
     let simplified = match prepass.as_str() {
         "metrics" => expr.simplify_metrics(),
         "schoonschip" | "schoonschip_partial" => {
-            expr.schoonschip_with_net::<false, true, Aind>(&SchoonschipSettings::partial())
+            expr.schoonschip_with_net::<false, Aind>(&SchoonschipSettings::partial())
         }
         "schoonschip_full" => {
-            expr.schoonschip_with_net::<false, true, Aind>(&SchoonschipSettings::full())
+            expr.schoonschip_with_net::<false, Aind>(&SchoonschipSettings::full())
         }
-        "schoonschip_expand" => expr.schoonschip_with_net::<true, true, Aind>(
+        "schoonschip_expand" => expr.schoonschip_with_net::<true, Aind>(
             &SchoonschipSettings::partial().with_expanded_contracted_sums(),
         ),
         other => panic!("unknown SPENSO_SUM46_PREPASS={other}"),
@@ -396,7 +396,7 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                             );
                         }
                     }
-                    NetworkLeaf::LibraryKey(key) => {
+                    NetworkLeaf::LibraryKey { key, .. } => {
                         library_leaves += 1;
                         library_logical_entries += key.structure.size().unwrap_or(0);
                     }
@@ -492,7 +492,7 @@ fn leaf_brief(net: &ParsingNet, node: NodeIndex) -> String {
         NetworkNode::Leaf(NetworkLeaf::TensorTermSum(terms)) => {
             format!("TensorTermSum({})", terms.len())
         }
-        NetworkNode::Leaf(NetworkLeaf::LibraryKey(key)) => key
+        NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, .. }) => key
             .structure
             .name()
             .map(|name| format!("lib:{name}"))
