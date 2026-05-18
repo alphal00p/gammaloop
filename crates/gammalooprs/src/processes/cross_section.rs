@@ -254,8 +254,14 @@ impl LuResiduePlanComponents<'_> {
 
     fn direct_original_prefactor_sign(&self) -> i64 {
         if self.is_simple_lu_cut() {
+            let unselected_repeated_channel_bridge = if self.graph_has_repeated_lu_cut_group {
+                self.ltd_repeated_channel_bridge_sign
+            } else {
+                1
+            };
             if self.simple_mixed_repeated_channel_contact {
                 self.full_graph_projection_bridge
+                    * unselected_repeated_channel_bridge
                     * self.simple_surface_family_sign
                     * self
                         .lu_cut_signs
@@ -269,7 +275,11 @@ impl LuResiduePlanComponents<'_> {
                         .product::<i64>()
             } else {
                 if self.graph_has_repeated_lu_cut_group {
-                    self.full_graph_projection_bridge
+                    // Direct original extraction has not selected the
+                    // repeated channel residue. Its generated-LTD routing
+                    // bridge therefore remains as a global convention factor
+                    // for simple cuts in the same graph.
+                    self.full_graph_projection_bridge * unselected_repeated_channel_bridge
                 } else {
                     self.local_series_prefactor_sign()
                 }

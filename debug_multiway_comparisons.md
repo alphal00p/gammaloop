@@ -28,7 +28,9 @@ separate signs for:
 The direct original-integrand path is now stable on the previously oscillating
 simple/repeated guardrails. Simple mixed contacts with repeated channel support
 use the generated selected-surface orientation and Cutkosky edge flow. Simple
-cuts in graphs with repeated LU groups use the full-graph projection bridge.
+cuts in graphs with repeated LU groups use the full-graph projection bridge and
+the generated-LTD repeated-channel routing bridge, because the direct
+`Original` extraction has not selected the repeated-channel residue yet.
 Repeated/confluent cuts use the repeated-channel local Laurent wedge parity.
 This is still a single graph/LMB-derived construction; there are no GL-specific
 branches.
@@ -42,42 +44,50 @@ Threshold residues are now representation-aware:
   left/right threshold counterterms because the LU threshold evaluator supplies
   the subtractive Cauchy orientation after threshold localization.
 
-This checkpoint is useful because it improves the full slow scalar sweep to
-132/143 passing without temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics.
-It is not the final parity state.
+This checkpoint is useful because it fixes the GL03/GL12 pure sign family that
+remained after the previous 132/143 full-sweep checkpoint, without temporary
+`GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics. It is not the final parity state:
+the remaining known failures are the GL24/GL35 non-sign local-UV drifts.
 
 ## Validation Snapshot
 
 Commands were run with `INSTA_FORCE_PASS=1` so generated snapshot drift did not
 hide numerical parity failures.
 
-Passing:
+Passing at the previous full-sweep checkpoint:
 
 - Focused threshold cluster: GL28, GL29, GL32, GL38, GL39, GL41.
 - Focused direct-original cluster: GL08, GL21, GL37, GL38, GL44, GL45, GL46,
   GL47.
 - Original simple/repeated LU guardrail: GL07, GL47, GL06 q1, GL21 q1, GL27
   q1, GL40.
-- Full slow scalar cross-section sweep:
+- Full slow scalar cross-section sweep before the latest GL03/GL12 fix:
 
 ```text
 143 tests run: 132 passed, 11 failed, 124 skipped
 ```
 
-Remaining slow sweep failures:
+Additional targeted validation after the latest direct-original prefactor fix:
 
 ```text
-GL03 q1, q7, no_numerator
-GL12 q1, q7, no_numerator
+GL03 no numerator, GL03 q1, GL03 q7,
+GL12 no numerator, GL12 q1, GL12 q7,
+GL07, GL08, GL21 q1, GL47: 10/10 passed
+```
+
+Known remaining slow sweep failures:
+
+```text
 GL24 q1, q7, no_numerator
 GL35 q1, no_numerator
 ```
 
 The failures split into two clean categories:
 
-- GL03 and GL12 are pure sign mismatches in `Original`. GL12 threshold
-  counterterms follow the same overall sign as `Original`, so the immediate
-  issue is not threshold selection.
+- GL03 and GL12 were pure sign mismatches in `Original`. GL12 threshold
+  counterterms followed the same overall sign as `Original`, so the immediate
+  issue was not threshold selection. They are now covered by the targeted
+  simple/repeated LU guardrail.
 - GL24 and GL35 are small non-sign `Original` drifts with matching event/cut
   metadata and matching full multiplicative factors. Threshold subtraction is
   disabled in these tests; this points at the expanded-4D local UV/original
@@ -127,13 +137,13 @@ propagators.
 
 ## Next Debugging Order
 
-1. Resolve GL03/GL12 first because they are pure signs with matching event
-   metadata. Re-derive the direct `Original` prefactor for their cut support
-   from the same local-coordinate determinant, paying special attention to
-   forward-scattering `is_cut` edges as external half-edge boundaries.
-2. Re-run the guardrails after any sign change: GL06 q1, GL07, GL21 q1, GL27
+1. Keep GL03/GL12 in the guardrail set. Their fix came from the same generated
+   LTD repeated-channel bridge used for repeated-channel residues, applied to
+   simple direct-original cuts in graphs whose LU surface family contains an
+   unselected repeated channel.
+2. Re-run the guardrails after any sign or routing change: GL06 q1, GL07, GL21 q1, GL27
    q1, GL40, GL47, plus GL08/GL37/GL38/GL44/GL45/GL46.
-3. Only after the pure signs are stable, debug GL24/GL35 as non-sign drift.
+3. Debug GL24/GL35 as non-sign drift.
    Start from event selection, selected support, representation choice,
    numerator completion, and expanded-4D local UV/original separation before
    touching any normalization.
