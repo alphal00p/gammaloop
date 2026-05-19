@@ -361,13 +361,13 @@ static COLOR_CONJ_GENERATOR_TRANSPOSITIONS: LazyLock<[Replacement; 1]> = LazyLoc
 
     [Replacement::new(
         color_t!(
-            RS.i_,
+            RS.i__,
             cof.to_symbolic([RS.d_, RS.a_]),
             coaf.to_symbolic([RS.d_, RS.b_]),
         )
         .to_pattern(),
         color_t!(
-            RS.i_,
+            RS.i__,
             coaf.to_symbolic([RS.d_, RS.b_]),
             cof.to_symbolic([RS.d_, RS.a_]),
         ),
@@ -419,30 +419,31 @@ static RAW_COLOR_GENERATOR_REPLACEMENTS: LazyLock<[Replacement; 5]> = LazyLock::
 
     [
         with_settings(
-            color_t!(pattern: CS.nc_, CS.adj_; RS.a_, RS.b_, RS.b_),
+            color_t!([CS.adj_, RS.a_], [CS.nc_, RS.b_], [CS.nc_, RS.b_]),
             Atom::num(0),
         ),
         with_settings(
-            color_t!(pattern: CS.nc_, CS.adj_; RS.a_, RS.i_, RS.j_)
-                * color_t!(pattern: CS.nc_, CS.adj_; RS.b_, RS.j_, RS.i_),
+            color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_])
+                * color_t!([CS.adj_, RS.b_], [CS.nc_, RS.j_], [CS.nc_, RS.i_]),
             &tr * coad.g(RS.a_, RS.b_),
         ),
         with_settings(
-            color_t!(pattern: CS.nc_, CS.adj_; RS.a_, RS.i_, RS.j_).pow(Atom::num(2)),
+            color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]).pow(Atom::num(2)),
             &tr * coad.g(RS.a_, RS.a_),
         ),
         // Prefer the separated open-line Casimir shortcut over expanding the
         // outer generators with Fierz; the expanded form is much harder to
         // clean back into a single generator line.
         with_settings(
-            color_t!(pattern: CS.nc_, CS.adj_; RS.i_, RS.a_, RS.b_)
-                * color_t!(pattern: CS.nc_, CS.adj_; RS.e_, RS.b_, RS.c_)
-                * color_t!(pattern: CS.nc_, CS.adj_; RS.i_, RS.c_, RS.d_),
-            -(&tr / Atom::var(CS.nc_)) * color_t!(pattern: CS.nc_, CS.adj_; RS.e_, RS.a_, RS.d_),
+            color_t!([CS.adj_, RS.i_], [CS.nc_, RS.a_], [CS.nc_, RS.b_])
+                * color_t!([CS.adj_, RS.e_], [CS.nc_, RS.b_], [CS.nc_, RS.c_])
+                * color_t!([CS.adj_, RS.i_], [CS.nc_, RS.c_], [CS.nc_, RS.d_]),
+            -(&tr / Atom::var(CS.nc_))
+                * color_t!([CS.adj_, RS.e_], [CS.nc_, RS.a_], [CS.nc_, RS.d_]),
         ),
         with_settings(
-            color_t!(pattern: CS.nc_, CS.adj_; RS.e_, RS.a_, RS.b_)
-                * color_t!(pattern: CS.nc_, CS.adj_; RS.e_, RS.c_, RS.d_),
+            color_t!([CS.adj_, RS.e_], [CS.nc_, RS.a_], [CS.nc_, RS.b_])
+                * color_t!([CS.adj_, RS.e_], [CS.nc_, RS.c_], [CS.nc_, RS.d_]),
             &tr * (coaf.id(RS.a_, RS.d_) * coaf.id(RS.c_, RS.b_)
                 - (coaf.id(RS.a_, RS.b_) * coaf.id(RS.c_, RS.d_) / CS.nc_)),
         ),
@@ -469,13 +470,13 @@ static RAW_COLOR_STRUCTURE_REPLACEMENTS: LazyLock<[Replacement; 2]> = LazyLock::
 
     [
         Replacement::new(
-            color_f!(pattern: CS.adj_; RS.a_, RS.b_, RS.c_)
+            color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_])
                 .pow(Atom::num(2))
                 .to_pattern(),
             CS.ca * CS.adj_,
         ),
         Replacement::new(
-            color_f!(pattern: CS.adj_; RS.a_, RS.b_, RS.c_).to_pattern(),
+            color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]).to_pattern(),
             (((fundamental_t(
                 RS.a_,
                 function!(i, RS.a_, RS.b_, RS.c_),
@@ -534,14 +535,13 @@ impl RawColorTensorSimplifier {
                 sum + coefficient * structure
             })
             .collect_tensors();
-        let out = self.restore_fundamental_dimension(out);
 
-        out
+        self.restore_fundamental_dimension(out)
     }
 
     fn find_fundamental_dimension(expression: AtomView<'_>) -> Option<Atom> {
         let generator_pattern =
-            color_t!(pattern: CS.nc_, CS.adj_; RS.a_, RS.i_, RS.j_).to_pattern();
+            color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]).to_pattern();
         let mut fundamental_dimension = None;
 
         for matched in expression.pattern_match(&generator_pattern, None, None) {
@@ -859,7 +859,7 @@ impl ColorAlgebraSimplifier {
             replacement_factors[position] = color_t!(x.clone());
             return Some(
                 prefactor * Atom::i() / Atom::num(2)
-                    * color_f!(a.clone(), b.clone(), x)
+                    * color_f!(a.clone(), b.clone(), x.clone())
                     * chain_with_factors(start.clone(), end.clone(), replacement_factors),
             );
         }
@@ -901,7 +901,7 @@ impl ColorAlgebraSimplifier {
             // commutator: i/2 f^{abx} T^x.
             return Some(
                 prefactor * Atom::i() / Atom::num(2)
-                    * color_f!(a.clone(), b.clone(), x)
+                    * color_f!(a.clone(), b.clone(), x.clone())
                     * trace_with_factors(rep.clone(), replacement_factors),
             );
         }
@@ -989,7 +989,7 @@ impl ColorAlgebraSimplifier {
                     * color_f!(b.clone(), d.clone(), x.clone())
                 + Atom::var(CS.tr) / Atom::num(3)
                     * color_f!(a.clone(), d.clone(), x.clone())
-                    * color_f!(b.clone(), c.clone(), x),
+                    * color_f!(b.clone(), c.clone(), x.clone()),
         )
     }
 
@@ -1107,7 +1107,7 @@ impl ColorAlgebraSimplifier {
 
                 // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
                 let replacement = Atom::i() * Atom::var(CS.ca) / Atom::num(2)
-                    * trace!(rep.clone(); std::iter::once(color_t!(fc)).chain(rest.iter().cloned()));
+                    * trace!(rep.clone(); std::iter::once(color_t!(fc.clone())).chain(rest.iter().cloned()));
                 return Some(product_replacing_pair(
                     factors,
                     trace_index,
@@ -1156,7 +1156,7 @@ impl ColorAlgebraSimplifier {
                             &end,
                             &chain_factors,
                             pair_index,
-                            color_t!(target),
+                            color_t!(target.clone()),
                         );
                     return Some(product_replacing_pair(
                         factors,
@@ -1584,7 +1584,7 @@ fn color_metric(left: Atom, right: Atom) -> Atom {
 fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) -> Atom {
     let sym_factors = factors
         .into_iter()
-        .map(|factor| color_t!(factor))
+        .map(|factor| color_t!(factor.clone()))
         .collect::<Vec<_>>();
     trace_sym!(rep.clone(); sym_factors)
 }
