@@ -440,7 +440,10 @@ pub(crate) fn to_vakint_integrand<
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> VakintExpression {
-    let mut integrand_vakint = integrand.undo_all::<Aind>();
+    let mut integrand_vakint = integrand
+        .undo_chain::<Aind>()
+        .undo_schoonschip::<Aind>()
+        .undo_trace::<Aind>();
 
     debug_tags!(#uv, #integrated, #vakint, #inspect;
         integrand = %integrand.log_print(None),
