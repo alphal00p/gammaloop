@@ -385,17 +385,18 @@ fn generate_expanded_4d_source_expression(
 
 fn use_confluent_cff_for_expanded_source(
     representation: ThreeDRepresentation,
-    _cutset: &CutSet,
+    cutset: &CutSet,
     source: &Expanded4DParsedSource,
     source_context: Expanded4DSourceContext<'_>,
 ) -> bool {
-    // Finite cograph sources are ordinary repeated-propagator sources; selected
-    // local residues must take the equal-energy confluent limit before the local
-    // pole is selected. UV-leading sources are already local Laurent
-    // coefficients in the generated coordinate and keep the canonical CFF
-    // projection basis used by the 3D local-UV expansion.
+    // Ordinary CFF expanded sources with repeated active denominators must take
+    // the equal-energy confluent limit before a residue is selected. UV-leading
+    // LU sources are already Laurent coefficients in the selected Cutkosky
+    // local-series coordinate, so they keep that basis and get their bridge
+    // from the LU residue construction instead.
     representation == ThreeDRepresentation::Cff
-        && !source_context.is_uv_leading_local_source()
+        && (!source_context.is_uv_leading_local_source()
+            || !cutset.residue_selector.has_lu_cut_residue())
         && source
             .denominator_edges
             .iter()
