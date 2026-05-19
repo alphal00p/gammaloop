@@ -308,6 +308,17 @@ mod tests {
 
         assert_eq!(damper.values, vec![F(1.0_f64), F(0.0_f64)]);
     }
+
+    #[test]
+    fn test_rstar_t_dependence_evaluator() {
+        generate_rstar_t_dependence_evaluator(3).unwrap();
+    }
+
+    #[test]
+    fn test_rstar_t_dependence_evaluator_zero_derivatives() {
+        let evaluator = generate_rstar_t_dependence_evaluator(0).unwrap();
+        assert!(!evaluator.supports_t_derivatives());
+    }
 }
 
 pub(crate) struct RstarTDependenceInput<'a, T: FloatLike> {
@@ -424,53 +435,4 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         dual_shape_for_esurface_evaluation: dual_shape,
         implicit_function_theorem: Some(implict_function_theorem),
     })
-}
-
-#[test]
-fn test_rstar_t_dependence_evaluator() {
-    generate_rstar_t_dependence_evaluator(3).unwrap();
-}
-
-#[test]
-fn test_rstar_t_dependence_evaluator_zero_derivatives() {
-    let evaluator = generate_rstar_t_dependence_evaluator(0).unwrap();
-    assert!(!evaluator.supports_t_derivatives());
-}
-
-#[test]
-fn verify_dual_behaviour() {
-    fn test_fn(t: HyperDual<F<f64>>, r: HyperDual<F<f64>>) -> HyperDual<F<f64>> {
-        t.clone() * t + r.clone() * r
-    }
-
-    fn r_func(t: HyperDual<F<f64>>) -> HyperDual<F<f64>> {
-        t.log()
-    }
-
-    let cut_cff_index = crate::cff::CutCFFIndex {
-        left_threshold_order: Some(2),
-        right_threshold_order: None,
-        lu_cut_order: Some(2),
-    };
-
-    let shape_from_cut_cff_index =
-        utils::hyperdual_utils::shape_from_cut_cff_index(&cut_cff_index).unwrap();
-    let dual_shape = HyperDual::new(shape_from_cut_cff_index.clone());
-
-    let t_deriv_shape = simple_n_deriv_shape(1);
-    let t_deriv_dual_shape = HyperDual::new(t_deriv_shape);
-
-    let t = t_deriv_dual_shape.variable(0, F(3.0_f64));
-    let r = r_func(t.clone());
-
-    let t_in_complex_shape = dual_shape.variable(0, F(3.0_f64));
-    let r_in_complex_shape = utils::hyperdual_utils::dualize_dual_t_to_dual_r_t(
-        r.clone(),
-        t_in_complex_shape.clone(),
-        1,
-    );
-
-    let test_fn_result = test_fn(t_in_complex_shape.clone(), r_in_complex_shape.clone());
-
-    println!("Test function result: {}", test_fn_result);
 }
