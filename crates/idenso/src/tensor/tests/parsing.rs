@@ -411,10 +411,10 @@ fn parse_scalar_tensors_step_by() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
-      1:5:s	-> 0:4:s	 [id=2  color="red:blue;0.5"];
+      3:8:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      2:7:s	-> 3:9:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
-      3:8:s	-> 0:2:s	 [id=5  color="red:blue;0.5"];
+      1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
+      2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
     }
     "#
     );
@@ -433,9 +433,9 @@ fn parse_scalar_tensors_step_by() {
       2	 [label = "T:b(mink(4,1))*d(mink(4,1))"];
       ext0	 [style=invis];
       3:0:s	-> ext0	 [id=0 color="red"];
-      1:5:s	-> 3:4:s	 [id=1  color="red:blue;0.5"];
-      2:6:s	-> 3:3:s	 [id=2  color="red:blue;0.5"];
-      0:2:s	-> 3:1:s	 [id=3  color="red:blue;0.5"];
+      0:2:s	-> 3:1:s	 [id=1  color="red:blue;0.5"];
+      1:5:s	-> 3:4:s	 [id=2  color="red:blue;0.5"];
+      2:6:s	-> 3:3:s	 [id=3  color="red:blue;0.5"];
     }
     "#
     );
@@ -869,19 +869,19 @@ fn infinite_execution() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "T:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*-1𝑖*G^3*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))"];
+      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))*-1𝑖*G^3"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_4"];
+      0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_0"];
+      0:4:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
       ext3	 [style=invis];
-      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
+      0:1:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_2"];
       ext4	 [style=invis];
-      0:3:s	-> ext4	 [id=4 dir=none color="red" label="bis4|l_2"];
+      0:5:s	-> ext4	 [id=4 dir=none color="red" label="bis4|l_3"];
       ext5	 [style=invis];
-      0:5:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_1"];
+      0:2:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_1"];
     }
     "#
     );
