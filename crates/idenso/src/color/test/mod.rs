@@ -96,6 +96,61 @@ fn test_color_simplification() {
 }
 
 #[test]
+fn color_generator_macro_accepts_gamma_style_index_shorthands() {
+    let r = TestReps::new();
+    let cof_nc = ColorFundamental {}.new_rep(CS.nc);
+
+    assert_eq!(color_t!(a), color_t!(slot!(r.coad_na, a)));
+    assert_eq!(color_t!(1), color_t!(slot!(r.coad_na, 1)));
+    assert_eq!(
+        color_t!(a, i, j),
+        color_t!(
+            slot!(r.coad_na, a),
+            slot!(cof_nc, i),
+            slot!(cof_nc.dual(), j)
+        ),
+    );
+    assert_eq!(
+        color_t!(RS.a__, RS.i__, RS.j__),
+        CS.explicit_t(
+            ColorAdjoint {}.to_symbolic([RS.a__]),
+            ColorFundamental {}.to_symbolic([RS.i__]),
+            ColorAntiFundamental {}.to_symbolic([RS.j__]),
+        ),
+    );
+    assert_eq!(
+        color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]),
+        CS.t_pattern(CS.nc_, CS.adj_, RS.a_, RS.i_, RS.j_),
+    );
+}
+
+#[test]
+fn color_structure_macro_accepts_gamma_style_index_shorthands() {
+    let r = TestReps::new();
+
+    assert_eq!(
+        color_f!(a, b, c),
+        color_f!(
+            slot!(r.coad_na, a),
+            slot!(r.coad_na, b),
+            slot!(r.coad_na, c)
+        ),
+    );
+    assert_eq!(
+        color_f!(RS.a__, RS.b__, RS.c__),
+        CS.structure_f(
+            ColorAdjoint {}.to_symbolic([RS.a__]),
+            ColorAdjoint {}.to_symbolic([RS.b__]),
+            ColorAdjoint {}.to_symbolic([RS.c__]),
+        ),
+    );
+    assert_eq!(
+        color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]),
+        CS.f_pattern(CS.adj_, RS.a_, RS.b_, RS.c_),
+    );
+}
+
+#[test]
 fn color_casimir_basis_rewrites_dimensions() {
     test_initialize();
     let expr = parse_lit!(Nc ^ -1 + Nc ^ 2 - 1 + NA, default_namespace = "spenso");

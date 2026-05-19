@@ -260,10 +260,14 @@ variadic tails from swallowing structural slots.
 idenso adds domain-specific expression macros for common Dirac objects:
 `gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. It also has the Levi-Civita
 builder `epsilon!` and color builders `color_t!`, `t!`, `color_f!`, `f!`,
-`color_d!`, and `color_d33!`. Use these in tests and examples when they make
-the expression read like the algebra. In generic rewrite rules, still match the
-structural class with Spenso tag patterns when the rule is not specific to one
-concrete head.
+`color_d!`, and `color_d33!`. The color generator and structure-constant
+macros follow the same index conventions as `gamma!`: bare identifiers/literals
+become default-dimension slots, `RS.a__`-style pattern variables become symbolic
+representation arguments, and bracketed forms such as `[CS.adj_, RS.a_]` spell
+out representation arguments explicitly. Use these in tests and examples when
+they make the expression read like the algebra. In generic rewrite rules, still
+match the structural class with Spenso tag patterns when the rule is not
+specific to one concrete head.
 
 ## Rust Rewrite Idioms
 
