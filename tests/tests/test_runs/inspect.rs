@@ -174,11 +174,11 @@ fn test_mass_approach_threshold_subtraction() -> Result<()> {
 
     assert!(
         inspect_magnitudes.windows(2).all(|pair| pair[1] <= pair[0]),
-        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
+        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 2: {inspect_magnitudes:?}"
     );
     assert!(
         inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 4.0e-10,
-        "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
+        "Inspect did not approach zero closely enough near mass_scalar_2=2  : {inspect_magnitudes:?}"
     );
 
     Ok(())
@@ -215,11 +215,11 @@ fn test_mass_approach_threshold_subtraction_reversed() -> Result<()> {
 
     assert!(
         inspect_magnitudes.windows(2).all(|pair| pair[1] <= pair[0]),
-        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
+        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 2: {inspect_magnitudes:?}"
     );
     assert!(
         inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 4.0e-10,
-        "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
+        "Inspect did not approach zero closely enough near mass_scalar_2=2: {inspect_magnitudes:?}"
     );
 
     Ok(())
