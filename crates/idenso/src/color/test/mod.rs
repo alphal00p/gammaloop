@@ -81,6 +81,7 @@ fn test_color_structures() {
 #[test]
 fn test_color_simplification() {
     test_initialize();
+
     let atom = parse_lit!(
         f(
             coad(Nc ^ 2 - 1, 1),

@@ -95,6 +95,7 @@ fn sun_simplify_id3_structure_loop_to_adjoint_delta() {
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CA*g(coad(NA,a),coad(NA,b))");
 }
 
+
 #[test]
 fn sun_simplify_id4_structure_times_open_chain_contracts() {
     let r = TestReps::new();

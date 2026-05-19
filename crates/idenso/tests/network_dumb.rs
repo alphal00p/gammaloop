@@ -3,12 +3,15 @@ use idenso::{
     shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
 };
 use spenso::{
-    shadowing::TensorCollectExt,
-    shadowing::symbolica_utils::{AtomCoreExt, SpensoPrintSettings},
+    shadowing::{
+        TensorCollectExt,
+        symbolica_utils::{AtomCoreExt, SpensoPrintSettings},
+    },
     structure::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
     },
+    symbol_set,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -19,13 +22,16 @@ fn contains_index(result: &str, index: &str) -> bool {
     result.contains(&format!("{index})")) || result.contains(&format!("{index},"))
 }
 
+// Generate TestSymbols with all alphabet characters and some multi-character symbols
+symbol_set!(TestSymbols, TS;
+    mu1 mu2 mu3 mu4 mu5 mu6 mu7 mu8 mu9 mu10 mu11
+);
+
 #[test]
 fn spenso_bare_symb_vertex_substitution() {
     initialize();
+    let _mu1 = TS.mu1;
     let _mink = Minkowski {}.new_rep(4);
-
-    let (mu1, mu2, mu3, mu4, mu5, mu6, mu7, mu8, mu9, mu10, mu11) = symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
-        tags=["spenso::index"]);
 
     symbol!("k";
         tags=["spenso::tensor","spenso::rank1"]);
@@ -97,7 +103,7 @@ fn spenso_bare_symb_vertex_substitution() {
 
     println!("out:{}", out.printer(settings));
 
-    for mu in [mu1, mu2, mu3, mu4] {
+    for mu in [TS.mu1, TS.mu2, TS.mu3, TS.mu4] {
         assert!(
             out.replace(mu).match_iter().next().is_none(),
             "{}",
@@ -108,10 +114,8 @@ fn spenso_bare_symb_vertex_substitution() {
 
 fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
     initialize();
+    let mu1 = TS.mu1;
     let _mink = Minkowski {}.new_rep(4);
-
-    let (mu1, _mu2, _mu7, mu8, mu9) =
-        symbol!("mu1", "mu2", "mu7", "mu8", "mu9"; tags=["spenso::index"]);
 
     symbol!("k";
         tags=["spenso::tensor","spenso::rank1"]);
@@ -155,8 +159,8 @@ fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
         r,
         [
             ("mu1", mu1.into()),
-            ("mu8", mu8.into()),
-            ("mu9", mu9.into()),
+            ("mu8", TS.mu8.into()),
+            ("mu9", TS.mu9.into()),
         ],
     )
 }
@@ -205,6 +209,8 @@ fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
 
 #[test]
 fn min_product_terms_three_vertex_still_has_residual_after_boundary_cleanup() {
+    initialize();
+    let _ = TS.mu1;
     let (r, dummies) = substituted_three_vertex_reproducer();
     let out = r.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial()
@@ -440,12 +446,12 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
 #[test]
 fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
     initialize();
+    let _mu1 = TS.mu1;
     let _mink = Minkowski {}.new_rep(4);
 
-    let (_mu7, mu9) = symbol!("mu7", "mu9"; tags=["spenso::index"]);
     symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
 
-    let mu9: Atom = mu9.into();
+    let mu9: Atom = TS.mu9.into();
     let dummies = [("mu9", mu9.clone())];
     let settings = SchoonschipSettings::partial()
         .into_single_pass()
