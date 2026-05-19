@@ -81,6 +81,7 @@ fn sun_simplify_sunn_to_cacf_rewrites_structure_square_dimension() {
 
 #[test]
 fn sun_simplify_id2_open_chain_separated_casimir() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
@@ -89,15 +90,16 @@ fn sun_simplify_id2_open_chain_separated_casimir() {
 
 #[test]
 fn sun_simplify_id3_structure_loop_to_adjoint_delta() {
+    test_initialize();
     let r = TestReps::new();
     let expr = f!(r, a, c, d) * f!(r, b, c, d);
 
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CA*g(coad(NA,a),coad(NA,b))");
 }
 
-
 #[test]
 fn sun_simplify_id4_structure_times_open_chain_contracts() {
+    test_initialize();
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
@@ -106,6 +108,7 @@ fn sun_simplify_id4_structure_times_open_chain_contracts() {
 
 #[test]
 fn sun_simplify_id7_cyclic_structure_times_open_chain_contracts() {
+    test_initialize();
     let r = TestReps::new();
     let expr = f!(r, c, a, b) * sun_tf!(r, i, j, b, c);
 
@@ -114,6 +117,7 @@ fn sun_simplify_id7_cyclic_structure_times_open_chain_contracts() {
 
 #[test]
 fn sun_simplify_id13_fundamental_delta_contracts() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sdf!(r, a, b) * sdf!(r, b, d);
 
@@ -122,6 +126,7 @@ fn sun_simplify_id13_fundamental_delta_contracts() {
 
 #[test]
 fn sun_simplify_id17_delta_renames_open_chain_endpoint() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sdf!(r, b, a) * sun_tf!(r, a, d, i) * sun_tf!(r, d, c, j);
 
@@ -130,6 +135,7 @@ fn sun_simplify_id17_delta_renames_open_chain_endpoint() {
 
 #[test]
 fn sun_simplify_id18_delta_closes_doubled_two_generator_chain() {
+    test_initialize();
     let r = TestReps::new();
     let line = sun_tf!(r, a, d, i) * sun_tf!(r, d, b, j);
     let expr = sdf!(r, b, a) * (line.clone() + line);
@@ -139,6 +145,7 @@ fn sun_simplify_id18_delta_closes_doubled_two_generator_chain() {
 
 #[test]
 fn sun_simplify_id21_adjacent_open_chains_join() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, a, d, i) * sun_tf!(r, d, c, j);
 
@@ -147,6 +154,7 @@ fn sun_simplify_id21_adjacent_open_chains_join() {
 
 #[test]
 fn sun_simplify_id27_structure_square_keeps_idenso_dimensions() {
+    test_initialize();
     let r = TestReps::new();
     let expr = f!(r, a, b, c).pow(Atom::num(2));
 
@@ -155,6 +163,7 @@ fn sun_simplify_id27_structure_square_keeps_idenso_dimensions() {
 
 #[test]
 fn sun_simplify_id30_three_generator_trace_terminal() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_trace!(r, i, j, k);
 
@@ -163,6 +172,7 @@ fn sun_simplify_id30_three_generator_trace_terminal() {
 
 #[test]
 fn sun_simplify_id41_nested_adjacent_open_chain_casimirs() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, b, c);
 
@@ -171,6 +181,7 @@ fn sun_simplify_id41_nested_adjacent_open_chain_casimirs() {
 
 #[test]
 fn sun_simplify_id44_adjacent_open_chain_casimir() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, a);
 
@@ -179,6 +190,7 @@ fn sun_simplify_id44_adjacent_open_chain_casimir() {
 
 #[test]
 fn sun_simplify_id45_open_chain_separated_casimir() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
@@ -187,6 +199,7 @@ fn sun_simplify_id45_open_chain_separated_casimir() {
 
 #[test]
 fn sun_simplify_id47_two_adjacent_open_chain_casimirs() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a1, a1) * sun_tf!(r, k, l, a2, a2);
 
@@ -195,6 +208,7 @@ fn sun_simplify_id47_two_adjacent_open_chain_casimirs() {
 
 #[test]
 fn sun_simplify_id48_iterated_adjacent_open_chain_casimirs() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, b);
 
@@ -203,6 +217,7 @@ fn sun_simplify_id48_iterated_adjacent_open_chain_casimirs() {
 
 #[test]
 fn sun_simplify_id52_repeated_trace_pair() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_trace!(r, i1, i2, i1, i2);
 
@@ -211,6 +226,7 @@ fn sun_simplify_id52_repeated_trace_pair() {
 
 #[test]
 fn sun_simplify_id55_adjacent_casimir_inside_open_chain() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, c);
 
@@ -219,6 +235,7 @@ fn sun_simplify_id55_adjacent_casimir_inside_open_chain() {
 
 #[test]
 fn sun_simplify_id56_explicit_i_times_structure_chain() {
+    test_initialize();
     let r = TestReps::new();
     let expr = Atom::i() * f!(r, b, jj, c) * sun_tf!(r, i, j, jj, c);
 
@@ -227,6 +244,7 @@ fn sun_simplify_id56_explicit_i_times_structure_chain() {
 
 #[test]
 fn sun_simplify_id66_trace_adjacent_pairs() {
+    test_initialize();
     let r = TestReps::new();
     let expr = sun_trace!(r, a, a, b, b);
 
@@ -235,6 +253,7 @@ fn sun_simplify_id66_trace_adjacent_pairs() {
 
 #[test]
 fn sun_simplify_id75_structure_times_two_generator_open_chain() {
+    test_initialize();
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 

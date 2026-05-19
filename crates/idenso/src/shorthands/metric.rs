@@ -1,6 +1,9 @@
 use std::{collections::HashSet, sync::LazyLock};
 
-use crate::tensor::{SymbolicNetParse, SymbolicTensor};
+use crate::{
+    shorthands::schoonschip::DotNormalizer,
+    tensor::{SymbolicNetParse, SymbolicTensor},
+};
 
 use super::schoonschip::Schoonschip;
 use spenso::{
@@ -445,7 +448,7 @@ impl MetricSimplifier for Atom {
 
 impl MetricSimplifier for AtomView<'_> {
     fn to_dots(&self) -> Atom {
-        to_dots_impl(*self)
+        DotNormalizer::to_dots(*self)
     }
 
     fn expand_dots(&self) -> Result<Atom> {

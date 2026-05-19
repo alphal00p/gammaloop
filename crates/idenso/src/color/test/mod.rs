@@ -20,17 +20,17 @@ static _CF: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> =
     });
 
 use spenso::{
-    antisym, chain, network::parsing::ShadowedStructure, slot, structure::permuted::Perm, sym,
+    antisym, chain, network::parsing::ShadowedStructure, s, slot, structure::permuted::Perm, sym,
     trace,
 };
 use symbolica::{id::Pattern, parse, parse_lit};
 
 use crate::dirac::PS;
-use crate::f;
 use crate::selective_expand::SelectiveExpand;
 use crate::shorthands::schoonschip::Schoonschip;
 use crate::tensor::SymbolicTensor;
 use crate::{Cookable, IndexTooling, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier};
+use crate::{color_f, color_t, f};
 
 use super::*;
 
@@ -42,6 +42,7 @@ fn assert_color_zero(expr: Atom) {
 
 #[test]
 fn test_color_structures() {
+    test_initialize();
     let f = IndexlessNamedStructure::<Symbol, ()>::from_iter(
         [
             ColorAdjoint {}.new_rep(8),
@@ -103,11 +104,12 @@ fn two_fs() {
     let atom = f!(3, 1, 5) * f!(3, 5, 1);
     let simplified = atom.simplify_color();
 
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*CA");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*-1*CA");
 }
 
 #[test]
 fn color_generator_macro_accepts_gamma_style_index_shorthands() {
+    test_initialize();
     let r = TestReps::new();
     let cof_nc = ColorFundamental {}.new_rep(CS.nc);
 
@@ -142,6 +144,7 @@ fn color_generator_macro_accepts_gamma_style_index_shorthands() {
 
 #[test]
 fn color_structure_macro_accepts_gamma_style_index_shorthands() {
+    test_initialize();
     let r = TestReps::new();
 
     let a = slot!(r.coad_na, a);
@@ -170,6 +173,22 @@ fn color_structure_macro_accepts_gamma_style_index_shorthands() {
 }
 
 #[test]
+fn color_structure_symbol_is_antisymmetric() {
+    test_initialize();
+    let r = TestReps::new();
+
+    let a = slot!(r.coad_na, a);
+    let b = slot!(r.coad_na, b);
+    let c = slot!(r.coad_na, c);
+
+    assert_snapshot!(
+        color_f!(a.clone(), c, b.clone()).to_bare_ordered_string(),
+        @"-1*f(coad(NA,a),coad(NA,b),coad(NA,c))"
+    );
+    assert!(color_f!(a, b.clone(), b).is_zero());
+}
+
+#[test]
 fn color_casimir_basis_rewrites_dimensions() {
     test_initialize();
     let expr = parse_lit!(Nc ^ -1 + Nc ^ 2 - 1 + NA, default_namespace = "spenso");
@@ -190,6 +209,7 @@ fn color_casimir_basis_keeps_trace_normalization_symbolic_by_default() {
 
 #[test]
 fn antisymmetric_two_generator_trace_vanishes() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -201,6 +221,7 @@ fn antisymmetric_two_generator_trace_vanishes() {
 
 #[test]
 fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -216,6 +237,7 @@ fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
 
 #[test]
 fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -228,6 +250,7 @@ fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
 
 #[test]
 fn antisymmetric_trace_commutator_preserves_projector_sign() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -240,6 +263,7 @@ fn antisymmetric_trace_commutator_preserves_projector_sign() {
 
 #[test]
 fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
+    test_initialize();
     let r = TestReps::new();
     let expr = chain!(
         slot!(r.cof_nc, i),
@@ -251,7 +275,117 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
 }
 
 #[test]
+fn color_simplify_defaults_match_simplify_color() {
+    test_initialize();
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.cof_nc, i),
+        slot!(r.cof_nc.dual(), j),
+        color_t!(slot!(r.coad_na, a)),
+    ) * chain!(
+        slot!(r.cof_nc, k),
+        slot!(r.cof_nc.dual(), l),
+        color_t!(slot!(r.coad_na, a)),
+    );
+
+    assert_eq!(
+        expr.simplify_color_with(ColorSimplifySettings::default()),
+        expr.simplify_color()
+    );
+}
+
+#[test]
+fn color_trace_evaluation_can_be_disabled() {
+    test_initialize();
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.cof_nc, i),
+        slot!(r.cof_nc.dual(), i),
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, b)),
+    );
+    let expected = trace!(
+        &r.cof_nc,
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, b)),
+    );
+
+    assert_eq!(
+        expr.simplify_color_with(ColorSimplifySettings::default().without_trace_evaluation()),
+        expected,
+    );
+}
+
+#[test]
+fn color_cross_chain_fierz_can_be_disabled() {
+    test_initialize();
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.cof_nc, i),
+        slot!(r.cof_nc.dual(), j),
+        color_t!(slot!(r.coad_na, a)),
+    ) * chain!(
+        slot!(r.cof_nc, k),
+        slot!(r.cof_nc.dual(), l),
+        color_t!(slot!(r.coad_na, a)),
+    );
+
+    assert_eq!(
+        expr.simplify_color_with(
+            ColorSimplifySettings::default().without_cross_chain_fierz_expansion()
+        ),
+        expr,
+    );
+}
+
+#[test]
+fn color_cross_chain_fierz_handles_longer_open_chains() {
+    test_initialize();
+    let r = TestReps::new();
+    let expr = chain!(
+        slot!(r.cof_nc, i),
+        slot!(r.cof_nc.dual(), j),
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, b)),
+    ) * chain!(
+        slot!(r.cof_nc, k),
+        slot!(r.cof_nc.dual(), l),
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, c)),
+    );
+    let expected = Atom::var(CS.tr)
+        * chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), l),
+            color_t!(slot!(r.coad_na, c)),
+        )
+        * chain!(
+            slot!(r.cof_nc, k),
+            slot!(r.cof_nc.dual(), j),
+            color_t!(slot!(r.coad_na, b)),
+        )
+        - Atom::var(CS.tr)
+            * chain!(
+                slot!(r.cof_nc, i),
+                slot!(r.cof_nc.dual(), j),
+                color_t!(slot!(r.coad_na, b)),
+            )
+            * chain!(
+                slot!(r.cof_nc, k),
+                slot!(r.cof_nc.dual(), l),
+                color_t!(slot!(r.coad_na, c)),
+            )
+            / s!(Nc);
+
+    assert_eq!(
+        expr.simplify_color().simplify_metrics(),
+        expected.simplify_metrics(),
+    );
+}
+
+#[test]
 fn symmetric_trace_d33_partial_contraction() {
+    test_initialize();
     let r = TestReps::new();
     let left = trace!(
         &r.cof_nc,
@@ -275,6 +409,7 @@ fn symmetric_trace_d33_partial_contraction() {
 
 #[test]
 fn symmetric_trace_d44_partial_contraction() {
+    test_initialize();
     let r = TestReps::new();
     let left = trace!(
         &r.cof_nc,
@@ -300,6 +435,7 @@ fn symmetric_trace_d44_partial_contraction() {
 
 #[test]
 fn symmetric_trace_d44_full_contraction() {
+    test_initialize();
     let r = TestReps::new();
     let left = trace!(
         &r.cof_nc,
@@ -422,6 +558,7 @@ fn compact_printing() {
 
 #[test]
 fn t_structure() {
+    test_initialize();
     println!("{}", CS.t_strct::<AbstractIndex>(3, 8));
 
     let _ = Atom::Zero.simplify_metrics();
@@ -671,9 +808,8 @@ fn ratio_simplify() {
 }
 
 #[test]
-fn simple() {
+fn structure_pair_with_closed_generator_chain_matches_form() {
     test_initialize();
-    // tc₄ г₁₀ г₈·tc₆ г₈ г₁₀·fc₄ c₀ c₂·fc₆ c₂ c₁
     let expr = parse_lit!(
         f(
             coad(Nc ^ 2 - 1, c4),
@@ -688,12 +824,9 @@ fn simple() {
         default_namespace = "spenso"
     );
 
-    println!("{}", expr.simplify_color());
-    println!(
-        "{}",
-        expr.simplify_color()
-            .replace(parse_lit!(spenso::Nc))
-            .with(3)
+    assert_snapshot!(
+        expr.simplify_color().to_bare_ordered_string(),
+        @"(-1+Nc^2)*-1*CA*TR"
     );
 }
 
