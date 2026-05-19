@@ -320,6 +320,7 @@ impl Inspect {
             );
         }
         progress_bar.finish_and_clear();
+        drop(progress_bar);
 
         let warmup_evaluation = warmup
             .samples
@@ -796,5 +797,35 @@ mod tests {
             format_timing_with_uncertainty(1.234e-6, 4.5e-8),
             "1.23±0.045 µs"
         );
+    }
+
+    #[test]
+    fn inspect_bench_table_includes_total_row_after_separator() {
+        let table = super::render_inspect_bench_table(&[
+            super::InspectBenchBatchTiming {
+                parameterization: 1.0e-7,
+                integrand: 4.0e-4,
+                event_processing: 0.0,
+                evaluator: 1.7e-2,
+                other: 1.0e-5,
+                total: 1.74101e-2,
+            },
+            super::InspectBenchBatchTiming {
+                parameterization: 1.2e-7,
+                integrand: 4.2e-4,
+                event_processing: 0.0,
+                evaluator: 1.8e-2,
+                other: 1.0e-5,
+                total: 1.843012e-2,
+            },
+        ]);
+
+        assert!(table.contains("│ Total"));
+        assert!(table.contains("100.0%"));
+        assert!(table.lines().any(|line| line.starts_with('├')));
+        assert!(table
+            .lines()
+            .last()
+            .is_some_and(|line| line.starts_with('╰')));
     }
 }
