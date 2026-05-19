@@ -15,7 +15,7 @@ digraph double_dotted_double_triangle {
     v6 -> ext0
 }
 
-digraph double_dotted_double_triangle {
+digraph double_dotted_double_triangle_small_mass {
     num = -1
     edge [
         pdg=1001
