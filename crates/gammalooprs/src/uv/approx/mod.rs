@@ -166,6 +166,13 @@ pub struct Approximation {
     pub generate_only_integrated_uv_chain_matches: bool,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct RootResidueContext<'a> {
+    pub(crate) expression: Option<&'a ThreeDExpression<OrientationID>>,
+    pub(crate) lu_residue_selection_basis: LuResidueSelectionBasis,
+    pub(crate) lu_residue_reference_basis: LuResidueSelectionBasis,
+}
+
 impl ForestNodeLike for Approximation {
     fn dod(&self) -> i32 {
         self.spinney.dod
@@ -376,9 +383,7 @@ impl Approximation {
         cuts: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &GenerationSettings,
-        root_expression: Option<&ThreeDExpression<OrientationID>>,
-        root_lu_residue_selection_basis: LuResidueSelectionBasis,
-        root_lu_residue_reference_basis: LuResidueSelectionBasis,
+        root_residue_context: RootResidueContext<'_>,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
@@ -394,7 +399,7 @@ impl Approximation {
                     .expect("root local 3D approximation should have been computed");
                 self.final_integrand = Some(Self::zero_terms(integrands.len()));
             } else if settings.explicit_orientation_sum_only {
-                let root_expression = root_expression.ok_or_else(|| {
+                let root_expression = root_residue_context.expression.ok_or_else(|| {
                     eyre!(
                         "explicit orientation-summed local-3D UV generation requires the production root 3D expression"
                     )
@@ -406,8 +411,8 @@ impl Approximation {
                     valid_orientations,
                     settings,
                     ThreeDRepresentation::Cff,
-                    root_lu_residue_selection_basis,
-                    root_lu_residue_reference_basis,
+                    root_residue_context.lu_residue_selection_basis,
+                    root_residue_context.lu_residue_reference_basis,
                     true,
                 )?);
             } else {
@@ -625,9 +630,7 @@ impl Approximation {
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &crate::settings::global::GenerationSettings,
         representation: ThreeDRepresentation,
-        root_expression: Option<&ThreeDExpression<OrientationID>>,
-        root_lu_residue_selection_basis: LuResidueSelectionBasis,
-        root_lu_residue_reference_basis: LuResidueSelectionBasis,
+        root_residue_context: RootResidueContext<'_>,
     ) -> Result<()> {
         self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
@@ -639,7 +642,7 @@ impl Approximation {
             if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
                 self.final_integrand = Some(Self::zero_terms(1));
             } else {
-                let root_expression = root_expression.ok_or_else(|| {
+                let root_expression = root_residue_context.expression.ok_or_else(|| {
                     eyre!(
                         "expanded-4D local UV generation requires the production root 3D expression for the original integrand"
                     )
@@ -651,8 +654,8 @@ impl Approximation {
                     valid_orientations,
                     settings,
                     representation,
-                    root_lu_residue_selection_basis,
-                    root_lu_residue_reference_basis,
+                    root_residue_context.lu_residue_selection_basis,
+                    root_residue_context.lu_residue_reference_basis,
                     representation == ThreeDRepresentation::Cff
                         && !settings.explicit_orientation_sum_only,
                 )?);

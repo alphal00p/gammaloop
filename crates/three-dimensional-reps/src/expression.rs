@@ -375,10 +375,9 @@ impl CFFVariant {
             if let Some(sign) = self
                 .denominator_surface_signs
                 .remove(&HybridSurfaceID::Esurface(*esurface_id))
+                && sign < 0
             {
-                if sign < 0 {
-                    self.prefactor *= Atom::num(sign);
-                }
+                self.prefactor *= Atom::num(sign);
             }
         }
     }
@@ -579,10 +578,9 @@ impl CFFVariant {
                     for selected_esurface in &selected_denominator_esurfaces {
                         if let Some(sign) =
                             surface_signs.remove(&HybridSurfaceID::Esurface(*selected_esurface))
+                            && sign < 0
                         {
-                            if sign < 0 {
-                                residue_variant.prefactor *= Atom::num(sign);
-                            }
+                            residue_variant.prefactor *= Atom::num(sign);
                         }
                     }
                     for selected_esurface in selected_esurfaces {

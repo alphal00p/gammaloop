@@ -3145,10 +3145,7 @@ fn subtract_decimal_digits(lhs: &[u8], rhs: &[u8]) -> Vec<u8> {
     let mut borrow = 0_i8;
     let mut lhs_iter = lhs.iter().rev();
     let mut rhs_iter = rhs.iter().rev();
-    loop {
-        let Some(lhs_digit) = lhs_iter.next().copied() else {
-            break;
-        };
+    while let Some(lhs_digit) = lhs_iter.next().copied() {
         let mut digit = lhs_digit as i8 - borrow - rhs_iter.next().copied().unwrap_or(0) as i8;
         if digit < 0 {
             digit += 10;

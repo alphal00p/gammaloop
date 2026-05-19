@@ -9,7 +9,7 @@ use crate::{
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
         UVgenerationSettings,
-        approx::{CutStructure, ForestNodeLike, Local3DApprox},
+        approx::{CutStructure, ForestNodeLike, Local3DApprox, RootResidueContext},
     },
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -279,6 +279,11 @@ impl Forest {
         self.explicitly_summed_orientations = settings.explicit_orientation_sum_only
             && representation == ThreeDRepresentation::Cff
             && use_expanded_4d_local_uv;
+        let root_residue_context = RootResidueContext {
+            expression: root_expression,
+            lu_residue_selection_basis: root_lu_residue_selection_basis,
+            lu_residue_reference_basis: root_lu_residue_reference_basis,
+        };
         let order = self.dag.compute_topological_order();
 
         for (i, n) in order.into_iter().enumerate() {
@@ -292,9 +297,7 @@ impl Forest {
                             valid_orientations,
                             settings,
                             representation,
-                            root_expression,
-                            root_lu_residue_selection_basis,
-                            root_lu_residue_reference_basis,
+                            root_residue_context,
                         )?;
                     } else {
                         self.dag.nodes[n].data.root(
@@ -302,9 +305,7 @@ impl Forest {
                             cut_data,
                             valid_orientations,
                             settings,
-                            root_expression,
-                            root_lu_residue_selection_basis,
-                            root_lu_residue_reference_basis,
+                            root_residue_context,
                         )?;
                     }
                 }

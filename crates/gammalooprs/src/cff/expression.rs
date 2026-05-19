@@ -351,14 +351,16 @@ fn ltd_lu_local_series_surface_family_sign_atom(
                     continue;
                 }
                 signs.insert(localized_variant_surface_family_sign(
-                    graph_name,
-                    expression,
-                    &chain,
-                    &variant.numerator_surfaces,
-                    &selected_surface_ids,
-                    selected_esurface_id,
-                    localized_external_edge,
-                    &replacement,
+                    LocalizedVariantSurfaceFamilySign {
+                        graph_name,
+                        expression,
+                        denominator_chain: &chain,
+                        numerator_surfaces: &variant.numerator_surfaces,
+                        selected_surface_ids: &selected_surface_ids,
+                        selected_esurface_id,
+                        localized_external_edge,
+                        replacement: &replacement,
+                    },
                 )?);
             }
         }
@@ -398,41 +400,47 @@ fn selected_lu_surface_zero_replacement(
     Ok(surface_without_localized_external.scale(-localized_external_coeff.signum()))
 }
 
-fn localized_variant_surface_family_sign(
-    graph_name: &str,
-    expression: &ThreeDExpression<OrientationID>,
-    denominator_chain: &[HybridSurfaceID],
-    numerator_surfaces: &[HybridSurfaceID],
-    selected_surface_ids: &[EsurfaceID],
+struct LocalizedVariantSurfaceFamilySign<'a> {
+    graph_name: &'a str,
+    expression: &'a ThreeDExpression<OrientationID>,
+    denominator_chain: &'a [HybridSurfaceID],
+    numerator_surfaces: &'a [HybridSurfaceID],
+    selected_surface_ids: &'a [EsurfaceID],
     selected_esurface_id: EsurfaceID,
     localized_external_edge: EdgeIndex,
-    replacement: &LinearEnergyExpr,
+    replacement: &'a LinearEnergyExpr,
+}
+
+fn localized_variant_surface_family_sign(
+    input: LocalizedVariantSurfaceFamilySign<'_>,
 ) -> Result<i64> {
-    let denominator_sign = denominator_chain
+    let denominator_sign = input
+        .denominator_chain
         .iter()
-        .filter(|surface_id| !is_selected_lu_surface(**surface_id, selected_surface_ids))
+        .filter(|surface_id| !is_selected_lu_surface(**surface_id, input.selected_surface_ids))
         .map(|surface_id| {
             localized_surface_family_sign(
-                graph_name,
-                expression,
+                input.graph_name,
+                input.expression,
                 *surface_id,
-                selected_esurface_id,
-                localized_external_edge,
-                replacement,
+                input.selected_esurface_id,
+                input.localized_external_edge,
+                input.replacement,
             )
         })
         .product::<Result<i64>>()?;
-    let numerator_sign = numerator_surfaces
+    let numerator_sign = input
+        .numerator_surfaces
         .iter()
-        .filter(|surface_id| !is_selected_lu_surface(**surface_id, selected_surface_ids))
+        .filter(|surface_id| !is_selected_lu_surface(**surface_id, input.selected_surface_ids))
         .map(|surface_id| {
             localized_surface_family_sign(
-                graph_name,
-                expression,
+                input.graph_name,
+                input.expression,
                 *surface_id,
-                selected_esurface_id,
-                localized_external_edge,
-                replacement,
+                input.selected_esurface_id,
+                input.localized_external_edge,
+                input.replacement,
             )
         })
         .product::<Result<i64>>()?;

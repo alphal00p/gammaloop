@@ -80,6 +80,16 @@ pub struct LuResiduePlan {
     pub ltd_lu_cut_local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
 }
 
+pub(crate) struct LuCutResiduePlanData {
+    pub(crate) edge_sets: Vec<Vec<EdgeIndex>>,
+    pub(crate) esurface_signs: Vec<(EsurfaceID, i64)>,
+    pub(crate) local_series_esurface_signs: Vec<(EsurfaceID, i64)>,
+    pub(crate) residue_prefactor_sign: i64,
+    pub(crate) local_series_prefactor_sign: i64,
+    pub(crate) direct_original_prefactor_sign: i64,
+    pub(crate) local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
+}
+
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct ResidueSelector {
     pub lu_plan: Option<LuResiduePlan>,
@@ -101,25 +111,16 @@ impl CutSet {
 }
 
 impl LuResiduePlan {
-    pub(crate) fn new_lu_cut(
-        lu_cut: RaisedEsurfaceGroup,
-        lu_cut_edge_sets: Vec<Vec<EdgeIndex>>,
-        ltd_lu_cut_esurface_signs: Vec<(EsurfaceID, i64)>,
-        ltd_lu_cut_local_series_esurface_signs: Vec<(EsurfaceID, i64)>,
-        ltd_lu_cut_residue_prefactor_sign: i64,
-        ltd_lu_cut_local_series_prefactor_sign: i64,
-        ltd_lu_cut_direct_original_prefactor_sign: i64,
-        ltd_lu_cut_local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
-    ) -> Self {
+    pub(crate) fn new_lu_cut(lu_cut: RaisedEsurfaceGroup, data: LuCutResiduePlanData) -> Self {
         Self {
             lu_cut: Some(lu_cut),
-            lu_cut_edge_sets,
-            ltd_lu_cut_esurface_signs,
-            ltd_lu_cut_local_series_esurface_signs,
-            ltd_lu_cut_residue_prefactor_sign,
-            ltd_lu_cut_local_series_prefactor_sign,
-            ltd_lu_cut_direct_original_prefactor_sign,
-            ltd_lu_cut_local_series_coordinates,
+            lu_cut_edge_sets: data.edge_sets,
+            ltd_lu_cut_esurface_signs: data.esurface_signs,
+            ltd_lu_cut_local_series_esurface_signs: data.local_series_esurface_signs,
+            ltd_lu_cut_residue_prefactor_sign: data.residue_prefactor_sign,
+            ltd_lu_cut_local_series_prefactor_sign: data.local_series_prefactor_sign,
+            ltd_lu_cut_direct_original_prefactor_sign: data.direct_original_prefactor_sign,
+            ltd_lu_cut_local_series_coordinates: data.local_series_coordinates,
         }
     }
 
@@ -144,27 +145,12 @@ impl LuResiduePlan {
 impl ResidueSelector {
     pub(crate) fn new_lu_cut(
         lu_cut: RaisedEsurfaceGroup,
-        lu_cut_edge_sets: Vec<Vec<EdgeIndex>>,
-        ltd_lu_cut_esurface_signs: Vec<(EsurfaceID, i64)>,
-        ltd_lu_cut_local_series_esurface_signs: Vec<(EsurfaceID, i64)>,
-        ltd_lu_cut_residue_prefactor_sign: i64,
-        ltd_lu_cut_local_series_prefactor_sign: i64,
-        ltd_lu_cut_direct_original_prefactor_sign: i64,
-        ltd_lu_cut_local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
+        data: LuCutResiduePlanData,
         left_th_cut: Option<RaisedEsurfaceGroup>,
         right_th_cut: Option<RaisedEsurfaceGroup>,
     ) -> Self {
         Self {
-            lu_plan: Some(LuResiduePlan::new_lu_cut(
-                lu_cut,
-                lu_cut_edge_sets,
-                ltd_lu_cut_esurface_signs,
-                ltd_lu_cut_local_series_esurface_signs,
-                ltd_lu_cut_residue_prefactor_sign,
-                ltd_lu_cut_local_series_prefactor_sign,
-                ltd_lu_cut_direct_original_prefactor_sign,
-                ltd_lu_cut_local_series_coordinates,
-            )),
+            lu_plan: Some(LuResiduePlan::new_lu_cut(lu_cut, data)),
             left_th_cut,
             right_th_cut,
         }

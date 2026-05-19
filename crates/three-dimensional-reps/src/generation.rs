@@ -1130,7 +1130,7 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
         .first()
         .map(|signature| signature.loop_signature.len())
         .unwrap_or(0);
-    let overall_sign = if (n_loops.saturating_sub(1) + duplicate_excess) % 2 == 0 {
+    let overall_sign = if (n_loops.saturating_sub(1) + duplicate_excess).is_multiple_of(2) {
         1
     } else {
         -1
@@ -5128,10 +5128,6 @@ impl<'a> RepeatedLtdBuilder<'a> {
                     bounds,
                     &basis_logical,
                     &cut_signs,
-                    &alpha,
-                    &loop_exprs,
-                    &edge_exprs,
-                    &loop_derivs,
                     &edge_derivs,
                 )?
             } else {
@@ -5428,10 +5424,6 @@ impl<'a> RepeatedLtdBuilder<'a> {
         bounds: &[usize],
         basis_logical: &[usize],
         cut_signs: &[i32],
-        _alpha: &[usize],
-        _base_loop_exprs: &[LinearEnergyExpr],
-        _base_edge_exprs: &[LinearEnergyExpr],
-        _loop_derivs: &[Vec<Rational>],
         edge_derivs: &[Vec<Rational>],
     ) -> Result<Vec<NumeratorSample>> {
         let basis_orig = basis_logical

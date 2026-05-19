@@ -624,9 +624,7 @@ impl CommandHistory {
 
         match Self::from_args_and_raw(args, raw_string.to_string()) {
             Ok(command) => Ok(command),
-            Err(err) if contains_placeholder(raw_string) => {
-                Ok(Self::new_template(raw_string.into()))
-            }
+            Err(_) if contains_placeholder(raw_string) => Ok(Self::new_template(raw_string.into())),
             Err(err) => Err(err),
         }
     }

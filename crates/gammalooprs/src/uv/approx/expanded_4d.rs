@@ -325,17 +325,17 @@ fn project_expanded_4d_term_to_3d_parametric_integrands(
     residues
         .into_iter()
         .map(|residue| {
-            expanded_expression_parametric_atom(
+            expanded_expression_parametric_atom(ExpandedExpressionParametricAtomInput {
                 graph,
-                &residue,
-                &term.numerator,
-                &source,
-                &source_cutset,
+                expression: &residue,
+                numerator: &term.numerator,
+                source: &source,
+                cutset: &source_cutset,
                 source_context,
                 representation,
                 settings,
                 valid_orientations,
-            )
+            })
         })
         .collect::<Result<Vec<_>>>()
         .map(Some)
@@ -447,7 +447,7 @@ fn remap_cutset_to_expression_surfaces(
     let normalized_generated_esurfaces = generated_esurfaces
         .iter()
         .map(|esurface| {
-            Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups)
+            Graph::normalize_esurface_with_raised_edge_groups(esurface, raised_edge_groups)
         })
         .collect::<TiVec<EsurfaceID, _>>();
     let reference_esurfaces = &root_expression.surfaces.esurface_cache;
@@ -470,7 +470,7 @@ fn remap_cutset_to_expression_surfaces(
                         reference,
                         generated_esurfaces,
                         &normalized_generated_esurfaces,
-                        &raised_edge_groups,
+                        raised_edge_groups,
                         format!(
                             "{label} residue selector for {:?} expanded-4D source {}",
                             representation,
@@ -767,17 +767,33 @@ fn expect_single_threshold_residue(
         .ok_or_else(|| eyre!("{side} threshold residue did not produce an expression"))
 }
 
-fn expanded_expression_parametric_atom(
-    graph: &Graph,
-    expression: &crate::cff::expression::ThreeDExpression<OrientationID>,
-    numerator: &Atom,
-    source: &Expanded4DParsedSource,
-    cutset: &CutSet,
-    source_context: Expanded4DSourceContext<'_>,
+struct ExpandedExpressionParametricAtomInput<'a> {
+    graph: &'a Graph,
+    expression: &'a crate::cff::expression::ThreeDExpression<OrientationID>,
+    numerator: &'a Atom,
+    source: &'a Expanded4DParsedSource,
+    cutset: &'a CutSet,
+    source_context: Expanded4DSourceContext<'a>,
     representation: ThreeDRepresentation,
-    settings: &GenerationSettings,
-    valid_orientations: &[EdgeVec<Orientation>],
+    settings: &'a GenerationSettings,
+    valid_orientations: &'a [EdgeVec<Orientation>],
+}
+
+fn expanded_expression_parametric_atom(
+    input: ExpandedExpressionParametricAtomInput<'_>,
 ) -> Result<Atom> {
+    let ExpandedExpressionParametricAtomInput {
+        graph,
+        expression,
+        numerator,
+        source,
+        cutset,
+        source_context,
+        representation,
+        settings,
+        valid_orientations,
+    } = input;
+
     let sum = expanded_expression_orientation_sum_atom(
         graph,
         expression,

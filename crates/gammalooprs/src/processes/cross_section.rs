@@ -36,7 +36,10 @@ use crate::{
     define_index,
     graph::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
-        cuts::{CutSet, LuLocalSeriesCoordinate, LuResidueSelectionBasis, ResidueSelector},
+        cuts::{
+            CutSet, LuCutResiduePlanData, LuLocalSeriesCoordinate, LuResidueSelectionBasis,
+            ResidueSelector,
+        },
         parse::complete_group_parsing,
     },
     integrands::process::{
@@ -322,13 +325,15 @@ impl LuResiduePlanComponents<'_> {
 
         ResidueSelector::new_lu_cut(
             self.raised_cut_group.related_esurface_group.clone(),
-            self.lu_cut_signs.edge_sets,
-            selected_esurface_signs,
-            local_series_esurface_signs,
-            residue_prefactor_sign,
-            local_series_prefactor_sign,
-            direct_original_prefactor_sign,
-            self.lu_cut_signs.local_series_coordinates,
+            LuCutResiduePlanData {
+                edge_sets: self.lu_cut_signs.edge_sets,
+                esurface_signs: selected_esurface_signs,
+                local_series_esurface_signs,
+                residue_prefactor_sign,
+                local_series_prefactor_sign,
+                direct_original_prefactor_sign,
+                local_series_coordinates: self.lu_cut_signs.local_series_coordinates,
+            },
             left_th_cut,
             right_th_cut,
         )
@@ -2178,10 +2183,8 @@ impl CrossSectionGraph {
     }
 
     fn forward_scattering_loop_count(&self) -> usize {
-        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
-            - self.graph.initial_state_cut.nedges(&self.graph);
-
-        loop_number
+        self.graph.cyclotomatic_number(&self.graph.full_filter())
+            - self.graph.initial_state_cut.nedges(&self.graph)
     }
 
     fn lu_prefactor_helper(&self) -> Atom {
