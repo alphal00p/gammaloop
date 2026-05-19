@@ -4,7 +4,6 @@ use std::{
 };
 
 use idenso::{
-    parsing_ind::Parsind,
     representations::initialize,
     tensor::{SymbolicNet, SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
@@ -16,6 +15,7 @@ use spenso::{
     },
     structure::{
         TensorStructure,
+        abstract_index::AbstractIndex,
         representation::LibraryRep,
         slot::{IsAbstractSlot, Slot},
     },
@@ -25,6 +25,8 @@ use symbolica::{
     parser::ParseSettings as SymbolicaParseSettings,
     wrap_input,
 };
+
+type Parsind = AbstractIndex;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
