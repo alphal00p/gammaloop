@@ -153,7 +153,23 @@ pub struct ProductContraction<K, Aind> {
     operands: Vec<ProductOperand<K, Aind>>,
 }
 
-type ProductPairReplacement<K, Aind> = ([NodeIndex; 2], NetworkLeaf<K, Aind>);
+struct ProductPairReplacement<K, Aind> {
+    nodes: [NodeIndex; 2],
+    position: usize,
+    leaf: NetworkLeaf<K, Aind>,
+}
+
+enum ProductRewriteProgress {
+    NoProgress,
+    UpdatedProduct,
+    CollapsedProduct,
+}
+
+impl ProductRewriteProgress {
+    fn made_progress(&self) -> bool {
+        !matches!(self, ProductRewriteProgress::NoProgress)
+    }
+}
 
 impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     #[allow(clippy::result_large_err)]
@@ -452,6 +468,176 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 Ok(true)
             }
             _ => Ok(false),
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn contract_scalars_in_place<LT, T, L, Sc, FK, Store>(
+        &mut self,
+        executor: &mut Store,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        operation: &NetworkOperation<FK>,
+        lib: &L,
+        ignored: &mut SuBitGraph,
+    ) -> Result<ProductRewriteProgress, TensorNetworkError<K, FK>>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        K: Clone + Debug + Display,
+        FK: Debug + Display,
+        Aind: AbsInd,
+        LT: LibraryTensor + Clone,
+        T: HasStructure + Clone + ScalarMul<Sc, Output = T>,
+        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>>
+            + Clone
+            + for<'a> MulAssign<T::ScalarRef<'a>>
+            + From<T::Scalar>
+            + Ref,
+        LT::WithIndices: ScalarMul<Sc, Output = T> + PermuteTensor<Permuted = LT::WithIndices>,
+        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+            IsAbstractSlot<Aind = Aind>,
+    {
+        let mut accumulator = None;
+        let mut scalar_positions = Vec::new();
+        let mut tensor_positions = Vec::new();
+
+        for (position, operand) in self.operands.iter().enumerate() {
+            let is_scalar = match &operand.leaf {
+                NetworkLeaf::Scalar(index) => {
+                    if let Some(accumulator) = &mut accumulator {
+                        *accumulator *= executor.scalar(*index).refer();
+                    } else {
+                        accumulator = Some(executor.scalar(*index).clone());
+                    }
+                    true
+                }
+                NetworkLeaf::LocalTensor(index) => {
+                    if let Some(scalar) = executor.tensor(*index).scalar_ref() {
+                        if let Some(accumulator) = &mut accumulator {
+                            *accumulator *= scalar;
+                        } else {
+                            accumulator =
+                                Some(Sc::from(executor.tensor(*index).clone().scalar().unwrap()));
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                NetworkLeaf::TensorTerm(term) => {
+                    if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
+                        if let Some(term_scalar) = term.scalar {
+                            if let Some(accumulator) = &mut accumulator {
+                                *accumulator *= executor.scalar(term_scalar).refer();
+                            } else {
+                                accumulator = Some(executor.scalar(term_scalar).clone());
+                            }
+                        }
+
+                        if let Some(accumulator) = &mut accumulator {
+                            *accumulator *= tensor_scalar;
+                        } else {
+                            accumulator = Some(Sc::from(
+                                executor.tensor(term.tensor).clone().scalar().unwrap(),
+                            ));
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                NetworkLeaf::TensorSum(_)
+                | NetworkLeaf::TensorTermSum(_)
+                | NetworkLeaf::LibraryKey { .. } => false,
+            };
+
+            if is_scalar {
+                scalar_positions.push(position);
+            } else {
+                tensor_positions.push(position);
+            }
+        }
+
+        let collapse_product = |graph: &mut NetworkGraph<K, FK, Aind>,
+                                ignored: &mut SuBitGraph,
+                                leaf: NetworkLeaf<K, Aind>|
+         -> Result<(), TensorNetworkError<K, FK>> {
+            graph
+                .identify_subgraph_nodes_without_deleting_self_edges(
+                    operation.subgraph(),
+                    NetworkNode::Leaf(leaf),
+                    ignored,
+                )
+                .ok_or_else(|| {
+                    TensorNetworkError::Other(eyre!(
+                        "ready operation subgraph did not contain any nodes"
+                    ))
+                })?;
+            graph.finish_deferred_node_identifications();
+            Ok(())
+        };
+
+        let Some(accumulator) = accumulator else {
+            if self.operands.len() == 1 {
+                collapse_product(graph, ignored, self.operands[0].leaf.clone())?;
+                return Ok(ProductRewriteProgress::CollapsedProduct);
+            }
+            return Ok(ProductRewriteProgress::NoProgress);
+        };
+
+        match tensor_positions.len() {
+            0 => {
+                let leaf = if scalar_positions.len() == 1
+                    && matches!(
+                        self.operands[scalar_positions[0]].leaf,
+                        NetworkLeaf::Scalar(_)
+                    ) {
+                    self.operands[scalar_positions[0]].leaf.clone()
+                } else {
+                    NetworkLeaf::Scalar(executor.push_scalar(accumulator))
+                };
+                collapse_product(graph, ignored, leaf)?;
+                Ok(ProductRewriteProgress::CollapsedProduct)
+            }
+            1 => {
+                let leaf = self.scalar_multiply_operand::<LT, T, L, Sc, FK, Store>(
+                    tensor_positions[0],
+                    accumulator,
+                    executor,
+                    graph,
+                    lib,
+                )?;
+                collapse_product(graph, ignored, leaf)?;
+                Ok(ProductRewriteProgress::CollapsedProduct)
+            }
+            _ if scalar_positions.len() > 1 => {
+                let scalar = executor.push_scalar(accumulator);
+                let scalar_nodes = scalar_positions
+                    .iter()
+                    .map(|position| {
+                        self.operands[*position].source.ok_or_else(|| {
+                            TensorNetworkError::Other(eyre!(
+                                "scalar product operand lost source node"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let node = graph.identify_nodes_marking_self_edges_and_duplicate_heads(
+                    &scalar_nodes,
+                    NetworkNode::Leaf(NetworkLeaf::Scalar(scalar)),
+                    ignored,
+                );
+                graph.finish_deferred_node_identifications();
+                self.replace_operands(
+                    &scalar_positions,
+                    ProductOperand {
+                        leaf: NetworkLeaf::Scalar(scalar),
+                        source: Some(node),
+                    },
+                );
+                Ok(ProductRewriteProgress::UpdatedProduct)
+            }
+            _ => Ok(ProductRewriteProgress::NoProgress),
         }
     }
 
@@ -1002,7 +1188,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn contract_one_by_degree_replacement<
+    fn contract_one_by_degree_replacement<
         const DEBUG: bool,
         const LARGEST: bool,
         LT,
@@ -1094,10 +1280,70 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             println!("Obtained {structure}");
         }
 
-        Ok(Some((
-            [left_node, right_node],
-            self.operands[replacement_position].leaf.clone(),
-        )))
+        Ok(Some(ProductPairReplacement {
+            nodes: [left_node, right_node],
+            position: replacement_position,
+            leaf: self.operands[replacement_position].leaf.clone(),
+        }))
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn contract_one_by_degree_in_place<
+        const DEBUG: bool,
+        const LARGEST: bool,
+        LT,
+        T,
+        L,
+        Sc,
+        CStrat,
+        FK,
+        Store,
+    >(
+        &mut self,
+        executor: &mut Store,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        lib: &L,
+        ignored: &mut SuBitGraph,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        K: Clone + Debug + Display,
+        FK: Debug + Display,
+        Aind: AbsInd,
+        LT: LibraryTensor + Clone,
+        T: HasStructure
+            + From<LT::WithIndices>
+            + Contract<T, CStrat, LCM = T>
+            + Clone
+            + Ref
+            + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + TensorCommonFactor<Sc>
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        T::Structure: Display,
+        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+            IsAbstractSlot<Aind = Aind>,
+    {
+        let Some(replacement) = self
+            .contract_one_by_degree_replacement::<DEBUG, LARGEST, LT, T, L, Sc, CStrat, FK, Store>(
+                executor, graph, lib,
+            )?
+        else {
+            return Ok(false);
+        };
+
+        let node = graph.identify_nodes_marking_self_edges_and_duplicate_heads(
+            &replacement.nodes,
+            NetworkNode::Leaf(replacement.leaf),
+            ignored,
+        );
+        graph.finish_deferred_node_identifications();
+        self.operands[replacement.position].source = Some(node);
+        Ok(true)
     }
 
     pub fn best_degree_pair<Store, const LARGEST: bool>(
@@ -1418,142 +1664,12 @@ where
         FK: Display + Debug,
         Aind: AbsInd,
     {
-        let product = ProductContraction::from_operation(graph, operation)?;
-        let mut accumulator = None;
-        let mut scalar_positions = Vec::new();
-        let mut tensor_positions = Vec::new();
-
-        for (position, operand) in product.operands.iter().enumerate() {
-            let is_scalar = match &operand.leaf {
-                NetworkLeaf::Scalar(index) => {
-                    if let Some(accumulator) = &mut accumulator {
-                        *accumulator *= executor.scalar(*index).refer();
-                    } else {
-                        accumulator = Some(executor.scalar(*index).clone());
-                    }
-                    true
-                }
-                NetworkLeaf::LocalTensor(index) => {
-                    if let Some(scalar) = executor.tensor(*index).scalar_ref() {
-                        if let Some(accumulator) = &mut accumulator {
-                            *accumulator *= scalar;
-                        } else {
-                            accumulator =
-                                Some(Sc::from(executor.tensor(*index).clone().scalar().unwrap()));
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                }
-                NetworkLeaf::TensorTerm(term) => {
-                    if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
-                        if let Some(term_scalar) = term.scalar {
-                            if let Some(accumulator) = &mut accumulator {
-                                *accumulator *= executor.scalar(term_scalar).refer();
-                            } else {
-                                accumulator = Some(executor.scalar(term_scalar).clone());
-                            }
-                        }
-
-                        if let Some(accumulator) = &mut accumulator {
-                            *accumulator *= tensor_scalar;
-                        } else {
-                            accumulator = Some(Sc::from(
-                                executor.tensor(term.tensor).clone().scalar().unwrap(),
-                            ));
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                }
-                NetworkLeaf::TensorSum(_)
-                | NetworkLeaf::TensorTermSum(_)
-                | NetworkLeaf::LibraryKey { .. } => false,
-            };
-
-            if is_scalar {
-                scalar_positions.push(position);
-            } else {
-                tensor_positions.push(position);
-            }
-        }
-
-        let collapse_product = |graph: &mut NetworkGraph<K, FK, Aind>,
-                                ignored: &mut SuBitGraph,
-                                leaf: NetworkLeaf<K, Aind>|
-         -> Result<(), TensorNetworkError<K, FK>> {
-            graph
-                .identify_subgraph_nodes_without_deleting_self_edges(
-                    operation.subgraph(),
-                    NetworkNode::Leaf(leaf),
-                    ignored,
-                )
-                .ok_or_else(|| {
-                    TensorNetworkError::Other(eyre!(
-                        "ready operation subgraph did not contain any nodes"
-                    ))
-                })?;
-            graph.finish_deferred_node_identifications();
-            Ok(())
-        };
-
-        let Some(accumulator) = accumulator else {
-            if product.operands.len() == 1 {
-                collapse_product(graph, ignored, product.operands[0].leaf.clone())?;
-                return Ok(true);
-            }
-            return Ok(false);
-        };
-
-        match tensor_positions.len() {
-            0 => {
-                let leaf = if scalar_positions.len() == 1
-                    && matches!(
-                        product.operands[scalar_positions[0]].leaf,
-                        NetworkLeaf::Scalar(_)
-                    ) {
-                    product.operands[scalar_positions[0]].leaf.clone()
-                } else {
-                    NetworkLeaf::Scalar(executor.push_scalar(accumulator))
-                };
-                collapse_product(graph, ignored, leaf)?;
-                Ok(true)
-            }
-            1 => {
-                let leaf = product.scalar_multiply_operand::<LT, T, L, Sc, FK, Store>(
-                    tensor_positions[0],
-                    accumulator,
-                    executor,
-                    graph,
-                    lib,
-                )?;
-                collapse_product(graph, ignored, leaf)?;
-                Ok(true)
-            }
-            _ if scalar_positions.len() > 1 => {
-                let scalar = executor.push_scalar(accumulator);
-                let scalar_nodes = scalar_positions
-                    .iter()
-                    .map(|position| {
-                        product.operands[*position].source.ok_or_else(|| {
-                            TensorNetworkError::Other(eyre!(
-                                "scalar product operand lost source node"
-                            ))
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                graph.identify_nodes_marking_self_edges_and_duplicate_heads(
-                    &scalar_nodes,
-                    NetworkNode::Leaf(NetworkLeaf::Scalar(scalar)),
-                    ignored,
-                );
-                graph.finish_deferred_node_identifications();
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
+        let mut product = ProductContraction::from_operation(graph, operation)?;
+        product
+            .contract_scalars_in_place::<LT, T, L, Sc, FK, Store>(
+                executor, graph, operation, lib, ignored,
+            )
+            .map(|progress| progress.made_progress())
     }
 }
 
@@ -1649,6 +1765,8 @@ where
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
+    const SUPPORTS_PARTIAL_GRAPH_REWRITE: bool = true;
+
     fn contract(
         executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
@@ -1670,6 +1788,51 @@ where
             product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         }
         product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
+    }
+
+    fn contract_product_in_place(
+        executor: &mut Store,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+        operation: &NetworkOperation<FK>,
+        lib: &L,
+        ignored: &mut SuBitGraph,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        K: Display + Debug,
+        FK: Display + Debug,
+        Aind: AbsInd,
+    {
+        let mut product = ProductContraction::from_operation(graph, operation)?;
+        let mut did_progress = false;
+
+        match product.contract_scalars_in_place::<LT, T, L, Sc, FK, Store>(
+            executor, graph, operation, lib, ignored,
+        )? {
+            ProductRewriteProgress::NoProgress => {}
+            ProductRewriteProgress::UpdatedProduct => did_progress = true,
+            ProductRewriteProgress::CollapsedProduct => return Ok(true),
+        }
+
+        for _ in 0..N {
+            if !product
+                .contract_one_by_degree_in_place::<false, false, LT, T, L, Sc, CStrat, FK, Store>(
+                    executor, graph, lib, ignored,
+                )?
+            {
+                break;
+            }
+            did_progress = true;
+
+            match product.contract_scalars_in_place::<LT, T, L, Sc, FK, Store>(
+                executor, graph, operation, lib, ignored,
+            )? {
+                ProductRewriteProgress::NoProgress => {}
+                ProductRewriteProgress::UpdatedProduct => did_progress = true,
+                ProductRewriteProgress::CollapsedProduct => return Ok(true),
+            }
+        }
+
+        Ok(did_progress)
     }
 }
 
@@ -1798,21 +1961,9 @@ where
         Aind: AbsInd,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        let Some((nodes, leaf)) = product
-            .contract_one_by_degree_replacement::<D, false, LT, T, L, Sc, CStrat, FK, Store>(
-                executor, graph, lib,
-            )?
-        else {
-            return Ok(false);
-        };
-
-        graph.identify_nodes_marking_self_edges_and_duplicate_heads(
-            &nodes,
-            NetworkNode::Leaf(leaf),
-            ignored,
-        );
-        graph.finish_deferred_node_identifications();
-        Ok(true)
+        product.contract_one_by_degree_in_place::<D, false, LT, T, L, Sc, CStrat, FK, Store>(
+            executor, graph, lib, ignored,
+        )
     }
 }
 
@@ -1885,20 +2036,8 @@ where
         Aind: AbsInd,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        let Some((nodes, leaf)) = product
-            .contract_one_by_degree_replacement::<D, true, LT, T, L, Sc, CStrat, FK, Store>(
-                executor, graph, lib,
-            )?
-        else {
-            return Ok(false);
-        };
-
-        graph.identify_nodes_marking_self_edges_and_duplicate_heads(
-            &nodes,
-            NetworkNode::Leaf(leaf),
-            ignored,
-        );
-        graph.finish_deferred_node_identifications();
-        Ok(true)
+        product.contract_one_by_degree_in_place::<D, true, LT, T, L, Sc, CStrat, FK, Store>(
+            executor, graph, lib, ignored,
+        )
     }
 }

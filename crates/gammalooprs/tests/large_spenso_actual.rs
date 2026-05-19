@@ -9,7 +9,7 @@ use gammalooprs::{
     numerator::{ParsingNet, aind::Aind},
     utils::{F, FUN_LIB, TENSORLIB},
 };
-use idenso::{
+use idenso::shorthands::{
     metric::MetricSimplifier,
     schoonschip::{Schoonschip, SchoonschipSettings},
 };
