@@ -1921,7 +1921,6 @@ impl CrossSectionGraph {
         self.graph.param_builder.initialize_duals(max_dual_size);
 
         self.derived_data.threshold_counterterms = result;
-
         Ok(())
     }
 

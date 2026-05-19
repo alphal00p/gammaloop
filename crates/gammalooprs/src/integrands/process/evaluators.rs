@@ -1003,7 +1003,7 @@ impl GenericEvaluator {
 
     pub(crate) fn compute_out_size(&self) -> usize {
         let number_type_size = if let Some(dual_shape) = &self.dual_shape {
-            dual_shape.iter().map(|vec| vec.len()).sum()
+            dual_shape.len()
         } else {
             1
         };

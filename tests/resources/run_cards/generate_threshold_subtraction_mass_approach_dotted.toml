@@ -4,6 +4,9 @@ commands = [
 	"set model mass_scalar_2=2.0001",
 	"import graphs tests/resources/graphs/double_dotted_double_triangle.dot",
 	"generate",
+	"set global kv global.display_directive=Debug",
+	"inspect -i default -x 0.1 0.2 0.3 0.4 0.5 0.6",
+	"quit -n",
 ]
 
 
@@ -18,7 +21,7 @@ momenta = [[5.0, 0.0, 0.0, 0.0]]
 helicities = ["summed_averaged"]
 
 [default_runtime_settings.general]
-evaluator_method = "SummedFunctionMap"
+evaluator_method = "Summed"
 enable_cache = false
 debug_cache = false
 generate_events = false
@@ -30,8 +33,8 @@ integral_unit = "picobarn"
 iterative_orientation_optimization = false
 store_atom = false
 compile = false
-summed = false
-summed_function_map = true
+summed = true
+summed_function_map = false
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]

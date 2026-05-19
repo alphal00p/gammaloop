@@ -308,6 +308,19 @@ fn evaluate_threshold_helper_single<
     );
     extend_plain_helper_real_params(&mut helper_params, &threshold_params.h_function, t_variable);
 
+    debug!(
+        "LU threshold helper input (single): cut_cff_index={:?}, t_variable={:?}, param_count={}",
+        cut_cff_index,
+        t_variable,
+        helper_params.len()
+    );
+    for (idx, value) in helper_params.iter().enumerate() {
+        debug!(
+            "LU threshold helper param (single): cut_cff_index={:?}, index={}, value={}",
+            cut_cff_index, idx, value
+        );
+    }
+
     let mut result = evaluate_evaluator(
         helper,
         &helper_params,
@@ -395,6 +408,19 @@ fn evaluate_threshold_helper_iterated<
         &right_threshold_params.h_function,
         t_variable,
     );
+
+    debug!(
+        "LU threshold helper input (iterated): cut_cff_index={:?}, t_variable={:?}, param_count={}",
+        cut_cff_index,
+        t_variable,
+        helper_params.len()
+    );
+    for (idx, value) in helper_params.iter().enumerate() {
+        debug!(
+            "LU threshold helper param (iterated): cut_cff_index={:?}, index={}, value={}",
+            cut_cff_index, idx, value
+        );
+    }
 
     let mut result = evaluate_evaluator(
         helper,
@@ -1307,6 +1333,15 @@ impl LUCounterTerm {
 
                         let left_threshold_params: ThresholdParams<T> =
                             sample.extract_threshold_parameters(true);
+                        debug!(
+                            "LU left evaluator input: cut_id={}, left_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
+                            cut_id.0,
+                            left_threshold_id.0,
+                            cut_cff_index,
+                            order + 1,
+                            left_threshold_params.radius,
+                            left_threshold_params.radius_star,
+                        );
                         let inverse_transformed_sample = sample.get_inverse_transformed_sample();
 
                         let params = T::get_parameters(
@@ -1335,6 +1370,11 @@ impl LUCounterTerm {
                             .unwrap()
                             .pop()
                             .unwrap();
+
+                        debug!(
+                            "result of left threshold evaluator {:?}: {}",
+                            cut_cff_index, result_of_this_ct
+                        );
 
                         let helper_completed_result = evaluate_threshold_helper_single(
                             self.evaluators[cut_id].threshold_helpers.left_thresholds
@@ -1391,6 +1431,15 @@ impl LUCounterTerm {
                         debug!("right threshold parameters");
                         let right_threshold_params: ThresholdParams<T> =
                             sample.extract_threshold_parameters(true);
+                        debug!(
+                            "LU right evaluator input: cut_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
+                            cut_id.0,
+                            right_threshold_id.0,
+                            cut_cff_index,
+                            order + 1,
+                            right_threshold_params.radius,
+                            right_threshold_params.radius_star,
+                        );
                         let inverse_transformed_sample = sample.get_inverse_transformed_sample();
 
                         let params = T::get_parameters(
@@ -1419,6 +1468,11 @@ impl LUCounterTerm {
                             .unwrap()
                             .pop()
                             .unwrap();
+
+                        debug!(
+                            "result of right threshold evaluator {:?}: {}",
+                            cut_cff_index, result_of_this_ct
+                        );
 
                         let helper_completed_result = evaluate_threshold_helper_single(
                             self.evaluators[cut_id].threshold_helpers.right_thresholds
@@ -1491,6 +1545,18 @@ impl LUCounterTerm {
                                     sample_left.extract_threshold_parameters(false);
                                 let right_threshold_params: ThresholdParams<T> =
                                     sample_right.extract_threshold_parameters(false);
+                                debug!(
+                                    "LU iterated evaluator input: cut_id={}, left_threshold_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, left_r={}, left_rstar={}, right_r={}, right_rstar={}",
+                                    cut_id.0,
+                                    iterated_index.0.0,
+                                    iterated_index.1.0,
+                                    cut_cff_index,
+                                    order + 1,
+                                    left_threshold_params.radius,
+                                    left_threshold_params.radius_star,
+                                    right_threshold_params.radius,
+                                    right_threshold_params.radius_star,
+                                );
                                 let multi_channeling_factor = plain_t_dual_or_scalar_complex(
                                     &multiply_dual_or_not_complex(
                                         sample_left.value_of_multi_channeling_factor.clone(),
@@ -1527,6 +1593,11 @@ impl LUCounterTerm {
                                     .unwrap()
                                     .pop()
                                     .unwrap();
+
+                                println!(
+                                    "result of iterated evaluator {:?}: {}",
+                                    iterated_index, result_of_this_ct
+                                );
 
                                 let helper_completed_result = evaluate_threshold_helper_iterated(
                                     self.evaluators[cut_id].threshold_helpers.iterated
@@ -1577,6 +1648,22 @@ impl LUCounterTerm {
                     debug!("non dual esurface: {}", non_dual_e_surface);
                     params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
                 }
+            }
+
+            debug!(
+                "LU pass-two evaluator input: cut_id={}, lu_order={}, param_count={}",
+                cut_id.0,
+                order + 1,
+                params_for_pass_two.len()
+            );
+            for (idx, value) in params_for_pass_two.iter().enumerate() {
+                debug!(
+                    "LU pass-two evaluator param: cut_id={}, lu_order={}, index={}, value={}",
+                    cut_id.0,
+                    order + 1,
+                    idx,
+                    value
+                );
             }
 
             let pass_two_result = evaluate_evaluator_single(
