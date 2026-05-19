@@ -1594,11 +1594,6 @@ impl LUCounterTerm {
                                     .pop()
                                     .unwrap();
 
-                                println!(
-                                    "result of iterated evaluator {:?}: {}",
-                                    iterated_index, result_of_this_ct
-                                );
-
                                 let helper_completed_result = evaluate_threshold_helper_iterated(
                                     self.evaluators[cut_id].threshold_helpers.iterated
                                         [iterated_index]
