@@ -15,7 +15,22 @@ use eyre::Result;
 use linnet::permutation::Permutation;
 use symbolica::{atom::Atom, evaluate::FunctionMap};
 
+mod atom_conversion;
+mod collect;
+mod macros;
+mod projectors;
+pub mod static_symbols;
+mod trace;
+
 pub mod symbolica_utils;
+
+pub use atom_conversion::IntoAtom;
+pub use collect::{COLLECT, Collectable, TensorCollectExt, TensorCollectFilter};
+pub use projectors::{ANTISYM, CYCLIC, ProjectorExpander, SYM, antisym, cyclic, sym};
+pub use trace::{trace, trace_factor_views, trace_parts, trace_sym};
+
+#[cfg(test)]
+mod tests;
 
 /// Trait that enables shadowing of a tensor
 ///

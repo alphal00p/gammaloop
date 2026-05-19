@@ -11,6 +11,7 @@ use spenso::{
         store::NetworkStore,
         tags::SPENSO_TAG,
     },
+    shadowing::TensorCollectExt,
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, PermutedStructure, TensorStructure, ToSymbolic,
@@ -19,7 +20,6 @@ use spenso::{
         representation::{LibraryRep, LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
-    symbolica_atom::TensorCollectExt,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomType, AtomView, FunctionBuilder, Symbol},

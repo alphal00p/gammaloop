@@ -20,7 +20,7 @@ use crate::structure::{
     representation::LibraryRep,
     slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError},
 };
-use crate::{network::tags::SPENSO_TAG, symbolica_atom};
+use crate::{network::tags::SPENSO_TAG, shadowing};
 
 /// Chooses how tensor structure is inferred from symbolic syntax.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,10 +98,10 @@ impl AtomStructureExt for AtomView<'_> {
     }
 }
 
-struct TensorialSyntax;
+pub(crate) struct TensorialSyntax;
 
 impl TensorialSyntax {
-    fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
+    pub(crate) fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
         let symbol = fun.get_symbol();
 
         if symbol == SPENSO_TAG.pure_scalar {
@@ -365,7 +365,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         }
 
         let mut slots = Vec::new();
-        for factor in symbolica_atom::trace_factor_views(&args[1..]) {
+        for factor in shadowing::trace_factor_views(&args[1..]) {
             Self::append_syntactic_slots(factor, &mut slots)?;
         }
 

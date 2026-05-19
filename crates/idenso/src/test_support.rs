@@ -3,12 +3,10 @@ use std::sync::LazyLock;
 use spenso::{
     s,
     structure::representation::{Minkowski, RepName, Representation},
-};
-
-use crate::{
-    representations::{Bispinor, ColorAdjoint, ColorFundamental},
     symbol_set,
 };
+
+use crate::representations::{Bispinor, ColorAdjoint, ColorFundamental};
 
 #[derive(Clone)]
 pub(crate) struct TestReps {

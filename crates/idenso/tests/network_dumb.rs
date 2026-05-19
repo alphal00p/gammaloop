@@ -3,12 +3,12 @@ use idenso::{
     shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
 };
 use spenso::{
+    shadowing::TensorCollectExt,
     shadowing::symbolica_utils::{AtomCoreExt, SpensoPrintSettings},
     structure::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
     },
-    symbolica_atom::TensorCollectExt,
 };
 use symbolica::{
     atom::{Atom, AtomCore},

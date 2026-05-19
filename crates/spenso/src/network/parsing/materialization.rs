@@ -40,13 +40,13 @@ use crate::{
         store::TensorScalarStore,
         tags::SPENSO_TAG,
     },
+    shadowing,
     shadowing::Concretize,
     structure::{
         HasStructure, ScalarStructure, TensorShell, TensorStructure,
         representation::{LibraryRep, RepName, Representation},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot},
     },
-    symbolica_atom,
 };
 use eyre::eyre;
 
@@ -618,7 +618,7 @@ where
 
         let rep = Representation::<LibraryRep>::try_from(*rep_view)
             .map_err(|err| eyre!("invalid trace representation `{rep_view}`: {err}"))?;
-        let factors = symbolica_atom::trace_factor_views(&args[1..]);
+        let factors = shadowing::trace_factor_views(&args[1..]);
 
         if factors.is_empty() {
             return Self::try_from_view_impl(

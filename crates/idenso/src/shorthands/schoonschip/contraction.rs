@@ -13,13 +13,13 @@ use spenso::{
         parsing::StructureFromAtom,
         store::NetworkStore,
     },
+    shadowing::TensorCollectExt,
     structure::{
         OrderedStructure, SlotIndex, StructureContract, TensorStructure,
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
-    symbolica_atom::TensorCollectExt,
 };
 
 use symbolica::atom::{Atom, AtomCore, AtomView};

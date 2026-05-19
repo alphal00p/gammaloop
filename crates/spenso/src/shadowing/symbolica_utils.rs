@@ -11,6 +11,7 @@ use symbolica::{
     domains::{float::Complex, rational::Rational},
     evaluate::{FunctionMap, Instruction, OptimizationSettings, Slot},
     function,
+    id::ReplaceBuilder,
     printer::{CanonicalOrderingSettings, PrintOptions, PrintState},
     symbol,
 };
@@ -23,6 +24,22 @@ use std::{
 };
 
 use eyre::Result;
+
+pub trait ReplaceBuilderExt {
+    fn has_matches(&self) -> bool;
+    // Returns true if the pattern matches entirely the given atom
+    fn matches(self) -> bool;
+}
+
+impl<'a, 'b> ReplaceBuilderExt for ReplaceBuilder<'a, 'b> {
+    fn has_matches(&self) -> bool {
+        self.match_iter().next().is_some()
+    }
+
+    fn matches(self) -> bool {
+        self.partial(false).has_matches()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SpensoPrintSettings {

@@ -1,6 +1,6 @@
 use super::*;
 use insta::assert_snapshot;
-use spenso::{network::library::symbolic::ETS, symbolica_atom::IntoAtom};
+use spenso::{network::library::symbolic::ETS, shadowing::IntoAtom};
 use symbolica::function;
 
 // Ported from FeynCalc's framework-independent SUNSimplify tests:

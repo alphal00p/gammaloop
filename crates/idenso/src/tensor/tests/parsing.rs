@@ -28,7 +28,7 @@ use spenso::{
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::IsAbstractSlot,
     },
-    tensor_symbol, vector, vector_symbol,
+    tensor_symbol, vector,
 };
 
 use insta::assert_snapshot;

@@ -14,13 +14,13 @@ use spenso::{
     algebra::upgrading_arithmetic::FallibleSub,
     iterators::IteratableTensor,
     network::{parsing::ParseSettings, tags::SPENSO_TAG},
+    shadowing::ProjectorExpander,
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::RepName,
         slot::{DualSlotTo, IsAbstractSlot},
     },
     sym,
-    symbolica_atom::ProjectorExpander,
     tensors::{
         data::SparseOrDense,
         parametric::{AtomViewOrConcrete, atomcore::TensorAtomMaps},

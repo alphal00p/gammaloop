@@ -23,7 +23,7 @@ use spenso::{
     antisym, chain, network::parsing::ShadowedStructure, slot, structure::permuted::Perm, sym,
     trace,
 };
-use symbolica::{parse, parse_lit};
+use symbolica::{id::Pattern, parse, parse_lit};
 
 use crate::dirac::PS;
 use crate::selective_expand::SelectiveExpand;
@@ -592,7 +592,7 @@ fn ratio_simplify() {
 
     let simplified = expr.cook_indices().simplify_color();
 
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"-1𝑖*G^4*TR^2*ahaha*ee^2*ohoho");
+    assert_snapshot!(simplified.collect_color_constants().collect_factors().to_bare_ordered_string(), @"-1𝑖*G^4*TR^2*ahaha*ee^2*ohoho");
 }
 
 #[test]

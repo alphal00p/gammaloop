@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use spenso::{g, symbolica_atom::TensorCollectExt};
+use spenso::{g, shadowing::TensorCollectExt};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
@@ -28,7 +28,7 @@ where
 
 /// Builds an antisymmetric epsilon tensor with arbitrary rank.
 ///
-/// Arguments are converted through `spenso::symbolica_atom::IntoAtom`, so tests
+/// Arguments are converted through `spenso::shadowing::IntoAtom`, so tests
 /// and rewrite code can pass slots, atoms, atom views, symbols, and integers
 /// without spelling out the conversion.
 #[macro_export]
@@ -39,7 +39,7 @@ macro_rules! epsilon {
     ($($arg:expr),* $(,)?) => {{
         let builder = symbolica::atom::FunctionBuilder::new(*$crate::epsilon::EPSILON_SYMBOL);
         $(
-            let builder = builder.add_arg(spenso::symbolica_atom::IntoAtom::into_atom($arg));
+            let builder = builder.add_arg(spenso::shadowing::IntoAtom::into_atom($arg));
         )*
         builder.finish()
     }};
