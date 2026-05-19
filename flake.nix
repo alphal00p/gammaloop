@@ -144,6 +144,12 @@
       in
         crateMemberDirs ++ ["tests"];
 
+      workspaceMemberPackages = map (
+        member:
+          (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name
+      )
+      workspaceMemberDirs;
+
       autoCargoTargetDirs =
         lib.concatMap (
           member:
@@ -276,6 +282,147 @@
         fi
       '';
 
+      nextestProfile = "ci_gammaloop";
+      nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
+
+      nextestFailureSummary = pkgs.writeShellApplication {
+        name = "nextest-failure-summary";
+        runtimeInputs = [pkgs.python313];
+        text = ''
+          exec python3 - "$@" <<'PY'
+          import pathlib
+          import sys
+          import xml.etree.ElementTree as ET
+
+          MAX_FAILURES = 20
+          MAX_LINES_PER_FAILURE = 120
+
+
+          def local_name(tag):
+              return tag.rsplit("}", 1)[-1]
+
+
+          def int_attr(node, name):
+              try:
+                  return int(node.attrib.get(name, "0"))
+              except ValueError:
+                  return 0
+
+
+          def clean_text(text):
+              if not text:
+                  return ""
+              lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+              return "\n".join(line.rstrip() for line in lines).strip()
+
+
+          def unique_chunks(chunks):
+              seen = set()
+              result = []
+              for chunk in chunks:
+                  chunk = clean_text(chunk)
+                  if chunk and chunk not in seen:
+                      seen.add(chunk)
+                      result.append(chunk)
+              return result
+
+
+          def failing_cases(root):
+              failure_tags = {
+                  "failure",
+                  "error",
+                  "rerunFailure",
+                  "rerunError",
+                  "flakyFailure",
+                  "flakyError",
+              }
+              for case in root.iter():
+                  if local_name(case.tag) != "testcase":
+                      continue
+                  failures = [
+                      child
+                      for child in list(case)
+                      if local_name(child.tag) in failure_tags
+                  ]
+                  if failures:
+                      yield case, failures
+
+
+          def test_name(case):
+              classname = case.attrib.get("classname", "").strip()
+              name = case.attrib.get("name", "").strip()
+              if classname and name:
+                  return f"{classname}::{name}"
+              return name or classname or "<unknown test>"
+
+
+          def failure_chunks(case, failures):
+              chunks = []
+              for failure in failures:
+                  label = local_name(failure.tag)
+                  kind = failure.attrib.get("type", "").strip()
+                  header = f"{label}: {kind}" if kind else label
+                  text = clean_text(failure.text)
+                  chunks.append(f"{header}\n{text}" if text else header)
+
+              for child in list(case):
+                  if local_name(child.tag) in {"system-err", "system-out"}:
+                      text = clean_text(child.text)
+                      if text:
+                          chunks.append(f"{local_name(child.tag)}\n{text}")
+
+              return unique_chunks(chunks)
+
+
+          path = pathlib.Path(sys.argv[1])
+          if not path.exists():
+              print(f"nextest JUnit report not found: {path}", file=sys.stderr)
+              sys.exit(0)
+
+          try:
+              root = ET.parse(path).getroot()
+          except ET.ParseError as error:
+              print(f"could not parse nextest JUnit report {path}: {error}", file=sys.stderr)
+              sys.exit(0)
+
+          failures = list(failing_cases(root))
+          total = int_attr(root, "tests")
+          failure_count = int_attr(root, "failures")
+          error_count = int_attr(root, "errors")
+
+          print()
+          print("========== nextest test summary ==========")
+          print(f"report: {path}")
+          print(f"tests: {total}, failures: {failure_count}, errors: {error_count}")
+
+          if not failures:
+              print("No failing testcases found.")
+              print("=========================================")
+              sys.exit(0)
+
+          for index, (case, case_failures) in enumerate(failures[:MAX_FAILURES], start=1):
+              print()
+              print(f"{index}. {test_name(case)}")
+              for chunk in failure_chunks(case, case_failures):
+                  lines = chunk.splitlines()
+                  truncated = len(lines) > MAX_LINES_PER_FAILURE
+                  if truncated:
+                      omitted = len(lines) - MAX_LINES_PER_FAILURE
+                      lines = lines[:MAX_LINES_PER_FAILURE]
+                  for line in lines:
+                      print(f"   {line}")
+                  if truncated:
+                      print(f"   ... omitted {omitted} more lines; see full nextest output above")
+
+          if len(failures) > MAX_FAILURES:
+              print()
+              print(f"... omitted {len(failures) - MAX_FAILURES} more failing tests")
+
+          print("=========================================")
+          PY
+        '';
+      };
+
       # Crane's documented workspace pattern is to build one shared dependency cache and
       # reuse it across workspace lint/test/doc/package checks.
       cargoArtifacts = craneLib.buildDepsOnly (ciArgs
@@ -335,6 +482,109 @@
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
+      nextestPackageGroups = [
+        {
+          name = "core";
+          packages = [
+            "gammaloop-api"
+            "gammaloop-tracing-filter"
+            "gammalooprs"
+          ];
+        }
+        {
+          name = "integration";
+          packages = ["gammaloop-integration-tests"];
+        }
+        {
+          name = "linnet";
+          packages = [
+            "clinnet"
+            "linnet"
+            "linnet-py"
+            "linnest"
+          ];
+        }
+        {
+          name = "spenso";
+          packages = [
+            "idenso"
+            "spenso"
+            "spenso-hep-lib"
+            "spenso-macros"
+            "spynso3"
+          ];
+        }
+        {
+          name = "vakint";
+          packages = ["vakint"];
+        }
+      ];
+
+      sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);
+
+      nextestSplitPackages = sortedUnique (lib.concatMap (target: target.packages) nextestPackageGroups);
+      workspacePackages = sortedUnique workspaceMemberPackages;
+      missingNextestPackages = lib.subtractLists nextestSplitPackages workspacePackages;
+      extraNextestPackages = lib.subtractLists workspacePackages nextestSplitPackages;
+
+      checkedNextestPackageGroups =
+        assert lib.asserts.assertMsg (
+          missingNextestPackages == [] && extraNextestPackages == []
+        ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]";
+          nextestPackageGroups;
+
+      nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
+
+      nextestPackageArgs = packages:
+        lib.concatMapStringsSep " " (package: "-p ${package}") packages;
+
+      nextestCheckFor = target:
+        craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            src = workspaceTestSrc;
+            pname = "gammaloop-nextest-${target.name}";
+            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
+            cargoExtraArgs = "--locked ${nextestPackageArgs target.packages}";
+            cargoNextestExtraArgs = nextestBaseExtraArgs;
+            checkPhase = ''
+              runHook preCheck
+
+              set +e
+              cargo nextest run \
+                ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
+                --locked ${nextestPackageArgs target.packages} ${nextestBaseExtraArgs}
+              nextest_status=$?
+              set -e
+
+              ${nextestFailureSummary}/bin/nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+
+              runHook postCheck
+              exit "$nextest_status"
+            '';
+            doInstallCargoArtifacts = false;
+            RUST_BACKTRACE = "1";
+            RUST_LIB_BACKTRACE = "1";
+          }
+          // {
+            preCheck = ''
+              ${licensePreCheck}
+              export INSTA_WORKSPACE_ROOT="$PWD"
+            '';
+            SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+          });
+
+      nextestChecks = lib.listToAttrs (map (target: {
+          name = "gammaloop-nextest-${target.name}";
+          value = nextestCheckFor target;
+        })
+        checkedNextestPackageGroups);
+
+      nextestAggregate = pkgs.runCommand "gammaloop-nextest" {} ''
+        ${lib.concatMapStringsSep "\n" (check: "test -d ${check}") (builtins.attrValues nextestChecks)}
+        mkdir -p "$out"
+      '';
+
       impureCheckRunnerTargets = [
         {
           runnerAttr = "nix-ci-check-gammaloop-doctest";
@@ -344,7 +594,12 @@
           runnerAttr = "nix-ci-check-gammaloop-nextest";
           checkAttr = "gammaloop-nextest";
         }
-      ];
+      ]
+      ++ map (target: {
+        runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
+        checkAttr = "gammaloop-nextest-${target.name}";
+      })
+      checkedNextestPackageGroups;
 
       impureCheckRunnerPackages = lib.listToAttrs (map (target: {
           name = target.runnerAttr;
@@ -365,6 +620,13 @@
           };
         })
         impureCheckRunnerTargets);
+
+      nixCiPassed = pkgs.writeShellApplication {
+        name = "nix-ci-passed";
+        text = ''
+          echo "All NixCI build and test jobs passed."
+        '';
+      };
     in {
       checks =
         {
@@ -408,22 +670,9 @@
             mkdir -p "$out"
           '';
         }
+        // nextestChecks
         // {
-          gammaloop-nextest = craneLib.cargoNextest (ciArgs
-            // {
-              inherit cargoArtifacts;
-              src = workspaceTestSrc;
-              nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
-              cargoNextestExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
-              doInstallCargoArtifacts = false;
-            }
-            // {
-              preCheck = ''
-                ${licensePreCheck}
-                export INSTA_WORKSPACE_ROOT="$PWD"
-              '';
-              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-            });
+          gammaloop-nextest = nextestAggregate;
         };
 
       packages =
@@ -432,6 +681,7 @@
           gammaloop = gammaloop-cli;
           inherit linnest-wasm linnestWasmCargoArtifacts;
           inherit cargoArtifacts;
+          "nix-ci-passed" = nixCiPassed;
         }
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
