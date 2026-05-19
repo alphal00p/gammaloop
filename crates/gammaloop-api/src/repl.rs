@@ -16,6 +16,7 @@ use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
+    command_template::PlaceholderSpec,
     commands::import::model::{builtin_json_model_names, builtin_json_model_restriction_names},
     commands::process_settings::{
         observable_completion_root, observable_schema, quantity_completion_root_for_kind,
@@ -36,7 +37,7 @@ use crate::{
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CompletionState {
     commands_block_names: Vec<String>,
-    command_block_placeholders: BTreeMap<String, Vec<String>>,
+    command_block_placeholders: BTreeMap<String, Vec<PlaceholderSpec>>,
     process_entries: Vec<ProcessCompletionEntry>,
     integrand_detail_entries: Vec<IntegrandDetailCompletionEntry>,
     process_settings_entries: Vec<ProcessSettingsCompletionEntry>,
@@ -1197,36 +1198,97 @@ fn add_run_define_suggestions(
     }
 
     let already_defined = completed_run_define_keys(completed_tokens);
-    let partial_key = request
-        .partial_path
-        .split_once('=')
-        .map(|(key, _)| key)
-        .unwrap_or(request.partial_path.as_str());
-    for placeholder in selected_blocks
-        .iter()
-        .filter_map(|name| completion_state.command_block_placeholders.get(name))
-        .flatten()
-    {
-        if already_defined.contains(placeholder) {
+    let placeholders = run_define_placeholder_completions(completion_state, &selected_blocks);
+
+    if let Some((key, partial_value)) = request.partial_path.split_once('=') {
+        if already_defined.contains(key) {
+            return;
+        }
+        let Some(default) = placeholders
+            .iter()
+            .find(|placeholder| placeholder.name == key)
+            .and_then(|placeholder| placeholder.default.as_deref())
+        else {
+            return;
+        };
+        if !partial_value.is_empty() && !default.starts_with(partial_value) {
+            return;
+        }
+        let rendered = render_value_completion(default, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            return;
+        }
+        let value_start = request.span_start + key.len() + 1;
+        suggestions.push(Suggestion {
+            value: rendered,
+            description: Some("Command block variable default".to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(value_start, pos),
+            append_whitespace: true,
+        });
+        return;
+    }
+
+    let partial_key = request.partial_path.as_str();
+    for placeholder in placeholders {
+        if already_defined.contains(placeholder.name.as_str()) {
             continue;
         }
-        if !partial_key.is_empty() && !placeholder.starts_with(partial_key) {
+        if !partial_key.is_empty() && !placeholder.name.starts_with(partial_key) {
             continue;
         }
-        let value = format!("{placeholder}=");
+        let value = format!("{}=", placeholder.name);
         let rendered = render_value_completion(&value, request.quote_style);
         if !seen.insert(rendered.clone()) {
             continue;
         }
         suggestions.push(Suggestion {
             value: rendered,
-            description: Some("Command block variable".to_string()),
+            description: placeholder
+                .default
+                .or_else(|| Some("Command block variable".to_string())),
             style: None,
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: false,
         });
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RunDefinePlaceholderCompletion {
+    name: String,
+    default: Option<String>,
+}
+
+fn run_define_placeholder_completions(
+    completion_state: &CompletionState,
+    selected_blocks: &[String],
+) -> Vec<RunDefinePlaceholderCompletion> {
+    let mut defaults_by_name = BTreeMap::<String, HashSet<String>>::new();
+    for spec in selected_blocks
+        .iter()
+        .filter_map(|name| completion_state.command_block_placeholders.get(name))
+        .flatten()
+    {
+        let defaults = defaults_by_name.entry(spec.name.clone()).or_default();
+        if let Some(default) = spec.default.as_ref() {
+            defaults.insert(default.clone());
+        }
+    }
+
+    defaults_by_name
+        .into_iter()
+        .map(|(name, defaults)| {
+            let default = if defaults.len() == 1 {
+                defaults.into_iter().next()
+            } else {
+                None
+            };
+            RunDefinePlaceholderCompletion { name, default }
+        })
+        .collect()
 }
 
 fn completed_run_block_names(completed_tokens: &[CompletionToken]) -> Vec<String> {
@@ -4095,6 +4157,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
+        command_template::PlaceholderSpec,
         commands::process_settings::ProcessSettingsCompletionEntry,
         completion::{arg_value_completion, ArgValueCompletion},
         Repl,
@@ -4344,6 +4407,13 @@ mod tests {
         collect_completions::<Repl>(line, line.len(), completion_state)
     }
 
+    fn placeholder(name: &str, default: Option<&str>) -> PlaceholderSpec {
+        PlaceholderSpec {
+            name: name.to_string(),
+            default: default.map(str::to_string),
+        }
+    }
+
     #[test]
     fn completion_offers_leaf_flags_on_empty_argument() {
         let values = completion_values("display model ", &CompletionState::default());
@@ -4393,9 +4463,12 @@ mod tests {
             command_block_placeholders: BTreeMap::from([
                 (
                     "alpha".to_string(),
-                    vec!["graph_id".to_string(), "workspace".to_string()],
+                    vec![
+                        placeholder("graph_id", None),
+                        placeholder("workspace", Some("scratch")),
+                    ],
                 ),
-                ("beta".to_string(), vec!["precision".to_string()]),
+                ("beta".to_string(), vec![placeholder("precision", None)]),
             ]),
             ..CompletionState::default()
         };
@@ -4405,6 +4478,29 @@ mod tests {
         assert!(values.contains(&"graph_id=".to_string()), "{values:?}");
         assert!(values.contains(&"workspace=".to_string()), "{values:?}");
         assert!(values.contains(&"precision=".to_string()), "{values:?}");
+
+        let suggestions = completion_suggestions("run alpha beta -D workspace", &completion_state);
+        let workspace = suggestions
+            .iter()
+            .find(|suggestion| suggestion.value == "workspace=")
+            .expect("workspace define completion should be suggested");
+        assert_eq!(workspace.description.as_deref(), Some("scratch"));
+    }
+
+    #[test]
+    fn completion_offers_run_define_default_value_after_equals() {
+        let completion_state = CompletionState {
+            commands_block_names: vec!["alpha".to_string()],
+            command_block_placeholders: BTreeMap::from([(
+                "alpha".to_string(),
+                vec![placeholder("workspace", Some("scratch"))],
+            )]),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("run alpha -D workspace=", &completion_state);
+
+        assert_eq!(values, vec!["scratch".to_string()]);
     }
 
     #[test]
@@ -4413,7 +4509,10 @@ mod tests {
             commands_block_names: vec!["alpha".to_string()],
             command_block_placeholders: BTreeMap::from([(
                 "alpha".to_string(),
-                vec!["graph_id".to_string(), "workspace".to_string()],
+                vec![
+                    placeholder("graph_id", None),
+                    placeholder("workspace", Some("scratch")),
+                ],
             )]),
             ..CompletionState::default()
         };

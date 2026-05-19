@@ -1320,9 +1320,9 @@ fn render_command_blocks_table(run_history: &RunHistory) -> String {
 
     for block in &run_history.command_blocks {
         let placeholders = run_history
-            .command_block_placeholder_names(&block.name)
+            .command_block_placeholder_specs(&block.name)
             .into_iter()
-            .map(|name| format!("{{{name}}}"))
+            .map(|spec| spec.render())
             .collect::<Vec<_>>()
             .join("\n");
         builder.push_record([
@@ -2103,14 +2103,14 @@ mod test {
                 CommandsBlock {
                     name: "inner".to_string(),
                     commands: vec![CommandHistory::from_raw_string(
-                        "set global kv global.display_directive={level}",
+                        "set global kv global.display_directive=$(level:warn)",
                     )
                     .unwrap()],
                 },
                 CommandsBlock {
                     name: "outer".to_string(),
                     commands: vec![CommandHistory::from_raw_string(
-                        "run inner -D level={outer_level}",
+                        "run inner -D level=$(outer_level)",
                     )
                     .unwrap()],
                 },
@@ -2121,8 +2121,8 @@ mod test {
         let rendered = render_command_blocks_table(&run_history);
 
         assert!(rendered.contains("placeholders"), "{rendered}");
-        assert!(rendered.contains("{level}"), "{rendered}");
-        assert!(rendered.contains("{outer_level}"), "{rendered}");
+        assert!(rendered.contains("$(level:warn)"), "{rendered}");
+        assert!(rendered.contains("$(outer_level)"), "{rendered}");
         assert_eq!(
             run_history
                 .command_block_placeholder_names("outer")

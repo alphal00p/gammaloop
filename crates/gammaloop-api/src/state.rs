@@ -54,7 +54,7 @@ use gammalooprs::{
 
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
-    command_template::{contains_placeholder, placeholder_names},
+    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
@@ -155,6 +155,16 @@ pub enum ProcessRef {
     Id(usize),
     Name(String),
     Unqualified(String),
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GraphImportOptions {
+    pub process_name: Option<String>,
+    pub process_id: Option<usize>,
+    pub process_definition: Option<ProcessDefinition>,
+    pub integrand_name: Option<String>,
+    pub overwrite: bool,
+    pub append: bool,
 }
 
 impl Serialize for ProcessRef {
@@ -754,17 +764,24 @@ impl RunHistory {
     }
 
     pub fn command_block_placeholder_names(&self, name: &str) -> BTreeSet<String> {
+        self.command_block_placeholder_specs(name)
+            .into_iter()
+            .map(|spec| spec.name)
+            .collect()
+    }
+
+    pub fn command_block_placeholder_specs(&self, name: &str) -> BTreeSet<PlaceholderSpec> {
         let mut placeholders = BTreeSet::new();
         let mut visited = HashSet::new();
-        self.collect_command_block_placeholder_names(name, &mut visited, &mut placeholders);
+        self.collect_command_block_placeholder_specs(name, &mut visited, &mut placeholders);
         placeholders
     }
 
-    fn collect_command_block_placeholder_names(
+    fn collect_command_block_placeholder_specs(
         &self,
         name: &str,
         visited: &mut HashSet<String>,
-        placeholders: &mut BTreeSet<String>,
+        placeholders: &mut BTreeSet<PlaceholderSpec>,
     ) {
         if !visited.insert(name.to_string()) {
             return;
@@ -776,20 +793,20 @@ impl RunHistory {
 
         for command in &block.commands {
             if let Some(raw) = command.raw_string() {
-                placeholders.extend(placeholder_names(raw));
+                placeholders.extend(placeholder_specs(raw));
             }
             let Commands::Run(run) = &command.command else {
                 continue;
             };
             for nested_name in run.selected_block_names() {
                 let mut nested_placeholders = BTreeSet::new();
-                self.collect_command_block_placeholder_names(
+                self.collect_command_block_placeholder_specs(
                     nested_name,
                     visited,
                     &mut nested_placeholders,
                 );
                 for defined in &run.defines {
-                    nested_placeholders.remove(&defined.key);
+                    nested_placeholders.retain(|spec| spec.name.as_str() != defined.key.as_str());
                 }
                 placeholders.extend(nested_placeholders);
             }
@@ -1828,24 +1845,25 @@ impl State {
         Ok(())
     }
 
-    pub fn import_graphs(
-        &mut self,
-        graphs: Vec<Graph>,
-        process_name: Option<String>,
-        process_id: Option<usize>,
-        integrand_name: Option<String>,
-        overwrite: bool,
-        append: bool,
-    ) -> Result<()> {
-        let generation_type = if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
-            GenerationType::Amplitude
-        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
-            GenerationType::CrossSection
-        } else {
-            return Err(eyre!(
-                "Mix of amplitude and cross section graphs in the same file is not supported"
-            ));
-        };
+    pub fn import_graphs(&mut self, graphs: Vec<Graph>, options: GraphImportOptions) -> Result<()> {
+        let GraphImportOptions {
+            process_name,
+            process_id,
+            process_definition,
+            integrand_name,
+            overwrite,
+            append,
+        } = options;
+        let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
+        if let Some(definition) = &process_definition {
+            if definition.generation_type != generation_type {
+                return Err(eyre!(
+                    "--process-spec describes a {} process, but the imported graph list is {}",
+                    definition.generation_type,
+                    generation_type
+                ));
+            }
+        }
 
         let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
         let process = if let Some(proc_id) = process_id {
@@ -1874,8 +1892,13 @@ impl State {
             {
                 Some(existing_proc)
             } else {
-                let process_defintion =
-                    ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?;
+                let mut process_defintion = match process_definition.clone() {
+                    Some(definition) => definition,
+                    None => {
+                        ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?
+                    }
+                };
+                process_defintion.process_id = self.process_list.processes.len();
                 let process = Process::from_graph_list(
                     p_name,
                     integrand_base_name.clone(),
@@ -1892,6 +1915,17 @@ impl State {
             }
         };
         if let Some(p) = process {
+            if let Some(mut imported_definition) = process_definition {
+                imported_definition.folder_name = p.definition.folder_name.clone();
+                imported_definition.process_id = p.definition.process_id;
+                if imported_definition != p.definition {
+                    return Err(eyre!(
+                        "--process-spec does not match existing process '{}'. Import the graphs into a new process or use the same process specification that created this process.",
+                        p.definition.folder_name
+                    ));
+                }
+            }
+
             let existing_names = p.get_integrand_names();
             let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
                 if append {
@@ -1933,6 +1967,18 @@ impl State {
         }
 
         Ok(())
+    }
+
+    pub(crate) fn infer_graph_list_generation_type(graphs: &[Graph]) -> Result<GenerationType> {
+        if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
+            Ok(GenerationType::Amplitude)
+        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
+            Ok(GenerationType::CrossSection)
+        } else {
+            Err(eyre!(
+                "Mix of amplitude and cross section graphs in the same file is not supported"
+            ))
+        }
     }
 
     pub fn bench(
@@ -2262,11 +2308,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
 

@@ -826,6 +826,23 @@ fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
 }
 
 #[test]
+fn inspect_bench_cli_runs_for_scalar_triangle() -> Result<()> {
+    let mut cli = setup_explicit_sum_scalar_topologies_cli("inspect_bench_cli_runs")?;
+    let point = default_xspace_point_for(&cli, "triangle", "scalar_tri")?;
+    let point_arg = point.iter().map(|entry| format!("{entry:.17e}")).join(" ");
+
+    cli.run_command(&format!(
+        "inspect -p triangle -i scalar_tri -x {point_arg} --bench 0.001 --n_batches 2"
+    ))?;
+
+    let value = inspect_xspace_process(&mut cli, "triangle", "scalar_tri", &point)?;
+    assert!(value.re.is_finite() && value.im.is_finite());
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 #[serial]
 fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
     let mut cli =

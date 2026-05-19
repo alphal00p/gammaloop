@@ -23,7 +23,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -1290,7 +1290,9 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
         let is_tree_level = self.data.graph_terms[0].graph.get_loop_number() == 0;
 
-        if !self.settings.subtraction.disable_threshold_subtraction && !is_tree_level {
+        if self.settings.subtraction.disable_threshold_subtraction || is_tree_level {
+            debug!("No threshold subtraction");
+        } else {
             debug!("esurface existence check");
             let existing_esurfaces = self.get_existing_esurfaces(model);
             self.validate_runtime_threshold_counterterms(&existing_esurfaces)?;
@@ -1418,15 +1420,19 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                         )
                     })?;
 
-                info!(
-                    "overlap structure of group {}: {:?}",
-                    group_id.0,
-                    overlap
-                        .overlap_groups
-                        .iter()
-                        .map(|group| group.existing_esurfaces.len())
-                        .collect_vec()
-                );
+                let overlap_structure = overlap
+                    .overlap_groups
+                    .iter()
+                    .map(|group| group.existing_esurfaces.len())
+                    .collect_vec();
+                if overlap_structure.iter().all(|count| *count == 0) {
+                    debug!("No threshold subtraction for group {}", group_id.0);
+                } else {
+                    debug!(
+                        "threshold overlap structure of group {}: {:?}",
+                        group_id.0, overlap_structure
+                    );
+                }
 
                 for graph_id in self.data.graph_group_structure[group_id].into_iter() {
                     self.data.graph_terms[graph_id]

@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
+    commands::generate::parse_process_spec_string,
     completion::CompletionArgExt,
-    state::{ProcessRef, State},
+    state::{GraphImportOptions, ProcessRef, State},
     CLISettings,
 };
 use color_eyre::Result;
@@ -29,6 +30,10 @@ pub enum Import {
         /// Inline DOT graph content to import instead of reading from a file path.
         #[arg(long = "inline-dot", value_name = "DOT")]
         inline_dot: Option<String>,
+
+        /// Process definition used to select physical Cutkosky cuts for imported graphs.
+        #[arg(long = "process-spec", value_name = "SPEC")]
+        process_spec: Option<String>,
 
         /// Process reference: #<id>, name:<name>, or <id>/<name>
         #[arg(
@@ -58,6 +63,7 @@ impl Import {
             Import::Graphs {
                 source,
                 inline_dot,
+                process_spec,
                 process,
                 integrand_name,
                 overwrite,
@@ -97,13 +103,25 @@ impl Import {
 
                 info!("Loading graphs from {}", source.display_name());
                 let graphs = source.load(&state.model)?;
+                let generation_type = State::infer_graph_list_generation_type(&graphs)?;
+                let process_definition = process_spec
+                    .as_deref()
+                    .map(|spec| {
+                        parse_process_spec_string(spec, generation_type, &state.model)
+                            .map(|spec| spec.process_definition)
+                            .wrap_err_with(|| format!("Failed to parse --process-spec `{spec}`"))
+                    })
+                    .transpose()?;
                 state.import_graphs(
                     graphs,
-                    process_name,
-                    process_id,
-                    integrand_name,
-                    overwrite,
-                    append,
+                    GraphImportOptions {
+                        process_name,
+                        process_id,
+                        process_definition,
+                        integrand_name,
+                        overwrite,
+                        append,
+                    },
                 )
             }
             Import::Model(im) => im.run(state),

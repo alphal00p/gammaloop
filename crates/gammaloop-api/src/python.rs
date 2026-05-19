@@ -2364,11 +2364,14 @@ impl GammaLoopAPI {
 
         self.gammaloop_state.import_graphs(
             graphs,
-            process_name,
-            process_id,
-            integrand_name,
-            overwrite,
-            append,
+            crate::state::GraphImportOptions {
+                process_name,
+                process_id,
+                process_definition: None,
+                integrand_name,
+                overwrite,
+                append,
+            },
         )
     }
 

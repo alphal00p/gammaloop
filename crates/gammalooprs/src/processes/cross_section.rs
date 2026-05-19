@@ -953,6 +953,14 @@ pub struct CrossSectionGraph {
     pub derived_data: CrossSectionDerivedData,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CutkoskyCutCount {
+    pub candidate_st_cuts: usize,
+    pub multi_edge_candidate_cuts: usize,
+    pub process_compatible_cuts: usize,
+    pub selected_cuts: usize,
+}
+
 impl CrossSectionGraph {
     pub(crate) fn new(graph: Graph) -> Self {
         let (source_node, target_node) = graph.get_source_and_target();
@@ -1293,18 +1301,52 @@ impl CrossSectionGraph {
     ) -> Result<()> {
         info!("generating cuts for graph: {}", self.graph.name);
 
+        let (cut_count, cuts) =
+            self.process_compatible_cutkosky_cuts(model, process_definition, settings)?;
+        info!("num s_t cuts: {}", cut_count.candidate_st_cuts);
+
+        self.cuts = cuts;
+
+        info!(
+            "found {} cuts for graph: {}",
+            self.cuts.len(),
+            self.graph.name
+        );
+        Ok(())
+    }
+
+    pub fn cutkosky_cut_count_for_process(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<CutkoskyCutCount> {
+        self.process_compatible_cutkosky_cuts(model, process_definition, settings)
+            .map(|(cut_count, _)| cut_count)
+    }
+
+    fn process_compatible_cutkosky_cuts(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<(CutkoskyCutCount, TiVec<CutId, CrossSectionCut>)> {
         let all_st_cuts = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
             &self.graph.get_initial_state_tree().0,
         );
+        let candidate_st_cuts = all_st_cuts.len();
 
-        info!("num s_t cuts: {}", all_st_cuts.len());
-
-        let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
+        let multi_edge_cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
             .filter(|cut| cut.cut.nedges(&self.graph) > 1)
+            .collect();
+        let multi_edge_candidate_cuts = multi_edge_cuts.len();
+
+        let mut cuts: TiVec<CutId, CrossSectionCut> = multi_edge_cuts
+            .into_iter()
             .filter_map(
                 |cut| match cut.is_valid_for_process(self, process_definition, model) {
                     Ok(true) => Some(Ok(cut)),
@@ -1313,6 +1355,7 @@ impl CrossSectionGraph {
                 },
             )
             .collect::<Result<_>>()?;
+        let process_compatible_cuts = cuts.len();
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
 
@@ -1336,14 +1379,13 @@ impl CrossSectionGraph {
             });
         }
 
-        self.cuts = cuts;
-
-        info!(
-            "found {} cuts for graph: {}",
-            self.cuts.len(),
-            self.graph.name
-        );
-        Ok(())
+        let cut_count = CutkoskyCutCount {
+            candidate_st_cuts,
+            multi_edge_candidate_cuts,
+            process_compatible_cuts,
+            selected_cuts: cuts.len(),
+        };
+        Ok((cut_count, cuts))
     }
 
     fn generate_esurface_cuts(&mut self) {

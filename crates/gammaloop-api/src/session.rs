@@ -284,7 +284,9 @@ impl<'a> CliSession<'a> {
             .collect()
     }
 
-    pub fn current_command_block_placeholders(&self) -> BTreeMap<String, Vec<String>> {
+    pub fn current_command_block_placeholders(
+        &self,
+    ) -> BTreeMap<String, Vec<crate::command_template::PlaceholderSpec>> {
         self.run_history
             .command_blocks
             .iter()
@@ -292,7 +294,7 @@ impl<'a> CliSession<'a> {
                 (
                     block.name.clone(),
                     self.run_history
-                        .command_block_placeholder_names(&block.name)
+                        .command_block_placeholder_specs(&block.name)
                         .into_iter()
                         .collect(),
                 )
