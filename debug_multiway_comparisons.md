@@ -99,14 +99,20 @@ Protected scalar cross-section sweep:
 ```text
 env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
   RUST_MIN_STACK=33554432 RUSTFLAGS=-L/opt/local/lib/libgcc \
-  INSTA_FORCE_PASS=1 \
   cargo nextest run -p gammaloop-integration-tests --test test_runs \
   --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
   -E 'test(/scalar_3l_cross_section_inspects::slow/)' \
   --no-capture --retries 0
 
-143 tests run: 143 passed, 124 skipped
+143 tests run: 143 passed (2 slow), 124 skipped
 ```
+
+This final sweep was rerun without `INSTA_FORCE_PASS`, so both layers of the
+scalar local-inspect checks are active: the rich multi-way parity assertions
+(`CFF local 4D vs CFF local 3D` and `LTD local 4D vs CFF local 3D`) and the
+final absolute-weight `insta` snapshot anchors. The `124 skipped` entries are
+the other tests in the `test_runs` binary filtered out by the scalar-slow
+expression, not omitted scalar cross-section local-inspect cases.
 
 Formatting, whitespace, and compilation:
 
