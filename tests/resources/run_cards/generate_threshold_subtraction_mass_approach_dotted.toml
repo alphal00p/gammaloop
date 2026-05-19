@@ -4,9 +4,6 @@ commands = [
 	"set model mass_scalar_2=2.0001",
 	"import graphs tests/resources/graphs/double_dotted_double_triangle.dot",
 	"generate",
-	"set global kv global.display_directive=Debug",
-	"inspect -i default -x 0.1 0.2 0.3 0.4 0.5 0.6",
-	"quit -n",
 ]
 
 
