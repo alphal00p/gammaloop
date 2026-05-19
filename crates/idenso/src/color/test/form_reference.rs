@@ -67,6 +67,7 @@ fn separated_generator_casimir_shortcut() {
 
 #[test]
 fn chain_one_generator_trace_vanishes() {
+    test_initialize();
     let r = TestReps::new();
     let expr = chain!(
         slot!(r.cof_nc, i),
@@ -79,6 +80,7 @@ fn chain_one_generator_trace_vanishes() {
 
 #[test]
 fn chain_two_generator_trace_normalizes() {
+    test_initialize();
     let r = TestReps::new();
     let expr = chain!(
         slot!(r.cof_nc, i),
@@ -92,6 +94,7 @@ fn chain_two_generator_trace_normalizes() {
 
 #[test]
 fn three_generator_trace_terminal() {
+    test_initialize();
     let r = TestReps::new();
     let expr = chain!(
         slot!(r.cof_nc, i),
@@ -106,6 +109,7 @@ fn three_generator_trace_terminal() {
 
 #[test]
 fn adjacent_generator_casimir_chain() {
+    test_initialize();
     let r = TestReps::new();
     let expr = chain!(
         slot!(r.cof_nc, i),
@@ -119,6 +123,7 @@ fn adjacent_generator_casimir_chain() {
 
 #[test]
 fn separated_generator_casimir_trace() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -156,7 +161,48 @@ fn three_f_loop_contracts_to_ca_f() {
 }
 
 #[test]
+fn four_f_closed_ghost_topology_preserves_antisymmetric_orientation() {
+    test_initialize();
+    let expr = parse_lit!(
+        -1 / 8
+            * g(coad(8, hedge(0)), coad(8, hedge(1)))
+            * f(coad(8, hedge(3)), coad(8, hedge(0)), coad(8, hedge(5)))
+            * f(coad(8, hedge(3)), coad(8, hedge(7)), coad(8, hedge(9)))
+            * f(coad(8, hedge(7)), coad(8, hedge(11)), coad(8, hedge(1)))
+            * f(coad(8, hedge(9)), coad(8, hedge(5)), coad(8, hedge(11))),
+        default_namespace = "spenso"
+    );
+
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*CA^2");
+}
+
+#[test]
+fn factored_four_f_closed_ghost_topology_preserves_antisymmetric_orientation() {
+    test_initialize();
+    let expr = parse_lit!(
+        -1 / 8
+            * g(coad(8, hedge(0)), coad(8, hedge(1)))
+            * (5 / 16
+                * x
+                * f(coad(8, hedge(3)), coad(8, hedge(0)), coad(8, hedge(5)))
+                * f(coad(8, hedge(3)), coad(8, hedge(7)), coad(8, hedge(9)))
+                * f(coad(8, hedge(7)), coad(8, hedge(11)), coad(8, hedge(1)))
+                * f(coad(8, hedge(9)), coad(8, hedge(5)), coad(8, hedge(11)))
+                + 3 / 8
+                    * y
+                    * f(coad(8, hedge(3)), coad(8, hedge(0)), coad(8, hedge(5)))
+                    * f(coad(8, hedge(3)), coad(8, hedge(7)), coad(8, hedge(9)))
+                    * f(coad(8, hedge(7)), coad(8, hedge(11)), coad(8, hedge(1)))
+                    * f(coad(8, hedge(9)), coad(8, hedge(5)), coad(8, hedge(11)))),
+        default_namespace = "spenso"
+    );
+
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"3/16*CA^2*y+5/32*CA^2*x");
+}
+
+#[test]
 fn mixed_trace_structure_contraction() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -186,6 +232,7 @@ fn symmetric_invariant_d33_partial_contraction() {
 
 #[test]
 fn four_generator_trace_terminal() {
+    test_initialize();
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
@@ -284,6 +331,7 @@ fn form_color_tloop_gg5(r: &TestReps) -> Atom {
 #[test]
 #[ignore = "pending FORM color.frm size-5 Q10 invariant-family reduction"]
 fn form_github_color_tloop_q10_size_5() {
+    test_initialize();
     let r = TestReps::new();
     let expr = form_color_tloop_q10(&r);
 
@@ -293,6 +341,7 @@ fn form_github_color_tloop_q10_size_5() {
 #[test]
 #[ignore = "pending FORM color.frm size-5 G10 invariant-family reduction"]
 fn form_github_color_tloop_g10_size_5() {
+    test_initialize();
     let r = TestReps::new();
     let expr = form_color_tloop_g10(&r);
 
@@ -302,6 +351,7 @@ fn form_github_color_tloop_g10_size_5() {
 #[test]
 #[ignore = "pending FORM color.frm size-5 QQ5 invariant-family reduction"]
 fn form_github_color_tloop_qq5_size_5() {
+    test_initialize();
     let r = TestReps::new();
     let expr = form_color_tloop_qq5(&r);
 
@@ -311,6 +361,7 @@ fn form_github_color_tloop_qq5_size_5() {
 #[test]
 #[ignore = "pending FORM color.frm size-5 QG5 invariant-family reduction"]
 fn form_github_color_tloop_qg5_size_5() {
+    test_initialize();
     let r = TestReps::new();
     let expr = form_color_tloop_qg5(&r);
 
@@ -320,6 +371,7 @@ fn form_github_color_tloop_qg5_size_5() {
 #[test]
 #[ignore = "pending FORM color.frm size-5 GG5 invariant-family reduction"]
 fn form_github_color_tloop_gg5_size_5() {
+    test_initialize();
     let r = TestReps::new();
     let expr = form_color_tloop_gg5(&r);
 

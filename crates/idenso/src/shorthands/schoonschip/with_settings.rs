@@ -396,9 +396,13 @@ impl SchoonschipWithSettings<'_> {
             .to_owned()
             .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS);
 
-        let simplified = metric_simplified
-            .replace_multiple(&*VECTOR_DOT_PRODUCTS)
-            .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR);
+        let simplified = if self.settings.schoonschip_rank1_tensors {
+            metric_simplified
+                .replace_multiple(&*VECTOR_DOT_PRODUCTS)
+                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR)
+        } else {
+            metric_simplified
+        };
 
         let simplified = if self.settings.simplify_chain_like_functions {
             self.apply_chain_like_rules(simplified)

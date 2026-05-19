@@ -2,8 +2,8 @@ use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{
-    dirac::GammaSimplifier, shorthands::metric::MetricSimplifier,
-    shorthands::schoonschip::Schoonschip,
+    dirac::GammaSimplifier,
+    shorthands::{UndoShorthands, metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
@@ -13,6 +13,7 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
@@ -131,9 +132,12 @@ impl Integrated<'_> {
 
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
         t_arg = t_arg
+            .collect_metrics()
             .simplify_metrics()
             .simplify_gamma()
             .schoonschip_net::<Aind>()
+            .to_dots()
+            .normalize_dots()
             / graph.denominator(&reduced, |_| 1);
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
@@ -436,7 +440,7 @@ pub(crate) fn to_vakint_integrand<
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> VakintExpression {
-    let mut integrand_vakint = integrand.clone();
+    let mut integrand_vakint = integrand.undo_all::<Aind>();
 
     debug_tags!(#uv, #integrated, #vakint, #inspect;
         integrand = %integrand.log_print(None),

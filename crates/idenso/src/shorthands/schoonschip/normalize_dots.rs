@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    dualizable_, dualizable_dual_, g, network::tags::SPENSO_TAG as T, rank1_, rep_, self_dual_,
-    tensors::parametric::atomcore::PatternReplacement,
+    dot, dualizable_, dualizable_dual_, g, network::tags::SPENSO_TAG as T, rank1_, rep_,
+    self_dual_, tensors::parametric::atomcore::PatternReplacement,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -59,6 +59,38 @@ static REDUNDANT_METRIC_SCHOONSCHIPS: LazyLock<[Replacement; 4]> = LazyLock::new
         Replacement::new(
             g!(&self_dual, rank1_!(0; W_.c___)).to_pattern(),
             rank1_!(0; W_.c___, self_dual),
+        ),
+    ]
+});
+
+static METRIC_DOT_PRODUCT: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
+    let self_dual_stripped1 = self_dual_!(0; W_.d_);
+    let self_dual_stripped2 = self_dual_!(0; W_.e_);
+    let dualizable_stripped1 = dualizable_!(0; W_.d_);
+    let dualizable_stripped2 = dualizable_!(0; W_.e_);
+
+    [
+        Replacement::new(
+            g!(
+                rank1_!(0; W_.d___, &self_dual_stripped1),
+                rank1_!(1; W_.c___, &self_dual_stripped2)
+            )
+            .to_pattern(),
+            dot!(
+                rank1_!(0; W_.d___, self_dual_stripped1),
+                rank1_!(1; W_.c___, self_dual_stripped2)
+            ),
+        ),
+        Replacement::new(
+            g!(
+                rank1_!(0; W_.d___, &dualizable_stripped1),
+                rank1_!(1; W_.c___, &dualizable_stripped2)
+            )
+            .to_pattern(),
+            dot!(
+                rank1_!(0; W_.d___, dualizable_stripped1),
+                rank1_!(1; W_.c___, dualizable_stripped2)
+            ),
         ),
     ]
 });
@@ -125,7 +157,7 @@ static METRIC_TRACE_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
     ]
 });
 
-pub(super) struct DotNormalizer;
+pub(crate) struct DotNormalizer;
 
 impl DotNormalizer {
     pub(super) fn run(view: AtomView<'_>) -> Atom {
@@ -135,6 +167,10 @@ impl DotNormalizer {
             .replace_multiple(&*VECTOR_POWER_NORMALIZATIONS)
             .replace_multiple(&*METRIC_POWER_NORMALIZATIONS)
             .replace_multiple(&*METRIC_TRACE_NORMALIZATIONS)
+    }
+
+    pub(crate) fn to_dots(view: AtomView<'_>) -> Atom {
+        view.to_owned().replace_multiple(&*METRIC_DOT_PRODUCT)
     }
 
     fn even_power(exp: AtomView<'_>) -> bool {

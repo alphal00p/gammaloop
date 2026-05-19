@@ -12,6 +12,8 @@ pub mod schoonschip;
 
 pub trait UndoShorthands {
     fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
+
+    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
     fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
     fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
     fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom;
@@ -20,6 +22,10 @@ pub trait UndoShorthands {
 impl UndoShorthands for Atom {
     fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
         self.as_view().undo_schoonschip::<Aind>()
+    }
+
+    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+        self.as_view().undo_all::<Aind>()
     }
 
     fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
@@ -36,6 +42,20 @@ impl UndoShorthands for Atom {
 }
 
 impl<'a> UndoShorthands for AtomView<'a> {
+    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
+        let net = self
+            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode::full(),
+                    trace: true,
+                    chain: true,
+                },
+                ..Default::default()
+            })
+            .unwrap();
+
+        net.simple_execute::<()>()
+    }
     fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Atom {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {

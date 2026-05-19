@@ -3,6 +3,7 @@ pub struct SchoonschipSettings {
     pub(super) mode: SchoonschipMode,
     pub(super) expand_contracted_sums: bool,
     pub(super) simplify_chain_like_functions: bool,
+    pub(super) schoonschip_rank1_tensors: bool,
     pub(super) contraction_order: SchoonschipContractionOrder,
 }
 
@@ -47,8 +48,7 @@ impl SchoonschipSettings {
             depth_limit,
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
             expand_contracted_sums: false,
-            simplify_chain_like_functions: false,
-            contraction_order: SchoonschipContractionOrder::default(),
+            contraction_order: SchoonschipContractionOrder::default(),..Default::default()
         }
     }
 
@@ -58,6 +58,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
             expand_contracted_sums: false,
             simplify_chain_like_functions: false,
+            schoonschip_rank1_tensors: false,
             contraction_order: SchoonschipContractionOrder::default(),
         }
     }
@@ -68,7 +69,7 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::SinglePass,
             expand_contracted_sums: false,
             simplify_chain_like_functions: false,
-            contraction_order: SchoonschipContractionOrder::default(),
+            contraction_order: SchoonschipContractionOrder::default(),..Default::default()
         }
     }
 
