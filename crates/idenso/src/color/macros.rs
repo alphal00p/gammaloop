@@ -8,9 +8,10 @@
 /// argument is an adjoint color index, the second is a fundamental color index,
 /// and the third is an anti-fundamental color index.
 ///
-/// Arguments can be typed slots, atoms, atom views, default-dimension
-/// identifiers/literals, pattern variables such as `RS.a__`, or bracketed
-/// representation argument lists such as `[CS.adj_, RS.a_]`.
+/// Arguments can be typed slots, atoms, atom views, pattern variables such as
+/// `RS.a__`, or bracketed representation argument lists such as
+/// `[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so
+/// local slot bindings and numeric labels are used as-is.
 ///
 /// # Examples
 ///
@@ -20,8 +21,8 @@
 ///
 /// let factor = color_t!(slot!(coad_na, a));
 /// let expr = trace!(&cof_nc, factor);
-/// let default_factor = color_t!(a);
-/// let default_tensor = color_t!(a, i, j);
+/// let factor_from_binding = color_t!(slot!(coad_na, a));
+/// let explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));
 /// let pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);
 /// let dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);
 /// ```
@@ -39,20 +40,6 @@ macro_rules! color_t {
             [$base.$a],
         ); $($rest)*)
     };
-    ($a:ident, $($rest:tt)+) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_t!(@tensor spenso::slot!(coad, $a); $($rest)*)
-    }};
-    ($a:literal, $($rest:tt)+) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_t!(@tensor spenso::slot!(coad, $a); $($rest)*)
-    }};
     ($a:expr, $($rest:tt)+) => {
         $crate::color_t!(@tensor $a; $($rest)*)
     };
@@ -68,20 +55,6 @@ macro_rules! color_t {
             [$base.$a],
         ))
     };
-    ($a:ident $(,)?) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color::CS.chain_t(spenso::shadowing::IntoAtom::into_atom(spenso::slot!(coad, $a)))
-    }};
-    ($a:literal $(,)?) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color::CS.chain_t(spenso::shadowing::IntoAtom::into_atom(spenso::slot!(coad, $a)))
-    }};
     ($a:expr $(,)?) => {
         $crate::color::CS.chain_t(spenso::shadowing::IntoAtom::into_atom($a))
     };
@@ -97,20 +70,6 @@ macro_rules! color_t {
             [$base.$i],
         ); $($rest)*)
     };
-    (@tensor $a:expr; $i:ident, $($rest:tt)*) => {{
-        let cof = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorFundamental {},
-            $crate::color::CS.nc,
-        );
-        $crate::color_t!(@tensor2 $a, spenso::slot!(cof, $i); $($rest)*)
-    }};
-    (@tensor $a:expr; $i:literal, $($rest:tt)*) => {{
-        let cof = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorFundamental {},
-            $crate::color::CS.nc,
-        );
-        $crate::color_t!(@tensor2 $a, spenso::slot!(cof, $i); $($rest)*)
-    }};
     (@tensor $a:expr; $i:expr, $($rest:tt)*) => {
         $crate::color_t!(@tensor2 $a, $i; $($rest)*)
     };
@@ -126,20 +85,6 @@ macro_rules! color_t {
             [$base.$j],
         ))
     };
-    (@tensor2 $a:expr, $i:expr; $j:ident $(,)?) => {{
-        let coaf = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAntiFundamental {},
-            $crate::color::CS.nc,
-        );
-        $crate::color_t!(@tensor_done $a, $i, spenso::slot!(coaf, $j))
-    }};
-    (@tensor2 $a:expr, $i:expr; $j:literal $(,)?) => {{
-        let coaf = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAntiFundamental {},
-            $crate::color::CS.nc,
-        );
-        $crate::color_t!(@tensor_done $a, $i, spenso::slot!(coaf, $j))
-    }};
     (@tensor2 $a:expr, $i:expr; $j:expr $(,)?) => {
         $crate::color_t!(@tensor_done $a, $i, $j)
     };
@@ -154,9 +99,10 @@ macro_rules! color_t {
 
 /// Builds an adjoint color structure-constant atom `f(a,b,c)`.
 ///
-/// Arguments can be typed slots, atoms, atom views, default-dimension adjoint
-/// identifiers/literals, pattern variables such as `RS.a__`, or bracketed
-/// adjoint representation argument lists such as `[CS.adj_, RS.a_]`.
+/// Arguments can be typed slots, atoms, atom views, pattern variables such as
+/// `RS.a__`, or bracketed adjoint representation argument lists such as
+/// `[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so
+/// local slot bindings and numeric labels are used as-is.
 ///
 /// # Examples
 ///
@@ -165,7 +111,7 @@ macro_rules! color_t {
 /// use spenso::slot;
 ///
 /// let expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));
-/// let default_tensor = color_f!(a, b, c);
+/// let numeric_label_tensor = color_f!(1, 2, 3);
 /// let pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);
 /// let dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);
 /// ```
@@ -183,20 +129,6 @@ macro_rules! color_f {
             [$base.$a],
         ); $($rest)*)
     };
-    ($a:ident, $($rest:tt)+) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_f!(@tensor spenso::slot!(coad, $a); $($rest)*)
-    }};
-    ($a:literal, $($rest:tt)+) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_f!(@tensor spenso::slot!(coad, $a); $($rest)*)
-    }};
     ($a:expr, $($rest:tt)+) => {
         $crate::color_f!(@tensor $a; $($rest)*)
     };
@@ -212,20 +144,6 @@ macro_rules! color_f {
             [$base.$b],
         ); $($rest)*)
     };
-    (@tensor $a:expr; $b:ident, $($rest:tt)*) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_f!(@tensor2 $a, spenso::slot!(coad, $b); $($rest)*)
-    }};
-    (@tensor $a:expr; $b:literal, $($rest:tt)*) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_f!(@tensor2 $a, spenso::slot!(coad, $b); $($rest)*)
-    }};
     (@tensor $a:expr; $b:expr, $($rest:tt)*) => {
         $crate::color_f!(@tensor2 $a, $b; $($rest)*)
     };
@@ -241,20 +159,6 @@ macro_rules! color_f {
             [$base.$c],
         ))
     };
-    (@tensor2 $a:expr, $b:expr; $c:ident $(,)?) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_f!(@tensor_done $a, $b, spenso::slot!(coad, $c))
-    }};
-    (@tensor2 $a:expr, $b:expr; $c:literal $(,)?) => {{
-        let coad = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::ColorAdjoint {},
-            $crate::color::CS.na,
-        );
-        $crate::color_f!(@tensor_done $a, $b, spenso::slot!(coad, $c))
-    }};
     (@tensor2 $a:expr, $b:expr; $c:expr $(,)?) => {
         $crate::color_f!(@tensor_done $a, $b, $c)
     };

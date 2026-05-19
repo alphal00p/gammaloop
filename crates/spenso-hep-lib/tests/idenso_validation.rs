@@ -92,19 +92,19 @@ fn color_trace_structure_contraction_matches_commutator() {
         .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
 
     let lhs = Atom::i()
-        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * idenso::color_f!(c, d, x)
         * trace!(
             &cof,
-            idenso::color_t!(a.clone()),
-            idenso::color_t!(b.clone()),
+            idenso::color_t!(a),
+            idenso::color_t!(b),
             idenso::color_t!(x)
         );
     let rhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c),
+        idenso::color_t!(d)
     ) - trace!(
         &cof,
         idenso::color_t!(a),

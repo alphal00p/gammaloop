@@ -26,6 +26,7 @@ use spenso::{
 use symbolica::{id::Pattern, parse, parse_lit};
 
 use crate::dirac::PS;
+use crate::f;
 use crate::selective_expand::SelectiveExpand;
 use crate::shorthands::schoonschip::Schoonschip;
 use crate::tensor::SymbolicTensor;
@@ -96,12 +97,27 @@ fn test_color_simplification() {
 }
 
 #[test]
+fn two_fs() {
+    test_initialize();
+
+    let atom = f!(3, 1, 5) * f!(3, 5, 1);
+    let simplified = atom.simplify_color();
+
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*CA");
+}
+
+#[test]
 fn color_generator_macro_accepts_gamma_style_index_shorthands() {
     let r = TestReps::new();
     let cof_nc = ColorFundamental {}.new_rep(CS.nc);
 
+    let a = slot!(r.coad_na, a);
     assert_eq!(color_t!(a), color_t!(slot!(r.coad_na, a)));
-    assert_eq!(color_t!(1), color_t!(slot!(r.coad_na, 1)));
+    assert_snapshot!(color_t!(1).to_bare_ordered_string(), @"t(1,in,out)");
+
+    let a = slot!(r.coad_na, a);
+    let i = slot!(cof_nc, i);
+    let j = slot!(cof_nc.dual(), j);
     assert_eq!(
         color_t!(a, i, j),
         color_t!(
@@ -128,6 +144,9 @@ fn color_generator_macro_accepts_gamma_style_index_shorthands() {
 fn color_structure_macro_accepts_gamma_style_index_shorthands() {
     let r = TestReps::new();
 
+    let a = slot!(r.coad_na, a);
+    let b = slot!(r.coad_na, b);
+    let c = slot!(r.coad_na, c);
     assert_eq!(
         color_f!(a, b, c),
         color_f!(
