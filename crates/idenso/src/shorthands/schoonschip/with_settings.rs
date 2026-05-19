@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    symbolica_atom,
+    shadowing,
     tensors::parametric::atomcore::PatternReplacement,
     trace, trace_sym,
 };
@@ -432,7 +432,7 @@ impl SchoonschipWithSettings<'_> {
     fn contains_symmetric_projector(expr: AtomView<'_>) -> bool {
         match expr {
             AtomView::Fun(f) => {
-                f.get_symbol() == *symbolica_atom::SYM
+                f.get_symbol() == *shadowing::SYM
                     || f.iter().any(Self::contains_symmetric_projector)
             }
             AtomView::Add(add) => add.iter().any(Self::contains_symmetric_projector),

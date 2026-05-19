@@ -5,11 +5,10 @@ use spenso::{
     chain,
     network::{
         library::symbolic::{ETS, ExplicitKey},
-        parsing::{AtomStructureExt, StrictTensorFilter},
         tags::SPENSO_TAG as T,
     },
     rep_,
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    shadowing::{self, Collectable, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
     structure::{
         TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -17,7 +16,6 @@ use spenso::{
         representation::RepName,
         slot::{AbsInd, IsAbstractSlot},
     },
-    symbolica_atom::{self, ScalarCollectExt, TensorCollectExt},
     tensor_symbol,
     tensors::parametric::atomcore::PatternReplacement,
     trace, trace_sym,
@@ -34,7 +32,7 @@ use symbolica::{
 
 use crate::{
     W_, color_f, color_t,
-    representations::ColorAntiFundamental,
+    representations::{ColorAntiFundamental, ColorSextet},
     selective_expand::SelectiveExpand,
     shorthands::{chain::Chain, metric::PermuteWithMetric},
 };
@@ -538,11 +536,7 @@ impl RawColorTensorSimplifier {
             .collect_tensors();
         let out = self.restore_fundamental_dimension(out);
 
-        if out.is_tensorial(StrictTensorFilter::Tagged) {
-            out
-        } else {
-            out.collect_scalar_symbols()
-        }
+        out
     }
 
     fn find_fundamental_dimension(expression: AtomView<'_>) -> Option<Atom> {
@@ -1375,7 +1369,7 @@ fn trace_parts(trace: AtomView) -> Option<(Atom, Vec<Atom>)> {
     let AtomView::Fun(f) = trace else {
         return None;
     };
-    let (rep, factors) = symbolica_atom::trace_parts(f)?;
+    let (rep, factors) = shadowing::trace_parts(f)?;
     Some((
         rep.to_owned(),
         factors
@@ -1450,7 +1444,7 @@ fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
     let AtomView::Fun(f) = projector else {
         return None;
     };
-    if f.get_symbol() != *symbolica_atom::SYM {
+    if f.get_symbol() != *shadowing::SYM {
         return None;
     }
 
@@ -1461,7 +1455,7 @@ fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
 
 fn color_antisymmetric_generator_args(factor: AtomView) -> Option<(Atom, Vec<Atom>)> {
     let (prefactor, projector_symbol, factors) = projector_factor(factor)?;
-    if projector_symbol != *symbolica_atom::ANTISYM {
+    if projector_symbol != *shadowing::ANTISYM {
         return None;
     }
 
@@ -1504,7 +1498,7 @@ fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
     let AtomView::Fun(f) = projector else {
         return None;
     };
-    if f.get_symbol() != *symbolica_atom::SYM && f.get_symbol() != *symbolica_atom::ANTISYM {
+    if f.get_symbol() != *shadowing::SYM && f.get_symbol() != *shadowing::ANTISYM {
         return None;
     }
 
@@ -1955,6 +1949,11 @@ pub trait ColorSimplifier {
     /// Expands factorized terms around color representation factors.
     fn expand_color(&self) -> Vec<(Atom, Atom)>;
 
+    /// Expands factorized terms around color representation factors.
+    fn collect_color(&self) -> Atom;
+
+    fn collect_color_constants(&self) -> Atom;
+
     // fn canonize_color(&self) -> Atom;
 
     fn wrap_color(&self, symbol: Symbol) -> Atom;
@@ -1976,6 +1975,14 @@ impl ColorSimplifier for Atom {
         self.as_view().expand_color()
     }
 
+    fn collect_color(&self) -> Atom {
+        self.as_view().collect_color()
+    }
+
+    fn collect_color_constants(&self) -> Atom {
+        self.as_view().collect_color_constants()
+    }
+
     // fn canonize_color(&self) -> Atom {
     //     self.as_view().canonize_color()
     // }
@@ -1988,6 +1995,20 @@ impl ColorSimplifier for Atom {
 impl ColorSimplifier for AtomView<'_> {
     fn simplify_color(&self) -> Atom {
         color_simplify_impl(self.as_atom_view())
+    }
+
+    fn collect_color_constants(&self) -> Atom {
+        self.collect_with_map(
+            |a| matches!(a,AtomView::Var(a) if a.get_symbol()==CS.tr || a.get_symbol()==CS.ca|| a.get_symbol()==CS.cf ),
+        )
+    }
+
+    fn collect_color(&self) -> Atom {
+        self.collect_reps([
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ])
     }
 
     fn to_color_casimir(&self) -> Atom {

@@ -12,6 +12,7 @@ use spenso::{
         representation::RepName,
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
+    symbol_set,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
@@ -50,75 +51,6 @@ pub(crate) mod test_support;
 pub use cook::{
     CookMode, CookOutputTags, CookSettings, CookSourceFilter, CookTagFilter, Cookable, CookingError,
 };
-
-#[macro_export]
-macro_rules!  symbol_set {
-        // Identifier symbols with an explicit namespace.
-        ($struct_name:ident, $static_name:ident, namespace = $namespace:literal; $($char:ident)*) => {
-            #[allow(dead_code, non_snake_case)]
-            pub struct $struct_name {
-                $(pub $char: ::symbolica::atom::Symbol,)*
-            }
-
-            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($char: ::symbolica::symbol!(concat!($namespace, "::", stringify!($char))),)*
-            });
-        };
-
-        // Identifier symbols with explicit struct and static names
-        ($struct_name:ident, $static_name:ident; $($char:ident)*) => {
-            #[allow(dead_code, non_snake_case)]
-            pub struct $struct_name {
-                $(pub $char: ::symbolica::atom::Symbol,)*
-            }
-
-            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($char: ::symbolica::symbol!(stringify!($char)),)*
-            });
-        };
-
-        // String literals as individual statics with an explicit namespace.
-        (statics, namespace = $namespace:literal; $($field:ident : $string:literal),* $(,)?) => {
-            $(
-                #[allow(non_upper_case_globals)]
-                pub static $field: ::std::sync::LazyLock<::symbolica::atom::Symbol> =
-                    ::std::sync::LazyLock::new(|| ::symbolica::symbol!(concat!($namespace, "::", $string)));
-            )*
-        };
-
-        // String literals as individual statics
-        (statics; $($field:ident : $string:literal),* $(,)?) => {
-            $(
-                #[allow(non_upper_case_globals)]
-                pub static $field: ::std::sync::LazyLock<::symbolica::atom::Symbol> =
-                    ::std::sync::LazyLock::new(|| ::symbolica::symbol!($string));
-            )*
-        };
-
-        // String literals grouped in a struct with an explicit namespace.
-        ($struct_name:ident, $static_name:ident, namespace = $namespace:literal; $($field:ident : $string:literal),* $(,)?) => {
-            #[allow(dead_code, non_snake_case)]
-            pub struct $struct_name {
-                $(pub $field: ::symbolica::atom::Symbol,)*
-            }
-
-            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($field: ::symbolica::symbol!(concat!($namespace, "::", $string)),)*
-            });
-        };
-
-        // String literals grouped in a struct
-        ($struct_name:ident, $static_name:ident; $($field:ident : $string:literal),* $(,)?) => {
-            #[allow(dead_code, non_snake_case)]
-            pub struct $struct_name {
-                $(pub $field: ::symbolica::atom::Symbol,)*
-            }
-
-            pub static $static_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
-                $($field: ::symbolica::symbol!($string),)*
-            });
-        };
-    }
 
 symbol_set!(Wildcards, W_;
     a_ b_ c_ d_ e_ f_ g_ h_ i_ j_ k_ l_ m_ n_ o_ p_ q_ r_ s_ t_ u_ v_ w_ x_ y_ z_

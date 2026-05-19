@@ -4,8 +4,8 @@ use spenso::{
     chain, g,
     network::tags::SPENSO_TAG as T,
     rep_,
+    shadowing::{self, IntoAtom, TensorCollectExt},
     structure::representation::{LibraryRep, Minkowski, RepName},
-    symbolica_atom::{self, IntoAtom, TensorCollectExt},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
@@ -1048,7 +1048,7 @@ impl DiracSimplifier<'_> {
     /// odd traces vanish and even traces recurse by contracting the first gamma
     /// with each later gamma.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
-        let (rep, factors) = symbolica_atom::trace_parts(f)?;
+        let (rep, factors) = shadowing::trace_parts(f)?;
 
         if factors.is_empty() {
             return Self::simplify_trace_terminal(f.as_view());

@@ -1,5 +1,5 @@
 use idenso::IndexTooling;
-use idenso::color::{CS, ColorSimplifier, SelectiveExpand};
+use idenso::color::{CS, ColorSimplifier};
 use idenso::dirac::{AGS, GammaSimplifier};
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};

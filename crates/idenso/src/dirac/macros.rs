@@ -18,7 +18,7 @@ macro_rules! id {
 /// With three arguments, this builds the ordinary gamma tensor with explicit
 /// spinor endpoints and a Lorentz slot.
 ///
-/// Arguments are converted through `spenso::symbolica_atom::IntoAtom`, so they
+/// Arguments are converted through `spenso::shadowing::IntoAtom`, so they
 /// can be typed slots, atoms, or atom views.
 ///
 /// # Examples
@@ -42,7 +42,7 @@ macro_rules! gamma {
         symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma)
             .add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in))
             .add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($mu))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .finish()
     };
     ($base:ident . $mu:ident, $($rest:tt)*) => {
@@ -128,9 +128,9 @@ macro_rules! gamma {
     };
     (@tensor_done $mu:expr, $i:expr, $j:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma)
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($j))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($mu))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($j))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .finish()
     };
 }
@@ -186,8 +186,8 @@ macro_rules! u {
     };
     (@done $label:expr, $i:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::PS.u)
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($label))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($label))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
             .finish()
     };
 }
@@ -229,8 +229,8 @@ macro_rules! v {
     };
     (@done $label:expr, $i:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::PS.v)
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($label))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($label))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
             .finish()
     };
 }
@@ -324,8 +324,8 @@ macro_rules! gamma0 {
     };
     (@tensor_done $i:expr, $j:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma0)
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($j))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($j))
             .finish()
     };
 }
@@ -366,8 +366,8 @@ macro_rules! gamma5 {
     };
     (@tensor_done $i:expr, $j:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma5)
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($i))
-            .add_arg(spenso::symbolica_atom::IntoAtom::into_atom($j))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($j))
             .finish()
     };
 }

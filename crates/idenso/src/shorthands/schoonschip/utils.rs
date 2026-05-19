@@ -1,4 +1,4 @@
-use spenso::symbolica_atom::TensorCollectExt;
+use spenso::shadowing::TensorCollectExt;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 pub(super) const TRACE_SCHOONSCHIP: bool = false;

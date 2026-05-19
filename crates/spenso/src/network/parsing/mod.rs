@@ -29,7 +29,7 @@ use crate::structure::representation::LibraryRep;
 
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
-mod structure_inference;
+pub(crate) mod structure_inference;
 pub use structure_inference::{AtomStructureExt, StructureFromAtom, StructureInferenceMode};
 mod materialization;
 mod tensor_from_expression;

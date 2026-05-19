@@ -2,7 +2,7 @@
 ///
 /// The one-argument form builds a fundamental generator factor for use inside
 /// `chain!` or `trace!`. The adjoint-index argument is converted through
-/// `spenso::symbolica_atom::IntoAtom`, so it can be a typed color-adjoint slot,
+/// `spenso::shadowing::IntoAtom`, so it can be a typed color-adjoint slot,
 /// an atom, or an atom view. The factor uses the chain placeholder indices `in`
 /// and `out`; the surrounding chain or trace owns the physical endpoints.
 ///
@@ -27,20 +27,20 @@ macro_rules! color_t {
         $crate::color::CS.t_pattern($fundamental_dimension, $adjoint_dimension, $a, $i, $j)
     };
     ($a:expr $(,)?) => {
-        $crate::color::CS.chain_t(spenso::symbolica_atom::IntoAtom::into_atom($a))
+        $crate::color::CS.chain_t(spenso::shadowing::IntoAtom::into_atom($a))
     };
     ($a:expr, $i:expr, $j:expr $(,)?) => {
         $crate::color::CS.explicit_t(
-            spenso::symbolica_atom::IntoAtom::into_atom($a),
-            spenso::symbolica_atom::IntoAtom::into_atom($i),
-            spenso::symbolica_atom::IntoAtom::into_atom($j),
+            spenso::shadowing::IntoAtom::into_atom($a),
+            spenso::shadowing::IntoAtom::into_atom($i),
+            spenso::shadowing::IntoAtom::into_atom($j),
         )
     };
 }
 
 /// Builds an adjoint color structure-constant atom `f(a,b,c)`.
 ///
-/// Arguments are converted through `spenso::symbolica_atom::IntoAtom`, so typed
+/// Arguments are converted through `spenso::shadowing::IntoAtom`, so typed
 /// color-adjoint slots can be used directly. This avoids accidentally mixing
 /// parsed symbols that print alike but are not identical atoms.
 ///
@@ -59,9 +59,9 @@ macro_rules! color_f {
     };
     ($a:expr, $b:expr, $c:expr $(,)?) => {
         $crate::color::CS.structure_f(
-            spenso::symbolica_atom::IntoAtom::into_atom($a),
-            spenso::symbolica_atom::IntoAtom::into_atom($b),
-            spenso::symbolica_atom::IntoAtom::into_atom($c),
+            spenso::shadowing::IntoAtom::into_atom($a),
+            spenso::shadowing::IntoAtom::into_atom($b),
+            spenso::shadowing::IntoAtom::into_atom($c),
         )
     };
 }
@@ -96,8 +96,8 @@ macro_rules! f {
 macro_rules! color_d {
     ($rep:expr $(, $arg:expr)+ $(,)?) => {
         $crate::color::CS.symmetric_d(
-            spenso::symbolica_atom::IntoAtom::into_atom($rep),
-            vec![$(spenso::symbolica_atom::IntoAtom::into_atom($arg)),+],
+            spenso::shadowing::IntoAtom::into_atom($rep),
+            vec![$(spenso::shadowing::IntoAtom::into_atom($arg)),+],
         )
     };
 }
@@ -107,8 +107,8 @@ macro_rules! color_d {
 macro_rules! color_d33 {
     ($left:expr, $right:expr $(,)?) => {
         $crate::color::CS.d33(
-            spenso::symbolica_atom::IntoAtom::into_atom($left),
-            spenso::symbolica_atom::IntoAtom::into_atom($right),
+            spenso::shadowing::IntoAtom::into_atom($left),
+            spenso::shadowing::IntoAtom::into_atom($right),
         )
     };
 }

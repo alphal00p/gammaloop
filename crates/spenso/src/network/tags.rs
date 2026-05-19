@@ -95,7 +95,7 @@ macro_rules! define_numbered_tag_macros {
             macro_rules! $macro_name {
                 ($d n:literal; $d($d arg:expr),* $d(,)?) => {
                     $crate::network::tags::SPENSO_TAG.$method::<$d n, _>(
-                        vec![$d($crate::symbolica_atom::IntoAtom::into_atom($d arg)),*],
+                        vec![$d($crate::shadowing::IntoAtom::into_atom($d arg)),*],
                     )
                 };
                 ($d n:literal $d(;)?) => {
