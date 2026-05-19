@@ -5984,8 +5984,12 @@ impl<'a> RepeatedLtdBuilder<'a> {
                     half_edges.sort_unstable();
                     let mut numerator_surfaces = base_num_surfaces.clone();
                     numerator_surfaces.extend(component.numerator_surfaces.iter().copied());
-                    let prefactor = -rational_from_coefficient(&variant.prefactor)
-                        * component.prefactor.clone();
+                    // This finite-pole branch lifts an LTD lower-sector
+                    // expression, so the contact quotient enters with its
+                    // algebraic sign. The one-edge pure-CFF pinch orientation
+                    // sign is already specific to the CFF recursive branch.
+                    let prefactor =
+                        rational_from_coefficient(&variant.prefactor) * component.prefactor.clone();
                     if prefactor.is_zero() {
                         continue;
                     }

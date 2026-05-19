@@ -950,6 +950,16 @@ combined with the repeated-channel sample set
 \(\Samples_{B,\sigma}\).  The black-box numerator is still sampled only at the
 explicit finite set of energies supplied by the JSON orientation map.
 
+There is one sign convention distinction between the pure-CFF contact lift and
+the LTD-style diagnostic finite-pole lift.  The extra one-edge pinch sign above
+belongs to the CFF minor orientation convention: it is part of lifting a lower
+CFF denominator tree back into the original CFF source/sink orientation.  If the
+lower sector is instead generated as an LTD object, the contact quotient in
+\eqref{eq:quadratic-contact} enters with its algebraic sign only.  Its
+orientation is already carried by the LTD residue determinant and cut
+half-edge factors, so reusing the pure-CFF pinch sign would double count a CFF
+orientation convention in an LTD lower-sector comparison.
+
 \phantomsection
 \subsection*{1.3.1.b One-Loop Box with One Quadratic Edge}
 \addcontentsline{toc}{subsection}{1.3.1.b One-Loop Box with One Quadratic Edge}

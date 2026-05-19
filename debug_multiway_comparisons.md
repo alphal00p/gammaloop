@@ -31,115 +31,106 @@ known-good test matrix and the next pass does not mix unrelated failures.
 
 ## Current Checkpoint
 
-Status as of 2026-05-19: the latest pushed checkpoint is
-`10feba0c4634c3162531a795b855c4f31fbd670d` and is the scalar cross-section
-plus divergent-bubble expanded-4D local-UV anchor. The current working tree
-contains one additional targeted fix for the amplitude-like profile-bulk bucket:
-`dotted_bubble_amp_bulk_profile_passes`,
-`double_dotted_bubble_amp_bulk_profile_passes`, and
-`scalar_self_energy_amp_bulk_profile_passes`.
+Status as of 2026-05-19: the latest pushed checkpoint before this pass is
+`3e2fe0d4f6606ab34d28e0a5e72d0b6477b900ff`, which had the protected scalar
+cross-section sweep green and only two selected-suite failures left. This pass
+fixes exactly that remaining 3Drep diagnostic bucket:
 
-The fix is in `crates/gammalooprs/src/cff/generation.rs` and
-`crates/gammalooprs/src/cff/mod.rs`. It detects repeated active denominators
-from the actual CFF 3D source used for the integrand. For pure amplitude
-threshold E-surface residues with repeated active denominators, the CFF
-construction uses the confluent repeated-channel source and selects the
-threshold residue in the generated basis. This avoids applying the canonical
-selected-denominator sign a second time to odd repeated threshold poles.
+- `generation::ltd_tests::ltd_equal_signature_vacuum_hexagon_matches_cff_through_quintic_numerator`
+- `generation::ltd_tests::ltd_gl06_forward_with_initial_state_cut_square_energy_numerator_matches_cff`
 
-This is intended to repair amplitude-like repeated-threshold local behavior
-without touching the scalar cross-section LU bridge. It is not a per-graph
-modifier and does not depend on loop count or graph name. Cross-section
-left/right threshold residues and real LU/Cutkosky residues continue to use the
-ordinary selection path.
+The code fix is limited to
+`crates/three-dimensional-reps/src/generation.rs`. In the LTD-style
+finite-pole contact branch, the lower sector is generated as an LTD object, so
+the contact quotient enters with its algebraic sign. The extra one-edge pinch
+sign is specific to lifting a lower CFF denominator tree back into a pure-CFF
+source/sink orientation and is not part of the LTD lower-sector comparison.
 
-The current working tree has no graph-name branches, no loop-count sign
-exceptions, no production use of `graph_from_signature`, and no temporary
-`GAMMALOOP_TRACE_LTD_LU_SIGNS` diagnostics in Rust code.
+The corresponding derivation note was added to
+`docs/3Dreps/generalised_ltd.tex`. The implementation remains free of
+graph-name branches, loop-count sign exceptions, production use of
+`graph_from_signature`, and temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS`
+diagnostics.
 
 ## Validation Matrix
 
-Targeted profile-bulk bucket fixed by this patch:
+Targeted two-test 3Drep diagnostic bucket:
 
 ```text
 env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
   RUST_MIN_STACK=33554432 \
-  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  cargo nextest run -p three-dimensional-reps --features eval \
   --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
-  -E 'test(=profile_bulk::massless_triangle_bulk_profile_passes) | test(=profile_bulk::dotted_bubble_amp_bulk_profile_passes) | test(=profile_bulk::double_dotted_bubble_amp_bulk_profile_passes) | test(=profile_bulk::scalar_self_energy_amp_bulk_profile_passes)' \
+  -E 'test(=generation::ltd_tests::ltd_equal_signature_vacuum_hexagon_matches_cff_through_quintic_numerator) | test(=generation::ltd_tests::ltd_gl06_forward_with_initial_state_cut_square_energy_numerator_matches_cff)' \
   --no-capture --retries 0
 
-4 tests run: 4 passed, 263 skipped
+2 tests run: 2 passed
 ```
 
-Previously fixed divergent-bubble expanded-4D inspect bucket, rechecked after
-the profile-bulk fix:
+Broad 3Drep eval sweep:
 
 ```text
 env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
   RUST_MIN_STACK=33554432 \
-  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  cargo nextest run -p three-dimensional-reps --features eval \
   --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
-  -E 'test(=inspect::divergent_bubble_local_uv_from_expanded_4d_inspects_match_cff_and_ltd) | test(=inspect::divergent_bubble_integrated_uv_from_expanded_4d_inspects_match_cff_and_ltd) | test(=inspect::cff_local_uv_from_expanded_4d_works_without_explicit_orientation_sum)' \
   --no-capture --retries 0
 
-3 tests run: 3 passed, 264 skipped
+60 tests run: 60 passed
 ```
 
-Formatting and compilation:
+Focused scalar cross-section regression bucket that caught the accidental
+pure-CFF sign edit during this pass:
 
 ```text
-cargo fmt
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 RUSTFLAGS=-L/opt/local/lib/libgcc \
+  INSTA_FORCE_PASS=1 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl22_quadratic_energy_inspects_match::q1_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl22_quadratic_energy_inspects_match::q7_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl24_quadratic_energy_inspects_match::q1_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl24_quadratic_energy_inspects_match::q7_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl35_quadratic_energy_inspects_match::q1_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl40_quadratic_energy_inspects_match::q1_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl40_quadratic_energy_inspects_match::q7_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl48_quadratic_energy_inspects_match::q1_squared) | test(=scalar_3l_cross_section_inspects::slow::quadratic_energy_numerators::scalar_3l_cross_section_gl48_quadratic_energy_inspects_match::q7_squared)' \
+  --no-capture --retries 0
 
-passed
+9 tests run: 9 passed
 ```
 
-```text
-env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
-  RUST_MIN_STACK=33554432 cargo check
-
-passed
-```
-
-Protected scalar cross-section anchor after the targeted fix:
+Protected scalar cross-section sweep:
 
 ```text
-env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
-  RUST_MIN_STACK=33554432 \
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 RUSTFLAGS=-L/opt/local/lib/libgcc \
+  INSTA_FORCE_PASS=1 \
   cargo nextest run -p gammaloop-integration-tests --test test_runs \
   --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
   -E 'test(/scalar_3l_cross_section_inspects::slow/)' \
   --no-capture --retries 0
 
-143 tests run: 143 passed (1 slow), 124 skipped
+143 tests run: 143 passed, 124 skipped
 ```
 
-Full selected GammaLoop suite after the targeted fix:
+Formatting, whitespace, and compilation:
 
 ```text
-env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
-  RUST_MIN_STACK=33554432 just test_gammaloop
+cargo fmt
+git diff --check
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 cargo check
 
-1131 tests run: 1129 passed, 2 failed, 271 skipped
+passed
 ```
 
-The two failing tests are the remaining known 3Drep diagnostic bucket, not
-profile-bulk or scalar cross-section regressions:
+Full selected GammaLoop suite:
 
-- `generation::ltd_tests::ltd_equal_signature_vacuum_hexagon_matches_cff_through_quintic_numerator`
-- `generation::ltd_tests::ltd_gl06_forward_with_initial_state_cut_square_energy_numerator_matches_cff`
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 just test_gammaloop
 
-The 3Drep failures are diagnostic CFF/LTD comparison mismatches:
+1131 tests run: 1131 passed, 271 skipped
+```
 
-- equal-signature vacuum hexagon:
-  `cff=-0.026196853417673083`,
-  `ltd=0.009207375767346093`;
-- GL06 forward initial-state cut square numerator:
-  `cff=-66.79480952028291`,
-  `ltd=548.3436360239327`.
-
-These diagnostic failures were also present at the clean pushed scalar-sweep
-anchor and are not introduced by the current targeted fix.
+As of this checkpoint, there are no known remaining multi-way comparison
+failures in the selected GammaLoop suite or the protected slow scalar
+cross-section sweep.
 
 ## Sensitive Construction Points
 
@@ -181,29 +172,14 @@ that ordinary source basis.
 
 ## Remaining Plan
 
-Do not start from a broad edit. Pick one bucket and keep it isolated.
+No multi-way comparison bucket is currently known to be failing. Future changes
+to CFF/LTD signs, repeated-channel handling, LU cut selection, threshold
+residue selection, or finite-pole contact completion should keep the same
+workflow:
 
-1. Commit and push the current targeted profile-bulk fix only if the staged
-   diff is limited to the CFF repeated-source guard, generated-basis threshold
-   residue selection, and this status note.
-2. Next bucket: the two 3Drep diagnostic CFF/LTD mismatches. They should be
-   fixed through the diagnostic comparison entry point or shared graph/LMB
-   coordinate construction. Do not redirect GammaLoop production CFF local-UV
-   generation and do not use `graph_from_signature` in production logic.
-3. After that bucket is fixed, rerun:
-   - the two 3Drep diagnostics plus nearby 3Drep CFF/LTD comparison guards,
-   - the profile-bulk four-test guard,
-   - the divergent-bubble expanded-4D inspect bucket,
-   - the full 143 slow scalar cross-section sweep,
-   - `just test_gammaloop`.
-4. After each fixed bucket, update this file with the exact commands and
-   counts, then commit and push before moving to the next bucket.
-5. Final acceptance after all buckets are green:
-   - `cargo fmt`
-   - `env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T cargo check`
-   - `env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T just test_gammaloop`
-   - full slow scalar cross-section sweep without `INSTA_FORCE_PASS`
-   - broad 3Drep integration sweep
-   - no generated `.snap.new` files unless deliberately accepted
-   - commit, push, and update the PR body with the implemented changes and
-     validation matrix.
+1. Start from this green checkpoint.
+2. Change one related bucket at a time.
+3. Rerun the targeted bucket, the protected 143-test slow scalar sweep, and
+   `just test_gammaloop` before committing.
+4. Update this file with exact commands and counts before pushing a new
+   checkpoint.
