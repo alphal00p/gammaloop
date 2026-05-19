@@ -1335,6 +1335,39 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .identify_nodes_of_subgraph_marking_self_edges(subgraph, node_data, ignored)
     }
 
+    pub fn identify_nodes_marking_self_edges_and_duplicate_heads(
+        &mut self,
+        nodes: &[NodeIndex],
+        node_data: NetworkNode<K, FK, Aind>,
+        ignored: &mut SuBitGraph,
+    ) -> NodeIndex {
+        let _span = profile::span(Timer::IdentifyNodes);
+        let (node, self_edges) = self
+            .graph
+            .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
+        ignored.union_with(&self_edges);
+
+        let mut seen_head_neighbors = BTreeSet::new();
+        for hedge in self.graph.iter_crown(node) {
+            if !self.graph[[&hedge]].is_head() {
+                continue;
+            }
+
+            let other = self.graph.inv(hedge);
+            if other == hedge {
+                continue;
+            }
+
+            let other_node = self.graph.node_id(other);
+            if !seen_head_neighbors.insert(other_node) {
+                ignored.add(hedge);
+                ignored.add(other);
+            }
+        }
+
+        node
+    }
+
     pub fn finish_deferred_node_identifications(&mut self) {
         self.graph.forget_identification_history();
         self.graph.node_store.check_and_set_nodes().unwrap();

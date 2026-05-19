@@ -2314,6 +2314,42 @@ where
     Ok(())
 }
 
+#[allow(clippy::result_large_err)]
+fn execute_operation_in_place<C, E, FL, L, K, FK, Aind>(
+    executor: &mut E,
+    graph: &mut NetworkGraph<K, FK, Aind>,
+    operation: &NetworkOperation<FK>,
+    lib: &L,
+    fnlib: &FL,
+    ignored: &mut SuBitGraph,
+) -> Result<bool, TensorNetworkError<K, FK>>
+where
+    C: ContractionStrategy<E, L, K, FK, Aind>,
+    E: ExecuteOp<FL, L, K, FK, Aind>,
+    K: Clone + Debug + Display,
+    FK: Clone + Debug + Display,
+    Aind: AbsInd,
+{
+    if matches!(operation.op(), NetworkOp::Product)
+        && <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE
+    {
+        return C::contract_product_in_place(executor, graph, operation, lib, ignored);
+    }
+
+    let replacement = executor.execute::<C>(graph, operation, lib, fnlib)?;
+    graph
+        .identify_subgraph_nodes_without_deleting_self_edges(
+            operation.subgraph(),
+            NetworkNode::Leaf(replacement),
+            ignored,
+        )
+        .ok_or_else(|| {
+            TensorNetworkError::Other(eyre!("ready operation subgraph did not contain any nodes"))
+        })?;
+    graph.finish_deferred_node_identifications();
+    Ok(true)
+}
+
 fn plan_ready_operation_batch<K, FK, Aind>(
     graph: &mut NetworkGraph<K, FK, Aind>,
     ignored: &SuBitGraph,
@@ -3010,6 +3046,44 @@ where
         K: Display,
         FK: Display,
     {
+        if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
+            let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
+            for _ in 0..N {
+                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {}
+
+                profile::bump(Counter::ExecuteIteration, 1);
+                let planned = plan_ready_operation_batch(graph, &ignored);
+                if planned.is_empty() {
+                    break;
+                }
+
+                let mut did_progress = false;
+                for operation in planned {
+                    if execute_operation_in_place::<C, E, FL, L, K, FK, Aind>(
+                        executor,
+                        graph,
+                        &operation,
+                        lib,
+                        fnlib,
+                        &mut ignored,
+                    )? {
+                        did_progress = true;
+                        break;
+                    }
+                }
+
+                if !did_progress {
+                    break;
+                }
+            }
+
+            if !ignored.is_empty() {
+                graph.delete(&ignored);
+            }
+
+            return Ok(());
+        }
+
         for _ in 0..N {
             while executor.execute_self_loop_traces(graph, lib)? {}
 
@@ -3078,6 +3152,44 @@ where
         K: Display,
         FK: Display,
     {
+        if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
+            let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
+            for _ in 0..N {
+                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {}
+
+                profile::bump(Counter::ExecuteIteration, 1);
+                let planned = plan_ready_operation_batch(graph, &ignored);
+                if planned.is_empty() {
+                    break;
+                }
+
+                let mut did_progress = false;
+                for operation in planned {
+                    if execute_operation_in_place::<C, E, FL, L, K, FK, Aind>(
+                        executor,
+                        graph,
+                        &operation,
+                        lib,
+                        fnlib,
+                        &mut ignored,
+                    )? {
+                        did_progress = true;
+                        break;
+                    }
+                }
+
+                if !did_progress {
+                    break;
+                }
+            }
+
+            if !ignored.is_empty() {
+                graph.delete(&ignored);
+            }
+
+            return Ok(());
+        }
+
         for _ in 0..N {
             while executor.execute_self_loop_traces(graph, lib)? {}
 
@@ -3208,6 +3320,46 @@ where
         FK: Display,
     {
         let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
+
+        if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
+            loop {
+                if executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    continue;
+                }
+
+                profile::bump(Counter::ExecuteIteration, 1);
+                let planned = plan_ready_operation_batch(graph, &ignored);
+                if planned.is_empty() {
+                    break;
+                }
+
+                let mut did_progress = false;
+                for operation in planned {
+                    if execute_operation_in_place::<C, E, FL, L, K, FK, Aind>(
+                        executor,
+                        graph,
+                        &operation,
+                        lib,
+                        fnlib,
+                        &mut ignored,
+                    )? {
+                        did_progress = true;
+                        break;
+                    }
+                }
+
+                if !did_progress {
+                    break;
+                }
+            }
+
+            if !ignored.is_empty() {
+                graph.delete(&ignored);
+            }
+
+            return Ok(());
+        }
+
         let mut batch_index = 0usize;
 
         loop {
@@ -3382,6 +3534,18 @@ impl Parallel {
         FK: Clone + Debug + Display + Send + Sync,
         Aind: AbsInd + Send + Sync,
     {
+        if <C as ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE
+        {
+            return <Sequential as ExecutionStrategy<
+                NetworkStore<T, Sc>,
+                FL,
+                L,
+                K,
+                FK,
+                Aind,
+            >>::execute_all::<C>(executor, graph, lib, fnlib);
+        }
+
         let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
 
         loop {
