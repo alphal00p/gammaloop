@@ -42,6 +42,7 @@ pub mod python;
 pub mod reference_cases;
 pub mod rep_symbols;
 pub mod representations;
+pub mod selective_expand;
 pub mod shorthands;
 #[cfg(test)]
 pub(crate) mod test_support;
