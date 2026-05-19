@@ -415,6 +415,7 @@
               src = workspaceTestSrc;
               nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
               cargoNextestExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
+              doInstallCargoArtifacts = false;
             }
             // {
               preCheck = ''
