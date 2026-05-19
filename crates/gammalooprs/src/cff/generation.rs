@@ -122,6 +122,57 @@ impl Graph {
         )
     }
 
+    pub(crate) fn cff_source_has_repeated_active_denominators(
+        &self,
+        contract_edges: &[EdgeIndex],
+        options: &Generate3DExpressionOptions,
+    ) -> Result<bool> {
+        if std::env::var_os("GAMMALOOP_DISABLE_CONFLUENT_CFF").is_some()
+            || options.representation != RepresentationMode::Cff
+        {
+            return Ok(false);
+        }
+
+        let initial_state_cut_edges = self
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .collect_vec();
+        let preserved_edges = self.normalized_preserved_4d_denominator_edges(options);
+        let source_contract_edges = source_contract_edges_for_3d_expression(
+            contract_edges,
+            &initial_state_cut_edges,
+            &preserved_edges,
+        );
+        let source = GraphThreeDSource::new(self, &source_contract_edges);
+        let parsed = source.to_three_d_parsed_graph()?;
+        let Some(edge_map) = source.energy_edge_index_map(&parsed) else {
+            return Ok(false);
+        };
+
+        let preserved_local_edges = edge_map
+            .remap_bounds_to_local(
+                &preserved_edges
+                    .into_iter()
+                    .map(|edge_id| (usize::from(edge_id), 0))
+                    .collect_vec(),
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(edge_id, _)| edge_id)
+            .collect::<BTreeSet<_>>();
+
+        Ok(three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .any(|group| {
+                group
+                    .edge_ids
+                    .into_iter()
+                    .filter(|edge_id| !preserved_local_edges.contains(edge_id))
+                    .count()
+                    > 1
+            }))
+    }
+
     pub(crate) fn production_3d_expression_options(
         &self,
         representation: ThreeDRepresentation,

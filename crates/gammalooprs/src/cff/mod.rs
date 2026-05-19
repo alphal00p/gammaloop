@@ -175,7 +175,12 @@ impl Graph {
         let cff_options = self.denominator_only_cff_3d_expression_options();
         let use_confluent_cff = cutset.residue_selector.right_th_cut.is_none()
             && cutset.residue_selector.left_th_cut.is_none()
-            && cutset.residue_selector.lu_cut().is_none();
+            && (cutset.residue_selector.lu_cut().is_none()
+                || (cutset.residue_selector.is_threshold_esurface_residue()
+                    && self.cff_source_has_repeated_active_denominators(
+                        &contract_edges,
+                        &cff_options,
+                    )?));
         let cff = self.generate_3d_expression_for_integrand(
             &contract_edges,
             &canonize_esurface,
@@ -198,7 +203,15 @@ impl Graph {
 
         let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
             if cutset.residue_selector.is_threshold_esurface_residue() {
-                residue.select_esurface_residue(lu_cut)
+                if use_confluent_cff {
+                    // The confluent source is already expressed in the
+                    // generated repeated-channel coordinate. Applying the
+                    // canonical selected-denominator sign again would
+                    // over-rotate odd repeated threshold poles.
+                    residue.select_esurface_residue_in_generated_basis(lu_cut)
+                } else {
+                    residue.select_esurface_residue(lu_cut)
+                }
             } else {
                 residue.select_esurface_residue_with_cut_edges(
                     lu_cut,

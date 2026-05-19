@@ -32,21 +32,26 @@ known-good test matrix and the next pass does not mix unrelated failures.
 ## Current Checkpoint
 
 Status as of 2026-05-19: the latest pushed checkpoint is
-`d9d2b81f3e8cf4224b155aa503a4bc479f5c4be8` and is the scalar cross-section
-anchor. The current working tree contains one additional targeted fix for the
-amplitude-like divergent scalar-bubble CFF expanded-4D local-UV bucket.
+`10feba0c4634c3162531a795b855c4f31fbd670d` and is the scalar cross-section
+plus divergent-bubble expanded-4D local-UV anchor. The current working tree
+contains one additional targeted fix for the amplitude-like profile-bulk bucket:
+`dotted_bubble_amp_bulk_profile_passes`,
+`double_dotted_bubble_amp_bulk_profile_passes`, and
+`scalar_self_energy_amp_bulk_profile_passes`.
 
-The fix is in `crates/gammalooprs/src/uv/approx/expanded_4d.rs` and changes
-when CFF expanded sources with repeated active denominators are evaluated in
-the confluent equal-energy basis. Ordinary CFF expanded sources still take the
-confluent limit before residue selection. UV-leading LU local-series sources
-do not, because they are already Laurent coefficients in the selected
-Cutkosky coordinate and receive their CFF/LTD bridge from the LU residue
-construction.
+The fix is in `crates/gammalooprs/src/cff/generation.rs` and
+`crates/gammalooprs/src/cff/mod.rs`. It detects repeated active denominators
+from the actual CFF 3D source used for the integrand. For pure amplitude
+threshold E-surface residues with repeated active denominators, the CFF
+construction uses the confluent repeated-channel source and selects the
+threshold residue in the generated basis. This avoids applying the canonical
+selected-denominator sign a second time to odd repeated threshold poles.
 
-This is intended to repair the CFF local expanded-4D behavior for repeated
-active denominators without touching the scalar cross-section LU bridge. It is
-not a per-graph modifier and does not depend on loop count or graph name.
+This is intended to repair amplitude-like repeated-threshold local behavior
+without touching the scalar cross-section LU bridge. It is not a per-graph
+modifier and does not depend on loop count or graph name. Cross-section
+left/right threshold residues and real LU/Cutkosky residues continue to use the
+ordinary selection path.
 
 The current working tree has no graph-name branches, no loop-count sign
 exceptions, no production use of `graph_from_signature`, and no temporary
@@ -54,7 +59,21 @@ exceptions, no production use of `graph_from_signature`, and no temporary
 
 ## Validation Matrix
 
-Targeted bucket fixed by this patch:
+Targeted profile-bulk bucket fixed by this patch:
+
+```text
+env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(=profile_bulk::massless_triangle_bulk_profile_passes) | test(=profile_bulk::dotted_bubble_amp_bulk_profile_passes) | test(=profile_bulk::double_dotted_bubble_amp_bulk_profile_passes) | test(=profile_bulk::scalar_self_energy_amp_bulk_profile_passes)' \
+  --no-capture --retries 0
+
+4 tests run: 4 passed, 263 skipped
+```
+
+Previously fixed divergent-bubble expanded-4D inspect bucket, rechecked after
+the profile-bulk fix:
 
 ```text
 env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
@@ -70,7 +89,7 @@ env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
 Formatting and compilation:
 
 ```text
-cargo fmt --check
+cargo fmt
 
 passed
 ```
@@ -98,24 +117,17 @@ env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
 Full selected GammaLoop suite after the targeted fix:
 
 ```text
-env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T just test_gammaloop
+env -u RUSTFLAGS EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 just test_gammaloop
 
-1131 tests run: 1126 passed, 5 failed, 271 skipped
+1131 tests run: 1129 passed, 2 failed, 271 skipped
 ```
 
-The five failing tests are the remaining known buckets, not scalar
-cross-section regressions:
+The two failing tests are the remaining known 3Drep diagnostic bucket, not
+profile-bulk or scalar cross-section regressions:
 
-- `profile_bulk::dotted_bubble_amp_bulk_profile_passes`
-- `profile_bulk::double_dotted_bubble_amp_bulk_profile_passes`
-- `profile_bulk::scalar_self_energy_amp_bulk_profile_passes`
 - `generation::ltd_tests::ltd_equal_signature_vacuum_hexagon_matches_cff_through_quintic_numerator`
 - `generation::ltd_tests::ltd_gl06_forward_with_initial_state_cut_square_energy_numerator_matches_cff`
-
-The profile failures are amplitude-like IR/profile tests. They show sparse
-zero/infinite-value samples in the individual original/CT fits and a failing
-sum fit. They must be handled as their own bucket, not mixed into the
-expanded-4D CFF local-UV fix.
 
 The 3Drep failures are diagnostic CFF/LTD comparison mismatches:
 
@@ -151,6 +163,11 @@ anchor and are not introduced by the current targeted fix.
 - `uv/approx/mod.rs` and `uv/approx/expanded_4d.rs` dispatch threshold residue
   selection by representation and must remain LTD-expression-facing for LTD
   output.
+- `Graph::cff_source_has_repeated_active_denominators()` is the CFF-side guard
+  for enabling confluent source evaluation on actual repeated active
+  denominators. It uses the same graph source, initial-state cut handling, and
+  preserved 4D denominator normalization as production 3D-expression
+  generation.
 - `three-dimensional-reps::generate_cff_ltd_comparison_expression` is the
   diagnostic CFF/LTD comparison entry point. It is intentionally not the
   GammaLoop production CFF local-UV generator.
@@ -166,22 +183,19 @@ that ordinary source basis.
 
 Do not start from a broad edit. Pick one bucket and keep it isolated.
 
-1. Commit and push the current targeted fix only if the staged diff is limited
-   to the CFF repeated-source guard and this status note.
-2. Next bucket candidate: the three profile-bulk amplitude-like tests. First
-   determine whether the zero/infinite samples are caused by original/CT
-   cancellation being probed term-by-term, by the profile evaluator choosing a
-   singular sample sequence for repeated bubbles, or by a real missing local
-   limit in the amplitude-like subtraction. Fix only the shared profile/local
-   limit construction, then rerun:
-   - the three profile-bulk tests plus `massless_triangle`,
-   - the 3-test divergent-bubble inspect bucket,
-   - the full 143 slow scalar cross-section sweep,
-   - `just test_gammaloop`.
-3. Separate bucket: the two 3Drep diagnostic CFF/LTD mismatches. They should be
+1. Commit and push the current targeted profile-bulk fix only if the staged
+   diff is limited to the CFF repeated-source guard, generated-basis threshold
+   residue selection, and this status note.
+2. Next bucket: the two 3Drep diagnostic CFF/LTD mismatches. They should be
    fixed through the diagnostic comparison entry point or shared graph/LMB
    coordinate construction. Do not redirect GammaLoop production CFF local-UV
    generation and do not use `graph_from_signature` in production logic.
+3. After that bucket is fixed, rerun:
+   - the two 3Drep diagnostics plus nearby 3Drep CFF/LTD comparison guards,
+   - the profile-bulk four-test guard,
+   - the divergent-bubble expanded-4D inspect bucket,
+   - the full 143 slow scalar cross-section sweep,
+   - `just test_gammaloop`.
 4. After each fixed bucket, update this file with the exact commands and
    counts, then commit and push before moving to the next bucket.
 5. Final acceptance after all buckets are green:
