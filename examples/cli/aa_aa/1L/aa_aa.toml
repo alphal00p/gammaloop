@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/aa_aa/1L/state"
+folder = "./examples/cli/aa_aa/1L/gammaloop_state"
 
 [[command_blocks]]
 name = "generate"

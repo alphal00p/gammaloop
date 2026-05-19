@@ -17,6 +17,10 @@
 # - reusable display examples for quantities, observables, and selectors
 # - a local state under ./state
 
+commands = []
+
+[[command_blocks]]
+name = "default"
 commands = [
   "import model sm-default",
   "run generate",
