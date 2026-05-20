@@ -38,6 +38,7 @@ dirs = { workspace = true }
 dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
+gammaloop-tracing-filter = { workspace = true }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
