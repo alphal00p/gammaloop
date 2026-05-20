@@ -410,7 +410,7 @@ impl SyncSettings for CLISettings {
         // println!("Syncing settings {}", self.global.logfile_directive);
         set_file_log_filter(&self.global.logfile_directive)?;
         set_stderr_log_filter(&self.global.display_directive)?;
-        set_log_style(self.global.log_style.clone());
+        set_log_style(self.global.log_style.to_runtime());
         Ok(())
     }
 }
@@ -1907,7 +1907,7 @@ impl State {
     }
 
     pub fn new_test() -> Self {
-        let _ = init_test_tracing();
+        init_test_tracing();
 
         Self {
             model: Model::default(),
@@ -1918,7 +1918,7 @@ impl State {
     }
 
     pub fn new_bench() -> Self {
-        let _ = init_bench_tracing();
+        init_bench_tracing();
 
         Self {
             model: Model::default(),

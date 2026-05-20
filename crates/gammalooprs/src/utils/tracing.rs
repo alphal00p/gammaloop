@@ -1,6 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use clap::ValueEnum;
-use gammaloop_tracing_filter::GammaLogFilter;
+use gammaloop_tracing_filter::{GammaDisplayFormat, GammaLogFilter};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::OnceLock};
@@ -53,6 +53,41 @@ pub struct LogStyle {
     pub full_line_source: bool,
     #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub include_fields: bool,
+}
+
+impl From<LogFormat> for gammaloop_tracing_filter::LogFormat {
+    fn from(value: LogFormat) -> Self {
+        match value {
+            LogFormat::Long => Self::Long,
+            LogFormat::Full => Self::Full,
+            LogFormat::Short => Self::Short,
+            LogFormat::Min => Self::Min,
+            LogFormat::None => Self::None,
+        }
+    }
+}
+
+impl LogStyle {
+    pub fn to_runtime(&self) -> gammaloop_tracing_filter::LogStyle {
+        gammaloop_tracing_filter::LogStyle {
+            log_format: self.log_format.into(),
+            short_timestamp: self.short_timestamp,
+            full_line_source: self.full_line_source,
+            include_fields: self.include_fields,
+        }
+    }
+}
+
+impl From<&LogStyle> for gammaloop_tracing_filter::LogStyle {
+    fn from(value: &LogStyle) -> Self {
+        value.to_runtime()
+    }
+}
+
+impl From<LogStyle> for gammaloop_tracing_filter::LogStyle {
+    fn from(value: LogStyle) -> Self {
+        value.to_runtime()
+    }
 }
 
 #[repr(usize)]
@@ -163,7 +198,15 @@ fn init_test_tracing_with_defaults(display_default: &str, file_default: &str) {
     let (file_spec, file_filter) = parse_log_filter_or_default(&file_spec, file_default, "file");
 
     let display_layer = fmt::layer()
-        .pretty()
+        .event_format(GammaDisplayFormat::new(
+            LogStyle {
+                log_format: LogFormat::Full,
+                short_timestamp: true,
+                full_line_source: true,
+                include_fields: true,
+            }
+            .to_runtime(),
+        ))
         .with_writer(std::io::stderr)
         .with_filter(display_filter);
 
