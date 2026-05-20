@@ -48,7 +48,8 @@ impl SchoonschipSettings {
             depth_limit,
             mode: SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst),
             expand_contracted_sums: false,
-            contraction_order: SchoonschipContractionOrder::default(),..Default::default()
+            contraction_order: SchoonschipContractionOrder::default(),
+            ..Default::default()
         }
     }
 
@@ -69,7 +70,8 @@ impl SchoonschipSettings {
             mode: SchoonschipMode::SinglePass,
             expand_contracted_sums: false,
             simplify_chain_like_functions: false,
-            contraction_order: SchoonschipContractionOrder::default(),..Default::default()
+            contraction_order: SchoonschipContractionOrder::default(),
+            ..Default::default()
         }
     }
 
@@ -100,6 +102,11 @@ impl SchoonschipSettings {
 
     pub fn with_chain_like_functions(mut self) -> Self {
         self.simplify_chain_like_functions = true;
+        self
+    }
+
+    pub fn with_rank1_tensors(mut self) -> Self {
+        self.schoonschip_rank1_tensors = true;
         self
     }
 

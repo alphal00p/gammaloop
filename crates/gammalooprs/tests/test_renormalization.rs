@@ -13,7 +13,7 @@ use gammalooprs::{
 use idenso::{
     color::{CS, ColorSimplifier},
     dirac::GammaSimplifier,
-    shorthands::metric::MetricSimplifier,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::{
@@ -136,7 +136,7 @@ fn finite_part_quark_lo() {
     println!("ren part: {:>}", a.log_print(Some(80)));
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-4/3*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-4/3*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)"
     );
     // -1 * target
 }
@@ -486,8 +486,9 @@ fn finite_part_ghost_2loop() {
 
     //p1.p1*i_*gs^4*CA*nf*rat(1/4*ep^-2 - 5/24*ep^-1)
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-144𝑖+-40𝑖*ε)*1/64*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-168𝑖*ε+48𝑖)*1/64*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(
@@ -498,7 +499,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-91𝑖/3*ε+74𝑖)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(10𝑖+37𝑖/3*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1/2 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
     insta::assert_snapshot!(
@@ -549,9 +550,10 @@ fn finit_part_ghlo() {
 
     println!("ren part: {:>}", a);
     //p1.p1*gs^2*CA*rat(1/2*ep^-1)
+    // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"1/2*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-1/2*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
 }
 
@@ -608,54 +610,54 @@ mod failing {
         //p1.p1*gs^6*CA^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)
         insta::assert_snapshot!(amp.graphs[0].graph.name,@"d1");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/4*CA^2*ε^2*𝜋^2+-27/4+-29/48*CA^2*ε^2+-3/2*CA^2+-87/32*ε^2+-9/8*ε^2*𝜋^2+11/12*CA^2*ε+33/8*ε)*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/4*ca^2*ε^2*𝜋^2+-27/4+-29/48*ca^2*ε^2+-3/2*ca^2+-87/32*ε^2+-9/8*ε^2*𝜋^2+11/12*ca^2*ε+33/8*ε)*ca*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
         );
 
         //p1.p1*gs^6*CA^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)
         let a = amp.graphs[1].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[1].graph.name,@"d2");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/192*ε+1𝑖/16)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/192*ε+1𝑖/16)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-2)"
         );
 
         //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)
         let a = amp.graphs[2].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[2].graph.name,@"d3");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9𝑖/128+-9𝑖/128*ε^2+39𝑖/256*ε)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9𝑖/128+-9𝑖/128*ε^2+39𝑖/256*ε)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
         );
 
         //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21𝑖/128*ε+9𝑖/64)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21𝑖/128*ε+9𝑖/64)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-2)"
         );
 
         //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
         let a = amp.graphs[4].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/128*ε^2+-9𝑖/128+39𝑖/256*ε)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/128*ε^2+-9𝑖/128+39𝑖/256*ε)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
         ); //-1/2 * target
 
         //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[5].graph.name,@"d6");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-131𝑖/128*ε+159𝑖/64+1𝑖*ε^2+27𝑖/64*ε^2*𝜋^2)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-131𝑖/128*ε+159𝑖/64+1𝑖*ε^2+27𝑖/64*ε^2*𝜋^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[6].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/128*ε+-3𝑖/64+1𝑖*ε^2)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/128*ε+-3𝑖/64+1𝑖*ε^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[7].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/32+63𝑖/64*ε+99𝑖/128*ε^2)*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/32+63𝑖/64*ε+99𝑖/128*ε^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[8].renormalization_part(&settings).unwrap();
@@ -673,409 +675,409 @@ mod failing {
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[11].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[12].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[13].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[14].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[15].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[16].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[17].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[18].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[19].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[20].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[21].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[22].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[23].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[24].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[25].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[26].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[27].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[28].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[29].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[30].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[31].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[32].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[33].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[34].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[35].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[36].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[37].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[38].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[39].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[40].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[41].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[42].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[43].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[44].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[45].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[46].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[47].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[48].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[49].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[50].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[51].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[52].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[53].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[54].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[55].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[56].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[57].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[58].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[59].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[60].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[61].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[62].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[63].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[64].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[65].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[66].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[67].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[68].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[69].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[70].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[71].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[72].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[73].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[74].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[75].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[76].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[77].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
     }
 }

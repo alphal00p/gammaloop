@@ -406,11 +406,11 @@ fn simplify_generated_metric_components(expr: Atom) -> Atom {
 }
 
 /// Trait for simplifying expressions involving metric tensors and converting
-/// index contractions to compact Schoonschip scalar products.
+/// metric shorthand to compact scalar products.
 ///
 /// Provides methods for contracting indices with metric tensors (`g(mu, nu)`) or
-/// identity tensors (`id(mu, nu)`), and for replacing contracted index patterns
-/// (like `p(mu)*q(mu)`) with `dot(p(rep), q(rep))`.
+/// identity tensors (`id(mu, nu)`), and for replacing metric shorthand
+/// (`g(p(rep), q(rep))`) with `dot(p(rep), q(rep))`.
 pub trait MetricSimplifier {
     /// Simplifies contractions involving metric tensors (`g` or `metric`) and identity tensors (`id` or `𝟙`).
     ///
@@ -422,20 +422,20 @@ pub trait MetricSimplifier {
 
     fn expand_dots(&self) -> Result<Atom>;
 
-    /// Converts contracted index patterns into compact scalar-product notation.
+    /// Converts metric shorthand into compact scalar-product notation.
     ///
-    /// Replaces expressions like `p(mu) * q(mu)` or `p(mu) * M(mu, nu) * q(nu)` (implicitly via metric rules)
-    /// with `dot(p(rep), q(rep))`. Assumes standard representations for vectors and tensors involved
-    /// in the contractions.
+    /// Replaces expressions like `g(p(rep), q(rep))` with `dot(p(rep), q(rep))`.
+    /// This does not accumulate indexed vector contractions; use `Schoonschip::to_dots`
+    /// for the full schoonschip-aware conversion.
     ///
     /// # Returns
-    /// An [`Atom`] where contractions have been replaced by compact scalar products where possible.
-    fn to_dots(&self) -> Atom;
+    /// An [`Atom`] where metric shorthand has been replaced by compact scalar products where possible.
+    fn metric_shorthand_to_dot(&self) -> Atom;
 }
 
 impl MetricSimplifier for Atom {
-    fn to_dots(&self) -> Atom {
-        self.as_view().to_dots()
+    fn metric_shorthand_to_dot(&self) -> Atom {
+        self.as_view().metric_shorthand_to_dot()
     }
 
     fn expand_dots(&self) -> Result<Atom> {
@@ -447,8 +447,8 @@ impl MetricSimplifier for Atom {
 }
 
 impl MetricSimplifier for AtomView<'_> {
-    fn to_dots(&self) -> Atom {
-        DotNormalizer::to_dots(*self)
+    fn metric_shorthand_to_dot(&self) -> Atom {
+        DotNormalizer::metric_shorthand_to_dot(*self)
     }
 
     fn expand_dots(&self) -> Result<Atom> {

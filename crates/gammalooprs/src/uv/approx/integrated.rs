@@ -852,7 +852,7 @@ pub(crate) fn to_vakint_integrand<
 
         t.numerator *= parse!(&settings.additional_normalization).pow(nloops);
 
-        t.numerator = t.numerator.simplify_metrics().to_dots();
+        t.numerator = t.numerator.to_dots();
         t.integral = t
             .integral
             .replace(function!(GS.loop_mom, W_.x___))
