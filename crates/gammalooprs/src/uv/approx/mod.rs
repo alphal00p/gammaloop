@@ -1,9 +1,13 @@
 use crate::{
-    cff::expression::{
-        OrientationID, ThreeDExpression, localize_three_d_expression_on_esurface,
-        ltd_lu_local_series_coefficients_from_parametric_atom,
-        prepare_ltd_lu_local_series_expression,
-        remove_ltd_global_contact_completions_from_local_residue, select_lu_cut_residue_for_basis,
+    cff::{
+        CutCFFIndex,
+        expression::{
+            OrientationID, ThreeDExpression, localize_three_d_expression_on_esurface,
+            ltd_lu_local_series_coefficients_from_parametric_atom,
+            prepare_ltd_lu_local_series_expression,
+            remove_ltd_global_contact_completions_from_local_residue,
+            select_lu_cut_residue_for_basis,
+        },
     },
     graph::{
         Graph, LoopMomentumBasis,
@@ -32,7 +36,7 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
 use spenso::network::library::TensorLibraryData;
@@ -159,7 +163,7 @@ pub struct Approximation {
     pub spinney: Spinney,
     pub local_3d: Local3DApprox,
     pub local_4d_expanded: Option<Expanded4DApprox>,
-    pub final_integrand: Option<Vec<Atom>>,
+    pub final_integrand: Option<BTreeMap<CutCFFIndex, Atom>>,
     pub integrated_4d: ApproxOp,
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
@@ -221,7 +225,7 @@ impl CutStructure {
 }
 
 impl Local3DApprox {
-    pub(crate) fn expr(&self) -> Option<(Vec<Atom>, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
         match self {
             Local3DApprox::NotComputed => None,
             Local3DApprox::Dependent { sign, t_arg } => Some((t_arg.integrands.clone(), *sign)),
@@ -282,11 +286,14 @@ fn localized_integrated_reduced_factor(
         let integrands = cff
             .terms
             .into_iter()
-            .map(|term| {
-                term.expression
-                    .into_iter()
-                    .fold(Atom::Zero, |acc, expr| acc + expr)
-                    / normalization.clone()
+            .map(|(index, term)| {
+                (
+                    index,
+                    term.expression
+                        .into_iter()
+                        .fold(Atom::Zero, |acc, expr| acc + expr)
+                        / normalization.clone(),
+                )
             })
             .collect();
 
@@ -298,7 +305,7 @@ fn localized_integrated_reduced_factor(
     let integrands = cff
         .terms
         .into_iter()
-        .map(|term| {
+        .map(|(index, term)| {
             let mut localized = Atom::Zero;
             for (expr, orientation) in term.expression.into_iter().zip(term.orientations) {
                 localized += localize_reduced_orientation_term(
@@ -308,11 +315,51 @@ fn localized_integrated_reduced_factor(
                     &internal_edges,
                 )?;
             }
-            Ok(localized)
+            Ok((index, localized))
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<BTreeMap<_, _>>>()?;
 
     Ok(IntegrandExpr { integrands })
+}
+
+#[derive(Clone, Copy)]
+enum ResidueIndexAxis {
+    RightThreshold,
+    LeftThreshold,
+    LuCut,
+}
+
+impl ResidueIndexAxis {
+    fn set_order(self, index: &mut CutCFFIndex, order: usize) {
+        match self {
+            Self::RightThreshold => index.right_threshold_order = Some(order),
+            Self::LeftThreshold => index.left_threshold_order = Some(order),
+            Self::LuCut => index.lu_cut_order = Some(order),
+        }
+    }
+}
+
+fn apply_indexed_residue_selection<F>(
+    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
+    axis: ResidueIndexAxis,
+    mut select: F,
+) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
+where
+    F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
+{
+    residues
+        .into_iter()
+        .flat_map(|(index, expression)| {
+            select(expression)
+                .into_iter()
+                .enumerate()
+                .map(move |(i, residue)| {
+                    let mut new_index = index;
+                    axis.set_order(&mut new_index, i + 1);
+                    (new_index, residue)
+                })
+        })
+        .collect()
 }
 
 fn select_threshold_residue_for_representation(
@@ -352,15 +399,38 @@ impl Approximation {
             });
     }
 
-    fn zero_terms(n_terms: usize) -> Vec<Atom> {
+    fn zero_terms(allowed_keys: &[CutCFFIndex]) -> BTreeMap<CutCFFIndex, Atom> {
+        allowed_keys.iter().map(|&key| (key, Atom::Zero)).collect()
+    }
+
+    fn zero_vec(n_terms: usize) -> Vec<Atom> {
         vec![Atom::Zero; n_terms]
     }
 
-    fn set_zero_local_3d(&mut self, sign: Sign, n_terms: usize) {
+    fn indexed_terms_from_cutset(
+        cutset: &CutSet,
+        terms: Vec<Atom>,
+        context: &str,
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        let allowed_keys = cutset.residue_selector.generate_allowed_keys();
+        if terms.len() == allowed_keys.len() {
+            return Ok(allowed_keys.into_iter().zip(terms).collect());
+        }
+        if terms.len() == 1 && terms[0].is_zero() {
+            return Ok(Self::zero_terms(&allowed_keys));
+        }
+        Err(eyre!(
+            "{context} generated {} local residue integrands, but the residue selector allows {} indices",
+            terms.len(),
+            allowed_keys.len()
+        ))
+    }
+
+    fn set_zero_local_3d(&mut self, sign: Sign, allowed_keys: &[CutCFFIndex]) {
         self.local_3d = Local3DApprox::Dependent {
             sign,
             t_arg: IntegrandExpr {
-                integrands: Self::zero_terms(n_terms),
+                integrands: Self::zero_terms(allowed_keys),
             },
         };
     }
@@ -368,7 +438,7 @@ impl Approximation {
     fn set_zero_local_4d_expanded(&mut self, sign: Sign, n_terms: usize) {
         self.local_4d_expanded = Some(Expanded4DApprox {
             sign,
-            terms: Self::zero_terms(n_terms),
+            terms: Self::zero_vec(n_terms),
         });
     }
 
@@ -393,11 +463,9 @@ impl Approximation {
             self.integrated_4d = ApproxOp::Root;
             self.local_3d = Local3DApprox::root(graph, cuts, &settings.uv)?;
             if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
-                let (integrands, _) = self
-                    .local_3d
-                    .expr()
-                    .expect("root local 3D approximation should have been computed");
-                self.final_integrand = Some(Self::zero_terms(integrands.len()));
+                self.final_integrand = Some(Self::zero_terms(
+                    &cuts.residue_selector.generate_allowed_keys(),
+                ));
             } else if settings.explicit_orientation_sum_only {
                 let root_expression = root_residue_context.expression.ok_or_else(|| {
                     eyre!(
@@ -441,33 +509,35 @@ impl Approximation {
         lu_residue_selection_basis: LuResidueSelectionBasis,
         lu_residue_reference_basis: LuResidueSelectionBasis,
         average_for_outer_orientation_projection: bool,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
 
-        let mut residues = vec![expression.clone()];
+        let mut residues = vec![(CutCFFIndex::new_all_none(), expression.clone())];
         if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-            residues = residues
-                .into_iter()
-                .flat_map(|expression| {
+            residues = apply_indexed_residue_selection(
+                residues,
+                ResidueIndexAxis::RightThreshold,
+                |expression| {
                     select_threshold_residue_for_representation(
                         expression,
                         right_threshold,
                         representation,
                     )
-                })
-                .collect();
+                },
+            );
         }
         if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-            residues = residues
-                .into_iter()
-                .flat_map(|expression| {
+            residues = apply_indexed_residue_selection(
+                residues,
+                ResidueIndexAxis::LeftThreshold,
+                |expression| {
                     select_threshold_residue_for_representation(
                         expression,
                         left_threshold,
                         representation,
                     )
-                })
-                .collect();
+                },
+            );
         }
         if representation == ThreeDRepresentation::Ltd
             && cutset.residue_selector.has_lu_cut_residue()
@@ -476,8 +546,8 @@ impl Approximation {
             let residue_prefactor_sign = cutset
                 .residue_selector
                 .ltd_direct_original_residue_prefactor_sign();
-            let mut atoms = Vec::new();
-            for mut residue in residues {
+            let mut atoms = BTreeMap::new();
+            for (index, mut residue) in residues {
                 prepare_ltd_lu_local_series_expression(&mut residue, cutset);
                 self.localize_ltd_threshold_residue_if_needed(&mut residue, cutset)?;
                 let atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
@@ -487,27 +557,33 @@ impl Approximation {
                     true,
                     &settings.orientation_pattern,
                 );
-                atoms.extend(
-                    ltd_lu_local_series_coefficients_from_parametric_atom(
-                        &graph.name,
-                        &residue,
-                        atom,
-                        lu_cut,
-                        cutset
-                            .residue_selector
-                            .ltd_lu_cut_local_series_esurface_signs(),
-                        cutset
-                            .residue_selector
-                            .ltd_lu_cut_local_series_coordinates(),
-                        false,
-                    )?
-                    .into_iter()
-                    .map(|coefficient| coefficient * Atom::num(residue_prefactor_sign)),
-                );
+                for (i, coefficient) in ltd_lu_local_series_coefficients_from_parametric_atom(
+                    &graph.name,
+                    &residue,
+                    atom,
+                    lu_cut,
+                    cutset
+                        .residue_selector
+                        .ltd_lu_cut_local_series_esurface_signs(),
+                    cutset
+                        .residue_selector
+                        .ltd_lu_cut_local_series_coordinates(),
+                    false,
+                )?
+                .into_iter()
+                .enumerate()
+                {
+                    let mut coefficient_index = index;
+                    coefficient_index.lu_cut_order = Some(i + 1);
+                    atoms.insert(
+                        coefficient_index,
+                        coefficient * Atom::num(residue_prefactor_sign),
+                    );
+                }
             }
             return atoms
                 .into_iter()
-                .map(|mut atom| {
+                .map(|(index, mut atom)| {
                     if average_for_outer_orientation_projection {
                         // The root term comes from the explicitly summed
                         // production expression, while CFF local-3D forests
@@ -522,21 +598,22 @@ impl Approximation {
                         }
                         atom /= Atom::num(valid_orientations.len() as i64);
                     }
-                    Ok(atom
-                        .replace(GS.dim)
-                        .with(4)
-                        .simplify_color()
-                        .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
-                        .with(W_.d_)
-                        .expand_dots()?
-                        .collect_factors())
+                    Ok((
+                        index,
+                        atom.replace(GS.dim)
+                            .with(4)
+                            .simplify_color()
+                            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                            .with(W_.d_)
+                            .expand_dots()?
+                            .collect_factors(),
+                    ))
                 })
                 .collect();
         }
         if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
-            residues = residues
-                .into_iter()
-                .flat_map(|expression| {
+            residues =
+                apply_indexed_residue_selection(residues, ResidueIndexAxis::LuCut, |expression| {
                     select_lu_cut_residue_for_basis(
                         expression,
                         lu_cut,
@@ -544,11 +621,10 @@ impl Approximation {
                         cutset.residue_selector.ltd_lu_cut_esurface_signs(),
                         lu_residue_selection_basis,
                     )
-                })
-                .collect();
+                });
         }
         if representation == ThreeDRepresentation::Ltd {
-            for residue in &mut residues {
+            for (_, residue) in &mut residues {
                 if cutset.residue_selector.lu_cut().is_some() {
                     remove_ltd_global_contact_completions_from_local_residue(residue);
                 }
@@ -557,7 +633,7 @@ impl Approximation {
         }
         residues
             .into_iter()
-            .map(|residue| {
+            .map(|(index, residue)| {
                 let mut atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
                     &residue,
                     &numerator,
@@ -600,7 +676,7 @@ impl Approximation {
                     .with(W_.d_)
                     .expand_dots()?
                     .collect_factors();
-                Ok(atom)
+                Ok((index, atom))
             })
             .collect()
     }
@@ -640,7 +716,9 @@ impl Approximation {
             self.integrated_4d = ApproxOp::Root;
             self.local_4d_expanded = Some(Expanded4DApprox::root(graph));
             if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
-                self.final_integrand = Some(Self::zero_terms(1));
+                self.final_integrand = Some(Self::zero_terms(
+                    &cuts.residue_selector.generate_allowed_keys(),
+                ));
             } else {
                 let root_expression = root_residue_context.expression.ok_or_else(|| {
                     eyre!(
@@ -691,7 +769,7 @@ impl Approximation {
         {
             self.integrated_4d = ApproxOp::Dependent {
                 t_arg: IntegrandExpr {
-                    integrands: vec![Atom::Zero],
+                    integrands: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
                 },
                 sign: Sign::Positive,
                 subgraph: unsafe {
@@ -717,8 +795,12 @@ impl Approximation {
 
         let integrands = current
             .iter()
-            .map(|a| Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a))
-            .collect::<Result<Vec<_>>>()?;
+            .map(|(index, a)| {
+                let integrated =
+                    Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a)?;
+                Ok((*index, integrated))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
 
         self.integrated_4d = ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrands },
@@ -760,7 +842,10 @@ impl Approximation {
         let ctx = UVCtx { graph, settings };
 
         if Self::filtered_integrated_uv_mode_is_active(settings) {
-            self.set_zero_local_3d(-sign, cff.len());
+            self.set_zero_local_3d(
+                -sign,
+                cuts.residue_selector.generate_allowed_keys().as_slice(),
+            );
             self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
                 self.final_integrand(
                     graph,
@@ -770,7 +855,7 @@ impl Approximation {
                     explicit_orientation_sum_only,
                 )?
             } else {
-                Self::zero_terms(cff.len())
+                Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
             });
             return Ok(());
         }
@@ -783,13 +868,16 @@ impl Approximation {
             ));
         }
 
-        let mut integrands = vec![];
-        for (local, t_arg) in cff.into_iter().zip(t_arg.integrands) {
+        let mut integrands = BTreeMap::new();
+        for (index, local) in cff {
+            let t_arg = t_arg.integrands.get(&index).ok_or_else(|| {
+                eyre!("localized finite integrated UV is missing residue index {index:?}")
+            })?;
             let mut sum_3d = Atom::Zero;
             sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
             sum_3d -=
                 Local3DApproximation {}.kernel(&ctx, &*self, dependent, &(&finite * t_arg))?;
-            integrands.push(sum_3d);
+            integrands.insert(index, sum_3d);
         }
 
         self.local_3d = Local3DApprox::Dependent {
@@ -836,7 +924,7 @@ impl Approximation {
                         root_expression,
                     )?
                 } else {
-                    Self::zero_terms(parent_terms.len())
+                    Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
                 });
             return Ok(());
         }
@@ -873,7 +961,7 @@ impl Approximation {
         valid_orientations: &[EdgeVec<Orientation>],
         _settings: &UVgenerationSettings,
         explicit_orientation_sum_only: bool,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
             .local_3d
@@ -906,10 +994,13 @@ impl Approximation {
             .subtract(self.spinney.subgraph.included())
             .subtract(&graph.initial_state_cut);
 
-        let mut integrands = vec![];
+        let mut integrands = BTreeMap::new();
 
-        for (t, t_arg) in t.iter().zip(t_arg.integrands.iter()) {
-            let mut cff = s * t.clone() - s * (&finite * t_arg);
+        for (local_index, local) in &t {
+            let t_arg = t_arg.integrands.get(local_index).ok_or_else(|| {
+                eyre!("localized finite integrated UV is missing residue index {local_index:?}")
+            })?;
+            let mut cff = s * local.clone() - s * (&finite * t_arg);
 
             for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
                 let eid = usize::from(eid) as i64;
@@ -978,7 +1069,7 @@ impl Approximation {
                 debug_preview.log_print(None) // printer(LOGPRINTOPTS)
             );
 
-            integrands.push(resnum.replace_multiple(&reps))
+            integrands.insert(*local_index, resnum.replace_multiple(&reps));
         }
 
         // debug!("final_cff {res:>}");
@@ -994,7 +1085,7 @@ impl Approximation {
         settings: &crate::settings::global::GenerationSettings,
         representation: crate::settings::global::ThreeDRepresentation,
         root_expression: Option<&ThreeDExpression<OrientationID>>,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let Some(local_4d) = self.local_4d_expanded.as_ref() else {
             return Err(eyre!("expanded 4D local UV term not yet computed"));
         };
@@ -1028,7 +1119,7 @@ impl Approximation {
         )?;
 
         if finite.is_zero() {
-            return Ok(integrands);
+            return Self::indexed_terms_from_cutset(cutset, integrands, "expanded 4D local UV");
         }
 
         let finite_atom = {
@@ -1048,9 +1139,9 @@ impl Approximation {
         )?;
         if integrands.len() != finite_integrands.len() {
             if integrands.len() == 1 && integrands[0].is_zero() {
-                integrands = Self::zero_terms(finite_integrands.len());
+                integrands = Self::zero_vec(finite_integrands.len());
             } else if finite_integrands.len() == 1 && finite_integrands[0].is_zero() {
-                finite_integrands = Self::zero_terms(integrands.len());
+                finite_integrands = Self::zero_vec(integrands.len());
             } else {
                 return Err(eyre!(
                     "expanded 4D local UV generated {} local residue integrands, but finite integrated UV generated {}",
@@ -1062,7 +1153,7 @@ impl Approximation {
         for (sum, finite) in integrands.iter_mut().zip(finite_integrands) {
             *sum += finite;
         }
-        Ok(integrands)
+        Self::indexed_terms_from_cutset(cutset, integrands, "expanded 4D local UV")
     }
 
     // pub(crate) fn simple_expr(
@@ -1091,7 +1182,7 @@ fn finite_integrated_part(integrated_4d: &ApproxOp) -> Result<Atom> {
         return Err(eyre!("expected one integrated 4D approximation term"));
     }
     let finite_term = t4
-        .pop()
+        .remove(&CutCFFIndex::new_all_none())
         .map(|t4| t4_sign * t4)
         .ok_or_else(|| eyre!("expected one integrated 4D approximation term"))?;
     Ok(finite_term
@@ -1106,7 +1197,7 @@ fn finite_integrated_part(integrated_4d: &ApproxOp) -> Result<Atom> {
 }
 
 impl ApproxOp {
-    pub(crate) fn expr(&self) -> Option<(Vec<Atom>, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { .. } => {
@@ -1116,7 +1207,10 @@ impl ApproxOp {
                 );
             }
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrands.clone(), *sign)),
-            ApproxOp::Root => Some((vec![Atom::num(1)], Sign::Positive)),
+            ApproxOp::Root => Some((
+                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::num(1))]),
+                Sign::Positive,
+            )),
         }
     }
 }

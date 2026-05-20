@@ -1,6 +1,7 @@
 ---
 source: tests/tests/test_runs/scalar_3L_cross_section_inspects.rs
+assertion_line: 262
 expression: "format!(\"re = {:.17e}\\nim = {:.17e}\", weight.re, weight.im)"
 ---
 re = 1.23523586496698471e-8
-im = 2.01854428653064201e-19
+im = 2.01854428653064249e-19

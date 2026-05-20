@@ -57,14 +57,14 @@ final-status-level = "fail"
 
 [profile.ci.junit]
 # JUnit output for CI systems
-path = "target/nextest/ci/junit.xml"
+path = "junit.xml"
 
 [profile.ci_gammaloop]
 inherits = "ci"
 default-filter = "not test(/(^|::)(slow|failing)::/)"
 
 [profile.ci_gammaloop.junit]
-path = "target/nextest/ci/junit.xml"
+path = "junit.xml"
 
 [[profile.ci_gammaloop.overrides]]
 # Vakint tests can end up running restricted Symbolica instances in nix-ci,

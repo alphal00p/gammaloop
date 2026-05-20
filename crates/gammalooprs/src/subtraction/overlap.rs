@@ -19,7 +19,7 @@ use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use crate::utils::GS;
 use crate::utils::compute_shift_part;
-use crate::utils::hyperdual_utils::shape_for_t_derivatives;
+use crate::utils::hyperdual_utils::simple_n_deriv_shape;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -140,6 +140,7 @@ impl OverlapStructure {
         for (group, square_atom) in self.overlap_groups.iter_mut().zip(group_square_atoms) {
             let atom = square_atom / &denominator;
             let num_orders = power.saturating_sub(1).max(1) as usize;
+
             let evaluators = (0..num_orders)
                 .map(|order_index| {
                     GenericEvaluator::new_from_raw_params(
@@ -148,7 +149,7 @@ impl OverlapStructure {
                         &FunctionMap::new(),
                         vec![],
                         optimization_settings.clone(),
-                        (order_index > 0).then(|| shape_for_t_derivatives(order_index)),
+                        (order_index > 0).then(|| simple_n_deriv_shape(order_index)),
                         &EvaluatorSettings::default(),
                     )
                     .map(RefCell::new)

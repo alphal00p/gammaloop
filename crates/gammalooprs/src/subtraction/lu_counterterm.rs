@@ -1,5 +1,5 @@
 use core::f64;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -8,7 +8,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::{
-    dual::HyperDual,
+    dual::{DualNumberStructure, HyperDual},
     float::{Real, RealLike},
 };
 use tracing::debug;
@@ -17,6 +17,7 @@ use typed_index_collections::TiVec;
 use crate::{
     GammaLoopContext,
     cff::{
+        CutCFFIndex,
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::OrientationID,
     },
@@ -25,7 +26,10 @@ use crate::{
         evaluation::EvaluationMetaData,
         process::{
             GenericEvaluator, ParamBuilder, ThresholdParams,
-            evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
+            evaluators::{
+                EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator,
+                evaluate_evaluator_single,
+            },
             param_builder::LUParams,
         },
     },
@@ -50,8 +54,9 @@ use crate::{
     utils::{
         F, FloatLike,
         hyperdual_utils::{
-            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            shape_for_t_derivatives,
+            DualOrNot, dualize_dual_t_to_dual_r_t, extract_coefficient_t_duals,
+            extract_t_derivatives, extract_t_derivatives_complex, new_constant,
+            shape_from_cut_cff_index, simple_n_deriv_shape, variable_indices_from_cut_cff_index,
         },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
@@ -61,7 +66,7 @@ fn zero_dual_or_not_complex<T: FloatLike>(order: usize, zero: &F<T>) -> DualOrNo
     if order == 0 {
         DualOrNot::NonDual(Complex::new_re(zero.clone()))
     } else {
-        DualOrNot::Dual(HyperDual::new(shape_for_t_derivatives(order)))
+        DualOrNot::Dual(HyperDual::new(simple_n_deriv_shape(order)))
     }
 }
 
@@ -92,9 +97,346 @@ fn multiply_dual_or_not_complex<T: FloatLike>(
     }
 }
 
+fn plain_t_dual_or_scalar_complex<T: FloatLike>(
+    value: &DualOrNot<Complex<F<T>>>,
+    t_variable: Option<usize>,
+) -> DualOrNot<Complex<F<T>>> {
+    match value {
+        DualOrNot::Dual(dual) => {
+            if let Some(t_variable) = t_variable {
+                DualOrNot::Dual(extract_zero_threshold_coefficient_t_dual(dual, t_variable))
+            } else {
+                DualOrNot::NonDual(dual.values[0].clone())
+            }
+        }
+        DualOrNot::NonDual(value) => DualOrNot::NonDual(value.clone()),
+    }
+}
+
+fn extract_zero_threshold_coefficient_t_dual<
+    T: Clone + spenso::algebra::algebraic_traits::RefZero + Default,
+>(
+    dual: &HyperDual<T>,
+    t_variable: usize,
+) -> HyperDual<T> {
+    let (coefficient_orders, coefficient_duals) = extract_coefficient_t_duals(dual, t_variable);
+    let zero_index = coefficient_orders
+        .iter()
+        .position(|orders| orders.iter().all(|order| *order == 0))
+        .expect("Could not find zero-threshold coefficient in mixed dual");
+
+    coefficient_duals[zero_index].clone()
+}
+
+fn embed_t_dual_in_target_shape<T: FloatLike>(
+    t_dual: &HyperDual<F<T>>,
+    target_shape: &HyperDual<F<T>>,
+    t_variable: Option<usize>,
+) -> HyperDual<F<T>> {
+    match t_variable {
+        Some(t_variable) => {
+            dualize_dual_t_to_dual_r_t(t_dual.clone(), target_shape.clone(), t_variable)
+        }
+        None => new_constant(target_shape, &t_dual.values[0]),
+    }
+}
+
+fn activate_threshold_variable_in_target_shape<T: FloatLike>(
+    dual: &mut HyperDual<F<T>>,
+    variable: Option<usize>,
+) {
+    let Some(variable) = variable else {
+        return;
+    };
+
+    let n_variables = dual.get_shape()[0].len();
+    let mut derivative_shape = vec![0; n_variables];
+    derivative_shape[variable] = 1;
+
+    let derivative_index = dual
+        .get_shape()
+        .iter()
+        .position(|shape| shape == &derivative_shape)
+        .expect("Could not find threshold-variable derivative slot in target shape");
+
+    dual.values[derivative_index] = dual.values[0].one();
+}
+
+fn embed_real_dual_or_not_in_target_shape<T: FloatLike>(
+    value: &DualOrNot<F<T>>,
+    target_shape: &Option<HyperDual<F<T>>>,
+    t_variable: Option<usize>,
+) -> DualOrNot<F<T>> {
+    match (value, target_shape) {
+        (DualOrNot::Dual(dual), Some(target_shape)) => {
+            DualOrNot::Dual(embed_t_dual_in_target_shape(dual, target_shape, t_variable))
+        }
+        (DualOrNot::NonDual(value), Some(target_shape)) => {
+            DualOrNot::Dual(new_constant(target_shape, value))
+        }
+        _ => value.clone(),
+    }
+}
+
+fn embedded_dual_loop_momenta_for_cut_cff_index<T: FloatLike>(
+    sample: &MomentumSample<T>,
+    target_shape: &Option<HyperDual<F<T>>>,
+    t_variable: Option<usize>,
+) -> Option<LoopMomenta<HyperDual<F<T>>>> {
+    match target_shape {
+        Some(target_shape) => Some(match sample.sample.dual_loop_moms.as_ref() {
+            Some(dual_loop_moms) => dual_loop_moms
+                .iter()
+                .map(|momentum| {
+                    momentum.map_ref(&|component| {
+                        embed_t_dual_in_target_shape(component, target_shape, t_variable)
+                    })
+                })
+                .collect(),
+            None => sample
+                .loop_moms()
+                .iter()
+                .map(|momentum| {
+                    momentum.map_ref(&|component| new_constant(target_shape, component))
+                })
+                .collect(),
+        }),
+        None => sample.sample.dual_loop_moms.clone(),
+    }
+}
+
+fn extend_plain_helper_real_params<T: FloatLike>(
+    params: &mut Vec<Complex<F<T>>>,
+    value: &DualOrNot<F<T>>,
+    t_variable: Option<usize>,
+) {
+    match value {
+        DualOrNot::Dual(dual) => {
+            if let Some(t_variable) = t_variable {
+                params.extend(
+                    extract_t_derivatives(extract_zero_threshold_coefficient_t_dual(
+                        dual, t_variable,
+                    ))
+                    .into_iter()
+                    .map(Complex::new_re),
+                );
+            } else {
+                params.push(Complex::new_re(dual.values[0].clone()));
+            }
+        }
+        DualOrNot::NonDual(value) => params.push(Complex::new_re(value.clone())),
+    }
+}
+
+fn extend_extracted_f_params<T: FloatLike>(
+    params: &mut Vec<Complex<F<T>>>,
+    value: &DualOrNot<Complex<F<T>>>,
+    t_variable: Option<usize>,
+) {
+    match value {
+        DualOrNot::Dual(dual) => {
+            if let Some(t_variable) = t_variable {
+                let (_, coefficient_duals) = extract_coefficient_t_duals(dual, t_variable);
+                for coefficient_dual in coefficient_duals {
+                    params.extend(extract_t_derivatives_complex(coefficient_dual));
+                }
+            } else {
+                params.extend(dual.values.iter().cloned());
+            }
+        }
+        DualOrNot::NonDual(value) => params.push(value.clone()),
+    }
+}
+
+fn extend_extracted_eta_params<T: FloatLike>(
+    params: &mut Vec<Complex<F<T>>>,
+    value: &DualOrNot<F<T>>,
+    t_variable: Option<usize>,
+) {
+    match value {
+        DualOrNot::Dual(dual) => {
+            if let Some(t_variable) = t_variable {
+                let (_, coefficient_duals) = extract_coefficient_t_duals(dual, t_variable);
+                for coefficient_dual in coefficient_duals {
+                    params.extend(
+                        extract_t_derivatives(coefficient_dual)
+                            .into_iter()
+                            .map(Complex::new_re),
+                    );
+                }
+            } else {
+                params.extend(dual.values.iter().cloned().map(Complex::new_re));
+            }
+        }
+        DualOrNot::NonDual(value) => params.push(Complex::new_re(value.clone())),
+    }
+}
+
+fn evaluate_threshold_helper_single<
+    T: FloatLike + crate::integrands::process::evaluators::GenericEvaluatorFloat,
+>(
+    helper: &mut GenericEvaluator,
+    cut_cff_index: &CutCFFIndex,
+    threshold_result: &DualOrNot<Complex<F<T>>>,
+    threshold_params: &ThresholdParams<T>,
+    evaluation_meta_data: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+) -> DualOrNot<Complex<F<T>>> {
+    let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
+    let mut helper_params = Vec::new();
+    extend_extracted_f_params(&mut helper_params, threshold_result, t_variable);
+    extend_extracted_eta_params(
+        &mut helper_params,
+        &threshold_params.esurface_derivative,
+        t_variable,
+    );
+    extend_plain_helper_real_params(&mut helper_params, &threshold_params.radius, t_variable);
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &threshold_params.radius_star,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &threshold_params.uv_damp_plus,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &threshold_params.uv_damp_minus,
+        t_variable,
+    );
+    extend_plain_helper_real_params(&mut helper_params, &threshold_params.h_function, t_variable);
+
+    debug!(
+        "LU threshold helper input (single): cut_cff_index={:?}, t_variable={:?}, param_count={}",
+        cut_cff_index,
+        t_variable,
+        helper_params.len()
+    );
+    for (idx, value) in helper_params.iter().enumerate() {
+        debug!(
+            "LU threshold helper param (single): cut_cff_index={:?}, index={}, value={}",
+            cut_cff_index, idx, value
+        );
+    }
+
+    let mut result = evaluate_evaluator(
+        helper,
+        &helper_params,
+        evaluation_meta_data,
+        record_primary_timing,
+    );
+
+    debug_assert_eq!(result.len(), 1);
+    result.pop().unwrap()
+}
+
+fn evaluate_threshold_helper_iterated<
+    T: FloatLike + crate::integrands::process::evaluators::GenericEvaluatorFloat,
+>(
+    helper: &mut GenericEvaluator,
+    cut_cff_index: &CutCFFIndex,
+    threshold_result: &DualOrNot<Complex<F<T>>>,
+    left_threshold_params: &ThresholdParams<T>,
+    right_threshold_params: &ThresholdParams<T>,
+    evaluation_meta_data: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+) -> DualOrNot<Complex<F<T>>> {
+    let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
+    let mut helper_params = Vec::new();
+    extend_extracted_f_params(&mut helper_params, threshold_result, t_variable);
+    extend_extracted_eta_params(
+        &mut helper_params,
+        &left_threshold_params.esurface_derivative,
+        t_variable,
+    );
+    extend_extracted_eta_params(
+        &mut helper_params,
+        &right_threshold_params.esurface_derivative,
+        t_variable,
+    );
+
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &left_threshold_params.radius,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &left_threshold_params.radius_star,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &left_threshold_params.uv_damp_plus,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &left_threshold_params.uv_damp_minus,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &left_threshold_params.h_function,
+        t_variable,
+    );
+
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &right_threshold_params.radius,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &right_threshold_params.radius_star,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &right_threshold_params.uv_damp_plus,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &right_threshold_params.uv_damp_minus,
+        t_variable,
+    );
+    extend_plain_helper_real_params(
+        &mut helper_params,
+        &right_threshold_params.h_function,
+        t_variable,
+    );
+
+    debug!(
+        "LU threshold helper input (iterated): cut_cff_index={:?}, t_variable={:?}, param_count={}",
+        cut_cff_index,
+        t_variable,
+        helper_params.len()
+    );
+    for (idx, value) in helper_params.iter().enumerate() {
+        debug!(
+            "LU threshold helper param (iterated): cut_cff_index={:?}, index={}, value={}",
+            cut_cff_index, idx, value
+        );
+    }
+
+    let mut result = evaluate_evaluator(
+        helper,
+        &helper_params,
+        evaluation_meta_data,
+        record_primary_timing,
+    );
+
+    debug_assert_eq!(result.len(), 1);
+    result.pop().unwrap()
+}
+
 fn real_dual_to_complex<T: FloatLike>(dual: HyperDual<F<T>>) -> HyperDual<Complex<F<T>>> {
+    let shape = dual.get_shape().iter().map(|v| v.to_vec()).collect();
     let values = dual.values.into_iter().map(Complex::new_re).collect_vec();
-    HyperDual::from_values(shape_for_t_derivatives(values.len() - 1), values)
+    HyperDual::from_values(shape, values)
 }
 
 fn dualize_external_momenta<T: FloatLike>(
@@ -289,10 +631,44 @@ fn compute_loop_part_subspace_dual<T: FloatLike>(
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
+pub struct LUThresholdHelperEvaluators {
+    pub left_thresholds: TiVec<LeftThresholdId, BTreeMap<CutCFFIndex, GenericEvaluator>>,
+    pub right_thresholds: TiVec<RightThresholdId, BTreeMap<CutCFFIndex, GenericEvaluator>>,
+    pub iterated: IteratedCtCollection<BTreeMap<CutCFFIndex, GenericEvaluator>>,
+}
+
+impl LUThresholdHelperEvaluators {
+    fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        for evaluators in self.left_thresholds.iter_mut() {
+            for evaluator in evaluators.values_mut() {
+                f(evaluator)?;
+            }
+        }
+        for evaluators in self.right_thresholds.iter_mut() {
+            for evaluator in evaluators.values_mut() {
+                f(evaluator)?;
+            }
+        }
+        for evaluators in self.iterated.iter_mut() {
+            for evaluator in evaluators.values_mut() {
+                f(evaluator)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermEvaluators {
-    pub left_thresholds_evaluator: TiVec<LeftThresholdId, Vec<EvaluatorStack>>,
-    pub right_thresholds_evaluator: TiVec<RightThresholdId, Vec<EvaluatorStack>>,
-    pub iterated_evaluator: IteratedCtCollection<Vec<EvaluatorStack>>,
+    pub left_thresholds_evaluator: TiVec<LeftThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub right_thresholds_evaluator: TiVec<RightThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub iterated_evaluator: IteratedCtCollection<BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub threshold_helpers: LUThresholdHelperEvaluators,
     pub residue_from_e_surface_evaluators: Vec<GenericEvaluator>,
 }
 
@@ -301,29 +677,30 @@ impl LUCounterTermEvaluators {
         let left = self
             .left_thresholds_evaluator
             .iter()
-            .flat_map(|evaluators| evaluators.iter())
+            .flat_map(|evaluators| evaluators.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
         let right = self
             .right_thresholds_evaluator
             .iter()
-            .flat_map(|evaluators| evaluators.iter())
+            .flat_map(|evaluators| evaluators.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
         let iterated = self
             .iterated_evaluator
             .iter()
-            .flat_map(|evaluators| evaluators.iter())
+            .flat_map(|evaluators| evaluators.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
 
-        // Ignore evaluators from residue_from_e_surface_evaluators since they are always eager
+        // Ignore eager-only helper evaluators and pass-two evaluators.
         left + right + iterated
     }
 
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
         max_raised_cut_occurrence: usize,
+        threshold_helpers: LUThresholdHelperEvaluators,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -336,14 +713,8 @@ impl LUCounterTermEvaluators {
                 parametric_integrands
                     .integrands
                     .iter()
-                    .enumerate()
                     .map(|(i, atom)| {
-                        let num_esurface = i + 1;
-                        let dual_shape = if num_esurface > 1 {
-                            Some(shape_for_t_derivatives(num_esurface - 1))
-                        } else {
-                            None
-                        };
+                        let dual_shape = shape_from_cut_cff_index(i);
 
                         let (evaluator, evaluator_timings) =
                             if settings.generation.explicit_orientation_sum_only {
@@ -364,7 +735,7 @@ impl LUCounterTermEvaluators {
                             }
                             .unwrap();
                         timings += evaluator_timings;
-                        evaluator
+                        (*i, evaluator)
                     })
                     .collect()
             })
@@ -377,14 +748,8 @@ impl LUCounterTermEvaluators {
                 parametric_integrands
                     .integrands
                     .iter()
-                    .enumerate()
                     .map(|(i, atom)| {
-                        let num_esurface = i + 1;
-                        let dual_shape = if num_esurface > 1 {
-                            Some(shape_for_t_derivatives(num_esurface - 1))
-                        } else {
-                            None
-                        };
+                        let dual_shape = shape_from_cut_cff_index(i);
 
                         let (evaluator, evaluator_timings) =
                             if settings.generation.explicit_orientation_sum_only {
@@ -405,7 +770,7 @@ impl LUCounterTermEvaluators {
                             }
                             .unwrap();
                         timings += evaluator_timings;
-                        evaluator
+                        (*i, evaluator)
                     })
                     .collect()
             })
@@ -416,14 +781,8 @@ impl LUCounterTermEvaluators {
             parametric_integrands
                 .integrands
                 .iter()
-                .enumerate()
                 .map(|(i, atom)| {
-                    let num_esurface = i + 1;
-                    let dual_shape = if num_esurface > 1 {
-                        Some(shape_for_t_derivatives(num_esurface - 1))
-                    } else {
-                        None
-                    };
+                    let dual_shape = shape_from_cut_cff_index(i);
 
                     let (evaluator, evaluator_timings) =
                         if settings.generation.explicit_orientation_sum_only {
@@ -446,46 +805,11 @@ impl LUCounterTermEvaluators {
                     let mut timings = iterated_timings.get();
                     timings += evaluator_timings;
                     iterated_timings.set(timings);
-                    evaluator
+                    (*i, evaluator)
                 })
                 .collect()
         });
         timings += iterated_timings.get();
-
-        for (label, orders) in [
-            (
-                "left",
-                counterterm_data
-                    .left_atoms
-                    .iter()
-                    .map(|integrands| integrands.integrands.len())
-                    .collect_vec(),
-            ),
-            (
-                "right",
-                counterterm_data
-                    .right_atoms
-                    .iter()
-                    .map(|integrands| integrands.integrands.len())
-                    .collect_vec(),
-            ),
-            (
-                "iterated",
-                counterterm_data
-                    .iterated
-                    .iter()
-                    .map(|integrands| integrands.integrands.len())
-                    .collect_vec(),
-            ),
-        ] {
-            assert!(
-                orders
-                    .iter()
-                    .all(|&order_count| order_count == max_raised_cut_occurrence),
-                "LU counterterm {label} integrands were generated with orders {:?}, but the raised cut expects {max_raised_cut_occurrence} occurrence(s)",
-                orders
-            );
-        }
 
         let symbolica_started = std::time::Instant::now();
         let pass_two_evaluator = (1..=max_raised_cut_occurrence)
@@ -501,6 +825,7 @@ impl LUCounterTermEvaluators {
                 left_thresholds_evaluator,
                 right_thresholds_evaluator,
                 iterated_evaluator,
+                threshold_helpers,
                 residue_from_e_surface_evaluators: pass_two_evaluator,
             },
             timings,
@@ -514,30 +839,30 @@ impl LUCounterTermEvaluators {
         frozen_mode: &FrozenCompilationMode,
     ) -> color_eyre::Result<()> {
         for (threshold_id, evaluators) in self.left_thresholds_evaluator.iter_mut_enumerated() {
-            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_left_threshold_{}_{}",
-                    cut_id.0, threshold_id.0, num_esurface
+                    "cut_{}_left_threshold_{}_index_{}",
+                    cut_id.0, threshold_id.0, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
         }
 
         for (threshold_id, evaluators) in self.right_thresholds_evaluator.iter_mut_enumerated() {
-            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_right_threshold_{}_{}",
-                    cut_id.0, threshold_id.0, num_esurface
+                    "cut_{}_right_threshold_{}_index_{}",
+                    cut_id.0, threshold_id.0, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
         }
 
         for (iterated_index, evaluators) in self.iterated_evaluator.iter_mut().enumerate() {
-            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_iterated_{}_{}",
-                    cut_id.0, iterated_index, num_esurface
+                    "cut_{}_iterated_{}_index_{}",
+                    cut_id.0, iterated_index, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
@@ -565,20 +890,22 @@ impl LUCounterTermEvaluators {
         mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
     ) -> color_eyre::Result<()> {
         for evaluators in self.left_thresholds_evaluator.iter_mut() {
-            for evaluator in evaluators.iter_mut() {
+            for (_, evaluator) in evaluators.iter_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.right_thresholds_evaluator.iter_mut() {
-            for evaluator in evaluators.iter_mut() {
+            for (_, evaluator) in evaluators.iter_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.iterated_evaluator.iter_mut() {
-            for evaluator in evaluators.iter_mut() {
+            for (_, evaluator) in evaluators.iter_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
+        self.threshold_helpers
+            .for_each_generic_evaluator_mut(&mut f)?;
         for pass_to_evaluator in self.residue_from_e_surface_evaluators.iter_mut() {
             f(pass_to_evaluator)?;
         }
@@ -646,6 +973,29 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
 
     pub fn cut_params_for_order(&self, order: usize) -> &LUParams<T> {
         &self.lu_cut_parameter_cache[order]
+    }
+
+    pub fn cut_params_for_cut_cff_index(&self, cut_cff_index: &CutCFFIndex) -> LUParams<T> {
+        let lu_order = cut_cff_index
+            .lu_cut_order
+            .expect("LU cut parameter lookup requires lu_cut_order")
+            - 1;
+        let base_params = self.cut_params_for_order(lu_order).clone();
+        let target_shape = shape_from_cut_cff_index(cut_cff_index).map(HyperDual::new);
+        let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
+
+        LUParams {
+            tstar: embed_real_dual_or_not_in_target_shape(
+                &base_params.tstar,
+                &target_shape,
+                t_variable,
+            ),
+            h_function: embed_real_dual_or_not_in_target_shape(
+                &base_params.h_function,
+                &target_shape,
+                t_variable,
+            ),
+        }
     }
 
     pub fn cut_esurface_for_order(&self, order: usize) -> &DualOrNot<F<T>> {
@@ -993,46 +1343,101 @@ impl LUCounterTerm {
 
         for order in 0..kinematic_point.lu_cut_parameter_cache.len() {
             let mut left_evaluations = zero_dual_or_not_complex(order, &zero);
-            let lu_cut_params = kinematic_point.cut_params_for_order(order).clone();
 
             for solutions_group in left_overlap_solutions.iter() {
                 for solution in solutions_group {
-                    let sample = solution.rstar_sample_for_order(order);
-                    debug!("left threshold parameters");
-
-                    let left_threshold_params: ThresholdParams<T> =
-                        sample.extract_threshold_parameters(true);
-                    let inverse_transformed_sample = sample.get_inverse_transformed_sample();
-                    let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
+                    let representative_sample = solution.rstar_sample_for_order(order);
+                    let left_threshold_id =
+                        LeftThresholdId::from(representative_sample.get_esurface_id().0);
                     self.ensure_active_left_threshold(cut_id, left_threshold_id)?;
 
-                    let params = T::get_parameters(
-                        param_builder,
-                        (false, false),
-                        graph,
-                        &inverse_transformed_sample,
-                        settings.kinematics.externals.get_helicities(),
-                        &settings.additional_params(),
-                        Some(&left_threshold_params),
-                        None,
-                        Some(&lu_cut_params),
-                    );
-                    let result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
-                        [left_threshold_id][order]
-                        .evaluate(
-                            params,
-                            orientations,
-                            settings,
+                    let matching_cut_indices = self.evaluators[cut_id].left_thresholds_evaluator
+                        [left_threshold_id]
+                        .keys()
+                        .filter(|cut_cff_index| {
+                            cut_cff_index.lu_cut_order == Some(order + 1)
+                                && cut_cff_index.right_threshold_order.is_none()
+                        })
+                        .copied()
+                        .collect_vec();
+
+                    for cut_cff_index in matching_cut_indices {
+                        let variable_indices = variable_indices_from_cut_cff_index(&cut_cff_index);
+                        let lu_cut_params =
+                            kinematic_point.cut_params_for_cut_cff_index(&cut_cff_index);
+                        let sample = solution.rstar_sample_for_cut_cff_index(
+                            &cut_cff_index,
+                            variable_indices.left_threshold,
+                        );
+                        debug!("left threshold parameters");
+
+                        let left_threshold_params: ThresholdParams<T> =
+                            sample.extract_threshold_parameters(true);
+                        debug!(
+                            "LU left evaluator input: cut_id={}, left_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
+                            cut_id.0,
+                            left_threshold_id.0,
+                            cut_cff_index,
+                            order + 1,
+                            left_threshold_params.radius,
+                            left_threshold_params.radius_star,
+                        );
+                        let inverse_transformed_sample = sample.get_inverse_transformed_sample();
+
+                        let params = T::get_parameters(
+                            param_builder,
+                            (false, false),
+                            graph,
+                            &inverse_transformed_sample,
+                            settings.kinematics.externals.get_helicities(),
+                            &settings.additional_params(),
+                            Some(&left_threshold_params),
+                            None,
+                            Some(&lu_cut_params),
+                        );
+
+                        let result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
+                            [left_threshold_id]
+                            .get_mut(&cut_cff_index)
+                            .unwrap()
+                            .evaluate(
+                                params,
+                                orientations,
+                                settings,
+                                evaluation_meta_data,
+                                record_primary_timing,
+                            )
+                            .unwrap()
+                            .pop()
+                            .unwrap();
+
+                        debug!(
+                            "result of left threshold evaluator {:?}: {}",
+                            cut_cff_index, result_of_this_ct
+                        );
+
+                        let helper_completed_result = evaluate_threshold_helper_single(
+                            self.evaluators[cut_id].threshold_helpers.left_thresholds
+                                [left_threshold_id]
+                                .get_mut(&cut_cff_index)
+                                .unwrap(),
+                            &cut_cff_index,
+                            &result_of_this_ct,
+                            &left_threshold_params,
                             evaluation_meta_data,
                             record_primary_timing,
-                        )
-                        .unwrap()
-                        .pop()
-                        .unwrap();
-                    left_evaluations += multiply_dual_or_not_complex(
-                        result_of_this_ct,
-                        &sample.value_of_multi_channeling_factor,
-                    );
+                        );
+
+                        let multi_channeling_factor = plain_t_dual_or_scalar_complex(
+                            &sample.value_of_multi_channeling_factor,
+                            variable_indices.lu_cut,
+                        );
+
+                        left_evaluations += multiply_dual_or_not_complex(
+                            helper_completed_result,
+                            &multi_channeling_factor,
+                        );
+                    }
                 }
             }
 
@@ -1040,41 +1445,97 @@ impl LUCounterTerm {
 
             for solutions_group in right_overlap_solutions.iter() {
                 for solution in solutions_group {
-                    let sample = solution.rstar_sample_for_order(order);
-                    debug!("right threshold parameters");
-                    let right_threshold_params: ThresholdParams<T> =
-                        sample.extract_threshold_parameters(true);
-                    let inverse_transformed_sample = sample.get_inverse_transformed_sample();
-                    let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
+                    let representative_sample = solution.rstar_sample_for_order(order);
+                    let right_threshold_id =
+                        RightThresholdId::from(representative_sample.get_esurface_id().0);
                     self.ensure_active_right_threshold(cut_id, right_threshold_id)?;
 
-                    let params = T::get_parameters(
-                        param_builder,
-                        (false, false),
-                        graph,
-                        &inverse_transformed_sample,
-                        settings.kinematics.externals.get_helicities(),
-                        &settings.additional_params(),
-                        None,
-                        Some(&right_threshold_params),
-                        Some(&lu_cut_params),
-                    );
-                    let result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
-                        [right_threshold_id][order]
-                        .evaluate(
-                            params,
-                            orientations,
-                            settings,
+                    let matching_cut_indices = self.evaluators[cut_id].right_thresholds_evaluator
+                        [right_threshold_id]
+                        .keys()
+                        .filter(|cut_cff_index| {
+                            cut_cff_index.lu_cut_order == Some(order + 1)
+                                && cut_cff_index.left_threshold_order.is_none()
+                        })
+                        .copied()
+                        .collect_vec();
+
+                    for cut_cff_index in matching_cut_indices {
+                        let variable_indices = variable_indices_from_cut_cff_index(&cut_cff_index);
+                        let lu_cut_params =
+                            kinematic_point.cut_params_for_cut_cff_index(&cut_cff_index);
+                        let sample = solution.rstar_sample_for_cut_cff_index(
+                            &cut_cff_index,
+                            variable_indices.right_threshold,
+                        );
+                        debug!("right threshold parameters");
+                        let right_threshold_params: ThresholdParams<T> =
+                            sample.extract_threshold_parameters(true);
+                        debug!(
+                            "LU right evaluator input: cut_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
+                            cut_id.0,
+                            right_threshold_id.0,
+                            cut_cff_index,
+                            order + 1,
+                            right_threshold_params.radius,
+                            right_threshold_params.radius_star,
+                        );
+                        let inverse_transformed_sample = sample.get_inverse_transformed_sample();
+
+                        let params = T::get_parameters(
+                            param_builder,
+                            (false, false),
+                            graph,
+                            &inverse_transformed_sample,
+                            settings.kinematics.externals.get_helicities(),
+                            &settings.additional_params(),
+                            None,
+                            Some(&right_threshold_params),
+                            Some(&lu_cut_params),
+                        );
+
+                        let result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
+                            [right_threshold_id]
+                            .get_mut(&cut_cff_index)
+                            .unwrap()
+                            .evaluate(
+                                params,
+                                orientations,
+                                settings,
+                                evaluation_meta_data,
+                                record_primary_timing,
+                            )
+                            .unwrap()
+                            .pop()
+                            .unwrap();
+
+                        debug!(
+                            "result of right threshold evaluator {:?}: {}",
+                            cut_cff_index, result_of_this_ct
+                        );
+
+                        let helper_completed_result = evaluate_threshold_helper_single(
+                            self.evaluators[cut_id].threshold_helpers.right_thresholds
+                                [right_threshold_id]
+                                .get_mut(&cut_cff_index)
+                                .unwrap(),
+                            &cut_cff_index,
+                            &result_of_this_ct,
+                            &right_threshold_params,
                             evaluation_meta_data,
                             record_primary_timing,
-                        )
-                        .unwrap()
-                        .pop()
-                        .unwrap();
-                    right_evaluations += multiply_dual_or_not_complex(
-                        result_of_this_ct,
-                        &sample.value_of_multi_channeling_factor,
-                    );
+                        );
+
+                        let multi_channeling_factor = plain_t_dual_or_scalar_complex(
+                            &sample.value_of_multi_channeling_factor,
+                            variable_indices.lu_cut,
+                        );
+
+                        right_evaluations += multiply_dual_or_not_complex(
+                            helper_completed_result,
+                            &multi_channeling_factor,
+                        );
+                    }
                 }
             }
 
@@ -1082,54 +1543,115 @@ impl LUCounterTerm {
 
             for left_solutions_group in left_overlap_solutions.iter() {
                 for left_solution in left_solutions_group {
-                    let sample_left = left_solution.rstar_sample_for_order(order);
+                    let left_sample_representative = left_solution.rstar_sample_for_order(order);
                     for right_solutions_group in right_overlap_solutions.iter() {
                         for right_solution in right_solutions_group {
-                            let sample_right = right_solution.rstar_sample_for_order(order);
-
-                            let left_threshold_params: ThresholdParams<T> =
-                                sample_left.extract_threshold_parameters(false);
-                            let right_threshold_params: ThresholdParams<T> =
-                                sample_right.extract_threshold_parameters(false);
-                            let multi_channeling_factor = multiply_dual_or_not_complex(
-                                sample_left.value_of_multi_channeling_factor.clone(),
-                                &sample_right.value_of_multi_channeling_factor,
-                            );
+                            let right_sample_representative =
+                                right_solution.rstar_sample_for_order(order);
                             let iterated_index = (
-                                LeftThresholdId::from(sample_left.get_esurface_id().0),
-                                RightThresholdId::from(sample_right.get_esurface_id().0),
+                                LeftThresholdId::from(
+                                    left_sample_representative.get_esurface_id().0,
+                                ),
+                                RightThresholdId::from(
+                                    right_sample_representative.get_esurface_id().0,
+                                ),
                             );
                             self.ensure_active_iterated_threshold(cut_id, iterated_index)?;
-                            let inverse_transformed_momentum_sample =
-                                merge_and_inverse_transform(&sample_left, &sample_right);
 
-                            let params = T::get_parameters(
-                                param_builder,
-                                (false, false),
-                                graph,
-                                &inverse_transformed_momentum_sample,
-                                settings.kinematics.externals.get_helicities(),
-                                &settings.additional_params(),
-                                Some(&left_threshold_params),
-                                Some(&right_threshold_params),
-                                Some(&lu_cut_params),
-                            );
-                            let result_of_this_ct = self.evaluators[cut_id].iterated_evaluator
-                                [iterated_index][order]
-                                .evaluate(
-                                    params,
-                                    orientations,
-                                    settings,
+                            let matching_cut_indices = self.evaluators[cut_id].iterated_evaluator
+                                [iterated_index]
+                                .keys()
+                                .filter(|cut_cff_index| {
+                                    cut_cff_index.lu_cut_order == Some(order + 1)
+                                })
+                                .copied()
+                                .collect_vec();
+
+                            for cut_cff_index in matching_cut_indices {
+                                let variable_indices =
+                                    variable_indices_from_cut_cff_index(&cut_cff_index);
+                                let lu_cut_params =
+                                    kinematic_point.cut_params_for_cut_cff_index(&cut_cff_index);
+                                let sample_left = left_solution.rstar_sample_for_cut_cff_index(
+                                    &cut_cff_index,
+                                    variable_indices.left_threshold,
+                                );
+                                let sample_right = right_solution.rstar_sample_for_cut_cff_index(
+                                    &cut_cff_index,
+                                    variable_indices.right_threshold,
+                                );
+
+                                let left_threshold_params: ThresholdParams<T> =
+                                    sample_left.extract_threshold_parameters(false);
+                                let right_threshold_params: ThresholdParams<T> =
+                                    sample_right.extract_threshold_parameters(false);
+                                debug!(
+                                    "LU iterated evaluator input: cut_id={}, left_threshold_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, left_r={}, left_rstar={}, right_r={}, right_rstar={}",
+                                    cut_id.0,
+                                    iterated_index.0.0,
+                                    iterated_index.1.0,
+                                    cut_cff_index,
+                                    order + 1,
+                                    left_threshold_params.radius,
+                                    left_threshold_params.radius_star,
+                                    right_threshold_params.radius,
+                                    right_threshold_params.radius_star,
+                                );
+                                let multi_channeling_factor = plain_t_dual_or_scalar_complex(
+                                    &multiply_dual_or_not_complex(
+                                        sample_left.value_of_multi_channeling_factor.clone(),
+                                        &sample_right.value_of_multi_channeling_factor,
+                                    ),
+                                    variable_indices.lu_cut,
+                                );
+                                let inverse_transformed_momentum_sample =
+                                    merge_and_inverse_transform(&sample_left, &sample_right);
+
+                                let params = T::get_parameters(
+                                    param_builder,
+                                    (false, false),
+                                    graph,
+                                    &inverse_transformed_momentum_sample,
+                                    settings.kinematics.externals.get_helicities(),
+                                    &settings.additional_params(),
+                                    Some(&left_threshold_params),
+                                    Some(&right_threshold_params),
+                                    Some(&lu_cut_params),
+                                );
+
+                                let result_of_this_ct = self.evaluators[cut_id].iterated_evaluator
+                                    [iterated_index]
+                                    .get_mut(&cut_cff_index)
+                                    .unwrap()
+                                    .evaluate(
+                                        params,
+                                        orientations,
+                                        settings,
+                                        evaluation_meta_data,
+                                        record_primary_timing,
+                                    )
+                                    .unwrap()
+                                    .pop()
+                                    .unwrap();
+
+                                let helper_completed_result = evaluate_threshold_helper_iterated(
+                                    self.evaluators[cut_id].threshold_helpers.iterated
+                                        [iterated_index]
+                                        .get_mut(&cut_cff_index)
+                                        .unwrap(),
+                                    &cut_cff_index,
+                                    &result_of_this_ct,
+                                    &left_threshold_params,
+                                    &right_threshold_params,
                                     evaluation_meta_data,
                                     record_primary_timing,
-                                )
-                                .unwrap()
-                                .pop()
-                                .unwrap();
-                            cartesian_product_result += multiply_dual_or_not_complex(
-                                result_of_this_ct,
-                                &multi_channeling_factor,
-                            );
+                                );
+
+                                cartesian_product_result += multiply_dual_or_not_complex(
+                                    helper_completed_result,
+                                    &multi_channeling_factor,
+                                );
+                            }
                         }
                     }
                 }
@@ -1161,6 +1683,22 @@ impl LUCounterTerm {
                     debug!("non dual esurface: {}", non_dual_e_surface);
                     params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
                 }
+            }
+
+            debug!(
+                "LU pass-two evaluator input: cut_id={}, lu_order={}, param_count={}",
+                cut_id.0,
+                order + 1,
+                params_for_pass_two.len()
+            );
+            for (idx, value) in params_for_pass_two.iter().enumerate() {
+                debug!(
+                    "LU pass-two evaluator param: cut_id={}, lu_order={}, index={}, value={}",
+                    cut_id.0,
+                    order + 1,
+                    idx,
+                    value
+                );
             }
 
             let pass_two_result = evaluate_evaluator_single(
@@ -1429,9 +1967,30 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .as_ref()
             .expect("higher-order LU threshold evaluation requires cached r_star(t)");
         HyperDual::from_values(
-            shape_for_t_derivatives(order),
+            simple_n_deriv_shape(order),
             dual_solution.values[..=order].to_vec(),
         )
+    }
+
+    fn embedded_truncated_rstar_solution(&self, cut_cff_index: &CutCFFIndex) -> HyperDual<F<T>> {
+        let lu_order = cut_cff_index
+            .lu_cut_order
+            .expect("mixed LU geometry requires lu_cut_order")
+            - 1;
+        let target_shape = shape_from_cut_cff_index(cut_cff_index)
+            .map(HyperDual::new)
+            .expect("mixed LU geometry requires a dual shape");
+        let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
+        let t_dual = if lu_order == 0 {
+            HyperDual::from_values(
+                simple_n_deriv_shape(0),
+                vec![self.solution.solution.clone()],
+            )
+        } else {
+            self.truncated_rstar_solution(lu_order)
+        };
+
+        embed_t_dual_in_target_shape(&t_dual, &target_shape, t_variable)
     }
 
     fn dual_geometry_for_order(&self, order: usize) -> DualRstarGeometry<T> {
@@ -1449,6 +2008,110 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .clone();
 
         let radius_star = self.truncated_rstar_solution(order);
+        let center = dualize_loop_momenta(
+            &radius_star,
+            &self.esurface_ct_builder.overlap_builder.rotated_center,
+        );
+        let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
+
+        let shifted_momenta = dual_loop_momenta
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum.clone() - center.clone())
+            .collect::<LoopMomenta<_>>();
+
+        let radius = dual_shifted_radius(
+            &shifted_momenta,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+        );
+        let inverse_radius = new_constant(&radius, &radius.values[0].one()) / radius.clone();
+        let unit_shifted_momenta = shifted_momenta.rescale(
+            &inverse_radius,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace
+                .as_subspace_simple(),
+        );
+
+        let rstar_loop_momenta = unit_shifted_momenta
+            .rescale(
+                &radius_star,
+                self.esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .subspace
+                    .as_subspace_simple(),
+            )
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum.clone() + center.clone())
+            .collect();
+
+        let (_, esurface_derivative) = compute_self_and_r_derivative_subspace_dual(
+            self.esurface_ct_builder.esurface,
+            &radius_star,
+            &unit_shifted_momenta,
+            &center,
+            &external_moms,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .real_mass_vector,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .all_lmbs,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .graph,
+        );
+
+        DualRstarGeometry {
+            radius,
+            radius_star,
+            esurface_derivative,
+            rstar_loop_momenta,
+            external_moms,
+        }
+    }
+
+    fn dual_geometry_for_cut_cff_index(
+        &self,
+        cut_cff_index: &CutCFFIndex,
+        threshold_variable: Option<usize>,
+    ) -> DualRstarGeometry<T> {
+        let lu_order = cut_cff_index
+            .lu_cut_order
+            .expect("mixed LU geometry requires lu_cut_order")
+            - 1;
+        let source_sample = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .transformed_kinematic_point
+            .sample_for_order(lu_order);
+        let target_shape = shape_from_cut_cff_index(cut_cff_index)
+            .map(HyperDual::new)
+            .expect("mixed LU geometry requires a dual shape");
+        let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
+        let dual_loop_momenta = embedded_dual_loop_momenta_for_cut_cff_index(
+            source_sample,
+            &Some(target_shape.clone()),
+            t_variable,
+        )
+        .expect("mixed LU geometry requires dual loop momenta");
+
+        let mut radius_star = self.embedded_truncated_rstar_solution(cut_cff_index);
+        activate_threshold_variable_in_target_shape(&mut radius_star, threshold_variable);
         let center = dualize_loop_momenta(
             &radius_star,
             &self.esurface_ct_builder.overlap_builder.rotated_center,
@@ -1853,6 +2516,88 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             value_of_multi_channeling_factor,
         }
     }
+
+    fn rstar_sample_for_cut_cff_index<'solution>(
+        &'solution self,
+        cut_cff_index: &CutCFFIndex,
+        threshold_variable: Option<usize>,
+    ) -> RstarSample<'solution, 'a, T> {
+        let lu_order = cut_cff_index
+            .lu_cut_order
+            .expect("LU threshold sampling requires lu_cut_order")
+            - 1;
+
+        if shape_from_cut_cff_index(cut_cff_index).is_none() {
+            return self.rstar_sample_for_order(lu_order);
+        }
+
+        let base_rstar_loop_momenta = self.base_rstar_loop_momenta();
+        let geometry = self.dual_geometry_for_cut_cff_index(cut_cff_index, threshold_variable);
+        let mut rstar_sample = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .transformed_kinematic_point
+            .sample_for_order(lu_order)
+            .clone();
+        rstar_sample.sample.loop_moms = base_rstar_loop_momenta;
+        rstar_sample.sample.dual_loop_moms = Some(geometry.rstar_loop_momenta.clone());
+
+        let e_cm = &self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .e_cm;
+        let uv_localisation_settings = &self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .settings
+            .subtraction
+            .local_ct_settings
+            .uv_localisation;
+
+        let threshold_params = ThresholdParams {
+            radius: DualOrNot::Dual(geometry.radius.clone()),
+            radius_star: DualOrNot::Dual(geometry.radius_star.clone()),
+            esurface_derivative: DualOrNot::Dual(geometry.esurface_derivative.clone()),
+            uv_damp_plus: DualOrNot::Dual(evaluate_uv_damper_dual(
+                &geometry.radius,
+                &geometry.radius_star,
+                e_cm,
+                uv_localisation_settings,
+            )),
+            uv_damp_minus: DualOrNot::Dual(evaluate_uv_damper_dual(
+                &-geometry.radius.clone(),
+                &geometry.radius_star,
+                e_cm,
+                uv_localisation_settings,
+            )),
+            h_function: DualOrNot::Dual(evaluate_integrated_ct_normalisation_dual(
+                &geometry.radius,
+                &geometry.radius_star,
+                e_cm,
+                &self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .settings
+                    .subtraction
+                    .integrated_ct_settings,
+            )),
+        };
+
+        let value_of_multi_channeling_factor = DualOrNot::Dual(real_dual_to_complex(
+            self.dual_multichanneling_factor(&geometry),
+        ));
+
+        RstarSample {
+            rstar_solution: self,
+            rstar_sample,
+            threshold_params,
+            value_of_multi_channeling_factor,
+        }
+    }
 }
 
 struct RstarSample<'solution, 'a, T: FloatLike> {
@@ -1999,8 +2744,14 @@ fn merge_and_inverse_transform<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
-    use super::LUCounterTerm;
+    use super::{LUCounterTerm, extract_zero_threshold_coefficient_t_dual};
+    use crate::cff::CutCFFIndex;
     use crate::processes::RaisedCutId;
+    use crate::utils::{
+        F,
+        hyperdual_utils::{new_from_values, shape_from_cut_cff_index},
+    };
+    use symbolica::domains::dual::HyperDual;
     use typed_index_collections::{TiVec, ti_vec};
 
     #[test]
@@ -2018,5 +2769,34 @@ mod tests {
 
         let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
         assert!(error.to_string().contains("generation marked it inactive"));
+    }
+
+    #[test]
+    fn zero_threshold_coefficient_lookup_is_explicit() {
+        let shape = HyperDual::new(
+            shape_from_cut_cff_index(&CutCFFIndex {
+                left_threshold_order: Some(2),
+                right_threshold_order: Some(2),
+                lu_cut_order: Some(2),
+            })
+            .unwrap(),
+        );
+        let mixed_dual = new_from_values(
+            &shape,
+            &[
+                F(10.0_f64),
+                F(11.0_f64),
+                F(20.0_f64),
+                F(30.0_f64),
+                F(40.0_f64),
+                F(21.0_f64),
+                F(31.0_f64),
+                F(41.0_f64),
+            ],
+        );
+
+        let zero_threshold = extract_zero_threshold_coefficient_t_dual(&mixed_dual, 0);
+
+        assert_eq!(zero_threshold.values, vec![F(10.0_f64), F(11.0_f64)]);
     }
 }

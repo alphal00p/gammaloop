@@ -667,9 +667,7 @@ impl AmplitudeGraph {
                 .max()
                 .unwrap_or(0);
             if max_order > 1 {
-                self.graph
-                    .param_builder
-                    .initialize_t_derivatives(max_order - 1);
+                self.graph.param_builder.initialize_duals(max_order);
             }
             raised_data.pass_two_evaluator = Some(
                 (1..=max_order)
@@ -1051,7 +1049,16 @@ impl AmplitudeGraph {
             })
             .collect();
 
-        self.derived_data.all_mighty_integrand = exprs[0].integrands[0].clone();
+        self.derived_data.all_mighty_integrand = exprs
+            .into_iter()
+            .next()
+            .unwrap()
+            .integrands
+            .into_iter()
+            .next()
+            .unwrap()
+            .1; // should be exactly one expression
+
         Ok(())
     }
 
@@ -1174,7 +1181,7 @@ impl AmplitudeGraph {
             }
 
             let cutset = CutSet {
-                residue_selector: ResidueSelector::new_threshold_esurface(raised_data.clone()),
+                residue_selector: ResidueSelector::new_left_threshold(raised_data.clone()),
                 union: cut_union,
             };
 
@@ -1224,12 +1231,12 @@ impl AmplitudeGraph {
             let raised_group = expr
                 .cuts
                 .residue_selector
-                .lu_cut()
-                .expect("amplitude threshold counterterms carry an E-surface residue");
+                .left_th_cut
+                .expect("amplitude threshold counterterms carry a left threshold E-surface");
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            for integrand in &counterterm_atom.parametric {
+            for integrand in counterterm_atom.parametric.values() {
                 debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
             }
 

@@ -1,7 +1,11 @@
+use std::{collections::BTreeMap, fmt::Display};
+
+use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetLike, SubSetOps},
 };
+use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::RepresentationMode;
 
@@ -18,10 +22,7 @@ use crate::{
     utils::GS,
     uv::UltravioletGraph,
 };
-use color_eyre::{
-    Result,
-    eyre::{ensure, eyre},
-};
+use color_eyre::Result;
 
 //pub mod cut_expression;
 pub mod esurface;
@@ -49,17 +50,100 @@ impl CFFTerm {
     }
 }
 
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Encode, Decode, Serialize, Deserialize,
+)]
+// This describes the combinations of residues that are selected.
+pub struct CutCFFIndex {
+    pub left_threshold_order: Option<usize>,
+    pub right_threshold_order: Option<usize>,
+    pub lu_cut_order: Option<usize>,
+}
+
+impl CutCFFIndex {
+    pub fn new_all_none() -> Self {
+        Self {
+            left_threshold_order: None,
+            right_threshold_order: None,
+            lu_cut_order: None,
+        }
+    }
+}
+
+impl Display for CutCFFIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut parts = vec![];
+        if let Some(order) = self.lu_cut_order {
+            parts.push(format!("lu_cut_{}", order));
+        }
+
+        if let Some(order) = self.left_threshold_order {
+            parts.push(format!("left_th_{}", order));
+        }
+
+        if let Some(order) = self.right_threshold_order {
+            parts.push(format!("right_th_{}", order));
+        }
+
+        if parts.is_empty() {
+            write!(f, "")
+        } else {
+            write!(f, "{}", parts.join("_"))
+        }
+    }
+}
+
 pub struct CutCFF {
-    pub terms: Vec<CFFTerm>, //index is the power of the esurface +1
+    pub terms: BTreeMap<CutCFFIndex, CFFTerm>,
 }
 
 impl CutCFF {
-    pub fn expression_with_selectors(&self) -> Vec<Atom> {
+    pub fn expression_with_selectors(&self) -> BTreeMap<CutCFFIndex, Atom> {
         self.terms
             .iter()
-            .map(|t| t.expression_with_selectors())
+            .map(|(index, term)| (*index, term.expression_with_selectors()))
             .collect()
     }
+}
+
+#[derive(Clone, Copy)]
+enum CutCffResidueAxis {
+    RightThreshold,
+    LeftThreshold,
+    LuCut,
+}
+
+impl CutCffResidueAxis {
+    fn set_order(self, index: &mut CutCFFIndex, order: usize) {
+        match self {
+            Self::RightThreshold => index.right_threshold_order = Some(order),
+            Self::LeftThreshold => index.left_threshold_order = Some(order),
+            Self::LuCut => index.lu_cut_order = Some(order),
+        }
+    }
+}
+
+fn apply_indexed_residue_selection<F>(
+    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
+    axis: CutCffResidueAxis,
+    mut select: F,
+) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
+where
+    F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
+{
+    residues
+        .into_iter()
+        .flat_map(|(index, expression)| {
+            select(expression)
+                .into_iter()
+                .enumerate()
+                .map(move |(i, residue)| {
+                    let mut new_index = index;
+                    axis.set_order(&mut new_index, i + 1);
+                    (new_index, residue)
+                })
+        })
+        .collect()
 }
 
 impl Graph {
@@ -152,15 +236,18 @@ impl Graph {
                 })
                 .collect::<Vec<_>>();
             return Ok(CutCFF {
-                terms: vec![CFFTerm {
-                    expression: vec![
-                        self.residual_denominator_factor_gs(&residual_denominators, true),
-                    ],
-                    orientations: vec![
-                        self.underlying
-                            .new_edgevec(|_, _, _| Orientation::Undirected),
-                    ],
-                }],
+                terms: BTreeMap::from([(
+                    CutCFFIndex::new_all_none(),
+                    CFFTerm {
+                        expression: vec![
+                            self.residual_denominator_factor_gs(&residual_denominators, true),
+                        ],
+                        orientations: vec![
+                            self.underlying
+                                .new_edgevec(|_, _, _| Orientation::Undirected),
+                        ],
+                    },
+                )]),
             });
         }
 
@@ -187,40 +274,46 @@ impl Graph {
             &cff_options,
             use_confluent_cff,
         )?;
-        let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-            let residues = cff.select_esurface_residue(right_threshold);
-            expect_single_cff_threshold_residue(residues, "right")?
-        } else {
-            cff
-        };
 
-        let residue = if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-            let residues = residue.select_esurface_residue(left_threshold);
-            expect_single_cff_threshold_residue(residues, "left")?
-        } else {
-            residue
-        };
+        let mut residues = vec![(CutCFFIndex::new_all_none(), cff)];
 
-        let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
-            if cutset.residue_selector.is_threshold_esurface_residue() {
-                if use_confluent_cff {
-                    // The confluent source is already expressed in the
-                    // generated repeated-channel coordinate. Applying the
-                    // canonical selected-denominator sign again would
-                    // over-rotate odd repeated threshold poles.
-                    residue.select_esurface_residue_in_generated_basis(lu_cut)
-                } else {
-                    residue.select_esurface_residue(lu_cut)
-                }
-            } else {
-                residue.select_esurface_residue_with_cut_edges(
-                    lu_cut,
-                    cutset.residue_selector.lu_cut_edge_sets(),
-                )
-            }
-        } else {
-            vec![residue]
-        };
+        if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+            residues = apply_indexed_residue_selection(
+                residues,
+                CutCffResidueAxis::RightThreshold,
+                |expression| expression.select_esurface_residue(right_threshold),
+            );
+        }
+
+        if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+            residues = apply_indexed_residue_selection(
+                residues,
+                CutCffResidueAxis::LeftThreshold,
+                |expression| expression.select_esurface_residue(left_threshold),
+            );
+        }
+
+        if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
+            residues =
+                apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
+                    if cutset.residue_selector.is_threshold_esurface_residue() {
+                        if use_confluent_cff {
+                            // The confluent source is already expressed in the
+                            // generated repeated-channel coordinate. Applying
+                            // the canonical selected-denominator sign again
+                            // would over-rotate odd repeated threshold poles.
+                            expression.select_esurface_residue_in_generated_basis(lu_cut)
+                        } else {
+                            expression.select_esurface_residue(lu_cut)
+                        }
+                    } else {
+                        expression.select_esurface_residue_with_cut_edges(
+                            lu_cut,
+                            cutset.residue_selector.lu_cut_edge_sets(),
+                        )
+                    }
+                });
+        }
 
         // println!("residue orders: {}", residue.len());
 
@@ -229,11 +322,12 @@ impl Graph {
             .full_filter()
             .subtract(&self.initial_state_cut.left)
             .subtract(&self.initial_state_cut.right);
-        let mut terms = vec![];
+
+        let mut terms = BTreeMap::new();
 
         let replacement_rules = self.surface_cache.get_all_replacements_gs(&[]);
 
-        for expr in residue.into_iter() {
+        for (cut_cff_index, expr) in residues {
             let mut cff_term = CFFTerm {
                 expression: vec![],
                 orientations: vec![],
@@ -254,26 +348,12 @@ impl Graph {
                     .orientations
                     .push(orientation.data.orientation.clone());
             }
-            terms.push(cff_term);
+            terms.insert(cut_cff_index, cff_term);
         }
 
         let cut_cff = CutCFF { terms };
         Ok(cut_cff)
     }
-}
-
-fn expect_single_cff_threshold_residue(
-    mut residues: Vec<ThreeDExpression<OrientationID>>,
-    side: &str,
-) -> Result<ThreeDExpression<OrientationID>> {
-    ensure!(
-        residues.len() == 1,
-        "{side} threshold residue produced {} expressions; cut CFF construction expects exactly one expression",
-        residues.len()
-    );
-    residues
-        .pop()
-        .ok_or_else(|| eyre!("{side} threshold residue did not produce an expression"))
 }
 
 pub(crate) fn cff_expression_uses_local_half_edges(

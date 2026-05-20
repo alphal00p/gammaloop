@@ -15,6 +15,7 @@
 #![allow(dead_code)]
 
 use std::{
+    collections::BTreeMap,
     fs,
     io::Cursor,
     path::{Path, PathBuf},
@@ -45,7 +46,16 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 3;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
+)]
+pub struct StandaloneCutCFFIndex {
+    pub(crate) left_threshold_order: Option<usize>,
+    pub(crate) right_threshold_order: Option<usize>,
+    pub(crate) lu_cut_order: Option<usize>,
+}
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneCrossSectionArchive<S = Vec<u8>, T = Vec<u8>> {
@@ -60,16 +70,20 @@ pub struct StandaloneCrossSectionGraphTermArchive<A = Vec<u8>> {
     pub(crate) orientations: Vec<Vec<i8>>,
     pub(crate) param_builder_params: Vec<A>,
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
-    pub(crate) raised_cut_integrands: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    pub(crate) raised_cut_integrands: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
     pub(crate) counterterms: Vec<StandaloneCountertermArchive<A>>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneCountertermArchive<A = Vec<u8>> {
-    pub(crate) left_thresholds_evaluator: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
-    pub(crate) right_thresholds_evaluator: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    pub(crate) left_thresholds_evaluator: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    pub(crate) right_thresholds_evaluator: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
     pub(crate) iterated_evaluator:
-        StandaloneIteratedCollectionArchive<Vec<StandaloneEvaluatorStackArchive<A>>>,
+        StandaloneIteratedCollectionArchive<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    pub(crate) left_threshold_helpers: Vec<Vec<StandaloneIndexedGenericEvaluatorArchive<A>>>,
+    pub(crate) right_threshold_helpers: Vec<Vec<StandaloneIndexedGenericEvaluatorArchive<A>>>,
+    pub(crate) iterated_helpers:
+        StandaloneIteratedCollectionArchive<Vec<StandaloneIndexedGenericEvaluatorArchive<A>>>,
     pub(crate) pass_two_evaluator: Vec<StandaloneGenericEvaluatorArchive<A>>,
 }
 
@@ -77,6 +91,18 @@ pub struct StandaloneCountertermArchive<A = Vec<u8>> {
 pub struct StandaloneIteratedCollectionArchive<T> {
     pub(crate) data: Vec<T>,
     pub(crate) num_left_thresholds: usize,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
+    pub(crate) cut_cff_index: StandaloneCutCFFIndex,
+    pub(crate) evaluator_stack: StandaloneEvaluatorStackArchive<A>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
+    pub(crate) cut_cff_index: StandaloneCutCFFIndex,
+    pub(crate) evaluator: StandaloneGenericEvaluatorArchive<A>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -352,14 +378,22 @@ pub struct LoadedStandaloneCrossSectionGraphTerm {
     pub graph_name: String,
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
-    pub raised_cut_integrands: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
+    pub raised_cut_integrands: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
     pub counterterms: Vec<LoadedStandaloneCounterterm>,
 }
 
 pub struct LoadedStandaloneCounterterm {
-    pub left_thresholds_evaluator: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
-    pub right_thresholds_evaluator: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
-    pub iterated_evaluator: LoadedStandaloneIteratedCollection<Vec<LoadedStandaloneEvaluatorStack>>,
+    pub left_thresholds_evaluator:
+        Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
+    pub right_thresholds_evaluator:
+        Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
+    pub iterated_evaluator: LoadedStandaloneIteratedCollection<
+        BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>,
+    >,
+    pub left_threshold_helpers: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>>,
+    pub right_threshold_helpers: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>>,
+    pub iterated_helpers:
+        LoadedStandaloneIteratedCollection<BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>>,
     pub pass_two_evaluator: Vec<LoadedGenericEvaluator>,
 }
 
@@ -422,27 +456,73 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                 .map(|param| param.import_with_map(state_map))
                 .collect::<Result<Vec<_>>>()?;
 
+            let build_indexed_stack_collection = |payloads: Vec<
+                StandaloneIndexedEvaluatorStackArchive<A>,
+            >,
+                                                  label: &str|
+             -> Result<
+                BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>,
+            > {
+                payloads
+                    .into_iter()
+                    .enumerate()
+                    .map(|(slot, payload)| {
+                        Ok((
+                            payload.cut_cff_index,
+                            build_stack(
+                                payload.evaluator_stack,
+                                &params,
+                                &graph.fn_map_entries,
+                                state_map,
+                                &graph.graph_name,
+                                &format!("{label}.slot[{slot}]"),
+                            )?,
+                        ))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+            };
+
+            let build_indexed_generic_evaluator_collection = |payloads: Vec<
+                StandaloneIndexedGenericEvaluatorArchive<A>,
+            >,
+                                                              label: &str|
+             -> Result<
+                BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>,
+            > {
+                let parsed_fn_map_entries = parse_fn_map_entries(&graph.fn_map_entries, state_map)?;
+                payloads
+                    .into_iter()
+                    .enumerate()
+                    .map(|(slot, payload)| {
+                        let started = Instant::now();
+                        let evaluator = build_evaluator(
+                            payload.evaluator,
+                            &params,
+                            parsed_fn_map_entries.clone(),
+                            state_map,
+                            false,
+                        )?;
+                        println!(
+                            "[timing] build_evaluator {}::{}.slot[{}] took {:?}",
+                            graph.graph_name,
+                            label,
+                            slot,
+                            started.elapsed()
+                        );
+                        Ok((payload.cut_cff_index, evaluator))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+            };
+
             let raised_cut_integrands = graph
                 .raised_cut_integrands
                 .into_iter()
                 .enumerate()
                 .map(|(raised_cut_id, derivative_stacks)| {
-                    derivative_stacks
-                        .into_iter()
-                        .enumerate()
-                        .map(|(derivative_order, stack)| {
-                            build_stack(
-                                stack,
-                                &params,
-                                &graph.fn_map_entries,
-                                state_map,
-                                &graph.graph_name,
-                                &format!(
-                                    "raised_cut[{raised_cut_id}].derivative[{derivative_order}]"
-                                ),
-                            )
-                        })
-                        .collect::<Result<Vec<_>>>()
+                    build_indexed_stack_collection(
+                        derivative_stacks,
+                        &format!("raised_cut[{raised_cut_id}]"),
+                    )
                 })
                 .collect::<Result<Vec<_>>>()?;
 
@@ -452,30 +532,22 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                 .enumerate()
                 .map(|(cut_id, counterterm)| {
                     let build_stack_collection =
-                        |payloads: Vec<StandaloneEvaluatorStackArchive<A>>,
+                        |payloads: Vec<StandaloneIndexedEvaluatorStackArchive<A>>,
                          label: &str|
-                         -> Result<Vec<LoadedStandaloneEvaluatorStack>> {
-                            payloads
-                                .into_iter()
-                                .enumerate()
-                                .map(|(i, payload)| {
-                                    build_stack(
-                                        payload,
-                                        &params,
-                                        &graph.fn_map_entries,
-                                        state_map,
-                                        &graph.graph_name,
-                                        &format!("counterterm[{cut_id}]::{label}[{i}]"),
-                                    )
-                                })
-                                .collect::<Result<Vec<_>>>()
+                         -> Result<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>> {
+                            build_indexed_stack_collection(
+                                payloads,
+                                &format!("counterterm[{cut_id}]::{label}"),
+                            )
                         };
 
                     let build_stack_iterated =
                         |payloads: StandaloneIteratedCollectionArchive<_>,
                          label: &str|
                          -> Result<
-                            LoadedStandaloneIteratedCollection<Vec<LoadedStandaloneEvaluatorStack>>,
+                            LoadedStandaloneIteratedCollection<
+                                BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>,
+                            >,
                         > {
                             let data = payloads
                                 .data
@@ -483,6 +555,32 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                                 .enumerate()
                                 .map(|(i, payload)| {
                                     build_stack_collection(payload, &format!("{label}[{i}]"))
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+
+                            Ok(LoadedStandaloneIteratedCollection {
+                                data,
+                                num_left_thresholds: payloads.num_left_thresholds,
+                            })
+                        };
+
+                    let build_helper_iterated =
+                        |payloads: StandaloneIteratedCollectionArchive<_>,
+                         label: &str|
+                         -> Result<
+                            LoadedStandaloneIteratedCollection<
+                                BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>,
+                            >,
+                        > {
+                            let data = payloads
+                                .data
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, payload)| {
+                                    build_indexed_generic_evaluator_collection(
+                                        payload,
+                                        &format!("counterterm[{cut_id}]::{label}[{i}]"),
+                                    )
                                 })
                                 .collect::<Result<Vec<_>>>()?;
 
@@ -540,6 +638,36 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                         iterated_evaluator: build_stack_iterated(
                             counterterm.iterated_evaluator,
                             "iterated_evaluator",
+                        )?,
+                        left_threshold_helpers: counterterm
+                            .left_threshold_helpers
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, payload)| {
+                                build_indexed_generic_evaluator_collection(
+                                    payload,
+                                    &format!(
+                                        "counterterm[{cut_id}]::left_threshold_helpers[{i}]"
+                                    ),
+                                )
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                        right_threshold_helpers: counterterm
+                            .right_threshold_helpers
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, payload)| {
+                                build_indexed_generic_evaluator_collection(
+                                    payload,
+                                    &format!(
+                                        "counterterm[{cut_id}]::right_threshold_helpers[{i}]"
+                                    ),
+                                )
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                        iterated_helpers: build_helper_iterated(
+                            counterterm.iterated_helpers,
+                            "iterated_helpers",
                         )?,
                         pass_two_evaluator,
                     })
@@ -621,10 +749,13 @@ fn main() -> Result<()> {
         }
         for (cut_id, counterterm) in graph.counterterms.iter().enumerate() {
             println!(
-                "  counterterm[{cut_id}] left={} right={} iterated={} pass_two_exprs={}",
+                "  counterterm[{cut_id}] left={} right={} iterated={} left_helpers={} right_helpers={} iterated_helpers={} pass_two_exprs={}",
                 counterterm.left_thresholds_evaluator.len(),
                 counterterm.right_thresholds_evaluator.len(),
                 counterterm.iterated_evaluator.data.len(),
+                counterterm.left_threshold_helpers.len(),
+                counterterm.right_threshold_helpers.len(),
+                counterterm.iterated_helpers.data.len(),
                 counterterm.pass_two_evaluator.len()
             );
         }

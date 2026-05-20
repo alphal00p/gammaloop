@@ -694,29 +694,23 @@ fn select_threshold_residues(
     if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
         residues = residues
             .into_iter()
-            .map(|residue| {
-                let residues = select_threshold_residue_for_representation(
+            .flat_map(|residue| {
+                select_threshold_residue_for_representation(
                     residue,
                     right_threshold,
                     representation,
-                );
-                expect_single_threshold_residue(residues, "right")
+                )
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect();
     }
 
     if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
         residues = residues
             .into_iter()
-            .map(|residue| {
-                let residues = select_threshold_residue_for_representation(
-                    residue,
-                    left_threshold,
-                    representation,
-                );
-                expect_single_threshold_residue(residues, "left")
+            .flat_map(|residue| {
+                select_threshold_residue_for_representation(residue, left_threshold, representation)
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect();
     };
 
     Ok(residues)
@@ -750,21 +744,6 @@ fn localize_ltd_threshold_residue_if_needed(
         }
     }
     Ok(())
-}
-
-fn expect_single_threshold_residue(
-    mut residues: Vec<crate::cff::expression::ThreeDExpression<OrientationID>>,
-    side: &str,
-) -> Result<crate::cff::expression::ThreeDExpression<OrientationID>> {
-    if residues.len() != 1 {
-        return Err(eyre!(
-            "{side} threshold residue produced {} expressions; expanded 4D local UV generation supports exactly one expression at this stage",
-            residues.len()
-        ));
-    }
-    residues
-        .pop()
-        .ok_or_else(|| eyre!("{side} threshold residue did not produce an expression"))
 }
 
 struct ExpandedExpressionParametricAtomInput<'a> {

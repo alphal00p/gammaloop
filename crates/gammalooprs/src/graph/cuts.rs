@@ -1,10 +1,11 @@
 use bincode_trait_derive::{Decode, Encode};
+use itertools::Itertools;
 use linnet::half_edge::{
     involution::EdgeIndex,
     subgraph::{SuBitGraph, SubSetLike},
 };
 
-use crate::cff::{esurface::RaisedEsurfaceGroup, surface::EsurfaceID};
+use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup, surface::EsurfaceID};
 
 #[derive(Debug, Clone, Copy, Encode, Decode, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum LuResidueSelectionBasis {
@@ -97,6 +98,54 @@ pub struct ResidueSelector {
     pub right_th_cut: Option<RaisedEsurfaceGroup>,
 }
 
+impl ResidueSelector {
+    pub fn generate_allowed_keys(&self) -> Vec<CutCFFIndex> {
+        let allowed_keys = vec![CutCFFIndex::new_all_none()];
+        allowed_keys
+            .into_iter()
+            .flat_map(|index| {
+                if let Some(right_th_cut) = &self.right_th_cut {
+                    (1..=right_th_cut.max_occurence)
+                        .map(|right_th_cut_index| {
+                            let mut new_index = index;
+                            new_index.right_threshold_order = Some(right_th_cut_index);
+                            new_index
+                        })
+                        .collect_vec()
+                } else {
+                    vec![index]
+                }
+            })
+            .flat_map(|index| {
+                if let Some(left_th_cut) = &self.left_th_cut {
+                    (1..=left_th_cut.max_occurence)
+                        .map(|left_th_cut_index| {
+                            let mut new_index = index;
+                            new_index.left_threshold_order = Some(left_th_cut_index);
+                            new_index
+                        })
+                        .collect_vec()
+                } else {
+                    vec![index]
+                }
+            })
+            .flat_map(|index| {
+                if let Some(lu_cut) = self.lu_cut() {
+                    (1..=lu_cut.max_occurence)
+                        .map(|lu_cut_index| {
+                            let mut new_index = index;
+                            new_index.lu_cut_order = Some(lu_cut_index);
+                            new_index
+                        })
+                        .collect_vec()
+                } else {
+                    vec![index]
+                }
+            })
+            .collect()
+    }
+}
+
 impl CutSet {
     pub fn empty(size: usize) -> Self {
         CutSet {
@@ -124,19 +173,6 @@ impl LuResiduePlan {
         }
     }
 
-    pub(crate) fn new_threshold_esurface(lu_cut: RaisedEsurfaceGroup) -> Self {
-        Self {
-            lu_cut: Some(lu_cut),
-            lu_cut_edge_sets: Vec::new(),
-            ltd_lu_cut_esurface_signs: Vec::new(),
-            ltd_lu_cut_local_series_esurface_signs: Vec::new(),
-            ltd_lu_cut_residue_prefactor_sign: 1,
-            ltd_lu_cut_local_series_prefactor_sign: 1,
-            ltd_lu_cut_direct_original_prefactor_sign: 1,
-            ltd_lu_cut_local_series_coordinates: Vec::new(),
-        }
-    }
-
     pub(crate) fn lu_cut(&self) -> Option<&RaisedEsurfaceGroup> {
         self.lu_cut.as_ref()
     }
@@ -156,10 +192,10 @@ impl ResidueSelector {
         }
     }
 
-    pub(crate) fn new_threshold_esurface(lu_cut: RaisedEsurfaceGroup) -> Self {
+    pub(crate) fn new_left_threshold(left_th_cut: RaisedEsurfaceGroup) -> Self {
         Self {
-            lu_plan: Some(LuResiduePlan::new_threshold_esurface(lu_cut)),
-            left_th_cut: None,
+            lu_plan: None,
+            left_th_cut: Some(left_th_cut),
             right_th_cut: None,
         }
     }

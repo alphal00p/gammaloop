@@ -1,8 +1,14 @@
+use std::collections::BTreeMap;
+
 use crate::{
     GammaLoopContext,
-    cff::expression::{GammaLoopGraphOrientation, OrientationID, ThreeDExpression},
+    cff::{
+        CutCFFIndex,
+        expression::{GammaLoopGraphOrientation, OrientationID, ThreeDExpression},
+    },
+    debug_tags,
     graph::{
-        Graph,
+        Graph, LMBext,
         cuts::{CutSet, LuResidueSelectionBasis},
     },
     settings::global::{GenerationSettings, ThreeDRepresentation},
@@ -15,6 +21,7 @@ use crate::{
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use std::collections::BTreeSet;
@@ -29,6 +36,7 @@ use tracing::{debug, instrument};
 use vakint::Vakint;
 
 use super::{
+    RenormalizationPart,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -42,15 +50,19 @@ pub struct CutForests {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParametricIntegrands {
-    pub integrands: Vec<Atom>,
+    pub integrands: BTreeMap<CutCFFIndex, Atom>,
     pub cuts: CutSet,
     pub explicitly_summed_orientations: bool,
 }
 
 impl ParametricIntegrands {
-    pub fn map<F: FnMut(Atom) -> Atom>(self, map: F) -> Self {
+    pub fn map<F: FnMut(Atom) -> Atom>(self, mut map: F) -> Self {
         Self {
-            integrands: self.integrands.into_iter().map(map).collect(),
+            integrands: self
+                .integrands
+                .into_iter()
+                .map(|(index, atom)| (index, map(atom)))
+                .collect(),
             cuts: self.cuts,
             explicitly_summed_orientations: self.explicitly_summed_orientations,
         }
@@ -58,7 +70,11 @@ impl ParametricIntegrands {
 
     pub fn zero_like(&self) -> Self {
         Self {
-            integrands: vec![Atom::Zero; self.integrands.len()],
+            integrands: self
+                .integrands
+                .keys()
+                .map(|index| (*index, Atom::Zero))
+                .collect(),
             cuts: self.cuts.clone(),
             explicitly_summed_orientations: self.explicitly_summed_orientations,
         }
@@ -214,15 +230,16 @@ impl CutForests {
         {
             let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
 
-            debug!(integrands=%integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
-                "Orientation Parametric integrand {i},with {} terms for \n{}\n{}",
-                forest.n_terms(),
-                graph.dot(&cuts.union),
-                integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
-
+            debug_tags!(#generation, #uv, #graph, #dump;
+                n_terms =%forest.n_terms(),
+                graph = %graph.dot(&cuts.union),
+                name = %graph.name,
+                integrands=%integrands.iter().enumerate().map(|(i, s)| format!("{}: {}", i, s.1.log_print(Some(100)))).join("\n"),
+                file.integrands = %integrands.iter().map(|s| s.1.to_canonical_string()).join(";"),
+                "Orientation Parametric integrand {i}",
             );
             if !settings.keep_sigma {
-                integrands.iter_mut().for_each(|s| {
+                integrands.values_mut().for_each(|s| {
                     *s = s
                         .replace(function!(GS.if_sigma, W_.a___))
                         .with(Atom::num(1))
@@ -383,6 +400,75 @@ impl Forest {
         Ok(())
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
+        let mut sum = Atom::Zero;
+
+        let wild = Atom::var(W_.x___);
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+
+        for (_, n) in &self.dag.nodes {
+            if !n.children.is_empty() {
+                continue;
+            }
+
+            let (atom, sign) = n.data.integrated_4d.expr().ok_or(eyre!(
+                "Integrated pole part not computed for {} of graph {}",
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+                graph.name
+            ))?;
+
+            let mut atom = atom
+                .get(&CutCFFIndex::new_all_none())
+                .cloned()
+                .ok_or_else(|| eyre!("integrated pole part is missing the uncut CFF index"))?;
+
+            atom = sign * atom;
+
+            debug_tags!(#generation, #uv, #graph, #term;
+                forest_term=%
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+               expr = % atom.expand_num().log_print(None),"Term before simplification"
+            );
+
+            let atom = (atom
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor)
+                .simplify_color()
+                .expand_num()
+                .to_dots();
+
+            debug_tags!(#generation, #uv, #graph, #term;
+                forest_term=%
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+               expr = % atom.log_print(None),"Term"
+            );
+            sum += atom;
+        }
+
+        Ok(RenormalizationPart::new(
+            sum.replace_multiple(&replacements)
+                .replace(GS.m_uv_int)
+                .with(GS.m_uv),
+            0,
+            self.dag.nodes.len(),
+        ))
+    }
+
     fn cff_explicit_sum_has_uv_leading_duplicate_denominators(
         &self,
         graph: &Graph,
@@ -412,7 +498,7 @@ impl Forest {
         &self,
         graph: &Graph,
         add_sigma: bool,
-    ) -> Result<Vec<Atom>> {
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let mut sum = None;
         for (node_id, n) in &self.dag.nodes {
             let simple_approx = n.data.simple_approx.as_ref().ok_or_else(|| {
@@ -422,19 +508,12 @@ impl Forest {
             debug!(dod = %n.data.dod(), simple = %simple_expr, "Terms");
 
             let first = sum.is_none();
-            let sum = sum.get_or_insert_with(Vec::new);
+            let sum = sum.get_or_insert_with(BTreeMap::new);
             let final_integrands = n.data.final_integrand.as_ref().ok_or_else(|| {
                 eyre!("UV forest node {node_id:?} final integrand was not computed")
             })?;
-            if !first && final_integrands.len() != sum.len() {
-                return Err(eyre!(
-                    "UV forest node {node_id:?} produced {} residue integrands, but previous nodes produced {}",
-                    final_integrands.len(),
-                    sum.len()
-                ));
-            }
 
-            for (i, integrand) in final_integrands.iter().enumerate() {
+            for (cut_index, integrand) in final_integrands {
                 let a = if add_sigma {
                     debug!("{}", simple_expr);
                     integrand * function!(GS.if_sigma, simple_expr.clone())
@@ -442,9 +521,13 @@ impl Forest {
                     integrand.clone()
                 };
                 if first {
-                    sum.push(a.clone());
+                    sum.insert(*cut_index, a);
                 } else {
-                    sum[i] += a.clone();
+                    *sum.get_mut(cut_index).ok_or_else(|| {
+                        eyre!(
+                            "UV forest node {node_id:?} produced residue index {cut_index:?}, which was absent from previous nodes"
+                        )
+                    })? += a;
                 }
             }
         }
@@ -460,7 +543,7 @@ impl Forest {
         Ok(sum)
     }
 
-    fn finalize_parametric_terms(graph: &Graph, terms: &mut [Atom]) {
+    fn finalize_parametric_terms(graph: &Graph, terms: &mut BTreeMap<CutCFFIndex, Atom>) {
         for (pair, edge_index, _) in graph.iter_edges_of(
             &graph
                 .full_filter()
@@ -471,12 +554,12 @@ impl Forest {
                 continue;
             }
 
-            for s in terms.iter_mut() {
+            for s in terms.values_mut() {
                 *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
             }
         }
 
-        for s in terms.iter_mut() {
+        for s in terms.values_mut() {
             *s = s
                 .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                 .with(W_.d_)
@@ -509,21 +592,46 @@ impl Forest {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::ParametricIntegrands;
-    use crate::graph::cuts::CutSet;
+    use crate::{cff::CutCFFIndex, graph::cuts::CutSet};
     use symbolica::{atom::Atom, symbol};
 
     #[test]
     fn zero_like_preserves_shape_and_cuts() {
         let integrands = ParametricIntegrands {
-            integrands: vec![Atom::var(symbol!("x")), Atom::num(7)],
+            integrands: BTreeMap::from([
+                (CutCFFIndex::new_all_none(), Atom::var(symbol!("x"))),
+                (
+                    CutCFFIndex {
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: None,
+                    },
+                    Atom::num(7),
+                ),
+            ]),
             cuts: CutSet::empty(3),
             explicitly_summed_orientations: false,
         };
 
         let zeroed = integrands.zero_like();
 
-        assert_eq!(zeroed.integrands, vec![Atom::Zero, Atom::Zero]);
+        assert_eq!(
+            zeroed.integrands,
+            BTreeMap::from([
+                (CutCFFIndex::new_all_none(), Atom::Zero),
+                (
+                    CutCFFIndex {
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: None,
+                    },
+                    Atom::Zero,
+                ),
+            ]),
+        );
         assert_eq!(zeroed.cuts, CutSet::empty(3));
     }
 }

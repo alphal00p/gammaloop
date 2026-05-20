@@ -1235,17 +1235,24 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.fn_map.add_function(name, args, body)
     }
 
-    pub fn initialize_t_derivatives(&mut self, num_derivatives: usize) {
-        let mut higher_order_values = (1..=num_derivatives)
-            .map(|derivative_order| {
-                self.values
-                    .first()
-                    .unwrap()
+    pub fn initialize_duals(&mut self, max_dual_size: usize) {
+        if max_dual_size <= self.values.len() {
+            return;
+        }
+
+        let Some(base_values) = self.values.first().cloned() else {
+            debug_assert_eq!(max_dual_size, 0);
+            return;
+        };
+
+        let mut dual_values = ((self.values.len() + 1)..=max_dual_size)
+            .map(|dual_size| {
+                base_values
                     .clone()
                     .into_iter()
                     .flat_map(move |value| {
                         let mut constant_dual_values = vec![value.clone()];
-                        for _ in 0..derivative_order {
+                        for _ in 1..dual_size {
                             constant_dual_values.push(value.ref_zero());
                         }
                         constant_dual_values
@@ -1253,11 +1260,11 @@ impl<T: FloatLike> ParamBuilder<T> {
                     .collect()
             })
             .collect();
-        self.values.append(&mut higher_order_values);
-        debug!("Initialized {} derivative values", self.values.len() - 1);
+        self.values.append(&mut dual_values);
+        debug!("Initialized dual values up to size {}", self.values.len());
 
         for values in self.values.iter() {
-            debug!("values at order: ");
+            debug!("values at dual size: ");
             debug!("len: {}", values.len());
         }
     }
@@ -2013,6 +2020,44 @@ impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {
 impl<T: FloatLike> Display for ParamBuilder<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.table().with(Style::rounded()).to_string().fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initialize_duals_extends_value_buffers_by_requested_size() {
+        let mut param_builder = ParamBuilder::<f64>::new_empty();
+        param_builder.values = vec![vec![
+            Complex::new_re(F(1.0_f64)),
+            Complex::new_re(F(2.0_f64)),
+        ]];
+
+        param_builder.initialize_duals(4);
+
+        assert_eq!(param_builder.values.len(), 4);
+        assert_eq!(param_builder.values[0].len(), 2);
+        assert_eq!(param_builder.values[1].len(), 4);
+        assert_eq!(param_builder.values[2].len(), 6);
+        assert_eq!(param_builder.values[3].len(), 8);
+        assert_eq!(
+            param_builder.values[3],
+            vec![
+                Complex::new_re(F(1.0_f64)),
+                Complex::new_re(F(0.0_f64)),
+                Complex::new_re(F(0.0_f64)),
+                Complex::new_re(F(0.0_f64)),
+                Complex::new_re(F(2.0_f64)),
+                Complex::new_re(F(0.0_f64)),
+                Complex::new_re(F(0.0_f64)),
+                Complex::new_re(F(0.0_f64)),
+            ]
+        );
+
+        param_builder.initialize_duals(4);
+        assert_eq!(param_builder.values.len(), 4);
     }
 }
 

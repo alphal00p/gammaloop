@@ -1,6 +1,6 @@
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
-use crate::{numerator::aind::Aind, utils::GS};
+use crate::{cff::CutCFFIndex, numerator::aind::Aind, utils::GS};
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
@@ -30,7 +30,7 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntegrandExpr {
-    integrands: Vec<Atom>,
+    integrands: BTreeMap<CutCFFIndex, Atom>,
     // add_arg: Option<Atom>,
 }
 

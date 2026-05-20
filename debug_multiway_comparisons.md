@@ -31,6 +31,77 @@ known-good test matrix and the next pass does not mix unrelated failures.
 
 ## Current Checkpoint
 
+Status as of 2026-05-20: `origin/main` at
+`04424870 Raised threshold subtraction cross section (#79)` has been merged
+into `ltd_in_gammaloop_symbolica_update`, preserving the branch's multi-way
+local-inspect construction while adopting main's raised threshold plus raised
+Cutkosky support.
+
+The merge required three first-principles repairs:
+
+- Raised threshold groups are now looked up in the root 3D expression's
+  E-surface namespace, not the graph-global cache. The threshold IDs consumed
+  by the selector are generated-expression IDs, so sizing the map with the
+  graph cache was a namespace error.
+- Expanded-4D UV projection now keeps the full ordered right-threshold,
+  left-threshold, and LU residue product instead of requiring a single
+  threshold residue. The order matches `CutCFFIndex` generation and the
+  production CFF residue chain.
+- Iterated left/right threshold helper atoms now canonicalize the two
+  one-variable helper families into side-specific `eta_left`, `eta_right`, and
+  bivariate `f(r*_left,r*_right)` derivative parameters before evaluator
+  construction. This is an algebraic parameter-basis normalization, not a sign
+  or graph-specific adjustment.
+
+Accepted snapshot updates in the scalar slow sweep are limited to `insta`
+metadata line numbers and last-digit numerical changes after the merge. The
+multi-way parity assertions and snapshot anchors now both pass without
+`INSTA_FORCE_PASS`.
+
+Validation for this checkpoint:
+
+```text
+cargo fmt
+
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 RUSTFLAGS=-Dwarnings cargo check
+
+passed
+```
+
+Raised threshold mass-approach inspect group:
+
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=1 \
+  RUST_MIN_STACK=33554432 \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(=inspect::test_mass_approach_threshold_subtraction) | test(=inspect::test_mass_approach_threshold_subtraction_reversed) | test(=inspect::test_mass_approach_threshold_subtraction_dotted) | test(=inspect::test_mass_approach_scalar_self_energy)' \
+  --retries 0
+
+4 tests run: 4 passed
+```
+
+Protected scalar cross-section sweep, snapshot validation active:
+
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=1 \
+  RUST_MIN_STACK=33554432 RUSTFLAGS=-L/opt/local/lib/libgcc \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(/scalar_3l_cross_section_inspects::slow/)' \
+  --retries 0
+
+143 tests run: 143 passed (16 slow), 128 skipped
+```
+
+The next intended pass is to remove the scalar-test threshold-subtraction
+disable overrides that were only present because main did not yet support
+raised threshold and raised Cutkosky cuts jointly. That must be done as a
+separate, protected change from this green post-merge baseline.
+
+## Previous Checkpoint
+
 Status as of 2026-05-19: the latest pushed checkpoint before this pass is
 `3e2fe0d4f6606ab34d28e0a5e72d0b6477b900ff`, which had the protected scalar
 cross-section sweep green and only two selected-suite failures left. This pass
@@ -52,7 +123,7 @@ graph-name branches, loop-count sign exceptions, production use of
 `graph_from_signature`, and temporary `GAMMALOOP_TRACE_LTD_LU_SIGNS`
 diagnostics.
 
-## Validation Matrix
+## Previous Validation Matrix
 
 Targeted two-test 3Drep diagnostic bucket:
 

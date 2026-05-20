@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs::{self},
     path::Path,
 };
@@ -14,14 +15,16 @@ use symbolica::{
 };
 
 use crate::{
+    cff::CutCFFIndex,
     integrands::process::{
         GenericEvaluator, GenericEvaluatorFloat, ProcessIntegrandImpl,
         amplitude::{
             AmplitudeIntegrand,
             load::{
-                STANDALONE_EVALUATORS_VERSION, StandaloneComplexInput, StandaloneEvaluatorArchive,
-                StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
-                StandaloneGraphTermArchive,
+                STANDALONE_EVALUATORS_VERSION, StandaloneComplexInput, StandaloneCutCFFIndex,
+                StandaloneEvaluatorArchive, StandaloneEvaluatorStackArchive,
+                StandaloneGenericEvaluatorArchive, StandaloneGraphTermArchive,
+                StandaloneIndexedEvaluatorStackArchive,
             },
         },
     },
@@ -115,6 +118,41 @@ fn export_evaluator_stack<T: ExportAtomTo>(
             .map(export_generic_evaluator)
             .transpose()?,
     })
+}
+
+fn export_cut_cff_index(index: &CutCFFIndex) -> StandaloneCutCFFIndex {
+    StandaloneCutCFFIndex {
+        left_threshold_order: index.left_threshold_order,
+        right_threshold_order: index.right_threshold_order,
+        lu_cut_order: index.lu_cut_order,
+    }
+}
+
+fn export_evaluator_map<T: ExportAtomTo>(
+    evaluator_stacks: &BTreeMap<
+        CutCFFIndex,
+        crate::integrands::process::evaluators::EvaluatorStack,
+    >,
+    start: usize,
+    override_pos: usize,
+    mult_offset: usize,
+    representative_input: &[StandaloneComplexInput],
+) -> Result<Vec<StandaloneIndexedEvaluatorStackArchive<T>>> {
+    evaluator_stacks
+        .iter()
+        .map(|(cut_cff_index, evaluator_stack)| {
+            Ok(StandaloneIndexedEvaluatorStackArchive {
+                cut_cff_index: export_cut_cff_index(cut_cff_index),
+                evaluator_stack: export_evaluator_stack(
+                    evaluator_stack,
+                    start,
+                    override_pos,
+                    mult_offset,
+                    representative_input.to_vec(),
+                )?,
+            })
+        })
+        .collect()
 }
 
 fn standalone_rust_script() -> String {
@@ -250,19 +288,13 @@ impl AmplitudeIntegrand {
                         .evaluators
                         .iter()
                         .map(|counterterm| {
-                            counterterm
-                                .evaluator_stacks
-                                .iter()
-                                .map(|evaluator_stack| {
-                                    export_evaluator_stack(
-                                        evaluator_stack,
-                                        start,
-                                        override_pos,
-                                        mult_offset,
-                                        representative_input.clone(),
-                                    )
-                                })
-                                .collect::<Result<Vec<_>>>()
+                            export_evaluator_map(
+                                &counterterm.evaluator_stacks,
+                                start,
+                                override_pos,
+                                mult_offset,
+                                &representative_input,
+                            )
                         })
                         .collect::<Result<Vec<_>>>()?;
 
