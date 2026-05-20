@@ -3,10 +3,7 @@ use idenso::{
     shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
 };
 use spenso::{
-    shadowing::{
-        TensorCollectExt,
-        symbolica_utils::{AtomCoreExt, SpensoPrintSettings},
-    },
+    shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings},
     structure::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
@@ -17,10 +14,6 @@ use symbolica::{
     atom::{Atom, AtomCore},
     parse, symbol,
 };
-
-fn contains_index(result: &str, index: &str) -> bool {
-    result.contains(&format!("{index})")) || result.contains(&format!("{index},"))
-}
 
 // Generate TestSymbols with all alphabet characters and some multi-character symbols
 symbol_set!(TestSymbols, TS;
@@ -49,13 +42,13 @@ fn spenso_bare_symb_vertex_substitution() {
     );
     let v5 =
         parse!("vx(5,-k(4), k(0), k(4)-k(0), spenso::mink(4,mu4), k(20), spenso::mink(4,mu5))");
-    let v6 = parse!(
+    let _v6 = parse!(
         "vx(6,-k(4)+k(0), -k(3)+k(4), k(3)-k(0), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
     );
-    let v7 = parse!(
+    let _v7 = parse!(
         "vx(7,-k(3)+k(0), -k(2)+k(3), k(2)-k(0), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))"
     );
-    let v8 = parse!(
+    let _v8 = parse!(
         "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
     );
 

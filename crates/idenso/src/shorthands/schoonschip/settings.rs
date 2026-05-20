@@ -34,7 +34,14 @@ pub enum SchoonschipContractionOrder {
 
 impl Default for SchoonschipSettings {
     fn default() -> Self {
-        Self::partial()
+        Self {
+            depth_limit: Some(1),
+            mode: SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst),
+            expand_contracted_sums: false,
+            simplify_chain_like_functions: false,
+            schoonschip_rank1_tensors: true,
+            contraction_order: SchoonschipContractionOrder::default(),
+        }
     }
 }
 
@@ -107,6 +114,11 @@ impl SchoonschipSettings {
 
     pub fn with_rank1_tensors(mut self) -> Self {
         self.schoonschip_rank1_tensors = true;
+        self
+    }
+
+    pub fn without_rank1_tensors(mut self) -> Self {
+        self.schoonschip_rank1_tensors = false;
         self
     }
 

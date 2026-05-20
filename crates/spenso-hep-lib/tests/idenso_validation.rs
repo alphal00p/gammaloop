@@ -126,19 +126,19 @@ fn color_middle_trace_structure_contraction_matches_commutator() {
         .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
 
     let lhs = Atom::i()
-        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * idenso::color_f!(c, d, x)
         * trace!(
             &cof,
-            idenso::color_t!(a.clone()),
+            idenso::color_t!(a),
             idenso::color_t!(x),
-            idenso::color_t!(b.clone())
+            idenso::color_t!(b)
         );
     let rhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone()),
-        idenso::color_t!(b.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(c),
+        idenso::color_t!(d),
+        idenso::color_t!(b)
     ) - trace!(
         &cof,
         idenso::color_t!(a),
@@ -162,21 +162,16 @@ fn color_explicit_middle_generator_contraction_matches_commutator() {
         ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
 
     let lhs = Atom::i()
-        * idenso::color_f!(c.clone(), d.clone(), x.clone())
-        * function!(
-            CS.t,
-            a.clone().to_atom(),
-            i.clone().to_atom(),
-            j.dual().to_atom()
-        )
+        * idenso::color_f!(c, d, x)
+        * function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
         * function!(CS.t, x.to_atom(), j.to_atom(), k.dual().to_atom())
-        * function!(CS.t, b.clone().to_atom(), k.to_atom(), i.dual().to_atom());
+        * function!(CS.t, b.to_atom(), k.to_atom(), i.dual().to_atom());
     let rhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone()),
-        idenso::color_t!(b.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(c),
+        idenso::color_t!(d),
+        idenso::color_t!(b)
     ) - trace!(
         &cof,
         idenso::color_t!(a),
@@ -199,9 +194,9 @@ fn color_trace_materialization_is_cyclic() {
 
     let lhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(c.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c)
     );
     let rhs = trace!(
         &cof,
@@ -224,14 +219,14 @@ fn color_three_trace_antisymmetric_part_matches_structure_constant() {
 
     let lhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(c.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c)
     ) - trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(b.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(c),
+        idenso::color_t!(b)
     );
     let rhs = Atom::i() * Atom::var(CS.tr) * idenso::color_f!(a, b, c);
 
@@ -249,29 +244,12 @@ fn color_explicit_three_trace_antisymmetric_part_matches_structure_constant() {
     let [i, j, k] =
         ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
 
-    let abc = function!(
-        CS.t,
-        a.clone().to_atom(),
-        i.clone().to_atom(),
-        j.dual().to_atom()
-    ) * function!(
-        CS.t,
-        b.clone().to_atom(),
-        j.clone().to_atom(),
-        k.dual().to_atom()
-    ) * function!(
-        CS.t,
-        c.clone().to_atom(),
-        k.clone().to_atom(),
-        i.dual().to_atom()
-    );
-    let acb = function!(
-        CS.t,
-        a.clone().to_atom(),
-        i.clone().to_atom(),
-        j.dual().to_atom()
-    ) * function!(CS.t, c.clone().to_atom(), j.to_atom(), k.dual().to_atom())
-        * function!(CS.t, b.clone().to_atom(), k.to_atom(), i.dual().to_atom());
+    let abc = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
+        * function!(CS.t, b.to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, c.to_atom(), k.to_atom(), i.dual().to_atom());
+    let acb = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
+        * function!(CS.t, c.to_atom(), j.to_atom(), k.dual().to_atom())
+        * function!(CS.t, b.to_atom(), k.to_atom(), i.dual().to_atom());
     let rhs = Atom::i() * Atom::var(CS.tr) * idenso::color_f!(a, b, c);
 
     assert_valid(abc - acb, rhs, &scalar_constants());
@@ -287,33 +265,33 @@ fn color_symmetric_trace_structure_contraction_matches_commutator_average() {
         .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
 
     let lhs = Atom::i()
-        * idenso::color_f!(c.clone(), d.clone(), x.clone())
+        * idenso::color_f!(c, d, x)
         * trace!(
             &cof,
             sym!(
-                idenso::color_t!(a.clone()),
-                idenso::color_t!(b.clone()),
+                idenso::color_t!(a),
+                idenso::color_t!(b),
                 idenso::color_t!(x)
             )
         );
     let rhs = (trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c),
+        idenso::color_t!(d)
     ) - trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(d.clone()),
-        idenso::color_t!(c.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(d),
+        idenso::color_t!(c)
     ) + trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone()),
-        idenso::color_t!(b.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(c),
+        idenso::color_t!(d),
+        idenso::color_t!(b)
     ) - trace!(
         &cof,
         idenso::color_t!(a),
@@ -338,10 +316,10 @@ fn color_trace_materialization_matches_explicit_generator_product() {
 
     let lhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c),
+        idenso::color_t!(d)
     );
     let rhs = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
         * function!(CS.t, b.to_atom(), j.to_atom(), k.dual().to_atom())
@@ -364,10 +342,10 @@ fn color_permuted_trace_materialization_matches_explicit_generator_product() {
 
     let lhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone()),
-        idenso::color_t!(b.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(c),
+        idenso::color_t!(d),
+        idenso::color_t!(b)
     );
     let rhs = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
         * function!(CS.t, c.to_atom(), j.to_atom(), k.dual().to_atom())
@@ -390,11 +368,11 @@ fn color_middle_trace_materialization_matches_explicit_generator_product() {
 
     let lhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(x.clone()),
-        idenso::color_t!(b.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(x),
+        idenso::color_t!(b)
     );
-    let rhs = function!(CS.t, a.to_atom(), i.clone().to_atom(), j.dual().to_atom())
+    let rhs = function!(CS.t, a.to_atom(), i.to_atom(), j.dual().to_atom())
         * function!(CS.t, x.to_atom(), j.to_atom(), k.dual().to_atom())
         * function!(CS.t, b.to_atom(), k.to_atom(), i.dual().to_atom());
 
@@ -413,20 +391,12 @@ fn color_structure_constant_matches_generator_commutator() {
         ["i", "j", "k"].map(|name| cof.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
 
     let lhs = Atom::i()
-        * idenso::color_f!(a.clone(), b.clone(), c.clone())
-        * function!(CS.t, c.to_atom(), i.clone().to_atom(), j.dual().to_atom());
-    let rhs = function!(
-        CS.t,
-        a.clone().to_atom(),
-        i.clone().to_atom(),
-        k.dual().to_atom()
-    ) * function!(
-        CS.t,
-        b.clone().to_atom(),
-        k.clone().to_atom(),
-        j.dual().to_atom()
-    ) - function!(CS.t, b.to_atom(), i.to_atom(), k.dual().to_atom())
-        * function!(CS.t, a.to_atom(), k.to_atom(), j.dual().to_atom());
+        * idenso::color_f!(a, b, c)
+        * function!(CS.t, c.to_atom(), i.to_atom(), j.dual().to_atom());
+    let rhs = function!(CS.t, a.to_atom(), i.to_atom(), k.dual().to_atom())
+        * function!(CS.t, b.to_atom(), k.to_atom(), j.dual().to_atom())
+        - function!(CS.t, b.to_atom(), i.to_atom(), k.dual().to_atom())
+            * function!(CS.t, a.to_atom(), k.to_atom(), j.dual().to_atom());
     assert_valid(lhs, rhs, &scalar_constants());
 }
 
@@ -475,45 +445,41 @@ fn color_four_generator_trace_decomposition_matches_direct_trace() {
 
     let lhs = trace!(
         &cof,
-        idenso::color_t!(a.clone()),
-        idenso::color_t!(b.clone()),
-        idenso::color_t!(c.clone()),
-        idenso::color_t!(d.clone())
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c),
+        idenso::color_t!(d)
     );
     let rhs = trace!(
         &cof,
         sym!(
-            idenso::color_t!(a.clone()),
-            idenso::color_t!(b.clone()),
-            idenso::color_t!(c.clone()),
-            idenso::color_t!(d.clone())
+            idenso::color_t!(a),
+            idenso::color_t!(b),
+            idenso::color_t!(c),
+            idenso::color_t!(d)
         )
     ) + Atom::i() / Atom::num(2)
-        * idenso::color_f!(a.clone(), b.clone(), x.clone())
+        * idenso::color_f!(a, b, x)
         * trace!(
             &cof,
             sym!(
-                idenso::color_t!(c.clone()),
-                idenso::color_t!(d.clone()),
-                idenso::color_t!(x.clone())
+                idenso::color_t!(c),
+                idenso::color_t!(d),
+                idenso::color_t!(x)
             )
         )
         + Atom::i() / Atom::num(2)
-            * idenso::color_f!(c.clone(), d.clone(), x.clone())
+            * idenso::color_f!(c, d, x)
             * trace!(
                 &cof,
                 sym!(
-                    idenso::color_t!(a.clone()),
-                    idenso::color_t!(b.clone()),
-                    idenso::color_t!(x.clone())
+                    idenso::color_t!(a),
+                    idenso::color_t!(b),
+                    idenso::color_t!(x)
                 )
             )
-        - Atom::var(CS.tr) / Atom::num(6)
-            * idenso::color_f!(a.clone(), c.clone(), x.clone())
-            * idenso::color_f!(b.clone(), d.clone(), x.clone())
-        + Atom::var(CS.tr) / Atom::num(3)
-            * idenso::color_f!(a, d, x.clone())
-            * idenso::color_f!(b, c, x);
+        - Atom::var(CS.tr) / Atom::num(6) * idenso::color_f!(a, c, x) * idenso::color_f!(b, d, x)
+        + Atom::var(CS.tr) / Atom::num(3) * idenso::color_f!(a, d, x) * idenso::color_f!(b, c, x);
 
     assert_valid(lhs, rhs, &scalar_constants());
 }
@@ -525,11 +491,9 @@ fn color_single_contracted_structure_constants_satisfy_jacobi() {
     let coad = ColorAdjoint {}.new_rep(8);
     let [a, b, c, d, x] = ["a", "b", "c", "d", "x"]
         .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
-    let expr = idenso::color_f!(a.clone(), b.clone(), x.clone())
-        * idenso::color_f!(c.clone(), d.clone(), x.clone())
-        - idenso::color_f!(a.clone(), c.clone(), x.clone())
-            * idenso::color_f!(b.clone(), d.clone(), x.clone())
-        + idenso::color_f!(a, d, x.clone()) * idenso::color_f!(b, c, x);
+    let expr = idenso::color_f!(a, b, x) * idenso::color_f!(c, d, x)
+        - idenso::color_f!(a, c, x) * idenso::color_f!(b, d, x)
+        + idenso::color_f!(a, d, x) * idenso::color_f!(b, c, x);
 
     assert_valid(expr, Atom::Zero, &scalar_constants());
 }

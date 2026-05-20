@@ -497,7 +497,7 @@ pub mod test {
         let can = can.canonize::<AbstractIndex>(AbstractIndex::Dummy);
 
         assert_snapshot!(
-            can.to_bare_ordered_string(),@"f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_4),dind(cof(3,d_5)))*t(coad(8,d_2),cof(3,d_5),dind(cof(3,d_3)))"
+            can.to_bare_ordered_string(),@"-1*f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_5),dind(cof(3,d_3)))*t(coad(8,d_2),cof(3,d_4),dind(cof(3,d_5)))"
         );
 
         //  gives

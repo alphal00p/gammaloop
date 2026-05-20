@@ -182,10 +182,10 @@ fn color_structure_symbol_is_antisymmetric() {
     let c = slot!(r.coad_na, c);
 
     assert_snapshot!(
-        color_f!(a.clone(), c, b.clone()).to_bare_ordered_string(),
+        color_f!(a, c, b).to_bare_ordered_string(),
         @"-1*f(coad(NA,a),coad(NA,b),coad(NA,c))"
     );
-    assert!(color_f!(a, b.clone(), b).is_zero());
+    assert!(color_f!(a, b, b).is_zero());
 }
 
 #[test]

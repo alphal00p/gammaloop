@@ -6,7 +6,7 @@ use symbolica::{
     coefficient::CoefficientView,
 };
 
-use crate::shorthands::metric::MetricSimplifier;
+use crate::shorthands::schoonschip::Schoonschip;
 
 /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
 /// Symbolica canonicalize argument order and annihilate repeated arguments.
@@ -86,19 +86,19 @@ impl EpsilonSimplifierPass {
         // Force Symbolica to register epsilon as antisymmetric before any
         // builders below create new epsilon nodes.
         let _ = *EPSILON_SYMBOL;
-        let mut current = expr.simplify_metrics();
+        let mut current = expr.schoonschip();
 
         loop {
             let next = current
                 .replace_map(|term, _context, out| {
-                    if let Some(rewritten) = Self::simplify_power(term.simplify_metrics().as_view())
+                    if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
                         .or_else(|| Self::simplify_pair_product(term))
                     {
                         **out = rewritten;
                     }
                 })
                 .collect_metrics()
-                .simplify_metrics();
+                .schoonschip();
 
             if next == current {
                 return next;
