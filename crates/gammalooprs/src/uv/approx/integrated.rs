@@ -441,8 +441,8 @@ pub(crate) fn to_vakint_integrand<
     substitute_masses_to_m_uv: bool,
 ) -> VakintExpression {
     let mut integrand_vakint = integrand
-        .undo_chain::<Aind>()
         .undo_schoonschip::<Aind>()
+        .undo_chain::<Aind>()
         .undo_trace::<Aind>();
 
     debug_tags!(#uv, #integrated, #vakint, #inspect;
@@ -852,7 +852,9 @@ pub(crate) fn to_vakint_integrand<
 
         t.numerator *= parse!(&settings.additional_normalization).pow(nloops);
 
-        t.numerator = t.numerator.to_dots();
+        // Vakint needs explicit tensor indices; only translate metric shorthands
+        // to dot notation here, without reintroducing Schoonschip rank-1 factors.
+        t.numerator = t.numerator.metric_shorthand_to_dot();
         t.integral = t
             .integral
             .replace(function!(GS.loop_mom, W_.x___))

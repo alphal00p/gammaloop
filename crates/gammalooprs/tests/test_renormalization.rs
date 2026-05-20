@@ -136,7 +136,7 @@ fn finite_part_quark_lo() {
     println!("ren part: {:>}", a.log_print(Some(80)));
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-4/3*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-4/3*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
     // -1 * target
 }
