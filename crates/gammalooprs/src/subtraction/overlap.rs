@@ -903,7 +903,7 @@ mod tests {
 
     use crate::{
         cff::{
-            cff_graph::VertexSet,
+            VertexSet,
             esurface::{
                 Esurface, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId,
             },

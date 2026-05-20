@@ -14,7 +14,10 @@ use crate::{
 use enum_try_as_inner::EnumTryAsInner;
 use eyre::{Result, eyre};
 #[cfg(feature = "shadowing")]
-use symbolica::{atom::Atom, evaluate::FunctionMap};
+use symbolica::{
+    atom::{Atom, Indeterminate, Symbol},
+    evaluate::FunctionMap,
+};
 
 use crate::structure::StructureError;
 use crate::structure::dimension::Dimension;
@@ -340,45 +343,79 @@ impl<T: Default + Clone + PartialEq, S: TensorStructure + Clone> SparseOrDense
 }
 
 #[cfg(feature = "shadowing")]
-impl<T: Clone + RefZero, S: TensorStructure, R> ShadowMapping<R> for RealOrComplexTensor<T, S>
+impl<T: Clone + RefZero + Into<Atom>, S: TensorStructure> ShadowMapping
+    for RealOrComplexTensor<T, S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
     S::Args: IntoArgs,
-    R: From<T>,
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
     fn append_map<C>(
         &self,
-        fn_map: &mut FunctionMap<R>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> C,
     ) where
         C: TensorCoefficient,
     {
         match self {
             RealOrComplexTensor::Real(c) => c.append_map(fn_map, index_to_atom),
-            RealOrComplexTensor::Complex(p) => match p {
-                DataTensor::Dense(d) => {
-                    for (i, c) in d.flat_iter() {
-                        let labeled_coef_re =
-                            index_to_atom(self.structure(), i).to_atom_re().unwrap();
-                        let labeled_coef_im =
-                            index_to_atom(self.structure(), i).to_atom_im().unwrap();
-                        fn_map.add_constant(labeled_coef_re.clone(), c.re.clone().into());
-                        fn_map.add_constant(labeled_coef_im.clone(), c.re.clone().into());
+            RealOrComplexTensor::Complex(p) => {
+                match p {
+                    DataTensor::Dense(d) => {
+                        for (i, c) in d.flat_iter() {
+                            let labeled_coef_re =
+                                index_to_atom(self.structure(), i).to_atom_re().unwrap();
+                            let labeled_coef_im =
+                                index_to_atom(self.structure(), i).to_atom_im().unwrap();
+                            let name_re = Indeterminate::try_from(labeled_coef_re.clone())
+                                .unwrap_or_else(|err| {
+                                    panic!(
+                                        "invalid tensor coefficient label {labeled_coef_re}: {err}"
+                                    )
+                                });
+                            let name_im = Indeterminate::try_from(labeled_coef_im.clone())
+                                .unwrap_or_else(|err| {
+                                    panic!(
+                                        "invalid tensor coefficient label {labeled_coef_im}: {err}"
+                                    )
+                                });
+                            fn_map
+                            .add_function(name_re, Vec::<Symbol>::new(), c.re.clone().into())
+                            .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_re}: {err}"));
+                            fn_map
+                            .add_function(name_im, Vec::<Symbol>::new(), c.im.clone().into())
+                            .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_im}: {err}"));
+                        }
+                    }
+                    DataTensor::Sparse(d) => {
+                        for (i, c) in d.flat_iter() {
+                            let labeled_coef_re =
+                                index_to_atom(self.structure(), i).to_atom_re().unwrap();
+                            let labeled_coef_im =
+                                index_to_atom(self.structure(), i).to_atom_im().unwrap();
+                            let name_re = Indeterminate::try_from(labeled_coef_re.clone())
+                                .unwrap_or_else(|err| {
+                                    panic!(
+                                        "invalid tensor coefficient label {labeled_coef_re}: {err}"
+                                    )
+                                });
+                            let name_im = Indeterminate::try_from(labeled_coef_im.clone())
+                                .unwrap_or_else(|err| {
+                                    panic!(
+                                        "invalid tensor coefficient label {labeled_coef_im}: {err}"
+                                    )
+                                });
+                            fn_map
+                            .add_function(name_re, Vec::<Symbol>::new(), c.re.clone().into())
+                            .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_re}: {err}"));
+                            fn_map
+                            .add_function(name_im, Vec::<Symbol>::new(), c.im.clone().into())
+                            .unwrap_or_else(|err| panic!("failed to register tensor coefficient {labeled_coef_im}: {err}"));
+                        }
                     }
                 }
-                DataTensor::Sparse(d) => {
-                    for (i, c) in d.flat_iter() {
-                        let labeled_coef_re =
-                            index_to_atom(self.structure(), i).to_atom_re().unwrap();
-                        let labeled_coef_im =
-                            index_to_atom(self.structure(), i).to_atom_im().unwrap();
-                        fn_map.add_constant(labeled_coef_re.clone(), c.re.clone().into());
-                        fn_map.add_constant(labeled_coef_im.clone(), c.re.clone().into());
-                    }
-                }
-            }, // p.append_map(fn_map, index_to_atom),
+            } // p.append_map(fn_map, index_to_atom),
         }
     }
 }

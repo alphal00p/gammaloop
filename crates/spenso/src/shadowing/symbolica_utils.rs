@@ -18,7 +18,7 @@ use symbolica::{
 extern crate derive_more;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     fmt::{Debug, Display, Error},
 };
 
@@ -219,31 +219,39 @@ impl<A: AtomCore> AtomCoreExt for A {
         f: &mut W,
         settings: &TypstSettings,
     ) -> Result<(), Error> {
-        let mut params = BTreeMap::new();
-        let mut fn_map = FunctionMap::new();
+        let mut params = Vec::new();
+        let mut seen_params = BTreeSet::new();
+        let fn_map = FunctionMap::new();
         let mut externals = BTreeSet::new();
 
         self.visitor(&mut |a| {
             if let AtomView::Var(a) = a {
-                params.insert(a.get_symbol(), a.as_view().to_owned());
+                let atom = a.as_view().to_owned();
+                if seen_params.insert(atom.clone()) {
+                    params.push((atom, a.get_symbol()));
+                }
                 false
             } else if let AtomView::Fun(a) = a {
-                externals.insert(a.get_symbol());
+                let symbol = a.get_symbol();
+                externals.insert(symbol);
+                if !symbol.is_builtin() {
+                    let atom = a.as_view().to_owned();
+                    if seen_params.insert(atom.clone()) {
+                        params.push((atom, symbol));
+                    }
+                    return false;
+                }
 
-                let dashed_name = format!(
-                    "{}-{}",
-                    a.get_symbol().get_namespace(),
-                    a.get_symbol().get_stripped_name(),
-                );
-                let _ = fn_map.add_external_function(a.get_symbol(), dashed_name);
+                let dashed_name =
+                    format!("{}-{}", symbol.get_namespace(), symbol.get_stripped_name(),);
+                let _ = dashed_name;
                 true
             } else {
                 true
             }
         });
 
-        let (params, symbols): (Vec<Atom>, Vec<Symbol>) =
-            params.into_iter().map(|(s, a)| (a, s)).collect();
+        let (params, symbols): (Vec<Atom>, Vec<Symbol>) = params.into_iter().unzip();
         let eval_tree = self
             .evaluator(
                 &fn_map,
@@ -306,6 +314,7 @@ impl<A: AtomCore> AtomCoreExt for A {
                         custom_print_mode: Some(("typst", 1)),
                         ..Default::default()
                     },
+                    &PrintState::new(),
                 )
             {
                 writeln!(f, "{a}")?;
@@ -331,6 +340,7 @@ impl<A: AtomCore> AtomCoreExt for A {
                         custom_print_mode: Some(("typst", 1)),
                         ..Default::default()
                     },
+                    &PrintState::new(),
                 )
             {
                 writeln!(f, "{a}")?;
@@ -364,45 +374,41 @@ impl<A: AtomCore> AtomCoreExt for A {
                             .join(" dot ")
                     )?;
                 }
-                Instruction::ExternalFun(o, name, args) => {
-                    writeln!(
-                        f,
-                        "let {} = {name}({})",
-                        typst_slot(o, &consts),
-                        args.into_iter().map(|a| typst_slot(a, &consts)).join(",")
-                    )?;
-                }
-                Instruction::Fun(o, builtin, s, _is_real) => {
-                    let b = builtin.get_symbol();
+                Instruction::Fun(o, fun, _is_real) => {
+                    let (b, tags, args) = *fun;
 
-                    if b == Symbol::COS {
+                    if b == Symbol::COS && args.len() == 1 {
                         writeln!(
                             f,
                             "let {} = $ cos({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            typst_slot(args[0], &consts)
                         )?;
-                    } else if b == Symbol::SIN {
+                    } else if b == Symbol::SIN && args.len() == 1 {
                         writeln!(
                             f,
                             "let {} = $ sin({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            typst_slot(args[0], &consts)
                         )?;
-                    } else if b == Symbol::SQRT {
+                    } else if b == Symbol::SQRT && args.len() == 1 {
                         writeln!(
                             f,
                             "let {} = $ sqrt({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            typst_slot(args[0], &consts)
                         )?;
                     } else {
                         let name = b.get_stripped_name().to_string();
+                        let values = tags
+                            .into_iter()
+                            .chain(args.iter().map(|a| typst_slot(*a, &consts)))
+                            .join(",");
                         writeln!(
                             f,
                             "let {} = $op(\"{name}\")({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            values
                         )?;
                     }
                 }
@@ -535,7 +541,7 @@ impl FormatWithState for FunView<'_> {
 
         if uppers.is_empty() {
             f.write_str("op(\"")?;
-            self.get_symbol().format(opts, f)?;
+            self.get_symbol().format(opts, PrintState::default(), f)?;
             f.write_str("\")")?;
             let n_args = self.get_nargs();
 
@@ -555,7 +561,7 @@ impl FormatWithState for FunView<'_> {
             f.write_str("scripts(attach(")?;
             f.write_str("op(\"")?;
 
-            self.get_symbol().format(opts, f)?;
+            self.get_symbol().format(opts, PrintState::default(), f)?;
             f.write_str("\")")?;
             f.write_str(", tr: ")?;
             f.write_str(&uppers.join(" "))?;
@@ -1007,7 +1013,7 @@ mod test {
         let _lower = symbol!(
             "lower",
             tag = SPENSO_TAG.lower,
-            print = |_, opt| {
+            print = |_, opt, _state| {
                 if let Some(("typst", 1)) = opt.custom_print_mode {
                     let body = r#"{
 let args = arg.pos().map(to-eq).join("")
@@ -1023,7 +1029,7 @@ let args = arg.pos().map(to-eq).join("")
         let _upper = symbol!(
             "upper",
             tags = [SPENSO_TAG.upper.clone(), tag!("Real")],
-            print = |_, opt| {
+            print = |_, opt, _state| {
                 if let Some(("typst", 1)) = opt.custom_print_mode {
                     let body = r#"{
 let args = arg.pos().map(to-eq).join("")

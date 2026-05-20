@@ -39,7 +39,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::expression::GraphOrientation,
+    cff::expression::{GammaLoopGraphOrientation, GraphOrientation},
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
@@ -223,7 +223,11 @@ pub enum EvaluatorBackendPolicy {
 }
 
 #[derive(Clone)]
-pub struct SymjitComplexEvaluatorGL(JITCompiledEvaluator<SymComplex<f64>>);
+pub struct SymjitComplexEvaluatorGL {
+    evaluator: JITCompiledEvaluator<SymComplex<f64>>,
+    args_scratch: Vec<SymComplex<f64>>,
+    out_scratch: Vec<SymComplex<f64>>,
+}
 
 impl std::fmt::Debug for SymjitComplexEvaluatorGL {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -232,13 +236,48 @@ impl std::fmt::Debug for SymjitComplexEvaluatorGL {
 }
 
 impl SymjitComplexEvaluatorGL {
-    pub fn evaluate(&mut self, args: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
-        unsafe {
-            self.0.evaluate(
-                transmute::<&[Complex<F<f64>>], &[SymComplex<f64>]>(args),
-                transmute::<&mut [Complex<F<f64>>], &mut [SymComplex<f64>]>(out),
-            );
+    fn new(evaluator: JITCompiledEvaluator<SymComplex<f64>>) -> Self {
+        Self {
+            evaluator,
+            args_scratch: Vec::new(),
+            out_scratch: Vec::new(),
         }
+    }
+
+    pub fn evaluate(&mut self, args: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
+        self.args_scratch.clear();
+        self.args_scratch
+            .extend(args.iter().map(|z| SymComplex::new(z.re.0, z.im.0)));
+        self.out_scratch
+            .resize(out.len(), SymComplex::new(0.0, 0.0));
+        self.evaluator
+            .evaluate(&self.args_scratch, &mut self.out_scratch);
+
+        for (out, value) in out.iter_mut().zip(self.out_scratch.iter()) {
+            *out = Complex::new(F(value.re), F(value.im));
+        }
+    }
+}
+
+impl bincode::Encode for SymjitComplexEvaluatorGL {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        self.evaluator.encode(encoder)
+    }
+}
+
+impl<Context> bincode::Decode<Context> for SymjitComplexEvaluatorGL
+where
+    JITCompiledEvaluator<SymComplex<f64>>: bincode::Decode<Context>,
+{
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        Ok(Self::new(JITCompiledEvaluator::<SymComplex<f64>>::decode(
+            decoder,
+        )?))
     }
 }
 #[cfg_attr(
@@ -263,6 +302,7 @@ impl Default for EvaluatorMethod {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
+    pub explicit_orientation_sum_only: bool,
     pub single_parametric: GenericEvaluator,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
@@ -332,6 +372,18 @@ impl EvaluatorStack {
         count
     }
 
+    /// Return the scalar Symbolica atoms produced by the Spenso network pass.
+    ///
+    /// These are the expressions handed to the concrete Symbolica evaluator
+    /// builders after optional color/gamma/metric simplification and tensor
+    /// network execution.
+    pub fn spenso_processed_atoms<A: AtomCore>(
+        atoms: &[A],
+        settings: &EvaluatorSettings,
+    ) -> Result<Vec<Atom>> {
+        Self::parse_atoms_with_timings(atoms, settings).map(|(atoms, _)| atoms)
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -356,6 +408,51 @@ impl EvaluatorStack {
             settings,
         )
     }
+
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Explicit Orientation Sum Evaluator",
+          )
+      )]
+    fn new_direct<A: AtomCore>(
+        parametric_atom: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        GenericEvaluator::new_from_builder(
+            parametric_atom
+                .iter()
+                .map(|atom| atom.as_atom_view().to_owned()),
+            param_builder,
+            dual_shape.clone(),
+            settings.optimization_settings(),
+            settings,
+        )
+    }
+
+    fn new_preprocessed_direct_with_progress<A, P>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<GenericEvaluator>
+    where
+        A: AtomCore,
+        P: FnMut(usize, usize),
+    {
+        GenericEvaluator::new_from_builder_with_progress(
+            atoms.iter().map(|atom| atom.as_atom_view().to_owned()),
+            param_builder,
+            dual_shape.clone(),
+            settings.optimization_settings(),
+            settings,
+            progress,
+        )
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -375,7 +472,7 @@ impl EvaluatorStack {
             GenericEvaluator::new_from_builder(
                 parametric_atom.iter().flat_map(|atom| {
                     orientations.iter().map(|a| {
-                        let selected = a.select(atom.as_atom_view());
+                        let selected = a.select_gs(atom.as_atom_view());
                         debug!(selected_expr = %selected.log_print(None), "Iterative");
                         selected
                     })
@@ -426,7 +523,6 @@ impl EvaluatorStack {
                     .add_tagged_function(
                         GS.integrand,
                         vec![Atom::num(i)],
-                        "integrand".into(),
                         args.clone(),
                         param_integrand.clone(),
                     )
@@ -446,7 +542,7 @@ impl EvaluatorStack {
             orientations
                 .iter()
                 .map(|a| {
-                    GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(i, a), true)
+                    GS.collect_orientation_if(a.orientation_thetas_gs() * GS.integrand(i, a), true)
                     // GS.integrand(a)
                 })
                 .fold(Atom::Zero, |acc, n| acc + n)
@@ -491,7 +587,7 @@ impl EvaluatorStack {
                 .iter()
                 .map(|a| {
                     let selected = GS.collect_orientation_if(
-                        a.orientation_thetas() * a.select(atom.as_atom_view()),
+                        a.orientation_thetas_gs() * a.select_gs(atom.as_atom_view()),
                         true,
                     );
                     debug!(selected_expr = %selected.log_print(None), "Iterative");
@@ -528,6 +624,41 @@ impl EvaluatorStack {
         Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
     }
 
+    pub fn new_preprocessed_components_with_timings<A, P>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<(Self, EvaluatorBuildTimings)>
+    where
+        A: AtomCore,
+        P: FnMut(usize, usize),
+    {
+        let mut timings = EvaluatorBuildTimings::default();
+        let symbolica_started = std::time::Instant::now();
+        let single_parametric = Self::new_preprocessed_direct_with_progress(
+            atoms,
+            param_builder,
+            &dual_shape,
+            settings,
+            progress,
+        )
+        .with_context(|| "Failed to create preprocessed component evaluator")?;
+        timings.symbolica_time += symbolica_started.elapsed();
+
+        Ok((
+            EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                single_parametric,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            },
+            timings,
+        ))
+    }
+
     #[instrument(
            skip_all,
            fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
@@ -540,42 +671,7 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
-        let mut timings = EvaluatorBuildTimings::default();
-        let spenso_started = std::time::Instant::now();
-        let parsed_atoms = atoms
-            .iter()
-            .map(|a| {
-                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-                let mut net = if settings.do_algebra {
-                    a.as_atom_view()
-                        .simplify_color()
-                        .simplify_gamma()
-                        .simplify_metrics()
-                        .to_dots()
-                        .parse_into_net()?
-                } else {
-                    a.as_atom_view().parse_into_net()?
-                };
-
-                // println!("Executing {}", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-
-                net.result_scalar()
-                    .map(|a| match a {
-                        ExecutionResult::One => Atom::num(1),
-                        ExecutionResult::Zero => Atom::Zero,
-                        ExecutionResult::Val(v) => v.into_owned(),
-                    })
-                    .map_err(|a| {
-                        Report::from(a)
-                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        timings.spenso_time += spenso_started.elapsed();
+        let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
 
         let symbolica_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
@@ -630,6 +726,7 @@ impl EvaluatorStack {
 
         Ok((
             EvaluatorStack {
+                explicit_orientation_sum_only: false,
                 single_parametric,
                 iterative,
                 summed_function_map,
@@ -637,6 +734,81 @@ impl EvaluatorStack {
             },
             timings,
         ))
+    }
+
+    #[instrument(
+           skip_all,
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Explicit Orientation Sum Evaluator Stack"),
+           err
+       )]
+    pub(crate) fn new_explicit_sum_with_timings<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let (parsed_atoms, mut timings) = Self::parse_atoms_with_timings(atoms, settings)?;
+
+        let symbolica_started = std::time::Instant::now();
+        let single_parametric =
+            Self::new_direct(&parsed_atoms, param_builder, &dual_shape, settings)
+                .with_context(|| "Failed to create explicit orientation sum evaluator")?;
+        timings.symbolica_time += symbolica_started.elapsed();
+
+        Ok((
+            EvaluatorStack {
+                explicit_orientation_sum_only: true,
+                single_parametric,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            },
+            timings,
+        ))
+    }
+
+    fn parse_atoms_with_timings<A: AtomCore>(
+        atoms: &[A],
+        settings: &EvaluatorSettings,
+    ) -> Result<(Vec<Atom>, EvaluatorBuildTimings)> {
+        let mut timings = EvaluatorBuildTimings::default();
+        let spenso_started = std::time::Instant::now();
+        let parsed_atoms = atoms
+            .iter()
+            .map(|a| {
+                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
+                let mut net = if settings.do_algebra {
+                    a.as_atom_view()
+                        .simplify_color()
+                        .simplify_gamma()
+                        .simplify_metrics()
+                        .to_dots()
+                        .parse_into_net()?
+                } else {
+                    a.as_atom_view().parse_into_net()?
+                };
+
+                // println!("Executing {}", net.dot_pretty());
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+
+                net.result_scalar()
+                    .map(|a| match a {
+                        ExecutionResult::One => Atom::num(1),
+                        ExecutionResult::Zero => Atom::Zero,
+                        ExecutionResult::Val(v) => v.into_owned(),
+                    })
+                    .map_err(|a| {
+                        Report::from(a)
+                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        timings.spenso_time += spenso_started.elapsed();
+
+        Ok((parsed_atoms, timings))
     }
 
     fn evaluate_parametric<'a, T: FloatLike, OID: IndexLike>(
@@ -853,6 +1025,22 @@ impl EvaluatorStack {
     where
         usize: From<OID>,
     {
+        if self.explicit_orientation_sum_only {
+            if settings.general.evaluator_method != EvaluatorMethod::Summed {
+                return Err(eyre!(
+                    "`global.generation.explicit_orientation_sum_only = true` requires runtime `general.evaluator_method = Summed`; {:?} is not supported",
+                    settings.general.evaluator_method
+                ));
+            }
+
+            return Ok(evaluate_evaluator(
+                &mut self.single_parametric,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            ));
+        }
+
         match settings.general.evaluator_method {
             EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
                 input,
@@ -945,6 +1133,47 @@ impl EvaluatorStack {
         Ok(())
     }
 
+    pub fn prepare_f64_backend(
+        &mut self,
+        name: impl AsRef<str>,
+        path: impl AsRef<Path>,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> Result<()> {
+        match frozen_mode {
+            FrozenCompilationMode::Eager => self.for_each_generic_evaluator_mut(|evaluator| {
+                evaluator.activate_eager();
+                Ok(())
+            }),
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())
+            }
+            FrozenCompilationMode::Cpp(_) | FrozenCompilationMode::Assembly(_) => {
+                self.compile(name, path, frozen_mode)
+            }
+        }
+    }
+
+    pub fn activate_cached_f64_backend(
+        &mut self,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> Result<()> {
+        match frozen_mode {
+            FrozenCompilationMode::Eager => self.for_each_generic_evaluator_mut(|evaluator| {
+                evaluator.activate_eager();
+                Ok(())
+            }),
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())
+            }
+            FrozenCompilationMode::Cpp(_) | FrozenCompilationMode::Assembly(_) => self
+                .for_each_generic_evaluator_mut(|evaluator| {
+                    evaluator.activate_external_from_artifact(ActiveF64Backend::from_frozen_mode(
+                        frozen_mode,
+                    ))
+                }),
+        }
+    }
+
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
         mut f: impl FnMut(&mut GenericEvaluator) -> Result<()>,
@@ -980,9 +1209,19 @@ pub struct GenericEvaluator {
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
     pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
+    pub symjit_f64_compiled: Option<SymjitComplexEvaluatorGL>,
     pub(crate) loaded_f64_compiled: RuntimeCache<CompiledComplexEvaluatorSpenso>,
     pub(crate) symjit_f64: RuntimeCache<SymjitComplexEvaluatorGL>,
     pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
+}
+
+pub(crate) struct RawEvaluatorBuildParams<'a> {
+    params: &'a [Atom],
+    fn_map: &'a FunctionMap,
+    fn_map_entries: Vec<FnMapEntry>,
+    optimization_settings: OptimizationSettings,
+    dual_shape: Option<Vec<Vec<usize>>>,
+    settings: &'a EvaluatorSettings,
 }
 
 impl GenericEvaluator {
@@ -994,6 +1233,7 @@ impl GenericEvaluator {
 
     fn activate_eager_only(&mut self) {
         self.f64_compiled = None;
+        self.symjit_f64_compiled = None;
         self.activate_eager();
     }
 
@@ -1058,15 +1298,23 @@ impl GenericEvaluator {
             return Ok(());
         }
 
-        let rational = self
-            .rational
-            .as_ref()
-            .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
-        let evaluator = rational
-            .jit_compile::<SymComplex<f64>>()
-            .map_err(|err| eyre!(err))?;
+        let evaluator = if let Some(evaluator) = &self.symjit_f64_compiled {
+            evaluator.clone()
+        } else {
+            let rational = self.rational.as_ref().ok_or_else(|| {
+                eyre!("Cannot build symjit backend without the rational evaluator")
+            })?;
+            let symjit_ready = rational
+                .clone()
+                .map_coeff_with_prec(&|r| SymComplex::new(r.re.to_f64(), r.im.to_f64()), 53);
+            let evaluator = SymjitComplexEvaluatorGL::new(
+                symjit_ready.jit_compile().map_err(|err| eyre!(err))?,
+            );
+            self.symjit_f64_compiled = Some(evaluator.clone());
+            evaluator
+        };
         self.loaded_f64_compiled.invalidate();
-        self.symjit_f64.set(SymjitComplexEvaluatorGL(evaluator));
+        self.symjit_f64.set(evaluator);
         self.active_f64_backend.set(ActiveF64Backend::Symjit);
         Ok(())
     }
@@ -1113,19 +1361,44 @@ impl GenericEvaluator {
         optimization_settings: OptimizationSettings,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Self::new_from_builder_with_progress(
+            atoms,
+            builder,
+            dual_shape,
+            optimization_settings,
+            settings,
+            |_, _| {},
+        )
+    }
+
+    pub(crate) fn new_from_builder_with_progress<I, P>(
+        atoms: I,
+        builder: &ParamBuilder<f64>,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        optimization_settings: OptimizationSettings,
+        settings: &EvaluatorSettings,
+        progress: P,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = Atom>,
+        P: FnMut(usize, usize),
+    {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
             .collect();
 
-        Self::new_from_raw_params(
+        Self::new_from_raw_params_with_progress(
             atoms,
-            &params,
-            &builder.fn_map,
-            builder.reps.clone(),
-            optimization_settings,
-            dual_shape,
-            settings,
+            RawEvaluatorBuildParams {
+                params: &params,
+                fn_map: &builder.fn_map,
+                fn_map_entries: builder.reps.clone(),
+                optimization_settings,
+                dual_shape,
+                settings,
+            },
+            progress,
         )
     }
 
@@ -1138,6 +1411,37 @@ impl GenericEvaluator {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Self::new_from_raw_params_with_progress(
+            atoms,
+            RawEvaluatorBuildParams {
+                params,
+                fn_map,
+                fn_map_entries,
+                optimization_settings,
+                dual_shape,
+                settings,
+            },
+            |_, _| {},
+        )
+    }
+
+    pub(crate) fn new_from_raw_params_with_progress<I, P>(
+        atoms: I,
+        build: RawEvaluatorBuildParams<'_>,
+        mut progress: P,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = Atom>,
+        P: FnMut(usize, usize),
+    {
+        let RawEvaluatorBuildParams {
+            params,
+            fn_map,
+            fn_map_entries,
+            optimization_settings,
+            dual_shape,
+            settings,
+        } = build;
         let reps = if settings.do_fn_map_replacements {
             fn_map_entries
                 .iter()
@@ -1147,26 +1451,25 @@ impl GenericEvaluator {
             vec![]
         };
 
-        for r in &reps {
-            println!("Reps!!{:#}", r)
-        }
-
         let exprs: Vec<Atom> = atoms
             .into_iter()
-            .map(|a| a.replace_multiple(&reps).replace_multiple(&reps))
+            .map(|a| {
+                GS.collect_orientation_if(a.replace_multiple(&reps).replace_multiple(&reps), false)
+            })
             .collect();
 
+        let total_exprs = exprs.len();
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
-        for n in exprs.iter() {
-            let eval = n
+        for (index, expr) in exprs.iter().enumerate() {
+            let eval = expr
                 .evaluator(fn_map, params, optimization_settings.clone())
                 .map_err(|e| {
-                    let mut settings =SpensoPrintSettings::compact().nice_symbolica();
+                    let mut settings = SpensoPrintSettings::compact().nice_symbolica();
                     settings.max_line_length = Some(120);
                     settings.hide_all_namespaces = false;
                     eyre!(
                         "Failed to create evaluator for atom: {:120}\n: {}, with params: \n {:120}, and fn_map_entries: \n {}",
-                        n.printer(settings),
+                        expr.printer(settings),
                         e,
                         params
                             .iter()
@@ -1175,7 +1478,7 @@ impl GenericEvaluator {
                             .join(", "),
                         fn_map_entries
                             .iter()
-                            .map(|a| format!("{}->{}\n",a.lhs,a.rhs))
+                            .map(|a| format!("{}->{}\n", a.lhs, a.rhs))
                             .collect::<Vec<_>>()
                             .join(", "),
                     )
@@ -1188,6 +1491,7 @@ impl GenericEvaluator {
             } else {
                 eval
             });
+            progress(index + 1, total_exprs);
         }
 
         let mut tree = tree.ok_or_else(|| eyre!("No expressions to evaluate"))?;
@@ -1195,9 +1499,7 @@ impl GenericEvaluator {
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
             let dualizer = Dualizer::new(dual, vec![]);
-            tree = tree
-                .vectorize(&dualizer, ahash::HashMap::default())
-                .unwrap();
+            tree = tree.vectorize(&dualizer).unwrap();
         }
 
         let rational = tree.clone();
@@ -1208,8 +1510,10 @@ impl GenericEvaluator {
         let f128 = tree
             .clone()
             .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
-        let arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
-            tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+        let arb: ExpressionEvaluator<Complex<F<ArbPrec>>> = tree.map_coeff_with_prec(
+            &|r| Complex::new(F::from(&r.re), F::from(&r.im)),
+            ArbPrec::BINARY_PRECISION,
+        );
 
         let evaluator = GenericEvaluator {
             exprs_len: exprs.len(),
@@ -1226,6 +1530,7 @@ impl GenericEvaluator {
             f128,
             dual_shape,
             arb,
+            symjit_f64_compiled: None,
             loaded_f64_compiled: RuntimeCache::default(),
             symjit_f64: RuntimeCache::default(),
             active_f64_backend: RuntimeCache::default(),
@@ -1281,7 +1586,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
     }
 
     pub(crate) fn set_orientation_values<O: GraphOrientation>(&mut self, orientation: &O) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let zero: Complex<F<T>> = Complex::new_re(F(T::new_zero()));
         let one = zero.ref_one();
         let mult_offset = self.multiplicative_offset;
         let start = self.orientations_start;
@@ -1296,7 +1601,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
     }
 
     pub(crate) fn override_if(&mut self, over_ride: bool) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let zero: Complex<F<T>> = Complex::new_re(F(T::new_zero()));
         let one = zero.ref_one();
         let multiplicative_offset = self.multiplicative_offset;
         let start = self.override_pos;
@@ -1606,8 +1911,13 @@ impl GenericEvaluatorFloat for ArbPrec {
 
 #[cfg(test)]
 mod tests {
-    use symbolica::atom::Symbol;
+    use std::io::Cursor;
 
+    use symbolica::atom::Symbol;
+    use symbolica::{function, parse, state::State};
+
+    use crate::GammaLoopContextContainer;
+    use crate::model::Model;
     use crate::utils::{W_, symbolica_ext::CallSymbol};
 
     use super::*;
@@ -1630,7 +1940,7 @@ mod tests {
         ]
         .iter()
         .map(|a| {
-            GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(1, a), true)
+            GS.collect_orientation_if(a.orientation_thetas_gs() * GS.integrand(1, a), true)
 
             // GS.integrand(a)
         })
@@ -1665,5 +1975,491 @@ mod tests {
         let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[1]);
 
         assert_eq!(summed, vec![20, 50]);
+    }
+
+    #[test]
+    fn symjit_payload_survives_bincode_roundtrip_without_rational_tree() {
+        let params = vec![parse!("x")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![parse!("x*x + 1")],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+        assert!(evaluator.symjit_f64_compiled.is_some());
+
+        evaluator.rational = None;
+        let encoded = bincode::encode_to_vec(&evaluator, bincode::config::standard()).unwrap();
+
+        let mut state_bytes = Vec::new();
+        State::export(&mut state_bytes).unwrap();
+        let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
+        let model = Model::default();
+        let context = GammaLoopContextContainer {
+            state_map: &state_map,
+            model: &model,
+        };
+        let (mut decoded, _): (GenericEvaluator, _) =
+            bincode::decode_from_slice_with_context(&encoded, bincode::config::standard(), context)
+                .unwrap();
+
+        assert!(decoded.rational.is_none());
+        decoded.activate_symjit().unwrap();
+
+        let mut out = [Complex::<F<f64>>::default()];
+        decoded
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&[Complex::new_re(F(2.0))], &mut out);
+        assert_eq!(out[0], Complex::new_re(F(5.0)));
+    }
+
+    #[test]
+    fn symjit_evaluates_registered_complex_external_functions() {
+        let params = vec![parse!("x")];
+        let conjugate = crate::numerator::ufo::UFO.complexconjugate;
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![function!(conjugate, Atom::var(symbolica::symbol!("x"))) + parse!("x")],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+
+        let mut out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&[Complex::new(F(1.0), F(3.0))], &mut out);
+        assert_eq!(out[0], Complex::new_re(F(2.0)));
+    }
+
+    #[test]
+    fn symjit_evaluates_symbolica_if_with_real_condition() {
+        let params = vec![parse!("x")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![Symbol::IF.f([parse!("x"), Atom::num(2), Atom::num(3)])],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+
+        let mut out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&[Complex::new_re(F(1.0))], &mut out);
+        assert_eq!(out[0], Complex::new_re(F(2.0)));
+
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&[Complex::new_re(F(0.0))], &mut out);
+        assert_eq!(out[0], Complex::new_re(F(3.0)));
+    }
+
+    #[test]
+    fn symjit_short_circuits_symbolica_if_branches() {
+        let params = vec![parse!("condition"), parse!("x"), parse!("y")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![Symbol::IF.f([parse!("condition"), Atom::num(2), parse!("1/(x-y)")])],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+
+        let input = [
+            Complex::new_re(F(1.0)),
+            Complex::new_re(F(1.0)),
+            Complex::new_re(F(1.0)),
+        ];
+        let eager = evaluator.f64_eager.evaluate_single(&input);
+        let mut symjit_out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&input, &mut symjit_out);
+        assert_eq!(eager, Complex::new_re(F(2.0)));
+        assert_eq!(symjit_out[0], eager);
+    }
+
+    #[test]
+    fn symbolica_if_vectorizes_over_dual_branches() {
+        let params = vec![parse!("condition"), parse!("x")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![Symbol::IF.f([parse!("condition"), parse!("x*x"), parse!("3*x")])],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            Some(vec![vec![0], vec![1]]),
+            &settings,
+        )
+        .unwrap();
+
+        let input = [
+            Complex::new_re(F(1.0)),
+            Complex::new_re(F(0.0)),
+            Complex::new_re(F(2.0)),
+            Complex::new_re(F(1.0)),
+        ];
+        let mut out = [Complex::<F<f64>>::default(); 2];
+        evaluator.f64_eager.evaluate(&input, &mut out);
+
+        assert_eq!(out[0], Complex::new_re(F(4.0)));
+        assert_eq!(out[1], Complex::new_re(F(4.0)));
+    }
+
+    #[test]
+    fn symbolica_vectorizes_function_map_body() {
+        let params = vec![parse!("x")];
+        let x = Indeterminate::try_from(parse!("x")).unwrap();
+        let mut fn_map = FunctionMap::new();
+        fn_map
+            .add_function(symbolica::symbol!("f"), vec![x.clone()], parse!("x*x"))
+            .unwrap();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![function!(symbolica::symbol!("f"), parse!("x"))],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            Some(vec![vec![0], vec![1]]),
+            &settings,
+        )
+        .unwrap();
+
+        let input = [Complex::new_re(F(2.0)), Complex::new_re(F(1.0))];
+        let mut out = [Complex::<F<f64>>::default(); 2];
+        evaluator.f64_eager.evaluate(&input, &mut out);
+
+        assert_eq!(out[0], Complex::new_re(F(4.0)));
+        assert_eq!(out[1], Complex::new_re(F(4.0)));
+    }
+
+    #[test]
+    fn symbolica_vectorizes_sqrt_taylor_coefficients() {
+        let params = vec![parse!("x")];
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![parse!("sqrt(x)")],
+            &params,
+            &FunctionMap::new(),
+            Vec::new(),
+            OptimizationSettings::default(),
+            Some(vec![vec![0], vec![1], vec![2]]),
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+
+        let input = [
+            Complex::new_re(F(4.0)),
+            Complex::new_re(F(1.0)),
+            Complex::new_re(F(0.0)),
+        ];
+        let mut out = [Complex::<F<f64>>::default(); 3];
+        evaluator.f64_eager.evaluate(&input, &mut out);
+
+        assert!((out[0].re.0 - 2.0).abs() < 1.0e-15);
+        assert!((out[1].re.0 - 0.25).abs() < 1.0e-15);
+        assert!((out[2].re.0 + 0.015625).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn symjit_evaluates_complex_sqrt_on_negative_real_axis() {
+        let params = vec![parse!("x")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![parse!("sqrt(x)")],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+
+        let input = [Complex::new_re(F(-1.0))];
+        let eager = evaluator.f64_eager.evaluate_single(&input);
+        let mut symjit_out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&input, &mut symjit_out);
+        assert!(eager.re.0.abs() < 1.0e-15);
+        assert!((eager.im.0 - 1.0).abs() < 1.0e-15);
+        assert!((symjit_out[0].re.0 - eager.re.0).abs() < 1.0e-15);
+        assert!((symjit_out[0].im.0 - eager.im.0).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn symjit_evaluates_symbolica_pi_constant() {
+        let params = Vec::<Atom>::new();
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![Atom::var(Symbol::PI)],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+
+        let eager = evaluator.f64_eager.evaluate_single(&[]);
+        let mut symjit_out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&[], &mut symjit_out);
+        assert!((eager.re.0 - std::f64::consts::PI).abs() < 1.0e-15);
+        assert!((symjit_out[0].re.0 - eager.re.0).abs() < 1.0e-15);
+        assert!((symjit_out[0].im.0 - eager.im.0).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn iterative_evaluator_merges_pi_free_and_builtin_pi_outputs() {
+        let params = vec![parse!("x")];
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![parse!("x"), Atom::var(Symbol::PI) * parse!("x")],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        let input = [Complex::new_re(F(2.0))];
+        let mut eager_out = [Complex::<F<f64>>::default(); 2];
+        evaluator.f64_eager.evaluate(&input, &mut eager_out);
+        assert_eq!(eager_out[0], Complex::new_re(F(2.0)));
+        assert!((eager_out[1].re.0 - 2.0 * std::f64::consts::PI).abs() < 1.0e-15);
+        assert!(eager_out[1].im.0.abs() < 1.0e-15);
+
+        evaluator.activate_symjit().unwrap();
+        let mut symjit_out = [Complex::<F<f64>>::default(); 2];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&input, &mut symjit_out);
+        assert_eq!(symjit_out, eager_out);
+    }
+
+    #[test]
+    fn symbolica_pi_spellings_parse_as_builtin_constant() {
+        let builtin = Atom::var(Symbol::PI);
+        assert_eq!(
+            parse!("pi").to_canonical_string(),
+            builtin.to_canonical_string()
+        );
+        assert_eq!(
+            parse!("𝜋").to_canonical_string(),
+            builtin.to_canonical_string()
+        );
+        assert_ne!(
+            parse!("π").to_canonical_string(),
+            builtin.to_canonical_string()
+        );
+    }
+
+    #[test]
+    fn arb_evaluates_symbolica_pi_constant() {
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![Atom::var(Symbol::PI)],
+            &[],
+            &FunctionMap::new(),
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        let value = evaluator.arb.evaluate_single(&[]);
+        assert!((value.re.0.to_f64() - std::f64::consts::PI).abs() < 1.0e-15);
+        assert!(value.im.0.to_f64().abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn symjit_evaluates_summed_function_map_orientation_override() {
+        fn integer_to_orientation(i: isize) -> Orientation {
+            match i {
+                1 => Orientation::Default,
+                -1 => Orientation::Reversed,
+                0 => Orientation::Undirected,
+                _ => panic!("Invalid orientation index"),
+            }
+        }
+
+        let orientations = [
+            EdgeVec::from_iter([1, 1].into_iter().map(integer_to_orientation)),
+            EdgeVec::from_iter([1, -1].into_iter().map(integer_to_orientation)),
+            EdgeVec::from_iter([-1, 1].into_iter().map(integer_to_orientation)),
+        ];
+
+        let params = orientations[0]
+            .iter()
+            .map(|(edge, _)| GS.sign(edge))
+            .chain([Atom::var(GS.override_if)])
+            .collect::<Vec<_>>();
+        let args = orientations[0]
+            .iter()
+            .map(|(edge, _)| Indeterminate::try_from(GS.sign(edge)).unwrap())
+            .collect::<Vec<_>>();
+        let atom_args = args
+            .iter()
+            .map(|arg| Atom::from(arg.clone()))
+            .collect::<Vec<_>>();
+        let body = parse!("10") + atom_args[0].clone() + Atom::num(2) * atom_args[1].clone();
+        let mut fn_map = FunctionMap::new();
+        fn_map
+            .add_tagged_function(GS.integrand, vec![Atom::num(0)], args.clone(), body.clone())
+            .unwrap();
+        let entry = FnMapEntry {
+            lhs: FunctionBuilder::new(GS.integrand)
+                .add_arg(0)
+                .add_args(&atom_args)
+                .finish(),
+            rhs: body,
+            tags: vec![Atom::num(0)],
+            args,
+        };
+
+        let sum = orientations
+            .iter()
+            .map(|orientation| {
+                GS.collect_orientation_if(
+                    orientation.orientation_thetas_gs() * GS.integrand(0, orientation),
+                    true,
+                )
+            })
+            .fold(Atom::Zero, |acc, term| acc + term)
+            .replace(
+                Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
+                    + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+            )
+            .repeat()
+            .with(Symbol::IF.f([
+                Atom::var(GS.override_if),
+                Atom::var(W_.b_) + Atom::var(W_.d_),
+                Atom::var(W_.c_) + Atom::var(W_.e_),
+            ]));
+
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![sum],
+            &params,
+            &fn_map,
+            vec![entry],
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+        evaluator.activate_symjit().unwrap();
+
+        let mut input = vec![Complex::new_re(F(0.0)); params.len()];
+        input[params.len() - 1] = Complex::new_re(F(1.0));
+        let eager = evaluator.f64_eager.evaluate_single(&input);
+        let mut symjit_out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&input, &mut symjit_out);
+
+        assert_eq!(symjit_out[0], eager);
+    }
+
+    #[test]
+    fn symjit_evaluates_large_complex_parameter_lists() {
+        let params = (0..256)
+            .map(|i| Atom::var(symbolica::symbol!(format!("x{i}"))))
+            .collect::<Vec<_>>();
+        let expr = params
+            .iter()
+            .enumerate()
+            .fold(Atom::Zero, |acc, (i, param)| {
+                acc + Atom::num((i + 1) as i64) * param.clone()
+            });
+        let fn_map = FunctionMap::new();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            vec![expr],
+            &params,
+            &fn_map,
+            Vec::new(),
+            OptimizationSettings::default(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        evaluator.activate_symjit().unwrap();
+
+        let input = (0..256)
+            .map(|i| Complex::new(F(i as f64 / 10.0), F(-(i as f64) / 20.0)))
+            .collect::<Vec<_>>();
+        let mut symjit_out = [Complex::<F<f64>>::default()];
+        evaluator
+            .symjit_f64
+            .as_mut()
+            .unwrap()
+            .evaluate(&input, &mut symjit_out);
+        let eager = evaluator.f64_eager.evaluate_single(&input);
+        assert!((symjit_out[0].re.0 - eager.re.0).abs() < 1.0e-9);
+        assert!((symjit_out[0].im.0 - eager.im.0).abs() < 1.0e-9);
     }
 }

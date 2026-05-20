@@ -8,8 +8,11 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
 };
 use momtrop::assert_approx_eq;
-use spenso::structure::abstract_index::AIND_SYMBOLS;
-use symbolica::{atom::AtomCore, parse_lit};
+use spenso::structure::{
+    abstract_index::AIND_SYMBOLS,
+    representation::{Minkowski, RepName},
+};
+use symbolica::{atom::Atom, atom::AtomCore, parse_lit};
 
 use crate::{
     momentum::ThreeMomentum,
@@ -47,6 +50,15 @@ fn normalization() {
     assert_snapshot!(c.to_canonical_string(),@"0");
     let c = GS.energy_delta(GS.cind(0));
     assert_snapshot!(c.to_canonical_string(),@"1");
+    let c = GS.energy_delta(Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]));
+    assert_snapshot!(c.to_canonical_string(),@"0");
+    let c = GS.energy_delta(Minkowski {}.new_rep(4).to_symbolic([Atom::Zero]));
+    assert_snapshot!(c.to_canonical_string(),@"1");
+    let q = GS.emr_vec_index(
+        EdgeIndex(1),
+        Minkowski {}.new_rep(4).to_symbolic([Atom::num(2)]),
+    );
+    assert_snapshot!(q.to_canonical_string(),@"gammalooprs::{}::Q(1,spenso::{}::cind(2))");
 
     let expr = parse_lit!(f(a + p + r));
     assert_snapshot!(GS.linearize.f(&[expr]).to_canonical_string(),@"gammalooprs::{}::f(gammalooprs::{}::a)+gammalooprs::{}::f(gammalooprs::{}::p)+gammalooprs::{}::f(gammalooprs::{}::r)");

@@ -39,6 +39,7 @@ crates/gammaloop-api/python/gammaloop/libgammaloop_api*
 *.sw*
 integration_workspace_*
 
+examples/*/*/*_workspace/
 gammaloop_state_integration_workspace/
 result/
 examples/amplitude_computation/GL_*

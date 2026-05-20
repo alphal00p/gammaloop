@@ -49,7 +49,7 @@ pub static INBUILTS: std::sync::LazyLock<Inbuilts> = std::sync::LazyLock::new(||
                 }
             }
         },
-        print = |a, opt| {
+        print = |a, opt, _state| {
             if opt.color_builtin_symbols {
                 let mut fmt = "conj".blue().to_string();
                 if let AtomView::Fun(f) = a {

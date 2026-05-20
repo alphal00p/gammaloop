@@ -371,12 +371,6 @@ fn finite_part_ghost_2loop() {
 
     let settings = finite_part_uv_settings();
 
-    let new_settings = UVgenerationSettings {
-        use_legacy: false,
-        cached: false,
-        ..settings.clone()
-    };
-
     let model = load_generic_model("sm");
 
     #[derive(Debug)]
@@ -396,23 +390,26 @@ fn finite_part_ghost_2loop() {
         }
     }
 
-    fn assert_new_paths_match_legacy(
+    fn assert_cached_path_matches_reference(
         amp: &mut AmplitudeGraph,
         a: RenormalizationPart,
-        new_settings: &UVgenerationSettings,
+        settings: &UVgenerationSettings,
     ) -> KernelStatsSnapshot {
-        let new_part = amp.renormalization_part(new_settings).unwrap();
+        let mut uncached_settings = settings.clone();
+        uncached_settings.cached = false;
+
+        let new_part = amp.renormalization_part(&uncached_settings).unwrap();
         let uncached_kernel_hits = new_part.stats.kernel_hits;
         assert_eq!(
             new_part.expression,
             a.expression.clone(),
-            "New renormalization for graph {} gives:\n{}\n vs old\n{}",
+            "New uncached renormalization for graph {} gives:\n{}\n vs reference\n{}",
             amp.graph.name,
             new_part.log_print(Some(120)),
             a.log_print(Some(120))
         );
 
-        let mut cached_settings = new_settings.clone();
+        let mut cached_settings = settings.clone();
         cached_settings.cached = true;
 
         let new_cached_part = amp.renormalization_part(&cached_settings).unwrap();
@@ -420,7 +417,7 @@ fn finite_part_ghost_2loop() {
         assert_eq!(
             new_cached_part.expression,
             a.expression.clone(),
-            "New cached renormalization for graph {} gives:\n{}\n vs old\n{}",
+            "New cached renormalization for graph {} gives:\n{}\n vs reference\n{}",
             amp.graph.name,
             new_cached_part.log_print(Some(120)),
             a.log_print(Some(120))
@@ -447,7 +444,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*ca^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)");
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
+    let stats = assert_cached_path_matches_reference(&mut amp.graphs[0], a, &settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=5, uncached_kernel_hits=7, forest_size=6"
@@ -458,7 +455,7 @@ fn finite_part_ghost_2loop() {
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     ); //-1 * target
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
+    let stats = assert_cached_path_matches_reference(&mut amp.graphs[1], a, &settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=5, uncached_kernel_hits=7, forest_size=6"
@@ -469,7 +466,7 @@ fn finite_part_ghost_2loop() {
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     ); //-1 * target
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
+    let stats = assert_cached_path_matches_reference(&mut amp.graphs[2], a, &settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
@@ -480,7 +477,7 @@ fn finite_part_ghost_2loop() {
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/4+21𝑖/8*ε)*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
+    let stats = assert_cached_path_matches_reference(&mut amp.graphs[3], a, &settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
@@ -491,7 +488,7 @@ fn finite_part_ghost_2loop() {
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(37𝑖/48*ε+5𝑖/8)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     ); //-1/2 * target
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
+    let stats = assert_cached_path_matches_reference(&mut amp.graphs[4], a, &settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
@@ -502,7 +499,7 @@ fn finite_part_ghost_2loop() {
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"-5𝑖/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
     );
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
+    let stats = assert_cached_path_matches_reference(&mut amp.graphs[5], a, &settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"

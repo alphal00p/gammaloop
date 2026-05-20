@@ -111,7 +111,7 @@ pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
     std::sync::LazyLock::new(|| AindSymbols {
         cind: symbol!(
             super::concrete_index::CONCRETEIND,
-            print = |a, opt| {
+            print = |a, opt, _state| {
                 match opt.custom_print_mode {
                     Some(("spenso", _)) => {
                         let AtomView::Fun(f) = a else {
@@ -147,7 +147,7 @@ pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
         ),
         find: symbol!(
             super::concrete_index::FLATIND,
-            print = |a, opt| {
+            print = |a, opt, _state| {
                 match opt.custom_print_mode {
                     Some(("spenso", _)) => {
                         let AtomView::Fun(f) = a else {
@@ -191,7 +191,7 @@ pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
                 }
             },
             tag = SPENSO_TAG.upper,
-            print = |_, opt| {
+            print = |_, opt, _state| {
                 match opt.custom_print_mode {
                     Some(("typst", 1)) => {
                         let body = r#"(..arg)={
@@ -220,7 +220,7 @@ let args = arg.pos().map(to-eq).join("")
                 }
             },
             tag = SPENSO_TAG.lower,
-            print = |a, opt| {
+            print = |a, opt, _state| {
                 match opt.custom_print_mode {
                     Some(("typst", 1)) => {
                         let body = r#"(..arg)={

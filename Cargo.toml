@@ -23,6 +23,7 @@ eyre = "0.6.12"
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammalooprs = { path = "crates/gammalooprs/" }
+git-version = "0.3"
 idenso = { path = "crates/idenso/" }
 include_dir = "0.7"
 indexmap = "2.14.0"
@@ -53,7 +54,7 @@ smartstring = "1.0.1"
 spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
-symbolica = { version = "1.5.1", default-features = false }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
 thiserror = "2.0"
@@ -69,15 +70,9 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
-# graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-# numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-# symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-# graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
 
 [profile.bench]
 opt-level = 3

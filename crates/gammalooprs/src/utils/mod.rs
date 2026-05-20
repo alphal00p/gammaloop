@@ -61,6 +61,7 @@ use std::sync::{LazyLock, OnceLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
+use symbolica::evaluate::EvaluationDomain;
 
 use vakint::Vakint;
 // use symbolica_community::physics::tensors::library::{
@@ -1288,6 +1289,8 @@ impl FloatLike for ArbPrec {
 }
 
 impl<const N: u32> VarFloat<N> {
+    pub(crate) const BINARY_PRECISION: u32 = N;
+
     fn machine_epsilon(&self) -> Self {
         self.from_i64(2).pow((N - 1) as u64).inv()
     }
@@ -1671,6 +1674,54 @@ pub trait FloatLike:
     JsonSchema,
 )]
 pub struct F<T: FloatLike>(pub T);
+
+impl EvaluationDomain for F<f64> {
+    const FIXED_PRECISION: Option<u32> = Some(53);
+
+    fn try_from_complex_float(
+        value: symbolica::domains::float::Complex<SymbolicaFloat>,
+    ) -> std::result::Result<Self, String> {
+        if value.is_real() {
+            Ok(F(value.re.to_f64()))
+        } else {
+            Err(format!(
+                "Cannot convert from Complex<Float> to F<f64> because the result {value} is not real"
+            ))
+        }
+    }
+}
+
+impl EvaluationDomain for F<QuadFloat> {
+    const FIXED_PRECISION: Option<u32> = Some(106);
+
+    fn try_from_complex_float(
+        value: symbolica::domains::float::Complex<SymbolicaFloat>,
+    ) -> std::result::Result<Self, String> {
+        if value.is_real() {
+            Ok(F(value.re.to_double_float().into()))
+        } else {
+            Err(format!(
+                "Cannot convert from Complex<Float> to F<QuadFloat> because the result {value} is not real"
+            ))
+        }
+    }
+}
+
+impl EvaluationDomain for F<ArbPrec> {
+    const FIXED_PRECISION: Option<u32> = None;
+
+    fn try_from_complex_float(
+        value: symbolica::domains::float::Complex<SymbolicaFloat>,
+    ) -> std::result::Result<Self, String> {
+        if value.is_real() {
+            Ok(F(value.re.into()))
+        } else {
+            Err(format!(
+                "Cannot convert from Complex<Float> to F<ArbPrec> because the result {value} is not real"
+            ))
+        }
+    }
+}
 
 impl<T: FloatLike> ToCoefficient for F<T> {
     fn to_coefficient(self) -> Coefficient {

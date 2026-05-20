@@ -1,7 +1,6 @@
 use gammalooprs::{
-    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
-    graph::{self, FeynmanGraph, Graph, LMBext},
+    graph::{FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
@@ -10,15 +9,11 @@ use gammalooprs::{
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
-    settings::{global::OrientationPattern, RuntimeSettings},
+    settings::RuntimeSettings,
     utils::tracing::{LogFormat, LogLevel},
 };
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::{ModifySubSet, SuBitGraph},
-};
+use linnet::half_edge::involution::Orientation;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
-use typed_index_collections::TiVec;
 
 use crate::{
     commands::{
@@ -1120,6 +1115,17 @@ impl PyBatchEvaluationResult {
         py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
+    #[getter]
+    fn numerical_stability<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        self.inner
+            .numerical_stability
+            .as_ref()
+            .map(|stability| {
+                py_observable_dict_from_bundle(py, &stability.as_observable_snapshot_bundle())
+            })
+            .transpose()
+    }
+
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -1178,6 +1184,10 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("threshold_counterterm:{subset_index}")
         }
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("amplitude_threshold_counterterm:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -1693,6 +1703,7 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
     }
 }
 
+#[allow(dead_code)]
 fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     if let Ok(process_id) = process.extract::<usize>() {
         return Ok(ProcessRef::Id(process_id));
@@ -1706,6 +1717,7 @@ fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
 }
 
+#[allow(dead_code)]
 fn py_complex_target_from_any(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
@@ -1728,6 +1740,7 @@ fn py_complex_target_from_any(
     ))
 }
 
+#[allow(dead_code)]
 fn resolve_python_slot_key(
     state: &State,
     process: &ProcessRef,
@@ -1747,6 +1760,7 @@ fn resolve_python_slot_key(
     ))
 }
 
+#[allow(dead_code)]
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2189,6 +2203,29 @@ impl GammaLoopAPI {
         })
     }
 
+    #[getter]
+    pub(crate) fn read_only_state(&self) -> bool {
+        self.cli_settings.session.read_only_state
+    }
+
+    #[pyo3(name = "is_read_only_state", signature = ())]
+    pub(crate) fn is_read_only_state_python(&self) -> bool {
+        self.cli_settings.session.read_only_state
+    }
+
+    #[pyo3(name = "state_access_mode", signature = ())]
+    pub(crate) fn state_access_mode_python(&self) -> &'static str {
+        match self.cli_settings.session.state_access_mode() {
+            crate::StateAccessMode::ReadWrite => "read_write",
+            crate::StateAccessMode::ReadOnly => "read_only",
+        }
+    }
+
+    #[getter]
+    pub(crate) fn active_state_folder(&self) -> String {
+        self.cli_settings.state.folder.display().to_string()
+    }
+
     #[pyo3(
         name = "evaluate_sample",
         signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
@@ -2236,6 +2273,7 @@ impl GammaLoopAPI {
         let gammalooprs::integrands::evaluation::BatchSampleEvaluationResult {
             mut samples,
             observables,
+            numerical_stability: _,
         } = res;
         let value = samples.pop().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
@@ -2338,11 +2376,14 @@ impl GammaLoopAPI {
 
         self.gammaloop_state.import_graphs(
             graphs,
-            process_name,
-            process_id,
-            integrand_name,
-            overwrite,
-            append,
+            crate::state::GraphImportOptions {
+                process_name,
+                process_id,
+                process_definition: None,
+                integrand_name,
+                overwrite,
+                append,
+            },
         )
     }
 
@@ -2438,7 +2479,7 @@ impl GammaLoopAPI {
 
         let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
-                let cff = amplitudes
+                let three_d_expression = amplitudes
                     .get(&name)
                     .unwrap()
                     .graphs
@@ -2447,18 +2488,19 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
                     .unwrap();
 
-                cff.orientations
+                three_d_expression
+                    .orientations
                     .iter()
                     .map(|or_data| or_data.data.orientation.clone())
                     .collect_vec()
             }
 
             ProcessCollection::CrossSections(cross_sections) => {
-                let cff = cross_sections
+                let three_d_expression = cross_sections
                     .get(&name)
                     .unwrap()
                     .supergraphs
@@ -2467,11 +2509,12 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .global_cff_expression
+                    .global_three_d_expression
                     .as_ref()
                     .unwrap();
 
-                cff.orientations
+                three_d_expression
+                    .orientations
                     .iter()
                     .map(|or_data| or_data.data.orientation.clone())
                     .collect_vec()
@@ -2755,143 +2798,6 @@ impl GammaLoopAPI {
                 ))
             })
             .map(|_| ())
-    }
-
-    #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
-    pub(crate) fn generate_cff(
-        &self,
-        dot_string: String,
-        subgraph_nodes: Vec<String>,
-        reverse_dangling: Vec<usize>,
-        orientation_pattern: Option<String>,
-    ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
-
-        let reverse_dangling = reverse_dangling
-            .into_iter()
-            .map(EdgeIndex::from)
-            .collect_vec();
-
-        let subgraph: SuBitGraph = if subgraph_nodes.is_empty() {
-            graph.full_filter()
-        } else {
-            let mut result: SuBitGraph = graph.empty_subgraph();
-            for (_node_id, neighbors, vertex) in graph.iter_nodes() {
-                if subgraph_nodes.contains(&vertex.name.to_string()) {
-                    neighbors.for_each(|hedge| result.add(hedge));
-                }
-            }
-            result
-        };
-
-        let mut surface_cache = SurfaceCache {
-            esurface_cache: TiVec::new(),
-            hsurface_cache: TiVec::new(),
-        };
-
-        let cff = generate_cff_expression_from_subgraph(
-            &graph.underlying,
-            &subgraph,
-            &None,
-            &reverse_dangling,
-            &graph.get_edges_in_initial_state_cut(),
-            &mut surface_cache,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
-        })?;
-
-        let or_pattern = orientation_pattern
-            .as_deref()
-            .map(OrientationPattern::from_user_pattern)
-            .transpose()
-            .map_err(|error| exceptions::PyException::new_err(error.to_string()))?
-            .unwrap_or_default();
-
-        let atoms = cff.get_orientation_atoms_with_data(or_pattern);
-        let inverse_energies = graph::get_cff_inverse_energy_product_impl(&graph, &subgraph, &[]);
-
-        let result = atoms
-            .into_iter()
-            .map(|(atom, orientation_data)| {
-                let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * &inverse_energies;
-                let string_atom = energy_sub.to_string();
-
-                let mut orientation_as_hashmap = HashMap::new();
-                for (edge_id, direction) in orientation_data.orientation.into_iter() {
-                    let direction = match direction {
-                        Orientation::Default => 1,
-                        Orientation::Reversed => -1,
-                        Orientation::Undirected => 0,
-                    };
-                    orientation_as_hashmap.insert(edge_id.0, direction);
-                }
-                (orientation_as_hashmap, string_atom)
-            })
-            .collect_vec();
-
-        Ok(result)
-    }
-
-    #[pyo3(
-        name = "generate_cff_as_json_string",
-        signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)
-    )]
-    pub(crate) fn generate_cff_as_json_string(
-        &self,
-        dot_string: String,
-        subgraph_nodes: Vec<String>,
-        reverse_dangling: Vec<usize>,
-        orientation_pattern: Option<String>,
-    ) -> PyResult<String> {
-        let _ = orientation_pattern;
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
-
-        let reverse_dangling = reverse_dangling
-            .into_iter()
-            .map(EdgeIndex::from)
-            .collect_vec();
-
-        let subgraph: SuBitGraph = if subgraph_nodes.is_empty() {
-            graph.full_filter()
-        } else {
-            let mut result: SuBitGraph = graph.empty_subgraph();
-            for (_node_id, neighbors, vertex) in graph.iter_nodes() {
-                if subgraph_nodes.contains(&vertex.name.to_string()) {
-                    neighbors.for_each(|hedge| result.add(hedge));
-                }
-            }
-            result
-        };
-
-        let mut surface_cache = SurfaceCache {
-            esurface_cache: TiVec::new(),
-            hsurface_cache: TiVec::new(),
-        };
-
-        let cff = generate_cff_expression_from_subgraph(
-            &graph.underlying,
-            &subgraph,
-            &None,
-            &reverse_dangling,
-            &graph.get_edges_in_initial_state_cut(),
-            &mut surface_cache,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
-        })?;
-
-        let json_string = serde_json::to_string(&cff).map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not serialize cff to json: {}", e))
-        })?;
-
-        Ok(json_string)
     }
 
     /*

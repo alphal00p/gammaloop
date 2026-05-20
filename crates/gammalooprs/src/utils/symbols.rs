@@ -9,8 +9,7 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{Minkowski, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot},
+        representation::{LibraryRep, Minkowski, RepName},
     },
     utils::{to_subscript, to_superscript},
 };
@@ -23,9 +22,28 @@ use symbolica::{
     symbol,
 };
 
-use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
+use crate::cff::expression::GraphOrientation;
 
 use super::symbolica_ext::CallSymbol;
+
+fn concrete_lorentz_component_index(index: AtomView<'_>) -> Option<i64> {
+    let AtomView::Fun(function) = index else {
+        return None;
+    };
+
+    if function.get_symbol() == AIND_SYMBOLS.cind && function.get_nargs() == 1 {
+        return i64::try_from(function.get(0)).ok();
+    }
+
+    if function.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
+        && function.get_nargs() == 2
+        && i64::try_from(function.get(0)).ok()? == 4
+    {
+        return i64::try_from(function.get(1)).ok();
+    }
+
+    None
+}
 
 pub struct WildCards {
     pub edgeid_: Symbol,
@@ -160,6 +178,7 @@ pub struct GammaloopSymbols {
     pub m_uv: Symbol,
     pub m_uv_int: Symbol,
     pub mu_r_sq: Symbol,
+    pub numerator_sampling_scale: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
@@ -263,7 +282,7 @@ impl GammaloopSymbols {
         function!(self.theta, arg.as_view())
     }
 
-    pub(crate) fn sign(&self, edge: EdgeIndex) -> Atom {
+    pub fn sign(&self, edge: EdgeIndex) -> Atom {
         function!(self.sign, Atom::num(edge.0 as i64))
     }
 }
@@ -464,7 +483,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     uvaind: symbol!(
         "uvind",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
@@ -493,7 +512,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     edgeaind: symbol!(
         "edge",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
@@ -522,7 +541,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     vertexaind: symbol!(
         "vertex",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
@@ -552,7 +571,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     dummyaind: symbol!(
         "dummy",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
@@ -581,7 +600,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     hedgeaind: symbol!(
         "hedge",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
                     let AtomView::Fun(f) = a else {
@@ -678,7 +697,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     theta: symbol!("θ"),
     m_uv: symbol!(
         "mUV",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
                 return None;
             };
@@ -697,7 +716,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     m_uv_int: symbol!(
         "mUVI",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
                 return None;
             };
@@ -716,7 +735,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     mu_r_sq: symbol!(
         "μᵣ²",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
                 return None;
             };
@@ -733,6 +752,25 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             }
         }
     ),
+    numerator_sampling_scale: symbol!(
+        "M",
+        print = |a, opt, _state| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                    if SpensoPrintSettings::from(i).is_typst() {
+                        Some("M".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
     delta_vec: symbol!(
         "δ",
         norm = |f, out| {
@@ -741,14 +779,16 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             {
                 let mut iter = ff.iter();
                 let matchid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
-                    && cind.get_symbol() == AIND_SYMBOLS.cind
-                {
-                    if cind.as_view() != matchid {
-                        **out = Atom::Zero;
+                let other = iter.next().unwrap();
+                if let (Some(left), Some(right)) = (
+                    concrete_lorentz_component_index(matchid),
+                    concrete_lorentz_component_index(other),
+                ) {
+                    **out = if left == right {
+                        Atom::num(1)
                     } else {
-                        **out = Atom::num(1);
-                    }
+                        Atom::Zero
+                    };
                 }
             }
         }
@@ -767,25 +807,25 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     ubar: symbol!(
         "ubar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u̅") }
     ),
     vbar: symbol!(
         "vbar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v̅") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v̅") }
     ),
     dot: symbol!("dot"),
     dim: symbol!("dim"),
     v: symbol!(
         "v",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v") }
     ),
     u: symbol!(
         "u",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u") }
     ),
     emr_mom: symbol!(
         "Q",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") }
     ),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
@@ -796,46 +836,43 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             {
                 let mut iter = ff.iter();
                 let eid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
-                    && cind.get_symbol() == AIND_SYMBOLS.cind
-                    && let Some(i) = cind.iter().next()
-                    && let Ok(i) = i64::try_from(i)
-                {
+                let index = iter.next().unwrap();
+                if let Some(i) = concrete_lorentz_component_index(index) {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = symbol!("Q").f(&[eid, cind.as_view()])
+                        **out = symbol!("Q").f(&[eid, AIND_SYMBOLS.cind.f([i]).as_view()])
                     }
                 }
             }
         },
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") }
     ),
     ose: symbol!(
         "OSE",
-        print = |a, opt| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
+        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
     ),
     energy: symbol!(
         "E",
-        print = |a, opt| { spenso_print_simple_indexed!(a, opt, "E") }
+        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "E") }
     ),
     external_mom: symbol!(
         "P",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "p") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "p") }
     ),
     loop_mom: symbol!(
         "K",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "k") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "k") }
     ),
     epsilon: symbol!(
         "ϵ",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ") }
     ),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),
     epsilonbar: symbol!(
         "ϵbar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") }
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") }
     ),
     coeff: symbol!("coef"),
     radius_left: symbol!("r_left"),
@@ -994,27 +1031,34 @@ impl GammaloopSymbols {
         e: EdgeIndex,
         e_mass: Atom,
         index: Option<Atom>,
-        inner_product: bool,
+        _inner_product: bool,
     ) -> Atom {
         let eidc = usize::from(e) as i64;
         let m2 = &e_mass * &e_mass;
 
-        let mink: Representation<Minkowski> = Minkowski {}.new_rep(4); //.slot(Aind::new_dummy());
-        let q3q3 = if inner_product {
-            mink.inner_product(self.emr_vec(e), self.emr_vec(e))
-        } else {
-            let mink = mink.slot::<Aind, Aind>(Aind::new_dummy()).to_atom();
-
-            self.emr_vec_index(e, mink.as_view()) * self.emr_vec_index(e, mink.as_view())
-        };
-
-        let ose = function!(self.ose, eidc, GS.emr_vec(e), m2, (m2 - q3q3)).pow((1, 2));
+        let ose = function!(
+            self.ose,
+            eidc,
+            GS.emr_vec(e),
+            m2.clone(),
+            m2 + self.emr_vec_spatial_norm_sq(e)
+        )
+        .pow((1, 2));
 
         if let Some(index) = index {
             ose * self.energy_delta(index)
         } else {
             ose
         }
+    }
+
+    pub(crate) fn emr_vec_spatial_norm_sq(&self, e: EdgeIndex) -> Atom {
+        let mut norm = Atom::Zero;
+        for spatial_index in 1..=3 {
+            let component = self.emr_vec_index(e, self.cind(spatial_index));
+            norm += component.clone() * component;
+        }
+        norm
     }
 
     pub(crate) fn split_mom_pattern(

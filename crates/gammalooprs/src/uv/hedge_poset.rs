@@ -108,7 +108,11 @@ impl Wood {
         let mut spinneys = Vec::new();
 
         for cut in cuts.cuts.iter() {
-            let cut_sub = subgraph.subtract(&cut.union);
+            let cut_sub = if cut.residue_selector.is_threshold_esurface_residue() {
+                subgraph.clone()
+            } else {
+                subgraph.subtract(&cut.union)
+            };
             spinneys.extend(graph.classified_spinneys(
                 &cut_sub,
                 settings,
@@ -316,7 +320,8 @@ pub struct ForestNode<'a> {
 
 impl OperationNode {
     pub fn is_compatible_with(&self, cut: &CutSet) -> bool {
-        self.covers().is_none_or(|c| !c.intersects(&cut.union))
+        cut.residue_selector.is_threshold_esurface_residue()
+            || self.covers().is_none_or(|c| !c.intersects(&cut.union))
     }
 
     pub fn current<'a>(&'a self, wood: &'a Wood, topo_order: usize) -> Option<Vec<ForestNode<'a>>> {
@@ -674,7 +679,7 @@ impl Forests {
         &mut self,
         graph: &mut Graph,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        _orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
         for (cut_compatible_forest_subset, cuts) in &self.cuts {
             let mut first = true;
@@ -689,7 +694,7 @@ impl Forests {
                 debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
                 let integrands = if first {
                     first = false;
-                    Local3DApproximation::root(graph, cuts, orientation_pattern)
+                    Local3DApproximation::root(graph, cuts)
                 } else {
                     self.graph[*nidx].local(
                         graph,

@@ -160,7 +160,7 @@ pub static GS: LazyLock<GammaSymbolsInternal> = LazyLock::new(|| GammaSymbolsInt
 pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     gamma: symbol!(
         "spenso::gamma",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
                     let SpensoPrintSettings {
@@ -216,7 +216,7 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     gammaadj: symbol!("spenso::gammaadj"),
     projp: symbol!(
         "spenso::projp",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
                     let settings = SpensoPrintSettings::from(i);
@@ -269,7 +269,7 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     ),
     projm: symbol!(
         "spenso::projm",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
                     let settings = SpensoPrintSettings::from(i);
@@ -321,7 +321,7 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     ),
     gamma5: symbol!(
         "spenso::gamma5",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             match opt.custom_print_mode {
                 Some(("spenso", i)) => {
                     let settings = SpensoPrintSettings::from(i);
@@ -377,7 +377,7 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
         }
     ),
     sigma: symbol!("spenso::sigma"),
-    gamma0: symbol!("spenso::gamma0";Real,Symmetric;print = |a, opt| {
+    gamma0: symbol!("spenso::gamma0";Real,Symmetric;print = |a, opt, _state| {
         match opt.custom_print_mode {
             Some(("spenso", i)) => {
                 let settings = SpensoPrintSettings::from(i);

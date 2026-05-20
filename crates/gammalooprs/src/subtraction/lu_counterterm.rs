@@ -482,7 +482,7 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
     external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
     subspace: &SubspaceData,
     all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-    graph: &Graph,
+    _graph: &Graph,
     masses: &EdgeVec<F<T>>,
 ) -> HyperDual<F<T>> {
     let lmb = subspace.get_lmb(all_lmbs);
@@ -496,7 +496,7 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
         .iter()
         .map(|(index, sign)| {
             let external_signature = &lmb.edge_signatures[*index].external;
-            let sign = new_constant(&zero, &F::from_f64(*sign as f64));
+            let sign = new_constant(&zero, &zero.values[0].from_i64(*sign));
             let external_energy = external_signature
                 .try_apply(&external_moms.raw)
                 .map(|momentum| momentum.temporal.value)
@@ -512,8 +512,13 @@ fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
         .map(|momentum| momentum.spatial.clone())
         .collect::<TiVec<ExternalIndex, _>>();
 
-    let remaining_shift = subspace
-        .does_not_contain(&esurface.energies, graph)
+    let remaining_shift = esurface
+        .energies
+        .iter()
+        .copied()
+        .filter(|index| {
+            !subspace.loop_signature_depends_on_subspace(&lmb.edge_signatures[*index].internal)
+        })
         .map(|index| {
             let signature = &lmb.edge_signatures[index];
             let momentum = signature
@@ -570,8 +575,13 @@ fn compute_self_and_r_derivative_subspace_dual<T: FloatLike>(
 
     let lmb = subspace.get_lmb(all_lmbs);
     let zero = new_constant(radius, &radius.values[0].zero());
-    let (derivative, energy_sum) = subspace
-        .contains(&esurface.energies, graph)
+    let (derivative, energy_sum) = esurface
+        .energies
+        .iter()
+        .copied()
+        .filter(|index| {
+            subspace.loop_signature_depends_on_subspace(&lmb.edge_signatures[*index].internal)
+        })
         .map(|index| {
             let signature = &lmb.edge_signatures[index];
             let momentum = signature
@@ -706,14 +716,24 @@ impl LUCounterTermEvaluators {
                     .map(|(i, atom)| {
                         let dual_shape = shape_from_cut_cff_index(i);
 
-                        let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
-                            std::slice::from_ref(atom),
-                            param_builder,
-                            &orientations.raw,
-                            dual_shape,
-                            &settings.generation.evaluator,
-                        )
-                        .unwrap();
+                        let (evaluator, evaluator_timings) =
+                            if settings.generation.explicit_orientation_sum_only {
+                                EvaluatorStack::new_explicit_sum_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            } else {
+                                EvaluatorStack::new_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    &orientations.raw,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            }
+                            .unwrap();
                         timings += evaluator_timings;
                         (*i, evaluator)
                     })
@@ -731,14 +751,24 @@ impl LUCounterTermEvaluators {
                     .map(|(i, atom)| {
                         let dual_shape = shape_from_cut_cff_index(i);
 
-                        let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
-                            std::slice::from_ref(atom),
-                            param_builder,
-                            &orientations.raw,
-                            dual_shape,
-                            &settings.generation.evaluator,
-                        )
-                        .unwrap();
+                        let (evaluator, evaluator_timings) =
+                            if settings.generation.explicit_orientation_sum_only {
+                                EvaluatorStack::new_explicit_sum_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            } else {
+                                EvaluatorStack::new_with_timings(
+                                    std::slice::from_ref(atom),
+                                    param_builder,
+                                    &orientations.raw,
+                                    dual_shape,
+                                    &settings.generation.evaluator,
+                                )
+                            }
+                            .unwrap();
                         timings += evaluator_timings;
                         (*i, evaluator)
                     })
@@ -754,14 +784,24 @@ impl LUCounterTermEvaluators {
                 .map(|(i, atom)| {
                     let dual_shape = shape_from_cut_cff_index(i);
 
-                    let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
-                        std::slice::from_ref(atom),
-                        param_builder,
-                        &orientations.raw,
-                        dual_shape,
-                        &settings.generation.evaluator,
-                    )
-                    .unwrap();
+                    let (evaluator, evaluator_timings) =
+                        if settings.generation.explicit_orientation_sum_only {
+                            EvaluatorStack::new_explicit_sum_with_timings(
+                                std::slice::from_ref(atom),
+                                param_builder,
+                                dual_shape,
+                                &settings.generation.evaluator,
+                            )
+                        } else {
+                            EvaluatorStack::new_with_timings(
+                                std::slice::from_ref(atom),
+                                param_builder,
+                                &orientations.raw,
+                                dual_shape,
+                                &settings.generation.evaluator,
+                            )
+                        }
+                        .unwrap();
                     let mut timings = iterated_timings.get();
                     timings += evaluator_timings;
                     iterated_timings.set(timings);
@@ -1255,7 +1295,7 @@ impl LUCounterTerm {
                     .overlap_group
                     .existing_esurfaces
                     .iter()
-                    .map(|esurface| {
+                    .filter_map(|esurface| {
                         overlap_builder
                             .new_esurface_builder(*esurface)
                             .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
@@ -1289,7 +1329,7 @@ impl LUCounterTerm {
                     .overlap_group
                     .existing_esurfaces
                     .iter()
-                    .map(|esurface| {
+                    .filter_map(|esurface| {
                         overlap_builder
                             .new_esurface_builder(*esurface)
                             .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
@@ -1667,7 +1707,6 @@ impl LUCounterTerm {
                 evaluation_meta_data,
                 record_primary_timing,
             );
-
             total_result += pass_two_result;
         }
 
@@ -1788,7 +1827,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
-    ) -> RstarSolution<'a, T> {
+    ) -> Option<RstarSolution<'a, T>> {
         let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
         let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
@@ -1838,6 +1877,23 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         debug!("r* solution: {:?}", solution);
 
+        let convergence_tolerance = radius_guess.epsilon()
+            * F::from_f64(TOLERANCE)
+            * &self.overlap_builder.counterterm_builder.e_cm;
+        if solution.solution <= radius_guess.zero()
+            || solution.solution.is_nan()
+            || solution.solution.is_infinite()
+            || solution.error_of_function.is_nan()
+            || solution.error_of_function.is_infinite()
+            || solution.error_of_function.abs() > convergence_tolerance
+        {
+            debug!(
+                "Skipping LU threshold counterterm for E-surface {}: no positive finite converged r* solution ({solution:?})",
+                self.esurface_id.0
+            );
+            return None;
+        }
+
         let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self
                 .overlap_builder
@@ -1877,11 +1933,11 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             None
         };
 
-        RstarSolution {
+        Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
             t_dependent_solution,
-        }
+        })
     }
 }
 

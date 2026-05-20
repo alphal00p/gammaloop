@@ -480,10 +480,7 @@ impl FeynmanGraph for Graph {
         self.new_edgevec(|edge, _edge_id, _| {
             let c = edge
                 .mass_value(model, &self.param_builder)
-                .unwrap_or(Complex {
-                    re: F::from_f64(0.0),
-                    im: F::from_f64(0.0),
-                });
+                .unwrap_or_else(|| Complex::new_re(F(T::new_zero())));
 
             if c.im.is_zero() {
                 c.re
@@ -505,10 +502,7 @@ impl FeynmanGraph for Graph {
                 let c = edge
                     .data
                     .mass_value(model, &self.param_builder)
-                    .unwrap_or(Complex {
-                        re: F::from_f64(0.0),
-                        im: F::from_f64(0.0),
-                    });
+                    .unwrap_or_else(|| Complex::new_re(F(T::new_zero())));
 
                 if c.im.is_zero() {
                     c.re

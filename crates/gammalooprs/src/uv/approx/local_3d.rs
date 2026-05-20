@@ -1,27 +1,19 @@
 use std::collections::BTreeMap;
 
 use eyre::eyre;
-use linnet::half_edge::{
-    involution::HedgePair,
-    subgraph::{SuBitGraph, SubSetOps},
-};
+use linnet::half_edge::{involution::HedgePair, subgraph::SuBitGraph};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
     id::Replacement,
     parse,
 };
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::{
     cff::CutCFFIndex,
-    debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    settings::global::OrientationPattern,
-    utils::{
-        GS, W_,
-        symbolica_ext::{CallSymbol, LogPrint},
-    },
+    utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
@@ -32,44 +24,30 @@ use color_eyre::Result;
 
 pub struct Local3DApproximation;
 
+fn resolve_ose_derivative_markers(atom: Atom) -> Atom {
+    atom.replace(parse!("der(0,0,0,1, OSE(y__))"))
+        .with(Atom::num(1))
+        .replace(parse!("der(0,0,0,1, OSE, y__)"))
+        .with(Atom::num(1))
+        .replace(parse!("der(x__, OSE(y__))"))
+        .with(Atom::num(0))
+        .replace(parse!("der(x__, OSE, y__)"))
+        .with(Atom::num(0))
+}
+
 impl Local3DApproximation {
     pub(crate) fn dependent(
         graph: &mut Graph,
         to_contract: &SuBitGraph,
         cuts: &CutSet,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
-        let cff = graph
-            .cff(
-                &to_contract
-                    .union(&graph.tree_edges)
-                    .subtract(&graph.initial_state_cut),
-                cuts,
-                orientation_pattern,
-            )?
-            .expression_with_selectors();
+        let cff = graph.cff(to_contract, cuts)?.expression_with_selectors();
 
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
-
-        Ok(cff
-            .iter()
-            .map(|(index, a)| (*index, a * &fourddenoms))
-            .collect())
+        Ok(cff)
     }
 
-    pub(crate) fn root(
-        graph: &mut Graph,
-        cuts: &CutSet,
-        orientation_pattern: &OrientationPattern,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
-        Self::dependent(
-            graph,
-            &graph.empty_subgraph::<SuBitGraph>(),
-            cuts,
-            orientation_pattern,
-        )
+    pub(crate) fn root(graph: &mut Graph, cuts: &CutSet) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts)
     }
 
     pub(crate) fn t_tilde<S: super::ForestNodeLike>(
@@ -140,7 +118,7 @@ impl Local3DApproximation {
                         .with(
                             FunctionBuilder::new(GS.emr_vec)
                                 .add_arg(W_.x_)
-                                .add_args(&[W_.x___])
+                                .add_args([W_.x___])
                                 .finish(),
                         )
                         + externals * GS.rescale)
@@ -158,9 +136,7 @@ impl Local3DApproximation {
         );
 
         atomarg = atomarg.replace_multiple(&mom_reps);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, (-1).into(), true)
-            .unwrap();
+        let a = atomarg.series(GS.rescale, Atom::Zero, -1).unwrap();
 
         let mut a = a
             .to_atom()
@@ -183,7 +159,9 @@ impl Local3DApproximation {
         let reduced = current.reduced_subgraph(given);
 
         // only apply replacements for edges in the reduced graph
-        let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        let mut mom_reps =
+            graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        mom_reps.extend(graph.uv_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]));
 
         let mut atomarg = integrand.replace_multiple(&mom_reps);
 
@@ -193,6 +171,9 @@ impl Local3DApproximation {
             atomarg = atomarg
                 .replace(GS.emr_vec_index(*e, W_.x___))
                 .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
+            atomarg = atomarg
+                .replace(GS.emr_mom(*e, W_.x___))
+                .with(GS.emr_mom(*e, W_.x___) * GS.rescale);
         }
 
         // (re-)expand OSEs from the subgraph only
@@ -239,18 +220,14 @@ impl Local3DApproximation {
             * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, 0.into(), true)
+
+        let a = resolve_ose_derivative_markers(atomarg)
+            .series(GS.rescale, Atom::Zero, 0)
             .unwrap();
 
-        let mut a = a
-            .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
-            .with(Atom::num(1))
-            .replace(parse!("der(x__, OSE(y__))"))
-            .with(Atom::num(0));
+        let mut a = resolve_ose_derivative_markers(a.to_atom());
         a = a.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#local; expr=%a.log_print(Some(80)), "Local 3D approximation");
+        debug!("a: {}", a);
         Ok(a)
     }
 

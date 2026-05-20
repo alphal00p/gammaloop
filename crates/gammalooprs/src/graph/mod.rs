@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{collections::BTreeMap, ops::Index};
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
@@ -18,21 +18,27 @@ use tracing::debug;
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
+use color_eyre::Result;
+use eyre::eyre;
+use spenso::algebra::complex::Complex;
 use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::ThreeDGraphSource;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::SurfaceCache,
+    cff::surface::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::edge::EdgeMass,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
+    model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    utils::{F, Length, W_, ose_atom_from_index, symbolica_ext::LogPrint},
+    uv::UltravioletGraph,
 };
 
 pub(crate) mod attribute_warnings;
@@ -64,6 +70,87 @@ pub struct Graph {
     pub polarizations: Vec<(PolDef, Atom)>,
 }
 
+#[derive(Clone, Debug)]
+pub struct ThreeDRepMassShift {
+    pub group_index: usize,
+    pub split_index: usize,
+    pub local_edge_id: usize,
+    pub edge_id: EdgeIndex,
+    pub base_mass: f64,
+    pub shifted_mass: f64,
+}
+
+#[derive(Clone, Debug)]
+struct ThreeDRepeatedChannelMember {
+    source_edge_id: EdgeIndex,
+    relative_sign: i32,
+}
+
+#[derive(Clone, Debug)]
+struct ThreeDRepeatedChannel {
+    members: Vec<ThreeDRepeatedChannelMember>,
+}
+
+impl ThreeDRepeatedChannel {
+    fn duplicate_signature_excess(&self) -> usize {
+        self.members.len().saturating_sub(1)
+    }
+
+    fn channel_routing_sign(&self) -> i64 {
+        let Some(reference_sign) = self.members.first().map(|member| member.relative_sign) else {
+            return 1;
+        };
+        i64::from(
+            self.members
+                .iter()
+                .map(|member| member.relative_sign * reference_sign)
+                .product::<i32>(),
+        )
+    }
+
+    fn residue_bridge_sign(&self) -> i64 {
+        if self.duplicate_signature_excess().is_multiple_of(2) {
+            1
+        } else {
+            self.channel_routing_sign()
+        }
+    }
+
+    fn source_duplicate_bridge_sign(&self) -> i64 {
+        let Some(reference_sign) = self.members.first().map(|member| member.relative_sign) else {
+            return 1;
+        };
+        if self
+            .members
+            .iter()
+            .any(|member| member.relative_sign != reference_sign)
+        {
+            return 1;
+        }
+        if self.duplicate_signature_excess().is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
+    }
+
+    fn normalized_support_edges(&self, raised_edge_groups: &[Vec<EdgeIndex>]) -> Vec<EdgeIndex> {
+        self.members
+            .iter()
+            .map(|member| member.source_edge_id)
+            .map(|edge_id| {
+                raised_edge_groups
+                    .iter()
+                    .find(|group| group.contains(&edge_id))
+                    .and_then(|group| group.first().copied())
+                    .unwrap_or(edge_id)
+            })
+            .sorted()
+            .dedup()
+            .collect()
+    }
+}
+
 // impl Deref for Graph {
 //     type Target = HedgeGraph<Edge, Vertex>;
 // }
@@ -80,6 +167,181 @@ impl Graph {
         self.to_dot_graph_with_settings(settings).debug_dot()
     }
 
+    pub fn rebuild_param_builder(&mut self, model: &Model) {
+        let additional_params = self.param_builder.pairs.additional_params.params.clone();
+        let loop_momentum_basis = self.loop_momentum_basis.clone();
+        self.param_builder =
+            ParamBuilder::new(self, model, &loop_momentum_basis, additional_params);
+    }
+
+    fn active_three_d_repeated_channels(&self) -> Vec<ThreeDRepeatedChannel> {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        let local_to_source = self
+            .energy_edge_index_map(&parsed)
+            .expect("GammaLoop graph source should expose an energy-edge map")
+            .internal;
+        let source_to_local = local_to_source
+            .iter()
+            .map(|(local, source)| (*source, *local))
+            .collect::<BTreeMap<_, _>>();
+        let preserved_edges = self
+            .external_tree_4d_denominator_edges()
+            .into_iter()
+            .filter_map(|edge_id| source_to_local.get(&usize::from(edge_id)).copied())
+            .collect_vec();
+
+        three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .filter_map(|group| {
+                let members = group
+                    .edge_ids
+                    .into_iter()
+                    .zip(group.relative_signs)
+                    .filter(|(edge_id, _)| !preserved_edges.contains(edge_id))
+                    .filter_map(|(edge_id, relative_sign)| {
+                        local_to_source
+                            .get(&edge_id)
+                            .copied()
+                            .map(|source_edge_id| ThreeDRepeatedChannelMember {
+                                source_edge_id: EdgeIndex(source_edge_id),
+                                relative_sign,
+                            })
+                    })
+                    .collect_vec();
+                (members.len() > 1).then_some(ThreeDRepeatedChannel { members })
+            })
+            .collect()
+    }
+
+    pub(crate) fn three_d_global_sign_exponent(&self) -> usize {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        let duplicate_signature_excess = self
+            .active_three_d_repeated_channels()
+            .into_iter()
+            .map(|channel| channel.duplicate_signature_excess())
+            .sum::<usize>();
+
+        parsed.loop_names.len().saturating_sub(1) + duplicate_signature_excess
+    }
+
+    pub(crate) fn three_d_ltd_projection_bridge_sign(&self) -> i64 {
+        // The full LTD production basis and the CFF projection basis differ by
+        // the orientation of the resolved loop-energy coordinate map. Repeated
+        // signature channels have their own residue/routing bridges below and
+        // are intentionally not folded into this global projection sign.
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .expect("GammaLoop graph should convert to generalized 3D-rep input");
+        if parsed.loop_names.len().saturating_sub(1).is_multiple_of(2) {
+            1
+        } else {
+            -1
+        }
+    }
+
+    pub(crate) fn three_d_ltd_repeated_channel_residue_bridge_sign(&self) -> i64 {
+        // LTD generation collapses repeated signatures into one logical
+        // channel. Copies with opposite canonical routing carry the channel
+        // routing sign, but an order-p repeated denominator contributes that
+        // orientation to residues only through the p - 1 derivative parity.
+        self.active_three_d_repeated_channels()
+            .into_iter()
+            .map(|channel| channel.residue_bridge_sign())
+            .product()
+    }
+
+    pub(crate) fn three_d_ltd_repeated_channel_source_bridge_sign(&self) -> i64 {
+        // Ordinary full-source LTD residues are compared to the CFF projection
+        // convention of the same source. An unselected same-routing repeated
+        // block leaves the duplicate-collapse parity in ordinary simple
+        // residues. Mixed-routing channels already carry their source
+        // orientation through the generated repeated-LTD channel routing; when
+        // those channels are selected, the derivative residue bridge and
+        // edge-support bridge below carry the remaining orientation.
+        self.active_three_d_repeated_channels()
+            .into_iter()
+            .map(|channel| channel.source_duplicate_bridge_sign())
+            .product()
+    }
+
+    pub(crate) fn three_d_ltd_repeated_channel_edge_support_signs(
+        &self,
+    ) -> BTreeMap<Vec<EdgeIndex>, i64> {
+        let raised_edge_groups = self.get_raised_edge_groups();
+
+        self.active_three_d_repeated_channels()
+            .into_iter()
+            .map(|channel| {
+                (
+                    channel.normalized_support_edges(&raised_edge_groups),
+                    channel.channel_routing_sign(),
+                )
+            })
+            .collect()
+    }
+
+    pub fn split_repeated_masses_for_three_drep(
+        &self,
+        model: &Model,
+        epsilon: f64,
+    ) -> Result<(Self, Vec<ThreeDRepMassShift>)> {
+        let parsed = self
+            .to_three_d_parsed_graph()
+            .map_err(|error| eyre!("could not inspect repeated 3Drep propagators: {error}"))?;
+        let repeated_groups = three_dimensional_reps::repeated_groups(&parsed);
+        let source_edges = self
+            .underlying
+            .iter_edges()
+            .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
+            .map(|(_, edge, _)| edge)
+            .sorted()
+            .collect::<Vec<_>>();
+
+        let mut shifted = self.clone();
+        let mut records = Vec::new();
+        for (group_index, group) in repeated_groups.iter().enumerate() {
+            let center = (group.edge_ids.len().saturating_sub(1)) as f64 / 2.0;
+            for (split_index, local_edge_id) in group.edge_ids.iter().copied().enumerate() {
+                let Some(edge_id) = source_edges.get(local_edge_id).copied() else {
+                    return Err(eyre!(
+                        "repeated 3Drep edge id {local_edge_id} does not map to a GammaLoop edge"
+                    ));
+                };
+                let base_mass = self.underlying[edge_id]
+                    .mass
+                    .value::<f64>(model, &self.param_builder)
+                    .map(|value| value.re.0)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "could not evaluate mass for repeated 3Drep edge {} (group {group_index}, split {split_index}, local edge id {local_edge_id})",
+                            edge_id.0
+                        )
+                    })?;
+                let shifted_mass = base_mass + (split_index as f64 - center) * epsilon;
+                shifted.underlying[edge_id].particle = shifted.underlying[edge_id]
+                    .particle
+                    .clone()
+                    .override_mass(Some(Atom::num(shifted_mass)));
+                shifted.underlying[edge_id].mass =
+                    EdgeMass::Value(Complex::new_re(F(shifted_mass)));
+                records.push(ThreeDRepMassShift {
+                    group_index,
+                    split_index,
+                    local_edge_id,
+                    edge_id,
+                    base_mass,
+                    shifted_mass,
+                });
+            }
+        }
+        shifted.rebuild_param_builder(model);
+        Ok((shifted, records))
+    }
+
     pub fn pretty_dot(&self) -> String {
         self.dot_impl(
             &self.full_filter(),
@@ -94,6 +356,25 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
+    pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
+        let reduced = self.full_filter().subtract(&self.initial_state_cut);
+        let numerator = self
+            .numerator(&reduced, &self.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * self.global_atom();
+        let momentum_replacements = self.underlying.normal_emr_replacement(
+            &self.underlying.full_filter(),
+            &self.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        numerator
+            .replace_multiple(&momentum_replacements)
+            .expand()
+            .collect_factors()
     }
 
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {
@@ -399,7 +680,7 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].mass == self[*e].mass
+                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
                 })
             });
 
@@ -478,6 +759,8 @@ pub use autogen::Autogen;
 pub use edge::Edge;
 pub mod hedge_data;
 pub use hedge_data::HedgeData;
+pub(crate) mod three_d_source;
+pub(crate) use three_d_source::GraphThreeDSource;
 pub mod vertex;
 pub use vertex::Vertex;
 

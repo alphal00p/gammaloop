@@ -1,4 +1,4 @@
-use crate::{cff::expression::GraphOrientation, utils::GS};
+use crate::{cff::expression::GammaLoopGraphOrientation, utils::GS};
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
@@ -44,17 +44,21 @@ fn representative_score(
 fn orientations_match_outside_integrated_subgraph(
     reduced_orientation: &EdgeVec<Orientation>,
     global_orientation: &EdgeVec<Orientation>,
+    internal_edges: &[EdgeIndex],
 ) -> bool {
     reduced_orientation.iter().all(|(edge, reduced)| {
-        matches!(reduced, Orientation::Undirected) || *reduced == global_orientation[edge]
+        internal_edges.contains(&edge)
+            || matches!(reduced, Orientation::Undirected)
+            || matches!(global_orientation[edge], Orientation::Undirected)
+            || *reduced == global_orientation[edge]
     })
 }
 
 /// Select the deterministic full-graph representative used to host the integrated UV term.
 ///
 /// The reduced orientation already fixes all edges that remain explicit after contracting the
-/// integrated subgraph. Any contracted edge appears as `Undirected` and is therefore ignored when
-/// matching compatible full orientations.
+/// integrated subgraph. Contracted internal edges are ignored when matching compatible full
+/// orientations.
 ///
 /// Among the compatible candidates, the representative is chosen by maximizing:
 /// 1. the number of `Undirected` internal edges
@@ -64,21 +68,38 @@ fn orientations_match_outside_integrated_subgraph(
 /// The first criterion is currently future-proof only: the canonical full-graph acyclic basis is
 /// built from `Default` / `Reversed` assignments on paired internal edges, so `Undirected`
 /// internal entries are not expected there unless the global orientation-generation step changes.
+///
+/// If the generalized global orientation basis has no representative with the same outside signs,
+/// fall back to the best internal-edge representative. The reduced expression already carries its
+/// own outside-edge selector factors, so this fallback only decides how to localize the integrated
+/// subgraph's internal selector.
 pub(crate) fn select_representative_orientation<'a>(
     reduced_orientation: &EdgeVec<Orientation>,
     valid_global_orientations: &'a [EdgeVec<Orientation>],
     internal_edges: &[EdgeIndex],
 ) -> Result<&'a EdgeVec<Orientation>> {
-    valid_global_orientations
+    let compatible = valid_global_orientations
         .iter()
         .filter(|candidate| {
-            orientations_match_outside_integrated_subgraph(reduced_orientation, candidate)
+            orientations_match_outside_integrated_subgraph(
+                reduced_orientation,
+                candidate,
+                internal_edges,
+            )
         })
+        .max_by_key(|candidate| representative_score(candidate, internal_edges));
+
+    if let Some(compatible) = compatible {
+        return Ok(compatible);
+    }
+
+    valid_global_orientations
+        .iter()
         .max_by_key(|candidate| representative_score(candidate, internal_edges))
         .ok_or_else(|| {
             eyre!(
-                "no valid global orientation matches reduced orientation {}",
-                GS.orientation_delta(reduced_orientation)
+                "no valid global orientations are available to localize reduced orientation {}",
+                GS.orientation_delta(reduced_orientation),
             )
         })
 }
@@ -124,7 +145,7 @@ pub(crate) fn localize_reduced_orientation_term(
     )?;
 
     Ok(reduced_expression.clone()
-        * reduced_orientation.orientation_thetas()
+        * reduced_orientation.orientation_thetas_gs()
         * internal_orientation_selector(representative, internal_edges))
 }
 
@@ -228,12 +249,15 @@ mod tests {
     }
 
     #[test]
-    fn errors_for_missing_external_orientation_class() {
+    fn falls_back_for_missing_external_orientation_class() {
         let valid = vec![edgevec([1, 1, 1]), edgevec([1, -1, 1])];
         let reduced = edgevec([-1, 0, 1]);
         let internal = edges([1]);
 
-        assert!(select_representative_orientation(&reduced, &valid, &internal).is_err());
+        assert_eq!(
+            select_representative_orientation(&reduced, &valid, &internal).unwrap(),
+            &valid[0]
+        );
     }
 
     #[test]

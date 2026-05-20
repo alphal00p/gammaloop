@@ -121,6 +121,7 @@ test_gammaloop *args:
     enforce_warnings_as_errors=1
     gammaloop_packages=(
         gammaloop-api
+        three-dimensional-reps
         gammalooprs
         idenso
         linnest
@@ -222,11 +223,13 @@ test_gammaloop *args:
     fi
 
     existing_rustflags="${RUSTFLAGS-}"
+    test_rust_min_stack="${RUST_MIN_STACK:-33554432}"
 
     if [ "$enforce_warnings_as_errors" -eq 1 ]; then
         compile_rustflags="${existing_rustflags:+$existing_rustflags }-Dwarnings"
         cmd=(
             env
+            "RUST_MIN_STACK=$test_rust_min_stack"
             "RUSTFLAGS=$compile_rustflags"
             cargo nextest run
             --cargo-profile dev-optim
@@ -235,6 +238,8 @@ test_gammaloop *args:
         )
     else
         cmd=(
+            env
+            "RUST_MIN_STACK=$test_rust_min_stack"
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
@@ -260,6 +265,9 @@ test_gammaloop *args:
     printf ' %q' "${cmd[@]}"
     printf '\n'
     "${cmd[@]}"
+
+test_gammaloop_detailed *args:
+    just test_gammaloop {{ args }} -- --show-progress=bar --status-level=slow --final-status-level=fail --max-progress-running=8
 
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all

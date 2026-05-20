@@ -73,7 +73,7 @@ use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomOrView, AtomView, Symbol};
+use symbolica::atom::{AtomCore, AtomOrView, AtomView, Indeterminate, Symbol};
 use symbolica::evaluate::{CompileOptions, InlineASM};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
@@ -84,6 +84,7 @@ pub mod symbolica_ext;
 
 use symbolica::{evaluate::FunctionMap, id::Replacement};
 pub mod aind;
+pub mod energy_degree;
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 /// Settings for the numerator
@@ -222,22 +223,27 @@ impl<S: NumeratorState> Numerator<S> {
     }
 
     fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
-        fn_map.add_constant(
+        crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+            fn_map,
             parse!("Nc"),
             symbolica::domains::float::Complex::from(Rational::from(3)),
-        );
+        )
+        .unwrap();
 
-        fn_map.add_constant(
+        crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+            fn_map,
             parse!("TR"),
             symbolica::domains::float::Complex::from(Rational::from((1, 2))),
-        );
+        )
+        .unwrap();
 
-        fn_map.add_constant(
-            parse!("pi"),
-            symbolica::domains::float::Complex::from(
-                Rational::try_from(std::f64::consts::PI).unwrap(),
-            ),
-        );
+        fn_map
+            .add_function(
+                Indeterminate::try_from(parse!("pi")).unwrap(),
+                Vec::<Symbol>::new(),
+                Atom::var(Symbol::PI),
+            )
+            .unwrap();
     }
 }
 
@@ -1161,11 +1167,10 @@ impl Numerator<PolyContracted> {
 
         for (v, k) in self.state.coef_map.clone().iter().enumerate() {
             fn_map
-                .add_tagged_function::<Symbol>(
+                .add_tagged_function(
                     GS.coeff,
                     vec![Atom::num(v as i64)],
-                    format!("coef{v}"),
-                    vec![],
+                    Vec::<Symbol>::new(),
                     k.clone(),
                 )
                 .unwrap();

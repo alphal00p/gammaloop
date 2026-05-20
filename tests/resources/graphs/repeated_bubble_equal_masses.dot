@@ -1,0 +1,16 @@
+digraph repeated_bubble_equal_masses {
+    num = 1
+    // Match the split-mass limiting convention for the scalar two-point insertion.
+    overall_factor = -1
+    params = "m1;m2"
+    edge [
+        pdg = 1001
+    ]
+    ext0 [style = invis]
+    ext1 [style = invis]
+    ext0 -> v1:0 [id = 0]
+    v1 -> v2 [id = 1, mass = "m1", lmb_id = 0]
+    v2 -> v3 [id = 2, mass = "m1"]
+    v1 -> v3 [id = 3, mass = "m1"]
+    v3:1 -> ext1 [id = 4]
+}

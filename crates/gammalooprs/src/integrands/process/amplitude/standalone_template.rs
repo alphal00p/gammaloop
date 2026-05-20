@@ -6,10 +6,10 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "aa51532febc5f88e5b3443123a075523faa2883e", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "aa51532febc5f88e5b3443123a075523faa2883e" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "aa51532febc5f88e5b3443123a075523faa2883e" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
 //! ```
 
 #![allow(dead_code)]
@@ -25,7 +25,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
+    atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
     domains::{
         float::{
             Complex, DoubleFloat, Float as ArbFloat, FloatLike as SymbolicaFloatLike, Real,
@@ -441,15 +441,16 @@ fn apply_fn_map_entries(
 ) -> Result<(Vec<Replacement>, FunctionMap)> {
     let mut fn_map = FunctionMap::new();
     let mut replacements: Vec<Replacement> = vec![];
-    fn_map.add_constant(
+    add_constant_to_fn_map(
+        &mut fn_map,
         parse_lit!(gammalooprs::x),
         Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
-    );
+    )?;
 
     for (lhs, rhs, tags, args) in parsed_entries {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(constant) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map.add_constant(lhs.clone(), constant);
+                add_constant_to_fn_map(&mut fn_map, lhs.clone(), constant)?;
             } else {
                 replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             }
@@ -471,12 +472,7 @@ fn apply_fn_map_entries(
                 }
 
                 fn_map
-                    .add_function(
-                        function.get_symbol(),
-                        function.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_function(function.get_symbol(), args, rhs.clone())
                     .map_err(|error| eyre!(error))?;
 
                 replacements.push(Replacement::new(
@@ -485,13 +481,7 @@ fn apply_fn_map_entries(
                 ));
             } else {
                 fn_map
-                    .add_tagged_function(
-                        function.get_symbol(),
-                        tags,
-                        function.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_tagged_function(function.get_symbol(), tags, args, rhs.clone())
                     .map_err(|error| eyre!(error))?;
             }
         } else {
@@ -500,6 +490,17 @@ fn apply_fn_map_entries(
     }
 
     Ok((replacements, fn_map))
+}
+
+fn add_constant_to_fn_map(
+    fn_map: &mut FunctionMap,
+    name: Atom,
+    value: Complex<Rational>,
+) -> Result<()> {
+    let name = Indeterminate::try_from(name).map_err(|error| eyre!(error))?;
+    fn_map
+        .add_function(name, Vec::<Symbol>::new(), Atom::num(value))
+        .map_err(|error| eyre!(error))
 }
 
 fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(

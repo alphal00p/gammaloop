@@ -21,7 +21,7 @@ use symbolica::{
     id::{BorrowReplacement, Context, Pattern},
     poly::{
         PolyVariable, PositiveExponent, factor::Factorize, gcd::PolynomialGCD,
-        polynomial::MultivariatePolynomial,
+        polynomial::MultivariatePolynomial, series::SeriesDepth,
     },
     symbol,
     utils::{BorrowedOrOwned, Settable},
@@ -97,7 +97,7 @@ where
     {
         // println!("Replacing");
         self.map_ref(
-            |a| a.replace_multiple(replacements),
+            |a| a.replace_multiple(replacements.iter().map(BorrowReplacement::borrow)),
             |a| a.replace_multiple(replacements),
         )
     }
@@ -162,9 +162,9 @@ where
     T: HasName<Name: IntoSymbol, Args: IntoArgs> + TensorStructure,
     T::Slot: IsAbstractSlot<Aind = Aind>,
 {
-    pub fn append_map<U>(&self, fn_map: &mut FunctionMap<U>)
+    pub fn append_map(&self, fn_map: &mut FunctionMap)
     where
-        T: ShadowMapping<U>,
+        T: ShadowMapping,
         T::Structure: Clone + ToSymbolic + TensorStructure,
         <T::Structure as TensorStructure>::Slot: IsAbstractSlot<Aind = Aind>,
         S: Clone,
@@ -278,7 +278,7 @@ where
 
     fn nsolve<
         'a,
-        N: SingleFloat + Real + PartialOrd,
+        N: SingleFloat + Real + PartialOrd + symbolica::evaluate::EvaluationDomain,
         V: Into<BorrowedOrOwned<'a, Indeterminate>>,
     >(
         &self,
@@ -305,15 +305,13 @@ where
         Self::ContainerData<symbolica::poly::series::Series<symbolica::domains::atom::AtomField>>,
         String,
     > {
+        let scalar_depth = if depth_is_absolute {
+            SeriesDepth::absolute(depth.clone())
+        } else {
+            SeriesDepth::relative(depth.clone())
+        };
         self.map_ref_result(
-            |a| {
-                a.series(
-                    x,
-                    expansion_point.as_atom_view(),
-                    depth.clone(),
-                    depth_is_absolute,
-                )
-            },
+            |a| a.series(x, expansion_point.as_atom_view(), scalar_depth.clone()),
             |a| {
                 a.series(
                     x,
@@ -447,7 +445,7 @@ where
 
     fn replace_multiple<T: BorrowReplacement>(&self, replacements: &[T]) -> Self::AtomContainer {
         self.map_ref(
-            |a| a.replace_multiple(replacements),
+            |a| a.replace_multiple(replacements.iter().map(BorrowReplacement::borrow)),
             |a| a.replace_multiple(replacements),
         )
     }
@@ -691,6 +689,7 @@ impl<
     where
         T: Clone + PartialEq,
         S: Clone,
+        T2: symbolica::evaluate::EvaluationDomain,
     {
         self.map_ref(|a| a.map_coeff(f), |a| a.map_coeff(f))
         // self.map_data_ref(|x| x.map_coeff(f))

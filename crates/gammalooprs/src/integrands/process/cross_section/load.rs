@@ -6,10 +6,10 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
 //! ```
 
 #![allow(dead_code)]
@@ -38,6 +38,8 @@ use symbolica::{
     state::{State, StateMap},
     try_parse,
 };
+
+use crate::utils::symbolica_ext::add_numeric_constant_to_fn_map;
 
 type RationalExpressionTree = (
     Vec<Atom>,
@@ -182,15 +184,18 @@ fn apply_fn_map_entries(
     let mut all_replacements = Vec::new();
     let mut fn_map = FunctionMap::new();
     let mut replacements = Vec::new();
-    fn_map.add_constant(
+    add_numeric_constant_to_fn_map(
+        &mut fn_map,
         parse_lit!(gammalooprs::x),
         Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
-    );
+    )
+    .map_err(|e| eyre!(e))?;
 
     for (lhs, rhs, tags, args) in parsed_entries {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(value) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map.add_constant(lhs.clone(), value);
+                add_numeric_constant_to_fn_map(&mut fn_map, lhs.clone(), value)
+                    .map_err(|e| eyre!(e))?;
                 all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             } else {
                 replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
@@ -214,12 +219,7 @@ fn apply_fn_map_entries(
                     .collect::<Vec<_>>();
 
                 fn_map
-                    .add_function(
-                        f.get_symbol(),
-                        f.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_function(f.get_symbol(), args, rhs.clone())
                     .map_err(|e| eyre!(e))?;
 
                 all_replacements.push(Replacement::new(
@@ -228,13 +228,7 @@ fn apply_fn_map_entries(
                 ));
             } else {
                 fn_map
-                    .add_tagged_function(
-                        f.get_symbol(),
-                        tags,
-                        f.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_tagged_function(f.get_symbol(), tags, args, rhs.clone())
                     .map_err(|e| eyre!(e))?;
                 all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             }

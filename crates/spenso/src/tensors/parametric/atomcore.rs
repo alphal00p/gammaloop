@@ -24,8 +24,11 @@ use symbolica::{
         PatternRestriction, ReplaceBuilder,
     },
     poly::{
-        Exponent, PolyVariable, PositiveExponent, factor::Factorize, gcd::PolynomialGCD,
-        polynomial::MultivariatePolynomial, series::Series,
+        Exponent, PolyVariable, PositiveExponent,
+        factor::Factorize,
+        gcd::PolynomialGCD,
+        polynomial::MultivariatePolynomial,
+        series::{Series, SeriesDepth},
     },
     solve::SolveError,
     state::RecycledAtom,
@@ -50,14 +53,19 @@ pub trait PatternReplacement {
 
 impl PatternReplacement for Atom {
     fn replace_multiple_mut<T: BorrowReplacement>(&mut self, replacements: &[T]) {
-        *self = self.as_atom_view().replace_multiple(replacements);
+        *self = self
+            .as_atom_view()
+            .replace_multiple(replacements.iter().map(BorrowReplacement::borrow));
     }
 
     fn replace_multiple_repeat<T: BorrowReplacement>(&self, replacements: &[T]) -> Atom {
         let mut out = self.clone();
         let mut out_mut = out.clone();
 
-        while out.replace_multiple_into(replacements, &mut out_mut) {
+        while out.replace_multiple_into(
+            replacements.iter().map(BorrowReplacement::borrow),
+            &mut out_mut,
+        ) {
             if out == out_mut {
                 break;
             }
@@ -367,7 +375,11 @@ pub trait TensorAtomMaps {
     ) -> Result<Self::ContainerData<Series<AtomField>>, String>;
 
     /// Find the root of a function in `x` numerically over the reals using Newton's method.
-    fn nsolve<'a, N: SingleFloat + Real + PartialOrd, V: Into<BorrowedOrOwned<'a, Indeterminate>>>(
+    fn nsolve<
+        'a,
+        N: SingleFloat + Real + PartialOrd + symbolica::evaluate::EvaluationDomain,
+        V: Into<BorrowedOrOwned<'a, Indeterminate>>,
+    >(
         &self,
         x: V,
         init: N,
@@ -1021,7 +1033,9 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
 
     /// Replace all occurrences of the patterns, where replacements are tested in the order that they are given.
     fn replace_multiple<T: BorrowReplacement>(&self, replacements: &[T]) -> Self {
-        self.map_data_ref_self(|a| a.replace_multiple(replacements))
+        self.map_data_ref_self(|a| {
+            a.replace_multiple(replacements.iter().map(BorrowReplacement::borrow))
+        })
     }
 
     fn replace_multiple_repeat<T: BorrowReplacement>(&self, replacements: &[T]) -> Self {
@@ -1126,13 +1140,18 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
         depth_is_absolute: bool,
     ) -> Result<Self::ContainerData<Series<AtomField>>, String> {
         let expansion_point = expansion_point.as_atom_view();
-        self.map_data_ref_result(|a| a.series(x, expansion_point, depth.clone(), depth_is_absolute))
+        let depth = if depth_is_absolute {
+            SeriesDepth::absolute(depth)
+        } else {
+            SeriesDepth::relative(depth)
+        };
+        self.map_data_ref_result(|a| a.series(x, expansion_point, depth.clone()))
     }
 
     /// Find the root of a function in `x` numerically over the reals using Newton's method.
     fn nsolve<
         'a,
-        N: SingleFloat + Real + PartialOrd,
+        N: SingleFloat + Real + PartialOrd + symbolica::evaluate::EvaluationDomain,
         V: Into<BorrowedOrOwned<'a, Indeterminate>>,
     >(
         &self,
@@ -1330,7 +1349,13 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
 impl<S: TensorStructure> DenseTensor<Atom, S> {
     /// Solve a non-linear system numerically over the reals using Newton's method.
     pub fn nsolve_system<
-        N: SingleFloat + Real + PartialOrd + InternalOrdering + Eq + std::hash::Hash,
+        N: SingleFloat
+            + Real
+            + PartialOrd
+            + InternalOrdering
+            + Eq
+            + std::hash::Hash
+            + symbolica::evaluate::EvaluationDomain,
     >(
         &self,
         vars: &[Indeterminate],
@@ -1376,7 +1401,7 @@ pub trait TensorAtomOps: HasStructure {
     /// All variables and all user functions in the expression must occur in the map.
     fn to_evaluation_tree(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
     ) -> Result<EvalTreeTensor<SymComplex<Rational>, Self::Structure>, String>;
 
@@ -1386,7 +1411,7 @@ pub trait TensorAtomOps: HasStructure {
     /// The function map may have nested expressions.
     fn evaluator(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
         optimization_settings: &OptimizationSettings,
     ) -> Result<EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, Self::Structure>, String>;
@@ -1455,7 +1480,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for DenseTensor<Atom, S> {
 
     fn to_evaluation_tree(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
     ) -> Result<EvalTreeTensor<SymComplex<Rational>, Self::Structure>, String> {
         let atomviews: Vec<AtomView> = self.data.iter().map(|a| a.as_view()).collect();
@@ -1470,7 +1495,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for DenseTensor<Atom, S> {
 
     fn evaluator(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
         optimization_settings: &OptimizationSettings,
     ) -> Result<EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, Self::Structure>, String>
@@ -1539,7 +1564,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for SparseTensor<Atom, S> {
 
     fn to_evaluation_tree(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
     ) -> Result<EvalTreeTensor<SymComplex<Rational>, Self::Structure>, String> {
         let atomviews: Vec<AtomView> = self.iter_flat().map(|(_, a)| a.as_view()).collect();
@@ -1554,7 +1579,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for SparseTensor<Atom, S> {
 
     fn evaluator(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
         optimization_settings: &OptimizationSettings,
     ) -> Result<EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, Self::Structure>, String>
@@ -1595,7 +1620,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for DataTensor<Atom, S> {
 
     fn evaluator(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
         optimization_settings: &OptimizationSettings,
     ) -> Result<EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, Self::Structure>, String>
@@ -1640,7 +1665,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for DataTensor<Atom, S> {
 
     fn to_evaluation_tree(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
     ) -> Result<EvalTreeTensor<SymComplex<Rational>, Self::Structure>, String> {
         match self {
@@ -1664,7 +1689,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for ParamTensor<S> {
 
     fn evaluator(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
         optimization_settings: &OptimizationSettings,
     ) -> Result<EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, Self::Structure>, String>
@@ -1695,7 +1720,7 @@ impl<S: TensorStructure + Clone> TensorAtomOps for ParamTensor<S> {
 
     fn to_evaluation_tree(
         &self,
-        fn_map: &FunctionMap<SymComplex<Rational>>,
+        fn_map: &FunctionMap,
         params: &[Atom],
     ) -> Result<EvalTreeTensor<SymComplex<Rational>, Self::Structure>, String> {
         self.tensor.to_evaluation_tree(fn_map, params)

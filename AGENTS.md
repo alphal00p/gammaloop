@@ -50,6 +50,7 @@
 ## Testing Guidelines
 - Rust integration tests live in `tests/` (files like `test_runs.rs`).
 - Use `cargo nextest` via `just test TEST_NAME` for targeted runs.
+- Use `just test_gammaloop` as the default full selected GammaLoop test suite before finishing larger changes. This recipe runs with warnings as errors (`RUSTFLAGS=-Dwarnings`) and excludes the explicitly named `slow` and `failing` test classes by default; pass those class names explicitly only when the task requires them.
 
 ## Commit & Pull Request Guidelines
 - Commit messages are short and descriptive, typically lowercase without scopes (e.g., "remove edge quotes"), but contain the full user prompt in the description

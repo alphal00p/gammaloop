@@ -33,7 +33,9 @@ use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
 use crate::integrands::process::ProcessIntegrand;
 use crate::model::{Model, SerializableInputParamCard};
-use crate::observables::{EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat};
+use crate::observables::{
+    EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
+};
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime::{
@@ -2294,6 +2296,7 @@ where
 
     let mut n_samples_evaluated = 0;
     let mut emitted_latest_observable_paths = vec![Vec::new(); n_slots];
+    let mut emitted_latest_numerical_stability_paths = Vec::new();
     clear_iteration_abort_request();
     'integrateLoop: while integration_state.num_points < n_max {
         // ensure we do not overshoot
@@ -2527,6 +2530,11 @@ where
                 &targets,
                 output_control,
             )?;
+            emitted_latest_numerical_stability_paths = write_numerical_stability_outputs(
+                Some(workspace_path.as_path()),
+                &integration_state,
+                output_control,
+            )?;
         }
 
         for (slot_index, slot) in slots.iter().enumerate() {
@@ -2620,6 +2628,7 @@ where
             workspace.as_deref(),
             &slots,
             &emitted_latest_observable_paths,
+            &emitted_latest_numerical_stability_paths,
         );
     }
 
@@ -2833,6 +2842,35 @@ fn archived_observable_output_path(
     workspace.join(format!("observables_final_iter_{iter:04}.{extension}"))
 }
 
+fn numerical_stability_output_extension(format: ObservableFileFormat) -> Option<&'static str> {
+    match format {
+        ObservableFileFormat::None => None,
+        ObservableFileFormat::Hwu => Some("hwu"),
+        ObservableFileFormat::Json => Some("json"),
+    }
+}
+
+fn numerical_stability_scope_file_stem(scope: &str, iter: Option<usize>) -> String {
+    match iter {
+        Some(iter) => format!("{scope}_iter_{iter:04}"),
+        None => scope.to_string(),
+    }
+}
+
+fn numerical_stability_output_path(
+    workspace: &Path,
+    scope: &str,
+    format: ObservableFileFormat,
+    iter: Option<usize>,
+) -> PathBuf {
+    let extension = numerical_stability_output_extension(format)
+        .expect("numerical stability outputs must use a real file format");
+    workspace.join("numerical_stability").join(format!(
+        "{}.{extension}",
+        numerical_stability_scope_file_stem(scope, iter)
+    ))
+}
+
 fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
         return Vec::new();
@@ -2951,6 +2989,76 @@ fn write_latest_observables_output(
     Ok(emitted_paths)
 }
 
+fn write_numerical_stability_snapshot(
+    bundle: &ObservableSnapshotBundle,
+    path: &Path,
+    format: ObservableFileFormat,
+) -> Result<()> {
+    match format {
+        ObservableFileFormat::None => Ok(()),
+        ObservableFileFormat::Json => write_atomic_json(path, bundle),
+        ObservableFileFormat::Hwu => {
+            let parent = path
+                .parent()
+                .ok_or_else(|| Report::msg("Numerical stability output is missing a parent"))?;
+            fs::create_dir_all(parent)?;
+            bundle.write_hwu_file(path)
+        }
+    }
+}
+
+fn write_numerical_stability_outputs(
+    workspace: Option<&Path>,
+    integration_state: &IntegrationState,
+    output_control: WorkspaceSnapshotControl,
+) -> Result<Vec<PathBuf>> {
+    let Some(workspace) = workspace else {
+        return Ok(Vec::new());
+    };
+
+    let mut emitted_paths = Vec::new();
+    let mut scopes = vec![(
+        "global".to_string(),
+        integration_state
+            .stats
+            .numerical_stability_snapshot()
+            .as_observable_snapshot_bundle(),
+    )];
+    scopes.extend(
+        integration_state
+            .slot_metas
+            .iter()
+            .zip(integration_state.slot_stats.iter())
+            .map(|(slot_meta, stats)| {
+                (
+                    slot_meta.key(),
+                    stats
+                        .numerical_stability_snapshot()
+                        .as_observable_snapshot_bundle(),
+                )
+            }),
+    );
+
+    for (scope, bundle) in scopes {
+        for format in [ObservableFileFormat::Json, ObservableFileFormat::Hwu] {
+            let latest_path = numerical_stability_output_path(workspace, &scope, format, None);
+            write_numerical_stability_snapshot(&bundle, &latest_path, format)?;
+            emitted_paths.push(latest_path);
+            if output_control.write_iteration_archives {
+                let archive_path = numerical_stability_output_path(
+                    workspace,
+                    &scope,
+                    format,
+                    Some(integration_state.iter),
+                );
+                write_numerical_stability_snapshot(&bundle, &archive_path, format)?;
+            }
+        }
+    }
+
+    Ok(emitted_paths)
+}
+
 fn write_integration_state_to_workspace(
     workspace_path: &Path,
     integration_state: &IntegrationState,
@@ -2991,8 +3099,14 @@ fn emit_results_output_summary(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
     emitted_paths: &[Vec<PathBuf>],
+    numerical_stability_paths: &[PathBuf],
 ) {
-    let rendered = render_results_output_summary_table(workspace, slots, emitted_paths);
+    let rendered = render_results_output_summary_table(
+        workspace,
+        slots,
+        emitted_paths,
+        numerical_stability_paths,
+    );
     let Some(rendered) = rendered else {
         return;
     };
@@ -3004,6 +3118,7 @@ fn render_results_output_summary_table(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
     emitted_paths: &[Vec<PathBuf>],
+    numerical_stability_paths: &[PathBuf],
 ) -> Option<String> {
     let mut summary_rows = Vec::new();
     if let Some(workspace) = workspace {
@@ -3036,6 +3151,20 @@ fn render_results_output_summary_table(
             };
             summary_rows.push((row_label, display_path));
         }
+    }
+
+    for path in numerical_stability_paths {
+        if !path.exists() {
+            continue;
+        }
+        let display_path = workspace
+            .map(|root| workspace_relative_display_path(root, path))
+            .unwrap_or_else(|| path.display().to_string());
+        let scope = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("numerical_stability");
+        summary_rows.push((format!("numerical stability ({scope})"), display_path));
     }
 
     if summary_rows.is_empty() {
@@ -4548,7 +4677,7 @@ mod tests {
     #[test]
     fn results_output_summary_renders_tabled_workspace_rows() {
         let workspace = Path::new("/tmp/gl_workspace");
-        let rendered = render_results_output_summary_table(Some(workspace), &[], &[])
+        let rendered = render_results_output_summary_table(Some(workspace), &[], &[], &[])
             .expect("workspace summary should render");
 
         assert!(
@@ -4588,6 +4717,7 @@ mod tests {
             &[vec![PathBuf::from(
                 "/tmp/definitely_missing_observables_final.json",
             )]],
+            &[],
         );
 
         assert!(rendered.is_none(), "{rendered:?}");
@@ -4629,6 +4759,7 @@ mod tests {
             Some(&workspace),
             &[slot],
             &[vec![hwu_path.clone(), json_path.clone()]],
+            &[],
         )
         .expect("summary should render");
 

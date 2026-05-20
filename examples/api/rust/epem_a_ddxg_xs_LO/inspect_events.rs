@@ -7,12 +7,9 @@
 //! gammalooprs = { path = "../../../../crates/gammalooprs" }
 //!
 //! [patch.crates-io]
-//! #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "460822f51949f12c58dbfe0352cbee97c17a9e6c" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "460822f51949f12c58dbfe0352cbee97c17a9e6c" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "460822f51949f12c58dbfe0352cbee97c17a9e6c" }
 //!
 //! ```
 //!

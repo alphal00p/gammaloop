@@ -11,8 +11,8 @@ use std::{
     sync::LazyLock,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    coefficient::CoefficientView,
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Indeterminate, Symbol},
+    coefficient::{Coefficient, CoefficientView},
     domains::{
         algebraic_number::AlgebraicExtension,
         finite_field::{FiniteFieldCore, PrimeIteratorU64, Zp64},
@@ -23,14 +23,32 @@ use symbolica::{
     function,
     id::{ReplaceWith, Replacement},
     parse,
-    poly::polynomial::PolynomialRing,
-    printer::{PrintMode, PrintOptions},
+    poly::{polynomial::PolynomialRing, series::SeriesDepth},
+    printer::{PrintMode, PrintOptions, PrintState},
     symbol,
 };
 
 use crate::GammaLoopContext;
 
 use super::{GS, W_};
+
+pub(crate) fn add_numeric_constant_to_fn_map(
+    fn_map: &mut symbolica::evaluate::FunctionMap,
+    name: Atom,
+    value: impl Into<Coefficient>,
+) -> std::result::Result<(), String> {
+    let value = value.into();
+    if name.is_zero() {
+        return if value.is_zero() {
+            Ok(())
+        } else {
+            Err(format!("Cannot bind the literal zero atom to {value}"))
+        };
+    }
+
+    let indeterminate = Indeterminate::try_from(name.clone())?;
+    fn_map.add_function(indeterminate, Vec::<Symbol>::new(), Atom::num(value))
+}
 
 pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
     LazyLock::new(|| AlgebraicExtension::new_complex(Q));
@@ -208,6 +226,7 @@ let a = args.pos().map(v => $#v$).join($, $);
                         custom_print_mode: Some(("typst", 2)),
                         ..Default::default()
                     },
+                    &PrintState::new(),
                 )
             {
                 writeln!(fmt, "{}", s).unwrap();
@@ -775,7 +794,7 @@ impl DOD for AtomView<'_> {
 
     fn trailing_exponent(&self) -> i32 {
         let series = self
-            .series(GS.rescale, Atom::Zero, 1.into(), false)
+            .series(GS.rescale, Atom::Zero, SeriesDepth::relative(1))
             .unwrap();
         // println!("{}", series);
 

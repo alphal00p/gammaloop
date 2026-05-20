@@ -55,6 +55,8 @@ use eyre::Context;
 use eyre::eyre;
 use std::{
     collections::{BTreeMap, HashSet},
+    fs,
+    path::Path,
     slice,
     time::{Duration, Instant},
 };
@@ -69,11 +71,7 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
-use std::{
-    fs::{self},
-    path::Path,
-    vec,
-};
+use std::vec;
 use symbolica::{
     domains::{dual::HyperDual, float::SingleFloat},
     numerical_integration::{Grid, Sample},
@@ -85,6 +83,7 @@ use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
     evaluate_sample, filtered_orientation_count, format_lmb_channel_label,
     format_orientation_label, histogram_process_info_for_integrand, resolve_visible_orientation_id,
+    validate_explicit_orientation_sum_runtime_settings,
 };
 
 pub mod export;
@@ -125,6 +124,7 @@ pub struct CrossSectionIntegrandData {
     pub external_connections: Vec<ExternalConnection>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub graph_to_group_id: Vec<usize>,
+    pub explicit_orientation_sum_only: bool,
     // pub builder_cache: ParamBuilder<f64>,
 }
 
@@ -344,6 +344,11 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
     fn loop_cache_id(&self) -> usize {
         self.data.loop_cache_id
     }
+
+    fn uses_explicit_orientation_sum_only(&self) -> bool {
+        self.data.explicit_orientation_sum_only
+    }
+
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
         self.data.rotations.as_ref().expect("forgot warmup").iter()
     }
@@ -353,6 +358,10 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
     }
 
     fn warm_up(&mut self, model: &Model) -> Result<()> {
+        if self.data.explicit_orientation_sum_only {
+            validate_explicit_orientation_sum_runtime_settings(&self.settings)?;
+        }
+
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()
@@ -461,6 +470,7 @@ pub struct CrossSectionGraphTerm {
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: SubSet<OrientationID>,
+    pub explicit_orientation_sum_only: bool,
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
     pub raised_data: RaisedCutData,
@@ -500,20 +510,22 @@ impl CrossSectionGraphTerm {
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
+        settings.ensure_step_iii_pending_options_are_supported()?;
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
         let selected_generation_orientations = graph
             .derived_data
-            .global_cff_expression
+            .global_three_d_expression
             .as_ref()
             .unwrap()
             .orientations
             .iter()
             .filter(|orientation| {
-                settings.generation.orientation_pattern.filter(*orientation)
-                    && orientation.expression.iter_nodes().any(|tree_node| {
+                (settings.generation.explicit_orientation_sum_only
+                    || settings.generation.orientation_pattern.filter(*orientation))
+                    && orientation.iter_denominator_nodes().any(|tree_node| {
                         graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
                             tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
                         })
@@ -542,13 +554,15 @@ impl CrossSectionGraphTerm {
         let selected_generation_esurfaces = selected_generation_orientations
             .iter()
             .flat_map(|orientation| {
-                orientation.expression.iter_nodes().filter_map(|tree_node| {
-                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
-                        Some(esurface_id)
-                    } else {
-                        None
-                    }
-                })
+                orientation
+                    .iter_denominator_nodes()
+                    .filter_map(|tree_node| {
+                        if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                            Some(esurface_id)
+                        } else {
+                            None
+                        }
+                    })
             })
             .collect::<HashSet<_>>();
 
@@ -591,10 +605,10 @@ impl CrossSectionGraphTerm {
                 .iter()
                 .map(|raised_group| {
                     active_cuts[raised_cut_id]
-                        && raised_group
-                            .esurface_ids
-                            .iter()
-                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+                        && (settings.generation.explicit_orientation_sum_only
+                            || raised_group.esurface_ids.iter().any(|esurface_id| {
+                                selected_generation_esurfaces.contains(esurface_id)
+                            }))
                 })
                 .collect();
             let right_active: TiVec<_, bool> = counterterm_data
@@ -602,10 +616,10 @@ impl CrossSectionGraphTerm {
                 .iter()
                 .map(|raised_group| {
                     active_cuts[raised_cut_id]
-                        && raised_group
-                            .esurface_ids
-                            .iter()
-                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+                        && (settings.generation.explicit_orientation_sum_only
+                            || raised_group.esurface_ids.iter().any(|esurface_id| {
+                                selected_generation_esurfaces.contains(esurface_id)
+                            }))
                 })
                 .collect();
             let mut iterated_active = counterterm_data.iterated.map_ref(|_| false);
@@ -656,19 +670,29 @@ impl CrossSectionGraphTerm {
                 }
                 let dual_shape = shape_from_cut_cff_index(cut_cff_index);
 
-                let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
-                    slice::from_ref(integrand_for_subset),
-                    &graph.graph.param_builder,
-                    &orientations.raw,
-                    dual_shape,
-                    &settings.generation.evaluator,
-                )
-                .with_context(|| {
-                    format!(
-                        "Failed to create evaluator for graph{}",
-                        graph.graph.debug_dot()
-                    )
-                })?;
+                let (evaluator_stack, evaluator_timings) =
+                    if settings.generation.explicit_orientation_sum_only {
+                        EvaluatorStack::new_explicit_sum_with_timings(
+                            slice::from_ref(integrand_for_subset),
+                            &graph.graph.param_builder,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    } else {
+                        EvaluatorStack::new_with_timings(
+                            slice::from_ref(integrand_for_subset),
+                            &graph.graph.param_builder,
+                            &orientations.raw,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    }
+                    .with_context(|| {
+                        format!(
+                            "Failed to create evaluator for graph{}",
+                            graph.graph.debug_dot()
+                        )
+                    })?;
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
@@ -920,6 +944,7 @@ impl CrossSectionGraphTerm {
                 estimated_scale: None,
                 param_builder: graph.graph.param_builder.clone(),
                 orientation_filter: SubSet::full(orientations.len()),
+                explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 orientations,
                 counterterm,
                 reversed_edges,
@@ -1011,7 +1036,8 @@ impl CrossSectionGraphTerm {
 
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
-        new_event.cut_info.orientation_id = momentum_sample.sample.orientation;
+        new_event.cut_info.orientation_id =
+            self.runtime_event_orientation_id(momentum_sample.sample.orientation);
         new_event.cut_info.lmb_channel_id = channel_id.map(usize::from);
         new_event.cut_info.lmb_channel_edge_ids =
             channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
@@ -1114,6 +1140,27 @@ impl CrossSectionGraphTerm {
 
         Ok(new_event)
     }
+
+    fn runtime_event_orientation_id(&self, sampled_orientation: Option<usize>) -> Option<usize> {
+        if self.explicit_orientation_sum_only {
+            Some(0)
+        } else {
+            sampled_orientation
+        }
+    }
+
+    fn explicit_orientation_label(&self, orientation_id: usize) -> Option<String> {
+        if orientation_id != 0 {
+            return None;
+        }
+
+        let n_edges = self
+            .orientations
+            .first()
+            .map(|orientation| orientation.iter().count())
+            .unwrap_or(0);
+        Some("x".repeat(n_edges))
+    }
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
@@ -1126,6 +1173,10 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
+        if self.explicit_orientation_sum_only {
+            return self.explicit_orientation_label(orientation_id);
+        }
+
         self.orientations
             .get(resolve_visible_orientation_id(
                 &self.orientation_filter,
@@ -1146,25 +1197,29 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .expected_scale(F(settings.kinematics.e_cm), model),
         );
 
-        self.orientation_filter = SubSet::empty(self.orientations.len());
+        if self.explicit_orientation_sum_only {
+            self.orientation_filter = SubSet::full(self.orientations.len());
+        } else {
+            self.orientation_filter = SubSet::empty(self.orientations.len());
 
-        for (i, or) in self.orientations.iter_enumerated() {
-            if settings.general.orientation_pat.filter(or) {
-                self.orientation_filter.add(i);
+            for (i, or) in self.orientations.iter_enumerated() {
+                if settings.general.orientation_pat.filter(or) {
+                    self.orientation_filter.add(i);
+                }
             }
-        }
-        if self.orientation_filter.included_iter().next().is_none() {
-            let pattern = settings
-                .general
-                .orientation_pat
-                .pat
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "<empty>".to_string());
-            return Err(eyre!(
-                "Runtime orientation pattern {pattern} matched no orientations for graph {}",
-                self.graph.name
-            ));
+            if self.orientation_filter.included_iter().next().is_none() {
+                let pattern = settings
+                    .general
+                    .orientation_pat
+                    .pat
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "<empty>".to_string());
+                return Err(eyre!(
+                    "Runtime orientation pattern {pattern} matched no orientations for graph {}",
+                    self.graph.name
+                ));
+            }
         }
 
         let externals = settings
@@ -1224,6 +1279,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph
             .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
+        self.graph
+            .param_builder
+            .numerator_sampling_scale_value(Complex::new_re(F(settings
+                .general
+                .numerator_sampling_scale)));
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();
@@ -1314,7 +1374,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             let solution = newton_iteration_and_derivative(
                 &guess,
                 function,
-                &F::from_f64(1.0),
+                &guess.one(),
                 2000,
                 &F::from_f64(context.settings.kinematics.e_cm),
             );
@@ -1479,7 +1539,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             _alpha,
                         )
                     } else {
-                        F::from_f64(1.0)
+                        momentum_sample.one()
                     },
                 );
 
@@ -1553,7 +1613,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     context.evaluation_metadata,
                     context.record_primary_timing,
                 );
-
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
@@ -1631,7 +1690,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "total bare contribution for cut {}: {:+16e}",
                 cut_id.0, total_bare_contribution
             );
-
             all_cut_result += total_bare_contribution;
 
             debug!(
@@ -1649,12 +1707,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.initial_state_cut.iter_edges(&self.graph).count(),
             );
         let flux_factor = if context.settings.general.disable_flux_factor {
-            F::from_f64(1.0)
+            momentum_sample.one()
         } else {
             match momentum_sample.external_moms().len() {
                 1 => {
                     momentum_sample.one()
-                        / (F::from_f64(2.0)
+                        / (momentum_sample.one().from_i64(2)
                             * &momentum_sample
                                 .external_moms()
                                 .first()
@@ -1681,7 +1739,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                         })
                         .re;
 
-                    let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                    let f = momentum_sample.one().from_i64(4)
+                        * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())
@@ -1732,6 +1791,10 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
+        if self.explicit_orientation_sum_only {
+            return 1;
+        }
+
         filtered_orientation_count(&self.orientation_filter, &self.orientations)
     }
 

@@ -1,0 +1,565 @@
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::MulAssign,
+};
+
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use spenso::structure::{
+    abstract_index::AIND_SYMBOLS,
+    representation::{LibraryRep, Minkowski},
+};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use thiserror::Error;
+
+use crate::{
+    graph::{Graph, lmb::LMBext},
+    utils::{GS, W_, symbolica_ext::LogPrint},
+    uv::UltravioletGraph,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct EnergyPowerCapMap {
+    degrees: BTreeMap<EdgeIndex, usize>,
+}
+
+impl EnergyPowerCapMap {
+    pub fn is_empty(&self) -> bool {
+        self.degrees.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (EdgeIndex, usize)> + '_ {
+        self.degrees.iter().map(|(edge, degree)| (*edge, *degree))
+    }
+
+    pub fn into_generation_bounds(self) -> Vec<(usize, usize)> {
+        self.degrees
+            .into_iter()
+            .map(|(edge, degree)| (usize::from(edge), degree))
+            .collect()
+    }
+
+    fn unit(edge: EdgeIndex) -> Self {
+        let mut degrees = BTreeMap::new();
+        degrees.insert(edge, 1);
+        Self { degrees }
+    }
+
+    fn add_assign(&mut self, other: Self) {
+        for (edge, degree) in other.degrees {
+            *self.degrees.entry(edge).or_insert(0) += degree;
+        }
+    }
+
+    fn max_assign(&mut self, other: Self) {
+        for (edge, degree) in other.degrees {
+            let slot = self.degrees.entry(edge).or_insert(0);
+            *slot = (*slot).max(degree);
+        }
+    }
+
+    fn scale(&mut self, exponent: usize) {
+        for degree in self.degrees.values_mut() {
+            degree.mul_assign(exponent);
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum EnergyPowerAnalysisError {
+    #[error("loop momentum K({loop_index}, ...) has no carrier edge in this loop momentum basis")]
+    MissingLoopCarrierEdge { loop_index: usize },
+    #[error(
+        "energy-power analysis expected an integer edge id in Q(edge, index), found `{argument}`"
+    )]
+    InvalidEmrEdgeArgument { argument: String },
+    #[error(
+        "energy-power analysis expected an integer loop id in K(loop, index), found `{argument}`"
+    )]
+    InvalidLoopMomentumArgument { argument: String },
+    #[error(
+        "non-polynomial energy dependence encountered in numerator subexpression `{expression}` with exponent `{exponent}`"
+    )]
+    NonPolynomialEnergyPower {
+        expression: String,
+        exponent: String,
+    },
+}
+
+pub struct EnergyPowerAnalyzer {
+    loop_edges: Vec<EdgeIndex>,
+    internal_edges: Option<BTreeSet<EdgeIndex>>,
+    minkowski_symbol: Symbol,
+}
+
+#[derive(Clone, Copy)]
+enum EnergyPowerAnalysisMode {
+    StrictPolynomial,
+    ConservativeUpperBound,
+}
+
+impl EnergyPowerAnalyzer {
+    pub fn new(loop_edges: impl IntoIterator<Item = EdgeIndex>) -> Self {
+        Self {
+            loop_edges: loop_edges.into_iter().collect(),
+            internal_edges: None,
+            minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
+        }
+    }
+
+    pub fn with_internal_edges(
+        loop_edges: impl IntoIterator<Item = EdgeIndex>,
+        internal_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Self {
+        Self {
+            loop_edges: loop_edges.into_iter().collect(),
+            internal_edges: Some(internal_edges.into_iter().collect()),
+            minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
+        }
+    }
+
+    pub fn analyze_atom(
+        &self,
+        expression: &Atom,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_view(
+            expression.as_view(),
+            EnergyPowerAnalysisMode::StrictPolynomial,
+        )
+    }
+
+    pub fn analyze_atom_upper_bound(
+        &self,
+        expression: &Atom,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_view(
+            expression.as_view(),
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
+    }
+
+    fn analyze_view(
+        &self,
+        expression: AtomView<'_>,
+        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        match expression {
+            AtomView::Num(_) | AtomView::Var(_) => Ok(EnergyPowerCapMap::default()),
+            AtomView::Add(add) => {
+                let mut max_degree = EnergyPowerCapMap::default();
+                for term in add.iter() {
+                    max_degree.max_assign(self.analyze_view(term, mode)?);
+                }
+                Ok(max_degree)
+            }
+            AtomView::Mul(mul) => {
+                let mut product_degree = EnergyPowerCapMap::default();
+                for factor in mul.iter() {
+                    product_degree.add_assign(self.analyze_view(factor, mode)?);
+                }
+                Ok(product_degree)
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let mut base_degree = self.analyze_view(base, mode)?;
+                if base_degree.is_empty() {
+                    return Ok(base_degree);
+                }
+
+                let Ok(exponent) = i64::try_from(exponent) else {
+                    return Err(EnergyPowerAnalysisError::NonPolynomialEnergyPower {
+                        expression: base.to_owned().log_print(None),
+                        exponent: exponent.to_owned().log_print(None),
+                    });
+                };
+                if exponent < 0 {
+                    if matches!(mode, EnergyPowerAnalysisMode::ConservativeUpperBound) {
+                        return Ok(EnergyPowerCapMap::default());
+                    }
+                    return Err(EnergyPowerAnalysisError::NonPolynomialEnergyPower {
+                        expression: base.to_owned().log_print(None),
+                        exponent: exponent.to_string(),
+                    });
+                }
+                base_degree.scale(exponent as usize);
+                Ok(base_degree)
+            }
+            AtomView::Fun(function) => {
+                if function.get_symbol() == GS.emr_vec {
+                    return Ok(EnergyPowerCapMap::default());
+                }
+
+                if function.get_nargs() == 2 && function.get_symbol() == GS.emr_mom {
+                    let edge = EdgeIndex(usize::try_from(function.get(0)).map_err(|_| {
+                        EnergyPowerAnalysisError::InvalidEmrEdgeArgument {
+                            argument: function.get(0).to_owned().log_print(None),
+                        }
+                    })?);
+                    return if self.is_internal_edge(edge) && self.is_energy_index(function.get(1)) {
+                        Ok(EnergyPowerCapMap::unit(edge))
+                    } else {
+                        Ok(EnergyPowerCapMap::default())
+                    };
+                }
+
+                if function.get_nargs() == 2 && function.get_symbol() == GS.loop_mom {
+                    let loop_index = usize::try_from(function.get(0)).map_err(|_| {
+                        EnergyPowerAnalysisError::InvalidLoopMomentumArgument {
+                            argument: function.get(0).to_owned().log_print(None),
+                        }
+                    })?;
+                    return if self.is_energy_index(function.get(1)) {
+                        let edge = self.loop_edges.get(loop_index).copied().ok_or(
+                            EnergyPowerAnalysisError::MissingLoopCarrierEdge { loop_index },
+                        )?;
+                        Ok(EnergyPowerCapMap::unit(edge))
+                    } else {
+                        Ok(EnergyPowerCapMap::default())
+                    };
+                }
+
+                let mut degree = EnergyPowerCapMap::default();
+                for argument in function.iter() {
+                    degree.add_assign(self.analyze_view(argument, mode)?);
+                }
+                Ok(degree)
+            }
+        }
+    }
+
+    fn is_energy_index(&self, index: AtomView<'_>) -> bool {
+        let AtomView::Fun(function) = index else {
+            return false;
+        };
+
+        if function.get_symbol() == AIND_SYMBOLS.cind {
+            return function.get_nargs() == 1
+                && usize::try_from(function.get(0)).is_ok_and(|index| index == 0);
+        }
+
+        if function.get_symbol() == self.minkowski_symbol && function.get_nargs() == 2 {
+            // `mink(4, n)` is an abstract Lorentz-index label in the numerator
+            // algebra, not a concrete component selection. Concrete components
+            // use `cind(n)` and are handled above. Any abstract Minkowski index
+            // can contract onto the temporal component, so it contributes to the
+            // conservative energy-power bound.
+            return true;
+        }
+
+        false
+    }
+
+    fn is_internal_edge(&self, edge: EdgeIndex) -> bool {
+        self.internal_edges
+            .as_ref()
+            .is_none_or(|internal_edges| internal_edges.contains(&edge))
+    }
+}
+
+impl Graph {
+    pub fn full_numerator_atom(&self) -> Atom {
+        self.numerator(&self.full_filter(), &self.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * &self.global_prefactor.num
+            * &self.global_prefactor.projector
+            * &self.overall_factor
+    }
+
+    pub fn numerator_energy_power_caps(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::StrictPolynomial)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds_for_3d_expression(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds_after_lmb_rewrite(
+        &self,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        let internal_edges = self
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge, edge_data)| {
+                (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
+            });
+        let momentum_replacements = self.normal_emr_replacement(
+            &self.full_filter(),
+            &self.loop_momentum_basis,
+            &[W_.x___],
+            HedgePair::is_paired,
+        );
+        let numerator = self
+            .full_numerator_atom()
+            .replace_multiple(&momentum_replacements)
+            .expand();
+
+        EnergyPowerAnalyzer::with_internal_edges(
+            self.loop_momentum_basis.loop_edges.iter().copied(),
+            internal_edges,
+        )
+        .analyze_view(
+            numerator.as_view(),
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
+    }
+
+    pub(crate) fn numerator_energy_power_upper_bounds_in_atom(
+        &self,
+        numerator: &Atom,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        self.analyze_numerator_atom_energy_powers(
+            numerator,
+            EnergyPowerAnalysisMode::ConservativeUpperBound,
+        )
+    }
+
+    fn analyze_numerator_energy_powers(
+        &self,
+        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        // Keep edge-energy variables attached to their source denominator.
+        // Rewriting them to a loop-momentum basis loses cancellation
+        // information in non-coordinate UV directions, e.g. when q_i-q_j is
+        // kept fixed while q_i and q_j are both large.
+        let numerator = self.full_numerator_atom().expand();
+        self.analyze_numerator_atom_energy_powers(&numerator, mode)
+    }
+
+    fn analyze_numerator_atom_energy_powers(
+        &self,
+        numerator: &Atom,
+        mode: EnergyPowerAnalysisMode,
+    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
+        let internal_edges = self
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge, edge_data)| {
+                (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
+            });
+
+        EnergyPowerAnalyzer::with_internal_edges(
+            self.loop_momentum_basis.loop_edges.iter().copied(),
+            internal_edges,
+        )
+        .analyze_view(numerator.as_view(), mode)
+    }
+
+    pub fn automatic_numerator_energy_degree_bounds(
+        &self,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        self.automatic_numerator_energy_degree_bounds_excluding([])
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_excluding(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        self.automatic_numerator_energy_degree_bounds_excluding_with_min_degree(excluded_edges, 2)
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_excluding_with_min_degree(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_for_3d_expression()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
+    }
+
+    pub(crate) fn automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+        &self,
+        numerator: &Atom,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_in_atom(numerator)?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
+    }
+
+    pub(crate) fn automatic_lmb_numerator_energy_degree_bounds_excluding_with_min_degree(
+        &self,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        min_degree: usize,
+    ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
+        let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
+        let mut bounds = BTreeMap::new();
+
+        for (edge, degree) in self
+            .numerator_energy_power_upper_bounds_after_lmb_rewrite()?
+            .iter()
+        {
+            if excluded_edges.contains(&edge) || degree < min_degree {
+                continue;
+            }
+            bounds.insert(usize::from(edge), degree);
+        }
+
+        Ok(bounds.into_iter().collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::half_edge::involution::EdgeIndex;
+    use spenso::structure::{
+        abstract_index::AIND_SYMBOLS,
+        representation::{LibraryRep, Minkowski},
+    };
+    use symbolica::{
+        atom::{Atom, AtomCore, FunctionBuilder},
+        function, symbol,
+    };
+
+    use crate::{
+        numerator::energy_degree::{EnergyPowerAnalysisError, EnergyPowerAnalyzer},
+        utils::{GS, symbolica_ext::CallSymbol},
+    };
+
+    fn mink_index(label: &str) -> Atom {
+        FunctionBuilder::new(LibraryRep::from(Minkowski {}).symbol())
+            .add_arg(Atom::num(4).as_view())
+            .add_arg(Atom::var(symbol!(label)).as_view())
+            .finish()
+    }
+
+    fn mink_component(index: i64) -> Atom {
+        FunctionBuilder::new(LibraryRep::from(Minkowski {}).symbol())
+            .add_arg(Atom::num(4).as_view())
+            .add_arg(Atom::num(index).as_view())
+            .finish()
+    }
+
+    fn bounds(expression: Atom) -> Vec<(usize, usize)> {
+        EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
+            .analyze_atom(&expression)
+            .unwrap()
+            .into_generation_bounds()
+    }
+
+    fn bounds_with_internal_edges(expression: Atom) -> Vec<(usize, usize)> {
+        EnergyPowerAnalyzer::with_internal_edges([EdgeIndex(7), EdgeIndex(9)], [EdgeIndex(3)])
+            .analyze_atom(&expression)
+            .unwrap()
+            .into_generation_bounds()
+    }
+
+    #[test]
+    fn emr_minkowski_index_counts_as_energy_power() {
+        let expression = function!(GS.emr_mom, 3, mink_index("mu"));
+        assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn emr_numeric_minkowski_label_counts_as_abstract_energy_power() {
+        let expression = function!(GS.emr_mom, 3, mink_component(1));
+        assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn emr_numeric_zero_minkowski_label_counts_as_abstract_energy_power() {
+        let expression = function!(GS.emr_mom, 3, mink_component(0));
+        assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn emr_external_edge_minkowski_index_does_not_count_when_internal_edges_are_known() {
+        let expression = function!(GS.emr_mom, 0, mink_index("mu"));
+        assert!(bounds_with_internal_edges(expression).is_empty());
+    }
+
+    #[test]
+    fn emr_temporal_concrete_index_counts_as_energy_power() {
+        let expression = function!(GS.emr_mom, 3, AIND_SYMBOLS.cind.f([0]));
+        assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn emr_spatial_concrete_index_does_not_count() {
+        let expression = function!(GS.emr_mom, 3, AIND_SYMBOLS.cind.f([2]));
+        assert!(bounds(expression).is_empty());
+    }
+
+    #[test]
+    fn spatial_emr_vector_does_not_count() {
+        let expression = function!(GS.emr_vec, 3, mink_index("mu"));
+        assert!(bounds(expression).is_empty());
+    }
+
+    #[test]
+    fn lmb_energy_maps_to_carrier_edge() {
+        let expression = function!(GS.loop_mom, 1, mink_index("mu"));
+        assert_eq!(bounds(expression), vec![(9, 1)]);
+    }
+
+    #[test]
+    fn sums_take_edgewise_max_and_products_add() {
+        let q3 = function!(GS.emr_mom, 3, mink_index("mu"));
+        let k1 = function!(GS.loop_mom, 1, mink_index("nu"));
+        let expression = q3.clone() * k1.clone() + q3.pow(Atom::num(3));
+        assert_eq!(bounds(expression), vec![(3, 3), (9, 1)]);
+    }
+
+    #[test]
+    fn malformed_emr_edge_argument_is_reported() {
+        let expression = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(Atom::var(symbol!("edge")).as_view())
+            .add_arg(mink_index("mu").as_view())
+            .finish();
+        let error = EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
+            .analyze_atom(&expression)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            EnergyPowerAnalysisError::InvalidEmrEdgeArgument { .. }
+        ));
+    }
+
+    #[test]
+    fn malformed_loop_argument_is_reported() {
+        let expression = FunctionBuilder::new(GS.loop_mom)
+            .add_arg(Atom::var(symbol!("loop_id")).as_view())
+            .add_arg(mink_index("mu").as_view())
+            .finish();
+        let error = EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
+            .analyze_atom(&expression)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            EnergyPowerAnalysisError::InvalidLoopMomentumArgument { .. }
+        ));
+    }
+}

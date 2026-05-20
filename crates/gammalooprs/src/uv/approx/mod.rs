@@ -1,14 +1,36 @@
 use crate::{
-    cff::CutCFFIndex,
-    debug_tags,
-    graph::{Graph, LoopMomentumBasis, cuts::CutSet},
+    cff::{
+        CutCFFIndex,
+        expression::{
+            OrientationID, ThreeDExpression, localize_three_d_expression_on_esurface,
+            ltd_lu_local_series_coefficients_from_parametric_atom,
+            prepare_ltd_lu_local_series_expression,
+            remove_ltd_global_contact_completions_from_local_residue,
+            select_lu_cut_residue_for_basis,
+        },
+    },
+    graph::{
+        Graph, LoopMomentumBasis,
+        cuts::{CutSet, LuResidueSelectionBasis},
+    },
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::global::OrientationPattern,
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    settings::global::{GenerationSettings, ThreeDRepresentation},
+    utils::{
+        GS, W_,
+        symbolica_ext::{LOGPRINTOPTS, LogPrint},
+    },
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
-        approx::{integrated::Integrated, local_3d::Local3DApproximation},
+        approx::{
+            expanded_4d::{
+                Expanded4DApprox, Expanded4DSourceContext,
+                expanded_4d_terms_to_3d_parametric_integrands, expanded_4d_uv_kernel,
+                expanded_4d_uv_start,
+            },
+            integrated::Integrated,
+            local_3d::Local3DApproximation,
+        },
     },
 };
 use color_eyre::Result;
@@ -22,6 +44,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, Symbol},
     function, parse_lit, symbol,
 };
+use three_dimensional_reps::RepresentationMode;
 
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
@@ -31,6 +54,7 @@ use vakint::{Vakint, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 use super::{IntegrandExpr, UltravioletGraph};
 
+pub mod expanded_4d;
 pub mod integrated;
 pub mod local_3d;
 pub mod orientation_localization;
@@ -137,12 +161,20 @@ impl SimpleApprox {
 #[derive(Clone)]
 pub struct Approximation {
     pub spinney: Spinney,
-    pub local_3d: CFFapprox, //3d denoms
+    pub local_3d: Local3DApprox,
+    pub local_4d_expanded: Option<Expanded4DApprox>,
     pub final_integrand: Option<BTreeMap<CutCFFIndex, Atom>>,
     pub integrated_4d: ApproxOp,
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
     pub generate_only_integrated_uv_chain_matches: bool,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RootResidueContext<'a> {
+    pub(crate) expression: Option<&'a ThreeDExpression<OrientationID>>,
+    pub(crate) lu_residue_selection_basis: LuResidueSelectionBasis,
+    pub(crate) lu_residue_reference_basis: LuResidueSelectionBasis,
 }
 
 impl ForestNodeLike for Approximation {
@@ -175,7 +207,7 @@ impl ForestNodeLike for Approximation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum CFFapprox {
+pub enum Local3DApprox {
     NotComputed,
     Dependent { sign: Sign, t_arg: IntegrandExpr },
 }
@@ -192,11 +224,11 @@ impl CutStructure {
     }
 }
 
-impl CFFapprox {
+impl Local3DApprox {
     pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
         match self {
-            CFFapprox::NotComputed => None,
-            CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrands.clone(), *sign)),
+            Local3DApprox::NotComputed => None,
+            Local3DApprox::Dependent { sign, t_arg } => Some((t_arg.integrands.clone(), *sign)),
         }
     }
 
@@ -205,29 +237,13 @@ impl CFFapprox {
         to_contract: &SuBitGraph,
         cuts: &CutSet,
         _settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
-    ) -> Result<CFFapprox> {
-        let cff = graph
-            .cff(
-                &to_contract
-                    .union(&graph.tree_edges)
-                    .subtract(&graph.initial_state_cut),
-                cuts,
-                orientation_pattern,
-            )?
-            .expression_with_selectors();
+    ) -> Result<Local3DApprox> {
+        let local_3d = graph.cff(to_contract, cuts)?.expression_with_selectors();
 
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
-
-        Ok(CFFapprox::Dependent {
+        Ok(Local3DApprox::Dependent {
             sign: Sign::Positive,
             t_arg: IntegrandExpr {
-                integrands: cff
-                    .iter()
-                    .map(|(index, a)| (*index, a * &fourddenoms))
-                    .collect(),
+                integrands: local_3d,
             },
         })
     }
@@ -236,15 +252,8 @@ impl CFFapprox {
         graph: &mut Graph,
         cuts: &CutSet,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
-    ) -> Result<CFFapprox> {
-        Self::dependent(
-            graph,
-            &graph.empty_subgraph::<SuBitGraph>(),
-            cuts,
-            settings,
-            orientation_pattern,
-        )
+    ) -> Result<Local3DApprox> {
+        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts, settings)
     }
 }
 
@@ -261,23 +270,35 @@ fn internal_paired_edges_of_subgraph(graph: &Graph, subgraph: &SuBitGraph) -> Ve
 fn localized_integrated_reduced_factor(
     graph: &mut Graph,
     to_contract: &SuBitGraph,
-    expr: &Atom,
     cuts: &CutSet,
     valid_orientations: &[EdgeVec<Orientation>],
-    orientation_pattern: &OrientationPattern,
+    explicit_orientation_sum_only: bool,
 ) -> Result<IntegrandExpr> {
-    debug_tags!(#uv;graph.name=%graph.name , expr=%expr.log_print(Some(80)),"Localizing integrated UV CT");
-    let cff = graph.cff(
-        &to_contract
-            .union(&graph.tree_edges)
-            .subtract(&graph.initial_state_cut),
-        cuts,
-        orientation_pattern,
-    )?;
+    let cff = graph.cff(to_contract, cuts)?;
 
-    let fourddenoms = GS.wrap_tree_denoms(
-        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-    );
+    if explicit_orientation_sum_only {
+        if valid_orientations.is_empty() {
+            return Err(eyre!(
+                "cannot embed explicitly summed reduced integrated-UV factor into an empty orientation projector"
+            ));
+        }
+        let normalization = Atom::num(valid_orientations.len() as i64);
+        let integrands = cff
+            .terms
+            .into_iter()
+            .map(|(index, term)| {
+                (
+                    index,
+                    term.expression
+                        .into_iter()
+                        .fold(Atom::Zero, |acc, expr| acc + expr)
+                        / normalization.clone(),
+                )
+            })
+            .collect();
+
+        return Ok(IntegrandExpr { integrands });
+    }
 
     let internal_edges = internal_paired_edges_of_subgraph(graph, to_contract);
 
@@ -288,17 +309,70 @@ fn localized_integrated_reduced_factor(
             let mut localized = Atom::Zero;
             for (expr, orientation) in term.expression.into_iter().zip(term.orientations) {
                 localized += localize_reduced_orientation_term(
-                    &(expr * &fourddenoms),
+                    &expr,
                     &orientation,
                     valid_orientations,
                     &internal_edges,
                 )?;
             }
-            Ok((index, localized * expr))
+            Ok((index, localized))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
 
     Ok(IntegrandExpr { integrands })
+}
+
+#[derive(Clone, Copy)]
+enum ResidueIndexAxis {
+    RightThreshold,
+    LeftThreshold,
+    LuCut,
+}
+
+impl ResidueIndexAxis {
+    fn set_order(self, index: &mut CutCFFIndex, order: usize) {
+        match self {
+            Self::RightThreshold => index.right_threshold_order = Some(order),
+            Self::LeftThreshold => index.left_threshold_order = Some(order),
+            Self::LuCut => index.lu_cut_order = Some(order),
+        }
+    }
+}
+
+fn apply_indexed_residue_selection<F>(
+    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
+    axis: ResidueIndexAxis,
+    mut select: F,
+) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
+where
+    F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
+{
+    residues
+        .into_iter()
+        .flat_map(|(index, expression)| {
+            select(expression)
+                .into_iter()
+                .enumerate()
+                .map(move |(i, residue)| {
+                    let mut new_index = index;
+                    axis.set_order(&mut new_index, i + 1);
+                    (new_index, residue)
+                })
+        })
+        .collect()
+}
+
+fn select_threshold_residue_for_representation(
+    expression: ThreeDExpression<OrientationID>,
+    threshold: &crate::cff::esurface::RaisedEsurfaceGroup,
+    representation: ThreeDRepresentation,
+) -> Vec<ThreeDExpression<OrientationID>> {
+    match representation {
+        ThreeDRepresentation::Cff => expression.select_esurface_residue(threshold),
+        ThreeDRepresentation::Ltd => {
+            expression.select_esurface_residue_in_generated_basis(threshold)
+        }
+    }
 }
 
 impl Approximation {
@@ -329,13 +403,43 @@ impl Approximation {
         allowed_keys.iter().map(|&key| (key, Atom::Zero)).collect()
     }
 
+    fn zero_vec(n_terms: usize) -> Vec<Atom> {
+        vec![Atom::Zero; n_terms]
+    }
+
+    fn indexed_terms_from_cutset(
+        cutset: &CutSet,
+        terms: Vec<Atom>,
+        context: &str,
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        let allowed_keys = cutset.residue_selector.generate_allowed_keys();
+        if terms.len() == allowed_keys.len() {
+            return Ok(allowed_keys.into_iter().zip(terms).collect());
+        }
+        if terms.len() == 1 && terms[0].is_zero() {
+            return Ok(Self::zero_terms(&allowed_keys));
+        }
+        Err(eyre!(
+            "{context} generated {} local residue integrands, but the residue selector allows {} indices",
+            terms.len(),
+            allowed_keys.len()
+        ))
+    }
+
     fn set_zero_local_3d(&mut self, sign: Sign, allowed_keys: &[CutCFFIndex]) {
-        self.local_3d = CFFapprox::Dependent {
+        self.local_3d = Local3DApprox::Dependent {
             sign,
             t_arg: IntegrandExpr {
                 integrands: Self::zero_terms(allowed_keys),
             },
         };
+    }
+
+    fn set_zero_local_4d_expanded(&mut self, sign: Sign, n_terms: usize) {
+        self.local_4d_expanded = Some(Expanded4DApprox {
+            sign,
+            terms: Self::zero_vec(n_terms),
+        });
     }
 
     fn should_keep_only_integrated_uv_terms(&self, settings: &UVgenerationSettings) -> bool {
@@ -348,31 +452,290 @@ impl Approximation {
         graph: &mut Graph,
         cuts: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
-        settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        settings: &GenerationSettings,
+        root_residue_context: RootResidueContext<'_>,
     ) -> Result<()> {
-        self.initialize_filtered_integrated_uv_root(settings);
+        self.initialize_filtered_integrated_uv_root(&settings.uv);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
-        if settings.only_integrated {
+        if settings.uv.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
-            self.local_3d = CFFapprox::root(graph, cuts, settings, orientation_pattern)?;
-            if Self::filtered_integrated_uv_mode_is_active(settings) {
-                let (_, _) = self
-                    .local_3d
-                    .expr()
-                    .expect("root local CFF should have been computed");
+            self.local_3d = Local3DApprox::root(graph, cuts, &settings.uv)?;
+            if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
                 self.final_integrand = Some(Self::zero_terms(
                     &cuts.residue_selector.generate_allowed_keys(),
                 ));
+            } else if settings.explicit_orientation_sum_only {
+                let root_expression = root_residue_context.expression.ok_or_else(|| {
+                    eyre!(
+                        "explicit orientation-summed local-3D UV generation requires the production root 3D expression"
+                    )
+                })?;
+                self.final_integrand = Some(self.final_integrand_from_root_expression(
+                    graph,
+                    cuts,
+                    root_expression,
+                    valid_orientations,
+                    settings,
+                    ThreeDRepresentation::Cff,
+                    root_residue_context.lu_residue_selection_basis,
+                    root_residue_context.lu_residue_reference_basis,
+                    true,
+                )?);
             } else {
                 self.final_integrand = Some(self.final_integrand(
                     graph,
                     cuts,
                     valid_orientations,
+                    &settings.uv,
+                    false,
+                )?);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn final_integrand_from_root_expression(
+        &self,
+        graph: &Graph,
+        cutset: &CutSet,
+        expression: &ThreeDExpression<OrientationID>,
+        valid_orientations: &[EdgeVec<Orientation>],
+        settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
+        lu_residue_selection_basis: LuResidueSelectionBasis,
+        lu_residue_reference_basis: LuResidueSelectionBasis,
+        average_for_outer_orientation_projection: bool,
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        let numerator = graph.production_numerator_atom_for_full_3d_expression();
+
+        let mut residues = vec![(CutCFFIndex::new_all_none(), expression.clone())];
+        if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+            residues = apply_indexed_residue_selection(
+                residues,
+                ResidueIndexAxis::RightThreshold,
+                |expression| {
+                    select_threshold_residue_for_representation(
+                        expression,
+                        right_threshold,
+                        representation,
+                    )
+                },
+            );
+        }
+        if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+            residues = apply_indexed_residue_selection(
+                residues,
+                ResidueIndexAxis::LeftThreshold,
+                |expression| {
+                    select_threshold_residue_for_representation(
+                        expression,
+                        left_threshold,
+                        representation,
+                    )
+                },
+            );
+        }
+        if representation == ThreeDRepresentation::Ltd
+            && cutset.residue_selector.has_lu_cut_residue()
+            && let Some(lu_cut) = cutset.residue_selector.lu_cut()
+        {
+            let residue_prefactor_sign = cutset
+                .residue_selector
+                .ltd_direct_original_residue_prefactor_sign();
+            let mut atoms = BTreeMap::new();
+            for (index, mut residue) in residues {
+                prepare_ltd_lu_local_series_expression(&mut residue, cutset);
+                self.localize_ltd_threshold_residue_if_needed(&mut residue, cutset)?;
+                let atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
+                    &residue,
+                    &numerator,
+                    RepresentationMode::Ltd,
+                    true,
+                    &settings.orientation_pattern,
+                );
+                for (i, coefficient) in ltd_lu_local_series_coefficients_from_parametric_atom(
+                    &graph.name,
+                    &residue,
+                    atom,
+                    lu_cut,
+                    cutset
+                        .residue_selector
+                        .ltd_lu_cut_local_series_esurface_signs(),
+                    cutset
+                        .residue_selector
+                        .ltd_lu_cut_local_series_coordinates(),
+                    false,
+                )?
+                .into_iter()
+                .enumerate()
+                {
+                    let mut coefficient_index = index;
+                    coefficient_index.lu_cut_order = Some(i + 1);
+                    atoms.insert(
+                        coefficient_index,
+                        coefficient * Atom::num(residue_prefactor_sign),
+                    );
+                }
+            }
+            return atoms
+                .into_iter()
+                .map(|(index, mut atom)| {
+                    if average_for_outer_orientation_projection {
+                        // The root term comes from the explicitly summed
+                        // production expression, while CFF local-3D forests
+                        // apply the orientation projector once to the whole
+                        // forest after all local terms are assembled. Embed
+                        // the root as a uniform orientation average so that
+                        // this later projector acts as the identity on it.
+                        if valid_orientations.is_empty() {
+                            return Err(eyre!(
+                                "cannot embed explicitly summed root 3D expression into an empty orientation projector"
+                            ));
+                        }
+                        atom /= Atom::num(valid_orientations.len() as i64);
+                    }
+                    Ok((
+                        index,
+                        atom.replace(GS.dim)
+                            .with(4)
+                            .simplify_color()
+                            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                            .with(W_.d_)
+                            .expand_dots()?
+                            .collect_factors(),
+                    ))
+                })
+                .collect();
+        }
+        if let Some(lu_cut) = cutset.residue_selector.lu_cut() {
+            residues =
+                apply_indexed_residue_selection(residues, ResidueIndexAxis::LuCut, |expression| {
+                    select_lu_cut_residue_for_basis(
+                        expression,
+                        lu_cut,
+                        cutset.residue_selector.lu_cut_edge_sets(),
+                        cutset.residue_selector.ltd_lu_cut_esurface_signs(),
+                        lu_residue_selection_basis,
+                    )
+                });
+        }
+        if representation == ThreeDRepresentation::Ltd {
+            for (_, residue) in &mut residues {
+                if cutset.residue_selector.lu_cut().is_some() {
+                    remove_ltd_global_contact_completions_from_local_residue(residue);
+                }
+                self.localize_ltd_threshold_residue_if_needed(residue, cutset)?;
+            }
+        }
+        residues
+            .into_iter()
+            .map(|(index, residue)| {
+                let mut atom = graph.three_d_expression_parametric_atom_with_numerator_gs(
+                    &residue,
+                    &numerator,
+                    match representation {
+                        ThreeDRepresentation::Cff => RepresentationMode::Cff,
+                        ThreeDRepresentation::Ltd => RepresentationMode::Ltd,
+                    },
+                    true,
+                    &settings.orientation_pattern,
+                );
+                if representation == ThreeDRepresentation::Ltd {
+                    let residue_prefactor_sign = match lu_residue_reference_basis {
+                        LuResidueSelectionBasis::GeneratedEsurface => cutset
+                            .residue_selector
+                            .ltd_local_series_residue_prefactor_sign(),
+                        LuResidueSelectionBasis::PositiveEnergyCutkosky => {
+                            cutset.residue_selector.ltd_residue_prefactor_sign()
+                        }
+                    };
+                    atom *= Atom::num(residue_prefactor_sign);
+                }
+                if average_for_outer_orientation_projection {
+                    // The root term comes from the explicitly summed production
+                    // expression, while CFF local-3D forests apply the orientation
+                    // projector once to the whole forest after all local terms are
+                    // assembled. Embed the root as a uniform orientation average
+                    // so that this later projector acts as the identity on it.
+                    if valid_orientations.is_empty() {
+                        return Err(eyre!(
+                            "cannot embed explicitly summed root 3D expression into an empty orientation projector"
+                        ));
+                    }
+                    atom /= Atom::num(valid_orientations.len() as i64);
+                }
+                let atom = atom
+                    .replace(GS.dim)
+                    .with(4)
+                    .simplify_color()
+                    .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                    .with(W_.d_)
+                    .expand_dots()?
+                    .collect_factors();
+                Ok((index, atom))
+            })
+            .collect()
+    }
+
+    fn localize_ltd_threshold_residue_if_needed(
+        &self,
+        residue: &mut ThreeDExpression<OrientationID>,
+        cutset: &CutSet,
+    ) -> Result<()> {
+        if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+            for esurface_id in &right_threshold.esurface_ids {
+                localize_three_d_expression_on_esurface(residue, *esurface_id)?;
+            }
+        }
+        if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+            for esurface_id in &left_threshold.esurface_ids {
+                localize_three_d_expression_on_esurface(residue, *esurface_id)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn root_expanded_4d(
+        &mut self,
+        graph: &mut Graph,
+        cuts: &CutSet,
+        valid_orientations: &[EdgeVec<Orientation>],
+        settings: &crate::settings::global::GenerationSettings,
+        representation: ThreeDRepresentation,
+        root_residue_context: RootResidueContext<'_>,
+    ) -> Result<()> {
+        self.initialize_filtered_integrated_uv_root(&settings.uv);
+        self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
+        if settings.uv.only_integrated {
+            self.integrated_4d = ApproxOp::Root;
+        } else {
+            self.integrated_4d = ApproxOp::Root;
+            self.local_4d_expanded = Some(Expanded4DApprox::root(graph));
+            if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
+                self.final_integrand = Some(Self::zero_terms(
+                    &cuts.residue_selector.generate_allowed_keys(),
+                ));
+            } else {
+                let root_expression = root_residue_context.expression.ok_or_else(|| {
+                    eyre!(
+                        "expanded-4D local UV generation requires the production root 3D expression for the original integrand"
+                    )
+                })?;
+                self.final_integrand = Some(self.final_integrand_from_root_expression(
+                    graph,
+                    cuts,
+                    root_expression,
+                    valid_orientations,
                     settings,
-                    orientation_pattern,
+                    representation,
+                    root_residue_context.lu_residue_selection_basis,
+                    root_residue_context.lu_residue_reference_basis,
+                    representation == ThreeDRepresentation::Cff
+                        && !settings.explicit_orientation_sum_only,
                 )?);
             }
         }
@@ -386,7 +749,8 @@ impl Approximation {
             topo_order: 0,
             final_integrand: None,
             simple_approx: None,
-            local_3d: CFFapprox::NotComputed,
+            local_3d: Local3DApprox::NotComputed,
+            local_4d_expanded: None,
             integrated_4d: ApproxOp::NotComputed,
             generate_only_integrated_uv_chain_matches: false,
         }
@@ -456,49 +820,23 @@ impl Approximation {
         dependent: &Self,
         valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        explicit_orientation_sum_only: bool,
     ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
-            panic!("Should have computed the dependent cff");
+            return Err(eyre!("dependent local 3D approximation was not computed"));
         };
-        let (mut t4, t4_sign) = if let ApproxOp::Root = dependent.integrated_4d {
-            (
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-                Sign::Positive,
-            )
-        } else {
-            dependent.integrated_4d.expr().unwrap_or((
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-                Sign::Positive,
-            ))
-        };
-        if t4.len() != 1 {
-            panic!("Should only have one t_arg for the 4d approximation");
-        }
-        let finite = t4
-            .remove(&CutCFFIndex::new_all_none())
-            .map(|t4| t4_sign * t4)
-            .unwrap()
-            .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
-            .unwrap()
-            .coefficient((0, 1).into())
-            .replace(GS.m_uv_int)
-            .with(GS.m_uv)
-            .map_mink_dim(4);
-        debug_tags!(
-            #uv;
-            finite = %finite.log_print(Some(80)),
-            t4 = %t4.iter().map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
-            "Computing UV subtraction",
+        let finite = finite_integrated_part(&dependent.integrated_4d)?;
+        debug!(
+            "Integrated 4d finite part: {:#}",
+            finite.printer(LOGPRINTOPTS)
         );
 
-        let integrated_t = localized_integrated_reduced_factor(
+        let t_arg = localized_integrated_reduced_factor(
             graph,
             dependent.spinney.filter(),
-            &finite,
             cuts,
             valid_orientations,
-            orientation_pattern,
+            explicit_orientation_sum_only,
         )?;
 
         let ctx = UVCtx { graph, settings };
@@ -514,7 +852,7 @@ impl Approximation {
                     cuts,
                     valid_orientations,
                     settings,
-                    orientation_pattern,
+                    explicit_orientation_sum_only,
                 )?
             } else {
                 Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
@@ -522,24 +860,27 @@ impl Approximation {
             return Ok(());
         }
 
-        let mut integrands = BTreeMap::new();
-        for ((index_local, local), (index_integ, integ)) in
-            cff.into_iter().zip(integrated_t.integrands)
-        {
-            if index_local != index_integ {
-                return Err(eyre!(
-                    "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
-                    index_local,
-                    index_integ
-                ));
-            }
-            let mut sum_3d = Atom::Zero;
-            sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
-            sum_3d -= Local3DApproximation {}.kernel(&ctx, &*self, dependent, &integ)?;
-            integrands.insert(index_local, sum_3d);
+        if cff.len() != t_arg.integrands.len() {
+            return Err(eyre!(
+                "local 3D UV approximation produced {} residue integrands, but localized finite integrated UV produced {}",
+                cff.len(),
+                t_arg.integrands.len()
+            ));
         }
 
-        self.local_3d = CFFapprox::Dependent {
+        let mut integrands = BTreeMap::new();
+        for (index, local) in cff {
+            let t_arg = t_arg.integrands.get(&index).ok_or_else(|| {
+                eyre!("localized finite integrated UV is missing residue index {index:?}")
+            })?;
+            let mut sum_3d = Atom::Zero;
+            sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
+            sum_3d -=
+                Local3DApproximation {}.kernel(&ctx, &*self, dependent, &(&finite * t_arg))?;
+            integrands.insert(index, sum_3d);
+        }
+
+        self.local_3d = Local3DApprox::Dependent {
             sign: -sign,
             t_arg: IntegrandExpr { integrands },
         };
@@ -549,7 +890,65 @@ impl Approximation {
             cuts,
             valid_orientations,
             settings,
-            orientation_pattern,
+            explicit_orientation_sum_only,
+        )?);
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn compute_expanded_4d(
+        &mut self,
+        graph: &mut Graph,
+        cuts: &CutSet,
+        dependent: &Self,
+        valid_orientations: &[EdgeVec<Orientation>],
+        settings: &crate::settings::global::GenerationSettings,
+        representation: crate::settings::global::ThreeDRepresentation,
+        root_expression: Option<&ThreeDExpression<OrientationID>>,
+    ) -> Result<()> {
+        let Some(parent) = dependent.local_4d_expanded.as_ref() else {
+            return Err(eyre!("expanded 4D local UV parent was not computed"));
+        };
+        let (parent_terms, parent_sign) = parent.expr();
+
+        if Self::filtered_integrated_uv_mode_is_active(&settings.uv) {
+            self.set_zero_local_4d_expanded(-parent_sign, parent_terms.len());
+            self.final_integrand =
+                Some(if self.should_keep_only_integrated_uv_terms(&settings.uv) {
+                    self.final_integrand_expanded_4d(
+                        graph,
+                        cuts,
+                        valid_orientations,
+                        settings,
+                        representation,
+                        root_expression,
+                    )?
+                } else {
+                    Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
+                });
+            return Ok(());
+        }
+
+        let terms = parent_terms
+            .iter()
+            .map(|parent_term| {
+                let start = expanded_4d_uv_start(graph, self, dependent, parent_term)?;
+                expanded_4d_uv_kernel(graph, self, dependent, &start)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        self.local_4d_expanded = Some(Expanded4DApprox {
+            sign: -parent_sign,
+            terms,
+        });
+
+        self.final_integrand = Some(self.final_integrand_expanded_4d(
+            graph,
+            cuts,
+            valid_orientations,
+            settings,
+            representation,
+            root_expression,
         )?);
         Ok(())
     }
@@ -561,55 +960,34 @@ impl Approximation {
         cutset: &CutSet,
         valid_orientations: &[EdgeVec<Orientation>],
         _settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
+        explicit_orientation_sum_only: bool,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
             .local_3d
             .expr()
             .ok_or(eyre!("Local3d not yet computed"))?;
-        let (mut t4, t4_sign) = if let ApproxOp::Root = self.integrated_4d {
-            (
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-                Sign::Positive,
-            )
-        } else {
-            self.integrated_4d.expr().unwrap_or((
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-                Sign::Positive,
-            ))
-        };
-        if t4.len() != 1 {
-            panic!("Should only have one t_arg for the 4d approximation");
-        }
-        let finite = t4
-            .remove(&CutCFFIndex::new_all_none())
-            .map(|t4| t4_sign * t4)
-            .unwrap()
-            .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
-            .unwrap()
-            .coefficient((0, 1).into())
-            .replace(GS.m_uv_int)
-            .with(GS.m_uv)
-            .map_mink_dim(4)
-            .replace(function!(symbol!("vakint::g"), W_.a__))
-            .with(function!(symbol!("spenso::g"), W_.a__));
+        let finite = finite_integrated_part(&self.integrated_4d)?;
 
-        debug_tags!(
-            #uv,#final;
-            finite = %finite.log_print(Some(80)),
-            t4 = %t4.iter().map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
-            "Computing Final integrand after uv subtraction",
+        debug!(
+            "Integrated 4d finite part: {:#}",
+            finite.printer(LOGPRINTOPTS)
         );
 
-        let integrated_t = localized_integrated_reduced_factor(
+        let t_arg = localized_integrated_reduced_factor(
             graph,
             self.spinney.filter(),
-            &finite,
             cutset,
             valid_orientations,
-            orientation_pattern,
+            explicit_orientation_sum_only,
         )?;
+        if t.len() != t_arg.integrands.len() {
+            return Err(eyre!(
+                "local 3D UV approximation produced {} residue integrands, but localized finite integrated UV produced {}",
+                t.len(),
+                t_arg.integrands.len()
+            ));
+        }
 
         let reduced = graph
             .full_filter()
@@ -618,18 +996,11 @@ impl Approximation {
 
         let mut integrands = BTreeMap::new();
 
-        for ((local_index, local), (integrated_index, integ)) in
-            t.iter().zip(integrated_t.integrands.iter())
-        {
-            let mut cff = s * (local - integ);
-
-            if local_index != integrated_index {
-                return Err(eyre!(
-                    "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
-                    local_index,
-                    integrated_index
-                ));
-            }
+        for (local_index, local) in &t {
+            let t_arg = t_arg.integrands.get(local_index).ok_or_else(|| {
+                eyre!("localized finite integrated UV is missing residue index {local_index:?}")
+            })?;
+            let mut cff = s * local.clone() - s * (&finite * t_arg);
 
             for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
                 let eid = usize::from(eid) as i64;
@@ -645,7 +1016,7 @@ impl Approximation {
             let mut resnum = graph
                 .numerator(&reduced, self.spinney.subgraph.included())
                 .get_single_atom()
-                .unwrap();
+                .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?;
 
             let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 
@@ -688,8 +1059,8 @@ impl Approximation {
                 "Integrand before parsing for {} for dod{}:{}",
                 self.simple_approx
                     .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),
+                    .map(|simple| simple.expr(&graph.full_filter()))
+                    .unwrap_or_else(|| Atom::var(symbol!("missing_simple_uv_approximation"))),
                 self.spinney.dod,
                 // orientations
                 //     .first()
@@ -705,6 +1076,86 @@ impl Approximation {
         Ok(integrands)
     }
 
+    #[instrument(skip_all)]
+    pub(crate) fn final_integrand_expanded_4d(
+        &self,
+        graph: &mut Graph,
+        cutset: &CutSet,
+        valid_orientations: &[EdgeVec<Orientation>],
+        settings: &crate::settings::global::GenerationSettings,
+        representation: crate::settings::global::ThreeDRepresentation,
+        root_expression: Option<&ThreeDExpression<OrientationID>>,
+    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        let Some(local_4d) = self.local_4d_expanded.as_ref() else {
+            return Err(eyre!("expanded 4D local UV term not yet computed"));
+        };
+        let (local_terms, sign) = local_4d.expr();
+        let finite = finite_integrated_part(&self.integrated_4d)?;
+
+        let reduced = graph
+            .full_filter()
+            .subtract(self.spinney.subgraph.included())
+            .subtract(&graph.initial_state_cut);
+        let outside_numerator = graph
+            .numerator(&reduced, self.spinney.subgraph.included())
+            .get_single_atom()
+            .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?
+            * graph.global_atom();
+
+        let mut local_atom = Atom::Zero;
+        for term in local_terms {
+            local_atom += sign * term.clone() * &outside_numerator;
+        }
+
+        let mut integrands = expanded_4d_terms_to_3d_parametric_integrands(
+            graph,
+            &local_atom,
+            cutset,
+            representation,
+            settings,
+            valid_orientations,
+            Expanded4DSourceContext::local_uv(self.spinney.filter(), self.spinney.filter()),
+            root_expression,
+        )?;
+
+        if finite.is_zero() {
+            return Self::indexed_terms_from_cutset(cutset, integrands, "expanded 4D local UV");
+        }
+
+        let finite_atom = {
+            let reduced_denominator = Atom::num(1) / graph.denominator(&reduced, |_| 1);
+            -sign * finite * reduced_denominator * &outside_numerator
+        };
+
+        let mut finite_integrands = expanded_4d_terms_to_3d_parametric_integrands(
+            graph,
+            &finite_atom,
+            cutset,
+            representation,
+            settings,
+            valid_orientations,
+            Expanded4DSourceContext::cograph_only(self.spinney.filter()),
+            root_expression,
+        )?;
+        if integrands.len() != finite_integrands.len() {
+            if integrands.len() == 1 && integrands[0].is_zero() {
+                integrands = Self::zero_vec(finite_integrands.len());
+            } else if finite_integrands.len() == 1 && finite_integrands[0].is_zero() {
+                finite_integrands = Self::zero_vec(integrands.len());
+            } else {
+                return Err(eyre!(
+                    "expanded 4D local UV generated {} local residue integrands, but finite integrated UV generated {}",
+                    integrands.len(),
+                    finite_integrands.len()
+                ));
+            }
+        }
+        for (sum, finite) in integrands.iter_mut().zip(finite_integrands) {
+            *sum += finite;
+        }
+        Self::indexed_terms_from_cutset(cutset, integrands, "expanded 4D local UV")
+    }
+
     // pub(crate) fn simple_expr(
     //     &self,
     //     graph: &UVGraph,
@@ -714,6 +1165,35 @@ impl Approximation {
 
     //     Some((simple_approx.sign * simple_approx.expr(&amplitude.filter)).into())
     // }
+}
+
+fn finite_integrated_part(integrated_4d: &ApproxOp) -> Result<Atom> {
+    let (mut t4, t4_sign) = match integrated_4d {
+        ApproxOp::Root | ApproxOp::NotComputed => return Ok(Atom::Zero),
+        ApproxOp::Union { .. } => {
+            return Err(eyre!(
+                "cannot extract finite integrated UV part from an unresolved union approximation"
+            ));
+        }
+        ApproxOp::Dependent { t_arg, sign, .. } => (t_arg.integrands.clone(), *sign),
+    };
+
+    if t4.len() != 1 {
+        return Err(eyre!("expected one integrated 4D approximation term"));
+    }
+    let finite_term = t4
+        .remove(&CutCFFIndex::new_all_none())
+        .map(|t4| t4_sign * t4)
+        .ok_or_else(|| eyre!("expected one integrated 4D approximation term"))?;
+    Ok(finite_term
+        .series(vakint_symbol!("ε"), Atom::Zero, 0)
+        .map_err(|error| eyre!("finite integrated UV epsilon expansion failed: {error}"))?
+        .coefficient((0, 1).into())
+        .replace(GS.m_uv_int)
+        .with(GS.m_uv)
+        .map_mink_dim(4)
+        .replace(function!(symbol!("vakint::g"), W_.a__))
+        .with(function!(symbol!("spenso::g"), W_.a__)))
 }
 
 impl ApproxOp {

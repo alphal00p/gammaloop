@@ -220,7 +220,7 @@ pub struct ExplicitTensorSymbols {
 }
 
 pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
-    flat: symbol!("♭";Symmetric;print = |a, opt| {
+    flat: symbol!("♭";Symmetric;print = |a, opt, _state| {
 
         match opt.custom_print_mode {
             Some(("spenso",i))=>{
@@ -265,7 +265,7 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
 
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: symbol!(METRIC_NAME;Symmetric,Real;print = |a, opt| {
+    metric: symbol!(METRIC_NAME;Symmetric,Real;print = |a, opt, _state| {
 
         match opt.custom_print_mode {
              Some(("typst", 1)) =>{
