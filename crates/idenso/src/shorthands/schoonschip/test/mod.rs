@@ -79,10 +79,10 @@ fn simple_dot() {
     assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(D)),p(1,mink(D)))");
 
     let result = p!(1, &p2_stripped).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(D)),p(2,mink(D)))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(dim)),p(2,mink(dim)))");
 
     let result = g!(slot!(mink, 1), &p1_stripped).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"p(1,mink(D,1))");
+    assert_snapshot!(result.to_bare_ordered_string(), @"p(1,mink(dim),mink(D,1))");
 
     let result = p1.clone().pow(Atom::num(4)).normalize_dots();
     assert_snapshot!(result.to_bare_ordered_string(), @"(g(p(1,mink(D)),p(1,mink(D))))^2");
