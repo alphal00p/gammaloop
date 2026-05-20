@@ -759,7 +759,7 @@ pub(crate) fn to_vakint_integrand<
         for (p, e, ed) in graph.iter_edges() {
             if p.is_paired() {
                 // println!("{e}");
-                let loop_expr = lmb.loop_atom::<Atom>(e, vakint::symbols::S.k, &[], false);
+                let loop_expr = lmb.loop_atom::<Atom>(e, GS.loop_mom, &[], false);
 
                 ed.data
                     .mom
@@ -789,8 +789,8 @@ pub(crate) fn to_vakint_integrand<
                 ..Default::default()
             }),
             Replacement::new(
-                function!(vakint::symbols::S.k, W_.i_).to_pattern(),
-                function!(vakint::symbols::S.k, W_.i_, W_.a___),
+                function!(GS.loop_mom, W_.i_).to_pattern(),
+                function!(GS.loop_mom, W_.i_, W_.a___),
             )
             .with_settings(MatchSettings {
                 allow_new_wildcards_on_rhs: true,
@@ -855,10 +855,14 @@ pub(crate) fn to_vakint_integrand<
         t.numerator = t.numerator.simplify_metrics().to_dots();
         t.integral = t
             .integral
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
         t.numerator = t
             .numerator
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___))
             .replace(function!(
@@ -884,12 +888,15 @@ pub(crate) fn to_vakint_integrand<
 
 #[cfg(test)]
 mod tests {
+    use crate::initialisation::test_initialise;
     use linnet::half_edge::involution::EdgeIndex;
 
     use super::*;
 
     #[test]
     fn integrated_triangle_norm_is_euclidean() {
+        test_initialise().unwrap();
+
         let edge = EdgeIndex(7);
         let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
         let minkowski_norm = Minkowski {}
@@ -903,5 +910,39 @@ mod tests {
                 + GS.emr_mom(edge, GS.cind(3)).pow(2)
         );
         assert_ne!(euclidean_norm, minkowski_norm);
+    }
+
+    #[test]
+    fn vakint_dot_conversion_keeps_loop_momentum_tagged_until_to_dots() {
+        test_initialise().unwrap();
+
+        let mink = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let numerator = function!(
+            ETS.metric,
+            function!(GS.emr_mom, 0, mink.clone()),
+            function!(GS.loop_mom, 1, mink.clone())
+        );
+
+        let converted = numerator
+            .simplify_metrics()
+            .to_dots()
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
+            .replace(function!(GS.emr_mom, W_.x___))
+            .with(function!(vakint::symbols::S.p, W_.x___))
+            .replace(function!(
+                SPENSO_TAG.dot,
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+            ))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)));
+
+        assert_eq!(
+            converted,
+            vakint::symbols::S.dot(
+                function!(vakint::symbols::S.p, 0),
+                function!(vakint::symbols::S.k, 1)
+            )
+        );
     }
 }
