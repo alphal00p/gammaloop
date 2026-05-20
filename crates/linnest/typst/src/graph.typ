@@ -129,33 +129,323 @@
   edges: (),
 )
 
-/// Parse one or more DOT digraphs into graph objects.
+/// Parse one or more DOT graphs into graph objects.
 ///
 /// Default data are applied before `eval-*` fields are evaluated, so
 /// default data strings can refer to parsed record fields such as `#str(name)`.
 /// Parsed fields take precedence over default data fields, so DOT
 /// `label="..."` overrides `default-node-data: (label: ...)`.
-/// ````example
-/// #let a = ```dot
-/// digraph {
-/// ext [style=invis]
-/// node[label="#str(name)"]
-/// a [id=0 pos="0,0!"]
-/// b [id=1 pos="ref(node:0)+4,0!"]
-/// a -> b [id=0 pos="ref(node:1)+0,1!"]
-/// b -> c [id=1 pos="ref(edge:0)+1,0!"]
-/// c [id=2 pos="x:2!" label="$c_nu$"]
-/// d [id=3 pos="x:2!,y:0.1"]
-/// ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
-/// }
-/// ```
-/// #let g = parse(a.text,eval-node-fields:"label")
-/// >>>#align(center+horizon, draw(layout(g.at(0))))
 ///
+/// Linnest uses `dot-parser` for DOT syntax and then gives special meaning to a
+/// small set of attributes. Every other attribute is preserved as a flat string
+/// statement. Preserved statements are visible through @info, @nodes, @edges,
+/// @map, and @eval-fields, but they do not become native Typst `data` unless a
+/// matching `eval-*` argument is passed.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [label="A"]; }
+/// ```
+/// #let n = nodes(parse(src.text).first()).first()
+/// #n.statements.label
+/// #n.data
+/// ````
+///
+/// Graph-level handling:
+///
+/// - The DOT graph name becomes `graph.info(g).name`. A graph-level `name`
+///   attribute can name an anonymous graph; a named `graph`/`digraph` header
+///   takes precedence.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph header_wins { graph [name="ignored"]; a }
+/// ```
+/// #info(parse(src.text).first()).name
+/// ````
+///
+/// - Top-level `key=value` statements and `graph [key=value]` attributes become
+///   `graph.info(g).global-statements`, except for the consumed `name`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { title="top"; graph [subtitle="nested"]; a }
+/// ```
+/// #info(parse(src.text).first()).global-statements
+/// ````
+///
+/// - `node [key=value]` and `edge [key=value]` become
+///   `default-node-statements` and `default-edge-statements`. They are merged
+///   into each parsed node or edge before local attributes, so local attributes
+///   override defaults.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { node [color=gray]; edge [particle=g]; a [color=red]; a -> b }
+/// ```
+/// #let g = parse(src.text).first()
+/// #nodes(g).first().statements.color
+/// #edges(g).first().statements.particle
+/// ````
+///
+/// - Graph statements may also be layout settings when the graph is passed to
+///   #api-link("layout-", "layout"). Those settings are documented on the
+///   layout API rather than here.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { "tree-dx"="3.0"; a -> b -> c }
+/// ```
+/// #nodes(layout(parse(src.text).first(), layout-algo: "tree")).map(n => n.pos.x)
+/// ````
+///
+/// Node handling:
+///
+/// - The DOT node id becomes the node `name` returned by @nodes. If the DOT node
+///   id is numeric, it is consumed as the node index instead and the public
+///   `name` is `none`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { alpha; 1; }
+/// ```
+/// #nodes(parse(src.text).first()).map(n => n.name)
+/// ````
+///
+/// - `id=<n>` is also consumed as an explicit node index. Explicit node indexes
+///   must be unique and in bounds after parsing.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [id=1]; b [id=0]; }
+/// ```
+/// #nodes(parse(src.text).first()).map(n => n.name)
+/// ````
+///
+/// - `style=invis` marks the DOT node as a dangling external endpoint. It is
+///   not returned by @nodes. Its remaining attributes are copied onto the
+///   external edge that touches it, except `shape` and `label`; `style` and
+///   `id` are consumed.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { ext [style=invis, column=left, label=skip]; ext -> a [id=0]; }
+/// ```
+/// #let g = parse(src.text).first()
+/// #nodes(g).map(n => n.name)
+/// #edges(g).first().statements.column
+/// #edges(g).first().statements.at("label", default: none)
+/// ````
+///
+/// - Node `style` is consumed for every node; only `style=invis` has special
+///   behavior. Use another attribute name for drawing style metadata that must
+///   survive parsing.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [style=filled, "draw-style"=filled]; }
+/// ```
+/// #nodes(parse(src.text).first()).first().statements
+/// ````
+///
+/// - `pos` is parsed as node placement. Simple numeric values are exposed as
+///   `node.pos`; extended placement values are used by
+///   #api-link("layout-", "layout"). `pin` is an explicit layout constraint and
+///   is not exposed as a public statement.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [id=0, pos="0,0!"]; b [id=1, pos="ref(node:0)+2,0!"]; }
+/// ```
+/// #let parsed-nodes = nodes(parse(src.text).first())
+/// #parsed-nodes.map(n => n.pos)
+/// #parsed-nodes.map(n => n.statements.at("pin", default: none))
+/// ````
+///
+/// - `shift` is parsed as a drawing shift and also remains available as a
+///   statement. `eval` is retained for legacy round-tripping. Other node
+///   attributes are preserved as node statements.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [shift="0.1,0", eval=legacy, label=A]; }
+/// ```
+/// #let n = nodes(parse(src.text).first()).first()
+/// #n.shift
+/// #n.statements
+/// ````
+///
+/// Edge handling:
+///
+/// - `id=<n>` is consumed as the edge index. It is not preserved as a statement;
+///   drawing callbacks expose the resulting stable edge index as `eid`.
+///   Explicit edge indexes must be unique and in bounds. Without explicit ids,
+///   edge order is parser-internal, not DOT input order.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a -> b [id=1, label=later]; b -> c [id=0, label=first]; }
+/// ```
+/// #let parsed-edges = edges(parse(src.text).first())
+/// #parsed-edges.map(e => e.edge)
+/// #parsed-edges.map(e => e.statements.label)
+/// #parsed-edges.map(e => e.statements.at("id", default: none))
+/// ````
+///
+/// - `dir=forward`, `dir=back`, and `dir=none` become edge orientations
+///   `"default"`, `"reversed"`, and `"undirected"`. If omitted, directed DOT
+///   edges are `"default"` and undirected DOT edges are `"undirected"`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a -> b [id=0]; b -> c [id=1, dir=back]; c -> d [id=2, dir=none]; }
+/// ```
+/// #edges(parse(src.text).first()).map(e => e.orientation)
+/// ````
+///
+/// - `source="..."` and `sink="..."` are consumed as endpoint `statement`
+///   values and removed from edge statements. On an external edge, use the
+///   attribute matching the real endpoint side in the DOT edge: `ext -> a`
+///   uses `sink=...`, while `a -> ext` uses `source=...`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { ext [style=invis]; ext -> a [id=0, sink=in]; a -> ext [id=1, source=out]; }
+/// ```
+/// #let endpoint-statement(endpoint) = if endpoint == none { none } else { endpoint.at("statement", default: none) }
+/// #let parsed-edges = edges(parse(src.text).first())
+/// #parsed-edges.map(e => endpoint-statement(e.source))
+/// #parsed-edges.map(e => endpoint-statement(e.sink))
+/// #parsed-edges.map(e => e.statements.at("source", default: none))
+/// ````
+///
+/// - `pos` is parsed as the edge control-point placement. `pin` is an explicit
+///   edge layout constraint. `shift`, `label-pos`, `label-angle`, and `bend`
+///   are parsed into edge geometry fields; except for `pin`, they also remain
+///   available as statements. Other edge attributes are preserved as edge
+///   statements.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a -> b [id=0, pos="0,1!", pin="x:@edge", shift="0.1,0", "label-pos"="0,1.2", "label-angle"="0.3rad", bend="0.4rad", particle=g]; }
+/// ```
+/// #let e = edges(parse(src.text).first()).first()
+/// #e.pos
+/// #e.shift
+/// #e.label-pos
+/// #e.label-angle
+/// #e.bend
+/// #e.statements.particle
+/// #e.statements.at("pin", default: none)
+/// ````
+///
+/// - Attributes copied from an invisible endpoint node are merged into the
+///   external edge statements unless their keys are `shape` or `label`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { ext [style=invis, column=left, shape=none, label=skip]; ext -> a [id=0]; }
+/// ```
+/// #edges(parse(src.text).first()).first().statements
+/// ````
+///
+/// Port and half-edge handling:
+///
+/// - DOT ports of the form `node:port` and `node:port:compass` are preserved on
+///   source/sink endpoint records. Numeric ports also assign explicit half-edge
+///   ids. Non-numeric ports are exposed only as `port-label`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a:left:e -> b:0:w [id=0]; }
+/// ```
+/// #let e = edges(parse(src.text).first()).first()
+/// #e.source.port-label
+/// #e.sink.hedge
+/// ````
+///
+/// - Compass values are exposed as `compass`; valid DOT compass names include
+///   `n`, `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `c`, and `_`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a:n -> b:sw [id=0]; }
+/// ```
+/// #let e = edges(parse(src.text).first()).first()
+/// #e.source.compass
+/// #e.sink.compass
+/// ````
+///
+/// - Explicit half-edge ids from numeric ports must be unique and in bounds.
+///   They are retained for half-edge ordering and for @join with `key: "id"`;
+///   query and eval records expose the resulting half-edge index as `hedge`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a:1 -> b:0 [id=0]; }
+/// ```
+/// #let e = edges(parse(src.text).first()).first()
+/// #e.source.hedge
+/// #e.sink.hedge
+/// ````
+///
+/// Placement fields:
+///
+/// - `pos="x,y"` gives a starting coordinate; `pos="x,y!"` pins both axes.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [id=0, pos="0,0"]; b [id=1, pos="2,0!"]; }
+/// ```
+/// #let parsed-nodes = nodes(parse(src.text).first())
+/// #parsed-nodes.map(n => n.pos)
+/// #parsed-nodes.map(n => n.statements.at("pos-mode", default: none))
+/// ````
+///
+/// - `pos="ref(node:<id>)+dx,dy!"` and `pos="ref(edge:<id>)+dx,dy!"` reference
+///   explicit DOT node or edge ids, not names and not implicit parse order.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [id=0, pos="1,1!"]; b [id=1, pos="ref(node:0)+2,0!"]; a -> b [id=0, pos="ref(node:1)+0,1!"]; }
+/// ```
+/// #let g = parse(src.text).first()
+/// #nodes(g).at(1).pos
+/// #edges(g).first().pos
+/// ````
+///
+/// - Axis form accepts `x:<coord>` and `y:<coord>` entries. `!` applies to the
+///   individual axis, for example `pos="x:2!,y:0"`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a [id=0, pos="x:2!,y:0"]; }
+/// ```
+/// #nodes(parse(src.text).first()).first().pos
+/// ````
+///
+/// - Group coordinates use `@name`, `@+name`, or `@-name` in axis form and must
+///   be pinned with `!`, for example `pos="x:@-left!,y:@row!"`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { ext [style=invis]; ext -> a [id=0, pos="x:@-left!,y:@row!"]; }
+/// ```
+/// #edges(layout(parse(src.text).first(), layout-algo: "tree")).first().pos
+/// ````
+///
+/// - `pin` accepts numeric point constraints, `x:<coord>`, `y:<coord>`, and
+///   grouped constraints such as `x:@left`, `x:@+right`, or `@row`.
+///
+/// ````example
+/// #let src = ```dot
+/// digraph { a -> b [id=0, pin="x:@+right"]; }
+/// ```
+/// #edges(layout(parse(src.text).first(), layout-algo: "tree")).first().statements.at("pin", default: none)
 /// ````
 /// -> array
 #let parse(
-  /// DOT source text containing one or more `digraph` definitions. -> string | bytes
+  /// DOT source text containing one or more `graph` or `digraph` definitions. -> string | bytes
   input,
   /// Default data merged into every node data. Captured node data fields override it, but bare dot statements don't set data fields. To turn statements into data fields, use `eval-node-fields`.
   ///
@@ -173,18 +463,14 @@
   /// ````
   ///   -> any
   default-node-data: none,
-  /// Node fields to evaluate into node data.
-  /// ````example
-  /// #let a = ```dot
-  /// digraph {
-  /// a -> b -> c -> d -> a
-  /// a -> a
-  /// b -> d
-  /// }
-  /// ```
-  /// #let g = parse(a.text,default-node-data:(label:"#str(name)"),eval-node-fields:"label")
-  /// >>>#align(center+horizon, draw(layout(g.at(0))))
+  /// Node fields to evaluate into node data. The eval scope includes node
+  /// statements plus `node`, `name`, and `pos`.
   ///
+  /// ````example
+  /// #let src = ```dot
+  /// digraph { a [label="#str(name)"]; }
+  /// ```
+  /// #nodes(parse(src.text, eval-node-fields: "label").first()).first().data.label
   /// ````
   /// -> string | array
   eval-node-fields: (),
@@ -192,17 +478,59 @@
   /// 
   /// -> any
   default-edge-data: none,
-  /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. -> string | array
+  /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. The eval
+  /// scope includes edge statements plus `edge`, `orientation`, endpoint records,
+  /// placement fields, and existing edge data. Drawing callbacks later expose the
+  /// edge index as `eid`.
+  ///
+  /// ````example
+  /// #let src = ```dot
+  /// digraph { a -> b [id=0, label="#orientation"]; }
+  /// ```
+  /// #edges(parse(src.text, eval-edge-fields: "label").first()).first().data.label
+  /// ````
+  /// -> string | array
   eval-edge-fields: (),
   /// Default data merged into every source half-edge data. Captured source data fields override it. -> any
   default-source-data: none,
-  /// Source half-edge fields to evaluate into `edge.source.data`. -> string | array
+  /// Source half-edge fields to evaluate into `edge.source.data`. The eval scope
+  /// includes source endpoint fields `statement`, `port-label`, `compass`, `node`,
+  /// and `hedge`, plus the surrounding edge fields.
+  ///
+  /// ````example
+  /// #let src = ```dot
+  /// digraph { a:left:e -> b [id=0, source="#port-label"]; }
+  /// ```
+  /// #edges(parse(src.text, eval-source-fields: "statement").first()).first().source.data.statement
+  /// ````
+  /// -> string | array
   eval-source-fields: (),
   /// Default data merged into every sink half-edge data. Captured sink data fields override it. -> any
   default-sink-data: none,
-  /// Sink half-edge fields to evaluate into `edge.sink.data`. -> string | array
+  /// Sink half-edge fields to evaluate into `edge.sink.data`. The eval scope
+  /// includes sink endpoint fields `statement`, `port-label`, `compass`, `node`,
+  /// and `hedge`, plus the surrounding edge fields.
+  ///
+  /// ````example
+  /// #let src = ```dot
+  /// digraph { a -> b:0:w [id=0, sink="#str(hedge)"]; }
+  /// ```
+  /// #edges(parse(src.text, eval-sink-fields: "statement").first()).first().sink.data.statement
+  /// ````
+  /// -> string | array
   eval-sink-fields: (),
-  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
+  /// Graph statement fields to evaluate into `graph.info(g).data`. The eval scope
+  /// includes graph statements and direct graph record fields.
+  ///
+  /// ````example
+  /// #let src = ```dot
+  /// digraph {
+  ///   title = "Strong graph";
+  /// }
+  /// ```
+  /// #info(parse(src.text, eval-graph-fields: "title").first()).data.title
+  /// ````
+  /// -> string | array
   eval-graph-fields: (),
   /// Typst `eval` mode used for string field values. -> string
   eval-mode: "markup",
