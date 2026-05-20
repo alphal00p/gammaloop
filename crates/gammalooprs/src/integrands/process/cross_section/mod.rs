@@ -1,6 +1,7 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
+        CutCFFIndex,
         esurface::Esurface,
         expression::{GraphOrientation, OrientationID},
         surface::HybridSurfaceID,
@@ -25,20 +26,23 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, RaisedCutData, RaisedCutId,
+        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, IteratedCtCollection,
+        RaisedCutData, RaisedCutId,
     },
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
     },
     subtraction::{
         generate_rstar_t_dependence_evaluator,
-        lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
+        lu_counterterm::{
+            LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUThresholdHelperEvaluators,
+        },
     },
     utils::{
         F, FloatLike, Length, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            shape_for_t_derivatives,
+            shape_from_cut_cff_index, simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
         serde_utils::SmartSerde,
@@ -50,7 +54,7 @@ use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     slice,
     time::{Duration, Instant},
 };
@@ -446,7 +450,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
-    pub integrand: TiVec<RaisedCutId, Vec<EvaluatorStack>>,
+    pub integrand: TiVec<RaisedCutId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
@@ -585,17 +589,23 @@ impl CrossSectionGraphTerm {
             let left_active: TiVec<_, bool> = counterterm_data
                 .left_thresholds
                 .iter()
-                .map(|esurface_id| {
+                .map(|raised_group| {
                     active_cuts[raised_cut_id]
-                        && selected_generation_esurfaces.contains(esurface_id)
+                        && raised_group
+                            .esurface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
                 })
                 .collect();
             let right_active: TiVec<_, bool> = counterterm_data
                 .right_thresholds
                 .iter()
-                .map(|esurface_id| {
+                .map(|raised_group| {
                     active_cuts[raised_cut_id]
-                        && selected_generation_esurfaces.contains(esurface_id)
+                        && raised_group
+                            .esurface_ids
+                            .iter()
+                            .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
                 })
                 .collect();
             let mut iterated_active = counterterm_data.iterated.map_ref(|_| false);
@@ -639,18 +649,12 @@ impl CrossSectionGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            let mut cut_integrands = Vec::with_capacity(integrand_for_cut.integrands.len());
-            for (num_derivatives, integrand_for_subset) in
-                integrand_for_cut.integrands.iter().enumerate()
-            {
+            let mut cut_integrands = BTreeMap::new();
+            for (cut_cff_index, integrand_for_subset) in integrand_for_cut.integrands.iter() {
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
-                let dual_shape = if num_derivatives > 0 {
-                    Some(graph.derived_data.raised_data.dual_shapes[num_derivatives - 1].clone())
-                } else {
-                    None
-                };
+                let dual_shape = shape_from_cut_cff_index(cut_cff_index);
 
                 let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
                     slice::from_ref(integrand_for_subset),
@@ -670,7 +674,7 @@ impl CrossSectionGraphTerm {
                 }
                 stats.add_evaluator_build_timings(evaluator_timings);
                 stats.evaluator_count += evaluator_stack.generic_evaluator_count();
-                cut_integrands.push(evaluator_stack);
+                cut_integrands.insert(*cut_cff_index, evaluator_stack);
             }
             integrand.push(cut_integrands);
         }
@@ -680,11 +684,136 @@ impl CrossSectionGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
+
+            let (left_subspace, right_subspace) = &graph.derived_data.subspace_data[raised_cut_id];
+            let include_integrated = !settings
+                .generation
+                .threshold_subtraction
+                .disable_integrated_ct;
+            let optimization_settings = settings.generation.evaluator.optimization_settings();
+
+            let build_single_helpers = |integrands: &crate::uv::forest::ParametricIntegrands,
+                                        is_on_right: bool,
+                                        loop_count: usize| {
+                integrands
+                    .integrands
+                    .keys()
+                    .map(|cut_cff_index| {
+                        let lu_order = cut_cff_index.lu_cut_order.ok_or_else(|| {
+                            eyre!("LU threshold counterterm helper index is missing lu_cut_order")
+                        })?;
+                        let threshold_order = if is_on_right {
+                            cut_cff_index.right_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Right LU threshold helper index is missing right_threshold_order"
+                                )
+                            })?
+                        } else {
+                            cut_cff_index.left_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Left LU threshold helper index is missing left_threshold_order"
+                                )
+                            })?
+                        };
+
+                        let dual_shape = if lu_order > 1 {
+                            Some(simple_n_deriv_shape(lu_order - 1))
+                        } else {
+                            None
+                        };
+
+                        let evaluator = graph.single_th_helper(
+                            threshold_order as u8,
+                            loop_count,
+                            is_on_right,
+                            include_integrated,
+                            dual_shape,
+                            optimization_settings.clone(),
+                            &settings.generation.evaluator,
+                        )?;
+                        Ok((*cut_cff_index, evaluator))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+            };
+
+            let build_iterated_helpers = |integrands: &crate::uv::forest::ParametricIntegrands| {
+                integrands
+                    .integrands
+                    .keys()
+                    .map(|cut_cff_index| {
+                        let lu_order = cut_cff_index.lu_cut_order.ok_or_else(|| {
+                            eyre!(
+                                "Iterated LU threshold counterterm helper index is missing lu_cut_order"
+                            )
+                        })?;
+                        let left_threshold_order =
+                            cut_cff_index.left_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Iterated LU threshold helper index is missing left_threshold_order"
+                                )
+                            })?;
+                        let right_threshold_order =
+                            cut_cff_index.right_threshold_order.ok_or_else(|| {
+                                eyre!(
+                                    "Iterated LU threshold helper index is missing right_threshold_order"
+                                )
+                            })?;
+
+
+                        let dual_shape = if lu_order > 1 {
+                            Some(simple_n_deriv_shape(lu_order - 1))
+                        } else {
+                            None
+                        };
+                        let evaluator = graph.iterated_th_helper(
+                            left_threshold_order as u8,
+                            right_threshold_order as u8,
+                            left_subspace.loopcount(),
+                            right_subspace.loopcount(),
+                            include_integrated,
+                            dual_shape,
+                            optimization_settings.clone(),
+                            &settings.generation.evaluator,
+                        )?;
+                        Ok((*cut_cff_index, evaluator))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+            };
+
+            let left_thresholds = ct_data
+                .left_atoms
+                .iter()
+                .map(|integrands| {
+                    build_single_helpers(integrands, false, left_subspace.loopcount())
+                })
+                .collect::<Result<TiVec<_, _>>>()?;
+            let right_thresholds = ct_data
+                .right_atoms
+                .iter()
+                .map(|integrands| {
+                    build_single_helpers(integrands, true, right_subspace.loopcount())
+                })
+                .collect::<Result<TiVec<_, _>>>()?;
+            let iterated = IteratedCtCollection::new(
+                ct_data
+                    .iterated
+                    .iter()
+                    .map(build_iterated_helpers)
+                    .collect::<Result<Vec<_>>>()?,
+                ct_data.iterated.num_left_thresholds(),
+            );
+            let threshold_helpers = LUThresholdHelperEvaluators {
+                left_thresholds,
+                right_thresholds,
+                iterated,
+            };
+
             let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
                 graph.derived_data.raised_data.raised_cut_groups[raised_cut_id]
                     .related_esurface_group
                     .max_occurence,
+                threshold_helpers,
                 &graph.graph.param_builder,
                 settings,
                 &orientations,
@@ -706,15 +835,17 @@ impl CrossSectionGraphTerm {
                 ct_data
                     .left_thresholds
                     .iter()
-                    .map(|esurface_id| {
-                        graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]]
+                            .clone()
                     })
                     .collect(),
                 ct_data
                     .right_thresholds
                     .iter()
-                    .map(|esurface_id| {
-                        graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                    .map(|raised_group| {
+                        graph.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]]
+                            .clone()
                     })
                     .collect(),
             ));
@@ -816,7 +947,8 @@ impl CrossSectionGraphTerm {
         })?;
 
         for (raised_cut_id, integrands) in self.integrand.iter_mut().enumerate() {
-            for (n_derivatives, integrand) in integrands.iter_mut().enumerate() {
+            for (cut_cff_index, integrand) in integrands.iter_mut() {
+                let n_derivatives = cut_cff_index.lu_cut_order.unwrap_or(0);
                 integrand.compile(
                     format!(
                         "integrand_zen_cut_{}_deriv_{}",
@@ -851,7 +983,7 @@ impl CrossSectionGraphTerm {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for raised_cut_integrands in self.integrand.iter_mut() {
-            for evaluator_stack in raised_cut_integrands.iter_mut() {
+            for (_cut_cff_index, evaluator_stack) in raised_cut_integrands.iter_mut() {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
@@ -1258,7 +1390,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .rescale_with_hyper_dual(&dual_t_for_integrand, None);
 
                         let dual_shape_for_esurface =
-                            HyperDual::<F<T>>::new(shape_for_t_derivatives(num_esurfaces));
+                            HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
 
                         let dual_t_for_esurface =
                             dual_shape_for_esurface.variable(0, solution.solution.clone());
@@ -1366,7 +1498,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                     Some(&lu_params),
                 );
 
-                let result = self.integrand[raised_cut][num_esurfaces - 1]
+                let cut_index = CutCFFIndex {
+                    lu_cut_order: Some(num_esurfaces),
+                    left_threshold_order: None,
+                    right_threshold_order: None,
+                };
+
+                let result = self.integrand[raised_cut]
+                    .get_mut(&cut_index)
+                    .unwrap()
                     .evaluate(
                         params,
                         orientations,

@@ -27,7 +27,7 @@ use crate::{
     },
     utils::{
         self, F, FloatLike,
-        hyperdual_utils::{DualOrNot, new_constant, shape_for_t_derivatives},
+        hyperdual_utils::{DualOrNot, new_constant, simple_n_deriv_shape},
     },
 };
 
@@ -42,6 +42,10 @@ fn evaluate_uv_damper<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> F<T> {
+    if settings.force_uv_dampers_to_one {
+        return radius.one();
+    }
+
     let normalizing_scale = match settings.dynamic_width {
         true => radius_star,
         false => e_cm,
@@ -66,6 +70,10 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> HyperDual<F<T>> {
+    if settings.force_uv_dampers_to_one {
+        return new_constant(radius, &radius.values[0].one());
+    }
+
     let normalizing_scale = if settings.dynamic_width {
         radius_star.clone()
     } else {
@@ -264,7 +272,7 @@ impl RstarTDependenceEvaluator {
             }
         }
 
-        HyperDual::from_values(shape_for_t_derivatives(dual_values.len() - 1), dual_values)
+        HyperDual::from_values(simple_n_deriv_shape(dual_values.len() - 1), dual_values)
     }
 }
 
@@ -363,10 +371,6 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
             current_t_derivative_counter -= 1;
         }
 
-        for param in &eta_derivatives_at_this_order {
-            println!("  {}", param);
-        }
-
         params.extend(eta_derivatives_at_this_order);
     }
 
@@ -388,13 +392,47 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
     })
 }
 
-#[test]
-fn test_rstar_t_dependence_evaluator() {
-    generate_rstar_t_dependence_evaluator(3).unwrap();
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::hyperdual_utils::new_from_values;
 
-#[test]
-fn test_rstar_t_dependence_evaluator_zero_derivatives() {
-    let evaluator = generate_rstar_t_dependence_evaluator(0).unwrap();
-    assert!(!evaluator.supports_t_derivatives());
+    #[test]
+    fn uv_damper_can_be_forced_to_one() {
+        let settings = UVLocalisationSettings {
+            force_uv_dampers_to_one: true,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            evaluate_uv_damper(&F(100.0_f64), &F(1.0_f64), &F(1.0_f64), &settings),
+            F(1.0_f64)
+        );
+    }
+
+    #[test]
+    fn uv_damper_dual_can_be_forced_to_constant_one() {
+        let settings = UVLocalisationSettings {
+            force_uv_dampers_to_one: true,
+            ..Default::default()
+        };
+        let shape = HyperDual::new(simple_n_deriv_shape(1));
+        let radius = new_from_values(&shape, &[F(100.0_f64), F(5.0_f64)]);
+        let radius_star = new_from_values(&shape, &[F(1.0_f64), F(3.0_f64)]);
+
+        let damper = evaluate_uv_damper_dual(&radius, &radius_star, &F(1.0_f64), &settings);
+
+        assert_eq!(damper.values, vec![F(1.0_f64), F(0.0_f64)]);
+    }
+
+    #[test]
+    fn test_rstar_t_dependence_evaluator() {
+        generate_rstar_t_dependence_evaluator(3).unwrap();
+    }
+
+    #[test]
+    fn test_rstar_t_dependence_evaluator_zero_derivatives() {
+        let evaluator = generate_rstar_t_dependence_evaluator(0).unwrap();
+        assert!(!evaluator.supports_t_derivatives());
+    }
 }

@@ -94,17 +94,18 @@ fn scalar_bubble_root_integrand_reference(
     let root_integrand = forests.forests[0]
         .dag
         .nodes
-        .iter()
+        .iter_mut()
         .find_map(|(_, node)| {
             node.parents.is_empty().then(|| {
                 node.data
                     .final_integrand
-                    .as_ref()
-                    .and_then(|integrands| integrands.first())
-                    .cloned()
-            })?
+                    .as_mut()
+                    .and_then(|integrands| integrands.pop_first())
+            })
         })
-        .expect("root UV-forest integrand should exist");
+        .expect("root UV-forest integrand should exist")
+        .expect("root UV-forest integrand should exist")
+        .1;
 
     let factors_of_pi =
         (Atom::var(GS.pi) * 2).pow(3 * amplitude_graph.graph.get_loop_number() as i64);
