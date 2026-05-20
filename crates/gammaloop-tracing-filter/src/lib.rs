@@ -8,6 +8,13 @@ use tracing::{Event, Metadata, Subscriber, field::Visit, level_filters::LevelFil
 use tracing_subscriber::layer::{Context, Filter};
 use tracing_subscriber::registry::LookupSpan;
 
+mod display;
+
+pub use display::{
+    GammaDisplayFormat, LogFormat, LogSink, LogStyle, RoutedFieldsVisitor, route_field_name,
+    strip_ansi_escape_codes,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GammaLogFilter {
     directives: Vec<Directive>,

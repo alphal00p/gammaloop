@@ -1564,6 +1564,14 @@ dependencies = [
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "clap",
+ "colored 3.1.1",
+ "itertools 0.14.0",
+ "pyo3",
+ "serde",
+ "serde_json",
+ "tabled",
  "thiserror 2.0.18",
  "tracing",
  "tracing-subscriber",
