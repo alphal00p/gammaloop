@@ -2,7 +2,9 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
-    color::ColorSimplifier, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier,
+    color::ColorSimplifier,
+    dirac::GammaSimplifier,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},

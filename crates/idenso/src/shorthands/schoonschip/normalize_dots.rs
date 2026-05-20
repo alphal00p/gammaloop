@@ -169,7 +169,7 @@ impl DotNormalizer {
             .replace_multiple(&*METRIC_TRACE_NORMALIZATIONS)
     }
 
-    pub(crate) fn to_dots(view: AtomView<'_>) -> Atom {
+    pub(crate) fn metric_shorthand_to_dot(view: AtomView<'_>) -> Atom {
         view.to_owned().replace_multiple(&*METRIC_DOT_PRODUCT)
     }
 

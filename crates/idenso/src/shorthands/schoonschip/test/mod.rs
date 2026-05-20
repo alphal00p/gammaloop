@@ -126,6 +126,27 @@ fn simple_dot() {
 }
 
 #[test]
+fn vakint_rank1_input_simplifies_to_dots() {
+    test_initialize();
+    let dim = symbol!("D");
+    let mink: Representation<_> = Minkowski {}.new_rep(dim.clone());
+
+    let input = p!(0, slot!(mink, 2))
+        * p!(0, slot!(mink, 5))
+        * p!(4, slot!(mink, 7))
+        * q!(0, slot!(mink, 2))
+        * q!(0, slot!(mink, 5))
+        * q!(0, slot!(mink, 7));
+
+    let result = input.to_dots();
+
+    assert_snapshot!(
+        result.to_bare_ordered_string(),
+        @"(dot(p(0,mink(D)),q(0,mink(D))))^2*dot(p(4,mink(D)),q(0,mink(D)))"
+    );
+}
+
+#[test]
 fn schoonschip_settings_substitutes_metric_slots_in_plain_functions() {
     test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));

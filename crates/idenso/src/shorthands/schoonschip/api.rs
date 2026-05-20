@@ -32,6 +32,8 @@ pub trait Schoonschip {
 
     fn normalize_dots(&self) -> Atom;
 
+    fn to_dots(&self) -> Atom;
+
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom;
 
     fn schoonschip_with_net<
@@ -54,6 +56,10 @@ impl Schoonschip for Atom {
 
     fn normalize_dots(&self) -> Atom {
         self.as_view().normalize_dots()
+    }
+
+    fn to_dots(&self) -> Atom {
+        self.as_view().to_dots()
     }
 
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {
@@ -281,6 +287,12 @@ impl Schoonschip for AtomView<'_> {
 
     fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
         super::with_settings::schoonschip_with_settings(*self, settings)
+    }
+
+    fn to_dots(&self) -> Atom {
+        let schoonschipped =
+            self.schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors());
+        super::normalize_dots::DotNormalizer::metric_shorthand_to_dot(schoonschipped.as_view())
     }
 
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {

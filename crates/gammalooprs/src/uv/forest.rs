@@ -12,7 +12,7 @@ use crate::{
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use symbolica::{
