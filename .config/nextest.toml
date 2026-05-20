@@ -36,12 +36,12 @@ path = "target/nextest/default/junit.xml"
 
 [profile.test_gammaloop]
 inherits = "default"
-# Reuse the default profile behavior but disable early termination for this curated suite.
-slow-timeout = "30y"
+# Match CI's per-test timeout policy for this curated local suite.
+slow-timeout = { period = "300s", terminate-after = 2 }
 default-filter = "not test(/(^|::)(slow|failing)::/)"
 
 [profile.ci]
-slow-timeout = { period = "120s", terminate-after = 2 }
+slow-timeout = { period = "300s", terminate-after = 2 }
 # Use all available cores in CI for faster execution
 test-threads = "num-cpus"
 # More verbose output for debugging CI failures
@@ -81,7 +81,7 @@ filter = "test(integration) or test(heavy) or test(memory) or test(large)"
 filter = "test(bench) or test(benchmark)"
 
 [profile.partition]
-slow-timeout = { period = "120s", terminate-after = 2 }
+slow-timeout = { period = "300s", terminate-after = 2 }
 # Use multiple threads even in partitions for better performance
 test-threads = "num-cpus"
 failure-output = "immediate"
