@@ -260,7 +260,7 @@
         DYLD_LIBRARY_PATH = runtimeLibPath;
       };
 
-      ciCargoProfile = "release";
+      ciCargoProfile = "dev-optim";
 
       ciArgs =
         commonArgs
@@ -552,7 +552,7 @@
               runHook preCheck
 
               set +e
-              cargo nextest run \
+              RUST_MIN_STACK=''${RUST_MIN_STACK:-33554432} cargo nextest run \
                 ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
                 --locked ${nextestPackageArgs target.packages} ${nextestBaseExtraArgs}
               nextest_status=$?

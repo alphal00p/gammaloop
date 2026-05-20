@@ -1,6 +1,6 @@
 # Gammaloop build and development commands
 
-ci_cargo_profile := "release"
+ci_cargo_profile := "dev-optim"
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
@@ -312,7 +312,10 @@ test-ci TEST_NAME="":
         vakint
         gammaloop-integration-tests
     )
+    test_rust_min_stack="${RUST_MIN_STACK:-33554432}"
     cmd=(
+        env
+        "RUST_MIN_STACK=$test_rust_min_stack"
         cargo nextest run
         --cargo-profile {{ ci_cargo_profile }}
         --profile ci_gammaloop
