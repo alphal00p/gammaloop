@@ -58,9 +58,9 @@ impl GlobalData {
             self.node_statements.extend(node_data);
         }
 
-        // Extract top-level keys (no nested structure). Runtime parameters must
-        // override existing global statements so repeated layout passes can
-        // replace stale layout metadata stored on the graph.
+        // Extract top-level keys (no nested structure). Runtime parameters
+        // override existing global statements when callers explicitly merge a
+        // Figment into graph metadata.
         if let Ok(all_data) = figment.extract::<BTreeMap<String, figment::value::Value>>() {
             for (key, value) in all_data {
                 if !key.contains('.') {

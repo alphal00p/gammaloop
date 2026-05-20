@@ -1115,13 +1115,7 @@ impl TypstGraph {
             TypstHedge::parse,
         );
 
-        let graph_figment = Figment::from(Serialized::from(
-            dot.global_data.statements.clone(),
-            Profile::Default,
-        ))
-        .merge(figment.clone());
-
-        let config = LayoutConfig::from_figment(&graph_figment);
+        let config = LayoutConfig::from_figment(figment);
 
         let global_eval: Option<String> = dot.global_data.statements.get("eval").cloned();
 

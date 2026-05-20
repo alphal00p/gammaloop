@@ -60,9 +60,8 @@ pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Str
     let subgraph_label = take_layout_subgraph(&mut cbor_map)?;
     let figment = Figment::from(Serialized::from(cbor_map, Profile::Default));
 
-    let mut graph = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(arg) }
+    let graph = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(arg) }
         .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
-    graph.global_data.set_figment(figment.clone());
     let subgraph = subgraph_label
         .as_deref()
         .map(|label| {

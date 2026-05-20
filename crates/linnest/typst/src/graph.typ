@@ -165,13 +165,17 @@
 /// ````
 ///
 /// - Top-level `key=value` statements and `graph [key=value]` attributes become
-///   `graph.info(g).global-statements`, except for the consumed `name`.
+///   `graph.info(g).global-statements`, except for the consumed `name`. They do
+///   not configure layout, even when a key looks like a layout option; pass
+///   layout options directly to #api-link("layout-", "layout").
 ///
 /// ````example
 /// #let src = ```dot
-/// digraph { title="top"; graph [subtitle="nested"]; a }
+/// digraph { steps=1; graph [subtitle="nested"]; a }
 /// ```
-/// #info(parse(src.text).first()).global-statements
+/// #let statements = info(parse(src.text).first()).global-statements
+/// #statements.steps
+/// #statements.subtitle
 /// ````
 ///
 /// - `node [key=value]` and `edge [key=value]` become
@@ -186,17 +190,6 @@
 /// #let g = parse(src.text).first()
 /// #nodes(g).first().statements.color
 /// #edges(g).first().statements.particle
-/// ````
-///
-/// - Graph statements may also be layout settings when the graph is passed to
-///   #api-link("layout-", "layout"). Those settings are documented on the
-///   layout API rather than here.
-///
-/// ````example
-/// #let src = ```dot
-/// digraph { "tree-dx"="3.0"; a -> b -> c }
-/// ```
-/// #nodes(layout(parse(src.text).first(), layout-algo: "tree")).map(n => n.pos.x)
 /// ````
 ///
 /// Node handling:
