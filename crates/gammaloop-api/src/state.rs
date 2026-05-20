@@ -2086,6 +2086,19 @@ impl State {
         run_state_migration_checks(&manifest, &save_path)?;
         debug!("Loading state manifest version {}", manifest.version);
 
+        // Import Symbolica before loading the model so saved UFO symbols do not
+        // collide with the model's non-exportable custom print callbacks during
+        // reload. This intentionally keeps imported UFO symbols with plain
+        // Symbolica formatting in restored states.
+        symbolica::GLOBAL_SETTINGS
+            .initialize_tracing
+            .store(false, Ordering::Relaxed);
+        let state = symbolica::state::State::import(
+            &mut fs::File::open(save_path.join("symbolica_state.bin"))
+                .context("Trying to open symbolica state binary")?,
+            None,
+        )?;
+
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
@@ -2108,12 +2121,6 @@ impl State {
         } else {
             InputParamCard::default_from_model(&model)
         };
-
-        let state = symbolica::state::State::import(
-            &mut fs::File::open(save_path.join("symbolica_state.bin"))
-                .context("Trying to open symbolica state binary")?,
-            None,
-        )?;
 
         let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
             state_map: &state,

@@ -2,6 +2,9 @@ use std::fs;
 
 use super::utils::*;
 use super::*;
+use gammalooprs::settings::runtime::{
+    RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
+};
 
 fn setup_explicit_sum_scalar_topologies_cli(
     test_name: &str,
@@ -830,10 +833,65 @@ fn inspect_bench_cli_runs_for_scalar_triangle() -> Result<()> {
     let mut cli = setup_explicit_sum_scalar_topologies_cli("inspect_bench_cli_runs")?;
     let point = default_xspace_point_for(&cli, "triangle", "scalar_tri")?;
     let point_arg = point.iter().map(|entry| format!("{entry:.17e}")).join(" ");
+    let normal_json_path = cli.cli_settings.state.folder.join("inspect_normal.json");
+    let bench_json_path = cli.cli_settings.state.folder.join("inspect_bench.json");
 
     cli.run_command(&format!(
-        "inspect -p triangle -i scalar_tri -x {point_arg} --bench 0.001 --n_batches 2"
+        "inspect -p triangle -i scalar_tri -x {point_arg} --json-output {}",
+        normal_json_path.display()
     ))?;
+    let normal_json: serde_json::Value = serde_json::from_slice(&fs::read(&normal_json_path)?)?;
+    assert!(normal_json.get("evaluation").is_some(), "{normal_json:#}");
+
+    let process_ref = ProcessRef::Unqualified("triangle".to_string());
+    let integrand_ref = "scalar_tri".to_string();
+    let (process_id, integrand_name) =
+        cli.find_integrand_ref(Some(&process_ref), Some(&integrand_ref))?;
+    let original_settings = {
+        let integrand = cli
+            .process_list
+            .get_integrand_mut(process_id, &integrand_name)?;
+        let settings = integrand.get_mut_settings();
+        settings.general.enable_cache = true;
+        settings.general.debug_cache = true;
+        settings.general.generate_events = true;
+        settings.general.store_additional_weights_in_event = true;
+        settings.stability.rotation_axis = vec![RotationSetting::Pi2X {}];
+        settings.stability.levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ];
+        settings.stability.recording = Some(StabilityRecordingSettings {
+            record_rotated_results: true,
+            record_all_stability_levels: true,
+            record_loop_momenta_escalation: true,
+        });
+        settings.clone()
+    };
+
+    cli.run_command(&format!(
+        "inspect -p triangle -i scalar_tri -x {point_arg} --bench 0.001 --n_batches 2 --minimal-integrand --json-output {}",
+        bench_json_path.display()
+    ))?;
+    let bench_json: serde_json::Value = serde_json::from_slice(&fs::read(&bench_json_path)?)?;
+    assert_eq!(bench_json["n_batches"], 2);
+    assert_eq!(bench_json["minimal_integrand"], true);
+    let summary = bench_json["summary"]
+        .as_array()
+        .expect("bench JSON should contain summary rows");
+    assert!(
+        summary
+            .iter()
+            .any(|row| row["category"].as_str() == Some("Total")),
+        "{bench_json:#}"
+    );
+    let restored_settings = cli
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?
+        .get_settings()
+        .clone();
+    assert_eq!(restored_settings, original_settings);
 
     let value = inspect_xspace_process(&mut cli, "triangle", "scalar_tri", &point)?;
     assert!(value.re.is_finite() && value.im.is_finite());

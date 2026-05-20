@@ -2130,6 +2130,36 @@ fn build_preview_integration_state(
     preview
 }
 
+fn write_interrupted_numerical_stability_outputs(
+    workspace: Option<&Path>,
+    integration_state: &IntegrationState,
+    slots: &[IntegrationSlot],
+    cores: usize,
+    completed_points: usize,
+    elapsed_seconds: f64,
+    core_states: &[CoreIterationState],
+) -> Result<Vec<PathBuf>> {
+    if workspace.is_none() || completed_points == 0 {
+        return Ok(Vec::new());
+    }
+
+    let preview_state = build_preview_integration_state(
+        integration_state,
+        slots,
+        cores,
+        completed_points,
+        elapsed_seconds,
+        core_states,
+    );
+    write_numerical_stability_outputs(
+        workspace,
+        &preview_state,
+        WorkspaceSnapshotControl {
+            write_iteration_archives: false,
+        },
+    )
+}
+
 /// Integrate function used for local runs
 pub fn havana_integrate<S>(
     request: HavanaIntegrateRequest,
@@ -2439,6 +2469,16 @@ where
 
             if is_interrupted() {
                 warn!("{}", "Integration interrupted by user".yellow());
+                emitted_latest_numerical_stability_paths =
+                    write_interrupted_numerical_stability_outputs(
+                        workspace.as_deref(),
+                        &integration_state,
+                        &slots,
+                        cores,
+                        total_completed_points(&worker_states),
+                        elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
+                        &worker_states,
+                    )?;
                 break 'integrateLoop;
             }
 
@@ -2457,6 +2497,16 @@ where
 
         if is_interrupted() {
             warn!("{}", "Integration interrupted by user".yellow());
+            emitted_latest_numerical_stability_paths =
+                write_interrupted_numerical_stability_outputs(
+                    workspace.as_deref(),
+                    &integration_state,
+                    &slots,
+                    cores,
+                    total_completed_points(&worker_states),
+                    elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
+                    &worker_states,
+                )?;
             break 'integrateLoop;
         }
 
@@ -3784,10 +3834,15 @@ mod tests {
         evaluation.evaluation_metadata.event_processing_time = fixture.event_time;
         evaluation.evaluation_metadata.generated_event_count = fixture.generated_event_count;
         evaluation.evaluation_metadata.accepted_event_count = fixture.accepted_event_count;
+        let estimated_relative_accuracy = match fixture.precision {
+            crate::settings::runtime::Precision::Double => Some(F(2.4e-16)),
+            crate::settings::runtime::Precision::Quad => Some(F(1.3e-26)),
+            crate::settings::runtime::Precision::Arb => None,
+        };
         evaluation.evaluation_metadata.stability_results.push(
             crate::integrands::evaluation::StabilityResult {
                 precision: fixture.precision,
-                estimated_relative_accuracy: None,
+                estimated_relative_accuracy,
                 status: crate::integrands::evaluation::StabilityStatus::Stable(2),
                 total_time: fixture.total_time,
             },
@@ -5012,6 +5067,7 @@ mod tests {
             rendered.contains("Precision mix [proc_b@itg_b]"),
             "{rendered}"
         );
+        assert!(rendered.contains("Scope i"), "{rendered}");
     }
 
     #[test]

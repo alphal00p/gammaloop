@@ -877,6 +877,8 @@ impl StatisticsSection {
         let Some(counter) = self.scoped_counter(scope) else {
             return Vec::new();
         };
+        let total_evals = counter.num_evals;
+        let stability_histograms = counter.numerical_stability_snapshot();
 
         NumericalStabilityLevel::all()
             .into_iter()
@@ -890,9 +892,19 @@ impl StatisticsSection {
                     .numerical_stability_median(level)
                     .map(|median| styled_colored(median.formatted_relative_accuracy(), style))
                     .unwrap_or_else(|| styled_plain("N/A"));
+                let processed_count = stability_histograms.processed_sample_count(level);
+                let processed_percentage = if total_evals == 0 {
+                    0.0
+                } else {
+                    processed_count as f64 / total_evals as f64 * 100.0
+                };
                 StatisticsMedianEntry {
                     label: styled_colored(level.short_label(), style),
                     value,
+                    processed_percentage: styled_colored(
+                        format_processed_stability_percentage(processed_percentage),
+                        style,
+                    ),
                 }
             })
             .collect()
@@ -1029,6 +1041,18 @@ pub(crate) struct StatisticsMixSegment {
 pub(crate) struct StatisticsMedianEntry {
     pub(crate) label: StyledText,
     pub(crate) value: StyledText,
+    pub(crate) processed_percentage: StyledText,
+}
+
+fn format_processed_stability_percentage(percentage: f64) -> String {
+    if !percentage.is_finite() {
+        return "N/A".to_string();
+    }
+    if percentage > 0.0 && percentage < 0.01 {
+        format!("{percentage:.2e}%")
+    } else {
+        format!("{percentage:.2}%")
+    }
 }
 
 fn component_accumulator(

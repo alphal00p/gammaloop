@@ -1,4 +1,8 @@
-use std::time::{Duration, Instant};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use clap::Args;
 use color_eyre::eyre::{eyre, Context};
@@ -24,7 +28,14 @@ use crate::{
     completion::CompletionArgExt,
     state::{ProcessRef, State},
 };
-use gammalooprs::{integrands::evaluation::EvaluationResultOutput, utils::F};
+use gammalooprs::{
+    integrands::evaluation::EvaluationResultOutput,
+    settings::{
+        runtime::{RotationSetting, StabilityLevelSetting},
+        RuntimeSettings,
+    },
+    utils::F,
+};
 
 const INSPECT_BENCH_WARMUP_SAMPLES: usize = 10;
 const INSPECT_BENCH_DEFAULT_BATCHES: usize = 10;
@@ -105,9 +116,20 @@ pub struct Inspect {
     )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub n_batches: Option<usize>,
+
+    /// Temporarily benchmark only the raw integrand path by disabling stability rotations,
+    /// caches, generated events, additional event weights, selectors, and observables.
+    #[arg(long = "minimal-integrand", requires = "bench")]
+    #[serde(default)]
+    pub minimal_integrand: bool,
+
+    /// Write the inspect or benchmark result as pretty JSON to this path.
+    #[arg(long = "json-output", value_name = "PATH")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json_output: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 struct InspectBenchBatchTiming {
     parameterization: f64,
     integrand: f64,
@@ -121,6 +143,35 @@ struct InspectBenchBatchTiming {
 struct InspectBenchRow {
     category: &'static str,
     timings: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct InspectBenchSummaryRow {
+    category: String,
+    mean_seconds_per_sample: f64,
+    standard_error_seconds_per_sample: f64,
+    percentage_of_total: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct InspectBenchOutput {
+    process_id: usize,
+    integrand_name: String,
+    momentum_space: bool,
+    point: Vec<f64>,
+    discrete_dim: Vec<usize>,
+    graph_name: Option<String>,
+    orientation_id: Option<usize>,
+    target_seconds: f64,
+    warmup_samples: usize,
+    warmup_seconds: f64,
+    total_samples: usize,
+    n_batches: usize,
+    minimal_integrand: bool,
+    parameterization_jacobian: Option<f64>,
+    displayed_result: Complex<f64>,
+    batches: Vec<InspectBenchBatchTiming>,
+    summary: Vec<InspectBenchSummaryRow>,
 }
 
 impl InspectBenchRow {
@@ -244,6 +295,24 @@ impl Inspect {
         Ok((jacobian, displayed_result.map(|entry| entry.0)))
     }
 
+    fn write_json_output<T: Serialize>(&self, value: &T) -> Result<()> {
+        let Some(path) = self.json_output.as_deref() else {
+            return Ok(());
+        };
+        let path = resolve_json_output_path(path)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Could not create {}", parent.display()))?;
+        }
+        fs::write(&path, serde_json::to_vec_pretty(value)?)
+            .with_context(|| format!("Could not write inspect JSON output {}", path.display()))?;
+        info!(
+            "Wrote inspect JSON output to {}",
+            path.display().to_string().green()
+        );
+        Ok(())
+    }
+
     fn run_bench(
         &self,
         state: &mut State,
@@ -328,6 +397,26 @@ impl Inspect {
             .ok_or_else(|| eyre!("inspect --bench warmup returned no sample"))?;
         let (jacobian, displayed_result) =
             self.displayed_result_from_evaluation(&warmup_evaluation.evaluation)?;
+        let bench_output = InspectBenchOutput {
+            process_id,
+            integrand_name: integrand_name.clone(),
+            momentum_space: self.momentum_space,
+            point: self.point.clone(),
+            discrete_dim: self.discrete_dim.clone(),
+            graph_name: graph_name.clone(),
+            orientation_id: self.orientation_id,
+            target_seconds: target.as_secs_f64(),
+            warmup_samples,
+            warmup_seconds: warmup_timing.as_secs_f64(),
+            total_samples,
+            n_batches,
+            minimal_integrand: self.minimal_integrand,
+            parameterization_jacobian: jacobian,
+            displayed_result,
+            batches: batch_timings.clone(),
+            summary: inspect_bench_summary_rows(&batch_timings),
+        };
+        self.write_json_output(&bench_output)?;
 
         info!(
             "\n{}\n{}",
@@ -349,12 +438,23 @@ impl Inspect {
         let (process_id, integrand_name) =
             state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
         self.validate_selector_mode()?;
+        if self.minimal_integrand && self.bench.is_none() {
+            return Err(eyre!(
+                "inspect --minimal-integrand is only supported together with --bench"
+            ));
+        }
         if !self.momentum_space {
             self.validate_x_space_point(state, process_id, &integrand_name)?;
         }
         let graph_name = self.resolve_graph_name(state, process_id, &integrand_name)?;
         if self.bench.is_some() {
-            return self.run_bench(state, process_id, integrand_name, graph_name);
+            let integrand_name_for_restore = integrand_name.clone();
+            return self.with_optional_minimal_integrand_settings(
+                state,
+                process_id,
+                &integrand_name_for_restore,
+                |state| self.run_bench(state, process_id, integrand_name, graph_name),
+            );
         }
         let points = Array2::from_shape_vec((1, self.point.len()), self.point.clone())?;
         let discrete_dims =
@@ -377,6 +477,7 @@ impl Inspect {
                     .map(|orientation| vec![Some(orientation)]),
             },
         )?;
+        self.write_json_output(&result.sample)?;
         let evaluation = &result.sample.evaluation;
 
         let raw_result = evaluation.integrand_result;
@@ -425,6 +526,49 @@ impl Inspect {
 
         Ok((jacobian, displayed_result.map(|entry| entry.0)))
     }
+
+    fn with_optional_minimal_integrand_settings<R>(
+        &self,
+        state: &mut State,
+        process_id: usize,
+        integrand_name: &str,
+        run: impl FnOnce(&mut State) -> Result<R>,
+    ) -> Result<R> {
+        if !self.minimal_integrand {
+            return run(state);
+        }
+
+        let original_settings = {
+            let integrand = state
+                .process_list
+                .get_integrand_mut(process_id, integrand_name)?;
+            let original_settings = integrand.get_settings().clone();
+            apply_minimal_integrand_settings(integrand.get_mut_settings());
+            original_settings
+        };
+
+        let result = run(state);
+        let integrand = state
+            .process_list
+            .get_integrand_mut(process_id, integrand_name)?;
+        *integrand.get_mut_settings() = original_settings;
+        result
+    }
+}
+
+fn apply_minimal_integrand_settings(settings: &mut RuntimeSettings) {
+    settings.general.enable_cache = false;
+    settings.general.debug_cache = false;
+    settings.general.generate_events = false;
+    settings.general.store_additional_weights_in_event = false;
+    settings.observables = Default::default();
+    settings.selectors = Default::default();
+    settings.stability.rotation_axis = vec![RotationSetting::None {}];
+    settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+    settings.stability.check_on_norm = false;
+    settings.stability.escalate_if_exact_zero = false;
+    settings.stability.loop_momenta_norm_escalation_factor = -1.0;
+    settings.stability.recording = None;
 }
 
 fn parse_bench_target_duration(input: &str) -> Result<Duration> {
@@ -486,6 +630,14 @@ fn parse_positive_usize(input: &str) -> std::result::Result<usize, String> {
     Ok(value)
 }
 
+fn resolve_json_output_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(std::env::current_dir()?.join(path))
+    }
+}
+
 fn split_samples_into_batches(total_samples: usize, batches: usize) -> Vec<usize> {
     let base = total_samples / batches;
     let remainder = total_samples % batches;
@@ -522,6 +674,8 @@ fn inspect_bench_batch_timing(
     let inv_sample_count = 1.0 / sample_count as f64;
     let parameterization = parameterization * inv_sample_count;
     let evaluator = evaluator * inv_sample_count;
+    // integrand_evaluation_time is inclusive of evaluator calls. Keep the
+    // displayed rows disjoint by showing the non-evaluator integrand residual.
     let integrand = (integrand_inclusive * inv_sample_count - evaluator).max(0.0);
     let event_processing = event_processing * inv_sample_count;
     let total = total_timing.as_secs_f64() * inv_sample_count;
@@ -536,6 +690,37 @@ fn inspect_bench_batch_timing(
         other,
         total,
     })
+}
+
+fn inspect_bench_summary_rows(
+    batch_timings: &[InspectBenchBatchTiming],
+) -> Vec<InspectBenchSummaryRow> {
+    let rows = inspect_bench_rows(batch_timings);
+    let total_values = batch_timings
+        .iter()
+        .map(|timing| timing.total)
+        .collect::<Vec<_>>();
+    let (total_mean, total_standard_error) = mean_and_standard_error(&total_values);
+
+    let mut summary = rows
+        .into_iter()
+        .map(|row| {
+            let (mean, standard_error) = row.mean_and_standard_error();
+            InspectBenchSummaryRow {
+                category: row.category.to_string(),
+                mean_seconds_per_sample: mean,
+                standard_error_seconds_per_sample: standard_error,
+                percentage_of_total: (total_mean > 0.0).then_some(mean / total_mean * 100.0),
+            }
+        })
+        .collect::<Vec<_>>();
+    summary.push(InspectBenchSummaryRow {
+        category: "Total".to_string(),
+        mean_seconds_per_sample: total_mean,
+        standard_error_seconds_per_sample: total_standard_error,
+        percentage_of_total: (total_mean > 0.0).then_some(100.0),
+    });
+    summary
 }
 
 fn inspect_bench_progress_bar(n_batches: usize) -> ProgressBar {
@@ -574,7 +759,7 @@ fn update_inspect_bench_progress(
     progress_bar.set_message(message);
 }
 
-fn render_inspect_bench_table(batch_timings: &[InspectBenchBatchTiming]) -> String {
+fn inspect_bench_rows(batch_timings: &[InspectBenchBatchTiming]) -> Vec<InspectBenchRow> {
     let mut rows = vec![
         InspectBenchRow {
             category: "parameterization",
@@ -626,6 +811,16 @@ fn render_inspect_bench_table(batch_timings: &[InspectBenchBatchTiming]) -> Stri
             .map(|timing| timing.evaluator)
             .collect(),
     });
+    rows
+}
+
+fn render_inspect_bench_table(batch_timings: &[InspectBenchBatchTiming]) -> String {
+    let rows = inspect_bench_rows(batch_timings);
+    let total_values = batch_timings
+        .iter()
+        .map(|timing| timing.total)
+        .collect::<Vec<_>>();
+    let (total_mean, _) = mean_and_standard_error(&total_values);
 
     let total_row = InspectBenchRow {
         category: "Total",
@@ -762,8 +957,12 @@ fn format_significant(value: f64, significant_digits: usize) -> String {
 mod tests {
     use std::time::Duration;
 
+    use gammalooprs::settings::runtime::{RotationSetting, StabilityRecordingSettings};
+
     use super::{
-        format_timing_with_uncertainty, parse_bench_target_duration, split_samples_into_batches,
+        apply_minimal_integrand_settings, format_timing_with_uncertainty,
+        parse_bench_target_duration, split_samples_into_batches, RuntimeSettings,
+        StabilityLevelSetting,
     };
 
     #[test]
@@ -827,5 +1026,51 @@ mod tests {
             .lines()
             .last()
             .is_some_and(|line| line.starts_with('╰')));
+    }
+
+    #[test]
+    fn minimal_integrand_settings_disable_benchmark_overhead_without_touching_subtraction() {
+        let mut settings = RuntimeSettings::default();
+        settings.general.enable_cache = true;
+        settings.general.debug_cache = true;
+        settings.general.generate_events = true;
+        settings.general.store_additional_weights_in_event = true;
+        settings.stability.rotation_axis = vec![RotationSetting::Pi2X {}, RotationSetting::Pi2Y {}];
+        settings.stability.levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ];
+        settings.stability.check_on_norm = true;
+        settings.stability.escalate_if_exact_zero = true;
+        settings.stability.loop_momenta_norm_escalation_factor = 2.0;
+        settings.stability.recording = Some(StabilityRecordingSettings {
+            record_rotated_results: true,
+            record_all_stability_levels: true,
+            record_loop_momenta_escalation: true,
+        });
+        let original_subtraction = settings.subtraction.clone();
+
+        apply_minimal_integrand_settings(&mut settings);
+
+        assert!(!settings.general.enable_cache);
+        assert!(!settings.general.debug_cache);
+        assert!(!settings.general.generate_events);
+        assert!(!settings.general.store_additional_weights_in_event);
+        assert!(settings.observables.is_empty());
+        assert!(settings.selectors.values().all(|selector| !selector.active));
+        assert_eq!(
+            settings.stability.rotation_axis,
+            vec![RotationSetting::None {}]
+        );
+        assert_eq!(
+            settings.stability.levels,
+            vec![StabilityLevelSetting::default_double()]
+        );
+        assert!(!settings.stability.check_on_norm);
+        assert!(!settings.stability.escalate_if_exact_zero);
+        assert_eq!(settings.stability.loop_momenta_norm_escalation_factor, -1.0);
+        assert_eq!(settings.stability.recording, None);
+        assert_eq!(settings.subtraction, original_subtraction);
     }
 }

@@ -464,6 +464,13 @@ impl NumericalStabilityHistograms {
         }
     }
 
+    pub fn processed_sample_count(&self, level: NumericalStabilityLevel) -> usize {
+        self.histograms
+            .get(level.key())
+            .map(|histogram| histogram.sample_count)
+            .unwrap_or_default()
+    }
+
     pub fn median(&self, level: NumericalStabilityLevel) -> Option<NumericalStabilityMedian> {
         let histogram = self.histograms.get(level.key())?;
         NumericalStabilityMedian::from_histogram(level, histogram)
