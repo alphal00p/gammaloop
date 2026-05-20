@@ -6,8 +6,10 @@ use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::StatisticsAccumulator;
 
 use crate::{
-    integrands::evaluation::StatisticsCounter, settings::runtime::IntegrationStatisticsSnapshot,
-    utils, utils::F,
+    integrands::evaluation::{NumericalStabilityLevel, StatisticsCounter},
+    settings::runtime::IntegrationStatisticsSnapshot,
+    utils,
+    utils::F,
 };
 
 use super::{
@@ -868,6 +870,34 @@ impl StatisticsSection {
         ])
     }
 
+    pub(crate) fn numerical_stability_median_entries(
+        &self,
+        scope: StatisticsScope,
+    ) -> Vec<StatisticsMedianEntry> {
+        let Some(counter) = self.scoped_counter(scope) else {
+            return Vec::new();
+        };
+
+        NumericalStabilityLevel::all()
+            .into_iter()
+            .map(|level| {
+                let style = match level {
+                    NumericalStabilityLevel::Double => TextStyle::green(),
+                    NumericalStabilityLevel::Quad => TextStyle::blue(),
+                    NumericalStabilityLevel::ArbPrec => TextStyle::PLAIN,
+                };
+                let value = counter
+                    .numerical_stability_median(level)
+                    .map(|median| styled_colored(median.formatted_relative_accuracy(), style))
+                    .unwrap_or_else(|| styled_plain("N/A"));
+                StatisticsMedianEntry {
+                    label: styled_colored(level.short_label(), style),
+                    value,
+                }
+            })
+            .collect()
+    }
+
     pub(crate) fn stability_mix_segments(
         &self,
         scope: StatisticsScope,
@@ -993,6 +1023,12 @@ pub(crate) struct StatisticsTableEntry {
 pub(crate) struct StatisticsMixSegment {
     pub(crate) label: StyledText,
     pub(crate) percentage: f64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct StatisticsMedianEntry {
+    pub(crate) label: StyledText,
+    pub(crate) value: StyledText,
 }
 
 fn component_accumulator(
@@ -2104,7 +2140,7 @@ pub(crate) fn build_status_update(request: StatusUpdateBuildRequest<'_>) -> Stat
             request.render_options,
         ),
         statistics: Some(StatisticsSection {
-            global: request.integration_state.stats,
+            global: request.integration_state.stats.clone(),
             slot_counters: request.integration_state.slot_stats.clone(),
             slot_labels: request
                 .integration_state

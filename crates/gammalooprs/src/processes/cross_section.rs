@@ -2408,12 +2408,12 @@ impl CrossSectionGraph {
 
         let mut product = (left_prefactor * right_prefactor).expand();
 
-        product = product.replace_multiple(&Self::side_specific_eta_replacements(
+        product = product.replace_multiple(Self::side_specific_eta_replacements(
             left_order,
             right_order,
         ));
         product =
-            product.replace_multiple(&Self::fuse_left_right_replacements(left_order, right_order));
+            product.replace_multiple(Self::fuse_left_right_replacements(left_order, right_order));
         product
     }
 
@@ -3900,7 +3900,7 @@ mod tests {
         let atom = function!(eta, GS.radius_star_left).derivative(GS.radius_star_left)
             * function!(eta, GS.radius_star_right).derivative(GS.radius_star_right);
         let rewritten = atom.replace_multiple(
-            &super::CrossSectionGraph::side_specific_eta_replacements(1, 1),
+            super::CrossSectionGraph::side_specific_eta_replacements(1, 1),
         );
         let expected = function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left)
             * function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right);
@@ -3914,9 +3914,8 @@ mod tests {
         let left = function!(f, GS.radius_star_left);
         let right = function!(f, GS.radius_star_right);
         let atom = (left * (right.clone() + right.derivative(GS.radius_star_right))).expand();
-        let rewritten = atom.replace_multiple(
-            &super::CrossSectionGraph::fuse_left_right_replacements(1, 2),
-        );
+        let rewritten =
+            atom.replace_multiple(super::CrossSectionGraph::fuse_left_right_replacements(1, 2));
         let base = function!(f, GS.radius_star_left, GS.radius_star_right);
         let expected = base.clone() + base.derivative(GS.radius_star_right);
 

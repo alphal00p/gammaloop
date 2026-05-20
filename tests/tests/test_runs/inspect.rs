@@ -843,6 +843,48 @@ fn inspect_bench_cli_runs_for_scalar_triangle() -> Result<()> {
 }
 
 #[test]
+fn integrate_writes_numerical_stability_histograms_for_scalar_triangle() -> Result<()> {
+    let mut cli =
+        setup_explicit_sum_scalar_topologies_cli("integrate_numerical_stability_histograms")?;
+    cli.run_command(
+        "set process -p triangle -i scalar_tri kv integrator.n_start=2 integrator.min_samples_for_update=2 integrator.n_max=2 integrator.n_increase=0",
+    )?;
+
+    let workspace = get_tests_workspace_path()
+        .join("integrate_numerical_stability_histograms")
+        .join("integration_workspace");
+    Integrate {
+        process: vec![ProcessRef::Unqualified("triangle".to_string())],
+        integrand_name: vec!["scalar_tri".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let stability_dir = workspace.join("numerical_stability");
+    assert!(stability_dir.join("global.json").exists());
+    assert!(stability_dir.join("global.hwu").exists());
+    assert!(stability_dir.join("triangle@scalar_tri.json").exists());
+    assert!(stability_dir.join("triangle@scalar_tri.hwu").exists());
+
+    let global_bundle = gammalooprs::observables::ObservableSnapshotBundle::from_json_file(
+        stability_dir.join("global.json"),
+    )?;
+    for key in ["Double", "Quad", "ArbPrec"] {
+        assert!(
+            global_bundle.histograms.contains_key(key),
+            "missing numerical stability histogram {key}"
+        );
+    }
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 #[serial]
 fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
     let mut cli =

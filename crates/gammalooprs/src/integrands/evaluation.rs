@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::time::Duration;
 
@@ -17,7 +18,8 @@ use tabled::{
 };
 
 use crate::observables::{
-    EventGroupList, GenericEventGroupList, ObservableSnapshotBundle,
+    EventGroupList, GenericEventGroupList, HistogramAccumulatorState, HistogramMedianPosition,
+    HistogramSnapshot, ObservablePhase, ObservableSnapshotBundle, ObservableValueTransform,
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
@@ -272,6 +274,7 @@ fn fmt_batch_result<D: Display>(
     f: &mut std::fmt::Formatter<'_>,
     samples: &[D],
     observables: &ObservableSnapshotBundle,
+    numerical_stability: Option<&NumericalStabilityHistograms>,
 ) -> std::fmt::Result {
     let summary_rows = [EvaluationSummaryRow {
         field: "samples".to_string(),
@@ -285,6 +288,12 @@ fn fmt_batch_result<D: Display>(
         writeln!(f)?;
         writeln!(f, "{}", "Observable snapshots".bold().bright_magenta())?;
         writeln!(f, "{observables_table}")?;
+    }
+
+    if let Some(stability_table) = numerical_stability.and_then(summarize_numerical_stability) {
+        writeln!(f)?;
+        writeln!(f, "{}", "Numerical stability".bold().bright_magenta())?;
+        writeln!(f, "{stability_table}")?;
     }
 
     for (sample_index, sample) in samples.iter().enumerate() {
@@ -387,10 +396,226 @@ pub struct SingleSampleEvaluationResult {
     pub observables: ObservableSnapshotBundle,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
+pub enum NumericalStabilityLevel {
+    Double,
+    Quad,
+    ArbPrec,
+}
+
+impl NumericalStabilityLevel {
+    pub fn all() -> [Self; 3] {
+        [Self::Double, Self::Quad, Self::ArbPrec]
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Double => "Double",
+            Self::Quad => "Quad",
+            Self::ArbPrec => "ArbPrec",
+        }
+    }
+
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Self::Double => "f64",
+            Self::Quad => "f128",
+            Self::ArbPrec => "arb",
+        }
+    }
+
+    fn from_precision(precision: Precision) -> Self {
+        match precision {
+            Precision::Double => Self::Double,
+            Precision::Quad => Self::Quad,
+            Precision::Arb => Self::ArbPrec,
+        }
+    }
+
+    fn histogram_range(self) -> (f64, f64, usize) {
+        match self {
+            Self::Double => (-1.0, 17.0, 72),
+            Self::Quad => (-1.0, 34.0, 140),
+            Self::ArbPrec => (-1.0, 1000.0, 100),
+        }
+    }
+
+    fn overflow_relative_bound(self) -> f64 {
+        let (_, x_max, _) = self.histogram_range();
+        10.0_f64.powf(-x_max)
+    }
+}
+
+impl Display for NumericalStabilityLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.key())
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct NumericalStabilityHistograms {
+    pub histograms: BTreeMap<String, HistogramSnapshot>,
+}
+
+impl NumericalStabilityHistograms {
+    pub fn as_observable_snapshot_bundle(&self) -> ObservableSnapshotBundle {
+        ObservableSnapshotBundle {
+            histograms: self.histograms.clone(),
+        }
+    }
+
+    pub fn median(&self, level: NumericalStabilityLevel) -> Option<NumericalStabilityMedian> {
+        let histogram = self.histograms.get(level.key())?;
+        NumericalStabilityMedian::from_histogram(level, histogram)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NumericalStabilityMedian {
+    Underflow { lower_bound: f64 },
+    InRange { relative_accuracy: f64 },
+    Overflow { upper_bound: f64 },
+}
+
+impl NumericalStabilityMedian {
+    fn from_histogram(
+        level: NumericalStabilityLevel,
+        histogram: &HistogramSnapshot,
+    ) -> Option<Self> {
+        match histogram.approximate_weighted_median_position()? {
+            HistogramMedianPosition::Underflow => {
+                let lower_bound = histogram.x_min.map(|x_min| 10.0_f64.powf(-x_min))?;
+                Some(Self::Underflow { lower_bound })
+            }
+            HistogramMedianPosition::InRange(log_accuracy) => Some(Self::InRange {
+                relative_accuracy: 10.0_f64.powf(-log_accuracy),
+            }),
+            HistogramMedianPosition::Overflow => Some(Self::Overflow {
+                upper_bound: level.overflow_relative_bound(),
+            }),
+        }
+    }
+
+    pub fn formatted_relative_accuracy(self) -> String {
+        match self {
+            Self::Underflow { lower_bound } => {
+                format!(">{}", format_stability_scientific(lower_bound))
+            }
+            Self::InRange { relative_accuracy } => format_stability_scientific(relative_accuracy),
+            Self::Overflow { upper_bound } => {
+                format!("<{}", format_stability_scientific(upper_bound))
+            }
+        }
+    }
+}
+
+fn format_stability_scientific(value: f64) -> String {
+    if !value.is_finite() {
+        return "N/A".to_string();
+    }
+    let formatted = format!("{value:.1e}");
+    let Some((mantissa, exponent)) = formatted.rsplit_once('e') else {
+        return formatted;
+    };
+    let exponent = exponent.parse::<i32>().unwrap_or_default();
+    format!("{mantissa}e{exponent}")
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct NumericalStabilityHistogramAccumulator {
+    histograms: BTreeMap<String, HistogramAccumulatorState>,
+}
+
+impl Default for NumericalStabilityHistogramAccumulator {
+    fn default() -> Self {
+        Self::new_empty()
+    }
+}
+
+impl NumericalStabilityHistogramAccumulator {
+    fn new_empty() -> Self {
+        let histograms = NumericalStabilityLevel::all()
+            .into_iter()
+            .map(|level| {
+                let (x_min, x_max, n_bins) = level.histogram_range();
+                (
+                    level.key().to_string(),
+                    HistogramAccumulatorState::continuous(
+                        format!("Numerical stability {}", level.key()),
+                        "-log10(relative accuracy)".to_string(),
+                        ObservablePhase::Real,
+                        ObservableValueTransform::Identity,
+                        x_min,
+                        x_max,
+                        false,
+                        false,
+                        n_bins,
+                    ),
+                )
+            })
+            .collect();
+        Self { histograms }
+    }
+
+    fn fill_from_stability_results(&mut self, stability_results: &[StabilityResult]) {
+        for result in stability_results {
+            let level = NumericalStabilityLevel::from_precision(result.precision);
+            let Some(histogram) = self.histograms.get_mut(level.key()) else {
+                continue;
+            };
+            let Some(relative_accuracy) = result.estimated_relative_accuracy else {
+                continue;
+            };
+            let relative_accuracy = relative_accuracy.0.abs();
+            let value = if relative_accuracy == 0.0 {
+                let (_, x_max, _) = level.histogram_range();
+                x_max + 1.0
+            } else if relative_accuracy.is_finite() {
+                -relative_accuracy.log10()
+            } else {
+                continue;
+            };
+            histogram
+                .fill_continuous_sample(&[(value, 1.0)])
+                .expect("numerical stability histograms are fixed continuous histograms");
+        }
+    }
+
+    fn merge_in_place(&mut self, other: &Self) {
+        for (name, histogram) in &mut self.histograms {
+            let mut other_histogram = other
+                .histograms
+                .get(name)
+                .unwrap_or_else(|| panic!("missing numerical stability histogram '{name}'"))
+                .clone();
+            histogram
+                .merge_in_place(&mut other_histogram)
+                .expect("fixed numerical stability histograms must be compatible");
+        }
+    }
+
+    fn merged(&self, other: &Self) -> Self {
+        let mut merged = self.clone();
+        merged.merge_in_place(other);
+        merged
+    }
+
+    pub(crate) fn snapshot(&self) -> NumericalStabilityHistograms {
+        NumericalStabilityHistograms {
+            histograms: self
+                .histograms
+                .iter()
+                .map(|(name, histogram)| (name.clone(), histogram.snapshot()))
+                .collect(),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Debug)]
 pub struct BatchSampleEvaluationResult {
     pub samples: Vec<SampleEvaluationResult>,
     pub observables: ObservableSnapshotBundle,
+    pub numerical_stability: Option<NumericalStabilityHistograms>,
 }
 
 #[derive(Clone, Debug)]
@@ -430,7 +655,12 @@ impl Display for SingleSampleEvaluationResult {
 
 impl Display for BatchSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_batch_result(f, &self.samples, &self.observables)
+        fmt_batch_result(
+            f,
+            &self.samples,
+            &self.observables,
+            self.numerical_stability.as_ref(),
+        )
     }
 }
 
@@ -442,7 +672,7 @@ impl Display for PreciseSingleSampleEvaluationResult {
 
 impl Display for PreciseBatchSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_batch_result(f, &self.samples, &self.observables)
+        fmt_batch_result(f, &self.samples, &self.observables, None)
     }
 }
 
@@ -470,6 +700,15 @@ struct StabilitySummaryRow {
     relative_accuracy: String,
     time: String,
     status: String,
+}
+
+#[derive(Tabled)]
+struct NumericalStabilitySummaryRow {
+    level: String,
+    median: String,
+    samples: String,
+    range: String,
+    overflow: String,
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -566,6 +805,35 @@ fn summarize_observables(observables: &ObservableSnapshotBundle) -> Option<Strin
             },
             underflow: format_count(histogram.underflow_bin.entry_count),
             overflow: format_count(histogram.overflow_bin.entry_count),
+        })
+        .collect::<Vec<_>>();
+
+    Some(Table::new(rows).with(Style::rounded()).to_string())
+}
+
+fn summarize_numerical_stability(stability: &NumericalStabilityHistograms) -> Option<String> {
+    if stability.histograms.is_empty() {
+        return None;
+    }
+
+    let rows = NumericalStabilityLevel::all()
+        .into_iter()
+        .filter_map(|level| {
+            let histogram = stability.histograms.get(level.key())?;
+            Some(NumericalStabilitySummaryRow {
+                level: level.key().to_string(),
+                median: stability
+                    .median(level)
+                    .map(NumericalStabilityMedian::formatted_relative_accuracy)
+                    .unwrap_or_else(|| "N/A".to_string()),
+                samples: format_count(histogram.sample_count),
+                range: format!(
+                    "[{:+.0}, {:+.0}]",
+                    histogram.x_min.unwrap_or_default(),
+                    histogram.x_max.unwrap_or_default()
+                ),
+                overflow: format_count(histogram.overflow_bin.entry_count),
+            })
         })
         .collect::<Vec<_>>();
 
@@ -745,7 +1013,7 @@ impl EvaluationMetaData {
 }
 
 /// This struct merges the evaluation metadata of many evaluations into a single struct
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
     num_sample_points: usize,
@@ -763,6 +1031,8 @@ pub struct StatisticsCounter {
     num_nan_or_unstable_evals: usize,
     sum_generated_event_count: usize,
     sum_accepted_event_count: usize,
+    #[bincode(with_serde)]
+    numerical_stability: NumericalStabilityHistogramAccumulator,
 }
 
 impl StatisticsCounter {
@@ -788,6 +1058,9 @@ impl StatisticsCounter {
                     data_entry.evaluation_metadata.generated_event_count;
                 accumulator.sum_accepted_event_count +=
                     data_entry.evaluation_metadata.accepted_event_count;
+                accumulator
+                    .numerical_stability
+                    .fill_from_stability_results(&data_entry.evaluation_metadata.stability_results);
 
                 accumulator.num_evals += 1;
                 match data_entry
@@ -852,6 +1125,7 @@ impl StatisticsCounter {
                 + other.sum_generated_event_count,
             sum_accepted_event_count: self.sum_accepted_event_count
                 + other.sum_accepted_event_count,
+            numerical_stability: self.numerical_stability.merged(&other.numerical_stability),
         }
     }
 
@@ -873,6 +1147,7 @@ impl StatisticsCounter {
             num_nan_or_unstable_evals: 0,
             sum_generated_event_count: 0,
             sum_accepted_event_count: 0,
+            numerical_stability: NumericalStabilityHistogramAccumulator::new_empty(),
         }
     }
 
@@ -990,6 +1265,17 @@ impl StatisticsCounter {
                     * 100.0,
             )
         }
+    }
+
+    pub fn numerical_stability_snapshot(&self) -> NumericalStabilityHistograms {
+        self.numerical_stability.snapshot()
+    }
+
+    pub(crate) fn numerical_stability_median(
+        &self,
+        level: NumericalStabilityLevel,
+    ) -> Option<NumericalStabilityMedian> {
+        self.numerical_stability_snapshot().median(level)
     }
 
     pub(crate) fn snapshot(&self) -> IntegrationStatisticsSnapshot {
@@ -1138,7 +1424,11 @@ mod tests {
 
     use crate::settings::runtime::Precision;
 
-    use super::{EvaluationMetaData, StabilityResult, StabilityStatus, StatisticsCounter};
+    use super::{
+        BatchSampleEvaluationResult, EvaluationMetaData, EvaluationResult,
+        NumericalStabilityHistogramAccumulator, NumericalStabilityLevel, NumericalStabilityMedian,
+        StabilityResult, StabilityStatus, StatisticsCounter,
+    };
 
     #[test]
     fn status_table_renders_three_rows_without_header() {
@@ -1159,6 +1449,7 @@ mod tests {
             num_nan_or_unstable_evals: 0,
             sum_generated_event_count: 0,
             sum_accepted_event_count: 0,
+            numerical_stability: NumericalStabilityHistogramAccumulator::new_empty(),
         };
 
         let rendered = stats.render_status_table();
@@ -1201,6 +1492,7 @@ mod tests {
             num_nan_or_unstable_evals: 0,
             sum_generated_event_count: 10,
             sum_accepted_event_count: 4,
+            numerical_stability: NumericalStabilityHistogramAccumulator::new_empty(),
         };
 
         let snapshot = stats.snapshot();
@@ -1237,6 +1529,66 @@ mod tests {
         assert!(rendered.contains("Stable(3 samples)"), "{rendered}");
         assert!(rendered.contains("Unknown(1 sample)"), "{rendered}");
         assert!(rendered.contains("None"), "{rendered}");
+    }
+
+    #[test]
+    fn numerical_stability_histograms_aggregate_stability_results() {
+        let mut first = EvaluationResult::zero();
+        first.evaluation_metadata.stability_results = vec![
+            StabilityResult {
+                precision: Precision::Double,
+                estimated_relative_accuracy: Some(1.0e-8.into()),
+                status: StabilityStatus::Stable(3),
+                total_time: Duration::ZERO,
+            },
+            StabilityResult {
+                precision: Precision::Quad,
+                estimated_relative_accuracy: Some(0.0.into()),
+                status: StabilityStatus::Stable(3),
+                total_time: Duration::ZERO,
+            },
+        ];
+
+        let stats = StatisticsCounter::from_evaluation_results(&[first]);
+        let stability = stats.numerical_stability_snapshot();
+        let double_histogram = stability
+            .histograms
+            .get(NumericalStabilityLevel::Double.key())
+            .expect("double histogram");
+        let quad_histogram = stability
+            .histograms
+            .get(NumericalStabilityLevel::Quad.key())
+            .expect("quad histogram");
+
+        assert_eq!(double_histogram.sample_count, 1);
+        assert_eq!(double_histogram.statistics.in_range_entry_count, 1);
+        assert_eq!(quad_histogram.sample_count, 1);
+        assert_eq!(quad_histogram.overflow_bin.entry_count, 1);
+        let Some(NumericalStabilityMedian::InRange { relative_accuracy }) =
+            stability.median(NumericalStabilityLevel::Double)
+        else {
+            panic!("double median should be populated in range");
+        };
+        assert!((1.0e-9..1.0e-7).contains(&relative_accuracy));
+        assert_eq!(
+            stability
+                .median(NumericalStabilityLevel::Quad)
+                .map(|median| median.formatted_relative_accuracy()),
+            Some("<1.0e-34".to_string())
+        );
+        assert_eq!(stability.median(NumericalStabilityLevel::ArbPrec), None);
+    }
+
+    #[test]
+    fn batch_result_omits_numerical_stability_when_minimal() {
+        let rendered = BatchSampleEvaluationResult {
+            samples: Vec::new(),
+            observables: Default::default(),
+            numerical_stability: None,
+        }
+        .to_string();
+
+        assert!(!rendered.contains("Numerical stability"), "{rendered}");
     }
 
     mod failing {

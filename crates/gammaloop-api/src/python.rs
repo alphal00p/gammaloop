@@ -1115,6 +1115,17 @@ impl PyBatchEvaluationResult {
         py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
+    #[getter]
+    fn numerical_stability<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        self.inner
+            .numerical_stability
+            .as_ref()
+            .map(|stability| {
+                py_observable_dict_from_bundle(py, &stability.as_observable_snapshot_bundle())
+            })
+            .transpose()
+    }
+
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -2262,6 +2273,7 @@ impl GammaLoopAPI {
         let gammalooprs::integrands::evaluation::BatchSampleEvaluationResult {
             mut samples,
             observables,
+            numerical_stability: _,
         } = res;
         let value = samples.pop().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
