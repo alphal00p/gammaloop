@@ -560,23 +560,8 @@ fn finit_part_ghlo() {
 mod failing {
     use super::*;
 
-    #[test]
-    fn finite_part_ghost_3loop() {
-        test_initialise().unwrap();
-
-        let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_path(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/resources/graphs/rqft_ghost_3l.dot"
-            ),
-            &model,
-        )
-        .unwrap();
-
-        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
-
-        let settings = UVgenerationSettings {
+    fn ghost_3loop_settings() -> UVgenerationSettings {
+        UVgenerationSettings {
             softct: false,
             only_integrated: true,
             pole_part: true,
@@ -587,10 +572,6 @@ mod failing {
              * (exp(-logmUVmu-log_mu_sq))^(eps)
              )^(-n_loops)"
                     .to_string(),
-                // evaluation_methods: vec!["matad".to_string()],
-                // normalization: "(exp(log_mu_sq+logmUVmu)/(4*𝜋*exp(-EulerGamma)))^(eps*n_loops)"
-                //     .to_string(),
-                // normalization: "FMFTandMATAD".to_string(),
                 additional_normalization: "1".to_string(),
                 matad: MATADSettings {
                     expand_masters: true,
@@ -604,7 +585,48 @@ mod failing {
                 ..Default::default()
             },
             ..Default::default()
-        };
+        }
+    }
+
+    #[test]
+    #[ignore = "reproduces the generated renormalization sum before alignment"]
+    fn finite_part_ghost_3loop_renormalization_sum_origin_mwe() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let graphs: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("bub", graphs).unwrap();
+        assert_eq!(amp.graphs[0].graph.name, "d1");
+        let _ = amp.graphs[0]
+            .renormalization_part(&ghost_3loop_settings())
+            .unwrap();
+    }
+
+    #[test]
+    fn finite_part_ghost_3loop() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let g: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+
+        let settings = ghost_3loop_settings();
 
         let a = amp.graphs[0].renormalization_part(&settings).unwrap();
         //p1.p1*gs^6*CA^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)

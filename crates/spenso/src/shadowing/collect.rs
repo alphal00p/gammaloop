@@ -33,12 +33,17 @@ pub enum TensorCollectFilter<const N: usize> {
 
 pub trait Collectable {
     fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
+    fn expand_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
     fn wrap_in_collect(self) -> Atom;
     fn unwrap_collect(self) -> Atom;
 }
 impl Collectable for Atom {
     fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom {
         self.as_view().collect_with_map(map)
+    }
+
+    fn expand_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom {
+        self.as_view().expand_with_map(map)
     }
 
     fn unwrap_collect(self) -> Atom {
@@ -50,6 +55,21 @@ impl Collectable for Atom {
     }
 }
 impl Collectable for AtomView<'_> {
+    fn expand_with_map(self, mut matches: impl FnMut(AtomView<'_>) -> bool) -> Atom {
+        let mut hit = false;
+        let wrapped = self.replace_map(|arg, _context, out| {
+            if matches(arg) {
+                hit = true;
+                **out = arg.wrap_in_collect()
+            }
+        });
+
+        if !hit {
+            return self.to_owned();
+        }
+        let collected = wrapped.expand_in(*COLLECT);
+        collected.unwrap_collect()
+    }
     fn collect_with_map(self, mut matches: impl FnMut(AtomView<'_>) -> bool) -> Atom {
         let mut hit = false;
         let wrapped = self.replace_map(|arg, _context, out| {
@@ -62,7 +82,6 @@ impl Collectable for AtomView<'_> {
         if !hit {
             return self.to_owned();
         }
-
         let collected = wrapped.collect_symbol::<i16>(*COLLECT, None, None);
         collected.unwrap_collect()
     }
@@ -92,6 +111,10 @@ impl Collectable for AtomView<'_> {
 impl<const N: usize> TensorCollectFilter<N> {
     fn collect(self, expression: AtomView<'_>) -> Atom {
         expression.collect_with_map(|a| self.matches(a))
+    }
+
+    fn expand(self, expression: AtomView<'_>) -> Atom {
+        expression.expand_with_map(|a| self.matches(a))
     }
 
     fn matches(self, arg: AtomView<'_>) -> bool {
@@ -172,6 +195,24 @@ pub trait TensorCollectExt {
 
     /// Collect common chain and trace tensors.
     fn collect_chains_and_traces(&self) -> Atom;
+
+    /// Expand common tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
+    fn expand_tensors(&self) -> Atom;
+
+    /// Expand common tagged tensor leaves by temporarily wrapping them in `spenso::collect(...)`.
+    fn expand_tagged_tensors(&self) -> Atom;
+
+    /// Expand common tensor leaves that contain `rep` as one of their slot representations.
+    fn expand_rep(&self, rep: LibraryRep) -> Atom;
+
+    /// Expand common tensor leaves that contain any of the `reps` as one of their slot representations.
+    fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom;
+
+    /// Expand common metric tensors.
+    fn expand_metrics(&self) -> Atom;
+
+    /// Expand common chain and trace tensors.
+    fn expand_chains_and_traces(&self) -> Atom;
 }
 
 impl TensorCollectExt for Atom {
@@ -198,6 +239,30 @@ impl TensorCollectExt for Atom {
     fn collect_chains_and_traces(&self) -> Atom {
         self.as_view().collect_chains_and_traces()
     }
+
+    fn expand_tensors(&self) -> Atom {
+        self.as_view().expand_tensors()
+    }
+
+    fn expand_tagged_tensors(&self) -> Atom {
+        self.as_view().expand_tagged_tensors()
+    }
+
+    fn expand_rep(&self, rep: LibraryRep) -> Atom {
+        self.as_view().expand_rep(rep)
+    }
+
+    fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {
+        self.as_view().expand_reps(reps)
+    }
+
+    fn expand_metrics(&self) -> Atom {
+        self.as_view().expand_metrics()
+    }
+
+    fn expand_chains_and_traces(&self) -> Atom {
+        self.as_view().expand_chains_and_traces()
+    }
 }
 
 impl TensorCollectExt for AtomView<'_> {
@@ -222,5 +287,28 @@ impl TensorCollectExt for AtomView<'_> {
 
     fn collect_metrics(&self) -> Atom {
         TensorCollectFilter::<0>::Metrics.collect(*self)
+    }
+
+    fn expand_chains_and_traces(&self) -> Atom {
+        TensorCollectFilter::<0>::ChainsAndTraces.expand(*self)
+    }
+    fn expand_tensors(&self) -> Atom {
+        TensorCollectFilter::<0>::Tensors.expand(*self)
+    }
+
+    fn expand_tagged_tensors(&self) -> Atom {
+        TensorCollectFilter::<0>::TaggedTensors.expand(*self)
+    }
+
+    fn expand_rep(&self, rep: LibraryRep) -> Atom {
+        TensorCollectFilter::Reps([rep]).expand(*self)
+    }
+
+    fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {
+        TensorCollectFilter::Reps(reps).expand(*self)
+    }
+
+    fn expand_metrics(&self) -> Atom {
+        TensorCollectFilter::<0>::Metrics.expand(*self)
     }
 }

@@ -45,6 +45,40 @@ These rules are intentionally broad and should shape most code changes.
   scratch docs, local example edits, profiling outputs, etc.) unless the task
   clearly requires them.
 
+## Debug Logging Pattern
+
+- Prefer `debug_tags!` plus the log filter environment variables over ad hoc
+  debug files, one-off `println!`, or custom dump env vars. This keeps
+  investigative output routable to display and JSONL log sinks with the same
+  filtering syntax.
+- Add semantic tags that describe the pipeline and subsystem, for example:
+  ```rust
+  debug_tags!(#uv, #integrated, #vakint, #trace;
+      stage = "to_vakint_integrand_after_den_to_prop",
+      reduced = %reduced_label,
+      display.preview = %expr.log_print(Some(120)),
+      file.expr = %expr.to_plain_string(),
+      "Vakint trace"
+  );
+  ```
+- Use a `stage` field for fine-grained ordering within a code path. Use
+  concise display fields for terminal output and `file.*` fields for large or
+  exact payloads. `file.*` fields are hidden from the display sink and written
+  as structured JSONL logfile fields with the routing prefix stripped
+  (`file.expr` is stored as `expr`).
+- To capture a focused test trace to file while keeping stderr quiet, run for
+  example:
+  ```bash
+  GL_DISPLAY_FILTER=off \
+  GL_LOGFILE_FILTER='[{#uv,#integrated,#vakint,#trace}]=debug' \
+  GL_TEST_LOG_DIR=/tmp/gammaloop-test-logs \
+  cargo test -p gammalooprs --test test_renormalization --profile dev-optim \
+    finite_part_ghost_3loop_renormalization_sum_origin_mwe -- --ignored --nocapture
+  ```
+- Use `GL_ALL_LOG_FILTER` only when display and logfile should receive the same
+  filter. Otherwise prefer `GL_DISPLAY_FILTER` and `GL_LOGFILE_FILTER` so large
+  `file.*` payloads can be kept out of terminal output.
+
 ## Code Quality Baseline
 
 ### Rust
