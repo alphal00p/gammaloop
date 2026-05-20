@@ -38,6 +38,52 @@ fn empty_config_bytes() -> Vec<u8> {
     bytes
 }
 
+#[test]
+fn parsed_dot_layout_keys_do_not_configure_layout() {
+    let graph = TypstGraph::from_dot(
+        dot!(digraph {
+            steps = 1
+            seed = 99
+            a -> b
+        })
+        .unwrap(),
+        &test_figment(),
+    );
+
+    assert!(matches!(
+        graph.layout_config.layout_algo,
+        crate::LayoutAlgo::Force
+    ));
+    assert_eq!(graph.layout_config.schedule.steps, 30);
+    assert_eq!(graph.layout_config.seed, 2);
+    assert_eq!(
+        graph.global_statements.get("steps").map(String::as_str),
+        Some("1")
+    );
+    assert_eq!(
+        graph.global_statements.get("seed").map(String::as_str),
+        Some("99")
+    );
+}
+
+#[test]
+fn explicit_layout_figment_configures_layout() {
+    let figment = Figment::from(Serialized::from(
+        BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("tree-dx".to_string(), "3.0".to_string()),
+        ]),
+        Profile::Default,
+    ));
+    let graph = TypstGraph::from_dot(dot!(digraph { a -> b }).unwrap(), &figment);
+
+    assert!(matches!(
+        graph.layout_config.layout_algo,
+        crate::LayoutAlgo::Tree
+    ));
+    assert_eq!(graph.layout_config.tree_dx, 3.0);
+}
+
 fn decode_graphs(bytes: &[u8]) -> Vec<Vec<u8>> {
     ciborium::de::from_reader(bytes).unwrap()
 }
