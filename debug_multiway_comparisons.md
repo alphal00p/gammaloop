@@ -53,10 +53,33 @@ The merge required three first-principles repairs:
   construction. This is an algebraic parameter-basis normalization, not a sign
   or graph-specific adjustment.
 
-Accepted snapshot updates in the scalar slow sweep are limited to `insta`
-metadata line numbers and last-digit numerical changes after the merge. The
-multi-way parity assertions and snapshot anchors now both pass without
-`INSTA_FORCE_PASS`.
+The follow-up pass that was enabled by main's raised threshold plus raised
+Cutkosky support is now complete:
+
+- Scalar cross-section local-inspect tests no longer disable threshold
+  subtraction for GL01, GL03, GL04, GL24, GL30, or GL35. The formerly disabled
+  threshold-on references are now accepted snapshots.
+- LU threshold-localization now mirrors the amplitude threshold path: an
+  `r*` root is only used when it is positive, finite, and converged. Invalid
+  roots are skipped instead of being fed into local threshold counterterms.
+  This removed NaN threshold counterterms on the newly enabled scalar cases.
+- Pure raised threshold residues in CFF now use the generated repeated-channel
+  basis whenever the CFF source has repeated active denominators, independent
+  of whether the selected threshold axis is represented as the older synthetic
+  threshold `lu_cut` or as the explicit `left_threshold` / `right_threshold`
+  `CutCFFIndex` axis. This repairs the amplitude-like divergent scalar bubble
+  profile bucket after main made threshold axes first-class.
+
+The CFF raised-threshold change is not a graph-specific sign or normalization
+modifier. It is the same Laurent-coordinate statement as the earlier confluent
+CFF amplitude threshold fix: once the source has been generated in the
+repeated-channel coordinate, the selected repeated threshold pole must be read
+in that generated coordinate, otherwise the Laurent coefficient is evaluated on
+the unresolved threshold surface and can become NaN.
+
+Accepted snapshot updates in this pass are the new threshold-on scalar
+cross-section references and one GL02 last-digit numerical drift. The multi-way
+parity assertions and snapshot anchors now both pass without `INSTA_FORCE_PASS`.
 
 Validation for this checkpoint:
 
@@ -92,13 +115,33 @@ env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=1 \
   -E 'test(/scalar_3l_cross_section_inspects::slow/)' \
   --retries 0
 
-143 tests run: 143 passed (16 slow), 128 skipped
+143 tests run: 143 passed (15 slow), 128 skipped
 ```
 
-The next intended pass is to remove the scalar-test threshold-subtraction
-disable overrides that were only present because main did not yet support
-raised threshold and raised Cutkosky cuts jointly. That must be done as a
-separate, protected change from this green post-merge baseline.
+Focused amplitude threshold profile bucket:
+
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 RUSTFLAGS=-L/opt/local/lib/libgcc \
+  cargo nextest run -p gammaloop-integration-tests --test test_runs \
+  --cargo-profile dev-optim --run-ignored all --ignore-default-filter \
+  -E 'test(=profile_bulk::massless_triangle_bulk_profile_passes) | test(=profile_bulk::dotted_bubble_amp_bulk_profile_passes) | test(=profile_bulk::double_dotted_bubble_amp_bulk_profile_passes) | test(=profile_bulk::scalar_self_energy_amp_bulk_profile_passes)' \
+  --no-capture --retries 0
+
+4 tests run: 4 passed
+```
+
+Full selected GammaLoop suite:
+
+```text
+env EXTRA_MACOS_LIBS_FOR_GNU_GCC=T RUST_BACKTRACE=0 \
+  RUST_MIN_STACK=33554432 just test_gammaloop
+
+1163 tests run: 1163 passed, 271 skipped
+```
+
+As of this checkpoint, there are no known remaining failures in the selected
+GammaLoop suite or in the protected slow scalar cross-section sweep.
 
 ## Previous Checkpoint
 

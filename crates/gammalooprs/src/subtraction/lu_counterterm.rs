@@ -1295,7 +1295,7 @@ impl LUCounterTerm {
                     .overlap_group
                     .existing_esurfaces
                     .iter()
-                    .map(|esurface| {
+                    .filter_map(|esurface| {
                         overlap_builder
                             .new_esurface_builder(*esurface)
                             .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
@@ -1329,7 +1329,7 @@ impl LUCounterTerm {
                     .overlap_group
                     .existing_esurfaces
                     .iter()
-                    .map(|esurface| {
+                    .filter_map(|esurface| {
                         overlap_builder
                             .new_esurface_builder(*esurface)
                             .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
@@ -1827,7 +1827,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
-    ) -> RstarSolution<'a, T> {
+    ) -> Option<RstarSolution<'a, T>> {
         let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
         let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
@@ -1877,6 +1877,23 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         debug!("r* solution: {:?}", solution);
 
+        let convergence_tolerance = radius_guess.epsilon()
+            * F::from_f64(TOLERANCE)
+            * &self.overlap_builder.counterterm_builder.e_cm;
+        if solution.solution <= radius_guess.zero()
+            || solution.solution.is_nan()
+            || solution.solution.is_infinite()
+            || solution.error_of_function.is_nan()
+            || solution.error_of_function.is_infinite()
+            || solution.error_of_function.abs() > convergence_tolerance
+        {
+            debug!(
+                "Skipping LU threshold counterterm for E-surface {}: no positive finite converged r* solution ({solution:?})",
+                self.esurface_id.0
+            );
+            return None;
+        }
+
         let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self
                 .overlap_builder
@@ -1916,11 +1933,11 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             None
         };
 
-        RstarSolution {
+        Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
             t_dependent_solution,
-        }
+        })
     }
 }
 

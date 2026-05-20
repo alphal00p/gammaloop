@@ -243,6 +243,20 @@ impl ResidueSelector {
             && self.right_th_cut.is_none()
     }
 
+    pub(crate) fn is_pure_left_threshold_residue(&self) -> bool {
+        self.lu_cut().is_none() && self.left_th_cut.is_some() && self.right_th_cut.is_none()
+    }
+
+    pub(crate) fn is_pure_right_threshold_residue(&self) -> bool {
+        self.lu_cut().is_none() && self.left_th_cut.is_none() && self.right_th_cut.is_some()
+    }
+
+    pub(crate) fn is_pure_raised_threshold_residue(&self) -> bool {
+        self.is_threshold_esurface_residue()
+            || self.is_pure_left_threshold_residue()
+            || self.is_pure_right_threshold_residue()
+    }
+
     pub(crate) fn has_lu_cut_residue(&self) -> bool {
         self.lu_cut().is_some() && !self.lu_cut_edge_sets().is_empty()
     }

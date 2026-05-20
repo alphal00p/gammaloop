@@ -260,14 +260,15 @@ impl Graph {
         inverse_energy_excluded_edges.dedup();
 
         let cff_options = self.denominator_only_cff_3d_expression_options();
-        let use_confluent_cff = cutset.residue_selector.right_th_cut.is_none()
+        let repeated_active_cff_source =
+            self.cff_source_has_repeated_active_denominators(&contract_edges, &cff_options)?;
+        let pure_repeated_threshold_residue =
+            cutset.residue_selector.is_pure_raised_threshold_residue()
+                && repeated_active_cff_source;
+        let use_confluent_cff = (cutset.residue_selector.right_th_cut.is_none()
             && cutset.residue_selector.left_th_cut.is_none()
-            && (cutset.residue_selector.lu_cut().is_none()
-                || (cutset.residue_selector.is_threshold_esurface_residue()
-                    && self.cff_source_has_repeated_active_denominators(
-                        &contract_edges,
-                        &cff_options,
-                    )?));
+            && cutset.residue_selector.lu_cut().is_none())
+            || pure_repeated_threshold_residue;
         let cff = self.generate_3d_expression_for_integrand(
             &contract_edges,
             &canonize_esurface,
@@ -281,7 +282,21 @@ impl Graph {
             residues = apply_indexed_residue_selection(
                 residues,
                 CutCffResidueAxis::RightThreshold,
-                |expression| expression.select_esurface_residue(right_threshold),
+                |expression| {
+                    if pure_repeated_threshold_residue
+                        && cutset.residue_selector.is_pure_right_threshold_residue()
+                    {
+                        // The confluent source is already expressed in the
+                        // generated repeated-channel coordinate for this
+                        // single raised threshold. Re-reading the same
+                        // repeated pole in the canonical family would put the
+                        // Laurent coefficient back on the unresolved
+                        // threshold surface.
+                        expression.select_esurface_residue_in_generated_basis(right_threshold)
+                    } else {
+                        expression.select_esurface_residue(right_threshold)
+                    }
+                },
             );
         }
 
@@ -289,7 +304,20 @@ impl Graph {
             residues = apply_indexed_residue_selection(
                 residues,
                 CutCffResidueAxis::LeftThreshold,
-                |expression| expression.select_esurface_residue(left_threshold),
+                |expression| {
+                    if pure_repeated_threshold_residue
+                        && cutset.residue_selector.is_pure_left_threshold_residue()
+                    {
+                        // See the right-threshold branch above. This is the
+                        // amplitude-like raised-threshold case after the
+                        // CutCFFIndex migration made the selected axis
+                        // explicit instead of storing it as a synthetic LU
+                        // residue.
+                        expression.select_esurface_residue_in_generated_basis(left_threshold)
+                    } else {
+                        expression.select_esurface_residue(left_threshold)
+                    }
+                },
             );
         }
 

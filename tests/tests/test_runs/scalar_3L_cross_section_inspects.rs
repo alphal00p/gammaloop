@@ -597,7 +597,7 @@ mod default_scalar_3l_cross_section_inspects {
         );
         quartic_energy_graph_test!(
             scalar_3l_cross_section_gl24_quartic_energy_inspects_match,
-            Scalar3LGraphCase::default("GL24").without_threshold_subtraction()
+            Scalar3LGraphCase::default("GL24")
         );
     }
 }
@@ -611,15 +611,12 @@ mod slow {
     );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl01_inspects_match,
-        Scalar3LGraphCase::default("GL01")
-            .without_uv_subtraction()
-            .without_threshold_subtraction()
+        Scalar3LGraphCase::default("GL01").without_uv_subtraction()
     );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl03_inspects_match,
         Scalar3LGraphCase::default("GL03")
             .without_uv_subtraction()
-            .without_threshold_subtraction()
             .with_numerator(NumeratorChoice::Dot {
                 left_edge: 7,
                 right_edge: 8,
@@ -628,9 +625,7 @@ mod slow {
     );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl04_inspects_match,
-        Scalar3LGraphCase::default("GL04")
-            .without_uv_subtraction()
-            .without_threshold_subtraction()
+        Scalar3LGraphCase::default("GL04").without_uv_subtraction()
     );
     scalar_3l_graph_test!(scalar_3l_cross_section_gl05_inspects_match, "GL05");
     scalar_3l_graph_test!(scalar_3l_cross_section_gl06_inspects_match, "GL06");
@@ -702,13 +697,11 @@ mod slow {
     );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl24_inspects_match,
-        Scalar3LGraphCase::default("GL24")
-            .without_threshold_subtraction()
-            .with_numerator(NumeratorChoice::Dot {
-                left_edge: 1,
-                right_edge: 2,
-                dummy_index: 1,
-            })
+        Scalar3LGraphCase::default("GL24").with_numerator(NumeratorChoice::Dot {
+            left_edge: 1,
+            right_edge: 2,
+            dummy_index: 1,
+        })
     );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl25_inspects_match,
@@ -739,7 +732,6 @@ mod slow {
         scalar_3l_cross_section_gl30_inspects_match,
         Scalar3LGraphCase::default("GL30")
             .without_uv_subtraction()
-            .without_threshold_subtraction()
             .with_numerator(NumeratorChoice::Dot {
                 left_edge: 1,
                 right_edge: 2,
@@ -762,7 +754,7 @@ mod slow {
     scalar_3l_graph_test!(scalar_3l_cross_section_gl34_inspects_match, "GL34");
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl35_inspects_match,
-        Scalar3LGraphCase::default("GL35").without_threshold_subtraction()
+        Scalar3LGraphCase::default("GL35")
     );
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl36_inspects_match,
@@ -835,9 +827,7 @@ mod slow {
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl01_quadratic_energy_inspects_match,
-            Scalar3LGraphCase::default("GL01")
-                .without_uv_subtraction()
-                .without_threshold_subtraction()
+            Scalar3LGraphCase::default("GL01").without_uv_subtraction()
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl02_quadratic_energy_inspects_match,
@@ -845,9 +835,7 @@ mod slow {
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl03_quadratic_energy_inspects_match,
-            Scalar3LGraphCase::default("GL03")
-                .without_uv_subtraction()
-                .without_threshold_subtraction()
+            Scalar3LGraphCase::default("GL03").without_uv_subtraction()
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl04_quadratic_energy_inspects_match,
@@ -931,7 +919,7 @@ mod slow {
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl24_quadratic_energy_inspects_match,
-            Scalar3LGraphCase::default("GL24").without_threshold_subtraction()
+            Scalar3LGraphCase::default("GL24")
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl25_quadratic_energy_inspects_match,
@@ -955,9 +943,7 @@ mod slow {
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl30_quadratic_energy_inspects_match,
-            Scalar3LGraphCase::default("GL30")
-                .without_uv_subtraction()
-                .without_threshold_subtraction()
+            Scalar3LGraphCase::default("GL30").without_uv_subtraction()
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl31_quadratic_energy_inspects_match,
@@ -977,7 +963,7 @@ mod slow {
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl35_quadratic_energy_inspects_match,
-            q1_only: Scalar3LGraphCase::default("GL35").without_threshold_subtraction()
+            q1_only: Scalar3LGraphCase::default("GL35")
         );
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl36_quadratic_energy_inspects_match,
@@ -1054,9 +1040,7 @@ mod slow {
         );
         quartic_energy_graph_test!(
             scalar_3l_cross_section_gl30_quartic_energy_inspects_match,
-            Scalar3LGraphCase::default("GL30")
-                .without_uv_subtraction()
-                .without_threshold_subtraction()
+            Scalar3LGraphCase::default("GL30").without_uv_subtraction()
         );
         quartic_energy_graph_test!(
             scalar_3l_cross_section_gl41_quartic_energy_inspects_match,
