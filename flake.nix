@@ -489,6 +489,7 @@
             "gammaloop-api"
             "gammaloop-tracing-filter"
             "gammalooprs"
+            "three-dimensional-reps"
           ];
         }
         {
