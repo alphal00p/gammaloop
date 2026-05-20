@@ -21,7 +21,6 @@ use crate::{
     representations::Bispinor,
     shorthands::{
         chain::Chain,
-        metric::MetricSimplifier,
         schoonschip::{Schoonschip, SchoonschipSettings},
     },
 };
@@ -332,12 +331,12 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut expr = expr
             .to_owned()
             .collect_metrics()
-            .simplify_metrics()
+            .schoonschip()
             .simplify_epsilon()
             .chainify(rep)
             .collect_chains(rep)
             .collect_tensors()
-            .simplify_metrics()
+            .schoonschip()
             .simplify_epsilon();
 
         loop {
@@ -345,10 +344,10 @@ impl<'settings> DiracSimplifier<'settings> {
                 .settings
                 .rewrite_expression(expr.clone())
                 .collect_tensors()
-                .simplify_metrics()
+                .schoonschip()
                 .simplify_epsilon()
                 .normalize_chains()
-                .simplify_metrics()
+                .schoonschip()
                 .simplify_epsilon();
 
             if next == expr {

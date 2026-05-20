@@ -55,8 +55,8 @@ fn is_slot_view(atom: AtomView<'_>) -> bool {
 fn simple_dot() {
     test_initialize();
     let dim = symbol!("D");
-    let mink: Representation<_> = Minkowski {}.new_rep(dim.clone());
-    let mink_d = mink!(dim.clone());
+    let mink: Representation<_> = Minkowski {}.new_rep(dim);
+    let mink_d = mink!(dim);
 
     let p1 = p!(1, slot!(mink, 1));
     let p2 = p!(2, slot!(mink, 1));
@@ -129,7 +129,7 @@ fn simple_dot() {
 fn vakint_rank1_input_simplifies_to_dots() {
     test_initialize();
     let dim = symbol!("D");
-    let mink: Representation<_> = Minkowski {}.new_rep(dim.clone());
+    let mink: Representation<_> = Minkowski {}.new_rep(dim);
 
     let input = p!(0, slot!(mink, 2))
         * p!(0, slot!(mink, 5))

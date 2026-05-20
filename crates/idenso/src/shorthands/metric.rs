@@ -5,7 +5,7 @@ use crate::{
     tensor::{SymbolicNetParse, SymbolicTensor},
 };
 
-use super::schoonschip::Schoonschip;
+use super::schoonschip::{Schoonschip, SchoonschipSettings};
 use spenso::{
     network::{
         Network,
@@ -442,7 +442,7 @@ impl MetricSimplifier for Atom {
         self.as_view().expand_dots()
     }
     fn simplify_metrics(&self) -> Atom {
-        self.schoonschip()
+        self.schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors())
     }
 }
 
@@ -475,7 +475,7 @@ impl MetricSimplifier for AtomView<'_> {
         }))
     }
     fn simplify_metrics(&self) -> Atom {
-        self.schoonschip()
+        self.schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors())
     }
 }
 
@@ -594,26 +594,19 @@ mod test {
     fn dots() {
         test_initialize();
 
-        let a =
-            parse_lit!(P(spenso::mink(4, -1 * g(2)), spenso::mink(4, 2)) * P(spenso::mink(4, 2)))
-                .to_dots();
-        assert_eq!(
-            a,
-            parse_lit!(P(spenso::mink(4, 2)) * P(spenso::mink(4, -g(2)), spenso::mink(4, 2)))
-        );
         let a = parse_lit!(P(label, spenso::mink(4, 2)) * P(spenso::mink(4, 2))).to_dots();
         insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(P(label,mink(4)),P(mink(4)))");
         insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(label,cind(1))+-1*P(cind(2))*P(label,cind(2))+-1*P(cind(3))*P(label,cind(3))+P(cind(0))*P(label,cind(0))");
 
-        let a = parse_lit!(k1(spenso::mink(4, mu1)) ^ 2).to_dots();
-        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(k1(mink(4)),k1(mink(4)))");
+        let a = parse_lit!(Q(spenso::mink(4, mu1)) ^ 2).to_dots();
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(Q(mink(4)),Q(mink(4)))");
 
         let a = parse_lit!(spenso::g(
-            k(1, spenso::mink(4)) + k(2, spenso::mink(4)),
-            p(3, spenso::mink(4))
+            K(1, spenso::mink(4)) + K(2, spenso::mink(4)),
+            P(3, spenso::mink(4))
         ))
         .to_dots();
-        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(k(1,mink(4)),p(3,mink(4)))+dot(k(2,mink(4)),p(3,mink(4)))");
+        insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(K(1,mink(4)),P(3,mink(4)))+dot(K(2,mink(4)),P(3,mink(4)))");
     }
 
     #[test]

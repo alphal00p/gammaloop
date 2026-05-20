@@ -10,6 +10,10 @@ use crate::{
 
 pub struct SpensoTags {
     pub broadcast: String,
+    /// Marks rank-one tensor symbols whose final argument is the tensor slot.
+    ///
+    /// Symbols carrying this tag must not use representation slots in earlier
+    /// arguments; rank-one shorthand rewrites assume that contract.
     pub rank1: String,
     pub rank1_: Symbol,
     pub chain_in: Symbol,
