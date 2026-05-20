@@ -10,12 +10,13 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = { version = "2.0", features = ["full", "extra-traits"] }
-symbolica = { workspace = true, optional = true, default-features = false }
-serde ={ workspace = true}
+serde = { workspace = true }
+symbolica = { workspace = true, default-features = false, optional = true }
+syn = { version = "2.0", features = ["extra-traits", "full"] }
+
+[dev-dependencies]
+linnet = { workspace = true }
+spenso = { workspace = true }
 
 [features]
 shadowing = ["dep:symbolica"]
-[dev-dependencies]
-spenso = { workspace = true }
-linnet = {workspace = true}

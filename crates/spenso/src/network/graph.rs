@@ -51,11 +51,20 @@ use super::{
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
-    pub graph: HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK>>, //, Forest<NetworkNode<K>, ChildVecStore<()>>>,
+    pub graph: HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>, //, Forest<NetworkNode<K>, ChildVecStore<()>>>,
     pub slot_order: Vec<u8>,
     // #[bincode(with_serde)]
     // uncontracted: SuBitGraph,
 }
+
+type NetworkGraphBuilder<K, FK, Aind> =
+    HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
+
+pub type ReadyNetworkOp<K, FK = i8, Aind = AbstractIndex> = (
+    NetworkGraph<K, FK, Aind>,
+    NetworkOp<FK>,
+    Vec<NetworkLeaf<K, Aind>>,
+);
 
 #[derive(
     Debug,
@@ -103,13 +112,13 @@ impl<Aind> NetworkEdge<Aind> {
 #[derive(
     Debug, Clone, PartialEq, Eq, Encode, bincode_trait_derive::Decode, Serialize, Deserialize,
 )]
-pub enum NetworkNode<LibKey, FunKey> {
-    Leaf(NetworkLeaf<LibKey>),
+pub enum NetworkNode<LibKey, FunKey, Aind = AbstractIndex> {
+    Leaf(NetworkLeaf<LibKey, Aind>),
     Op(NetworkOp<FunKey>),
     // Port,
 }
 
-impl<K, FK> NetworkNode<K, FK> {
+impl<K, FK, Aind> NetworkNode<K, FK, Aind> {
     pub fn is_leaf(&self) -> bool {
         matches!(self, NetworkNode::Leaf(_))
     }
@@ -127,7 +136,7 @@ impl<K, FK> NetworkNode<K, FK> {
     }
 }
 
-impl<K: Display, FK: Display> Display for NetworkNode<K, FK> {
+impl<K: Display, FK: Display, Aind> Display for NetworkNode<K, FK, Aind> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NetworkNode::Leaf(l) => write!(f, "{}", l),
@@ -171,22 +180,25 @@ impl<FunKey: Display> Display for NetworkOp<FunKey> {
 #[derive(
     Debug, Clone, PartialEq, Eq, Encode, bincode_trait_derive::Decode, Serialize, Deserialize,
 )]
-pub enum NetworkLeaf<K> {
+pub enum NetworkLeaf<K, Aind = AbstractIndex> {
     LocalTensor(usize),
-    LibraryKey(PermutedStructure<K>),
+    LibraryKey {
+        key: PermutedStructure<K>,
+        indices: Vec<Aind>,
+    },
     Scalar(usize),
 }
 
-impl<K> NetworkLeaf<K> {
+impl<K, Aind> NetworkLeaf<K, Aind> {
     pub fn is_scalar(&self) -> bool {
         matches!(self, NetworkLeaf::Scalar(_))
     }
 }
 
-impl<K: Display> Display for NetworkLeaf<K> {
+impl<K: Display, Aind> Display for NetworkLeaf<K, Aind> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NetworkLeaf::LibraryKey(k) => write!(f, "Key:{k}"),
+            NetworkLeaf::LibraryKey { key, .. } => write!(f, "Key:{key}"),
             NetworkLeaf::LocalTensor(l) => write!(f, "Tensor:{l}"),
             NetworkLeaf::Scalar(s) => write!(f, "Scalar:{s}"),
         }
@@ -201,10 +213,11 @@ pub enum NetworkLeafWithInds<K> {
 }
 
 impl<K: Debug, FK: Debug, Aind: AbsInd>
-    From<HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK>>> for NetworkGraph<K, FK, Aind>
+    From<HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>>
+    for NetworkGraph<K, FK, Aind>
 {
-    fn from(builder: HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK>>) -> Self {
-        let graph: HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK>> = builder.build();
+    fn from(builder: HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>) -> Self {
+        let graph: HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>> = builder.build();
         let slot_order = vec![0; graph.n_hedges()];
         let mut g = Self {
             slot_order,
@@ -222,6 +235,80 @@ pub enum NetworkGraphError {
 }
 
 impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
+    fn match_slots(
+        _self_flow: Flow,
+        self_data: EdgeData<&NetworkEdge<Aind>>,
+        _other_flow: Flow,
+        other_data: EdgeData<&NetworkEdge<Aind>>,
+    ) -> bool {
+        match (self_data.data, other_data.data) {
+            (NetworkEdge::Slot(s), NetworkEdge::Slot(o)) => s.matches(o),
+            _ => false,
+        }
+    }
+
+    fn keep_first_edge(
+        self_flow: Flow,
+        self_data: EdgeData<NetworkEdge<Aind>>,
+        _other_flow: Flow,
+        _other_data: EdgeData<NetworkEdge<Aind>>,
+    ) -> (Flow, EdgeData<NetworkEdge<Aind>>) {
+        (self_flow, self_data)
+    }
+
+    fn sew_internal_tensor_slots(&mut self) {
+        self.graph
+            .sew(Self::match_slots, Self::keep_first_edge)
+            .expect("sewing internal tensor slots should only connect dangling slot edges");
+    }
+
+    pub(crate) fn replace_node_deleting_self_loop_slots(
+        &mut self,
+        node: NodeIndex,
+        node_data: NetworkNode<K, FK, Aind>,
+    ) {
+        let mut traced_slots: SuBitGraph = self.graph.empty_subgraph();
+        for hedge in self.graph.iter_crown(node) {
+            if self.graph[[&hedge]].is_slot() && self.graph.is_self_loop(hedge) {
+                traced_slots.add(hedge);
+            }
+        }
+
+        self.graph[node] = node_data;
+        self.delete(&traced_slots);
+        self.graph.node_store.check_and_set_nodes().unwrap();
+    }
+
+    fn set_tensor_slot_order(&mut self, node: NodeIndex, slots: &[LibrarySlot<Aind>]) {
+        let mut slot_hedges = self
+            .graph
+            .iter_crown(node)
+            .filter(|hedge| matches!(self.graph[[hedge]], NetworkEdge::Slot(_)))
+            .collect::<Vec<_>>();
+
+        for (order, slot) in slots.iter().enumerate() {
+            let Some(position) = slot_hedges
+                .iter()
+                .position(|hedge| self.graph[[hedge]] == NetworkEdge::Slot(*slot))
+            else {
+                panic!(
+                    "tensor graph is missing slot {slot} while assigning structural slot order; node crown: {:?}",
+                    self.graph
+                        .iter_crown(node)
+                        .map(|hedge| self.graph[[&hedge]])
+                        .collect::<Vec<_>>()
+                );
+            };
+            let hedge = slot_hedges.remove(position);
+            self.slot_order[hedge.0] = u8::try_from(order).unwrap_or_else(|_| {
+                panic!(
+                    "tensor graph slot order {order} for slot {slot} exceeds u8 storage; tensor has {} slots",
+                    slots.len()
+                )
+            });
+        }
+    }
+
     pub fn slots(&self, nodeid: NodeIndex) -> Vec<LibrarySlot<Aind>> {
         let mut slots = Vec::new();
         let mut ord = Vec::new();
@@ -234,7 +321,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
 
-        let perm = Permutation::sort(&slots);
+        let perm = Permutation::sort(&ord);
         perm.apply_slice_in_place(&mut slots);
         slots
     }
@@ -252,8 +339,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
     pub fn sync_order(&mut self) {
         for (_, n, _) in self.graph.iter_nodes() {
+            let slot_hedges = n
+                .clone()
+                .filter(|c| matches!(self.graph[[c]], NetworkEdge::Slot(_)))
+                .collect::<Vec<_>>();
+            if slot_hedges.iter().any(|h| self.slot_order[h.0] != 0) {
+                continue;
+            }
+
             let mut slots: BTreeMap<NetworkEdge<Aind>, Vec<Hedge>> = BTreeMap::new();
-            for c in n {
+            for c in slot_hedges {
                 slots
                     .entry(self.graph[self.graph[&c]])
                     .and_modify(|curr| curr.push(c))
@@ -275,15 +370,12 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             for n in self.graph.iter_crown(nodeid) {
                 if let NetworkEdge::Slot(s) = self.graph[[&n]] {
                     slots.push(s.aind);
-                    // ord.push(self.slot_order[n.0]);
-                    ord.push(s);
+                    ord.push(self.slot_order[n.0]);
                 }
             }
         }
 
         let perm = Permutation::sort(&ord);
-        // perm.apply_slice_in_place(&mut ord);
-        // println!("Inds:{:?}", ord);
         perm.apply_slice_in_place(&mut slots);
         slots
     }
@@ -303,11 +395,10 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
-        let mut inds = self.inds(nodeid);
-
-        if let NetworkNode::Leaf(NetworkLeaf::LibraryKey(k)) = &self.graph[nodeid] {
-            let libt = lib.get(&k.structure).unwrap();
-            let mappingperm = &k.index_permutation;
+        if let NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, indices }) = &self.graph[nodeid] {
+            let libt = lib.get(&key.structure).unwrap();
+            let mappingperm = &key.index_permutation;
+            let mut inds = indices.clone();
 
             // println!("Mapping perm: {mappingperm}");
             mappingperm.apply_slice_in_place_inv(&mut inds);
@@ -394,7 +485,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
-    pub fn find_all_ready_ops(&mut self) -> Vec<(Self, NetworkOp<FK>, Vec<NetworkLeaf<K>>)>
+    pub fn find_all_ready_ops(&mut self) -> Vec<ReadyNetworkOp<K, FK, Aind>>
     where
         K: Clone + Display,
         FK: Clone + Display,
@@ -575,7 +666,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     pub fn identify_nodes_without_self_edges(
         &mut self,
         nodes: &[NodeIndex],
-        node_data: NetworkNode<K, FK>,
+        node_data: NetworkNode<K, FK, Aind>,
     ) -> NodeIndex {
         let (n, sub) = self
             .graph
@@ -596,7 +687,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     pub fn identify_nodes_without_self_edges_merge_heads(
         &mut self,
         nodes: &[NodeIndex],
-        node_data: NetworkNode<K, FK>,
+        node_data: NetworkNode<K, FK, Aind>,
     ) -> NodeIndex {
         // println!("Identifying:{:?}", nodes);
         let (n, mut sub) = self
@@ -650,7 +741,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             },
             &|n| match n {
                 NetworkNode::Leaf(l) => match l {
-                    NetworkLeaf::LibraryKey(l) => Some(format!("label= \"L{l}\"")),
+                    NetworkLeaf::LibraryKey { key, .. } => Some(format!("label= \"L{key}\"")),
                     NetworkLeaf::LocalTensor(l) => Some(format!("label = \"T{l}\"")),
                     NetworkLeaf::Scalar(s) => Some(format!("label = \"S{s}\"")),
                 },
@@ -695,8 +786,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             },
             &|n| match n {
                 NetworkNode::Leaf(l) => match l {
-                    NetworkLeaf::LibraryKey(l) => {
-                        Some(format!("label= \"L:{}\"", library_disp(&l.structure)))
+                    NetworkLeaf::LibraryKey { key, .. } => {
+                        Some(format!("label= \"L:{}\"", library_disp(&key.structure)))
                     }
                     NetworkLeaf::LocalTensor(l) => {
                         Some(format!("label = \"T:{}\"", tensor_disp(*l)))
@@ -733,8 +824,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             },
             &|n| match n {
                 NetworkNode::Leaf(l) => match l {
-                    NetworkLeaf::LibraryKey(l) => {
-                        Some(format!("label= \"L:{}\"", library_disp(&l.structure)))
+                    NetworkLeaf::LibraryKey { key, .. } => {
+                        Some(format!("label= \"L:{}\"", library_disp(&key.structure)))
                     }
                     NetworkLeaf::LocalTensor(l) => {
                         Some(format!("label = \"T:{}\"", tensor_disp(*l)))
@@ -765,11 +856,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     fn head_builder(
-        node: NetworkNode<K, FK>,
-    ) -> (
-        HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK>>,
-        NodeIndex,
-    ) {
+        node: NetworkNode<K, FK, Aind>,
+    ) -> (NetworkGraphBuilder<K, FK, Aind>, NodeIndex) {
         let mut graph = HedgeGraphBuilder::new();
         let head = graph.add_node(node);
         graph.add_external_edge(head, NetworkEdge::Head, true, Flow::Source);
@@ -846,28 +934,41 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .map(|a| a.to_lib())
             .collect::<Vec<_>>();
 
-        let (mut graph, head) = Self::head_builder(NetworkNode::Leaf(NetworkLeaf::LibraryKey(key)));
+        let indices = slots.iter().map(|slot| slot.aind()).collect::<Vec<_>>();
+        let (mut graph, head) =
+            Self::head_builder(NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, indices }));
 
-        for lib in slots {
+        for lib in &slots {
             let orientation = lib.rep_name().orientation();
-            graph.add_external_edge(head, NetworkEdge::Slot(lib), orientation, Flow::Source);
+            graph.add_external_edge(head, NetworkEdge::Slot(*lib), orientation, Flow::Source);
         }
-        graph.into()
+        let mut graph = Self::from(graph);
+        graph.set_tensor_slot_order(head, &slots);
+        graph.sew_internal_tensor_slots();
+        graph
     }
 
-    pub fn tensor<T: TensorStructure>(tensor: &T, node: NetworkLeaf<K>) -> NetworkGraph<K, FK, Aind>
+    pub fn tensor<T: TensorStructure>(
+        tensor: &T,
+        node: NetworkLeaf<K, Aind>,
+    ) -> NetworkGraph<K, FK, Aind>
     where
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
         let (mut graph, head) = Self::head_builder(NetworkNode::Leaf(node));
+        let mut slots = Vec::new();
 
         for s in tensor.external_structure_iter() {
             let lib = s.to_lib();
+            slots.push(lib);
 
             let orientation = lib.rep_name().orientation();
             graph.add_external_edge(head, NetworkEdge::Slot(lib), orientation, Flow::Source);
         }
-        graph.into()
+        let mut graph = Self::from(graph);
+        graph.set_tensor_slot_order(head, &slots);
+        graph.sew_internal_tensor_slots();
+        graph
     }
 
     fn match_heads(
@@ -958,7 +1059,10 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     #[allow(clippy::result_large_err, clippy::type_complexity)]
     pub fn result(
         &self,
-    ) -> Result<(&NetworkNode<K, FK>, NodeIndex, Vec<LibrarySlot<Aind>>), TensorNetworkError<K, FK>>
+    ) -> Result<
+        (&NetworkNode<K, FK, Aind>, NodeIndex, Vec<LibrarySlot<Aind>>),
+        TensorNetworkError<K, FK>,
+    >
     where
         K: Display,
         FK: Display,

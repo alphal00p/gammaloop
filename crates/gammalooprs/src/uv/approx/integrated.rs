@@ -1,7 +1,10 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    dirac::GammaSimplifier,
+    shorthands::{UndoShorthands, metric::MetricSimplifier, schoonschip::Schoonschip},
+};
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
@@ -9,7 +12,8 @@ use linnet::half_edge::{
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
@@ -25,6 +29,7 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 use crate::{
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
+    numerator::aind::Aind,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
@@ -125,9 +130,16 @@ impl Integrated<'_> {
             .get_single_atom()
             .unwrap();
 
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg without denoms");
-        t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
+        t_arg = t_arg
+            .collect_metrics()
+            .simplify_metrics()
+            .simplify_gamma()
+            .schoonschip_net::<Aind>()
+            .to_dots()
+            .normalize_dots()
+            / graph.denominator(&reduced, |_| 1);
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg
             .replace(GS.dim)
@@ -428,7 +440,10 @@ pub(crate) fn to_vakint_integrand<
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> VakintExpression {
-    let mut integrand_vakint = integrand.clone();
+    let mut integrand_vakint = integrand
+        .undo_schoonschip::<Aind>()
+        .undo_chain::<Aind>()
+        .undo_trace::<Aind>();
 
     debug_tags!(#uv, #integrated, #vakint, #inspect;
         integrand = %integrand.log_print(None),
@@ -744,7 +759,7 @@ pub(crate) fn to_vakint_integrand<
         for (p, e, ed) in graph.iter_edges() {
             if p.is_paired() {
                 // println!("{e}");
-                let loop_expr = lmb.loop_atom::<Atom>(e, vakint::symbols::S.k, &[], false);
+                let loop_expr = lmb.loop_atom::<Atom>(e, GS.loop_mom, &[], false);
 
                 ed.data
                     .mom
@@ -774,8 +789,8 @@ pub(crate) fn to_vakint_integrand<
                 ..Default::default()
             }),
             Replacement::new(
-                function!(vakint::symbols::S.k, W_.i_).to_pattern(),
-                function!(vakint::symbols::S.k, W_.i_, W_.a___),
+                function!(GS.loop_mom, W_.i_).to_pattern(),
+                function!(GS.loop_mom, W_.i_, W_.a___),
             )
             .with_settings(MatchSettings {
                 allow_new_wildcards_on_rhs: true,
@@ -837,22 +852,27 @@ pub(crate) fn to_vakint_integrand<
 
         t.numerator *= parse!(&settings.additional_normalization).pow(nloops);
 
-        t.numerator = t.numerator.simplify_metrics().to_dots();
+        // Vakint needs explicit tensor indices; only translate metric shorthands
+        // to dot notation here, without reintroducing Schoonschip rank-1 factors.
+        t.numerator = t.numerator.metric_shorthand_to_dot();
         t.integral = t
             .integral
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
         t.numerator = t
             .numerator
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___))
             .replace(function!(
                 SPENSO_TAG.dot,
-                Minkowski {}.new_rep(GS.dim).to_symbolic([]),
-                W_.a_,
-                W_.b_
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
             ))
-            .with(vakint::symbols::S.dot(W_.a_, W_.b_))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
             .replace(function!(
                 ETS.metric,
                 Minkowski {}.to_symbolic([W_.a__]),
@@ -870,12 +890,15 @@ pub(crate) fn to_vakint_integrand<
 
 #[cfg(test)]
 mod tests {
+    use crate::initialisation::test_initialise;
     use linnet::half_edge::involution::EdgeIndex;
 
     use super::*;
 
     #[test]
     fn integrated_triangle_norm_is_euclidean() {
+        test_initialise().unwrap();
+
         let edge = EdgeIndex(7);
         let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
         let minkowski_norm = Minkowski {}
@@ -889,5 +912,39 @@ mod tests {
                 + GS.emr_mom(edge, GS.cind(3)).pow(2)
         );
         assert_ne!(euclidean_norm, minkowski_norm);
+    }
+
+    #[test]
+    fn vakint_dot_conversion_keeps_loop_momentum_tagged_until_to_dots() {
+        test_initialise().unwrap();
+
+        let mink = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let numerator = function!(
+            ETS.metric,
+            function!(GS.emr_mom, 0, mink.clone()),
+            function!(GS.loop_mom, 1, mink.clone())
+        );
+
+        let converted = numerator
+            .simplify_metrics()
+            .to_dots()
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
+            .replace(function!(GS.emr_mom, W_.x___))
+            .with(function!(vakint::symbols::S.p, W_.x___))
+            .replace(function!(
+                SPENSO_TAG.dot,
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+            ))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)));
+
+        assert_eq!(
+            converted,
+            vakint::symbols::S.dot(
+                function!(vakint::symbols::S.p, 0),
+                function!(vakint::symbols::S.k, 1)
+            )
+        );
     }
 }

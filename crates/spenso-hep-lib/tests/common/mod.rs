@@ -1,13 +1,14 @@
 use idenso::{
-    gamma::AGS,
-    metric::{MetricSimplifier, PermuteWithMetric},
+    dirac::AGS,
     representations::{Bispinor, initialize},
+    shorthands::metric::{MetricSimplifier, PermuteWithMetric},
+    tensor::SymbolicTensor,
 };
 use spenso::{
     network::{
         ExecutionResult, Sequential, SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
         library::{TensorLibraryData, symbolic::ExplicitKey},
-        parsing::ParseSettings,
+        parsing::{ParseSettings, StrictTensorFilter},
     },
     structure::{
         IndexlessNamedStructure, ScalarTensor,
@@ -15,7 +16,7 @@ use spenso::{
         permuted::Perm,
         representation::{Minkowski, RepName},
     },
-    tensors::{parametric::ParamTensor, symbolic::SymbolicTensor},
+    tensors::parametric::ParamTensor,
 };
 use spenso_hep_lib::{FUN_LIB, HEP_LIB, HepNet, HepTensor};
 use symbolica::{
@@ -84,7 +85,11 @@ impl HepAtomExt for AtomView<'_> {
         &self,
         settings: &ParseSettings,
     ) -> Result<HepNet<AbstractIndex>, TensorNetworkError<ExplicitKey<AbstractIndex>, Symbol>> {
-        HepNet::try_from_view(*self, &*HEP_LIB, settings)
+        let settings = settings
+            .clone()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+
+        HepNet::try_from_view(*self, &*HEP_LIB, &settings)
     }
 }
 

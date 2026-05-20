@@ -1,6 +1,5 @@
-use bitvec::vec::BitVec;
 use log::trace;
-use std::{cmp::Ordering, collections::HashMap};
+use std::collections::HashMap;
 // use num::Zero;
 use crate::{
     algebra::{
@@ -12,11 +11,14 @@ use crate::{
         ResetableIterator,
     },
     structure::{
-        HasStructure, StructureContract, TensorStructure,
+        HasStructure, SlotIndex, StructureContract, TensorStructure,
         concrete_index::{ExpandedIndex, FlatIndex},
+        slot::{DualSlotTo, IsAbstractSlot},
     },
     tensors::data::{DataIterator, DenseTensor, SparseTensor},
 };
+
+use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 
 use std::iter::Iterator;
 
@@ -304,13 +306,16 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &DenseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         // Assume we're contracting the first positions for now - this needs to be updated
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
+
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
         // println!("Interleaving dense dense multi"); // Initialize result tensor with default values
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
 
@@ -336,14 +341,14 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
-                for (i, v) in pos_self.iter_zeros().zip(expa) {
-                    exp_self.indices[i] = v;
+                for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                    exp_self.indices[i.0] = v;
                 }
 
-                for (i, v) in pos_other.iter_zeros().zip(expb) {
-                    exp_other.indices[i] = v;
+                for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                    exp_other.indices[i.0] = v;
                 }
                 // And now we flatten
                 let shift_a = self.structure().flat_index(&exp_self).unwrap();
@@ -389,10 +394,10 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &DenseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = if let Some((_, s)) = self.flat_iter().next() {
             s.try_upgrade().unwrap().as_ref().ref_zero()
@@ -401,6 +406,8 @@ where
         } else {
             return Err(ContractionError::EmptySparse);
         };
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
 
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
 
@@ -425,15 +432,15 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
                 // println!("expa: {:?}", expa);
-                for (i, v) in pos_self.iter_zeros().zip(expa) {
-                    exp_self.indices[i] = v;
+                for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                    exp_self.indices[i.0] = v;
                 }
 
-                for (i, v) in pos_other.iter_zeros().zip(expb) {
-                    exp_other.indices[i] = v;
+                for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                    exp_other.indices[i.0] = v;
                 }
 
                 // println!("exp_self: {:?}", exp_self);
@@ -484,14 +491,15 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &SparseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
-
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
         let self_fiber_class = Fiber::from(&resulting_partition, &resulting_structure); //We use the partition as a filter here, for indices that belong to self, vs those that belong to other
         let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
             CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class); // these are iterators over the open indices of self and other, except expressed in the flat indices of the resulting structure
@@ -514,15 +522,15 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
                 // println!("expa: {:?}", expa);
-                for (i, v) in pos_self.iter_zeros().zip(expa) {
-                    exp_self.indices[i] = v;
+                for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                    exp_self.indices[i.0] = v;
                 }
 
-                for (i, v) in pos_other.iter_zeros().zip(expb) {
-                    exp_other.indices[i] = v;
+                for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                    exp_other.indices[i.0] = v;
                 }
 
                 // println!("exp_self: {:?}", exp_self);
@@ -573,111 +581,92 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &SparseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let mut result_data = HashMap::default();
         let zero = self.zero.try_upgrade().unwrap().as_ref().ref_zero();
-        if self.flat_iter().next().is_some() {
-            let self_fiber_class = Fiber::from(&resulting_partition, &resulting_structure); //We use the partition as a filter here, for indices that belong to self, vs those that belong to other
-            let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
-                CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class); // these are iterators over the open indices of self and other, except expressed in the flat indices of the resulting structure
+        let self_slots = self
+            .structure()
+            .external_structure_iter()
+            .collect::<Vec<_>>();
+        let other_slots = other
+            .structure()
+            .external_structure_iter()
+            .collect::<Vec<_>>();
+        let matched_slots = pos_self
+            .included_iter()
+            .map(|self_position| {
+                let self_slot = self_slots[self_position.0];
+                let other_position = pos_other
+                    .included_iter()
+                    .find(|other_position| other_slots[other_position.0].dual() == self_slot)
+                    .ok_or_else(|| {
+                        ContractionError::Other(eyre::eyre!(
+                            "missing matching interleaved sparse contraction slot for {self_slot}"
+                        ))
+                    })?;
+                Ok((self_position, other_position))
+            })
+            .collect::<Result<Vec<_>, ContractionError>>()?;
+        let self_free = (!&pos_self).included_iter().collect::<Vec<_>>();
+        let other_free = (!&pos_other).included_iter().collect::<Vec<_>>();
 
-            let mut iter_self = self.fiber(FiberData::from(&pos_self)).iter_metric(); //The summed over index comes from the actual self structure (and is a single index)
-            let mut iter_other = other.fiber(FiberData::from(&pos_other)).iter(); // same for other
-
-            let mut exp_self = self.expanded_index(FlatIndex::from(0)).unwrap();
-            let mut exp_other = other.expanded_index(FlatIndex::from(0)).unwrap();
-
-            //We first iterate over the free indices (self_fiber_class)
-            for fiber_class_a_id in self_fiber_class_iter.by_ref() {
-                for fiber_class_b_id in other_fiber_class_iter.by_ref() {
-                    // This is the index in the resulting structure for these two class indices
-                    let result_index = fiber_class_a_id + fiber_class_b_id;
-
-                    //To obtain the corresponding flat indices for the self and other we partition the expanded index
-                    let ((_, expa), (_, expb)): ((Vec<_>, ExpandedIndex), (Vec<_>, ExpandedIndex)) =
-                        resulting_structure
-                            .expanded_index(result_index)?
-                            .into_iter()
-                            .enumerate()
-                            .partition(|(i, _)| resulting_partition[*i]);
-
-                    // println!("expa: {:?}", expa);
-                    for (i, v) in pos_self.iter_zeros().zip(expa) {
-                        exp_self.indices[i] = v;
+        for (self_flat, self_value) in self.flat_iter() {
+            let self_expanded = self.expanded_index(self_flat)?;
+            for (other_flat, other_value) in other.flat_iter() {
+                let other_expanded = other.expanded_index(other_flat)?;
+                let mut neg = false;
+                let mut matches = true;
+                for (self_position, other_position) in &matched_slots {
+                    let self_index = self_expanded.indices[self_position.0];
+                    if self_index != other_expanded.indices[other_position.0] {
+                        matches = false;
+                        break;
                     }
-
-                    for (i, v) in pos_other.iter_zeros().zip(expb) {
-                        exp_other.indices[i] = v;
-                    }
-
-                    // println!("exp_self: {:?}", exp_self);
-                    // println!("exp_other: {:?}", exp_other);
-                    // println!("")
-                    // And now we flatten
-                    let shift_a = self.structure().flat_index(&exp_self).unwrap();
-                    let shift_b = other.structure().flat_index(&exp_other).unwrap();
-
-                    // we shift the fiber start by the flattened indices. This also resets the iterator
-                    iter_self.shift(shift_a.into());
-                    iter_other.shift(shift_b.into());
-
-                    let mut items = iter_self
-                        .next()
-                        .map(|(a, skip, (neg, _))| (a, skip, neg))
-                        .zip(iter_other.next().map(|(b, skip, _)| (b, skip)));
-
-                    let mut value = zero.clone();
-                    let mut nonzero = false;
-
-                    while let Some(((a, skip_a, neg), (b, skip_b))) = items {
-                        match skip_a.cmp(&skip_b) {
-                            std::cmp::Ordering::Greater => {
-                                let b = iter_other
-                                    .by_ref()
-                                    .next()
-                                    .map(|(b, skip, _)| (b, skip + skip_b + 1));
-                                items = Some((a, skip_a, neg)).zip(b);
-                            }
-                            Ordering::Less => {
-                                //Advance iter_self
-                                let a = iter_self
-                                    .by_ref()
-                                    .next()
-                                    .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
-                                items = a.zip(Some((b, skip_b)));
-                            }
-                            _ => {
-                                // skip_a == skip_b
-                                if neg {
-                                    value.sub_assign_fallible(&a.mul_fallible(b).unwrap());
-                                } else {
-                                    value.add_assign_fallible(&a.mul_fallible(b).unwrap());
-                                }
-                                let b = iter_other
-                                    .by_ref()
-                                    .next()
-                                    .map(|(b, skip, _)| (b, skip + skip_b + 1));
-                                let a = iter_self
-                                    .by_ref()
-                                    .next()
-                                    .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
-                                items = a.zip(b);
-                                nonzero = true;
-                            }
-                        }
-                    }
-
-                    if nonzero && !value.is_zero() {
-                        result_data.insert(result_index, value);
+                    if self_slots[self_position.0].rep().negative()?[self_index] {
+                        neg = !neg;
                     }
                 }
-                other_fiber_class_iter.reset();
+                if !matches {
+                    continue;
+                }
+
+                let mut self_free_iter = self_free.iter();
+                let mut other_free_iter = other_free.iter();
+                let result_expanded = (0..resulting_structure.order())
+                    .map(|position| {
+                        if resulting_partition[SlotIndex(position)] {
+                            let position = self_free_iter.next().ok_or_else(|| {
+                                ContractionError::Other(eyre::eyre!(
+                                    "missing self free slot while building interleaved sparse contraction result"
+                                ))
+                            })?;
+                            Ok(self_expanded.indices[position.0])
+                        } else {
+                            let position = other_free_iter.next().ok_or_else(|| {
+                                ContractionError::Other(eyre::eyre!(
+                                    "missing other free slot while building interleaved sparse contraction result"
+                                ))
+                            })?;
+                            Ok(other_expanded.indices[position.0])
+                        }
+                    })
+                    .collect::<Result<ExpandedIndex, ContractionError>>()?;
+                let result_index = resulting_structure.flat_index(&result_expanded)?;
+                let value = result_data
+                    .entry(result_index)
+                    .or_insert_with(|| zero.clone());
+                if neg {
+                    value.sub_assign_fallible(&self_value.mul_fallible(other_value).unwrap());
+                } else {
+                    value.add_assign_fallible(&self_value.mul_fallible(other_value).unwrap());
+                }
             }
         }
+        result_data.retain(|_, value| !value.is_zero());
         let result = SparseTensor {
             zero,
             elements: result_data,

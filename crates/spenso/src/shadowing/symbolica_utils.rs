@@ -1,4 +1,4 @@
-use crate::{network::parsing::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
+use crate::{network::tags::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,7 @@ use symbolica::{
     domains::{float::Complex, rational::Rational},
     evaluate::{FunctionMap, Instruction, OptimizationSettings, Slot},
     function,
+    id::ReplaceBuilder,
     printer::{CanonicalOrderingSettings, PrintOptions, PrintState},
     symbol,
 };
@@ -23,6 +24,22 @@ use std::{
 };
 
 use eyre::Result;
+
+pub trait ReplaceBuilderExt {
+    fn has_matches(&self) -> bool;
+    // Returns true if the pattern matches entirely the given atom
+    fn matches(self) -> bool;
+}
+
+impl<'a, 'b> ReplaceBuilderExt for ReplaceBuilder<'a, 'b> {
+    fn has_matches(&self) -> bool {
+        self.match_iter().next().is_some()
+    }
+
+    fn matches(self) -> bool {
+        self.partial(false).has_matches()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SpensoPrintSettings {
@@ -88,7 +105,7 @@ impl SpensoPrintSettings {
     // x^-1*a^-1*b^-1 -> ((1/x)/a)/b
     pub fn compact() -> Self {
         Self {
-            parens: false,
+            parens: true,
             commas: false,
             with_dim: false,
             symbol_scripts: false,
@@ -997,7 +1014,7 @@ impl IntoSymbol for std::string::String {
 #[cfg(test)]
 mod test {
     use crate::{
-        network::parsing::SPENSO_TAG,
+        network::tags::SPENSO_TAG,
         shadowing::symbolica_utils::{AtomCoreExt, TypstSettings},
     };
 

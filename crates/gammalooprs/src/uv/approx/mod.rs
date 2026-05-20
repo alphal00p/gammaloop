@@ -13,7 +13,7 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
@@ -617,9 +617,9 @@ impl Approximation {
             .subtract(&graph.initial_state_cut);
 
         let mut integrands = BTreeMap::new();
+        let final_integrand_terms = t.iter().zip(integrated_t.integrands.iter()).enumerate();
 
-        for ((local_index, local), (integrated_index, integ)) in
-            t.iter().zip(integrated_t.integrands.iter())
+        for (term_index, ((local_index, local), (integrated_index, integ))) in final_integrand_terms
         {
             let mut cff = s * (local - integ);
 
@@ -660,7 +660,15 @@ impl Approximation {
             resnum = resnum.replace_multiple(&reps);
             resnum *= cff * &global_num;
 
-            resnum = resnum.replace(GS.dim).with(4).simplify_color(); //.to_dots();
+            let color_simplify_input = resnum.replace(GS.dim).with(4);
+
+            debug_tags!(#generation, #uv, #inspect, #dump;
+                expression = %color_simplify_input.log_print(Some(120)),
+                dod = self.spinney.dod,
+                term_index = term_index,
+                "Dumped final-integrand color simplification input"
+            );
+            resnum = color_simplify_input.simplify_color(); //.to_dots();
             // println!(
             //     "Resnum {}",
             //     resnum.printer(

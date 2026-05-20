@@ -35,7 +35,7 @@ crossterm = "0.28.1"
 dirs = { workspace = true }
 eyre = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
-gammaloop-tracing-filter = { workspace = true }
+gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }
@@ -114,6 +114,7 @@ pyo3-extension-module = [
 ]
 python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
 python_api = [
+  "gammaloop-tracing-filter/python_api",
   "dep:numpy",
   "dep:pyo3-build-config",
   "gammalooprs/python_api",

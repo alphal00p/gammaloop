@@ -1,6 +1,6 @@
 use std::{ops::Neg, sync::LazyLock};
 
-use idenso::{gamma::AGS, representations::initialize};
+use idenso::{color::CS, dirac::AGS, representations::initialize};
 
 use spenso::{
     algebra::complex::Complex,
@@ -21,7 +21,10 @@ use spenso::{
         parametric::{MixedTensor, ParamOrConcrete},
     },
 };
-use symbolica::atom::{Atom, Symbol};
+use symbolica::{
+    atom::{Atom, Symbol},
+    parse_lit,
+};
 
 #[allow(clippy::similar_names)]
 pub fn gamma_data_dirac<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
@@ -321,6 +324,156 @@ where
     proj_p
 }
 
+/// Fundamental SU(3) generators in the normalization `Tr(T^a T^b)=1/2 delta^{ab}`.
+///
+/// The index order follows [`CS.t_strct`]: adjoint, fundamental, anti-fundamental.
+pub fn su3_generator_data<N>(structure: N) -> SparseTensor<Complex<f64>, N>
+where
+    N: TensorStructure,
+{
+    let z = Complex::new(0., 0.);
+    let mut t = SparseTensor::empty(structure, z);
+    let h = 0.5;
+    let s = 1. / (2. * 3_f64.sqrt());
+
+    t.set(&[0, 0, 1], Complex::new(h, 0.)).unwrap();
+    t.set(&[0, 1, 0], Complex::new(h, 0.)).unwrap();
+
+    t.set(&[1, 0, 1], Complex::new(0., -h)).unwrap();
+    t.set(&[1, 1, 0], Complex::new(0., h)).unwrap();
+
+    t.set(&[2, 0, 0], Complex::new(h, 0.)).unwrap();
+    t.set(&[2, 1, 1], Complex::new(-h, 0.)).unwrap();
+
+    t.set(&[3, 0, 2], Complex::new(h, 0.)).unwrap();
+    t.set(&[3, 2, 0], Complex::new(h, 0.)).unwrap();
+
+    t.set(&[4, 0, 2], Complex::new(0., -h)).unwrap();
+    t.set(&[4, 2, 0], Complex::new(0., h)).unwrap();
+
+    t.set(&[5, 1, 2], Complex::new(h, 0.)).unwrap();
+    t.set(&[5, 2, 1], Complex::new(h, 0.)).unwrap();
+
+    t.set(&[6, 1, 2], Complex::new(0., -h)).unwrap();
+    t.set(&[6, 2, 1], Complex::new(0., h)).unwrap();
+
+    t.set(&[7, 0, 0], Complex::new(s, 0.)).unwrap();
+    t.set(&[7, 1, 1], Complex::new(s, 0.)).unwrap();
+    t.set(&[7, 2, 2], Complex::new(-2. * s, 0.)).unwrap();
+
+    t
+}
+
+/// SU(3) structure constants for `[T^a,T^b]=i f^{abc} T^c`.
+pub fn su3_structure_f_data<N>(structure: N) -> SparseTensor<f64, N>
+where
+    N: TensorStructure,
+{
+    let mut f = SparseTensor::empty(structure, 0.);
+
+    fn set_antisymmetric<N>(f: &mut SparseTensor<f64, N>, a: usize, b: usize, c: usize, value: f64)
+    where
+        N: TensorStructure,
+    {
+        f.set(&[a, b, c], value).unwrap();
+        f.set(&[b, c, a], value).unwrap();
+        f.set(&[c, a, b], value).unwrap();
+        f.set(&[b, a, c], -value).unwrap();
+        f.set(&[a, c, b], -value).unwrap();
+        f.set(&[c, b, a], -value).unwrap();
+    }
+
+    set_antisymmetric(&mut f, 0, 1, 2, 1.);
+    set_antisymmetric(&mut f, 0, 3, 6, 0.5);
+    set_antisymmetric(&mut f, 0, 4, 5, -0.5);
+    set_antisymmetric(&mut f, 1, 3, 5, 0.5);
+    set_antisymmetric(&mut f, 1, 4, 6, 0.5);
+    set_antisymmetric(&mut f, 2, 3, 4, 0.5);
+    set_antisymmetric(&mut f, 2, 5, 6, -0.5);
+    set_antisymmetric(&mut f, 3, 4, 7, 3_f64.sqrt() / 2.);
+    set_antisymmetric(&mut f, 5, 6, 7, 3_f64.sqrt() / 2.);
+
+    f
+}
+
+/// Exact Atom-backed SU(3) generators, useful for symbolic tensor libraries.
+pub fn su3_generator_data_atom<N>(structure: N) -> SparseTensor<Atom, N>
+where
+    N: TensorStructure,
+{
+    let mut t = SparseTensor::empty(structure, Atom::Zero);
+    let half = Atom::num(1) / Atom::num(2);
+    let sqrt3 = parse_lit!(sqrt(3));
+    let t8 = sqrt3.clone() / Atom::num(6);
+
+    t.set(&[0, 0, 1], half.clone()).unwrap();
+    t.set(&[0, 1, 0], half.clone()).unwrap();
+
+    t.set(&[1, 0, 1], -Atom::i() * half.clone()).unwrap();
+    t.set(&[1, 1, 0], Atom::i() * half.clone()).unwrap();
+
+    t.set(&[2, 0, 0], half.clone()).unwrap();
+    t.set(&[2, 1, 1], -half.clone()).unwrap();
+
+    t.set(&[3, 0, 2], half.clone()).unwrap();
+    t.set(&[3, 2, 0], half.clone()).unwrap();
+
+    t.set(&[4, 0, 2], -Atom::i() * half.clone()).unwrap();
+    t.set(&[4, 2, 0], Atom::i() * half.clone()).unwrap();
+
+    t.set(&[5, 1, 2], half.clone()).unwrap();
+    t.set(&[5, 2, 1], half.clone()).unwrap();
+
+    t.set(&[6, 1, 2], -Atom::i() * half).unwrap();
+    t.set(&[6, 2, 1], Atom::i() / Atom::num(2)).unwrap();
+
+    t.set(&[7, 0, 0], t8.clone()).unwrap();
+    t.set(&[7, 1, 1], t8.clone()).unwrap();
+    t.set(&[7, 2, 2], -sqrt3 / Atom::num(3)).unwrap();
+
+    t
+}
+
+/// Exact Atom-backed SU(3) structure constants.
+pub fn su3_structure_f_data_atom<N>(structure: N) -> SparseTensor<Atom, N>
+where
+    N: TensorStructure,
+{
+    let mut f = SparseTensor::empty(structure, Atom::Zero);
+
+    fn set_antisymmetric<N>(
+        f: &mut SparseTensor<Atom, N>,
+        a: usize,
+        b: usize,
+        c: usize,
+        value: Atom,
+    ) where
+        N: TensorStructure,
+    {
+        f.set(&[a, b, c], value.clone()).unwrap();
+        f.set(&[b, c, a], value.clone()).unwrap();
+        f.set(&[c, a, b], value.clone()).unwrap();
+        f.set(&[b, a, c], -value.clone()).unwrap();
+        f.set(&[a, c, b], -value.clone()).unwrap();
+        f.set(&[c, b, a], -value).unwrap();
+    }
+
+    let half = Atom::num(1) / Atom::num(2);
+    let sqrt3_half = parse_lit!(sqrt(3)) / Atom::num(2);
+
+    set_antisymmetric(&mut f, 0, 1, 2, Atom::num(1));
+    set_antisymmetric(&mut f, 0, 3, 6, half.clone());
+    set_antisymmetric(&mut f, 0, 4, 5, -half.clone());
+    set_antisymmetric(&mut f, 1, 3, 5, half.clone());
+    set_antisymmetric(&mut f, 1, 4, 6, half.clone());
+    set_antisymmetric(&mut f, 2, 3, 4, half.clone());
+    set_antisymmetric(&mut f, 2, 5, 6, -half);
+    set_antisymmetric(&mut f, 3, 4, 7, sqrt3_half.clone());
+    set_antisymmetric(&mut f, 5, 6, 7, sqrt3_half);
+
+    f
+}
+
 #[allow(clippy::similar_names)]
 pub fn sigma_data<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
 where
@@ -435,6 +588,24 @@ where
     weyl
 }
 
+pub fn insert_su3_color_tensors<Aind: AbsInd>(
+    lib: &mut TensorLibrary<MixedTensor<f64, ExplicitKey<Aind>>, Aind>,
+) {
+    initialize();
+
+    let t_key = PermutedStructure::identity(su3_generator_data(CS.t_strct::<Aind>(3, 8)).into());
+    lib.insert_explicit(t_key);
+
+    let f_key = PermutedStructure::identity(su3_structure_f_data(CS.f_strct::<Aind>(8)).into());
+    lib.insert_explicit(f_key);
+}
+
+pub fn hep_lib_su3<Aind: AbsInd>() -> TensorLibrary<MixedTensor<f64, ExplicitKey<Aind>>, Aind> {
+    let mut lib = hep_lib(1., 0.);
+    insert_su3_color_tensors(&mut lib);
+    lib
+}
+
 pub fn hep_lib_atom<Aind: AbsInd, T: TensorLibraryData + Clone + Default>()
 -> TensorLibrary<MixedTensor<T, ExplicitKey<Aind>>, Aind>
 where
@@ -496,6 +667,16 @@ where
     ));
     weyl.insert_explicit(projp_key);
 
+    let color_t_key = PermutedStructure::identity(ParamOrConcrete::param(
+        su3_generator_data_atom(CS.t_strct::<Aind>(3, 8)).into(),
+    ));
+    weyl.insert_explicit(color_t_key);
+
+    let color_f_key = PermutedStructure::identity(ParamOrConcrete::param(
+        su3_structure_f_data_atom(CS.f_strct::<Aind>(8)).into(),
+    ));
+    weyl.insert_explicit(color_f_key);
+
     weyl
 }
 
@@ -506,7 +687,7 @@ pub type HepNet<Aind> =
 
 pub static HEP_LIB: LazyLock<
     TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
-> = LazyLock::new(|| hep_lib(1., 0.));
+> = LazyLock::new(hep_lib_su3);
 
 pub static FUN_LIB: LazyLock<
     SymbolLib<RealOrComplexTensor<f64, ShadowedStructure<AbstractIndex>>, PanicMissingConcrete>,
@@ -525,7 +706,7 @@ mod tests {
     use spenso::{
         network::{
             Network, SingleSmallestDegree, SmallestDegreeIter, Steps,
-            parsing::{ParseSettings, ShadowedStructure},
+            parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
             store::NetworkStore,
         },
         structure::{HasStructure, abstract_index::AbstractIndex},
@@ -555,7 +736,11 @@ mod tests {
             NetworkStore<MixedTensor<f64, ShadowedStructure<AbstractIndex>>, Atom>,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &*HEP_LIB, &ParseSettings::default())
+        >::try_from_view(
+            expr.as_view(),
+            &*HEP_LIB,
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
 
         println!(
@@ -751,7 +936,11 @@ mod tests {
             NetworkStore<MixedTensor<f64, ShadowedStructure<AbstractIndex>>, Atom>,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &*HEP_LIB, &ParseSettings::default())
+        >::try_from_view(
+            expr.as_view(),
+            &*HEP_LIB,
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
 
         net.merge_ops();

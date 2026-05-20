@@ -41,7 +41,7 @@ fn normalization() {
     let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.f(&[1]));
 
     assert_snapshot!(a.to_canonical_string(),@"0");
-    assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{}::Q(1,spenso::{}::cind(1))");
+    assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))");
 
     let c = GS.energy_delta(GS.cind(1));
     assert_snapshot!(c.to_canonical_string(),@"0");

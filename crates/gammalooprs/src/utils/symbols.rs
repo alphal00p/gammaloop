@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
-    network::{library::TensorLibraryData, parsing::SPENSO_TAG},
+    network::{library::TensorLibraryData, tags::SPENSO_TAG},
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         abstract_index::AIND_SYMBOLS,
@@ -17,7 +17,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
-    function,
+    function, get_symbol,
     id::Replacement,
     printer::PrintState,
     symbol,
@@ -489,7 +489,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()]
     ),
     edgeaind: symbol!(
         "edge",
@@ -518,7 +519,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()]
     ),
     vertexaind: symbol!(
         "vertex",
@@ -548,7 +550,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()]
     ),
     dummyaind: symbol!(
         "dummy",
@@ -577,7 +580,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()]
     ),
     hedgeaind: symbol!(
         "hedge",
@@ -612,7 +616,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
                 _ => None,
             }
-        }
+        },
+        tags = [SPENSO_TAG.index.clone()]
     ),
     override_if: symbol!("override_if"),
     if_sigma: symbol!("if_sigma"),
@@ -656,7 +661,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     broadcasting_sqrt: symbol!(
         "broadcasting_sqrt",
-        tag = SPENSO_TAG.tag,
+        tag = SPENSO_TAG.broadcast,
         der = |a, _, out| {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }
@@ -751,7 +756,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                     }
                 }
             }
-        }
+        },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     top: symbol!("Top"),
     num: symbol!("num"),
@@ -767,25 +773,30 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     ubar: symbol!(
         "ubar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     vbar: symbol!(
         "vbar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v̅") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v̅") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     dot: symbol!("dot"),
     dim: symbol!("dim"),
     v: symbol!(
         "v",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     u: symbol!(
         "u",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     emr_mom: symbol!(
         "Q",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
@@ -804,12 +815,13 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = symbol!("Q").f(&[eid, cind.as_view()])
+                        **out = get_symbol!("Q").unwrap().f(&[eid, cind.as_view()])
                     }
                 }
             }
         },
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     ose: symbol!(
         "OSE",
@@ -821,21 +833,25 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     external_mom: symbol!(
         "P",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "p") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "p") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     loop_mom: symbol!(
         "K",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "k") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "k") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     epsilon: symbol!(
         "ϵ",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),
     epsilonbar: symbol!(
         "ϵbar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") }
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") },
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     coeff: symbol!("coef"),
     radius_left: symbol!("r_left"),

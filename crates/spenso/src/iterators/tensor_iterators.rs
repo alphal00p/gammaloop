@@ -113,10 +113,10 @@ where
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.get_rep(pos).unwrap())
+                .map(|&pos| tensor.get_dim(pos).unwrap())
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.get_rep(trace_indices[0]).unwrap()),
+                .all(|&dim| dim == tensor.get_dim(trace_indices[0]).unwrap()),
             "Trace indices must point to the same dimension"
         );
         SparseTensorTraceIterator {
@@ -402,10 +402,10 @@ where
         assert!(
             trace_indices
                 .iter()
-                .map(|&pos| tensor.get_rep(pos))
+                .map(|&pos| tensor.get_dim(pos))
                 .collect::<Vec<_>>()
                 .iter()
-                .all(|&sig| sig == tensor.get_rep(trace_indices[0])),
+                .all(|&dim| dim == tensor.get_dim(trace_indices[0])),
             "Trace indices must point to the same dimension"
         );
         DenseTensorTraceIterator {
