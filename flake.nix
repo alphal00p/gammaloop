@@ -533,7 +533,7 @@
         ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]";
           nextestPackageGroups;
 
-      nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
+      nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
 
       nextestPackageArgs = packages:
         lib.concatMapStringsSep " " (package: "-p ${package}") packages;

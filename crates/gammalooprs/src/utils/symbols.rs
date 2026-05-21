@@ -678,7 +678,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     vertexid: symbol!("vid"),
     source_id: symbol!("source"),
     sink_id: symbol!("sink"),
-    sign: symbol!("σ"),
+    sign: symbol!("σ"; Scalar),
     selected: symbol!("selected"),
     theta: symbol!("θ"),
     m_uv: symbol!(
@@ -824,7 +824,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     ose: symbol!(
-        "OSE",
+        "OSE"; Scalar;
         print = |a, opt| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
     ),
     energy: symbol!(
