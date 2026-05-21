@@ -308,7 +308,26 @@ impl IndexTooling for AtomView<'_> {
 
         let expr = net.simple_execute::<()>();
 
-        let a = expr.canonize_tensors(dummies).unwrap();
+        let a = match expr.canonize_tensors(dummies) {
+            Ok(a) => a,
+            Err(err) => {
+                if let AtomView::Add(add) = self {
+                    // Linear tensor heads can produce sums whose open slots differ by term.
+                    // Canonize those terms independently when the whole sum is not tensorial.
+                    let mut next_dummy = 0;
+                    return add.iter().fold(Atom::Zero, |acc, term| {
+                        let mut term_new_dummy = |_: usize| {
+                            let dummy = new_dummy(next_dummy);
+                            next_dummy += 1;
+                            dummy
+                        };
+                        let term_new_dummy: &mut dyn FnMut(usize) -> Aind = &mut term_new_dummy;
+                        acc + term.canonize(term_new_dummy)
+                    });
+                }
+                panic!("{err}");
+            }
+        };
 
         let mut reps = vec![];
 

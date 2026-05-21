@@ -1,6 +1,3 @@
-use std::collections::HashSet;
-
-use itertools::Itertools;
 use spenso::{
     network::library::symbolic::ETS,
     structure::representation::{Minkowski, RepName},
@@ -8,7 +5,8 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     function,
-    id::Pattern,
+    id::{Pattern, Replacement},
+    symbol,
 };
 
 use crate::{rep_symbols::RS, representations::Bispinor};
@@ -56,16 +54,60 @@ impl SelectiveExpand for Atom {
 
 impl SelectiveExpand for AtomView<'_> {
     fn expand_in_patterns(&self, pats: &[Pattern]) -> Vec<(Atom, Atom)> {
-        let mut coefs = HashSet::new();
+        let mut coefs = Vec::new();
 
         // A (x+y)(z*B+x*C) => A(x*x*C+y*x*C+y*z*B+y*z*B)
         for p in pats {
             for m in self.pattern_match(p, None, None) {
-                coefs.insert(p.replace_wildcards(&m));
+                let matched = p.replace_wildcards(&m);
+                let coef = match matched.as_view() {
+                    AtomView::Mul(mul) if mul.has_coefficient() => {
+                        let mut coef = Atom::num(1);
+                        for factor in mul.iter() {
+                            if !matches!(factor, AtomView::Num(_)) {
+                                coef *= factor.to_owned();
+                            }
+                        }
+                        coef
+                    }
+                    _ => matched,
+                };
+                if !coefs.iter().any(|known| known == &coef) {
+                    coefs.push(coef);
+                }
             }
         }
 
-        let coefs = coefs.into_iter().collect_vec();
-        self.coefficient_list::<i8>(&coefs)
+        // Symbolica's coefficient collector requires polynomial variables.
+        // Tensor factors can contain polynomial dimensions, so collect through placeholders.
+        let replacement_pairs = coefs
+            .iter()
+            .enumerate()
+            .map(|(i, coef)| {
+                (
+                    coef,
+                    Atom::var(symbol!(format!("idenso::selective_expand_{i}"))),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let to_placeholders = replacement_pairs
+            .iter()
+            .map(|(coef, placeholder)| Replacement::new(coef.to_pattern(), placeholder.clone()))
+            .collect::<Vec<_>>();
+        let from_placeholders = replacement_pairs
+            .iter()
+            .map(|(coef, placeholder)| Replacement::new(placeholder.to_pattern(), (*coef).clone()))
+            .collect::<Vec<_>>();
+        let placeholders = replacement_pairs
+            .iter()
+            .map(|(_, placeholder)| placeholder.clone())
+            .collect::<Vec<_>>();
+
+        self.replace_multiple(&to_placeholders)
+            .coefficient_list::<i8>(&placeholders)
+            .into_iter()
+            .map(|(key, coefficient)| (key.replace_multiple(&from_placeholders), coefficient))
+            .collect()
     }
 }

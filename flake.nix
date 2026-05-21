@@ -93,6 +93,7 @@
 
       snapshotSources = lib.fileset.unions [
         ./crates/gammalooprs
+        ./crates/idenso
         ./crates/linnet
         ./crates/spenso
       ];
