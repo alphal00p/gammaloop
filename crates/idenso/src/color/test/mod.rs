@@ -200,6 +200,77 @@ fn permuted_structure_constant_square_simplifies_with_sign() {
 }
 
 #[test]
+fn kaapo_gl34_color_input_simplifies_to_zero() {
+    test_initialize();
+
+    // Captured from feyngen GL34 after `to_param_color()` and before `simplify_color()`.
+    let input = parse!(
+        "
+        -1𝑖 * UFO::G^6
+        * (
+            -gammalooprs::Q(2, mink(4, gammalooprs::hedge(11))) * g(mink(4, gammalooprs::hedge(5)), mink(4, gammalooprs::hedge(17)))
+            + gammalooprs::Q(2, mink(4, gammalooprs::hedge(17))) * g(mink(4, gammalooprs::hedge(5)), mink(4, gammalooprs::hedge(11)))
+            + gammalooprs::Q(5, mink(4, gammalooprs::hedge(5))) * g(mink(4, gammalooprs::hedge(11)), mink(4, gammalooprs::hedge(17)))
+            - gammalooprs::Q(5, mink(4, gammalooprs::hedge(17))) * g(mink(4, gammalooprs::hedge(5)), mink(4, gammalooprs::hedge(11)))
+            - gammalooprs::Q(8, mink(4, gammalooprs::hedge(5))) * g(mink(4, gammalooprs::hedge(11)), mink(4, gammalooprs::hedge(17)))
+            + gammalooprs::Q(8, mink(4, gammalooprs::hedge(11))) * g(mink(4, gammalooprs::hedge(5)), mink(4, gammalooprs::hedge(17)))
+        )
+        * (
+            -gammalooprs::Q(6, mink(4, gammalooprs::hedge(15))) * g(mink(4, gammalooprs::hedge(13)), mink(4, gammalooprs::hedge(16)))
+            + gammalooprs::Q(6, mink(4, gammalooprs::hedge(16))) * g(mink(4, gammalooprs::hedge(13)), mink(4, gammalooprs::hedge(15)))
+            + gammalooprs::Q(7, mink(4, gammalooprs::hedge(13))) * g(mink(4, gammalooprs::hedge(15)), mink(4, gammalooprs::hedge(16)))
+            - gammalooprs::Q(7, mink(4, gammalooprs::hedge(16))) * g(mink(4, gammalooprs::hedge(13)), mink(4, gammalooprs::hedge(15)))
+            + gammalooprs::Q(8, mink(4, gammalooprs::hedge(13))) * g(mink(4, gammalooprs::hedge(15)), mink(4, gammalooprs::hedge(16)))
+            - gammalooprs::Q(8, mink(4, gammalooprs::hedge(15))) * g(mink(4, gammalooprs::hedge(13)), mink(4, gammalooprs::hedge(16)))
+        )
+        * gammalooprs::Q(0, mink(4, gammalooprs::edge(0, 1)))
+        * gammalooprs::Q(1, mink(4, gammalooprs::edge(1, 1)))
+        * gammalooprs::Q(3, mink(4, gammalooprs::edge(3, 1)))
+        * gammalooprs::Q(4, mink(4, gammalooprs::edge(4, 1)))
+        * g(mink(4, gammalooprs::hedge(4)), mink(4, gammalooprs::hedge(5)))
+        * g(mink(4, gammalooprs::hedge(10)), mink(4, gammalooprs::hedge(11)))
+        * g(mink(4, gammalooprs::hedge(12)), mink(4, gammalooprs::hedge(13)))
+        * g(mink(4, gammalooprs::hedge(14)), mink(4, gammalooprs::hedge(15)))
+        * g(mink(4, gammalooprs::hedge(16)), mink(4, gammalooprs::hedge(17)))
+        * g(dind(cof(Nc, gammalooprs::hedge(1))), cof(Nc, gammalooprs::hedge(0)))
+        * g(dind(cof(Nc, gammalooprs::hedge(2))), cof(Nc, gammalooprs::hedge(3)))
+        * g(dind(cof(Nc, gammalooprs::hedge(6))), cof(Nc, gammalooprs::hedge(7)))
+        * g(dind(cof(Nc, gammalooprs::hedge(9))), cof(Nc, gammalooprs::hedge(8)))
+        * g(coad(-1 + Nc^2, gammalooprs::hedge(4)), coad(-1 + Nc^2, gammalooprs::hedge(5)))
+        * g(coad(-1 + Nc^2, gammalooprs::hedge(10)), coad(-1 + Nc^2, gammalooprs::hedge(11)))
+        * g(coad(-1 + Nc^2, gammalooprs::hedge(12)), coad(-1 + Nc^2, gammalooprs::hedge(13)))
+        * g(coad(-1 + Nc^2, gammalooprs::hedge(14)), coad(-1 + Nc^2, gammalooprs::hedge(15)))
+        * g(coad(-1 + Nc^2, gammalooprs::hedge(16)), coad(-1 + Nc^2, gammalooprs::hedge(17)))
+        * gamma(bis(4, gammalooprs::hedge(0)), bis(4, gammalooprs::hedge(2)), mink(4, gammalooprs::hedge(4)))
+        * gamma(bis(4, gammalooprs::hedge(3)), bis(4, gammalooprs::hedge(9)), mink(4, gammalooprs::hedge(14)))
+        * gamma(bis(4, gammalooprs::hedge(7)), bis(4, gammalooprs::hedge(1)), mink(4, gammalooprs::hedge(12)))
+        * gamma(bis(4, gammalooprs::hedge(8)), bis(4, gammalooprs::hedge(6)), mink(4, gammalooprs::hedge(10)))
+        * gamma(bis(4, gammalooprs::hedge(1)), bis(4, gammalooprs::hedge(0)), mink(4, gammalooprs::edge(0, 1)))
+        * gamma(bis(4, gammalooprs::hedge(2)), bis(4, gammalooprs::hedge(3)), mink(4, gammalooprs::edge(1, 1)))
+        * gamma(bis(4, gammalooprs::hedge(6)), bis(4, gammalooprs::hedge(7)), mink(4, gammalooprs::edge(3, 1)))
+        * gamma(bis(4, gammalooprs::hedge(9)), bis(4, gammalooprs::hedge(8)), mink(4, gammalooprs::edge(4, 1)))
+        * t(coad(-1 + Nc^2, gammalooprs::hedge(4)), cof(Nc, gammalooprs::hedge(2)), dind(cof(Nc, gammalooprs::hedge(0))))
+        * t(coad(-1 + Nc^2, gammalooprs::hedge(10)), cof(Nc, gammalooprs::hedge(6)), dind(cof(Nc, gammalooprs::hedge(8))))
+        * t(coad(-1 + Nc^2, gammalooprs::hedge(12)), cof(Nc, gammalooprs::hedge(1)), dind(cof(Nc, gammalooprs::hedge(7))))
+        * t(coad(-1 + Nc^2, gammalooprs::hedge(14)), cof(Nc, gammalooprs::hedge(9)), dind(cof(Nc, gammalooprs::hedge(3))))
+        * f(coad(-1 + Nc^2, gammalooprs::hedge(5)), coad(-1 + Nc^2, gammalooprs::hedge(11)), coad(-1 + Nc^2, gammalooprs::hedge(17)))
+        * f(coad(-1 + Nc^2, gammalooprs::hedge(13)), coad(-1 + Nc^2, gammalooprs::hedge(15)), coad(-1 + Nc^2, gammalooprs::hedge(16)))
+        ",
+        default_namespace = "spenso"
+    );
+    let color_zero_candidate = input
+        .cook_indices()
+        .simplify_color()
+        .expand_color()
+        .iter()
+        .fold(Atom::Zero, |acc, (coefficient, color)| {
+            coefficient * color + acc
+        });
+
+    assert!(color_zero_candidate.is_zero());
+}
+
+#[test]
 fn color_casimir_basis_rewrites_dimensions() {
     test_initialize();
     let expr = parse_lit!(Nc ^ -1 + Nc ^ 2 - 1 + NA, default_namespace = "spenso");
