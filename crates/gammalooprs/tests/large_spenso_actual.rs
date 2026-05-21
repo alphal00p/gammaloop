@@ -260,36 +260,40 @@ fn report_actual_net_stats(label: &str, net: &ParsingNet) {
     );
 }
 
-fn accumulate_actual_tensor_reference(
-    tensor: &ActualTensor,
-    refs: &mut usize,
-    logical_entries: &mut usize,
-    flat_entries: &mut usize,
-    nonzero_entries: &mut usize,
-    orders: &mut BTreeMap<usize, usize>,
-    names: &mut BTreeMap<String, usize>,
-    nonzeros_by_name: &mut BTreeMap<String, usize>,
-) {
-    *refs += 1;
-    *logical_entries += tensor.structure().size().unwrap_or(0);
-    *flat_entries += tensor.iter_flat().count();
-    *orders.entry(tensor.structure().order()).or_default() += 1;
+#[derive(Default)]
+struct ActualTensorReferenceStats {
+    refs: usize,
+    logical_entries: usize,
+    flat_entries: usize,
+    nonzero_entries: usize,
+    orders: BTreeMap<usize, usize>,
+    names: BTreeMap<String, usize>,
+    nonzeros_by_name: BTreeMap<String, usize>,
+}
 
-    let name = tensor
-        .name()
-        .map(|name| name.to_string())
-        .unwrap_or_else(|| "<anonymous>".to_owned());
-    *names.entry(name.clone()).or_default() += 1;
+impl ActualTensorReferenceStats {
+    fn accumulate(&mut self, tensor: &ActualTensor) {
+        self.refs += 1;
+        self.logical_entries += tensor.structure().size().unwrap_or(0);
+        self.flat_entries += tensor.iter_flat().count();
+        *self.orders.entry(tensor.structure().order()).or_default() += 1;
 
-    let tensor_nonzeros = tensor
-        .iter_flat()
-        .filter(|(_, value)| match value {
-            AtomViewOrConcrete::Atom(atom) => !atom.is_zero(),
-            AtomViewOrConcrete::Concrete(_) => true,
-        })
-        .count();
-    *nonzero_entries += tensor_nonzeros;
-    *nonzeros_by_name.entry(name).or_default() += tensor_nonzeros;
+        let name = tensor
+            .name()
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| "<anonymous>".to_owned());
+        *self.names.entry(name.clone()).or_default() += 1;
+
+        let tensor_nonzeros = tensor
+            .iter_flat()
+            .filter(|(_, value)| match value {
+                AtomViewOrConcrete::Atom(atom) => !atom.is_zero(),
+                AtomViewOrConcrete::Concrete(_) => true,
+            })
+            .count();
+        self.nonzero_entries += tensor_nonzeros;
+        *self.nonzeros_by_name.entry(name).or_default() += tensor_nonzeros;
+    }
 }
 
 fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
@@ -315,15 +319,9 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
     let mut library_leaves = 0usize;
     let mut scalar_leaves = 0usize;
 
-    let mut tensor_refs = 0usize;
-    let mut tensor_ref_logical_entries = 0usize;
-    let mut tensor_ref_flat_entries = 0usize;
-    let mut tensor_ref_nonzero_entries = 0usize;
     let mut library_logical_entries = 0usize;
     let mut scalar_bytes = 0usize;
-    let mut tensor_ref_orders = BTreeMap::<usize, usize>::new();
-    let mut tensor_ref_names = BTreeMap::<String, usize>::new();
-    let mut tensor_ref_nonzeros_by_name = BTreeMap::<String, usize>::new();
+    let mut tensor_ref_stats = ActualTensorReferenceStats::default();
 
     for (node_index, _neigh, node) in net.graph.graph.iter_nodes() {
         match node {
@@ -332,31 +330,13 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                 match leaf {
                     NetworkLeaf::LocalTensor(index) => {
                         local_tensor_leaves += 1;
-                        accumulate_actual_tensor_reference(
-                            &net.store.tensors[*index],
-                            &mut tensor_refs,
-                            &mut tensor_ref_logical_entries,
-                            &mut tensor_ref_flat_entries,
-                            &mut tensor_ref_nonzero_entries,
-                            &mut tensor_ref_orders,
-                            &mut tensor_ref_names,
-                            &mut tensor_ref_nonzeros_by_name,
-                        );
+                        tensor_ref_stats.accumulate(&net.store.tensors[*index]);
                     }
                     NetworkLeaf::TensorSum(indices) => {
                         tensor_sum_leaves += 1;
                         tensor_sum_terms += indices.len();
                         for index in indices {
-                            accumulate_actual_tensor_reference(
-                                &net.store.tensors[*index],
-                                &mut tensor_refs,
-                                &mut tensor_ref_logical_entries,
-                                &mut tensor_ref_flat_entries,
-                                &mut tensor_ref_nonzero_entries,
-                                &mut tensor_ref_orders,
-                                &mut tensor_ref_names,
-                                &mut tensor_ref_nonzeros_by_name,
-                            );
+                            tensor_ref_stats.accumulate(&net.store.tensors[*index]);
                         }
                     }
                     NetworkLeaf::TensorTerm(term) => {
@@ -365,16 +345,7 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                             tensor_term_scaled += 1;
                             scalar_bytes += net.store.scalar[scalar].as_view().get_byte_size();
                         }
-                        accumulate_actual_tensor_reference(
-                            &net.store.tensors[term.tensor],
-                            &mut tensor_refs,
-                            &mut tensor_ref_logical_entries,
-                            &mut tensor_ref_flat_entries,
-                            &mut tensor_ref_nonzero_entries,
-                            &mut tensor_ref_orders,
-                            &mut tensor_ref_names,
-                            &mut tensor_ref_nonzeros_by_name,
-                        );
+                        tensor_ref_stats.accumulate(&net.store.tensors[term.tensor]);
                     }
                     NetworkLeaf::TensorTermSum(terms) => {
                         tensor_term_sum_leaves += 1;
@@ -384,16 +355,7 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                                 tensor_term_sum_scaled += 1;
                                 scalar_bytes += net.store.scalar[scalar].as_view().get_byte_size();
                             }
-                            accumulate_actual_tensor_reference(
-                                &net.store.tensors[term.tensor],
-                                &mut tensor_refs,
-                                &mut tensor_ref_logical_entries,
-                                &mut tensor_ref_flat_entries,
-                                &mut tensor_ref_nonzero_entries,
-                                &mut tensor_ref_orders,
-                                &mut tensor_ref_names,
-                                &mut tensor_ref_nonzeros_by_name,
-                            );
+                            tensor_ref_stats.accumulate(&net.store.tensors[term.tensor]);
                         }
                     }
                     NetworkLeaf::LibraryKey { key, .. } => {
@@ -426,6 +388,16 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
             }
         }
     }
+
+    let ActualTensorReferenceStats {
+        refs: tensor_refs,
+        logical_entries: tensor_ref_logical_entries,
+        flat_entries: tensor_ref_flat_entries,
+        nonzero_entries: tensor_ref_nonzero_entries,
+        orders: tensor_ref_orders,
+        names: tensor_ref_names,
+        nonzeros_by_name: tensor_ref_nonzeros_by_name,
+    } = tensor_ref_stats;
 
     let mut top_tensor_ref_names = tensor_ref_names.into_iter().collect::<Vec<_>>();
     top_tensor_ref_names

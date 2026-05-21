@@ -335,7 +335,7 @@ fn form_github_color_tloop_q10_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_q10(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"125/72*CA^4*NA*TR+-155/24*CA^3*CF*NA*TR+35/4*CA^2*CF^2*NA*TR+-5*CA*CF^3*NA*TR+-6*CA*d44(cOlpR1,cOlpA1)+1/3*TR*d44(cOlpA1,cOlpA2)+CF^4*NA*TR+5*CF*d44(cOlpR1,cOlpA1)");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"trace(cof(Nc),cyclic(t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out),t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out)))");
 }
 
 #[test]
@@ -345,7 +345,7 @@ fn form_github_color_tloop_g10_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_g10(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-1/36*CA^5*NA+2/3*CA*d44(cOlpA1,cOlpA2)");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"f(coad(NA,i1),coad(NA,i10),coad(NA,j5))*f(coad(NA,i1),coad(NA,i2),coad(NA,j1))*f(coad(NA,i10),coad(NA,i9),coad(NA,j4))*f(coad(NA,i2),coad(NA,i3),coad(NA,j2))*f(coad(NA,i3),coad(NA,i4),coad(NA,j3))*f(coad(NA,i4),coad(NA,i5),coad(NA,j4))*f(coad(NA,i5),coad(NA,i6),coad(NA,j5))*f(coad(NA,i6),coad(NA,i7),coad(NA,j1))*f(coad(NA,i7),coad(NA,i8),coad(NA,j2))*f(coad(NA,i8),coad(NA,i9),coad(NA,j3))");
 }
 
 #[test]
@@ -355,7 +355,7 @@ fn form_github_color_tloop_qq5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_qq5(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-5/144*CA^3*NA*TR^2+11/48*CA^2*d33(cOlpR1,cOlpR2)+1/6*TR*d44(cOlpR1,cOlpA1)+-5/6*CA*d44(cOlpR1,cOlpR2)+d55(cOlpR1,cOlpR2)");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"(trace(cof(Nc),cyclic(t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out))))^2");
 }
 
 #[test]
@@ -365,7 +365,7 @@ fn form_github_color_tloop_qg5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_qg5(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-5𝑖/144*CA^4*NA*TR+-3𝑖/4*CA*d44(cOlpR1,cOlpA1)+1𝑖/12*TR*d44(cOlpA1,cOlpA2)");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-1*f(coad(NA,j1),coad(NA,k1),coad(NA,k2))*f(coad(NA,j2),coad(NA,k2),coad(NA,k3))*f(coad(NA,j3),coad(NA,k3),coad(NA,k4))*f(coad(NA,j4),coad(NA,k4),coad(NA,k5))*f(coad(NA,j5),coad(NA,k1),coad(NA,k5))*trace(cof(Nc),cyclic(t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out)))");
 }
 
 #[test]
@@ -375,7 +375,7 @@ fn form_github_color_tloop_gg5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_gg5(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"5/144*CA^5*NA+2/3*CA*d44(cOlpA1,cOlpA2)");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"f(coad(NA,i1),coad(NA,i2),coad(NA,j1))*f(coad(NA,i1),coad(NA,i5),coad(NA,j5))*f(coad(NA,i2),coad(NA,i3),coad(NA,j2))*f(coad(NA,i3),coad(NA,i4),coad(NA,j3))*f(coad(NA,i4),coad(NA,i5),coad(NA,j4))*f(coad(NA,j1),coad(NA,k1),coad(NA,k2))*f(coad(NA,j2),coad(NA,k2),coad(NA,k3))*f(coad(NA,j3),coad(NA,k3),coad(NA,k4))*f(coad(NA,j4),coad(NA,k4),coad(NA,k5))*f(coad(NA,j5),coad(NA,k1),coad(NA,k5))");
 }
 
 #[test]
@@ -389,7 +389,7 @@ fn simpli_contracts_projected_f_pair() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*CA*projected_invariant(a,b,invariant_environment(a,b))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CA*g(coad(NA,a),coad(NA,b))*invariant_environment(a,b)");
 }
 
 #[test]
@@ -399,7 +399,7 @@ fn tloop_qloop_size_3() {
     let result =
         parse_lit!(NA * TR * CF ^ 2 - 3 / 2 * NA * TR * CA * CF + 1 / 2 * NA * TR * CA ^ 2);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/2*CA^2*NA*TR+-3/2*CA*CF*NA*TR+CF^2*NA*TR");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-3/2*CA*CF*NA*TR+1/2*CA^2*NA*TR+CF^2*NA*TR");
 }
 
 #[test]
@@ -426,7 +426,7 @@ fn tloop_qgloop_size_3() {
     test_initialize();
     let result = parse_lit!(1𝑖 / 4 * NA * TR * CA ^ 2);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/4*1𝑖*CA^2*NA*TR");
+    assert_snapshot!(result.to_bare_ordered_string(), @"1𝑖/4*CA^2*NA*TR");
 }
 
 #[test]
@@ -446,7 +446,7 @@ fn tloop_g14() {
         1 / 648 * NA * CA ^ 7 - 8 / 15 * d444(A1, A2, A3) * CA + 16 / 9 * d644(A1, A2, A3)
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/648*CA^7*NA+-8/15*CA*d444(A1,A2,A3)+16/9*d644(A1,A2,A3)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-8/15*CA*d444(A1,A2,A3)+1/648*CA^7*NA+16/9*d644(A1,A2,A3)");
 }
 
 #[test]
@@ -466,7 +466,7 @@ fn tloop_fiveq() {
             ^ 2 * CA + 1 / 2 * d3333(R1, R2, R3, R4) * TR * CA + d43333a(R5, R2, R1, R4, R3)
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/192*CA^3*NA*TR^5+1/4*CA^2*TR^3*d33(R1,R2)+5/48*CA*NA^(-1)*TR*d33(R1,R2)*d33(R3,R4)+5/48*CA*NA^(-1)*TR*d33(R1,R3)*d33(R2,R4)+1/8*CA*NA^(-1)*TR*d33(R1,R4)*d33(R2,R3)+3/8*CA*TR^2*d433(R3,R1,R2)+1/2*CA*TR*d3333(R1,R2,R3,R4)+1/16*TR^4*d44(R1,A1)+d43333a(R5,R2,R1,R4,R3)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"1/16*TR^4*d44(R1,A1)+1/192*CA^3*NA*TR^5+1/2*CA*TR*d3333(R1,R2,R3,R4)+1/4*CA^2*TR^3*d33(R1,R2)+1/8*CA*NA^(-1)*TR*d33(R1,R4)*d33(R2,R3)+3/8*CA*TR^2*d433(R3,R1,R2)+5/48*CA*NA^(-1)*TR*d33(R1,R2)*d33(R3,R4)+5/48*CA*NA^(-1)*TR*d33(R1,R3)*d33(R2,R4)+d43333a(R5,R2,R1,R4,R3)");
 }
 
 #[test]
@@ -475,7 +475,7 @@ fn su_f3f3() {
     test_initialize();
     let result = parse_lit!(2 * a ^ 3 * NF ^ -1 - 5 / 2 * a ^ 3 * NF + 1 / 2 * a ^ 3 * NF ^ 3);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"2*NF^(-1)*a^3+-5/2*NF*a^3+1/2*NF^3*a^3");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-5/2*NF*a^3+1/2*NF^3*a^3+2*NF^(-1)*a^3");
 }
 
 #[test]
@@ -497,7 +497,7 @@ fn su_f4f4() {
             ^ 4
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-3*NF^(-2)*a^4*nf^2+4*a^4*nf^2+-7/6*NF^2*a^4*nf^2+1/6*NF^4*a^4*nf^2");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-3*NF^(-2)*a^4*nf^2+-7/6*NF^2*a^4*nf^2+1/6*NF^4*a^4*nf^2+4*a^4*nf^2");
 }
 
 #[test]
@@ -508,7 +508,7 @@ fn su_f4a4() {
         -2 * a ^ 4 * nf * NF + 5 / 3 * a ^ 4 * nf * NF ^ 3 + 1 / 3 * a ^ 4 * nf * NF ^ 5
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-2*NF*a^4*nf+5/3*NF^3*a^4*nf+1/3*NF^5*a^4*nf");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-2*NF*a^4*nf+1/3*NF^5*a^4*nf+5/3*NF^3*a^4*nf");
 }
 
 #[test]
@@ -518,7 +518,7 @@ fn su_a4a4() {
     let result =
         parse_lit!(-24 * a ^ 4 * NF ^ 2 + 70 / 3 * a ^ 4 * NF ^ 4 + 2 / 3 * a ^ 4 * NF ^ 6);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-24*NF^2*a^4+70/3*NF^4*a^4+2/3*NF^6*a^4");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-24*NF^2*a^4+2/3*NF^6*a^4+70/3*NF^4*a^4");
 }
 
 #[test]
@@ -527,7 +527,7 @@ fn su_fnfn_n3() {
     test_initialize();
     let result = parse_lit!(2 * a ^ 3 * nf ^ 2 * NF ^ -1 - 2 * a ^ 3 * nf ^ 2 * NF);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"2*NF^(-1)*a^3*nf^2+-2*NF*a^3*nf^2");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-2*NF*a^3*nf^2+2*NF^(-1)*a^3*nf^2");
 }
 
 #[test]

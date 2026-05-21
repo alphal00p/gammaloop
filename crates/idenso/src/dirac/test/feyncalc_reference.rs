@@ -91,7 +91,7 @@ fn dirac_simplify_id6_projectors_move_through_gamma() {
         * gamma7
         * gamma!(nu, slot!(r.bis4, c), slot!(r.bis4, j));
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"1/2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+1/2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma5(in,out))");
 }
 
 #[test]

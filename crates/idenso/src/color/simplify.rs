@@ -4,8 +4,7 @@ use itertools::Itertools;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    rep_,
-    shadowing::{self, TensorCollectExt},
+    rep_, shadowing,
     structure::{abstract_index::AIND_SYMBOLS, representation::RepName},
     tensors::parametric::atomcore::PatternReplacement,
     trace, trace_sym,
@@ -57,14 +56,12 @@ struct ColorAlgebraSimplifier {
 
 impl ColorAlgebraSimplifier {
     fn run(&self, expression: AtomView<'_>) -> Atom {
-        let mut current = expression.to_owned().collect_metrics().simplify_metrics();
+        let mut current = expression.to_owned().simplify_metrics();
 
         loop {
             let next = self.apply_once(current.as_view());
             if next == current {
-                return restore_explicit_default_generator_chains(next)
-                    .collect_metrics()
-                    .simplify_metrics();
+                return restore_explicit_default_generator_chains(next).simplify_metrics();
             }
             current = next;
         }
@@ -74,7 +71,6 @@ impl ColorAlgebraSimplifier {
         let collected = self.collect_lines(expression);
         self.rewrite_terms(collected.as_view())
             .collect_color()
-            .collect_metrics()
             .simplify_metrics()
     }
 

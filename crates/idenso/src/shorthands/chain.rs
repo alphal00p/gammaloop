@@ -230,6 +230,6 @@ mod tests {
         );
         let rep = Bispinor {}.into();
 
-        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(out,in,p(1,mink(4))),gamma(out,in,mink(4,nu)))");
+        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*chain(bis(4,c),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
     }
 }

@@ -2004,7 +2004,7 @@ where
         index.indices.remove(target_axis);
         let mut value = value.clone();
         if selector_value != Atom::num(1) {
-            value = value * selector_value.clone();
+            value *= selector_value.clone();
         }
         if negative_metric_component {
             value = -value;
