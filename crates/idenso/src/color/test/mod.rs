@@ -200,6 +200,95 @@ fn permuted_structure_constant_square_simplifies_with_sign() {
 }
 
 #[test]
+fn three_loop_pole_part_color() {
+    test_initialize();
+    let input = parse_lit!(
+        ((-16 + -26 * ε ^ 2 + -8 / 3 * ε ^ 2 * 𝜋 ^ 2 + 56 / 3 * ε)
+            * f(
+                coad(8, hedge(11)),
+                coad(8, hedge(13)),
+                coad(8, vertex(2, 1))
+            )
+            * f(coad(8, hedge(11)), coad(8, hedge(6)), coad(8, vertex(3, 1)))
+            * f(coad(8, hedge(13)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+            * f(coad(8, hedge(4)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+            + (-16 + -26 * ε ^ 2 + -8 / 3 * ε ^ 2 * 𝜋 ^ 2 + 56 / 3 * ε)
+                * f(
+                    coad(8, hedge(11)),
+                    coad(8, hedge(13)),
+                    coad(8, vertex(3, 1))
+                )
+                * f(coad(8, hedge(11)), coad(8, hedge(4)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(6)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+            + (-16 + -26 * ε ^ 2 + -8 / 3 * ε ^ 2 * 𝜋 ^ 2 + 88 / 3 * ε)
+                * f(coad(8, hedge(11)), coad(8, hedge(4)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(11)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(6)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+            + (-16 + -26 * ε ^ 2 + -8 / 3 * ε ^ 2 * 𝜋 ^ 2 + 88 / 3 * ε)
+                * f(coad(8, hedge(11)), coad(8, hedge(6)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(11)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(4)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+            + (-16 / 3 * ε ^ 2 * 𝜋 ^ 2 + -32 + -52 * ε ^ 2 + 176 / 3 * ε)
+                * f(coad(8, hedge(11)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(11)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(4)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(6)), coad(8, vertex(3, 1)))
+            + (-16 / 3 * ε ^ 2 * 𝜋 ^ 2 + -32 + -52 * ε ^ 2 + 48 * ε)
+                * f(
+                    coad(8, hedge(11)),
+                    coad(8, hedge(13)),
+                    coad(8, vertex(2, 1))
+                )
+                * f(
+                    coad(8, hedge(11)),
+                    coad(8, hedge(13)),
+                    coad(8, vertex(3, 1))
+                )
+                * f(coad(8, hedge(4)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(6)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+            + (-16 / 3 * ε ^ 2 * 𝜋 ^ 2 + -32 + -52 * ε ^ 2 + 48 * ε)
+                * f(coad(8, hedge(11)), coad(8, hedge(4)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(11)), coad(8, hedge(6)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+            + (-88 / 3 * ε + 16 + 26 * ε ^ 2 + 8 / 3 * ε ^ 2 * 𝜋 ^ 2)
+                * f(
+                    coad(8, hedge(11)),
+                    coad(8, hedge(13)),
+                    coad(8, vertex(2, 1))
+                )
+                * f(coad(8, hedge(11)), coad(8, hedge(9)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(6)), coad(8, vertex(3, 1)))
+                * f(coad(8, hedge(4)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+            + (-88 / 3 * ε + 16 + 26 * ε ^ 2 + 8 / 3 * ε ^ 2 * 𝜋 ^ 2)
+                * f(
+                    coad(8, hedge(11)),
+                    coad(8, hedge(13)),
+                    coad(8, vertex(3, 1))
+                )
+                * f(coad(8, hedge(11)), coad(8, hedge(9)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(13)), coad(8, hedge(4)), coad(8, vertex(2, 1)))
+                * f(coad(8, hedge(6)), coad(8, hedge(9)), coad(8, vertex(3, 1))))
+            * 1
+            / 64
+            * CA
+            * dot(P(0, mink(4)), P(0, mink(4)))
+            * g(coad(8, hedge(4)), coad(8, hedge(6)))
+            * gs
+            ^ 6 * ε
+            ^ (-3),
+        default_namespace = "spenso"
+    );
+
+    let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
+
+    assert_snapshot!(&color_zero_candidate.to_bare_ordered_string(),@"(-16+-26*ε^2+-8/3*ε^2*𝜋^2+56/3*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,vertex_2_1))*f(coad(8,hedge_11),coad(8,hedge_6),coad(8,vertex_3_1))*f(coad(8,hedge_13),coad(8,hedge_9),coad(8,vertex_3_1))*f(coad(8,hedge_4),coad(8,hedge_9),coad(8,vertex_2_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-16+-26*ε^2+-8/3*ε^2*𝜋^2+56/3*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,vertex_3_1))*f(coad(8,hedge_11),coad(8,hedge_4),coad(8,vertex_2_1))*f(coad(8,hedge_13),coad(8,hedge_9),coad(8,vertex_2_1))*f(coad(8,hedge_6),coad(8,hedge_9),coad(8,vertex_3_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-16+-26*ε^2+-8/3*ε^2*𝜋^2+88/3*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_4),coad(8,vertex_2_1))*f(coad(8,hedge_11),coad(8,hedge_9),coad(8,vertex_3_1))*f(coad(8,hedge_13),coad(8,hedge_6),coad(8,vertex_3_1))*f(coad(8,hedge_13),coad(8,hedge_9),coad(8,vertex_2_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-16+-26*ε^2+-8/3*ε^2*𝜋^2+88/3*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_6),coad(8,vertex_3_1))*f(coad(8,hedge_11),coad(8,hedge_9),coad(8,vertex_2_1))*f(coad(8,hedge_13),coad(8,hedge_4),coad(8,vertex_2_1))*f(coad(8,hedge_13),coad(8,hedge_9),coad(8,vertex_3_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-16/3*ε^2*𝜋^2+-32+-52*ε^2+176/3*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_9),coad(8,vertex_2_1))*f(coad(8,hedge_11),coad(8,hedge_9),coad(8,vertex_3_1))*f(coad(8,hedge_13),coad(8,hedge_4),coad(8,vertex_2_1))*f(coad(8,hedge_13),coad(8,hedge_6),coad(8,vertex_3_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-16/3*ε^2*𝜋^2+-32+-52*ε^2+48*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,vertex_2_1))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,vertex_3_1))*f(coad(8,hedge_4),coad(8,hedge_9),coad(8,vertex_2_1))*f(coad(8,hedge_6),coad(8,hedge_9),coad(8,vertex_3_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-16/3*ε^2*𝜋^2+-32+-52*ε^2+48*ε)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_4),coad(8,vertex_2_1))*f(coad(8,hedge_11),coad(8,hedge_6),coad(8,vertex_3_1))*f(coad(8,hedge_13),coad(8,hedge_9),coad(8,vertex_2_1))*f(coad(8,hedge_13),coad(8,hedge_9),coad(8,vertex_3_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-88/3*ε+16+26*ε^2+8/3*ε^2*𝜋^2)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,vertex_2_1))*f(coad(8,hedge_11),coad(8,hedge_9),coad(8,vertex_3_1))*f(coad(8,hedge_13),coad(8,hedge_6),coad(8,vertex_3_1))*f(coad(8,hedge_4),coad(8,hedge_9),coad(8,vertex_2_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)+(-88/3*ε+16+26*ε^2+8/3*ε^2*𝜋^2)*1/64*CA*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,vertex_3_1))*f(coad(8,hedge_11),coad(8,hedge_9),coad(8,vertex_2_1))*f(coad(8,hedge_13),coad(8,hedge_4),coad(8,vertex_2_1))*f(coad(8,hedge_6),coad(8,hedge_9),coad(8,vertex_3_1))*g(coad(8,hedge_4),coad(8,hedge_6))*gs^6*ε^(-3)");
+}
+
+#[test]
 fn kaapo_gl34_color_input_simplifies_to_zero() {
     test_initialize();
 
