@@ -52,7 +52,6 @@ compilation_mode = "$(compilation_mode:symjit)"
 optimization_level = "$(optimization_level:O3)"
 fast_math = $(fast_math:true)
 unsafe_math = $(unsafe_math:true)
-compiler = "$(compiler:clang++)"
 custom = $(compile_custom:[])
 
 [global.generation.threshold_subtraction]
