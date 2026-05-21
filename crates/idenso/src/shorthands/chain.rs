@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    chain,
+    chain, dualizable_, dualizable_dual_,
     network::tags::SPENSO_TAG as T,
     self_dual_,
     structure::representation::{LibraryRep, RepName},
@@ -16,16 +16,25 @@ use symbolica::{
 
 use crate::W_;
 
-static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let rep = self_dual_!(1; W_.d_, W_.i_);
-    let stripped_rep = self_dual_!(1; W_.d_);
+static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
+    let sd_rep = self_dual_!(1; W_.d_, W_.i_);
+    let sd_stripped_rep = self_dual_!(1; W_.d_);
+    let d_rep = dualizable_!(1; W_.d_, W_.i_);
+    let dd_rep = dualizable_dual_!(1; W_.d_, W_.i_);
+    let d_stripped_rep = dualizable_!(1; W_.d_);
 
-    [Replacement::new(
-        // A chain whose endpoints are the same slot is a closed line:
-        // chain(rep(d,i), rep(d,i), factors...) -> trace(rep(d), factors...).
-        chain!(&rep, &rep, W_.a___).to_pattern(),
-        trace!(stripped_rep, W_.a___),
-    )]
+    [
+        Replacement::new(
+            // A chain whose endpoints are the same slot is a closed line:
+            // chain(rep(d,i), rep(d,i), factors...) -> trace(rep(d), factors...).
+            chain!(&sd_rep, &sd_rep, W_.a___).to_pattern(),
+            trace!(sd_stripped_rep, W_.a___),
+        ),
+        Replacement::new(
+            chain!(&d_rep, &dd_rep, W_.a___).to_pattern(),
+            trace!(d_stripped_rep, W_.a___),
+        ),
+    ]
 });
 
 pub trait Chain {
@@ -68,7 +77,7 @@ impl<'a> Chain for AtomView<'a> {
         let in_index = representation.to_symbolic([W_.d_, W_.i_]);
         let dummy_out = representation.dual().to_symbolic([W_.d_, W_.j_]);
         let dummy_in = representation.to_symbolic([W_.d_, W_.j_]);
-        let out_index = representation.to_symbolic([W_.d_, W_.k_]);
+        let out_index = representation.dual().to_symbolic([W_.d_, W_.k_]);
 
         let product = function!(
             T.chain,
