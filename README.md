@@ -5,8 +5,7 @@
 </picture>
 
 
-[![Nix-CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2)](https://nix-ci.com/gh:alphal00p:gammaloop/main)
-[![GitHub Actions](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml?query=branch%3Amain)
+[![Nix-CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2)](https://nix-ci.com/gh:alphal00p:gammaloop/main) [![GitHub Actions](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml?query=branch%3Amain)
 <!--[![crates.io](https://img.shields.io/crates/v/spenso.svg)](https://crates.io/crates/spenso)
 [![Build Status](https://github.com/alphal00p/spenso/actions/workflows/ci.yml/badge.svg)](https://github.com/alphal00p/spenso/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/alphal00p/spenso/graph/badge.svg?token=ST0XA54QSF)](https://codecov.io/github/alphal00p/spenso)
