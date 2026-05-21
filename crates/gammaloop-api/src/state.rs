@@ -10,12 +10,11 @@ use std::{
         Arc,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use clap::Args;
 use color_eyre::{Result, Section};
-use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
@@ -25,7 +24,6 @@ use linnet::half_edge::subgraph::SubGraphLike;
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::numerical_integration::Sample;
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::debug;
@@ -36,7 +34,6 @@ use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
-    integrands::HasIntegrand,
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
@@ -1979,51 +1976,6 @@ impl State {
                 "Mix of amplitude and cross section graphs in the same file is not supported"
             ))
         }
-    }
-
-    pub fn bench(
-        &mut self,
-        samples: usize,
-        process_id: usize,
-        integrand_name: String,
-        _n_cores: usize,
-    ) -> Result<()> {
-        let integrand = self
-            .process_list
-            .get_integrand_mut(process_id, integrand_name)?;
-        let name = integrand.name();
-
-        info!(
-            "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-            name.green(),
-            samples.to_string().blue()
-        );
-
-        let now = Instant::now();
-        for _ in 0..samples {
-            let _ = integrand.evaluate_sample(
-                &Sample::Continuous(
-                    F(1.),
-                    (0..integrand.get_n_dim())
-                        .map(|_| F(rand::random::<f64>()))
-                        .collect(),
-                ),
-                &self.model,
-                F(1.),
-                1,
-                false,
-                Complex::new_zero(),
-            );
-        }
-        let total_time = now.elapsed().as_secs_f64();
-        info!(
-            "\n> Total time: {} s for {} samples, {} ms per sample\n",
-            format!("{:.1}", total_time).blue(),
-            format!("{}", samples).blue(),
-            format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
-        );
-
-        Ok(())
     }
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {

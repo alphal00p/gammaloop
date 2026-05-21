@@ -1,0 +1,199 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/bench/outputs/gammaloop_state"
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[[command_blocks]]
+name = "load"
+commands = [
+  "import model $(model:sm-default.json)",
+  "remove processes",
+  "import graphs $(graph_path:./graphs/G1.dot) -p $(process:bench) -i $(integrand:default) -o --process-spec '$(process_spec:a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==2 [{{2}} QCD=1])'",
+]
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "run load",
+  """set global string '
+[global]
+logfile_directive = "$(logfile_directive:off)"
+display_directive = "$(display_directive:info)"
+3d_representation = "$(representation:CFF)"
+
+[global.log_style]
+include_fields = $(log_include_fields:false)
+
+[global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[global.generation]
+explicit_orientation_sum_only = $(explicit_orientation_sum_only:false)
+
+[global.generation.evaluator]
+do_algebra = $(do_algebra:false)
+iterative_orientation_optimization = $(iterative_orientation_optimization:false)
+store_atom = $(store_atom:false)
+compile = $(compile:false)
+summed = $(summed:false)
+summed_function_map = $(summed_function_map:false)
+
+[global.generation.compile]
+compilation_mode = "$(compilation_mode:symjit)"
+optimization_level = "$(optimization_level:O3)"
+fast_math = $(fast_math:true)
+unsafe_math = $(unsafe_math:true)
+compiler = "$(compiler:clang++)"
+custom = $(compile_custom:[])
+
+[global.generation.threshold_subtraction]
+enable_thresholds = $(enable_thresholds:false)
+check_esurface_at_generation = $(check_esurface_at_generation:true)
+skip_thresholds_that_are_cuts = $(skip_thresholds_that_are_cuts:true)
+
+[global.generation.uv]
+softct = $(uv_softct:false)
+inner_products = $(uv_inner_products:true)
+generate_integrated = $(uv_generate_integrated:false)
+subtract_uv = $(uv_subtract:true)
+# false: local UV from 3D expansions; true: local UV from expanded 4D integrands.
+# The expanded-4D local UV path is required when switching representation to "LTD".
+local_uv_cts_from_expanded_4d_integrands = $(local_uv_from_expanded_4d:false)
+
+[global.generation.tropical_subgraph_table]
+panic_on_fail = $(tropical_panic_on_fail:true)
+disable_tropical_generation = $(disable_tropical_generation:true)
+'""",
+  "generate existing -p $(process:bench) -i $(integrand:default)",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "bench_setup"
+commands = [
+  "run set_model_parameters",
+  """set process -p $(process:bench) -i $(integrand:default) string '
+[general]
+use_ltd = $(use_ltd:false)
+evaluator_method = "$(evaluator_method:SingleParametric)"
+load_compiled_cff = $(load_compiled_cff:false)
+enable_cache = $(enable_cache:false)
+debug_cache = $(debug_cache:false)
+generate_events = $(generate_events:false)
+store_additional_weights_in_event = $(store_additional_weights_in_event:false)
+integral_unit = "$(integral_unit:picobarn)"
+mu_r = $(mu_r:91.188)
+m_uv = $(m_uv:91.188)
+
+[subtraction]
+disable_threshold_subtraction = $(disable_threshold_subtraction:true)
+
+[sampling]
+graphs = "$(sampling_graphs:summed)"
+orientations = "$(sampling_orientations:summed)"
+lmb_multichanneling = $(lmb_multichanneling:false)
+lmb_channels = "$(lmb_channels:summed)"
+coordinate_system = "$(coordinate_system:spherical)"
+mapping = "$(mapping:linear)"
+b = $(mapping_b:1.0)
+
+[stability]
+rotation_axis = $(rotation_axis:[])
+
+[[stability.levels]]
+precision = "$(precision:Double)"
+required_precision_for_re = $(required_precision_for_re:1.0e-5)
+required_precision_for_im = $(required_precision_for_im:1.0e-5)
+escalate_for_large_weight_threshold = $(escalate_for_large_weight_threshold:-1.0)
+'""",
+]
+
+[[command_blocks]]
+name = "bench"
+commands = [
+  "run bench_setup",
+  "run bench_point$(x_dim:6)",
+]
+
+[[command_blocks]]
+name = "bench_point6"
+commands = [
+  "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
+]
+
+[[command_blocks]]
+name = "bench_point9"
+commands = [
+  "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) $(x6:0.19) $(x7:0.33) $(x8:0.47) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
+]
+
+[[command_blocks]]
+name = "bench_point12"
+commands = [
+  "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) $(x6:0.19) $(x7:0.33) $(x8:0.47) $(x9:0.61) $(x10:0.75) $(x11:0.89) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
+]
+
+[[command_blocks]]
+name = "bench_point15"
+commands = [
+  "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) $(x6:0.19) $(x7:0.33) $(x8:0.47) $(x9:0.61) $(x10:0.75) $(x11:0.89) $(x12:0.11) $(x13:0.24) $(x14:0.37) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
+]
+
+[[command_blocks]]
+name = "bench_point18"
+commands = [
+  "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) $(x6:0.19) $(x7:0.33) $(x8:0.47) $(x9:0.61) $(x10:0.75) $(x11:0.89) $(x12:0.11) $(x13:0.24) $(x14:0.37) $(x15:0.52) $(x16:0.68) $(x17:0.83) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [
+        1000.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+helicities = [
+    "summed_averaged",
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true

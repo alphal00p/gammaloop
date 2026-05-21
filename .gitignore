@@ -104,6 +104,11 @@ pip-delete-this-directory.txt
 # GammaLoop test outputs
 TEST_OUTPUT*/
 
+# Local benchmark outputs
+/examples/cli/bench/__pycache__/
+/examples/cli/bench/outputs/*
+!/examples/cli/bench/outputs/.gitkeep
+
 
 # Local scratch and ad-hoc workspaces
 .local/

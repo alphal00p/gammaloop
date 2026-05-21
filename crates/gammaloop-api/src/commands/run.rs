@@ -416,7 +416,14 @@ fn command_history_from_template(
             eyre!("Could not parse command template: unmatched quotes or trailing escape")
         })?
         .into_iter()
-        .map(|arg| expand(&arg, environment))
+        .filter_map(|arg| {
+            let is_optional_placeholder = contains_placeholder(&arg);
+            match expand(&arg, environment) {
+                Ok(expanded) if is_optional_placeholder && expanded.is_empty() => None,
+                Ok(expanded) => Some(Ok(expanded)),
+                Err(err) => Some(Err(err)),
+            }
+        })
         .collect::<Result<Vec<_>>>()?;
     let raw_string = args
         .iter()
@@ -502,4 +509,18 @@ fn shell_quote(value: &str) -> String {
     }
 
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{command_history_from_template, CommandEnvironment};
+
+    #[test]
+    fn command_template_omits_empty_optional_placeholder_args() {
+        let command =
+            command_history_from_template("quit $(optional:) -n", &CommandEnvironment::new())
+                .unwrap();
+
+        assert_eq!(command.raw_string(), Some("quit -n"));
+    }
 }

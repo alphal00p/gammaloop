@@ -678,6 +678,9 @@ fn inspect_bench_batch_timing(
     // displayed rows disjoint by showing the non-evaluator integrand residual.
     let integrand = (integrand_inclusive * inv_sample_count - evaluator).max(0.0);
     let event_processing = event_processing * inv_sample_count;
+    // Keep Total as the wall-clock time around evaluate_samples. The metadata
+    // rows below are subtracted from that wrapper timing so other/overhead
+    // captures unclassified evaluation work plus evaluate_samples overhead.
     let total = total_timing.as_secs_f64() * inv_sample_count;
     let known = parameterization + integrand + event_processing + evaluator;
     let other = (total - known).max(0.0);
@@ -957,12 +960,18 @@ fn format_significant(value: f64, significant_digits: usize) -> String {
 mod tests {
     use std::time::Duration;
 
-    use gammalooprs::settings::runtime::{RotationSetting, StabilityRecordingSettings};
+    use gammalooprs::{
+        integrands::evaluation::{
+            BatchSampleEvaluationResult, EvaluationResult, SampleEvaluationResult,
+        },
+        observables::ObservableSnapshotBundle,
+        settings::runtime::{RotationSetting, StabilityRecordingSettings},
+    };
 
     use super::{
         apply_minimal_integrand_settings, format_timing_with_uncertainty,
-        parse_bench_target_duration, split_samples_into_batches, RuntimeSettings,
-        StabilityLevelSetting,
+        inspect_bench_batch_timing, parse_bench_target_duration, split_samples_into_batches,
+        RuntimeSettings, StabilityLevelSetting,
     };
 
     #[test]
@@ -1026,6 +1035,64 @@ mod tests {
             .lines()
             .last()
             .is_some_and(|line| line.starts_with('╰')));
+    }
+
+    #[test]
+    fn inspect_bench_timing_uses_wrapper_total_and_metadata_components() {
+        let batch = BatchSampleEvaluationResult {
+            samples: vec![
+                sample_with_metadata(
+                    Duration::from_micros(10),
+                    Duration::from_micros(1),
+                    Duration::from_micros(5),
+                    Duration::from_micros(3),
+                    Duration::from_micros(1),
+                ),
+                sample_with_metadata(
+                    Duration::from_micros(14),
+                    Duration::from_micros(2),
+                    Duration::from_micros(6),
+                    Duration::from_micros(4),
+                    Duration::from_micros(2),
+                ),
+            ],
+            observables: ObservableSnapshotBundle::default(),
+            numerical_stability: None,
+        };
+
+        let timing = inspect_bench_batch_timing(Duration::from_micros(30), &batch).unwrap();
+
+        assert_close(timing.total, 15.0e-6);
+        assert_close(timing.parameterization, 1.5e-6);
+        assert_close(timing.integrand, 2.0e-6);
+        assert_close(timing.event_processing, 1.5e-6);
+        assert_close(timing.evaluator, 3.5e-6);
+        assert_close(timing.other, 6.5e-6);
+    }
+
+    fn sample_with_metadata(
+        total: Duration,
+        parameterization: Duration,
+        integrand: Duration,
+        evaluator: Duration,
+        event_processing: Duration,
+    ) -> SampleEvaluationResult {
+        let mut evaluation = EvaluationResult::zero();
+        evaluation.evaluation_metadata.total_timing = total;
+        evaluation.evaluation_metadata.parameterization_time = parameterization;
+        evaluation.evaluation_metadata.integrand_evaluation_time = integrand;
+        evaluation.evaluation_metadata.evaluator_evaluation_time = evaluator;
+        evaluation.evaluation_metadata.event_processing_time = event_processing;
+        SampleEvaluationResult {
+            evaluation: evaluation.into_output(false),
+        }
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() <= 1.0e-12,
+            "expected {expected:e}, got {actual:e}"
+        );
     }
 
     #[test]

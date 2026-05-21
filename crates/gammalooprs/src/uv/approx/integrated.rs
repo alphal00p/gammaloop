@@ -123,26 +123,12 @@ impl Integrated<'_> {
         given: &S,
         integrand: &Atom,
     ) -> Result<Atom> {
-        let reduced = current.reduced_subgraph(given);
-        let graph = ctx.graph;
         let settings = ctx.settings;
-        let mut t_arg = ctx
-            .graph
-            .numerator(&reduced, given.subgraph())
-            .to_d_dim(GS.dim)
-            .get_single_atom()
-            .unwrap();
+        let t_arg = integrated_uv_start(ctx.graph, current, given, integrand)?;
 
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg without denoms");
-        t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
+        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"Integrated UV start source");
 
-        t_arg = t_arg
-            .replace(GS.dim)
-            .max_level(0)
-            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
-
-        Ok(t_arg * integrand)
+        Ok(t_arg)
     }
 
     pub(crate) fn t<S: super::ForestNodeLike>(
@@ -152,20 +138,11 @@ impl Integrated<'_> {
         given: &S,
         integrand: &Atom,
     ) -> Result<Atom> {
-        let graph = ctx.graph;
-        let reduced = current.reduced_subgraph(given);
-        let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
-
-        let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
-
+        let n_loops = ctx.graph.n_loops(current.subgraph()) - ctx.graph.n_loops(given.subgraph());
+        let atomarg = integrated_uv_rescaled(ctx.graph, current, given, integrand);
         debug_tags!(#uv,#integrated;res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
-        let a = atomarg.series(GS.rescale, Atom::Zero, 1).unwrap();
-
-        let mut a = a.to_atom();
-
-        debug_tags!(#uv,#integrated;res = %a.log_print(None),file.res = %a.to_plain_string(),"Series expanded");
-        a = a.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#integrated;res = %a.log_print(None),"Series expanded");
+        let a = integrated_uv_rescale_series(ctx.graph, current, given, integrand)?;
+        debug_tags!(#uv,#integrated;res = %a.log_print(None),file.res = %a.to_plain_string(),"Integrated UV rescale series");
 
         Ok(a)
     }
@@ -373,6 +350,53 @@ impl Integrated<'_> {
         // println!("\nIntegrated CT:\n{}\n", res);
         Ok(res)
     }
+}
+
+pub(crate) fn integrated_uv_start<S: super::ForestNodeLike>(
+    graph: &Graph,
+    current: &S,
+    given: &S,
+    integrand: &Atom,
+) -> Result<Atom> {
+    let reduced = current.reduced_subgraph(given);
+    let t_arg = graph
+        .numerator(&reduced, given.subgraph())
+        .to_d_dim(GS.dim)
+        .get_single_atom()
+        .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?
+        .simplify_metrics()
+        .simplify_gamma()
+        / graph.denominator(&reduced, |_| 1);
+
+    Ok(t_arg
+        .replace(GS.dim)
+        .max_level(0)
+        .with(Atom::var(GS.dim_epsilon) * (-2) + 4)
+        * integrand)
+}
+
+pub(crate) fn integrated_uv_rescaled<S: super::ForestNodeLike>(
+    graph: &Graph,
+    current: &S,
+    given: &S,
+    integrand: &Atom,
+) -> Atom {
+    let reduced = current.reduced_subgraph(given);
+    let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
+    graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand)
+}
+
+pub(crate) fn integrated_uv_rescale_series<S: super::ForestNodeLike>(
+    graph: &Graph,
+    current: &S,
+    given: &S,
+    integrand: &Atom,
+) -> Result<Atom> {
+    let atomarg = integrated_uv_rescaled(graph, current, given, integrand);
+    let series = atomarg
+        .series(GS.rescale, Atom::Zero, 1)
+        .map_err(|error| eyre!("integrated UV rescale series expansion failed: {error}"))?;
+    Ok(series.to_atom().replace(GS.rescale).with(Atom::num(1)))
 }
 
 fn integrated_triangle_spatial_norm_sq(

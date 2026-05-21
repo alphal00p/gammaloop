@@ -8,8 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    completion::CompletionArgExt,
-    state::{CommandHistory, ProcessRef, RunHistory, State},
+    state::{CommandHistory, RunHistory, State},
     CLISettings,
 };
 use symbolica::atom::Atom;
@@ -120,32 +119,6 @@ pub enum Commands {
 
     Renormalize(Renormalize),
 
-    /// Benchmark raw integrand evaluation speed
-    Bench {
-        /// Number of random samples to evaluate
-        #[arg(short = 's', long, value_name = "SAMPLES")]
-        samples: usize,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(
-            short = 'p',
-            long = "process",
-            value_name = "PROCESS",
-            completion_process_selector(crate::completion::SelectorKind::Any)
-        )]
-        process: ProcessRef,
-
-        /// The integrand name to benchmark
-        #[arg(
-            short = 'i',
-            long = "integrand-name",
-            value_name = "NAME",
-            completion_integrand_selector(crate::completion::SelectorKind::Any)
-        )]
-        integrand_name: String,
-        /// Number of cores to parallelize over
-        #[arg(short = 'c', long)]
-        n_cores: usize,
-    },
     #[clap(subcommand)]
     Profile(Profile),
 
@@ -199,15 +172,6 @@ impl Commands {
             }
             Commands::Inspect(inspect) => {
                 let _ = inspect.run(state)?;
-            }
-            Commands::Bench {
-                samples,
-                process,
-                integrand_name,
-                n_cores,
-            } => {
-                let process_id = process.resolve(&state.process_list)?;
-                state.bench(samples, process_id, integrand_name, n_cores)?;
             }
             Commands::Import(s) => s.run(state, global_cli_settings)?,
             Commands::Save(s) => s.run(

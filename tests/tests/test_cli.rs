@@ -1342,14 +1342,17 @@ fn run_history_load_accepts_command_block_templates_that_need_late_parsing() {
         r#"
 [[command_blocks]]
 name = "bench_template"
-commands = ["bench -s $(samples) -p box -i default -c 1"]
+commands = ["inspect -p box -i default -x 0.1 0.2 --bench $(samples)"]
 "#,
     )
     .unwrap();
 
     let run_history = RunHistory::load(&run_card_path).unwrap();
 
-    assert!(run_history.command_blocks[0].commands[0].is_template());
+    assert_eq!(
+        run_history.command_blocks[0].commands[0].raw_string(),
+        Some("inspect -p box -i default -x 0.1 0.2 --bench $(samples)")
+    );
     assert_eq!(
         run_history
             .command_block_placeholder_names("bench_template")

@@ -41,14 +41,16 @@ use crate::{
         generation::generated_cff_expression_uses_variant_half_edges,
         surface::GammaLoopSurfaceCache,
     },
-    graph::{FeynmanGraph, Graph, LoopMomentumBasis, cuts::CutSet},
+    graph::{FeynmanGraph, Graph, cuts::CutSet},
     momentum::{Sign, SignOrZero, sample::LoopIndex},
-    numerator::energy_degree::EnergyPowerAnalyzer,
+    numerator::{energy_degree::EnergyPowerAnalyzer, symbolica_ext::AtomCoreExt},
     settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{UltravioletGraph, approx::ForestNodeLike},
 };
 use typed_index_collections::TiVec;
+
+use super::integrated::{integrated_uv_rescale_series, integrated_uv_start};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Expanded4DApprox {
@@ -147,13 +149,7 @@ pub fn expanded_4d_uv_start<S: ForestNodeLike>(
     given: &S,
     integrand: &Atom,
 ) -> Result<Atom> {
-    let reduced = current.reduced_subgraph(given);
-    let numerator = graph
-        .numerator(&reduced, given.subgraph())
-        .to_d_dim(4)
-        .get_single_atom()
-        .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?;
-    Ok(numerator * integrand)
+    integrated_uv_start(graph, current, given, integrand)
 }
 
 pub fn expanded_4d_uv_kernel<S: ForestNodeLike>(
@@ -162,24 +158,19 @@ pub fn expanded_4d_uv_kernel<S: ForestNodeLike>(
     given: &S,
     integrand: &Atom,
 ) -> Result<Atom> {
-    let reduced = current.reduced_subgraph(given);
-    let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
-    expanded_4d_uv_rescaled(graph, &reduced, n_loops, current.lmb(), integrand)
+    Ok(project_integrated_uv_source_to_4d(
+        integrated_uv_rescale_series(graph, current, given, integrand)?,
+    ))
 }
 
-fn expanded_4d_uv_rescaled(
-    graph: &Graph,
-    replacement_subgraph: &SuBitGraph,
-    n_loops: usize,
-    lmb: &LoopMomentumBasis,
-    atom: &Atom,
-) -> Result<Atom> {
-    let atomarg = graph.uv_rescaled(replacement_subgraph, n_loops, lmb, atom);
-    let series = atomarg
-        .series(GS.rescale, Atom::Zero, 0)
-        .map_err(|error| eyre!("expanded 4D local UV series expansion failed: {error}"))?;
-    let result = series.to_atom().replace(GS.rescale).with(Atom::num(1));
-    Ok(result)
+fn project_integrated_uv_source_to_4d(atom: Atom) -> Atom {
+    // Keep the local 4D route on the integrated-UV construction path: no
+    // local-only epsilon expansion before the 3D projection.
+    atom.replace(GS.dim_epsilon)
+        .with(Atom::Zero)
+        .replace(GS.dim)
+        .with(4)
+        .map_mink_dim(4)
 }
 
 #[allow(clippy::too_many_arguments)]
