@@ -30,10 +30,7 @@ use crate::{
 };
 use gammalooprs::{
     integrands::evaluation::EvaluationResultOutput,
-    settings::{
-        runtime::{RotationSetting, StabilityLevelSetting},
-        RuntimeSettings,
-    },
+    settings::{runtime::StabilityLevelSetting, RuntimeSettings},
     utils::F,
 };
 
@@ -563,7 +560,7 @@ fn apply_minimal_integrand_settings(settings: &mut RuntimeSettings) {
     settings.general.store_additional_weights_in_event = false;
     settings.observables = Default::default();
     settings.selectors = Default::default();
-    settings.stability.rotation_axis = vec![RotationSetting::None {}];
+    settings.stability.rotation_axis = Vec::new();
     settings.stability.levels = vec![StabilityLevelSetting::default_double()];
     settings.stability.check_on_norm = false;
     settings.stability.escalate_if_exact_zero = false;
@@ -1126,10 +1123,7 @@ mod tests {
         assert!(!settings.general.store_additional_weights_in_event);
         assert!(settings.observables.is_empty());
         assert!(settings.selectors.values().all(|selector| !selector.active));
-        assert_eq!(
-            settings.stability.rotation_axis,
-            vec![RotationSetting::None {}]
-        );
+        assert!(settings.stability.rotation_axis.is_empty());
         assert_eq!(
             settings.stability.levels,
             vec![StabilityLevelSetting::default_double()]

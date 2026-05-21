@@ -1257,6 +1257,9 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                         .stability
                         .rotation_axis
                         .iter()
+                        .filter(|axis| {
+                            !matches!(axis, crate::settings::runtime::RotationSetting::None {})
+                        })
                         .map(|axis| Rotation::new(axis.rotation_method())),
                 )
                 .collect(),
