@@ -1214,7 +1214,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
     fn fishnet2b2() {
         let edges = vec![
             (0, 1),
@@ -1265,7 +1264,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
     fn cube() {
         let edges = vec![
             (0, 1),

@@ -48,7 +48,6 @@ use super::{
     UnInit,
 };
 
-#[ignore]
 #[test]
 fn hhgghh() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -871,8 +870,6 @@ fn bug_check_a() {
     println!("res={}", a.canonize_tensors(&indices).unwrap());
 }
 
-// Ignore this test by default as it's too memory intensive for the CI
-#[ignore]
 #[test]
 fn one_loop_lbl_concretize() {
     let (_model, amplitude, _path) = load_amplitude_output(
