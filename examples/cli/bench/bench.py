@@ -980,8 +980,20 @@ def sanitize_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
 
 
+def print_error_log_notice(path: Path, cwd: Path) -> None:
+    relative_path = display_path(path, cwd)
+    print(
+        f"{color('↳ error log', 'bold', 'red')}: {color(relative_path, 'bold', 'yellow')}",
+        file=sys.stderr,
+    )
+
+
 def write_error_log(
-    path: Path, title: str, cmd: list[str], result: dict[str, Any]
+    path: Path,
+    title: str,
+    cmd: list[str],
+    result: dict[str, Any],
+    cwd: Path | None = None,
 ) -> None:
     body = [
         title,
@@ -1008,6 +1020,8 @@ def write_error_log(
         ]
     )
     path.write_text("\n".join(str(part) for part in body), encoding="utf-8")
+    if cwd is not None:
+        print_error_log_notice(path, cwd)
 
 
 def command_prefix(repo_root: Path, binary_profile: str) -> list[str]:
@@ -1163,6 +1177,7 @@ def run_case(
             f"{graph_name}/{profile_name} generation {status}",
             generate_cmd,
             generation,
+            bench_dir,
         )
         result["disk_size_bytes"] = state_size_bytes(state_dir)
         return result
@@ -1199,6 +1214,7 @@ def run_case(
             f"{graph_name}/{profile_name} benchmark {result['status']}",
             bench_cmd,
             bench,
+            bench_dir,
         )
         result["benchmark"] = {
             "status": result["status"],
@@ -1214,7 +1230,11 @@ def run_case(
         result["status"] = "error"
         result["error_log"] = str(error_log)
         write_error_log(
-            error_log, f"{graph_name}/{profile_name} benchmark error", bench_cmd, bench
+            error_log,
+            f"{graph_name}/{profile_name} benchmark error",
+            bench_cmd,
+            bench,
+            bench_dir,
         )
         result["benchmark"] = {
             "status": "error",
@@ -1239,6 +1259,7 @@ def run_case(
             f"{graph_name}/{profile_name} benchmark JSON error",
             bench_cmd,
             bench,
+            bench_dir,
         )
         result["benchmark"] = {
             "status": "error",
