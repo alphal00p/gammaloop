@@ -23,6 +23,7 @@ pub fn initialise() -> Result<()> {
 
         // println!("Initializing symbols");
         let _ = GS.delta_vec;
+        let _ = GS.metric3d;
         let _ = INBUILTS.conj;
         let _ = SPENSO_TAG.tag;
         let _ = UFO.complexconjugate;

@@ -37,9 +37,11 @@ use spenso::network::library::TensorLibraryData;
 use spenso::network::library::function_lib::{INBUILTS, Panic, PanicMissingConcrete, SymbolLib};
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::parsing::ShadowedStructure;
+use spenso::structure::PermutedStructure;
 use spenso::structure::concrete_index::ExpandedIndex;
+use spenso::structure::representation::{Minkowski, RepName};
 use spenso::tensors::complex::RealOrComplexTensor;
-use spenso::tensors::data::StorageTensor;
+use spenso::tensors::data::{DenseTensor, StorageTensor};
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib_atom;
@@ -50,7 +52,7 @@ use symbolica::domains::float::{
     SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::{function, parse, try_parse};
+use symbolica::{function, try_parse};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -61,8 +63,6 @@ use std::sync::{LazyLock, OnceLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
-use tracing_subscriber::fmt::format;
-
 use vakint::Vakint;
 // use symbolica_community::physics::tensors::library::{
 //     gamma5_weyl_data, gamma_data_weyl, proj_m_data_weyl, proj_p_data_weyl, SpensorLibrary,
@@ -4533,7 +4533,28 @@ type TensorLibStore = RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>
 type FunLibStore =
     SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>;
 
-pub static TENSORLIB: LazyLock<TensorLibStore> = LazyLock::new(|| RwLock::new(hep_lib_atom()));
+fn gammaloop_tensor_lib() -> TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind> {
+    let mut lib = hep_lib_atom();
+    let key = ExplicitKey::from_iter(
+        [Minkowski {}.new_rep(4), Minkowski {}.new_rep(4)],
+        GS.metric3d,
+        None,
+    );
+    let mut data = vec![Complex::new_re(F(0.0)); 16];
+
+    data[5] = Complex::new_re(F(-1.0));
+    data[10] = Complex::new_re(F(-1.0));
+    data[15] = Complex::new_re(F(-1.0));
+
+    let tensor: MixedTensor<F<f64>, _> =
+        DenseTensor::from_data(data, key.structure).unwrap().into();
+    lib.insert_explicit(PermutedStructure::identity(tensor));
+
+    lib
+}
+
+pub static TENSORLIB: LazyLock<TensorLibStore> =
+    LazyLock::new(|| RwLock::new(gammaloop_tensor_lib()));
 
 pub static FUN_LIB: LazyLock<FunLibStore> = LazyLock::new(|| {
     let mut lib = PanicMissingConcrete::new_lib();

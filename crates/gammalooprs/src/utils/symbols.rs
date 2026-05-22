@@ -170,6 +170,7 @@ pub struct GammaloopSymbols {
     pub expansion: Symbol,
     ///For selecting a concete index.
     pub delta_vec: Symbol,
+    pub metric3d: Symbol,
     ///Q(<edgeid>,index___)
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
@@ -225,6 +226,25 @@ impl GammaloopSymbols {
                     Symbol::IF.f([W_.a_, W_.b_, W_.c_])
                 }
             })
+    }
+
+    fn explicit_lorentz_component(arg: AtomView) -> Option<i64> {
+        if let Ok(component) = i64::try_from(arg) {
+            return Some(component);
+        }
+
+        let AtomView::Fun(fun) = arg else {
+            return None;
+        };
+
+        if fun.get_symbol() == AIND_SYMBOLS.cind {
+            return fun
+                .iter()
+                .next()
+                .and_then(|component| i64::try_from(component).ok());
+        }
+
+        None
     }
 
     pub fn den<'a>(
@@ -753,6 +773,35 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             }
         }
     ),
+    metric3d: symbol!(
+        "Metric3D",
+        norm = |f, out| {
+            if let AtomView::Fun(ff) = f
+                && ff.get_nargs() == 2
+            {
+                let mut iter = ff.iter();
+                let left = iter.next().unwrap();
+                let right = iter.next().unwrap();
+                let left_component = GammaloopSymbols::explicit_lorentz_component(left);
+                let right_component = GammaloopSymbols::explicit_lorentz_component(right);
+
+                if left_component == Some(0) || right_component == Some(0) {
+                    **out = Atom::Zero;
+                    return;
+                }
+
+                if let (Some(left_component), Some(right_component)) =
+                    (left_component, right_component)
+                {
+                    if left_component == right_component {
+                        **out = Atom::num(-1);
+                    } else {
+                        **out = Atom::Zero;
+                    }
+                }
+            }
+        }
+    ),
     top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!(
@@ -989,6 +1038,15 @@ impl GammaloopSymbols {
         self.delta_vec.f(&[self.cind(0), index.into().into_owned()])
     }
 
+    pub(crate) fn metric3d<'a>(
+        &self,
+        left: impl Into<AtomOrView<'a>>,
+        right: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
+        self.metric3d
+            .f(&[left.into().into_owned(), right.into().into_owned()])
+    }
+
     pub(crate) fn ose_full(
         &self,
         e: EdgeIndex,
@@ -1059,4 +1117,67 @@ pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {
     FunctionBuilder::new(symbol!("σ"))
         .add_arg(usize::from(eid) as i64)
         .finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GS;
+    use crate::initialisation::test_initialise;
+    use crate::utils::TENSORLIB;
+    use spenso::{
+        network::library::symbolic::ExplicitKey,
+        structure::representation::{Minkowski, RepName},
+        tensors::data::GetTensorData,
+    };
+    use symbolica::{atom::Atom, function};
+
+    #[test]
+    fn metric3d_zeroes_time_components() {
+        test_initialise().unwrap();
+
+        assert_eq!(function!(GS.metric3d, GS.cind(0), GS.cind(0)), Atom::Zero);
+        assert_eq!(function!(GS.metric3d, GS.cind(0), GS.cind(2)), Atom::Zero);
+        assert_eq!(function!(GS.metric3d, GS.cind(2), GS.cind(0)), Atom::Zero);
+    }
+
+    #[test]
+    fn metric3d_matches_spatial_metric_components() {
+        test_initialise().unwrap();
+
+        assert_eq!(
+            function!(GS.metric3d, GS.cind(1), GS.cind(1)),
+            Atom::num(-1)
+        );
+        assert_eq!(function!(GS.metric3d, GS.cind(1), GS.cind(2)), Atom::Zero);
+    }
+
+    #[test]
+    fn metric3d_trace_contracts_to_minus_three() {
+        test_initialise().unwrap();
+
+        let key = ExplicitKey::from_iter(
+            [Minkowski {}.new_rep(4), Minkowski {}.new_rep(4)],
+            GS.metric3d,
+            None,
+        );
+        let lib = TENSORLIB.read().unwrap();
+        let tensor = lib.get(&key.structure).unwrap();
+
+        assert_eq!(
+            tensor.get_owned_linear(0.into()).unwrap().to_string(),
+            "(0+0i)"
+        );
+        assert_eq!(
+            tensor.get_owned_linear(5.into()).unwrap().to_string(),
+            "(-1+0i)"
+        );
+        assert_eq!(
+            tensor.get_owned_linear(10.into()).unwrap().to_string(),
+            "(-1+0i)"
+        );
+        assert_eq!(
+            tensor.get_owned_linear(15.into()).unwrap().to_string(),
+            "(-1+0i)"
+        );
+    }
 }

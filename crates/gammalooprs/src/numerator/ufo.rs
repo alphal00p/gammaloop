@@ -36,6 +36,7 @@ pub struct UFOSymbols {
     pub sigma: Symbol,
     pub charge_conj: Symbol,
     pub metric: Symbol,
+    pub metric3d: Symbol,
     pub momentum: Symbol,
     pub momentum3: Symbol,
     pub levicivita: Symbol,
@@ -75,6 +76,7 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     sigma: symbol!("UFO::Sigma"),
     charge_conj: symbol!("UFO::C"),
     metric: symbol!("UFO::Metric"),
+    metric3d: symbol!("UFO::Metric3D"),
     momentum: symbol!("UFO::P"),
     momentum3: symbol!("UFO::P3"),
     levicivita: symbol!("UFO::Epsilon"),
@@ -175,6 +177,11 @@ impl UFOSymbols {
             (
                 self.metric.f(&[W_.a_, W_.b_]),
                 self.metric
+                    .f(&[mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
+            ),
+            (
+                self.metric3d.f(&[W_.a_, W_.b_]),
+                self.metric3d
                     .f(&[mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
             ),
             (
@@ -319,6 +326,10 @@ impl UFOSymbols {
                 mink.g(W_.a_, W_.b_),
             ),
             (
+                self.metric3d.f(&[mink.pattern(W_.a_), mink.pattern(W_.b_)]),
+                GS.metric3d(mink.pattern(W_.a_), mink.pattern(W_.b_)),
+            ),
+            (
                 self.gamma
                     .f(&[mink.pattern(W_.i_), bis.pattern(W_.a_), bis.pattern(W_.b_)]),
                 AGS.gamma
@@ -356,7 +367,10 @@ impl UFOSymbols {
         .collect();
 
         // println!("out:{atom}");
-        atom = atom.replace_multiple(&reps);
+        atom = atom
+            .replace_multiple(&reps)
+            .replace(self.metric3d.f(&[W_.a_, W_.b_]))
+            .with(GS.metric3d(W_.a_, W_.b_));
 
         atom = atom.replace_map(|term, _, out| {
             if let AtomView::Fun(f) = term
@@ -734,7 +748,11 @@ impl UFOSymbols {
 #[cfg(test)]
 pub mod test {
     use linnet::half_edge::involution::{EdgeIndex, Flow};
-    use spenso::structure::{OrderedStructure, representation::LibraryRep};
+    use spenso::structure::{
+        OrderedStructure,
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::IsAbstractSlot,
+    };
     use symbolica::parse;
 
     use crate::{numerator::aind::Aind, utils::GS};
@@ -762,5 +780,51 @@ pub mod test {
             out,
             GS.emr_vec_index(EdgeIndex(7), parse!("spenso::mink(3)"))
         );
+    }
+
+    #[test]
+    fn ufo_spin_processing_preserves_metric3d_symbol() {
+        let slots = [
+            OrderedStructure::<LibraryRep, Aind>::empty(),
+            OrderedStructure::<LibraryRep, Aind>::empty(),
+        ];
+        let momenta = [(Flow::Sink, EdgeIndex(4))];
+
+        let out = UFO
+            .reindex_spin(
+                &[&slots[0], &slots[1]],
+                &momenta,
+                parse!("UFO::Metric3D(1,2)"),
+                Aind::Normal,
+            )
+            .unwrap();
+
+        assert_eq!(
+            out,
+            GS.metric3d(parse!("spenso::mink(1)"), parse!("spenso::mink(2)"))
+        );
+    }
+
+    #[test]
+    fn ufo_spin_processing_preserves_metric3d_wrapped_indices() {
+        let mink = Minkowski {}.new_rep(4);
+        let left = mink.slot(Aind::Hedge(0, 0));
+        let right = mink.slot(Aind::Hedge(1, 0));
+        let slots = [
+            OrderedStructure::new(vec![left.cast()]).structure,
+            OrderedStructure::new(vec![right.cast()]).structure,
+        ];
+        let momenta = [(Flow::Sink, EdgeIndex(4))];
+
+        let out = UFO
+            .reindex_spin(
+                &[&slots[0], &slots[1]],
+                &momenta,
+                parse!("UFO::Metric3D(1,2)"),
+                Aind::Normal,
+            )
+            .unwrap();
+
+        assert_eq!(out, GS.metric3d(left.to_atom(), right.to_atom()));
     }
 }
