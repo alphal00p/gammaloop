@@ -1,5 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use eyre::eyre;
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
@@ -735,36 +736,36 @@ impl PrimeGenerate for Atom {
 
 pub trait DOD {
     ///Rescales momentum of edge `eid`, and computes the leading scaling
-    fn edge_dod(&self, eid: EdgeIndex) -> i32;
+    fn edge_dod(&self, eid: EdgeIndex) -> Result<i32>;
 
     ///Rescales all momenta, and computes the leading scaling
-    fn all_dod(&self) -> i32;
+    fn all_dod(&self) -> Result<i32>;
 
-    fn trailing_exponent(&self) -> i32;
+    fn trailing_exponent(&self) -> Result<i32>;
 }
 
 impl DOD for Atom {
-    fn edge_dod(&self, eid: EdgeIndex) -> i32 {
+    fn edge_dod(&self, eid: EdgeIndex) -> Result<i32> {
         self.as_view().edge_dod(eid)
     }
 
-    fn all_dod(&self) -> i32 {
+    fn all_dod(&self) -> Result<i32> {
         self.as_view().all_dod()
     }
 
-    fn trailing_exponent(&self) -> i32 {
+    fn trailing_exponent(&self) -> Result<i32> {
         self.as_view().trailing_exponent()
     }
 }
 
 impl DOD for AtomView<'_> {
-    fn edge_dod(&self, eid: EdgeIndex) -> i32 {
+    fn edge_dod(&self, eid: EdgeIndex) -> Result<i32> {
         self.replace(GS.emr_mom(eid, W_.a___))
             .with(GS.emr_mom(eid, W_.a___) / GS.rescale)
             .trailing_exponent()
     }
 
-    fn all_dod(&self) -> i32 {
+    fn all_dod(&self) -> Result<i32> {
         self.replace(function!(GS.emr_mom, W_.a___))
             .with(function!(GS.emr_mom, W_.a___) / GS.rescale)
             .replace(function!(*RAW_UFO_MOMENTUM, W_.a___))
@@ -776,18 +777,20 @@ impl DOD for AtomView<'_> {
             .trailing_exponent()
     }
 
-    fn trailing_exponent(&self) -> i32 {
+    fn trailing_exponent(&self) -> Result<i32> {
         let series = self
             .series(GS.rescale, Atom::Zero, 1.into(), false)
-            .unwrap();
+            .map_err(|err| {
+                eyre!("Failed to compute series for trailing exponent of {self}: {err}")
+            })?;
         // println!("{}", series);
 
         let dod = series.get_trailing_exponent();
 
         if dod.is_integer() {
-            -(dod.numerator().to_i64().unwrap() as i32)
+            Ok(-(dod.numerator().to_i64().unwrap() as i32))
         } else {
-            panic!("{dod} for {self}")
+            Err(eyre!("Non-integer trailing exponent {dod} for {self}"))
         }
     }
 }
@@ -805,12 +808,12 @@ fn test_dod() {
     let atom3 =
         GS.emr_mom(e1, Atom::Zero) * GS.emr_mom(e2, Atom::Zero) + GS.emr_mom(e2, Atom::Zero);
 
-    assert_eq!(-1, atom.edge_dod(e1));
-    assert_eq!(1, atom.edge_dod(e2));
-    assert_eq!(-2, atom2.edge_dod(e1));
-    assert_eq!(1, atom3.edge_dod(e1));
-    assert_eq!(1, atom3.edge_dod(e2));
-    assert_eq!(1, parse!("UFO::P3(1)").all_dod());
+    assert_eq!(-1, atom.edge_dod(e1).unwrap());
+    assert_eq!(1, atom.edge_dod(e2).unwrap());
+    assert_eq!(-2, atom2.edge_dod(e1).unwrap());
+    assert_eq!(1, atom3.edge_dod(e1).unwrap());
+    assert_eq!(1, atom3.edge_dod(e2).unwrap());
+    assert_eq!(1, parse!("UFO::P3(1)").all_dod().unwrap());
 }
 
 pub trait CallSymbol<T> {

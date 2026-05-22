@@ -449,7 +449,7 @@ fn cut_content() {
         color_structures: ColorStructure {
             color_structure: vec![],
         },
-        dod: 0,
+        dod: Some(0),
     }));
 
     let v0 = graph.add_node(bbH.clone());

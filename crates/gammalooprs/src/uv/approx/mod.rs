@@ -147,7 +147,9 @@ pub struct Approximation {
 
 impl ForestNodeLike for Approximation {
     fn dod(&self) -> i32 {
-        self.spinney.dod
+        self.spinney
+            .dod
+            .expect("missing spinney dod in UV approximation")
     }
 
     fn renormalization_scheme(&self) -> ApproximationType {
@@ -690,7 +692,9 @@ impl Approximation {
                     .as_ref()
                     .unwrap()
                     .expr(&graph.full_filter()),
-                self.spinney.dod,
+                self.spinney
+                    .dod
+                    .expect("missing spinney dod in UV debug preview"),
                 // orientations
                 //     .first()
                 //     .unwrap()

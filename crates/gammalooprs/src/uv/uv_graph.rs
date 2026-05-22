@@ -1,6 +1,7 @@
-use std::{collections::BTreeSet, ops::Deref};
+use std::collections::BTreeSet;
 
 use ahash::AHashSet;
+use color_eyre::Result;
 use idenso::metric::MetricSimplifier;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
@@ -253,7 +254,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Wood::from_spinneys(self.classified_spinneys(subgraph, settings, lmb), self)
     }
 
-    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
+    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> Result<i32>;
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
     fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -285,7 +286,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             &|a, b| a.union(b),
             &|union| {
                 // println!("{}", self.as_ref().dot(&union));
-                if self.dod(&union) >= 0 {
+                if self
+                    .dod(&union)
+                    .expect("failed to compute UV dod for candidate subgraph")
+                    >= 0
+                {
                     Some(union)
                 } else {
                     // println!("Negative dod:{}", self.dod(&union));
@@ -383,7 +388,7 @@ impl UltravioletGraph for Graph {
         num.fill_in_reduced(self, subgraph, without)
     }
 
-    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32 {
+    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> Result<i32> {
         let lmb = self.lmb_of(subgraph);
         let empty = self.underlying.empty_subgraph();
         let integrand = self
@@ -401,12 +406,19 @@ impl UltravioletGraph for Graph {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         for (p, _, e) in self.underlying.iter_edges_of(subgraph) {
             if p.is_paired() {
-                dod += e.data.dod.deref();
+                dod += e
+                    .data
+                    .dod
+                    .value
+                    .expect("missing edge dod while computing local UV dod");
             }
         }
 
         for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
-            dod += n.dod.deref();
+            dod += n
+                .dod
+                .value
+                .expect("missing vertex dod while computing local UV dod");
         }
 
         dod

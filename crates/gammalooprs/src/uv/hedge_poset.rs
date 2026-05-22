@@ -350,7 +350,9 @@ impl AsRef<TraceKey<SuBitGraph, EdgeIndex>> for OperationNode {
 
 impl ForestNodeLike for ForestNode<'_> {
     fn dod(&self) -> i32 {
-        self.spinney.dod
+        self.spinney
+            .dod
+            .expect("missing spinney dod in hedge poset forest node")
     }
     fn renormalization_scheme(&self) -> crate::uv::ApproximationType {
         self.spinney.renormalization_scheme

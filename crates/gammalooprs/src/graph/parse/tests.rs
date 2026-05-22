@@ -294,7 +294,7 @@ fn dod_rescales_only_internal_edge_qs() {
     )
     .unwrap();
 
-    assert_eq!(g.underlying[EdgeIndex::from(2)].dod.value, -1);
+    assert_eq!(g.underlying[EdgeIndex::from(2)].dod.value, Some(-1));
 }
 
 #[test]
@@ -1191,9 +1191,9 @@ mod failing {
         )
         .unwrap();
 
-        assert_eq!(g.underlying[NodeIndex(3)].dod.value, 1);
-        assert_eq!(g.underlying[EdgeIndex(2)].dod.value, -1);
-        assert_eq!(g.underlying[EdgeIndex(4)].dod.value, -2);
+        assert_eq!(g.underlying[NodeIndex(3)].dod.value, Some(1));
+        assert_eq!(g.underlying[EdgeIndex(2)].dod.value, Some(-1));
+        assert_eq!(g.underlying[EdgeIndex(4)].dod.value, Some(-2));
 
         let default_dot = g.debug_dot();
         assert!(!default_dot.contains("dod_autogen"));

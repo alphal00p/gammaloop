@@ -1059,7 +1059,7 @@ impl<'a> UVProfileRunner<'a> {
             );
         }
 
-        let initial_dod = input.graph.dod(&subgraph);
+        let initial_dod = input.graph.dod(&subgraph)?;
         let inspect = if let Some(orientation_labels) = input.orientation_labels {
             let per_orientation = orientation_labels
                 .iter()

@@ -15,7 +15,7 @@ use crate::{
 pub struct Spinney {
     pub subgraph: InternalSubGraph,
     components: Vec<SuBitGraph>,
-    pub dod: i32,
+    pub dod: Option<i32>,
     pub lmb: LoopMomentumBasis,
     pub renormalization_scheme: ApproximationType,
     max_comp_loop_count: usize,
@@ -30,7 +30,7 @@ impl Spinney {
         Self {
             subgraph: InternalSubGraph::empty(g.as_ref().n_hedges()),
             components: vec![],
-            dod: 0,
+            dod: Some(0),
             lmb: g.empty_lmb(),
             renormalization_scheme: ApproximationType::MUV,
             max_comp_loop_count: 0,
@@ -59,19 +59,21 @@ impl Spinney {
             .unwrap_or(0);
         let lmb = g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb);
 
-        let dod = g.dod(&subgraph);
+        let dod = g.dod(&subgraph).ok();
 
-        if dod != g.local_dod(&subgraph) {
+        if let Some(dod) = dod
+            && dod != g.local_dod(&subgraph)
+        {
             error!(
                 "dod mismatch: global={} local={} of graph:\n{}",
                 dod,
                 g.local_dod(&subgraph),
-                g.dod(&subgraph),
+                dod,
             );
         }
 
         debug!(
-            dod = %dod,
+            dod = ?dod,
             graph = %g.dot_lmb_of(&subgraph,&lmb),
             renormalization_scheme = %renormalization_scheme,
             string_label =%subgraph.string_label(),

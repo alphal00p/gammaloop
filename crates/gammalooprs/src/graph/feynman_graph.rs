@@ -691,7 +691,14 @@ impl FeynmanGraph for Graph {
                 })
                 .unwrap_or(Complex::new_re(F(1.0)));
 
-            scale *= Complex::new_re(e_cm.powi(vertex.dod.value)) * coupling_value;
+            scale *= Complex::new_re(
+                e_cm.powi(
+                    vertex
+                        .dod
+                        .value
+                        .expect("missing vertex dod for graph scaling"),
+                ),
+            ) * coupling_value;
         }
 
         for (_, _, edge_data) in self.iter_edges_of(
@@ -699,7 +706,15 @@ impl FeynmanGraph for Graph {
                 .full_filter()
                 .subtract(&self.external_filter::<SuBitGraph>()),
         ) {
-            scale *= Complex::new_re(e_cm.powi(edge_data.data.dod.value))
+            scale *= Complex::new_re(
+                e_cm.powi(
+                    edge_data
+                        .data
+                        .dod
+                        .value
+                        .expect("missing edge dod for graph scaling"),
+                ),
+            )
         }
 
         scale.norm_squared().sqrt()
