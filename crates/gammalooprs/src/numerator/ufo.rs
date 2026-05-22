@@ -37,6 +37,7 @@ pub struct UFOSymbols {
     pub charge_conj: Symbol,
     pub metric: Symbol,
     pub momentum: Symbol,
+    pub momentum3: Symbol,
     pub levicivita: Symbol,
     pub t: Symbol,
     pub f: Symbol,
@@ -75,6 +76,7 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     charge_conj: symbol!("UFO::C"),
     metric: symbol!("UFO::Metric"),
     momentum: symbol!("UFO::P"),
+    momentum3: symbol!("UFO::P3"),
     levicivita: symbol!("UFO::Epsilon"),
     t: symbol!("UFO::T"),
     f: symbol!("UFO::f"),
@@ -145,8 +147,15 @@ impl UFOSymbols {
         atom = atom
             .replace(self.momentum.f(&[W_.a_, W_.b___]))
             .with(self.momentum.f((&[W_.b___], &[mink.to_symbolic([W_.a_])])))
+            .replace(self.momentum3.f(&[W_.a_, W_.b___]))
+            .with(self.momentum3.f((&[W_.b___], &[mink.to_symbolic([W_.a_])])))
             .replace(self.momentum.f((&[self.idx.f((&[1], &[W_.a_]))], &[W_.b_])))
-            .with(self.momentum.f(&[W_.a_, W_.b_]));
+            .with(self.momentum.f(&[W_.a_, W_.b_]))
+            .replace(
+                self.momentum3
+                    .f((&[self.idx.f((&[1], &[W_.a_]))], &[W_.b_])),
+            )
+            .with(self.momentum3.f(&[W_.a_, W_.b_]));
 
         // Fill in representations
         let reps: Vec<_> = [
@@ -392,11 +401,15 @@ impl UFOSymbols {
                     Flow::Sink => GS.emr_mom(*e, W_.a_),
                     Flow::Source => -GS.emr_mom(*e, W_.a_),
                 })
+                .replace(function!(UFO.momentum3, (i + 1) as i64, W_.a_))
+                .with(GS.emr_vec_index(*e, W_.a_))
         }
 
         atom = atom
             .replace(function!(UFO.momentum, W_.a_))
-            .with(GS.emr_mom(momenta[0].1, W_.a_));
+            .with(GS.emr_mom(momenta[0].1, W_.a_))
+            .replace(function!(UFO.momentum3, W_.a_))
+            .with(GS.emr_vec_index(momenta[0].1, W_.a_));
 
         // debug!(out = atom.printer(LOGPRINTOPTS).to_string());
         // println!("out:{atom:#}");
@@ -720,7 +733,34 @@ impl UFOSymbols {
 
 #[cfg(test)]
 pub mod test {
+    use linnet::half_edge::involution::{EdgeIndex, Flow};
+    use spenso::structure::{OrderedStructure, representation::LibraryRep};
+    use symbolica::parse;
+
+    use crate::{numerator::aind::Aind, utils::GS};
+
+    use super::UFO;
 
     #[test]
-    fn ufo_spin_processing() {}
+    fn ufo_spin_processing_maps_p3_to_q3() {
+        let slots = [
+            OrderedStructure::<LibraryRep, Aind>::empty(),
+            OrderedStructure::<LibraryRep, Aind>::empty(),
+        ];
+        let momenta = [(Flow::Sink, EdgeIndex(4)), (Flow::Source, EdgeIndex(7))];
+
+        let out = UFO
+            .reindex_spin(
+                &[&slots[0], &slots[1]],
+                &momenta,
+                parse!("UFO::P3(3,2)"),
+                Aind::Normal,
+            )
+            .unwrap();
+
+        assert_eq!(
+            out,
+            GS.emr_vec_index(EdgeIndex(7), parse!("spenso::mink(3)"))
+        );
+    }
 }

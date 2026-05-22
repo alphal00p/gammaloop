@@ -48,6 +48,7 @@ use crate::{
     utils::{
         F, GS, W_,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
+        symbolica_ext::LogPrint,
     },
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
 };
@@ -998,10 +999,20 @@ impl CrossSectionGraph {
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
 
-        Ok(parametric_integrands
+        let result: TiVec<RaisedCutId, ParametricIntegrands> = parametric_integrands
             .into_iter()
             .map(|integrand| integrand.map(|a| a * &lu_prefactor))
-            .collect())
+            .collect();
+
+        for (raised_cut_id, parametric_integrands) in result.iter_enumerated() {
+            debug_tags!(#bare_final_integrand; "integrand for raised_cut_id: {}", raised_cut_id.0);
+            for (cut_index, integrand) in parametric_integrands.integrands.iter() {
+                debug_tags!(#bare_final_integrand; "integrand for cut_index: {}", cut_index);
+                debug_tags!(#bare_final_integrand; "integrand: \n{}", integrand.log_print(Some(100)));
+            }
+        }
+
+        Ok(result)
     }
 
     fn lu_prefactor_helper(&self) -> Atom {

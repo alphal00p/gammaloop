@@ -35,6 +35,7 @@ use super::{GS, W_};
 pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
     LazyLock::new(|| AlgebraicExtension::new_complex(Q));
 static RAW_UFO_MOMENTUM: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::P"));
+static RAW_UFO_MOMENTUM3: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::P3"));
 static RAW_UFO_PSLASH: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::PSlash"));
 
 pub static COMPLEXRATPOLYFIELD: LazyLock<
@@ -768,6 +769,8 @@ impl DOD for AtomView<'_> {
             .with(function!(GS.emr_mom, W_.a___) / GS.rescale)
             .replace(function!(*RAW_UFO_MOMENTUM, W_.a___))
             .with(function!(*RAW_UFO_MOMENTUM, W_.a___) / GS.rescale)
+            .replace(function!(*RAW_UFO_MOMENTUM3, W_.a___))
+            .with(function!(*RAW_UFO_MOMENTUM3, W_.a___) / GS.rescale)
             .replace(function!(*RAW_UFO_PSLASH, W_.a___))
             .with(function!(*RAW_UFO_PSLASH, W_.a___) / GS.rescale)
             .trailing_exponent()
@@ -807,6 +810,7 @@ fn test_dod() {
     assert_eq!(-2, atom2.edge_dod(e1));
     assert_eq!(1, atom3.edge_dod(e1));
     assert_eq!(1, atom3.edge_dod(e2));
+    assert_eq!(1, parse!("UFO::P3(1)").all_dod());
 }
 
 pub trait CallSymbol<T> {

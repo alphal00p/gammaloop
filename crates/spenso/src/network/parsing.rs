@@ -46,7 +46,7 @@ pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::ne
     tag: tag!("broadcast"),
     upper: tag!("upper"),
     lower: tag!("lower"),
-    bracket: symbol!("bracket"),
+    bracket: symbol!("bracket"; Linear),
     pure_scalar: symbol!("pure_scalar"),
     dot: symbol!("dot";Symmetric,Linear; print = |a,opt|{
     match opt.custom_print_mode {

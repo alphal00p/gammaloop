@@ -50,7 +50,7 @@ use symbolica::domains::float::{
     SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::{function, parse};
+use symbolica::{function, parse, try_parse};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -61,6 +61,7 @@ use std::sync::{LazyLock, OnceLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
+use tracing_subscriber::fmt::format;
 
 use vakint::Vakint;
 // use symbolica_community::physics::tensors::library::{
@@ -2581,7 +2582,14 @@ pub(crate) fn parse_python_expression(expression: &str) -> Atom {
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
 
-    parse!(processed_string)
+    try_parse!(&processed_string)
+        .map_err(|e| {
+            format!(
+                "error trying to parse processed_string: {}\n {e}",
+                processed_string
+            )
+        })
+        .unwrap()
 }
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
