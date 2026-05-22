@@ -1,0 +1,24 @@
+digraph aa_aa_box {
+
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+	group_id=0
+    is_group_master=true
+
+	exte0	 [style=invis];
+	exte0	-> A:0	 [id=0 name="p0" particle="a"];
+	exte1	 [style=invis];
+	exte1	-> B:1	 [id=1 name="p1" particle="a"];
+	exte2	 [style=invis];
+	C:2	-> exte2	 [id=2 name="p2" particle="a"];
+	exte3	 [style=invis];
+	D:3	-> exte3	 [id=3 name="p3" particle="a"];
+
+	A -> B	 [id=4 name="q4" particle="t" lmb_id=0];
+	B -> C	 [id=5 name="q5" particle="t"];
+	C -> D   [id=6 name="q6" particle="t"];	
+	D -> A   [id=7 name="q7" particle="t"];
+
+}

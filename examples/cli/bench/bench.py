@@ -23,6 +23,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 DEFAULT_OUTPUT = "outputs/bench_result.json"
+DEFAULT_3DREP_OUTPUT = "outputs/bench_result_3drep.json"
 DEFAULT_CONFIG = "bench_config.toml"
 DEFAULT_GRAPHS = ["G1"]
 DEFAULT_PROFILES = ["minimal"]
@@ -30,6 +31,8 @@ DEFAULT_MAX_GEN_RAM = "15GB"
 DEFAULT_MAX_GEN_TIME = "120s"
 DEFAULT_BINARY_PROFILE = "release"
 DEFAULT_TARGET_PROFILE_TIME = "10s"
+MODE_GENERATE_INSPECT = "generate+inspect"
+MODE_3DREP = "3Drep"
 USE_COLOUR = True
 RESET = "\033[0m"
 COLORS = {
@@ -309,10 +312,10 @@ def is_status_table_cell(cell: str) -> bool:
     return plain in {"N/A", "Error", "Ctrl+C", "Aborted"} or plain.startswith("> ")
 
 
-def result_cell_alignment(category: str, subcolumn_index: int, cell: str) -> str:
+def result_cell_alignment(_category: str, _subcolumn_index: int, cell: str) -> str:
     if is_status_table_cell(cell):
         return "center"
-    return "left" if category != "Δ target" and subcolumn_index == 0 else "right"
+    return "left"
 
 
 def metadata_float(
@@ -361,6 +364,12 @@ def command_status_cell(
 def generation_unavailable_cell(
     run: dict[str, Any], metadata: dict[str, Any]
 ) -> str | None:
+    preparation = run.get("state_preparation") or {}
+    if preparation and (
+        preparation.get("status") != "ok"
+        or preparation.get("returncode") not in (0, None)
+    ):
+        return command_status_cell(run, "state_preparation", metadata)
     generation = run.get("generation") or {}
     if generation.get("status") == "ok" and generation.get("returncode") == 0:
         return None
@@ -621,8 +630,12 @@ def grouped_result_table(
             + " "
         )
 
+    result_context = f"{binary_profile} build"
+    if metadata.get("use_3drep") or metadata.get("route") == "3Drep":
+        result_context += " - 3Drep"
+
     lines = [
-        f"{color('Results', 'bold', 'cyan')} ({binary_profile} build)",
+        f"{color('Results', 'bold', 'cyan')} ({result_context})",
         top,
         "│" + "│".join(header_1) + "│",
         "│" + "│".join(header_2) + "│",
@@ -644,11 +657,7 @@ def grouped_result_table(
             ]
             groups.append(
                 " "
-                + pad(
-                    subcolumn_gap.join(pieces),
-                    group_widths[category],
-                    "right" if category == "Δ target" else "left",
-                )
+                + pad(subcolumn_gap.join(pieces), group_widths[category], "left")
                 + " "
             )
         lines.append("│" + "│".join(groups) + "│")
@@ -742,7 +751,7 @@ def print_process_header(
     cap_text = (
         f"time ≤ {format_limit_seconds(max_seconds)}, RAM ≤ {format_bytes(float(max_rss_bytes))}"
         if max_seconds is not None and max_rss_bytes is not None
-        else "generation caps disabled for this run"
+        else "caps disabled for this run"
     )
     rows = [
         f"{color(stage.upper(), 'bold', 'magenta')} {color(graph_name, 'bold', 'green')} / {color(profile_name, 'bold', 'blue')}",
@@ -959,8 +968,12 @@ def run_block_command(block: str, defines: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
-def gammaloop_command_sequence(block: str, defines: dict[str, Any]) -> str:
-    return f"{run_block_command(block, defines)}; quit -o"
+def gammaloop_command_sequence(
+    block: str, defines: dict[str, Any], prelude: list[str] | None = None
+) -> str:
+    return command_sequence(
+        [*(prelude or []), run_block_command(block, defines), "quit -o"]
+    )
 
 
 def state_size_bytes(state_dir: Path) -> int:
@@ -974,6 +987,22 @@ def state_size_bytes(state_dir: Path) -> int:
             except OSError:
                 pass
     return total
+
+
+def serialized_evaluator_size(payload: dict[str, Any], cwd: Path) -> int | None:
+    explicit = payload.get("serialized_evaluator_size_bytes")
+    if isinstance(explicit, int):
+        return explicit
+    path_value = payload.get("serialized_evaluator_path")
+    if not path_value:
+        return None
+    path = Path(str(path_value))
+    if not path.is_absolute():
+        path = cwd / path
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
 
 
 def sanitize_name(value: str) -> str:
@@ -1075,13 +1104,38 @@ def relative_delta(value: Any, target: Any) -> float | None:
     return abs(observed - expected) / denominator
 
 
+def process_spec_define(graph: dict[str, Any]) -> str:
+    process_spec = graph.get("process_spec")
+    if not process_spec:
+        return ""
+    return str(process_spec)
+
+
+def prelude_commands(graph: dict[str, Any]) -> list[str]:
+    commands = graph.get("prelude_commands", [])
+    if commands is None:
+        return []
+    if not isinstance(commands, list):
+        raise SystemExit("graph prelude_commands must be a list of strings")
+    return [str(command).strip() for command in commands if str(command).strip()]
+
+
+def command_sequence(commands: list[str]) -> str:
+    return "; ".join(
+        command.strip().rstrip(";") for command in commands if command.strip()
+    )
+
+
 def graph_defines(graph_name: str, graph: dict[str, Any]) -> dict[str, str]:
     defines = {
         "model": str(graph["model"]),
         "graph_path": str(graph["path"]),
         "process": str(graph.get("process", "bench")),
         "integrand": str(graph.get("integrand", "default")),
-        "process_spec": str(graph["process_spec"]),
+        "process_spec_flag": "--process-spec" if graph.get("process_spec") else "",
+        "process_spec": process_spec_define(graph),
+        "graph_id": str(graph.get("graph_id", 0)),
+        "threeDrep_seed": str(graph.get("3Drep_seed", 1337)),
         "point": graph_point(graph),
     }
     for index, value in enumerate(graph["x"]):
@@ -1099,22 +1153,49 @@ def run_case(
     repo_root: Path,
     interrupt_state: InterruptState,
 ) -> dict[str, Any]:
+    use_3drep = bool(getattr(args, "use_3drep", False))
     safe_case = f"{sanitize_name(graph_name)}_{sanitize_name(profile_name)}"
+    if use_3drep:
+        safe_case = f"{safe_case}_3drep"
     outputs_dir = bench_dir / "outputs"
     state_dir = outputs_dir / safe_case
     error_log = outputs_dir / f"{safe_case}_errors.log"
-    json_output = outputs_dir / f"{safe_case}_inspect.json"
-    generate_command_file = outputs_dir / f"{safe_case}_generate_command.sh"
-    generate_output_log = outputs_dir / f"{safe_case}_generate_output.log"
-    inspect_command_file = outputs_dir / f"{safe_case}_inspect_command.sh"
-    inspect_output_log = outputs_dir / f"{safe_case}_inspect_output.log"
+    json_output = outputs_dir / (
+        f"{safe_case}_3drep.json" if use_3drep else f"{safe_case}_inspect.json"
+    )
+    prepare_command_file = outputs_dir / f"{safe_case}_prepare_command.sh"
+    prepare_output_log = outputs_dir / f"{safe_case}_prepare_output.log"
+    generate_command_file = outputs_dir / (
+        f"{safe_case}_build_command.sh"
+        if use_3drep
+        else f"{safe_case}_generate_command.sh"
+    )
+    generate_output_log = outputs_dir / (
+        f"{safe_case}_build_output.log"
+        if use_3drep
+        else f"{safe_case}_generate_output.log"
+    )
+    inspect_command_file = outputs_dir / (
+        f"{safe_case}_evaluate_command.sh"
+        if use_3drep
+        else f"{safe_case}_inspect_command.sh"
+    )
+    inspect_output_log = outputs_dir / (
+        f"{safe_case}_evaluate_output.log"
+        if use_3drep
+        else f"{safe_case}_inspect_output.log"
+    )
     state_arg = display_path(state_dir, bench_dir)
 
     base_defines = graph_defines(graph_name, graph)
     profile_defines = {
         key: str(value) for key, value in profile.get("defines", {}).items()
     }
-    generate_defines = {**base_defines, **profile_defines}
+    generate_defines = {
+        **base_defines,
+        **profile_defines,
+        "threeDrep_workspace_path": str(outputs_dir / f"{safe_case}_workspace"),
+    }
     bench_defines = {
         **generate_defines,
         "x_dim": str(len(graph["x"])),
@@ -1122,23 +1203,100 @@ def run_case(
         "json_output": str(json_output),
     }
 
-    generate_command = gammaloop_command_sequence("generate", generate_defines)
+    graph_prelude = prelude_commands(graph)
+    result: dict[str, Any] = {
+        "status": "ok",
+        "route": "3Drep" if use_3drep else "generate+inspect",
+        "state_dir": str(state_dir),
+        "error_log": None,
+        "state_preparation": None,
+        "generation": None,
+        "disk_size_bytes": None,
+        "benchmark": None,
+    }
+
+    if graph_prelude:
+        prepare_sequence = command_sequence(
+            [run_block_command("load", generate_defines), *graph_prelude, "quit -o"]
+        )
+        prepare_cmd = [
+            *command_prefix(repo_root, args.profile),
+            "-s",
+            state_arg,
+            "--clean-state",
+            "bench.toml",
+            "run",
+            "-c",
+            prepare_sequence,
+        ]
+        preparation = run_monitored(
+            prepare_cmd,
+            bench_dir,
+            graph_name,
+            profile_name,
+            "state preparation",
+            interrupt_state,
+            prepare_command_file,
+            prepare_output_log,
+            state_dir,
+        )
+        result["state_preparation"] = {
+            "status": "ok",
+            "seconds": preparation["seconds"],
+            "peak_rss_bytes": preparation["peak_rss_bytes"],
+            "returncode": preparation["returncode"],
+            "command_file": str(prepare_command_file),
+            "output_log": str(prepare_output_log),
+        }
+        if preparation["aborted"] or preparation["returncode"] != 0:
+            status = (
+                "interrupted"
+                if preparation.get("interrupted")
+                else ("aborted" if preparation["aborted"] else "error")
+            )
+            result["status"] = status
+            result["state_preparation"]["status"] = status
+            result["state_preparation"]["abort_reason"] = preparation.get(
+                "abort_reason"
+            )
+            result["abort_all_requested"] = preparation.get("abort_all", False)
+            result["error_log"] = str(error_log)
+            write_error_log(
+                error_log,
+                f"{graph_name}/{profile_name} state preparation {status}",
+                prepare_cmd,
+                preparation,
+                bench_dir,
+            )
+            result["disk_size_bytes"] = state_size_bytes(state_dir)
+            return result
+
+    generation_block = (
+        "3drep_build_prepared"
+        if use_3drep and graph_prelude
+        else "3drep_build"
+        if use_3drep
+        else "generate_prepared"
+        if graph_prelude
+        else "generate"
+    )
+    generate_command = gammaloop_command_sequence(
+        generation_block, generate_defines, graph_prelude
+    )
     generate_cmd = [
         *command_prefix(repo_root, args.profile),
         "-s",
         state_arg,
-        "--clean-state",
-        "bench.toml",
-        "run",
-        "-c",
-        generate_command,
     ]
+    if not graph_prelude:
+        generate_cmd.append("--clean-state")
+    generate_cmd.extend(["bench.toml", "run", "-c", generate_command])
     generation = run_monitored(
         generate_cmd,
         bench_dir,
         graph_name,
         profile_name,
-        "generation",
+        "3Drep build" if use_3drep else "generation",
         interrupt_state,
         generate_command_file,
         generate_output_log,
@@ -1146,20 +1304,13 @@ def run_case(
         max_seconds=args.max_gen_time,
         max_rss_bytes=args.max_gen_ram,
     )
-    result: dict[str, Any] = {
+    result["generation"] = {
         "status": "ok",
-        "state_dir": str(state_dir),
-        "error_log": None,
-        "generation": {
-            "status": "ok",
-            "seconds": generation["seconds"],
-            "peak_rss_bytes": generation["peak_rss_bytes"],
-            "returncode": generation["returncode"],
-            "command_file": str(generate_command_file),
-            "output_log": str(generate_output_log),
-        },
-        "disk_size_bytes": None,
-        "benchmark": None,
+        "seconds": generation["seconds"],
+        "peak_rss_bytes": generation["peak_rss_bytes"],
+        "returncode": generation["returncode"],
+        "command_file": str(generate_command_file),
+        "output_log": str(generate_output_log),
     }
     if generation["aborted"] or generation["returncode"] != 0:
         status = (
@@ -1182,9 +1333,13 @@ def run_case(
         result["disk_size_bytes"] = state_size_bytes(state_dir)
         return result
 
-    result["disk_size_bytes"] = state_size_bytes(state_dir)
+    if not use_3drep:
+        result["disk_size_bytes"] = state_size_bytes(state_dir)
 
-    bench_command = gammaloop_command_sequence("bench", bench_defines)
+    bench_block = "3drep_evaluate" if use_3drep else "bench"
+    bench_command = gammaloop_command_sequence(
+        bench_block, bench_defines, graph_prelude
+    )
     bench_cmd = [
         *command_prefix(repo_root, args.profile),
         "-s",
@@ -1199,7 +1354,7 @@ def run_case(
         bench_dir,
         graph_name,
         profile_name,
-        "inspect",
+        "3Drep evaluate" if use_3drep else "inspect",
         interrupt_state,
         inspect_command_file,
         inspect_output_log,
@@ -1250,7 +1405,7 @@ def run_case(
         payload = json.loads(json_output.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         bench["stderr"] += (
-            f"\nCould not read inspect JSON output {json_output}: {exc}\n"
+            f"\nCould not read benchmark JSON output {json_output}: {exc}\n"
         )
         result["status"] = "error"
         result["error_log"] = str(error_log)
@@ -1270,6 +1425,9 @@ def run_case(
             "output_log": str(inspect_output_log),
         }
         return result
+
+    if use_3drep:
+        result["disk_size_bytes"] = serialized_evaluator_size(payload, bench_dir)
 
     target = graph.get("target_weight")
     result["benchmark"] = {
@@ -1329,7 +1487,15 @@ def render_profiles(config: dict[str, Any], profile_names: list[str]) -> str:
     return table("Run Profiles", ["define", *profile_names], rows)
 
 
-def process_characteristics(process_spec: str) -> dict[str, str]:
+def process_characteristics(process_spec: str | None) -> dict[str, str]:
+    if not process_spec:
+        return {
+            "final_state": color("N/A", "dim"),
+            "qed_squared": color("N/A", "dim"),
+            "qcd_squared": color("N/A", "dim"),
+            "qcd_order": color("N/A", "dim"),
+            "loop_selector": color("N/A", "dim"),
+        }
     final_state = re.search(r">\s*(.*?)\s*\|", process_spec)
     qed_squared = re.search(r"QED\^2==(\d+)", process_spec)
     qcd_squared = re.search(r"QCD\^2==(\d+)", process_spec)
@@ -1362,17 +1528,23 @@ def render_graphs(config: dict[str, Any], graph_names: list[str]) -> str:
         ),
         (
             "final state",
-            lambda g: process_characteristics(g["process_spec"])["final_state"],
+            lambda g: process_characteristics(g.get("process_spec"))["final_state"],
         ),
-        ("QED²", lambda g: process_characteristics(g["process_spec"])["qed_squared"]),
-        ("QCD²", lambda g: process_characteristics(g["process_spec"])["qcd_squared"]),
+        (
+            "QED²",
+            lambda g: process_characteristics(g.get("process_spec"))["qed_squared"],
+        ),
+        (
+            "QCD²",
+            lambda g: process_characteristics(g.get("process_spec"))["qcd_squared"],
+        ),
         (
             "QCD order",
-            lambda g: process_characteristics(g["process_spec"])["qcd_order"],
+            lambda g: process_characteristics(g.get("process_spec"))["qcd_order"],
         ),
         (
             "loop selector",
-            lambda g: process_characteristics(g["process_spec"])["loop_selector"],
+            lambda g: process_characteristics(g.get("process_spec"))["loop_selector"],
         ),
         ("x dim", lambda g: str(len(g["x"]))),
         (
@@ -1409,17 +1581,30 @@ def render_graphs(config: dict[str, Any], graph_names: list[str]) -> str:
 
 
 def render_report(
-    payload: dict[str, Any], use_evaluator_timings: bool, compare_eval: bool
+    payload: dict[str, Any],
+    use_evaluator_timings: bool,
+    compare_eval: bool,
+    graph_names: list[str] | None = None,
+    profile_names: list[str] | None = None,
+    no_details: bool = False,
 ) -> str:
-    profile_names = payload["selected_profiles"]
-    graph_names = payload["selected_graphs"]
+    profile_names = profile_names or payload["selected_profiles"]
+    graph_names = graph_names or payload["selected_graphs"]
+    metadata = payload.get("metadata", {})
+    compare_eval = compare_eval and not bool(metadata.get("use_3drep"))
     binary_profile = payload.get("metadata", {}).get(
         "binary_profile", DEFAULT_BINARY_PROFILE
     )
-    sections = [
-        color("GammaLoop Benchmark Comparison", "bold", "green"),
-        render_profiles(payload["config"], profile_names),
-        render_graphs(payload["config"], graph_names),
+    route = metadata.get("route", "generate+inspect")
+    sections = [color(f"GammaLoop Benchmark Comparison ({route})", "bold", "green")]
+    if not no_details:
+        sections.extend(
+            [
+                render_profiles(payload["config"], profile_names),
+                render_graphs(payload["config"], graph_names),
+            ]
+        )
+    sections.append(
         grouped_result_table(
             graph_names,
             profile_names,
@@ -1428,9 +1613,9 @@ def render_report(
             use_evaluator_timings,
             compare_eval,
             binary_profile,
-            payload.get("metadata", {}),
-        ),
-    ]
+            metadata,
+        )
+    )
     return "\n\n".join(sections)
 
 
@@ -1445,6 +1630,14 @@ def default_config_choices() -> tuple[str, str]:
     return graphs, profiles
 
 
+def detail_selection(
+    requested: list[str] | None, available: dict[str, Any], label: str
+) -> list[str]:
+    if requested is None:
+        return []
+    return expand_all_selection(requested or ["all"], available, label)
+
+
 def parse_args() -> argparse.Namespace:
     graph_choices, profile_choices = default_config_choices()
     parser = argparse.ArgumentParser(
@@ -1457,24 +1650,54 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         default=DEFAULT_OUTPUT,
-        help="JSON result path",
+        help=(
+            "JSON result path; defaults to outputs/bench_result_3drep.json "
+            "when --3Drep is used"
+        ),
     )
     parser.add_argument(
         "--rerun",
         action="store_true",
-        help="ignore an existing output JSON file and overwrite it with a fresh run",
+        help=(
+            "rerun selected graph/profile combinations and merge them into the "
+            "existing output JSON"
+        ),
     )
     parser.add_argument(
         "--graphs",
         nargs="+",
         default=DEFAULT_GRAPHS,
-        help=f"graph names to run, or all; valid names in default config: {graph_choices}",
+        help=(
+            "graph names to run/render, all, or all_existing; "
+            f"valid names in default config: {graph_choices}"
+        ),
     )
     parser.add_argument(
         "--profiles",
         nargs="+",
         default=DEFAULT_PROFILES,
-        help=f"run profile names to run, or all; valid names in default config: {profile_choices}",
+        help=(
+            "run profile names to run/render, all, or all_existing; "
+            f"valid names in default config: {profile_choices}"
+        ),
+    )
+    parser.add_argument(
+        "--detail-graph",
+        nargs="*",
+        metavar="GRAPH",
+        help=(
+            "render graph details for the listed graph names and exit; "
+            f"use all for every graph; valid names in default config: {graph_choices}"
+        ),
+    )
+    parser.add_argument(
+        "--detail-profiles",
+        nargs="*",
+        metavar="PROFILE",
+        help=(
+            "render profile details for the listed profile names and exit; "
+            f"use all for every profile; valid names in default config: {profile_choices}"
+        ),
     )
     parser.add_argument(
         "--max-gen-RAM",
@@ -1502,6 +1725,13 @@ def parse_args() -> argparse.Namespace:
         help="show relative distance to configured target weights",
     )
     parser.add_argument(
+        "--3Drep",
+        "--3drep",
+        dest="use_3drep",
+        action="store_true",
+        help="use the 3Drep build/evaluate route instead of generate+inspect",
+    )
+    parser.add_argument(
         "--use-evaluator-timings",
         action="store_true",
         help="compare the inspect evaluator row instead of Total",
@@ -1519,7 +1749,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="disable ANSI colours in progress messages and rendered tables",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--no-details",
+        action="store_true",
+        help="skip run-profile and graph-detail tables in the final render",
+    )
+    args = parser.parse_args()
+    output_was_explicit = any(
+        token == "--output" or token.startswith("--output=") for token in sys.argv[1:]
+    )
+    if args.use_3drep and not output_was_explicit:
+        args.output = DEFAULT_3DREP_OUTPUT
+    return args
 
 
 def validate_selection(
@@ -1546,6 +1787,178 @@ def expand_all_selection(
     return requested
 
 
+def selected_mode(use_3drep: bool) -> str:
+    return MODE_3DREP if use_3drep else MODE_GENERATE_INSPECT
+
+
+def payload_mode(payload: dict[str, Any]) -> str | None:
+    metadata = payload.get("metadata", {})
+    mode = metadata.get("mode")
+    if mode:
+        return str(mode)
+    route = metadata.get("route")
+    if route:
+        return str(route)
+    if "use_3drep" in metadata:
+        return selected_mode(bool(metadata["use_3drep"]))
+    return None
+
+
+def validate_payload_mode(
+    payload: dict[str, Any], requested_mode: str, output_path: Path
+) -> None:
+    existing_mode = payload_mode(payload)
+    if existing_mode is None:
+        return
+    if existing_mode != requested_mode:
+        raise SystemExit(
+            f"Existing benchmark output {output_path} was produced in mode "
+            f"{existing_mode!r}, but this invocation selected mode {requested_mode!r}. "
+            "Choose a matching existing JSON output, pass a different --output path, "
+            "or remove the existing file first."
+        )
+
+
+def existing_graph_names(payload: dict[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    results = payload.get("results", {})
+    if not isinstance(results, dict):
+        return []
+    return [
+        name
+        for name, graph_results in results.items()
+        if isinstance(graph_results, dict)
+    ]
+
+
+def existing_profile_names(
+    payload: dict[str, Any] | None, graph_names: list[str] | None = None
+) -> list[str]:
+    if not payload:
+        return []
+    results = payload.get("results", {})
+    if not isinstance(results, dict):
+        return []
+    selected_graphs = graph_names or existing_graph_names(payload)
+    profiles: list[str] = []
+    seen: set[str] = set()
+    for graph_name in selected_graphs:
+        graph_results = results.get(graph_name, {})
+        if not isinstance(graph_results, dict):
+            continue
+        for profile_name in graph_results:
+            if profile_name not in seen:
+                profiles.append(profile_name)
+                seen.add(profile_name)
+    return profiles
+
+
+def append_unique(values: list[str], additions: list[str]) -> list[str]:
+    seen = set(values)
+    for value in additions:
+        if value not in seen:
+            values.append(value)
+            seen.add(value)
+    return values
+
+
+def expand_requested_selection(
+    requested: list[str],
+    available: dict[str, Any],
+    existing: list[str],
+    label: str,
+) -> list[str]:
+    lowered = [name.lower() for name in requested]
+    if "all" in lowered:
+        expanded = list(available)
+        if not expanded:
+            raise SystemExit(f"No {label}s are defined in the configuration.")
+        return expanded
+
+    expanded: list[str] = []
+    if "all_existing" in lowered:
+        if not existing:
+            raise SystemExit(
+                f"No existing {label}s are available in the selected output JSON."
+            )
+        append_unique(expanded, existing)
+
+    explicit = [
+        name for name in requested if name.lower() not in {"all", "all_existing"}
+    ]
+    append_unique(expanded, explicit)
+    return expanded or requested
+
+
+def resolve_output_path(raw_output: str, bench_dir: Path, invocation_cwd: Path) -> Path:
+    output_path = Path(raw_output)
+    if output_path.is_absolute():
+        return output_path
+    if raw_output in {DEFAULT_OUTPUT, DEFAULT_3DREP_OUTPUT}:
+        return bench_dir / output_path
+    return invocation_cwd / output_path
+
+
+def new_payload(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "metadata": {},
+        "selected_graphs": [],
+        "selected_profiles": [],
+        "config": config,
+        "results": {},
+    }
+
+
+def update_payload_metadata(
+    payload: dict[str, Any],
+    config: dict[str, Any],
+    config_path: Path,
+    args: argparse.Namespace,
+    mode: str,
+) -> None:
+    metadata = payload.setdefault("metadata", {})
+    metadata.setdefault("created_at", dt.datetime.now(dt.timezone.utc).isoformat())
+    metadata["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    metadata["config_path"] = str(config_path)
+    metadata["binary_profile"] = args.profile
+    metadata["max_gen_ram_bytes"] = args.max_gen_ram
+    metadata["max_gen_time_s"] = args.max_gen_time
+    metadata["target_profile_time_s"] = args.target_profile_time
+    metadata["compare_eval"] = args.compare_eval
+    metadata["rerun"] = args.rerun
+    metadata["use_3drep"] = args.use_3drep
+    metadata["route"] = mode
+    metadata["mode"] = mode
+    metadata["last_selected_graphs"] = args.graphs
+    metadata["last_selected_profiles"] = args.profiles
+    payload["config"] = config
+
+
+def refresh_payload_selection(payload: dict[str, Any]) -> None:
+    graph_names = existing_graph_names(payload)
+    payload["selected_graphs"] = graph_names
+    payload["selected_profiles"] = existing_profile_names(payload, graph_names)
+
+
+def combinations_to_run(
+    payload: dict[str, Any],
+    graph_names: list[str],
+    profile_names: list[str],
+    rerun: bool,
+) -> list[tuple[str, str]]:
+    results = payload.setdefault("results", {})
+    pairs: list[tuple[str, str]] = []
+    for graph_name in graph_names:
+        graph_results = results.get(graph_name, {})
+        if not isinstance(graph_results, dict):
+            graph_results = {}
+        for profile_name in profile_names:
+            if rerun or profile_name not in graph_results:
+                pairs.append((graph_name, profile_name))
+    return pairs
+
+
 def main() -> int:
     global USE_COLOUR
     args = parse_args()
@@ -1553,95 +1966,122 @@ def main() -> int:
     invocation_cwd = Path.cwd()
     bench_dir = Path(__file__).resolve().parent
     repo_root = bench_dir.parents[2]
-    output_path = Path(args.output)
-    if not output_path.is_absolute():
-        output_path = (
-            bench_dir / output_path
-            if args.output == DEFAULT_OUTPUT
-            else invocation_cwd / output_path
-        )
-
-    if output_path.exists() and not args.rerun:
-        payload = json.loads(output_path.read_text(encoding="utf-8"))
-        compare_eval = args.compare_eval or bool(
-            payload.get("metadata", {}).get("compare_eval")
-        )
-        print(render_report(payload, args.use_evaluator_timings, compare_eval))
-        return 0
-
     config_path = Path(args.config)
     if not config_path.is_absolute():
         candidate = invocation_cwd / config_path
         config_path = candidate if candidate.exists() else bench_dir / config_path
     config = load_toml(config_path)
-    args.graphs = expand_all_selection(args.graphs, config.get("graphs", {}), "graph")
-    args.profiles = expand_all_selection(
-        args.profiles, config.get("profiles", {}), "profile"
+    mode = selected_mode(args.use_3drep)
+
+    if args.detail_graph is not None or args.detail_profiles is not None:
+        detail_graphs = detail_selection(
+            args.detail_graph, config.get("graphs", {}), "graph"
+        )
+        detail_profiles = detail_selection(
+            args.detail_profiles, config.get("profiles", {}), "profile"
+        )
+        validate_selection(config, detail_graphs, detail_profiles)
+        sections = [color("Benchmark Configuration Details", "bold", "green")]
+        if detail_profiles:
+            sections.append(render_profiles(config, detail_profiles))
+        if detail_graphs:
+            sections.append(render_graphs(config, detail_graphs))
+        print("\n\n".join(sections))
+        return 0
+
+    output_path = resolve_output_path(args.output, bench_dir, invocation_cwd)
+    existing_payload = None
+    if output_path.exists():
+        existing_payload = json.loads(output_path.read_text(encoding="utf-8"))
+        validate_payload_mode(existing_payload, mode, output_path)
+
+    args.graphs = expand_requested_selection(
+        args.graphs,
+        config.get("graphs", {}),
+        existing_graph_names(existing_payload),
+        "graph",
+    )
+    args.profiles = expand_requested_selection(
+        args.profiles,
+        config.get("profiles", {}),
+        existing_profile_names(existing_payload, args.graphs),
+        "profile",
     )
     validate_selection(config, args.graphs, args.profiles)
 
-    payload: dict[str, Any] = {
-        "metadata": {
-            "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "config_path": str(config_path),
-            "binary_profile": args.profile,
-            "max_gen_ram_bytes": args.max_gen_ram,
-            "max_gen_time_s": args.max_gen_time,
-            "target_profile_time_s": args.target_profile_time,
-            "compare_eval": args.compare_eval,
-            "rerun": args.rerun,
-        },
-        "selected_graphs": args.graphs,
-        "selected_profiles": args.profiles,
-        "config": config,
-        "results": {},
-    }
+    payload = existing_payload or new_payload(config)
+    payload.setdefault("results", {})
+    payload["config"] = config
+    pairs_to_run = combinations_to_run(payload, args.graphs, args.profiles, args.rerun)
 
+    if not pairs_to_run:
+        refresh_payload_selection(payload)
+        print(
+            render_report(
+                payload,
+                args.use_evaluator_timings,
+                args.compare_eval,
+                args.graphs,
+                args.profiles,
+                args.no_details,
+            )
+        )
+        return 0
+
+    update_payload_metadata(payload, config, config_path, args, mode)
     interrupt_state = InterruptState()
     stop_remaining = False
-    for graph_name in args.graphs:
-        payload["results"][graph_name] = {}
-        for profile_name in args.profiles:
-            if stop_remaining:
-                break
-            print(
-                color(f"running {graph_name}/{profile_name}", "bold", "cyan"),
-                file=sys.stderr,
+    for graph_name, profile_name in pairs_to_run:
+        if stop_remaining:
+            break
+        payload["results"].setdefault(graph_name, {})
+        print(
+            color(f"running {graph_name}/{profile_name}", "bold", "cyan"),
+            file=sys.stderr,
+        )
+        try:
+            payload["results"][graph_name][profile_name] = run_case(
+                graph_name,
+                config["graphs"][graph_name],
+                profile_name,
+                config["profiles"][profile_name],
+                args,
+                bench_dir,
+                repo_root,
+                interrupt_state,
             )
-            try:
-                payload["results"][graph_name][profile_name] = run_case(
-                    graph_name,
-                    config["graphs"][graph_name],
-                    profile_name,
-                    config["profiles"][profile_name],
-                    args,
-                    bench_dir,
-                    repo_root,
-                    interrupt_state,
-                )
-            except KeyboardInterrupt:
-                if interrupt_state.register():
-                    stop_remaining = True
-                    break
-                payload["results"][graph_name][profile_name] = {
-                    "status": "interrupted",
-                    "generation": {"status": "interrupted"},
-                    "disk_size_bytes": None,
-                    "benchmark": None,
-                    "error_log": None,
-                }
-            if payload["results"][graph_name][profile_name].get("abort_all_requested"):
+        except KeyboardInterrupt:
+            if interrupt_state.register():
                 stop_remaining = True
                 break
-        if stop_remaining:
-            payload["metadata"]["interrupted"] = True
+            payload["results"][graph_name][profile_name] = {
+                "status": "interrupted",
+                "generation": {"status": "interrupted"},
+                "disk_size_bytes": None,
+                "benchmark": None,
+                "error_log": None,
+            }
+        if payload["results"][graph_name][profile_name].get("abort_all_requested"):
+            stop_remaining = True
             break
+    if stop_remaining:
+        payload["metadata"]["interrupted"] = True
 
+    refresh_payload_selection(payload)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
     )
-    print(render_report(payload, args.use_evaluator_timings, args.compare_eval))
+    print(
+        render_report(
+            payload,
+            args.use_evaluator_timings,
+            args.compare_eval,
+            args.graphs,
+            args.profiles,
+            args.no_details,
+        )
+    )
     print(color(f"\nSaved JSON results to {output_path}", "green"))
     return 0
 

@@ -14,13 +14,19 @@ name = "load"
 commands = [
   "import model $(model:sm-default.json)",
   "remove processes",
-  "import graphs $(graph_path:./graphs/G1.dot) -p $(process:bench) -i $(integrand:default) -o --process-spec '$(process_spec:a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==2 [{{2}} QCD=1])'",
+  "import graphs $(graph_path:./graphs/G1.dot) -p $(process:bench) -i $(integrand:default) -o $(process_spec_flag:) $(process_spec:)",
 ]
 
 [[command_blocks]]
 name = "generate"
 commands = [
   "run load",
+  "run generate_prepared",
+]
+
+[[command_blocks]]
+name = "generate_prepared"
+commands = [
   """set global string '
 [global]
 logfile_directive = "$(logfile_directive:off)"
@@ -77,6 +83,75 @@ disable_tropical_generation = $(disable_tropical_generation:true)
 ]
 
 [[command_blocks]]
+name = "3drep_setup"
+commands = [
+  "run set_model_parameters",
+  """set global string '
+[global]
+logfile_directive = "$(logfile_directive:off)"
+display_directive = "$(display_directive:info)"
+
+[global.log_style]
+include_fields = $(log_include_fields:false)
+
+[global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[global.generation.evaluator]
+do_algebra = $(do_algebra:false)
+iterative_orientation_optimization = $(iterative_orientation_optimization:false)
+store_atom = $(store_atom:false)
+compile = $(compile:false)
+summed = $(summed:false)
+summed_function_map = $(summed_function_map:false)
+
+[global.generation.compile]
+compilation_mode = "$(compilation_mode:symjit)"
+optimization_level = "$(optimization_level:O3)"
+fast_math = $(fast_math:true)
+unsafe_math = $(unsafe_math:true)
+custom = $(compile_custom:[])
+'""",
+  """set default-runtime string '
+[general]
+evaluator_method = "$(evaluator_method:SingleParametric)"
+integral_unit = "$(integral_unit:picobarn)"
+mu_r = $(mu_r:91.188)
+m_uv = $(m_uv:91.188)
+generate_events = $(generate_events:false)
+store_additional_weights_in_event = $(store_additional_weights_in_event:false)
+
+[subtraction]
+disable_threshold_subtraction = $(disable_threshold_subtraction:true)
+'""",
+]
+
+[[command_blocks]]
+name = "3drep_build"
+commands = [
+  "run load",
+  "run 3drep_build_prepared",
+]
+
+[[command_blocks]]
+name = "3drep_build_prepared"
+commands = [
+  "run 3drep_setup",
+  "3Drep build -p $(process:bench) -i $(integrand:default) -g $(graph_id:0) --representation $(threeDrep_representation:cff) --numerator-samples-normalization $(threeDrep_numerator_samples_normalization:M_for_beyond_quadratic_only) --workspace-path $(threeDrep_workspace_path:./outputs/G1_minimal_3drep/workspace) $(threeDrep_build_extra:) --no-pretty",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "3drep_evaluate"
+commands = [
+  "run 3drep_setup",
+  "3Drep evaluate -p $(process:bench) -i $(integrand:default) -g $(graph_id:0) --representation $(threeDrep_representation:cff) --numerator-samples-normalization $(threeDrep_numerator_samples_normalization:M_for_beyond_quadratic_only) --workspace-path $(threeDrep_workspace_path:./outputs/G1_minimal_3drep/workspace) --precision $(precision:Double) --seed $(threeDrep_seed:1337) --scale $(threeDrep_scale:0.25) --profile $(bench_duration:10.0) --json-output $(json_output:threedrep_bench.json) --manifest-name $(threeDrep_manifest_name:evaluate_manifest.json) --no-show-parameters $(threeDrep_evaluate_extra:)",
+]
+
+[[command_blocks]]
 name = "bench_setup"
 commands = [
   "run set_model_parameters",
@@ -127,6 +202,12 @@ commands = [
 name = "bench_point6"
 commands = [
   "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
+]
+
+[[command_blocks]]
+name = "bench_point3"
+commands = [
+  "inspect -p $(process:bench) -i $(integrand:default) -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(minimal_integrand:) --bench $(bench_duration:10.0) --json-output $(json_output:inspect_bench.json)",
 ]
 
 [[command_blocks]]

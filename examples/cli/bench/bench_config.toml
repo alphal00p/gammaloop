@@ -5,6 +5,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==2 [{{2}} QCD=1]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 target_weight = { re = -4.986300161096361e-20, im = -8.983113256654707e-4 }
 
 [graphs.G1.alphaloop]
@@ -19,6 +22,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==4 [{{3}} QCD=2]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.G2.alphaloop]
 t_gen_s = 4.7
@@ -32,6 +38,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==6 [{{4}} QCD=3]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.G3.alphaloop]
 t_gen_s = 36000.0
@@ -45,6 +54,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==2 [{{2}} QCD=1]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 target_weight = { re = -7.938122705437497e-21, im = 1.5008076532031015e-3 }
 
 [graphs.H1.alphaloop]
@@ -59,6 +71,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==4 [{{3}} QCD=2]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.H2.alphaloop]
 t_gen_s = 1.5
@@ -72,6 +87,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==6 [{{4}} QCD=3]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.H3.alphaloop]
 t_gen_s = 255.0
@@ -85,6 +103,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ h | t h g ghG ghG~ a QED^2==4 QCD^2==4 [{{4}} QCD=2]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.I1.alphaloop]
 t_gen_s = 126.0
@@ -98,6 +119,9 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ h h | t h g ghG ghG~ a QED^2==6 QCD^2==4 [{{4}} QCD=2]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89, 0.11, 0.24, 0.37]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.I2.alphaloop]
 t_gen_s = 1900.0
@@ -111,11 +135,146 @@ process = "bench"
 integrand = "default"
 process_spec = "a > t t~ h h h | t h g ghG ghG~ a QED^2==8 QCD^2==4 [{{4}} QCD=2]"
 x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89, 0.11, 0.24, 0.37, 0.52, 0.68, 0.83]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
 
 [graphs.I3.alphaloop]
 t_gen_s = 36000.0
 disk_mb = 20000.0
 t_eval_ms = 3600.0
+
+[graphs.G1_no_num]
+path = "./graphs/G1_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==2 [{{2}} QCD=1]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.G2_no_num]
+path = "./graphs/G2_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==4 [{{3}} QCD=2]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.G3_no_num]
+path = "./graphs/G3_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==6 [{{4}} QCD=3]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.H1_no_num]
+path = "./graphs/H1_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==2 [{{2}} QCD=1]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.H2_no_num]
+path = "./graphs/H2_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==4 [{{3}} QCD=2]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.H3_no_num]
+path = "./graphs/H3_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ | t g ghG ghG~ a QED^2==2 QCD^2==6 [{{4}} QCD=3]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.I1_no_num]
+path = "./graphs/I1_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ h | t h g ghG ghG~ a QED^2==4 QCD^2==4 [{{4}} QCD=2]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.I2_no_num]
+path = "./graphs/I2_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ h h | t h g ghG ghG~ a QED^2==6 QCD^2==4 [{{4}} QCD=2]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89, 0.11, 0.24, 0.37]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.I3_no_num]
+path = "./graphs/I3_no_num.dot"
+model = "sm-default.json"
+process = "bench"
+integrand = "default"
+process_spec = "a > t t~ h h h | t h g ghG ghG~ a QED^2==8 QCD^2==4 [{{4}} QCD=2]"
+x = [0.13, 0.27, 0.41, 0.58, 0.72, 0.86, 0.19, 0.33, 0.47, 0.61, 0.75, 0.89, 0.11, 0.24, 0.37, 0.52, 0.68, 0.83]
+graph_id = 0
+3Drep_seed = 1337
+prelude_commands = []
+
+[graphs.aa_aa_box]
+path = "./graphs/aa_aa_box.dot"
+model = "sm-default.json"
+process = "aa_aa_box"
+integrand = "default"
+graph_id = 0
+3Drep_seed = 1337
+x = [0.13, 0.27, 0.41]
+target_weight = { re = -1.919647796571551e-5, im = -1.446332123685159e-21 }
+prelude_commands = [
+  """set default-runtime string '
+[kinematics]
+e_cm = 300.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+  [500.0, 0.0, 0.0, 500.0],
+  [500.0, 0.0, 0.0, -500.0],
+  [500.0, 500.0, 0.0, 0.0],
+  "dependent",
+]
+helicities = [+1, +1, -1, -1]
+
+[general]
+numerator_interpolation_scale = 2.0
+'
+""",
+]
+
 
 [profiles.minimal.defines]
 minimal_integrand = "--minimal-integrand"
@@ -168,6 +327,11 @@ precision = "Double"
 required_precision_for_re = "1.0e-5"
 required_precision_for_im = "1.0e-5"
 escalate_for_large_weight_threshold = "-1.0"
+threeDrep_representation = "cff"
+threeDrep_numerator_samples_normalization = "M_for_beyond_quadratic_only"
+threeDrep_scale = "0.25"
+threeDrep_build_extra = ""
+threeDrep_evaluate_extra = "--eager"
 
 [profiles.cff.defines]
 minimal_integrand = "--minimal-integrand"
@@ -220,6 +384,11 @@ precision = "Double"
 required_precision_for_re = "1.0e-5"
 required_precision_for_im = "1.0e-5"
 escalate_for_large_weight_threshold = "-1.0"
+threeDrep_representation = "cff"
+threeDrep_numerator_samples_normalization = "M_for_beyond_quadratic_only"
+threeDrep_scale = "0.25"
+threeDrep_build_extra = ""
+threeDrep_evaluate_extra = "--eager"
 
 [profiles.cff_4d.defines]
 minimal_integrand = "--minimal-integrand"
@@ -272,6 +441,11 @@ precision = "Double"
 required_precision_for_re = "1.0e-5"
 required_precision_for_im = "1.0e-5"
 escalate_for_large_weight_threshold = "-1.0"
+threeDrep_representation = "cff"
+threeDrep_numerator_samples_normalization = "M_for_beyond_quadratic_only"
+threeDrep_scale = "0.25"
+threeDrep_build_extra = ""
+threeDrep_evaluate_extra = "--eager"
 
 [profiles.ltd.defines]
 minimal_integrand = "--minimal-integrand"
@@ -324,6 +498,11 @@ precision = "Double"
 required_precision_for_re = "1.0e-5"
 required_precision_for_im = "1.0e-5"
 escalate_for_large_weight_threshold = "-1.0"
+threeDrep_representation = "ltd"
+threeDrep_numerator_samples_normalization = "M_for_beyond_quadratic_only"
+threeDrep_scale = "0.25"
+threeDrep_build_extra = ""
+threeDrep_evaluate_extra = "--eager"
 
 [profiles.optimized_cff.defines]
 minimal_integrand = "--minimal-integrand"
@@ -376,6 +555,11 @@ precision = "Double"
 required_precision_for_re = "1.0e-5"
 required_precision_for_im = "1.0e-5"
 escalate_for_large_weight_threshold = "-1.0"
+threeDrep_representation = "cff"
+threeDrep_numerator_samples_normalization = "M_for_beyond_quadratic_only"
+threeDrep_scale = "0.25"
+threeDrep_build_extra = ""
+threeDrep_evaluate_extra = ""
 
 [profiles.optimized_ltd.defines]
 minimal_integrand = "--minimal-integrand"
@@ -428,3 +612,8 @@ precision = "Double"
 required_precision_for_re = "1.0e-5"
 required_precision_for_im = "1.0e-5"
 escalate_for_large_weight_threshold = "-1.0"
+threeDrep_representation = "ltd"
+threeDrep_numerator_samples_normalization = "M_for_beyond_quadratic_only"
+threeDrep_scale = "0.25"
+threeDrep_build_extra = ""
+threeDrep_evaluate_extra = ""

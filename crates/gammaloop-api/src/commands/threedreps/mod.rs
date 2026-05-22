@@ -28,11 +28,12 @@ use gammalooprs::{
         },
     },
     model::Model,
+    momentum::Helicity,
     numerator::symbolica_ext::AtomCoreExt,
     processes::{Amplitude, CrossSection, EvaluatorSettings, Process, ProcessCollection},
     settings::{
         global::{FrozenCompilationMode, OrientationPattern, UniformNumeratorSamplingScale},
-        runtime::Precision,
+        runtime::{kinematic::Externals, Precision},
         RuntimeSettings,
     },
     utils::{
@@ -288,6 +289,10 @@ pub struct Evaluate {
     /// File name used for the evaluate summary manifest in the 3Drep workspace.
     #[arg(long, default_value = "evaluate_manifest.json", value_name = "NAME")]
     pub manifest_name: String,
+
+    /// Write the profiling/evaluation result as pretty JSON to this path.
+    #[arg(long = "json-output", value_hint = clap::ValueHint::FilePath)]
+    pub json_output: Option<PathBuf>,
 
     /// Do not print the input-parameter table in the evaluate command output.
     #[arg(long, default_value_t = false)]
@@ -574,6 +579,34 @@ struct EvaluateOutput {
     settings: ThreeDrepRunSettings,
     evaluation: ThreeDrepEvaluationRecord,
     parameters: Vec<ParameterValueRecord>,
+}
+
+#[derive(Debug, Serialize)]
+struct ThreeDrepBenchSummaryRow {
+    category: String,
+    mean_seconds_per_sample: f64,
+    standard_error_seconds_per_sample: f64,
+    percentage_of_total: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+struct ThreeDrepBenchOutput<'a> {
+    process_id: usize,
+    integrand_name: &'a str,
+    graph_id: usize,
+    graph_name: &'a str,
+    target_seconds: Option<f64>,
+    warmup_samples: Option<usize>,
+    warmup_seconds: Option<f64>,
+    total_samples: Option<usize>,
+    n_batches: usize,
+    minimal_integrand: bool,
+    displayed_result: Option<SymbolicaComplexValueRecord>,
+    manifest_path: &'a Path,
+    serialized_evaluator_path: Option<PathBuf>,
+    serialized_evaluator_size_bytes: Option<u64>,
+    evaluation: &'a ThreeDrepEvaluationRecord,
+    summary: Vec<ThreeDrepBenchSummaryRow>,
 }
 
 const SYMBOLICA_RAW_ARCHIVE_SCHEMA_VERSION: u32 = 2;
@@ -1612,6 +1645,12 @@ impl Evaluate {
             &evaluate_manifest_path,
             &serde_json::to_string_pretty(&summary)?,
         )?;
+        self.write_json_output(
+            &summary,
+            &evaluate_manifest_path,
+            &artifact_dir,
+            global_cli_settings,
+        )?;
         println!(
             "{}",
             render_evaluate_summary(&summary, !self.no_show_parameters)
@@ -1621,6 +1660,50 @@ impl Evaluate {
             relative_display(&evaluate_manifest_path)
         );
         Ok(())
+    }
+
+    fn write_json_output(
+        &self,
+        summary: &EvaluateOutput,
+        manifest_path: &Path,
+        artifact_dir: &Path,
+        global_cli_settings: &CLISettings,
+    ) -> Result<()> {
+        let Some(path) = self.json_output.as_deref() else {
+            return Ok(());
+        };
+        let path = resolve_json_output_path(path)?;
+        global_cli_settings
+            .ensure_write_target_outside_active_state(&path, "write 3Drep evaluate JSON")?;
+        let serialized_evaluator_path = serialized_evaluator_path(summary, artifact_dir);
+        let serialized_evaluator_size_bytes = serialized_evaluator_path
+            .as_ref()
+            .and_then(|path| path.metadata().ok())
+            .map(|metadata| metadata.len());
+        let profile = summary.evaluation.profile.as_ref();
+        let displayed_result = parse_symbolica_complex_value(
+            &summary.evaluation.value_re,
+            &summary.evaluation.value_im,
+        );
+        let output = ThreeDrepBenchOutput {
+            process_id: summary.process_id,
+            integrand_name: &summary.integrand_name,
+            graph_id: summary.graph_id,
+            graph_name: &summary.graph_name,
+            target_seconds: profile.map(|profile| profile.target_timing_seconds),
+            warmup_samples: profile.map(|profile| profile.warmup_calls),
+            warmup_seconds: profile.map(|profile| profile.warmup_timing_seconds),
+            total_samples: profile.map(|profile| profile.calls),
+            n_batches: 1,
+            minimal_integrand: false,
+            displayed_result,
+            manifest_path,
+            serialized_evaluator_path,
+            serialized_evaluator_size_bytes,
+            evaluation: &summary.evaluation,
+            summary: threedrep_bench_summary_rows(&summary.evaluation),
+        };
+        write_path(&path, &serde_json::to_string_pretty(&output)?)
     }
 
     fn resolve_input<'a>(
@@ -2606,6 +2689,56 @@ fn threedrep_evaluator_cache_paths(evaluator_dir: &Path, name: &str) -> (PathBuf
         evaluator_dir.join(format!("{name}.evaluator.bin")),
         evaluator_dir.join(format!("{name}.evaluator_manifest.json")),
     )
+}
+
+fn serialized_evaluator_path(summary: &EvaluateOutput, artifact_dir: &Path) -> Option<PathBuf> {
+    if summary.evaluation.build_strategy.is_iterative() {
+        return None;
+    }
+    let evaluator_dir = artifact_dir.join("evaluators");
+    let (evaluator_path, _) =
+        threedrep_evaluator_cache_paths(&evaluator_dir, &summary.evaluation.label);
+    Some(evaluator_path)
+}
+
+fn threedrep_bench_summary_rows(
+    evaluation: &ThreeDrepEvaluationRecord,
+) -> Vec<ThreeDrepBenchSummaryRow> {
+    let (mean, standard_error) = if let Some(profile) = &evaluation.profile {
+        (
+            profile.timing_per_sample_seconds,
+            profile.timing_per_sample_standard_error_seconds,
+        )
+    } else {
+        (evaluation.sample_evaluation_timing_seconds, 0.0)
+    };
+    ["Evaluator", "Total"]
+        .into_iter()
+        .map(|category| ThreeDrepBenchSummaryRow {
+            category: category.to_string(),
+            mean_seconds_per_sample: mean,
+            standard_error_seconds_per_sample: standard_error,
+            percentage_of_total: (mean > 0.0).then_some(100.0),
+        })
+        .collect()
+}
+
+fn parse_symbolica_complex_value(re: &str, im: &str) -> Option<SymbolicaComplexValueRecord> {
+    if re == "-" || im == "-" {
+        return None;
+    }
+    Some(SymbolicaComplexValueRecord {
+        re: re.to_string(),
+        im: im.to_string(),
+    })
+}
+
+fn resolve_json_output_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(std::env::current_dir()?.join(path))
+    }
 }
 
 fn try_load_cached_threedrep_evaluator(
@@ -3828,7 +3961,9 @@ fn set_random_diagnostic_input_values_with_policy(
         let should_randomize_external = randomize_externals
             && matches!(
                 parameter.group,
-                ParamBuilderInputGroup::ExternalEnergy | ParamBuilderInputGroup::ExternalSpatial
+                ParamBuilderInputGroup::ExternalEnergy
+                    | ParamBuilderInputGroup::ExternalSpatial
+                    | ParamBuilderInputGroup::Polarization
             );
         let should_randomize_non_external = matches!(
             parameter.group,
@@ -3858,7 +3993,9 @@ impl DiagnosticExternalSource {
             ) => "runtime kinematics",
             (
                 Self::AutomaticDiagnostic,
-                ParamBuilderInputGroup::ExternalEnergy | ParamBuilderInputGroup::ExternalSpatial,
+                ParamBuilderInputGroup::ExternalEnergy
+                | ParamBuilderInputGroup::ExternalSpatial
+                | ParamBuilderInputGroup::Polarization,
             ) => "automatic diagnostic",
             (
                 _,
@@ -3868,7 +4005,6 @@ impl DiagnosticExternalSource {
                 _,
                 ParamBuilderInputGroup::Runtime
                 | ParamBuilderInputGroup::Model
-                | ParamBuilderInputGroup::Polarization
                 | ParamBuilderInputGroup::LocalCounterterm,
             ) => "state/default",
         }
@@ -3898,12 +4034,19 @@ fn prepare_diagnostic_param_builder(
     let mut param_builder = graph.param_builder.clone();
     let numerator_q0_parameters =
         ensure_numerator_q0_parameters(graph, &mut param_builder, input_config)?;
-    let runtime_external_result = set_runtime_external_kinematics(
-        &mut param_builder,
-        graph,
-        integrand_kind,
-        default_runtime_settings,
-    );
+    let runtime_external_result =
+        if runtime_helicities_are_fixed_for_graph_polarizations(graph, default_runtime_settings) {
+            set_runtime_external_kinematics(
+                &mut param_builder,
+                graph,
+                integrand_kind,
+                default_runtime_settings,
+            )
+        } else {
+            Err(eyre!(
+                "runtime kinematics use summed or missing helicities for polarized external states"
+            ))
+        };
     let external_source = match runtime_external_result {
         Ok(()) => {
             set_random_diagnostic_input_values_with_policy(
@@ -3914,21 +4057,13 @@ fn prepare_diagnostic_param_builder(
             );
             DiagnosticExternalSource::RuntimeKinematics
         }
-        Err(_error) if graph.polarizations.is_empty() => {
+        Err(_error) => {
             set_random_diagnostic_input_values(
                 &mut param_builder,
                 run_settings.seed,
                 run_settings.scale,
             );
             DiagnosticExternalSource::AutomaticDiagnostic
-        }
-        Err(error) => {
-            return Err(error).with_context(|| {
-                format!(
-                    "while preparing external kinematics and polarizations for 3Drep graph {}",
-                    graph.name
-                )
-            });
         }
     };
 
@@ -4008,6 +4143,28 @@ fn ensure_numerator_q0_parameters(
     }
 
     Ok(by_edge)
+}
+
+fn runtime_helicities_are_fixed_for_graph_polarizations(
+    graph: &Graph,
+    default_runtime_settings: &RuntimeSettings,
+) -> bool {
+    if graph.polarizations.is_empty() {
+        return true;
+    }
+
+    let Externals::Constant { helicities, .. } = &default_runtime_settings.kinematics.externals;
+    graph.polarizations.iter().all(|(polarization, _)| {
+        let Some(external_index) = graph
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .position(|&edge_id| edge_id == polarization.eid)
+        else {
+            return false;
+        };
+        matches!(helicities.get(external_index), Some(Helicity::Signed(_)))
+    })
 }
 
 fn apply_numerator_q0_overrides(
