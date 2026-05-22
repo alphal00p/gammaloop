@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::{fs, process::Command};
 
 use color_eyre::eyre::eyre;
 use gammalooprs::{graph::Graph, processes::ProcessCollection};
@@ -1330,6 +1330,33 @@ fn assert_numerator_only_q0_override(
     assert!(
         value.contains(&format!("{expected_value:+.17e}")),
         "Q({edge_id},0) parameter in {context} was {value}, expected {expected_value:+.17e}"
+    );
+    Ok(())
+}
+
+fn assert_standalone_replay_script_compiles_and_runs(
+    raw_script_path: &Path,
+    context: &str,
+) -> Result<()> {
+    let output = Command::new(raw_script_path)
+        .current_dir(gammaloop_integration_tests::workspace_root())
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "standalone replay script for {context} failed with status {:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        stdout,
+        stderr
+    );
+    assert!(
+        stdout.contains("built call '3d_rep'"),
+        "standalone replay script for {context} should build the archived evaluator call\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("3d_rep[0] ="),
+        "standalone replay script for {context} should run the archived evaluator call\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
     Ok(())
 }
@@ -3129,6 +3156,41 @@ fn cli_aa_aa_evaluate_reuses_standard_and_numerator_only_evaluator_caches() -> R
             "cached numerator-only aa_aa {graph_label} evaluation should reproduce the same value"
         );
     }
+
+    clean_test(test_root);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[ignore = "slow: compiles and runs the generated 3Drep rust-script standalone replay"]
+#[test]
+#[serial]
+fn cli_aa_aa_box_numerator_only_standalone_replay_compiles_and_runs() -> Result<()> {
+    let test_name = "threedreps_aa_aa_box_numerator_only_standalone_replay";
+    let test_root = get_tests_workspace_path().join(test_name);
+    let state_path = test_root.join("state");
+    clean_test(&test_root);
+    let mut cli = get_test_cli(None, &state_path, Some(test_name.to_string()), true)?;
+
+    cli.run_command("import model sm-default.json")?;
+    cli.run_command("import graphs ./examples/cli/bench/graphs/aa_aa_box.dot")?;
+    cli.run_command("3Drep evaluate -p aa_aa_box -i default -g 0 --numerator-only --profile 0.01")?;
+
+    let raw_script_path = state_path
+        .join("threed_workspace")
+        .join("process_0000_default")
+        .join("graph_0000_aa_aa_box")
+        .join("numerator_only")
+        .join("symbolica_expression_raw.rs");
+    assert!(
+        raw_script_path.exists(),
+        "3Drep numerator-only evaluate should write the standalone replay script at {}",
+        raw_script_path.display()
+    );
+    assert_standalone_replay_script_compiles_and_runs(
+        &raw_script_path,
+        "aa_aa_box numerator-only",
+    )?;
 
     clean_test(test_root);
     clean_test(&cli.cli_settings.state.folder);

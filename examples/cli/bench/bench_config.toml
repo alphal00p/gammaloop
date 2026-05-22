@@ -13,7 +13,7 @@ target_weight = { re = -4.986300161096361e-20, im = -8.983113256654707e-4 }
 [graphs.G1.alphaloop]
 t_gen_s = 0.1
 disk_mb = 0.13
-t_eval_ms = 0.004
+t_eval_ms = 0.002
 
 [graphs.G2]
 path = "./graphs/G2.dot"
@@ -29,7 +29,7 @@ prelude_commands = []
 [graphs.G2.alphaloop]
 t_gen_s = 4.7
 disk_mb = 3.0
-t_eval_ms = 0.04
+t_eval_ms = 0.02
 
 [graphs.G3]
 path = "./graphs/G3.dot"
@@ -45,7 +45,7 @@ prelude_commands = []
 [graphs.G3.alphaloop]
 t_gen_s = 36000.0
 disk_mb = 509.0
-t_eval_ms = 17.6
+t_eval_ms = 8.8
 
 [graphs.H1]
 path = "./graphs/H1.dot"
@@ -62,7 +62,7 @@ target_weight = { re = -7.938122705437497e-21, im = 1.5008076532031015e-3 }
 [graphs.H1.alphaloop]
 t_gen_s = 0.07
 disk_mb = 0.12
-t_eval_ms = 0.006
+t_eval_ms = 0.003
 
 [graphs.H2]
 path = "./graphs/H2.dot"
@@ -78,7 +78,7 @@ prelude_commands = []
 [graphs.H2.alphaloop]
 t_gen_s = 1.5
 disk_mb = 1.3
-t_eval_ms = 0.056
+t_eval_ms = 0.028
 
 [graphs.H3]
 path = "./graphs/H3.dot"
@@ -94,7 +94,7 @@ prelude_commands = []
 [graphs.H3.alphaloop]
 t_gen_s = 255.0
 disk_mb = 43.0
-t_eval_ms = 2.35
+t_eval_ms = 1.175
 
 [graphs.I1]
 path = "./graphs/I1.dot"
@@ -110,7 +110,7 @@ prelude_commands = []
 [graphs.I1.alphaloop]
 t_gen_s = 126.0
 disk_mb = 22.0
-t_eval_ms = 0.32
+t_eval_ms = 0.16
 
 [graphs.I2]
 path = "./graphs/I2.dot"
@@ -126,7 +126,7 @@ prelude_commands = []
 [graphs.I2.alphaloop]
 t_gen_s = 1900.0
 disk_mb = 120.0
-t_eval_ms = 4.4
+t_eval_ms = 2.2
 
 [graphs.I3]
 path = "./graphs/I3.dot"
@@ -142,7 +142,7 @@ prelude_commands = []
 [graphs.I3.alphaloop]
 t_gen_s = 36000.0
 disk_mb = 20000.0
-t_eval_ms = 3600.0
+t_eval_ms = 1800.0
 
 [graphs.G1_no_num]
 path = "./graphs/G1_no_num.dot"

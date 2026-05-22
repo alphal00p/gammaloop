@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs,
+    env, fs,
     io::Cursor,
     ops::Deref,
     path::{Path, PathBuf},
@@ -18,7 +18,7 @@ use gammalooprs::{
         GammaLoopGraphOrientation, GammaLoopOrientationExpression,
     },
     cff::surface::GammaLoopSurfaceCache,
-    graph::{FeynmanGraph, Graph, ThreeDRepMassShift},
+    graph::{FeynmanGraph, Graph, LMBext, ThreeDRepMassShift},
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
@@ -3785,14 +3785,40 @@ fn diagnostic_evaluation_orientations(
         .collect()
 }
 
+const THREE_DREP_SPENSO_INVESTIGATION_ENV: &str = "GAMMALOOP_3DREP_INVESTIGATION_JSON";
+
+#[derive(Debug, Serialize)]
+struct ThreeDRepSpensoInvestigationDump {
+    numerator_input_to_spenso_canonical: String,
+    spenso_output_parametric_emr_canonical: String,
+    emr_to_lmb_replacement_rules: Vec<EmrToLmbReplacementRuleDump>,
+}
+
+#[derive(Debug, Serialize)]
+struct EmrToLmbReplacementRuleDump {
+    edge_id: usize,
+    rule: String,
+}
+
+struct SpensoNumeratorResult {
+    input_to_spenso: Atom,
+    output: Atom,
+}
+
 fn diagnostic_parametric_atom_for_evaluator(
     expression: &ThreeDExpression<OrientationID>,
     graph: &Graph,
     _evaluator_settings: &EvaluatorSettings,
 ) -> Result<Atom> {
     let numerator = graph.full_numerator_atom();
-    let processed_numerator = spenso_process_numerator(&numerator)?;
-    let processed_numerator = expand_simple_minkowski_dots(processed_numerator);
+    let spenso_result = spenso_process_numerator_with_trace(&numerator)?;
+    let processed_numerator = expand_simple_minkowski_dots(spenso_result.output);
+
+    maybe_write_3drep_spenso_investigation(
+        graph,
+        &spenso_result.input_to_spenso,
+        &processed_numerator,
+    )?;
 
     Ok(gammalooprs::cff::expression::GammaLoopThreeDExpression::diagnostic_parametric_atom_with_numerator_gs(
         expression,
@@ -3841,6 +3867,10 @@ fn preprocess_numerator(numerator: &Atom) -> Atom {
 }
 
 fn spenso_process_numerator(numerator: &Atom) -> Result<Atom> {
+    Ok(spenso_process_numerator_with_trace(numerator)?.output)
+}
+
+fn spenso_process_numerator_with_trace(numerator: &Atom) -> Result<SpensoNumeratorResult> {
     let preprocessed_numerator = preprocess_numerator(numerator);
     let mut net = preprocessed_numerator
         .as_atom_view()
@@ -3853,13 +3883,64 @@ fn spenso_process_numerator(numerator: &Atom) -> Result<Atom> {
     )
     .with_context(|| "Could not execute Spenso numerator network")?;
 
-    net.result_scalar()
+    let output = net
+        .result_scalar()
         .map(|result| match result {
             ExecutionResult::One => Atom::num(1),
             ExecutionResult::Zero => Atom::Zero,
             ExecutionResult::Val(value) => value.into_owned(),
         })
-        .map_err(Into::into)
+        .map_err(|error| eyre!(error))?;
+
+    Ok(SpensoNumeratorResult {
+        input_to_spenso: preprocessed_numerator,
+        output,
+    })
+}
+
+fn maybe_write_3drep_spenso_investigation(
+    graph: &Graph,
+    numerator_input_to_spenso: &Atom,
+    spenso_output_parametric_emr: &Atom,
+) -> Result<()> {
+    let Ok(path) = env::var(THREE_DREP_SPENSO_INVESTIGATION_ENV) else {
+        return Ok(());
+    };
+    if path.trim().is_empty() {
+        return Ok(());
+    }
+
+    let dump = ThreeDRepSpensoInvestigationDump {
+        numerator_input_to_spenso_canonical: numerator_input_to_spenso.to_canonical_string(),
+        spenso_output_parametric_emr_canonical: spenso_output_parametric_emr.to_canonical_string(),
+        emr_to_lmb_replacement_rules: emr_to_lmb_replacement_rule_dumps(graph),
+    };
+    write_path(Path::new(&path), &serde_json::to_string_pretty(&dump)?).with_context(|| {
+        format!(
+            "Could not write 3Drep Spenso investigation dump to {}",
+            path
+        )
+    })
+}
+
+fn emr_to_lmb_replacement_rule_dumps(graph: &Graph) -> Vec<EmrToLmbReplacementRuleDump> {
+    let full_graph = graph.underlying.full_filter();
+    let edges = graph
+        .underlying
+        .iter_edges_of(&full_graph)
+        .map(|(_, edge_id, _)| edge_id);
+    let replacements =
+        graph
+            .underlying
+            .integrand_replacement(&full_graph, &graph.loop_momentum_basis, &[W_.x___]);
+
+    edges
+        .zip(replacements)
+        .map(|(edge_id, replacement)| EmrToLmbReplacementRuleDump {
+            edge_id: usize::from(edge_id),
+            rule: replacement.to_string(),
+        })
+        .collect()
 }
 
 fn expand_simple_minkowski_dots(atom: Atom) -> Atom {
@@ -5840,12 +5921,12 @@ fn symbolica_expression_raw_rust_script() -> String {
 //! color-eyre = "0.6"
 //! serde = { version = "1.0", features = ["derive"] }
 //! serde_json = "1"
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd", default-features = false, features = ["bincode", "serde"] }
 //!
 //! [patch.crates-io]
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "3638099c607d79da709989716c8dc9d5085364bd" }
 //! ```
 
 #![allow(dead_code)]
