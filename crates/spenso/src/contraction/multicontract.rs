@@ -13,7 +13,7 @@ use crate::{
     structure::{
         HasStructure, SlotIndex, StructureContract, TensorStructure,
         concrete_index::{ExpandedIndex, FlatIndex},
-        slot::{DualSlotTo, IsAbstractSlot},
+        slot::DualSlotTo,
     },
     tensors::data::{DataIterator, DenseTensor, SparseTensor},
 };
@@ -313,6 +313,15 @@ where
     ) -> Result<Self::LCM, ContractionError> {
         // Assume we're contracting the first positions for now - this needs to be updated
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
+        let contracted_slots_aligned = pos_self.included_iter().count()
+            == pos_other.included_iter().count()
+            && pos_self.included_iter().zip(pos_other.included_iter()).all(
+                |(self_position, other_position)| {
+                    let self_slot = self.structure().get_slot(self_position).unwrap();
+                    let other_slot = other.structure().get_slot(other_position).unwrap();
+                    self_slot == other_slot.dual()
+                },
+            );
 
         let pos_self_inv = !&pos_self;
         let pos_other_inv = !&pos_other;
@@ -323,11 +332,25 @@ where
         let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
             CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class); // these are iterators over the open indices of self and other, except expressed in the flat indices of the resulting structure
 
-        let mut iter_self = self.fiber(FiberData::from(&pos_self)).iter_metric(); //The summed over index comes from the actual self structure (and is a single index)
-        let mut iter_other = other.fiber(FiberData::from(&pos_other)).iter(); // same for other
-
         let mut exp_self = self.expanded_index(FlatIndex::from(0)).unwrap();
         let mut exp_other = other.expanded_index(FlatIndex::from(0)).unwrap();
+
+        let mut iter_self = if contracted_slots_aligned {
+            self.fiber(FiberData::from(&pos_self)).iter_metric()
+        } else {
+            let contraction_permutation = self
+                .structure()
+                .match_indices(other.structure())
+                .map(|(permutation, _, _)| permutation)
+                .ok_or_else(|| {
+                    ContractionError::Other(eyre::eyre!(
+                        "missing matching interleaved dense contraction slots"
+                    ))
+                })?;
+            self.fiber(FiberData::from(&pos_self))
+                .iter_perm_metric(contraction_permutation)
+        };
+        let mut iter_other = other.fiber(FiberData::from(&pos_other)).iter(); // same for other
 
         //We first iterate over the free indices (self_fiber_class)
         for fiber_class_a_id in self_fiber_class_iter.by_ref() {
@@ -406,6 +429,15 @@ where
         } else {
             return Err(ContractionError::EmptySparse);
         };
+        let contracted_slots_aligned = pos_self.included_iter().count()
+            == pos_other.included_iter().count()
+            && pos_self.included_iter().zip(pos_other.included_iter()).all(
+                |(self_position, other_position)| {
+                    let self_slot = self.structure().get_slot(self_position).unwrap();
+                    let other_slot = other.structure().get_slot(other_position).unwrap();
+                    self_slot == other_slot.dual()
+                },
+            );
         let pos_self_inv = !&pos_self;
         let pos_other_inv = !&pos_other;
 
@@ -414,7 +446,21 @@ where
         let self_fiber_class = Fiber::from(&resulting_partition, &resulting_structure); //We use the partition as a filter here, for indices that belong to self, vs those that belong to other
         let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
             CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class); // these are iterators over the open indices of self and other, except expressed in the flat indices of the resulting structure
-        let mut iter_self = self.fiber(FiberData::from(&pos_self)).iter_metric(); //The summed over index comes from the actual self structure (and is a single index)
+        let mut iter_self = if contracted_slots_aligned {
+            self.fiber(FiberData::from(&pos_self)).iter_metric()
+        } else {
+            let contraction_permutation = self
+                .structure()
+                .match_indices(other.structure())
+                .map(|(permutation, _, _)| permutation)
+                .ok_or_else(|| {
+                    ContractionError::Other(eyre::eyre!(
+                        "missing matching interleaved sparse-dense contraction slots"
+                    ))
+                })?;
+            self.fiber(FiberData::from(&pos_self))
+                .iter_perm_metric(contraction_permutation)
+        };
         let mut iter_other = other.fiber(FiberData::from(&pos_other)).iter(); // same for other
 
         let mut exp_self = self.expanded_index(FlatIndex::from(0)).unwrap();
@@ -497,6 +543,15 @@ where
         resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
+        let contracted_slots_aligned = pos_self.included_iter().count()
+            == pos_other.included_iter().count()
+            && pos_self.included_iter().zip(pos_other.included_iter()).all(
+                |(self_position, other_position)| {
+                    let self_slot = self.structure().get_slot(self_position).unwrap();
+                    let other_slot = other.structure().get_slot(other_position).unwrap();
+                    self_slot == other_slot.dual()
+                },
+            );
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
         let pos_self_inv = !&pos_self;
         let pos_other_inv = !&pos_other;
@@ -504,7 +559,21 @@ where
         let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
             CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class); // these are iterators over the open indices of self and other, except expressed in the flat indices of the resulting structure
 
-        let mut iter_self = self.fiber(FiberData::from(&pos_self)).iter_metric(); //The summed over index comes from the actual self structure (and is a single index)
+        let mut iter_self = if contracted_slots_aligned {
+            self.fiber(FiberData::from(&pos_self)).iter_metric()
+        } else {
+            let contraction_permutation = self
+                .structure()
+                .match_indices(other.structure())
+                .map(|(permutation, _, _)| permutation)
+                .ok_or_else(|| {
+                    ContractionError::Other(eyre::eyre!(
+                        "missing matching interleaved dense-sparse contraction slots"
+                    ))
+                })?;
+            self.fiber(FiberData::from(&pos_self))
+                .iter_perm_metric(contraction_permutation)
+        };
         let mut iter_other = other.fiber(FiberData::from(&pos_other)).iter(); // same for other
 
         let mut exp_self = self.expanded_index(FlatIndex::from(0)).unwrap();
@@ -588,85 +657,115 @@ where
     ) -> Result<Self::LCM, ContractionError> {
         let mut result_data = HashMap::default();
         let zero = self.zero.try_upgrade().unwrap().as_ref().ref_zero();
-        let self_slots = self
-            .structure()
-            .external_structure_iter()
-            .collect::<Vec<_>>();
-        let other_slots = other
-            .structure()
-            .external_structure_iter()
-            .collect::<Vec<_>>();
-        let matched_slots = pos_self
-            .included_iter()
-            .map(|self_position| {
-                let self_slot = self_slots[self_position.0];
-                let other_position = pos_other
-                    .included_iter()
-                    .find(|other_position| other_slots[other_position.0].dual() == self_slot)
+
+        if self.flat_iter().next().is_some() {
+            let contracted_slots_aligned = pos_self.included_iter().count()
+                == pos_other.included_iter().count()
+                && pos_self.included_iter().zip(pos_other.included_iter()).all(
+                    |(self_position, other_position)| {
+                        let self_slot = self.structure().get_slot(self_position).unwrap();
+                        let other_slot = other.structure().get_slot(other_position).unwrap();
+                        self_slot == other_slot.dual()
+                    },
+                );
+            let pos_self_inv = !&pos_self;
+            let pos_other_inv = !&pos_other;
+
+            let self_fiber_class = Fiber::from(&resulting_partition, &resulting_structure);
+            let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
+                CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class);
+
+            let mut iter_self = if contracted_slots_aligned {
+                self.fiber(FiberData::from(&pos_self)).iter_metric()
+            } else {
+                let contraction_permutation = self
+                    .structure()
+                    .match_indices(other.structure())
+                    .map(|(permutation, _, _)| permutation)
                     .ok_or_else(|| {
                         ContractionError::Other(eyre::eyre!(
-                            "missing matching interleaved sparse contraction slot for {self_slot}"
+                            "missing matching interleaved sparse contraction slots"
                         ))
                     })?;
-                Ok((self_position, other_position))
-            })
-            .collect::<Result<Vec<_>, ContractionError>>()?;
-        let self_free = (!&pos_self).included_iter().collect::<Vec<_>>();
-        let other_free = (!&pos_other).included_iter().collect::<Vec<_>>();
+                self.fiber(FiberData::from(&pos_self))
+                    .iter_perm_metric(contraction_permutation)
+            };
+            let mut iter_other = other.fiber(FiberData::from(&pos_other)).iter();
 
-        for (self_flat, self_value) in self.flat_iter() {
-            let self_expanded = self.expanded_index(self_flat)?;
-            for (other_flat, other_value) in other.flat_iter() {
-                let other_expanded = other.expanded_index(other_flat)?;
-                let mut neg = false;
-                let mut matches = true;
-                for (self_position, other_position) in &matched_slots {
-                    let self_index = self_expanded.indices[self_position.0];
-                    if self_index != other_expanded.indices[other_position.0] {
-                        matches = false;
-                        break;
-                    }
-                    if self_slots[self_position.0].rep().negative()?[self_index] {
-                        neg = !neg;
-                    }
-                }
-                if !matches {
-                    continue;
-                }
+            let mut exp_self = self.expanded_index(FlatIndex::from(0)).unwrap();
+            let mut exp_other = other.expanded_index(FlatIndex::from(0)).unwrap();
 
-                let mut self_free_iter = self_free.iter();
-                let mut other_free_iter = other_free.iter();
-                let result_expanded = (0..resulting_structure.order())
-                    .map(|position| {
-                        if resulting_partition[SlotIndex(position)] {
-                            let position = self_free_iter.next().ok_or_else(|| {
-                                ContractionError::Other(eyre::eyre!(
-                                    "missing self free slot while building interleaved sparse contraction result"
-                                ))
-                            })?;
-                            Ok(self_expanded.indices[position.0])
+            for fiber_class_a_id in self_fiber_class_iter.by_ref() {
+                for fiber_class_b_id in other_fiber_class_iter.by_ref() {
+                    let result_index = fiber_class_a_id + fiber_class_b_id;
+
+                    let ((_, expa), (_, expb)): ((Vec<_>, ExpandedIndex), (Vec<_>, ExpandedIndex)) =
+                        resulting_structure
+                            .expanded_index(result_index)?
+                            .into_iter()
+                            .enumerate()
+                            .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
+
+                    for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                        exp_self.indices[i.0] = v;
+                    }
+
+                    for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                        exp_other.indices[i.0] = v;
+                    }
+
+                    let shift_a = self.structure().flat_index(&exp_self).unwrap();
+                    let shift_b = other.structure().flat_index(&exp_other).unwrap();
+
+                    iter_self.shift(shift_a.into());
+                    iter_other.shift(shift_b.into());
+
+                    let mut items = iter_self
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip, neg))
+                        .zip(iter_other.next().map(|(b, skip, _)| (b, skip)));
+
+                    let mut value = zero.clone();
+                    let mut nonzero = false;
+
+                    while let Some(((a, skip_a, neg), (b, skip_b))) = items {
+                        if skip_a > skip_b {
+                            let b = iter_other
+                                .by_ref()
+                                .next()
+                                .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                            items = Some((a, skip_a, neg)).zip(b);
+                        } else if skip_b > skip_a {
+                            let a = iter_self
+                                .by_ref()
+                                .next()
+                                .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                            items = a.zip(Some((b, skip_b)));
                         } else {
-                            let position = other_free_iter.next().ok_or_else(|| {
-                                ContractionError::Other(eyre::eyre!(
-                                    "missing other free slot while building interleaved sparse contraction result"
-                                ))
-                            })?;
-                            Ok(other_expanded.indices[position.0])
+                            if neg {
+                                value.sub_assign_fallible(&a.mul_fallible(b).unwrap());
+                            } else {
+                                value.add_assign_fallible(&a.mul_fallible(b).unwrap());
+                            }
+                            let b = iter_other
+                                .by_ref()
+                                .next()
+                                .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                            let a = iter_self
+                                .by_ref()
+                                .next()
+                                .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                            items = a.zip(b);
+                            nonzero = true;
                         }
-                    })
-                    .collect::<Result<ExpandedIndex, ContractionError>>()?;
-                let result_index = resulting_structure.flat_index(&result_expanded)?;
-                let value = result_data
-                    .entry(result_index)
-                    .or_insert_with(|| zero.clone());
-                if neg {
-                    value.sub_assign_fallible(&self_value.mul_fallible(other_value).unwrap());
-                } else {
-                    value.add_assign_fallible(&self_value.mul_fallible(other_value).unwrap());
+                    }
+                    if nonzero && value.is_non_zero() {
+                        result_data.insert(result_index, value);
+                    }
                 }
+                other_fiber_class_iter.reset();
             }
         }
-        result_data.retain(|_, value| !value.is_zero());
         let result = SparseTensor {
             zero,
             elements: result_data,
@@ -686,7 +785,7 @@ mod tests {
             representation::{LibraryRep, Lorentz, RepName},
             slot::{DualSlotTo, IsAbstractSlot},
         },
-        tensors::data::{DenseTensor, GetTensorData, SetTensorData},
+        tensors::data::{DenseTensor, GetTensorData, SetTensorData, SparseTensor},
     };
 
     #[test]
@@ -730,6 +829,102 @@ mod tests {
         let result = lhs.contract(&rhs).unwrap();
         println!("result data: {:?}", result.data);
         println!("result[0, 1, 0]: {}", result.get_ref(&[0, 1, 0]).unwrap());
+
+        assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
+    }
+
+    #[test]
+    fn dense_interleaved_multi_contract_matches_dual_slots_across_base_dual_order() {
+        let rep = Lorentz {};
+        let self_free_left = rep.new_slot(2, 0).to_lib();
+        let other_free = rep.new_slot(2, 2).to_lib();
+        let self_free_right = rep.new_slot(2, 4).to_lib();
+        let contracted_base = rep.new_slot(2, 10).to_lib();
+        let contracted_other_base = rep.new_slot(2, 12).to_lib();
+
+        let self_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+            self_free_left,
+            self_free_right,
+            contracted_base,
+            contracted_other_base.dual(),
+        ])
+        .structure;
+        let other_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+            other_free,
+            contracted_other_base,
+            contracted_base.dual(),
+        ])
+        .structure;
+
+        let (resulting_structure, pos_self, pos_other, mergeinfo) =
+            self_structure.merge(&other_structure).unwrap();
+        println!("mixed-orientation dense self structure: {self_structure}");
+        println!("mixed-orientation dense other structure: {other_structure}");
+        println!("mixed-orientation dense result structure: {resulting_structure}");
+        println!("mixed-orientation dense pos_self: {pos_self:?}");
+        println!("mixed-orientation dense pos_other: {pos_other:?}");
+        println!("mixed-orientation dense mergeinfo: {mergeinfo:?}");
+
+        let mut lhs = DenseTensor::<i32, _>::zero(self_structure);
+        let mut rhs = DenseTensor::<i32, _>::zero(other_structure);
+
+        lhs.set(&[0, 0, 0, 1], 2).unwrap();
+        rhs.set(&[1, 1, 0], 5).unwrap();
+
+        let result = lhs.contract(&rhs).unwrap();
+        println!("mixed-orientation dense result data: {:?}", result.data);
+        println!(
+            "mixed-orientation dense result[0, 1, 0]: {}",
+            result.get_ref(&[0, 1, 0]).unwrap()
+        );
+
+        assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
+    }
+
+    #[test]
+    fn sparse_interleaved_multi_contract_matches_dual_slots_across_base_dual_order() {
+        let rep = Lorentz {};
+        let self_free_left = rep.new_slot(2, 0).to_lib();
+        let other_free = rep.new_slot(2, 2).to_lib();
+        let self_free_right = rep.new_slot(2, 4).to_lib();
+        let contracted_base = rep.new_slot(2, 10).to_lib();
+        let contracted_other_base = rep.new_slot(2, 12).to_lib();
+
+        let self_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+            self_free_left,
+            self_free_right,
+            contracted_base,
+            contracted_other_base.dual(),
+        ])
+        .structure;
+        let other_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+            other_free,
+            contracted_other_base,
+            contracted_base.dual(),
+        ])
+        .structure;
+
+        let (resulting_structure, pos_self, pos_other, mergeinfo) =
+            self_structure.merge(&other_structure).unwrap();
+        println!("mixed-orientation self structure: {self_structure}");
+        println!("mixed-orientation other structure: {other_structure}");
+        println!("mixed-orientation result structure: {resulting_structure}");
+        println!("mixed-orientation pos_self: {pos_self:?}");
+        println!("mixed-orientation pos_other: {pos_other:?}");
+        println!("mixed-orientation mergeinfo: {mergeinfo:?}");
+
+        let mut lhs = SparseTensor::<i32, _>::empty(self_structure, 0);
+        let mut rhs = SparseTensor::<i32, _>::empty(other_structure, 0);
+
+        lhs.set(&[0, 0, 0, 1], 2).unwrap();
+        rhs.set(&[1, 1, 0], 5).unwrap();
+
+        let result = lhs.contract(&rhs).unwrap();
+        println!("mixed-orientation result elements: {:?}", result.elements);
+        println!(
+            "mixed-orientation result[0, 1, 0]: {}",
+            result.get_ref(&[0, 1, 0]).unwrap()
+        );
 
         assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
     }
