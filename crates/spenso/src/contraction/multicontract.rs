@@ -676,3 +676,61 @@ where
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        contraction::Contract,
+        structure::{
+            OrderedStructure, PermutedStructure, StructureContract,
+            representation::{LibraryRep, Lorentz, RepName},
+            slot::{DualSlotTo, IsAbstractSlot},
+        },
+        tensors::data::{DenseTensor, GetTensorData, SetTensorData},
+    };
+
+    #[test]
+    fn dense_interleaved_multi_contract_uses_other_free_slots() {
+        let rep = Lorentz {};
+        let self_free_left = rep.new_slot(2, 0).to_lib();
+        let other_free = rep.new_slot(2, 2).to_lib();
+        let self_free_right = rep.new_slot(2, 4).to_lib();
+        let contracted_left = rep.new_slot(2, 10).to_lib();
+        let contracted_right = rep.new_slot(2, 12).to_lib();
+
+        let self_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+            self_free_left,
+            self_free_right,
+            contracted_left,
+            contracted_right,
+        ])
+        .structure;
+        let other_structure: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+            other_free,
+            contracted_left.dual(),
+            contracted_right.dual(),
+        ])
+        .structure;
+
+        let (resulting_structure, pos_self, pos_other, mergeinfo) =
+            self_structure.merge(&other_structure).unwrap();
+        println!("self structure: {self_structure}");
+        println!("other structure: {other_structure}");
+        println!("result structure: {resulting_structure}");
+        println!("pos_self: {pos_self:?}");
+        println!("pos_other: {pos_other:?}");
+        println!("mergeinfo: {mergeinfo:?}");
+
+        let mut lhs = DenseTensor::<i32, _>::zero(self_structure);
+        let mut rhs = DenseTensor::<i32, _>::zero(other_structure);
+
+        lhs.set(&[0, 0, 1, 1], 2).unwrap();
+        rhs.set(&[1, 1, 1], 5).unwrap();
+
+        let result = lhs.contract(&rhs).unwrap();
+        println!("result data: {:?}", result.data);
+        println!("result[0, 1, 0]: {}", result.get_ref(&[0, 1, 0]).unwrap());
+
+        assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
+    }
+}
