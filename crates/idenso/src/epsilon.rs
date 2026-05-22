@@ -89,16 +89,15 @@ impl EpsilonSimplifierPass {
         let mut current = expr.schoonschip();
 
         loop {
-            let next = current
-                .replace_map(|term, _context, out| {
-                    if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
-                        .or_else(|| Self::simplify_pair_product(term))
-                    {
-                        **out = rewritten;
-                    }
-                })
-                .collect_metrics()
-                .schoonschip();
+            let next = current.replace_map(|term, _context, out| {
+                if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
+                    .or_else(|| Self::simplify_pair_product(term))
+                {
+                    **out = rewritten;
+                }
+            });
+            // .collect_metrics()
+            // .schoonschip();
 
             if next == current {
                 return next;

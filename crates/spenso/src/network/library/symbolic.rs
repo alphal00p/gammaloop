@@ -12,6 +12,7 @@ use symbolica::{
     symbol,
 };
 
+use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
@@ -305,7 +306,8 @@ $g(#to-eq(a),#to-eq(b))$
              Some(("spenso",i))=>{
                  let SpensoPrintSettings{
                      parens,
-                     commas,..
+                     commas,
+                     with_dim,..
                  } = SpensoPrintSettings::from(i);
                 let AtomView::Fun(f)=a else {
                     return None;
@@ -326,6 +328,23 @@ $g(#to-eq(a),#to-eq(b))$
 
                     let mut a_sym = f_a.get_symbol();
                     let mut b_sym = f_b.get_symbol();
+
+                    if a_sym.has_tag(&SPENSO_TAG.rank1) &&b_sym.has_tag(&SPENSO_TAG.rank1) {
+                            let mut out = String::new();
+                            if parens {
+                                out.push('(');
+                            }
+                            f_a.as_view().format(&mut out, opt,PrintState::new()).unwrap();
+                            out.push('.');
+                            if with_dim {a.format(&mut out, opt, PrintState::new()).unwrap();
+                                out.push('.');
+                            }
+                            f_b.as_view().format(&mut out, opt,PrintState::new()).unwrap();
+                            if parens {
+                                out.push(')');
+                            }
+                            return Some(out);
+                    }
 
                     let a_is_dind = a_sym == AIND_SYMBOLS.dind;
                     if a_is_dind {

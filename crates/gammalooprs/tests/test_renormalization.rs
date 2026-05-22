@@ -560,6 +560,7 @@ fn finit_part_ghlo() {
 mod failing {
     use super::*;
 
+    
     fn ghost_3loop_settings() -> UVgenerationSettings {
         UVgenerationSettings {
             softct: false,
@@ -632,66 +633,66 @@ mod failing {
         //p1.p1*gs^6*CA^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)
         insta::assert_snapshot!(amp.graphs[0].graph.name,@"d1");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((((-110/3*ε^2+-56/9*ε+16/3+8/9*ε^2*𝜋^2)*dot(P(0,mink(4)),P(0,mink(4)))+(-16/3+-8/9*ε^2*𝜋^2)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4)))+(1+ε)*-32/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))+((-110/3*ε^2+-56/9*ε+16/3+8/9*ε^2*𝜋^2)*dot(P(0,mink(4)),P(0,mink(4)))+(-16/3+-8/9*ε^2*𝜋^2)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4)))+(1+ε)*-32/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))+((-112/9*ε+-220/3*ε^2+16/9*ε^2*𝜋^2+32/3)*dot(P(0,mink(4)),P(0,mink(4)))+(-16/9*ε^2*𝜋^2+-32/3)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4)))+(1+ε)*-64/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))+((-16+-184/9*ε+-458/9*ε^2+-8/3*ε^2*𝜋^2)*dot(P(0,mink(4)),P(0,mink(4)))+(1+ε)*32/3*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))+((-16+-184/9*ε+-458/9*ε^2+-8/3*ε^2*𝜋^2)*dot(P(0,mink(4)),P(0,mink(4)))+(1+ε)*32/3*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+((-16/3+-8/9*ε^2*𝜋^2)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4)))+(-16/9*ε^2*𝜋^2+-32/3+-788/9*ε^2+-80/3*ε)*dot(P(0,mink(4)),P(0,mink(4)))+(1+ε)*64/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+((-16/3+-8/9*ε^2*𝜋^2)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4)))+(-16/9*ε^2*𝜋^2+-32/3+-788/9*ε^2+-80/3*ε)*dot(P(0,mink(4)),P(0,mink(4)))+(1+ε)*64/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε)*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))+((-16/3+-8/9*ε^2*𝜋^2+110/3*ε^2+56/9*ε)*dot(P(0,mink(4)),P(0,mink(4)))+(1+ε)*32/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε+(16/3+8/9*ε^2*𝜋^2)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4))))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))+((-16/3+-8/9*ε^2*𝜋^2+110/3*ε^2+56/9*ε)*dot(P(0,mink(4)),P(0,mink(4)))+(1+ε)*32/9*P(0,13370002)*P(0,mink(4,hedge(6)))*ε+(16/3+8/9*ε^2*𝜋^2)*P(0,mink(4,hedge(12)))*P(0,mink(4,hedge(4))))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1))))*CA*g(coad(8,hedge(4)),coad(8,hedge(6)))+(-32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))+-32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))+64/9*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1))))*(1+ε)*P(0,13370002)*P(0,mink(4,hedge(6)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(6)))*g(13370002,mink(4,hedge(12)))*ε+(-32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))+-32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))+64/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1))))*(1+ε)*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(6)))*g(mink(4,hedge(6)),mink(4,hedge(9)))*ε+(1+ε)*(32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(4)),coad(8,hedge(9)),coad(8,vertex(2,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(6)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1)))+32/9*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(9)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(6)),coad(8,vertex(3,1)))+64/9*f(coad(8,hedge(11)),coad(8,hedge(4)),coad(8,vertex(2,1)))*f(coad(8,hedge(11)),coad(8,hedge(6)),coad(8,vertex(3,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(2,1)))*f(coad(8,hedge(13)),coad(8,hedge(9)),coad(8,vertex(3,1))))*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(6)))*g(13370005,mink(4,hedge(10)))*ε)*1/64*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1456*ε^2+-448/3*ε^2*𝜋^2+-896+4160/3*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         //p1.p1*gs^6*CA^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)
         let a = amp.graphs[1].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[1].graph.name,@"d2");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/192*ε+1𝑖/16)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((-32+40/3*ε)*1/64*CA^3+-3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(7)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1)))+3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(6)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(6)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1))))*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
         //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)
         let a = amp.graphs[2].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[2].graph.name,@"d3");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9𝑖/128+-9𝑖/128*ε^2+39𝑖/256*ε)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-52*ε+24+24*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21𝑖/128*ε+9𝑖/64)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-48+56*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
         //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
         let a = amp.graphs[4].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/128*ε^2+-9𝑖/128+39𝑖/256*ε)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-24+-72*ε^2+52*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         ); //-1/2 * target
 
         //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[5].graph.name,@"d6");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-131𝑖/128*ε+159𝑖/64+1𝑖*ε^2+27𝑖/64*ε^2*𝜋^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+120*ε^2*𝜋^2+3968/3*cl2*sqrt(3)*ε^2+640)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[6].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/128*ε+-3𝑖/64+1𝑖*ε^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+-80+3968/3*cl2*sqrt(3)*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[7].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/32+63𝑖/64*ε+99𝑖/128*ε^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-288+264*ε^2+336*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[8].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(208*z3*ε+60*ε+64)*-1/64*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(1)),coad(8,hedge(15)),coad(8,hedge(9)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(11)),coad(8,hedge(17)),coad(8,hedge(5)))*f(coad(8,hedge(13)),coad(8,hedge(3)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[9].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((8*ε+8/3)*1/64*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+-1/16*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+1/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(14)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(10)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(17)),coad(8,hedge(7))))*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(17)),coad(8,hedge(3)),coad(8,hedge(9)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();

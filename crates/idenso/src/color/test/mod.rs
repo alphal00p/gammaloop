@@ -287,6 +287,37 @@ fn three_loop_pole_part_color() {
     let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
 
     assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot, None, None).to_bare_ordered_string(),@"(((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/128*CA^2*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/128*CA^2*eps^(-3)*gs^6)*16*CA+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*-1/8*CA^3*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA^3*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA^3*eps^(-3)*gs^6)*dot(P(0,mink(4)),P(0,mink(4)))");
+
+    let input = parse_lit!(
+        ((8 * eps + 8 / 3) * 1 / 64
+            * f(coad(8, hedge(1)), coad(8, hedge(11)), coad(8, hedge(15)))
+            * f(coad(8, hedge(1)), coad(8, hedge(3)), coad(8, hedge(5)))
+            * f(coad(8, hedge(11)), coad(8, hedge(13)), coad(8, hedge(9)))
+            * f(coad(8, hedge(13)), coad(8, hedge(5)), coad(8, hedge(7)))
+            * f(coad(8, hedge(15)), coad(8, hedge(17)), coad(8, hedge(7)))
+            + -1 / 16
+                * f(coad(8, hedge(1)), coad(8, hedge(11)), coad(8, hedge(15)))
+                * f(coad(8, hedge(1)), coad(8, hedge(3)), coad(8, hedge(4)))
+                * f(coad(8, hedge(11)), coad(8, hedge(13)), coad(8, hedge(9)))
+                * f(coad(8, hedge(13)), coad(8, hedge(4)), coad(8, hedge(7)))
+                * f(coad(8, hedge(15)), coad(8, hedge(17)), coad(8, hedge(7)))
+            + 1 / 16
+                * f(coad(8, hedge(1)), coad(8, hedge(10)), coad(8, hedge(14)))
+                * f(coad(8, hedge(1)), coad(8, hedge(3)), coad(8, hedge(5)))
+                * f(coad(8, hedge(10)), coad(8, hedge(13)), coad(8, hedge(9)))
+                * f(coad(8, hedge(13)), coad(8, hedge(5)), coad(8, hedge(7)))
+                * f(coad(8, hedge(14)), coad(8, hedge(17)), coad(8, hedge(7))))
+            * dot(P(0, mink(4)), P(0, mink(4)))
+            * f(coad(8, hedge(17)), coad(8, hedge(3)), coad(8, hedge(9)))
+            * gs
+            ^ 6 * eps
+            ^ (-2),
+        default_namespace = "spenso"
+    );
+
+    let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
+
+    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot, None, None).to_bare_ordered_string(),@"((8*eps+8/3)*1/64*eps^(-2)*f(coad(8,hedge_1),coad(8,hedge_11),coad(8,hedge_15))*f(coad(8,hedge_1),coad(8,hedge_3),coad(8,hedge_5))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,hedge_9))*f(coad(8,hedge_13),coad(8,hedge_5),coad(8,hedge_7))*f(coad(8,hedge_15),coad(8,hedge_17),coad(8,hedge_7))*f(coad(8,hedge_17),coad(8,hedge_3),coad(8,hedge_9))*gs^6+-1/16*eps^(-2)*f(coad(8,hedge_1),coad(8,hedge_11),coad(8,hedge_15))*f(coad(8,hedge_1),coad(8,hedge_3),coad(8,hedge_4))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,hedge_9))*f(coad(8,hedge_13),coad(8,hedge_4),coad(8,hedge_7))*f(coad(8,hedge_15),coad(8,hedge_17),coad(8,hedge_7))*f(coad(8,hedge_17),coad(8,hedge_3),coad(8,hedge_9))*gs^6+1/16*eps^(-2)*f(coad(8,hedge_1),coad(8,hedge_10),coad(8,hedge_14))*f(coad(8,hedge_1),coad(8,hedge_3),coad(8,hedge_5))*f(coad(8,hedge_10),coad(8,hedge_13),coad(8,hedge_9))*f(coad(8,hedge_13),coad(8,hedge_5),coad(8,hedge_7))*f(coad(8,hedge_14),coad(8,hedge_17),coad(8,hedge_7))*f(coad(8,hedge_17),coad(8,hedge_3),coad(8,hedge_9))*gs^6)*dot(P(0,mink(4)),P(0,mink(4)))")
 }
 
 #[test]

@@ -32,6 +32,7 @@ These rules are intentionally broad and should shape most code changes.
 - Do not add broad helper layers just to avoid touching call sites. Update the
   call sites when the API should change.
 
+
 ## Investigation Discipline
 
 - Before fixing a suspected bug, find the existing code path that should own the

@@ -4,7 +4,7 @@ use spenso::{
     chain, g,
     network::tags::SPENSO_TAG as T,
     rep_,
-    shadowing::{self, IntoAtom, TensorCollectExt},
+    shadowing::{self, IntoAtom, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
     structure::representation::{LibraryRep, Minkowski, RepName},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
@@ -334,21 +334,42 @@ impl<'settings> DiracSimplifier<'settings> {
             .schoonschip()
             .simplify_epsilon()
             .chainify(rep)
-            .collect_chains(rep)
-            .collect_tensors()
-            .schoonschip()
-            .simplify_epsilon();
+            .collect_chains(rep);
 
         loop {
-            let next = self
-                .settings
-                .rewrite_expression(expr.clone())
-                .collect_tensors()
-                .schoonschip()
-                .simplify_epsilon()
-                .normalize_chains()
-                .schoonschip()
-                .simplify_epsilon();
+            let mut time = std::time::Instant::now();
+            let mut next = self.settings.rewrite_expression(expr.clone());
+            let elapsed = time.elapsed();
+            println!(
+                "Rewrite ({}ms)",
+                // next.printer(SpensoPrintSettings::compact().nice_symbolica()),
+                elapsed.as_millis()
+            );
+
+            time = std::time::Instant::now();
+
+            next = next.schoonschip();
+
+            println!(
+                "Schoonschip: {:?}",
+                time.elapsed(),
+                // next.printer(SpensoPrintSettings::compact().nice_symbolica())
+            );
+            time = std::time::Instant::now();
+            // next = next.simplify_epsilon();
+
+            // println!(
+            //     "Simplify Eps: {:?}",
+            //     time.elapsed(),
+            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica())
+            // );
+            next = next.normalize_chains();
+
+            println!(
+                "Normalize Chains: {:?}",
+                time.elapsed(),
+                // next.printer(SpensoPrintSettings::compact().nice_symbolica())
+            );
 
             if next == expr {
                 return next;

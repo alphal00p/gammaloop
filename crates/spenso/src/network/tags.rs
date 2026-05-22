@@ -5,7 +5,8 @@ use symbolica::{
 };
 
 use crate::{
-    shadowing::symbolica_utils::SpensoPrintSettings, structure::abstract_index::AIND_SYMBOLS,
+    shadowing::{CYCLIC, symbolica_utils::SpensoPrintSettings},
+    structure::abstract_index::AIND_SYMBOLS,
 };
 
 pub struct SpensoTags {
@@ -381,9 +382,15 @@ impl SpensoTags {
                             if parens {
                                 s.push('(');
                             }
-                            for a in args {
-                                a.format(&mut s, opt, PrintState::new()).unwrap();
+                            let a = args.next()?;
+                            if let AtomView::Fun(f) = a && f.get_symbol() == *CYCLIC {
+                                for a in f.iter() {
+                                    a.format(&mut s, opt, PrintState::new()).unwrap();
+                                }
+                            }else{
+                                return None;
                             }
+
                             if parens {
                                 s.push(')');
                             }

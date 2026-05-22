@@ -140,6 +140,7 @@ impl EvaluatorSettings {
             max_common_pair_cache_entries: self.max_common_pair_cache_entries,
             max_common_pair_distance: self.max_common_pair_distance,
             verbose: self.verbose,
+            direct_translation: false,
             ..OptimizationSettings::default()
         }
     }

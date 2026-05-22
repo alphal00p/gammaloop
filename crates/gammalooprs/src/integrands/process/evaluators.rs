@@ -20,7 +20,9 @@ use spenso::{
         algebraic_traits::RefOne,
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
-    network::{ExecutionResult, Sequential, SmallestDegree},
+    network::{
+        ExecutionResult, MinResultRank, Parallel, Sequential, SequentialRef, SmallestDegree,
+    },
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
 use std::ops::Deref;
@@ -537,7 +539,7 @@ impl EvaluatorStack {
            fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
            err
        )]
-    pub(crate) fn new_with_timings<A: AtomCore>(
+    pub fn new_with_timings<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
@@ -550,6 +552,7 @@ impl EvaluatorStack {
             .iter()
             .map(|a| {
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
+                let instant = std::time::Instant::now();
                 let mut net = if settings.do_algebra {
                     a.as_atom_view()
                         .simplify_color()
@@ -561,11 +564,16 @@ impl EvaluatorStack {
                     a.as_atom_view().parse_into_net()?
                 };
 
-                // println!("Executing {}", net.dot_pretty());
+                println!("Parsed: {:?}", instant.elapsed());
+                let instant = std::time::Instant::now();
+
+                // println!("Executing ", net.dot_pretty());
                 net.execute::<Sequential, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;
+
+                println!("Executing: {:?}", instant.elapsed());
 
                 net.result_scalar()
                     .map(|a| match a {

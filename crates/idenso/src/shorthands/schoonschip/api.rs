@@ -286,9 +286,7 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn to_dots(&self) -> Atom {
-        let schoonschipped =
-            self.schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors());
-        super::normalize_dots::DotNormalizer::metric_shorthand_to_dot(schoonschipped.as_view())
+        self.schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors())
     }
 
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {

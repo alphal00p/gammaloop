@@ -361,6 +361,7 @@ macro_rules! spenso_print_scripted_indexed {
                     parens,
                     symbol_scripts,
                     commas,
+                    with_dim,
                     ..
                 } = SpensoPrintSettings::from(i);
 
@@ -381,23 +382,33 @@ macro_rules! spenso_print_scripted_indexed {
                 }
 
                 let mut first = true;
+                let mut has_args = false;
                 for arg in argiter {
                     if first {
                         if symbol_scripts {
                             out.push('^');
                         }
                         first = false;
-                        if parens {
-                            out.push('(');
-                        }
                     } else if commas {
                         out.push(',');
                     } else {
                         out.push(' ');
                     }
-                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
+                    if let AtomView::Fun(a) = arg
+                        && a.get_symbol().has_tag(&SPENSO_TAG.representation) 
+                        && a.get_nargs() == 1
+                        && !with_dim
+                    {
+                    } else {
+                        if first && parens {
+                            out.push('(');
+                        }
+                        has_args = true;
+
+                        arg.format(&mut out, $opt, PrintState::new()).unwrap();
+                    }
                 }
-                if !first && parens {
+                if has_args && !first && parens {
                     out.push(')');
                 }
                 Some(out)
@@ -1048,7 +1059,7 @@ impl GammaloopSymbols {
     }
 
     /// Add the sign by splitting Q(i,mu)-> Q3(i,mu)+OSE(i)*σ(i)*δ(cind(0),mu)
-    pub(crate) fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
+    pub fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         let index = Minkowski {}.to_symbolic([W_.a__]);
         Replacement::new(
