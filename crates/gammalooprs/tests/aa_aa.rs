@@ -2,18 +2,21 @@ use std::ops::Deref;
 use std::time::Instant;
 
 use gammalooprs::graph::parse::IntoGraph;
+use gammalooprs::integrands::process::ParamValuePairs;
 use gammalooprs::integrands::process::{
     evaluators::EvaluatorStack, param_builder::ParamBuilderGraph,
 };
 use gammalooprs::numerator::symbolica_ext::AtomCoreExt;
-use gammalooprs::processes::EvaluatorSettings;
+use gammalooprs::processes::{ContractionMode, EvaluatorSettings, ExecutionMode};
 use gammalooprs::utils::symbolica_ext::{CallSymbol, LogPrint};
-use gammalooprs::utils::{FUN_LIB, GS, TENSORLIB};
+use gammalooprs::utils::{F, FUN_LIB, GS, TENSORLIB};
 use gammalooprs::{dot, graph::Graph, uv::UltravioletGraph};
 use idenso::dirac::GammaSimplifier;
 use idenso::shorthands::metric::MetricSimplifier;
 use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::subgraph::SubSetOps;
+use rand::Rng;
+use spenso::algebra::complex::Complex;
 use spenso::shadowing::TensorCollectExt;
 use spenso::structure::representation::Minkowski;
 use spenso::{
@@ -21,6 +24,7 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
 };
 use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+use symbolica::function;
 use symbolica::id::Replacement;
 use tabled::{
     builder::Builder,
@@ -92,46 +96,78 @@ fn aaa() {
         elapsed
     );
 
+    let expanded_simplified = simplified.expand();
+    println!(
+        "Gamma simplified: {}, {} terms",
+        expanded_simplified.log_print(Some(120)),
+        expanded_simplified.nterms(),
+    );
+
     let evaluator_settings = EvaluatorSettings {
         iterative_orientation_optimization: false,
-        verbose: true,
+        horner_iterations: 10,
+        spenso_execution_mode: (ExecutionMode::Sequential, ContractionMode::MinResultRank),
+        store_atom: true,
+        verbose: false,
         ..EvaluatorSettings::default()
     };
     let mut evaluator_param_builder = graph.param_builder.clone();
 
-    println!("Hello");
+    // println!("Hello");
     for (edge_id, signature) in graph.loop_momentum_basis.edge_signatures.iter() {
-        // if !lmb.loop_edges.contains(&edge_id) {
         if signature.internal.iter().any(|sign| sign.is_sign()) {
-            //has loop mom->is a non-tree edge -> energy is OSE-> no need for Q(0) rep
-            let i = 0;
-
-            evaluator_param_builder
-                .add_tagged_function::<Symbol>(
-                    GS.emr_mom,
-                    vec![
+            if graph.loop_momentum_basis.loop_edges.contains(&edge_id) {
+                evaluator_param_builder
+                    .pairs
+                    .external_energies
+                    .params
+                    .push(function!(
+                        GS.emr_mom,
                         Atom::num(edge_id.0 as i64),
-                        Atom::from(ExpandedIndex::from_iter([i])),
-                    ],
-                    format!("Q({edge_id}, {i})"),
-                    vec![],
-                    graph.loop_momentum_basis.loop_atom(
-                        edge_id,
+                        Atom::from(ExpandedIndex::from_iter([0]))
+                    ));
+
+                evaluator_param_builder.pairs.update_ranges();
+            } else {
+                //has loop mom->is a non-tree edge -> energy is OSE-> no need for Q(0) rep
+                let i = 0;
+
+                evaluator_param_builder
+                    .add_tagged_function::<Symbol>(
                         GS.emr_mom,
-                        &[Atom::from(ExpandedIndex::from_iter([i]))],
-                        true,
-                    ) + graph.loop_momentum_basis.ext_atom(
-                        edge_id,
-                        GS.emr_mom,
-                        &[Atom::from(ExpandedIndex::from_iter([i]))],
-                        true,
-                    ),
-                )
-                .unwrap();
+                        vec![
+                            Atom::num(edge_id.0 as i64),
+                            Atom::from(ExpandedIndex::from_iter([i])),
+                        ],
+                        format!("Q({edge_id}, {i})"),
+                        vec![],
+                        graph.loop_momentum_basis.loop_atom(
+                            edge_id,
+                            GS.emr_mom,
+                            &[Atom::from(ExpandedIndex::from_iter([i]))],
+                            true,
+                        ) + graph.loop_momentum_basis.ext_atom(
+                            edge_id,
+                            GS.emr_mom,
+                            &[Atom::from(ExpandedIndex::from_iter([i]))],
+                            true,
+                        ),
+                    )
+                    .unwrap();
+            }
         }
     }
 
-    println!("Hi");
+    // for r in &evaluator_param_builder.reps {
+    //     println!("{}", r.replacement())
+    // }
+
+    // for r in &evaluator_param_builder.pairs {
+    //     for param in &r.params {
+    //         println!("{}", param)
+    //     }
+    // }
+    // println!("Hi");
     let mut size_table_builder = Builder::new();
     size_table_builder.push_record([
         "expression".to_string(),
@@ -140,11 +176,32 @@ fn aaa() {
         "number of additions".to_string(),
         "spenso time".to_string(),
         "symbolica time".to_string(),
+        "average time per evaluation".to_string(),
+        "re".to_string(),
+        "im".to_string(),
     ]);
+    let params: Vec<Atom> = (&evaluator_param_builder.pairs)
+        .into_iter()
+        .flat_map(|p| p.params.clone())
+        .collect();
+    let mut rng = rand::rng();
+    let values = params
+        .iter()
+        .map(|_| {
+            Complex::new(
+                F(rng.random_range(-1.0..1.0)),
+                F(rng.random_range(-1.0..1.0)),
+            )
+        })
+        .collect::<Vec<_>>();
 
-    for (name, expr) in [("Concretized", num), ("Simplified", simplified)] {
+    for (name, expr) in [
+        ("Concretized", num),
+        ("Simplified", simplified),
+        ("Expanded", expanded_simplified),
+    ] {
         println!("Creating evaluator for {}", name);
-        let (evaluator, timings) = EvaluatorStack::new_with_timings(
+        let (mut evaluator, timings) = EvaluatorStack::new_with_timings(
             std::slice::from_ref(&expr),
             &evaluator_param_builder,
             &[],
@@ -153,7 +210,10 @@ fn aaa() {
         )
         .unwrap();
         let (additions, multiplications) = evaluator.single_parametric.f64_eager.count_operations();
-        println!("{}", name);
+
+        let mut out = vec![Complex::new(F(0.0), F(0.0))];
+
+        println!("{}:", name);
         for inst in evaluator
             .single_parametric
             .f64_eager
@@ -162,13 +222,29 @@ fn aaa() {
         {
             println!("{}", inst);
         }
+
+        let time = std::time::Instant::now();
+        for i in 0..10000 {
+            evaluator
+                .single_parametric
+                .f64_eager
+                .evaluate(&values, &mut out);
+        }
+        let elapsed = time.elapsed();
+
         size_table_builder.push_record([
             name.to_string(),
-            expr.as_view().get_byte_size().to_string(),
+            evaluator.single_parametric.exprs.as_ref().unwrap()[0]
+                .as_view()
+                .get_byte_size()
+                .to_string(),
             multiplications.to_string(),
             additions.to_string(),
             format!("{:?}", timings.spenso_time),
             format!("{:?}", timings.symbolica_time),
+            format!("{:?}", elapsed / 10000),
+            out[0].re.to_string(),
+            out[0].im.to_string(),
         ]);
     }
     let mut size_table = size_table_builder.build();

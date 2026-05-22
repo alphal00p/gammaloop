@@ -383,7 +383,7 @@ impl SpensoTags {
                                 s.push('(');
                             }
                             let a = args.next()?;
-                            if let AtomView::Fun(f) = a && f.get_symbol() == *CYCLIC {
+                            if let AtomView::Fun(f) = a{//} && f.get_symbol() == *CYCLIC {
                                 for a in f.iter() {
                                     a.format(&mut s, opt, PrintState::new()).unwrap();
                                 }

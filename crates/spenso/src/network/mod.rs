@@ -3026,6 +3026,13 @@ pub struct Parallel;
 pub struct SequentialRef;
 pub struct SequentialExtract;
 
+pub enum ExecutionMode {
+    Sequential,
+    Parallel,
+    SequentialRef,
+    SequentialExtract,
+}
+
 pub struct Steps<const N: usize> {}
 pub struct StepsDebug<const N: usize> {}
 

@@ -395,7 +395,7 @@ macro_rules! spenso_print_scripted_indexed {
                         out.push(' ');
                     }
                     if let AtomView::Fun(a) = arg
-                        && a.get_symbol().has_tag(&SPENSO_TAG.representation) 
+                        && a.get_symbol().has_tag(&SPENSO_TAG.representation)
                         && a.get_nargs() == 1
                         && !with_dim
                     {

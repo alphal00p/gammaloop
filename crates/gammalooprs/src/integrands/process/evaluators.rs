@@ -21,7 +21,8 @@ use spenso::{
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
     network::{
-        ExecutionResult, MinResultRank, Parallel, Sequential, SequentialRef, SmallestDegree,
+        ExecutionResult, MinResultRank, Parallel, Sequential, SequentialExtract, SequentialRef,
+        SmallestDegree,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
@@ -56,7 +57,7 @@ use crate::{
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::AtomCoreExt,
-    processes::{EvaluatorBuildTimings, EvaluatorSettings},
+    processes::{ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode},
     settings::{RuntimeSettings, global::FrozenCompilationMode},
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
@@ -567,8 +568,53 @@ impl EvaluatorStack {
                 println!("Parsed: {:?}", instant.elapsed());
                 let instant = std::time::Instant::now();
 
+                match settings.spenso_execution_mode {
+                    (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
+                        net.execute::<Sequential, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
+                        net.execute::<Sequential, MinResultRank, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
+                        net.execute::<SequentialRef, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
+                        net.execute::<SequentialRef, MinResultRank, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
+                        net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
+                        net.execute::<SequentialExtract, MinResultRank, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    _ => {
+                        net.execute::<Sequential, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                }
+
                 // println!("Executing ", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                net.execute::<SequentialRef, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;

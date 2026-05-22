@@ -26,6 +26,21 @@ pub use generation_report::{
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+pub enum ExecutionMode {
+    Sequential,
+    Parallel,
+    SequentialRef,
+    SequentialExtract,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+pub enum ContractionMode {
+    SmallestDegree,
+    MinResultRank,
+}
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_algebra: bool,
@@ -78,6 +93,8 @@ pub struct EvaluatorSettings {
     pub max_common_pair_distance: usize,
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
+
+    pub spenso_execution_mode: (ExecutionMode, ContractionMode),
 }
 
 const fn evaluator_default_iterative_orientation_optimization() -> bool {
@@ -123,6 +140,7 @@ impl Default for EvaluatorSettings {
             max_common_pair_cache_entries: evaluator_default_max_common_pair_cache_entries(),
             max_common_pair_distance: evaluator_default_max_common_pair_distance(),
             verbose: false,
+            spenso_execution_mode: (ExecutionMode::Sequential, ContractionMode::SmallestDegree),
         }
     }
 }

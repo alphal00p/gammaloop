@@ -88,6 +88,11 @@ pub struct SingleLargestDegree<const D: bool, CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
 }
 
+pub enum ContractionMode {
+    SmallestDegree,
+    MinResultRank,
+}
+
 pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
     const SUPPORTS_PARTIAL_GRAPH_REWRITE: bool = false;
 

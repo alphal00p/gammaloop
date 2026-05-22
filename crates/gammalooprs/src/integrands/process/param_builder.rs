@@ -122,7 +122,7 @@ pub struct GammaLoopPairs {
     orientations: ParamValuePairs,
     override_if: ParamValuePairs,
     pub model_parameters: ParamValuePairs,
-    external_energies: ParamValuePairs,
+    pub external_energies: ParamValuePairs,
     external_spatial: ParamValuePairs,
     pub polarizations: ParamValuePairs,
     loop_moms_spatial: ParamValuePairs,
