@@ -1,3 +1,4 @@
+use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{FeynmanGraph, Graph, LMBext},
@@ -9,8 +10,8 @@ use gammalooprs::{
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
-    settings::RuntimeSettings,
-    utils::tracing::{LogFormat, LogLevel},
+    settings::{global::OrientationPattern, RuntimeSettings},
+    utils::tracing::LogLevel,
 };
 use linnet::half_edge::involution::Orientation;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
@@ -1271,9 +1272,23 @@ fn event_from_py_event(event: &PyEvent) -> Event {
                 "original" => AdditionalWeightKey::Original,
                 "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
                 _ => match weight.key.strip_prefix("threshold_counterterm:") {
-                    Some(subset_index) => AdditionalWeightKey::ThresholdCounterterm {
-                        subset_index: subset_index.parse().unwrap_or_default(),
-                    },
+                    Some(indices) => {
+                        let mut indices = indices.split(':');
+                        let first = indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default();
+                        match indices.next() {
+                            Some(second) => AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                                esurface_id: first,
+                                overlap_group: second.parse().unwrap_or_default(),
+                            },
+                            None => AdditionalWeightKey::ThresholdCounterterm {
+                                subset_index: first,
+                            },
+                        }
+                    }
                     None => AdditionalWeightKey::Original,
                 },
             };

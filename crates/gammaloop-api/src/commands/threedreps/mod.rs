@@ -43,7 +43,7 @@ use gammalooprs::{
     },
     DependentMomentaConstructor, GammaLoopContextContainer,
 };
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use indicatif::{ProgressBar, ProgressStyle};
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
@@ -55,7 +55,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::{
     algebra::complex::Complex,
-    network::{parsing::SPENSO_TAG, ExecutionResult, Sequential, SmallestDegree},
+    network::{tags::SPENSO_TAG, ExecutionResult, MinResultRank, Sequential},
     structure::{
         concrete_index::ExpandedIndex,
         representation::{LibraryRep, Minkowski, RepName},
@@ -832,6 +832,19 @@ struct ThreeDrepRunSettings {
     numerator_interpolation_scale: f64,
     seed: u64,
     scale: f64,
+}
+
+impl ThreeDrepRunSettings {
+    fn should_componentize_test_cff_ltd_assembly(&self) -> bool {
+        // `test-cff-ltd` is a representation-equivalence diagnostic.  The
+        // assembly backend lowers one exported atom to inline assembly, and a
+        // monolithic CFF atom can be a very large orientation sum whose value is
+        // dominated by cancellations.  The iterative strategy keeps the same
+        // generated terms and still exercises assembly lowering, but sums
+        // explicit numerator/orientation components at the evaluator boundary.
+        self.build_strategy == ThreeDrepBuildStrategy::Monolithic
+            && self.evaluator_backend == "assembly"
+    }
 }
 
 const fn default_build_strategy() -> ThreeDrepBuildStrategy {
@@ -1879,7 +1892,7 @@ impl TestCffLtd {
             &automatic_energy_degree_bounds,
             &override_energy_degree_bounds,
         );
-        let run_settings = threedrep_run_settings(ThreeDrepRunSettingsRequest {
+        let mut run_settings = threedrep_run_settings(ThreeDrepRunSettingsRequest {
             global_cli_settings,
             default_runtime_settings,
             precision: self.precision,
@@ -1891,6 +1904,9 @@ impl TestCffLtd {
             force_eager: false,
             build_strategy: ThreeDrepBuildStrategy::from_iterative_flag(self.iterative),
         })?;
+        if run_settings.should_componentize_test_cff_ltd_assembly() {
+            run_settings.build_strategy = ThreeDrepBuildStrategy::Iterative;
+        }
         let mass_shift_start = self.mass_shift.unwrap_or(self.scale);
         if self.n_epsilon_steps == 0 {
             return Err(eyre!(
@@ -3877,7 +3893,7 @@ fn spenso_process_numerator_with_trace(numerator: &Atom) -> Result<SpensoNumerat
         .parse_into_net()
         .with_context(|| "Could not parse preprocessed numerator into Spenso network")?;
 
-    net.execute::<Sequential, SmallestDegree, _, _, _>(
+    net.execute::<Sequential, MinResultRank, _, _, _>(
         TENSORLIB.read().unwrap().deref(),
         FUN_LIB.deref(),
     )

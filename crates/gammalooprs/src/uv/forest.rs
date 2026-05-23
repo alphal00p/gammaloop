@@ -21,7 +21,7 @@ use crate::{
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use std::collections::BTreeSet;
@@ -440,13 +440,19 @@ impl Forest {
                expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
 
-            let atom = (atom
+            let atom = atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
-                * &graph.overall_factor)
-                .simplify_color()
-                .expand_num()
-                .to_dots();
+                * &graph.overall_factor;
+            debug_tags!(#generation, #uv, #inspect, #dump;
+                expression = %atom.log_print(Some(120)),
+                dod = n.data.spinney.dod,
+                "Dumped pole part color simplification input"
+            );
+            let atom = atom.simplify_color().expand_num().to_dots();
+            // .replace(GS.dim)
+            // .max_level(0)
+            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term=%

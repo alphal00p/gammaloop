@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
@@ -23,6 +23,7 @@ use three_dimensional_reps::{
     },
     repeated_groups,
 };
+use tracing::instrument;
 
 use crate::{
     cff::{
@@ -46,7 +47,10 @@ use crate::{
     numerator::{energy_degree::EnergyPowerAnalyzer, symbolica_ext::AtomCoreExt},
     settings::global::{GenerationSettings, ThreeDRepresentation},
     utils::{GS, W_, symbolica_ext::LogPrint},
-    uv::{UltravioletGraph, approx::ForestNodeLike},
+    uv::{
+        ApproximationType, UltravioletGraph,
+        approx::{ApproximationKernel, ForestNodeLike, UVCtx},
+    },
 };
 use typed_index_collections::TiVec;
 
@@ -57,6 +61,8 @@ pub struct Expanded4DApprox {
     pub sign: Sign,
     pub terms: Vec<Atom>,
 }
+
+pub struct Local4DApproximation;
 
 #[derive(Clone, Debug)]
 struct ExpandedDenominator {
@@ -143,24 +149,54 @@ impl Expanded4DApprox {
     }
 }
 
-pub fn expanded_4d_uv_start<S: ForestNodeLike>(
-    graph: &Graph,
-    current: &S,
-    given: &S,
-    integrand: &Atom,
-) -> Result<Atom> {
-    integrated_uv_start(graph, current, given, integrand)
+impl Local4DApproximation {
+    pub(crate) fn start<S: ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        integrated_uv_start(ctx.graph, current, given, integrand)
+    }
+
+    pub(crate) fn t<S: ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        Ok(project_integrated_uv_source_to_4d(
+            integrated_uv_rescale_series(ctx.graph, current, given, integrand)?,
+        ))
+    }
 }
 
-pub fn expanded_4d_uv_kernel<S: ForestNodeLike>(
-    graph: &Graph,
-    current: &S,
-    given: &S,
-    integrand: &Atom,
-) -> Result<Atom> {
-    Ok(project_integrated_uv_source_to_4d(
-        integrated_uv_rescale_series(graph, current, given, integrand)?,
-    ))
+impl ApproximationKernel<UVCtx<'_>> for Local4DApproximation {
+    #[instrument(skip_all)]
+    fn kernel<S: ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        match current.renormalization_scheme() {
+            ApproximationType::MUV => self.t(
+                ctx,
+                current,
+                given,
+                &self.start(ctx, current, given, integrand)?,
+            ),
+            ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
+            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
+            ApproximationType::Unsubtracted => {
+                panic!("should have been kept out of the wood");
+            }
+        }
+    }
 }
 
 fn project_integrated_uv_source_to_4d(atom: Atom) -> Atom {
@@ -174,7 +210,31 @@ fn project_integrated_uv_source_to_4d(atom: Atom) -> Atom {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn expanded_4d_terms_to_3d_parametric_integrands(
+pub(crate) fn map_expanded_4d_atom_to_3drep(
+    graph: &mut Graph,
+    atom: &Atom,
+    cutset: &CutSet,
+    representation: ThreeDRepresentation,
+    settings: &GenerationSettings,
+    valid_orientations: &[EdgeVec<Orientation>],
+    source_context: Expanded4DSourceContext<'_>,
+    root_expression: Option<&ThreeDExpression<OrientationID>>,
+) -> Result<BTreeMap<crate::cff::CutCFFIndex, Atom>> {
+    let terms = expanded_4d_terms_to_3d_parametric_integrands(
+        graph,
+        atom,
+        cutset,
+        representation,
+        settings,
+        valid_orientations,
+        source_context,
+        root_expression,
+    )?;
+    indexed_terms_from_cutset(cutset, terms, "expanded 4D map_to_3drep")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn expanded_4d_terms_to_3d_parametric_integrands(
     graph: &mut Graph,
     atom: &Atom,
     cutset: &CutSet,
@@ -206,6 +266,29 @@ pub fn expanded_4d_terms_to_3d_parametric_integrands(
     }
 
     Ok(out.unwrap_or_else(|| vec![Atom::Zero]))
+}
+
+fn zero_terms(allowed_keys: &[crate::cff::CutCFFIndex]) -> BTreeMap<crate::cff::CutCFFIndex, Atom> {
+    allowed_keys.iter().map(|&key| (key, Atom::Zero)).collect()
+}
+
+fn indexed_terms_from_cutset(
+    cutset: &CutSet,
+    terms: Vec<Atom>,
+    context: &str,
+) -> Result<BTreeMap<crate::cff::CutCFFIndex, Atom>> {
+    let allowed_keys = cutset.residue_selector.generate_allowed_keys();
+    if terms.len() == allowed_keys.len() {
+        return Ok(allowed_keys.into_iter().zip(terms).collect());
+    }
+    if terms.len() == 1 && terms[0].is_zero() {
+        return Ok(zero_terms(&allowed_keys));
+    }
+    Err(eyre!(
+        "{context} generated {} local residue integrands, but the top-level residue selector allows {} indices",
+        terms.len(),
+        allowed_keys.len()
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]

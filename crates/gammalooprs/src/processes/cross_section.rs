@@ -11,7 +11,7 @@ use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use itertools::Itertools;
 use rayon::{
     ThreadPool,

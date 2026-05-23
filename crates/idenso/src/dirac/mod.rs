@@ -1,0 +1,549 @@
+use std::sync::LazyLock;
+
+use spenso::{
+    metric,
+    network::{
+        library::symbolic::{ETS, ExplicitKey},
+        tags::SPENSO_TAG,
+    },
+    shadowing::symbolica_utils::SpensoPrintSettings,
+    structure::{
+        dimension::Dimension,
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::{AbsInd, DummyAind, ParseableAind},
+    },
+    utils::to_superscript,
+};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    function,
+    printer::PrintState,
+    symbol,
+};
+
+use crate::{IndexTooling, bis, dirac::simplify::DiracSimplifier, gamma, gamma0, rep_symbols::RS};
+use eyre::Result;
+
+use super::representations::Bispinor;
+
+pub struct GammaLibrary {
+    pub gamma: Symbol,
+    pub gammaconj: Symbol,
+    pub gammaadj: Symbol,
+    pub gamma0: Symbol,
+    pub projp: Symbol,
+    pub projm: Symbol,
+    pub gamma5: Symbol,
+    pub sigma: Symbol,
+}
+
+pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
+    gamma: spenso::tensor_symbol!(
+        "spenso::gamma"; Linear;
+        print = |a, opt, _state| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let SpensoPrintSettings {
+                        parens,
+                        symbol_scripts,
+                        commas,
+                        ..
+                    } = SpensoPrintSettings::from(i);
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 3 {
+                        return None;
+                    }
+                    let mut argitem = f.iter();
+                    let i = argitem.next().unwrap();
+                    let j = argitem.next().unwrap();
+                    let mu = argitem.next().unwrap();
+
+                    let mut out = "γ".to_string();
+                    if symbol_scripts {
+                        out.push('^');
+                    }
+                    if opt.color_builtin_symbols {
+                        out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                    }
+
+                    if parens {
+                        out.push('(');
+                    }
+                    mu.format(&mut out, opt, PrintState::new()).unwrap();
+
+                    let mut skip = false;
+                    if let (AtomView::Var(v), AtomView::Var(w)) = (i, j) {
+                        if v.get_symbol() == SPENSO_TAG.chain_in
+                            && w.get_symbol() == SPENSO_TAG.chain_out
+                        {
+                            skip = true;
+                        } else if v.get_symbol() == SPENSO_TAG.chain_out
+                            && w.get_symbol() == SPENSO_TAG.chain_in
+                        {
+                            skip = true;
+                            out.push('T');
+                        }
+                    }
+
+                    if !skip {
+                        out.push(',');
+                        i.format(&mut out, opt, PrintState::new()).unwrap();
+                        if commas {
+                            out.push(',');
+                        } else {
+                            out.push(' ');
+                        }
+                        j.format(&mut out, opt, PrintState::new()).unwrap();
+                    }
+                    if parens {
+                        out.push(')');
+                    }
+
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    gammaadj: spenso::tensor_symbol!("spenso::gammaadj"),
+    projp: spenso::tensor_symbol!(
+        "spenso::projp",
+        print = |a, opt, _state| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let settings = SpensoPrintSettings::from(i);
+                    let is_typst = settings.is_typst();
+                    let SpensoPrintSettings {
+                        parens,
+                        symbol_scripts,
+                        commas,
+                        ..
+                    } = settings;
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 2 {
+                        return None;
+                    }
+                    let mut argitem = f.iter();
+                    let i = argitem.next().unwrap();
+                    let j = argitem.next().unwrap();
+
+                    let mut out = if is_typst { "ℙ_p" } else { "ℙₚ" }.to_string();
+
+                    if symbol_scripts {
+                        out.push('^');
+                    }
+                    if opt.color_builtin_symbols {
+                        out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                    }
+
+                    if parens {
+                        out.push('(');
+                    }
+                    i.format(&mut out, opt, PrintState::new()).unwrap();
+                    if commas {
+                        out.push(',');
+                    } else {
+                        out.push(' ');
+                    }
+                    j.format(&mut out, opt, PrintState::new()).unwrap();
+                    if parens {
+                        out.push(')');
+                    }
+
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    projm: spenso::tensor_symbol!(
+        "spenso::projm",
+        print = |a, opt, _state| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let settings = SpensoPrintSettings::from(i);
+                    let is_typst = settings.is_typst();
+                    let SpensoPrintSettings {
+                        parens,
+                        symbol_scripts,
+                        commas,
+                        ..
+                    } = settings;
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 2 {
+                        return None;
+                    }
+                    let mut argitem = f.iter();
+                    let i = argitem.next().unwrap();
+                    let j = argitem.next().unwrap();
+                    let mut out = if is_typst { "ℙ_m" } else { "ℙₘ" }.to_string();
+
+                    if symbol_scripts {
+                        out.push('^');
+                    }
+                    if opt.color_builtin_symbols {
+                        out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                    }
+
+                    if parens {
+                        out.push('(');
+                    }
+                    i.format(&mut out, opt, PrintState::new()).unwrap();
+                    if commas {
+                        out.push(',');
+                    } else {
+                        out.push(' ');
+                    }
+                    j.format(&mut out, opt, PrintState::new()).unwrap();
+                    if parens {
+                        out.push(')');
+                    }
+
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    gamma5: spenso::tensor_symbol!(
+        "spenso::gamma5",
+        print = |a, opt, _state| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let settings = SpensoPrintSettings::from(i);
+                    let is_typst = settings.is_typst();
+                    let SpensoPrintSettings {
+                        parens,
+                        symbol_scripts,
+                        commas,
+                        ..
+                    } = settings;
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 2 {
+                        return None;
+                    }
+                    let mut argitem = f.iter();
+                    let i = argitem.next().unwrap();
+                    let j = argitem.next().unwrap();
+
+                    let mut out = "γ".to_string();
+                    if is_typst {
+                        out.push_str("_5");
+                    } else {
+                        out.push_str(&to_superscript(5));
+                    }
+                    if symbol_scripts {
+                        out.push('^');
+                    }
+                    if opt.color_builtin_symbols {
+                        out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                    }
+
+                    if parens {
+                        out.push('(');
+                    }
+                    i.format(&mut out, opt, PrintState::new()).unwrap();
+                    if commas {
+                        out.push(',');
+                    } else {
+                        out.push(' ');
+                    }
+                    j.format(&mut out, opt, PrintState::new()).unwrap();
+                    if parens {
+                        out.push(')');
+                    }
+
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    sigma: spenso::tensor_symbol!("spenso::sigma"),
+    gamma0: spenso::tensor_symbol!("spenso::gamma0"; Real, Symmetric; print = |a, opt, _state| {
+        match opt.custom_print_mode {
+            Some(("spenso", i)) => {
+                let settings = SpensoPrintSettings::from(i);
+                let is_typst = settings.is_typst();
+                let SpensoPrintSettings {
+                    parens,
+                    symbol_scripts,
+                    commas,
+                    ..
+                } = settings;
+
+                let AtomView::Fun(f) = a else {
+                    return None;
+                };
+                if f.get_nargs() != 2 {
+                    return None;
+                }
+                let mut argitem = f.iter();
+                let i = argitem.next().unwrap();
+                let j = argitem.next().unwrap();
+
+                let mut out = "γ".to_string();
+                if is_typst {
+                    out.push_str("_0");
+                } else {
+                    out.push_str(&to_superscript(0));
+                }
+                if symbol_scripts {
+                    out.push('^');
+                }
+                if opt.color_builtin_symbols {
+                    out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                }
+
+                if parens {
+                    out.push('(');
+                }
+                i.format(&mut out, opt, PrintState::new()).unwrap();
+                if commas {
+                    out.push(',');
+                } else {
+                    out.push(' ');
+                }
+                j.format(&mut out, opt, PrintState::new()).unwrap();
+                if parens {
+                    out.push(')');
+                }
+
+                Some(out)
+            }
+            _ => None,
+        }
+    }),
+    gammaconj: spenso::tensor_symbol!("spenso::gammaconj"),
+});
+
+impl GammaLibrary {
+    #[cfg(test)]
+    pub(crate) fn initialize_tensor_symbols(&self) {
+        let _ = self.gamma;
+    }
+}
+
+fn spinor_matrix_structure<Aind: AbsInd>(
+    symbol: Symbol,
+    dim: impl Into<Dimension>,
+) -> ExplicitKey<Aind> {
+    let dim = dim.into();
+    ExplicitKey::from_iter(
+        [Bispinor {}.new_rep(dim), Bispinor {}.new_rep(dim)],
+        symbol,
+        None,
+    )
+    .structure
+}
+
+fn gamma_matrix_structure<Aind: AbsInd>(
+    symbol: Symbol,
+    dim: impl Into<Dimension>,
+) -> ExplicitKey<Aind> {
+    ExplicitKey::from_iter(
+        [
+            LibraryRep::from(Minkowski {}).new_rep(dim),
+            Bispinor {}.new_rep(4).cast(),
+            Bispinor {}.new_rep(4).cast(),
+        ],
+        symbol,
+        None,
+    )
+    .structure
+}
+
+macro_rules! gamma_matrix_structure_methods {
+    ($($structure:ident, $field:ident;)*) => {
+        $(
+            pub fn $structure<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+                gamma_matrix_structure(self.$field, dim)
+            }
+        )*
+    };
+}
+
+impl GammaLibrary {
+    gamma_matrix_structure_methods! {
+        gamma_strct, gamma;
+        gamma_conj_strct, gammaconj;
+        gamma_adj_strct, gammaadj;
+    }
+
+    pub fn gamma0_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+        spinor_matrix_structure(self.gamma0, dim)
+    }
+
+    pub fn projm_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+        spinor_matrix_structure(self.projm, dim)
+    }
+
+    pub fn projp_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+        spinor_matrix_structure(self.projp, dim)
+    }
+
+    pub fn gamma5_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+        spinor_matrix_structure(self.gamma5, dim)
+    }
+}
+
+pub struct PolSymbols {
+    pub eps: Symbol,
+    pub ebar: Symbol,
+    pub u: Symbol,
+    pub ubar: Symbol,
+    pub v: Symbol,
+    pub vbar: Symbol,
+}
+
+pub static PS: LazyLock<PolSymbols> = LazyLock::new(|| PolSymbols {
+    eps: spenso::tensor_symbol!("spenso::ϵ"),
+    ebar: spenso::tensor_symbol!("spenso::ϵbar"),
+    u: spenso::tensor_symbol!("spenso::u"),
+    ubar: spenso::tensor_symbol!("spenso::ubar"),
+    v: spenso::tensor_symbol!("spenso::v"),
+    vbar: spenso::tensor_symbol!("spenso::vbar"),
+});
+
+impl PolSymbols {
+    #[cfg(test)]
+    pub(crate) fn initialize_tensor_symbols(&self) {
+        let _ = self.eps;
+    }
+}
+
+/// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
+///
+/// Implementors provide a method to apply gamma matrix identities, such as
+/// anticommutation relations and trace evaluations.
+pub trait GammaSimplifier {
+    /// Simplifies gamma matrix structures within the expression.
+    ///
+    /// Uses the Clifford algebra relation `{gamma^mu, gamma^nu} = 2 * g^{mu nu}`
+    /// and evaluates traces of products of gamma matrices. It handles intermediate
+    /// simplification steps involving metric tensors.
+    ///
+    /// # Returns
+    /// An [`Atom`] representing the expression after gamma matrix simplification.
+    fn simplify_gamma(&self) -> Atom;
+
+    /// Simplifies gamma matrices with explicit chain-ordering and trace settings.
+    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom;
+
+    fn simplify_gamma0(&self) -> Atom;
+
+    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom>;
+}
+
+impl GammaSimplifier for Atom {
+    fn simplify_gamma(&self) -> Atom {
+        self.as_view().simplify_gamma()
+    }
+
+    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
+        self.as_view().simplify_gamma_with(settings)
+    }
+
+    fn simplify_gamma0(&self) -> Atom {
+        self.as_view().simplify_gamma0()
+    }
+
+    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom> {
+        self.as_view().simplify_gamma_conj::<Aind>()
+    }
+}
+
+impl GammaSimplifier for AtomView<'_> {
+    fn simplify_gamma(&self) -> Atom {
+        self.simplify_gamma_with(GammaSimplifySettings::default())
+    }
+
+    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
+        DiracSimplifier::new(&settings).simplify(*self)
+    }
+
+    fn simplify_gamma0(&self) -> Atom {
+        let repeated_gamma0 = gamma0!(RS.a__, RS.b__) * gamma0!(RS.b__, RS.c__);
+
+        let gamma0_ia = gamma0!([RS.d_, RS.i_], [RS.d_, RS.a_]);
+        let gamma_ab = gamma!(RS.a__, [RS.d_, RS.a_], [RS.d_, RS.b_]);
+        let gamma0_bj = gamma0!([RS.d_, RS.b_], [RS.d_, RS.j_]);
+
+        let gmg = (Atom::var(RS.f_) * gamma0_ia.clone() * gamma_ab.clone() * gamma0_bj.clone()
+            + Atom::var(RS.e_) * metric!(bis!(RS.d_, RS.j_), bis!(RS.d_, RS.i_)))
+        .to_pattern();
+
+        let gmgrhs = (gamma0_ia.clone()
+            * (Atom::var(RS.f_) * gamma_ab.clone()
+                + Atom::var(RS.e_) * metric!(bis!(RS.d_, RS.a_), bis!(RS.d_, RS.b_)))
+            * gamma0_bj.clone())
+        .to_pattern();
+
+        let gmgn = (Atom::var(RS.f_) * gamma0_ia.clone() * gamma_ab.clone() * gamma0_bj.clone()
+            + metric!(bis!(RS.d_, RS.j_), bis!(RS.d_, RS.i_)))
+        .to_pattern();
+
+        let gmgnrhs = (gamma0_ia
+            * (Atom::var(RS.f_) * gamma_ab + metric!(bis!(RS.d_, RS.a_), bis!(RS.d_, RS.b_)))
+            * gamma0_bj)
+            .to_pattern();
+
+        self.replace(gmg)
+            .with(gmgrhs)
+            .replace(gmgn)
+            .with(gmgnrhs)
+            .replace(repeated_gamma0)
+            .repeat()
+            .with(metric!(bis!(RS.a__), bis!(RS.c__)))
+    }
+
+    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> Result<Atom> {
+        let dummy = symbol!("dummy");
+
+        let dummypati = function!(dummy, RS.i_).to_pattern();
+        let dummypatj = function!(dummy, RS.j_).to_pattern();
+
+        let conj_gamma = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]).spenso_conj();
+
+        let conj_gamma_rhs = (gamma0!([RS.d_, RS.j_], [Atom::var(RS.d_), function!(dummy, RS.j_)])
+            * gamma!(
+                RS.a__,
+                [Atom::var(RS.d_), function!(dummy, RS.j_)],
+                [Atom::var(RS.d_), function!(dummy, RS.i_)]
+            )
+            * gamma0!([Atom::var(RS.d_), function!(dummy, RS.i_)], [RS.d_, RS.i_]))
+        .to_pattern();
+
+        Ok(self.replace(conj_gamma).with_map(move |m| {
+            let a = conj_gamma_rhs.replace_wildcards_with_matches(m);
+            let i = dummypati.replace_wildcards_with_matches(m);
+            let j = dummypatj.replace_wildcards_with_matches(m);
+            a.replace(i)
+                .with(Aind::new_dummy().to_atom())
+                .replace(j)
+                .with(Aind::new_dummy().to_atom())
+        }))
+    }
+}
+
+pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
+    function!(ETS.metric, i.into(), j.into())
+}
+
+mod macros;
+mod simplify;
+pub use simplify::{GammaChainOrdering, GammaSimplifySettings};
+#[cfg(test)]
+mod test;

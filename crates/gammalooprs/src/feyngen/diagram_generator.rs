@@ -1,6 +1,6 @@
 use idenso::IndexTooling;
-use idenso::color::{CS, ColorSimplifier, SelectiveExpand};
-use idenso::gamma::{AGS, GammaSimplifier};
+use idenso::color::{CS, ColorSimplifier};
+use idenso::dirac::{AGS, GammaSimplifier};
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -13,7 +13,7 @@ use rayon::prelude::*;
 use spenso::network::library::LibraryTensor;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::parsing::ParseSettings;
-use spenso::network::{Sequential, SmallestDegree};
+use spenso::network::{MinResultRank, Sequential};
 
 // use spenso::network::Network;
 
@@ -5075,7 +5075,7 @@ impl ProcessedNumeratorForComparison {
                                     .for_each(|a| *a = a.replace_multiple(reps));
 
                                 // debug!(net=?net.dot_pretty());
-                                net.execute::<Sequential, SmallestDegree, _, _,_>(lib,PARAM_FUN_LIB.deref())
+                                net.execute::<Sequential, MinResultRank, _, _,_>(lib,PARAM_FUN_LIB.deref())
                                     .unwrap_or_else(|_| panic!("failed to execute net:{}", net.dot_pretty()));
 
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())

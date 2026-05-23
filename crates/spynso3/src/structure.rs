@@ -13,6 +13,7 @@ use pyo3::{
     types::{PyList, PyTuple},
 };
 
+use idenso::tensor::SymbolicTensor;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     TypeInfo,
@@ -36,7 +37,6 @@ use spenso::{
         },
         slot::{IsAbstractSlot, Slot},
     },
-    tensors::symbolic::SymbolicTensor,
 };
 use symbolica::{
     api::python::PythonTransformer,
@@ -55,7 +55,8 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 use thiserror::Error;
 
 use idenso::{
-    IndexTooling, color::CS, gamma::AGS, metric::PermuteWithMetric, representations::Bispinor,
+    Cookable, color::CS, dirac::AGS, representations::Bispinor,
+    shorthands::metric::PermuteWithMetric,
 };
 
 use super::{ModuleInit, SliceOrIntOrExpanded};

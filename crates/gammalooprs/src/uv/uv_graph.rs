@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, ops::Deref};
 
 use ahash::AHashSet;
-use idenso::metric::MetricSimplifier;
+use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Flow, Hedge, HedgePair},

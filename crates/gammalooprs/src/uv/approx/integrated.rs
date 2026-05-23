@@ -1,7 +1,10 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    dirac::GammaSimplifier,
+    shorthands::{UndoShorthands, metric::MetricSimplifier, schoonschip::Schoonschip},
+};
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
@@ -9,7 +12,8 @@ use linnet::half_edge::{
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
@@ -25,6 +29,7 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 use crate::{
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
+    numerator::aind::Aind,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
@@ -157,6 +162,22 @@ impl Integrated<'_> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let settings = ctx.settings;
+        let current_label = current.subgraph().string_label();
+        let given_label = given.subgraph().string_label();
+        let reduced_label = reduced.string_label();
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "integrate_and_truncate_input",
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
+            current_topo_order = %current.topo_order(),
+            given_topo_order = %given.topo_order(),
+            current_dod = %current.dod(),
+            given_dod = %given.dod(),
+            integrand = %integrand.log_print(Some(120)),
+            file.integrand = %integrand.to_plain_string(),
+            "Vakint trace"
+        );
         let mut integrand_vakint = to_vakint_integrand(
             integrand,
             graph,
@@ -166,8 +187,19 @@ impl Integrated<'_> {
             true,
         );
 
-        for t in &integrand_vakint.0 {
-            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term as input");
+        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+            debug_tags!(#uv,#integrated,#vakint,#trace;
+                stage = "integrate_and_truncate_to_vakint_output",
+                term_index = %term_index,
+                current = %current_label,
+                given = %given_label,
+                reduced = %reduced_label,
+                integral = %t.integral.log_print(None),
+                numerator = %t.numerator.log_print(None),
+                file.integral = %t.integral.to_plain_string(),
+                file.numerator = %t.numerator.to_plain_string(),
+                "Vakint term as input"
+            );
         }
         debug_tags!(#uv,#integrated,#vakint;settings = ?&self.vakint_settings,"Vakint args");
 
@@ -177,21 +209,62 @@ impl Integrated<'_> {
         //     .unwrap();
 
         integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
-        for t in &integrand_vakint.0 {
-            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),file.integral = %t.integral.to_plain_string(), file.numerator = %t.numerator.to_plain_string(), numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
+        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+            debug_tags!(#uv,#integrated,#vakint,#trace;
+                stage = "integrate_and_truncate_after_canonicalize",
+                term_index = %term_index,
+                current = %current_label,
+                given = %given_label,
+                reduced = %reduced_label,
+                integral = %t.integral.log_print(None),
+                numerator = %t.numerator.log_print(None),
+                file.integral = %t.integral.to_plain_string(),
+                file.numerator = %t.numerator.to_plain_string(),
+                "Vakint term after canonicalization"
+            );
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
-        for t in &integrand_vakint.0 {
-            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after tensor reduction");
+        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+            debug_tags!(#uv,#integrated,#vakint,#trace;
+                stage = "integrate_and_truncate_after_tensor_reduce",
+                term_index = %term_index,
+                current = %current_label,
+                given = %given_label,
+                reduced = %reduced_label,
+                integral = %t.integral.log_print(None),
+                numerator = %t.numerator.log_print(None),
+                file.integral = %t.integral.to_plain_string(),
+                file.numerator = %t.numerator.to_plain_string(),
+                "Vakint term after tensor reduction"
+            );
         }
         integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
-        for t in &integrand_vakint.0 {
-            debug_tags!(#uv,#integrated,#vakint;integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after evaluation");
+        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+            debug_tags!(#uv,#integrated,#vakint,#trace;
+                stage = "integrate_and_truncate_after_evaluate_integral",
+                term_index = %term_index,
+                current = %current_label,
+                given = %given_label,
+                reduced = %reduced_label,
+                integral = %t.integral.log_print(None),
+                numerator = %t.numerator.log_print(None),
+                file.integral = %t.integral.to_plain_string(),
+                file.numerator = %t.numerator.to_plain_string(),
+                "Vakint term after evaluation"
+            );
         }
 
         let mut res: Atom = integrand_vakint.into();
 
-        debug_tags!(#uv,#integrated,#vakint;res = %res.expand().log_print(None),"Raw post vakint ");
+        debug_tags!(#uv,#integrated,#vakint,#trace;
+            stage = "integrate_and_truncate_raw_post_vakint",
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
+            res = %res.expand().log_print(None),
+            file.res = %res.to_plain_string(),
+            "Raw post vakint "
+        );
 
         res = res
             .replace(parse_lit!(vakint::cl2))
@@ -269,8 +342,13 @@ impl Integrated<'_> {
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        debug_tags!(#uv, #integrated, #vakint, #inspect;
+        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace;
+            stage = "integrate_and_truncate_replaced_post_vakint",
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
             res = %res.expand().log_print(None),
+            file.res = %res.to_plain_string(),
             "Replaced post vakint "
         );
 
@@ -364,8 +442,12 @@ pub(crate) fn integrated_uv_start<S: super::ForestNodeLike>(
         .to_d_dim(GS.dim)
         .get_single_atom()
         .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?
+        .collect_metrics()
         .simplify_metrics()
         .simplify_gamma()
+        .schoonschip_net::<Aind>()
+        .to_dots()
+        .normalize_dots()
         / graph.denominator(&reduced, |_| 1);
 
     Ok(t_arg
@@ -453,7 +535,30 @@ pub(crate) fn to_vakint_integrand<
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> VakintExpression {
-    let mut integrand_vakint = integrand.clone();
+    let reduced_label = reduced.string_label();
+    let dependent_subgraph_label = dependent_subgraph.string_label();
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_input",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        substitute_masses_to_m_uv = substitute_masses_to_m_uv,
+        integrand = %integrand.log_print(Some(120)),
+        file.integrand = %integrand.to_plain_string(),
+        "Vakint trace"
+    );
+    let mut integrand_vakint = integrand
+        .undo_schoonschip::<Aind>()
+        .undo_chain::<Aind>()
+        .undo_trace::<Aind>();
+
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_after_undo_shorthands",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        integrand = %integrand_vakint.log_print(Some(120)),
+        file.integrand = %integrand_vakint.to_plain_string(),
+        "Vakint trace"
+    );
 
     debug_tags!(#uv, #integrated, #vakint, #inspect;
         integrand = %integrand.log_print(None),
@@ -474,6 +579,19 @@ pub(crate) fn to_vakint_integrand<
     // println!("Expanded: {:>}", integrand_vakint.expand());
 
     integrand_vakint = integrand_vakint.expand();
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_after_den_strip_expand",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        integrand = %integrand_vakint.log_print(Some(120)),
+        file.integrand = %integrand_vakint.to_plain_string(),
+        "Vakint trace"
+    );
+
+    // Nested counterterms can expose a boundary metric next to the propagator
+    // metric of the reduced graph. Contract those metric-only structures before
+    // the expression is split into Vakint terms.
+    integrand_vakint = integrand_vakint.simplify_metrics();
 
     let mut propagator_id = 1;
 
@@ -533,6 +651,14 @@ pub(crate) fn to_vakint_integrand<
             propagator_id += 1;
         }
     }
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_after_den_to_prop",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        integrand = %integrand_vakint.log_print(Some(120)),
+        file.integrand = %integrand_vakint.to_plain_string(),
+        "Vakint trace"
+    );
 
     let mut first: Option<NodeIndex> = None;
 
@@ -577,6 +703,14 @@ pub(crate) fn to_vakint_integrand<
             first = Some(id);
         }
     }
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_after_shrink_subgraph",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        integrand = %integrand_vakint.log_print(Some(120)),
+        file.integrand = %integrand_vakint.to_plain_string(),
+        "Vakint trace"
+    );
 
     // flip edges to positive momentum
     // FIXME: how will this work for sums of momenta?
@@ -622,6 +756,14 @@ pub(crate) fn to_vakint_integrand<
             W_.x___,
             W_.e_ + W_.f_
         ));
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_after_flip_fuse",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        integrand = %integrand_vakint.log_print(Some(120)),
+        file.integrand = %integrand_vakint.to_plain_string(),
+        "Vakint trace"
+    );
 
     // println!(
     //     "Integrand pre vakint: {:}",
@@ -636,19 +778,33 @@ pub(crate) fn to_vakint_integrand<
     //     .unwrap()
     // );
 
-    let mut a = VakintExpression::try_from(
-        integrand_vakint
-            .replace(function!(vk_prop, W_.x__))
-            .with(function!(vk_topo, function!(vk_prop, W_.x__)))
-            .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
-            .repeat()
-            .with(function!(vk_topo, W_.x_ * W_.y_)),
-    )
-    .unwrap();
+    let vakint_input_atom = integrand_vakint
+        .replace(function!(vk_prop, W_.x__))
+        .with(function!(vk_topo, function!(vk_prop, W_.x__)))
+        .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
+        .repeat()
+        .with(function!(vk_topo, W_.x_ * W_.y_));
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_before_split_terms",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        integrand = %vakint_input_atom.log_print(Some(120)),
+        file.integrand = %vakint_input_atom.to_plain_string(),
+        "Vakint trace"
+    );
 
-    for t in a.0.iter_mut() {
-        debug_tags!(#uv, #integrated, #vakint, #inspect;
+    let mut a = VakintExpression::try_from(vakint_input_atom).unwrap();
+
+    for (term_index, t) in a.0.iter_mut().enumerate() {
+        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace;
+            stage = "to_vakint_integrand_term_initial",
+            term_index = %term_index,
+            reduced = %reduced_label,
+            dependent_subgraph = %dependent_subgraph_label,
             integral = %t.integral,
+            numerator = %t.numerator.log_print(Some(120)),
+            file.integral = %t.integral.to_plain_string(),
+            file.numerator = %t.numerator.to_plain_string(),
             "Starting integral"
         );
 
@@ -761,6 +917,17 @@ pub(crate) fn to_vakint_integrand<
 
         // println!("{}->{}", t.integral, new_integral);
         t.integral = function!(vakint::symbols::S.topo, new_integral);
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "to_vakint_integrand_term_after_graph_rebuild",
+            term_index = %term_index,
+            reduced = %reduced_label,
+            dependent_subgraph = %dependent_subgraph_label,
+            integral = %t.integral.log_print(None),
+            numerator = %t.numerator.log_print(Some(120)),
+            file.integral = %t.integral.to_plain_string(),
+            file.numerator = %t.numerator.to_plain_string(),
+            "Vakint trace"
+        );
 
         let nloops = graph.cyclotomatic_number(&graph.full_filter());
 
@@ -769,7 +936,7 @@ pub(crate) fn to_vakint_integrand<
         for (p, e, ed) in graph.iter_edges() {
             if p.is_paired() {
                 // println!("{e}");
-                let loop_expr = lmb.loop_atom::<Atom>(e, vakint::symbols::S.k, &[], false);
+                let loop_expr = lmb.loop_atom::<Atom>(e, GS.loop_mom, &[], false);
 
                 ed.data
                     .mom
@@ -799,8 +966,8 @@ pub(crate) fn to_vakint_integrand<
                 ..Default::default()
             }),
             Replacement::new(
-                function!(vakint::symbols::S.k, W_.i_).to_pattern(),
-                function!(vakint::symbols::S.k, W_.i_, W_.a___),
+                function!(GS.loop_mom, W_.i_).to_pattern(),
+                function!(GS.loop_mom, W_.i_, W_.a___),
             )
             .with_settings(MatchSettings {
                 allow_new_wildcards_on_rhs: true,
@@ -853,6 +1020,17 @@ pub(crate) fn to_vakint_integrand<
                 );
             }
         }
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "to_vakint_integrand_term_after_momentum_solve",
+            term_index = %term_index,
+            reduced = %reduced_label,
+            dependent_subgraph = %dependent_subgraph_label,
+            integral = %t.integral.log_print(None),
+            numerator = %t.numerator.log_print(Some(120)),
+            file.integral = %t.integral.to_plain_string(),
+            file.numerator = %t.numerator.to_plain_string(),
+            "Vakint trace"
+        );
 
         // debug!(
         //     "Graph from vakint expression:\n{}\n{}",
@@ -862,22 +1040,38 @@ pub(crate) fn to_vakint_integrand<
 
         t.numerator *= parse!(&settings.additional_normalization).pow(nloops);
 
-        t.numerator = t.numerator.simplify_metrics().to_dots();
+        // Vakint needs explicit tensor indices; only translate metric shorthands
+        // to dot notation here, without reintroducing Schoonschip rank-1 factors.
+        t.numerator = t.numerator.metric_shorthand_to_dot();
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "to_vakint_integrand_term_after_metric_shorthand_to_dot",
+            term_index = %term_index,
+            reduced = %reduced_label,
+            dependent_subgraph = %dependent_subgraph_label,
+            integral = %t.integral.log_print(None),
+            numerator = %t.numerator.log_print(Some(120)),
+            file.integral = %t.integral.to_plain_string(),
+            file.numerator = %t.numerator.to_plain_string(),
+            "Vakint trace"
+        );
         t.integral = t
             .integral
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
         t.numerator = t
             .numerator
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___))
             .replace(function!(
                 SPENSO_TAG.dot,
-                Minkowski {}.new_rep(GS.dim).to_symbolic([]),
-                W_.a_,
-                W_.b_
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
             ))
-            .with(vakint::symbols::S.dot(W_.a_, W_.b_))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
             .replace(function!(
                 ETS.metric,
                 Minkowski {}.to_symbolic([W_.a__]),
@@ -888,6 +1082,17 @@ pub(crate) fn to_vakint_integrand<
                 Minkowski {}.to_symbolic([W_.a__]),
                 Minkowski {}.to_symbolic([W_.b__])
             ));
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "to_vakint_integrand_term_after_vakint_symbols",
+            term_index = %term_index,
+            reduced = %reduced_label,
+            dependent_subgraph = %dependent_subgraph_label,
+            integral = %t.integral.log_print(None),
+            numerator = %t.numerator.log_print(Some(120)),
+            file.integral = %t.integral.to_plain_string(),
+            file.numerator = %t.numerator.to_plain_string(),
+            "Vakint trace"
+        );
     }
 
     a
@@ -895,12 +1100,16 @@ pub(crate) fn to_vakint_integrand<
 
 #[cfg(test)]
 mod tests {
+    use crate::initialisation::test_initialise;
+    use idenso::shorthands::schoonschip::Schoonschip;
     use linnet::half_edge::involution::EdgeIndex;
 
     use super::*;
 
     #[test]
     fn integrated_triangle_norm_is_euclidean() {
+        test_initialise().unwrap();
+
         let edge = EdgeIndex(7);
         let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
         let minkowski_norm = Minkowski {}
@@ -914,5 +1123,39 @@ mod tests {
                 + GS.emr_mom(edge, GS.cind(3)).pow(2)
         );
         assert_ne!(euclidean_norm, minkowski_norm);
+    }
+
+    #[test]
+    fn vakint_dot_conversion_keeps_loop_momentum_tagged_until_to_dots() {
+        test_initialise().unwrap();
+
+        let mink = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let numerator = function!(
+            ETS.metric,
+            function!(GS.emr_mom, 0, mink.clone()),
+            function!(GS.loop_mom, 1, mink.clone())
+        );
+
+        let converted = numerator
+            .simplify_metrics()
+            .to_dots()
+            .replace(function!(GS.loop_mom, W_.x___))
+            .with(function!(vakint::symbols::S.k, W_.x___))
+            .replace(function!(GS.emr_mom, W_.x___))
+            .with(function!(vakint::symbols::S.p, W_.x___))
+            .replace(function!(
+                SPENSO_TAG.dot,
+                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+            ))
+            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)));
+
+        assert_eq!(
+            converted,
+            vakint::symbols::S.dot(
+                function!(vakint::symbols::S.p, 0),
+                function!(vakint::symbols::S.k, 1)
+            )
+        );
     }
 }

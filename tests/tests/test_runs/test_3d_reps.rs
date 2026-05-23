@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::{fs, process::Command};
+use std::{env, fs, process::Command};
 
 use color_eyre::eyre::eyre;
 use gammalooprs::{graph::Graph, processes::ProcessCollection};
@@ -1338,9 +1338,25 @@ fn assert_standalone_replay_script_compiles_and_runs(
     raw_script_path: &Path,
     context: &str,
 ) -> Result<()> {
-    let output = Command::new(raw_script_path)
-        .current_dir(gammaloop_integration_tests::workspace_root())
-        .output()?;
+    let mut command = Command::new(raw_script_path);
+    command.current_dir(gammaloop_integration_tests::workspace_root());
+    if cfg!(target_os = "macos") && env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {
+        let mut rustflags = env::var("RUSTFLAGS").unwrap_or_default();
+        if !rustflags.contains("-L/opt/local/lib/libgcc") {
+            if !rustflags.is_empty() {
+                rustflags.push(' ');
+            }
+            rustflags.push_str("-L/opt/local/lib/libgcc");
+        }
+        if !rustflags.contains("gcc_s.1.1") {
+            if !rustflags.is_empty() {
+                rustflags.push(' ');
+            }
+            rustflags.push_str("-l dylib=gcc_s.1.1");
+        }
+        command.env("RUSTFLAGS", rustflags);
+    }
+    let output = command.output()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(

@@ -3,8 +3,8 @@
 //! This module provides the core abstractions for tensor indices and fibers,
 //! which are used to navigate tensor data structures efficiently.
 
-use crate::structure::concrete_index::FlatIndex;
-use bitvec::vec::BitVec;
+use crate::structure::{SlotIndex, concrete_index::FlatIndex};
+use linnet::half_edge::subgraph::subset::SubSet;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
 
@@ -90,12 +90,18 @@ pub enum FiberData<'a> {
     /// Integer filter where non-zero values indicate free indices
     IntFilter(&'a [u8]),
     /// A bitvec filter where true indicates free indices
-    BitVec(&'a BitVec),
+    Subset(&'a SubSet<SlotIndex>),
 }
 
 impl From<usize> for FiberData<'_> {
     fn from(value: usize) -> Self {
         Self::Single(value)
+    }
+}
+
+impl From<SlotIndex> for FiberData<'_> {
+    fn from(value: SlotIndex) -> Self {
+        Self::Single(value.into())
     }
 }
 
@@ -105,9 +111,9 @@ impl<'a> From<&'a [bool]> for FiberData<'a> {
     }
 }
 
-impl<'a> From<&'a BitVec> for FiberData<'a> {
-    fn from(value: &'a BitVec) -> Self {
-        Self::BitVec(value)
+impl<'a> From<&'a SubSet<SlotIndex>> for FiberData<'a> {
+    fn from(value: &'a SubSet<SlotIndex>) -> Self {
+        Self::Subset(value)
     }
 }
 

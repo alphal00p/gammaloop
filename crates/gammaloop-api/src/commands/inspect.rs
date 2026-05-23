@@ -34,7 +34,7 @@ use gammalooprs::{
     utils::F,
 };
 
-const INSPECT_BENCH_WARMUP_SAMPLES: usize = 10;
+const INSPECT_BENCH_WARMUP_SAMPLES: usize = 1;
 const INSPECT_BENCH_DEFAULT_BATCHES: usize = 10;
 const INSPECT_BENCH_OTHER_RELATIVE_THRESHOLD: f64 = 5.0e-3;
 const INSPECT_BENCH_OTHER_ABSOLUTE_THRESHOLD_SECONDS: f64 = 1.0e-9;
@@ -342,11 +342,8 @@ impl Inspect {
         let warmup_timing = warmup_start.elapsed();
         let warmup_samples = warmup.samples.len().max(1);
         let warmup_per_sample = warmup_timing.as_secs_f64() / warmup_samples as f64;
-        let total_samples = if warmup_per_sample > 0.0 {
-            ((target.as_secs_f64() / warmup_per_sample).ceil() as usize).max(n_batches)
-        } else {
-            n_batches
-        };
+        let (total_samples, n_batches) =
+            inspect_bench_sample_plan(target, warmup_per_sample, n_batches);
 
         let batch_sizes = split_samples_into_batches(total_samples, n_batches);
         let progress_bar = inspect_bench_progress_bar(n_batches);
@@ -641,6 +638,20 @@ fn split_samples_into_batches(total_samples: usize, batches: usize) -> Vec<usize
     (0..batches)
         .map(|index| base + usize::from(index < remainder))
         .collect()
+}
+
+fn inspect_bench_sample_plan(
+    target: Duration,
+    warmup_per_sample_seconds: f64,
+    requested_batches: usize,
+) -> (usize, usize) {
+    let total_samples = if warmup_per_sample_seconds.is_finite() && warmup_per_sample_seconds > 0.0
+    {
+        ((target.as_secs_f64() / warmup_per_sample_seconds).ceil() as usize).max(1)
+    } else {
+        requested_batches
+    };
+    (total_samples, requested_batches.min(total_samples).max(1))
 }
 
 fn inspect_bench_batch_timing(
@@ -967,8 +978,8 @@ mod tests {
 
     use super::{
         apply_minimal_integrand_settings, format_timing_with_uncertainty,
-        inspect_bench_batch_timing, parse_bench_target_duration, split_samples_into_batches,
-        RuntimeSettings, StabilityLevelSetting,
+        inspect_bench_batch_timing, inspect_bench_sample_plan, parse_bench_target_duration,
+        split_samples_into_batches, RuntimeSettings, StabilityLevelSetting,
     };
 
     #[test]
@@ -994,6 +1005,13 @@ mod tests {
         assert_eq!(batches.iter().sum::<usize>(), 23);
         assert_eq!(batches[0], 3);
         assert_eq!(batches[9], 2);
+    }
+
+    #[test]
+    fn inspect_bench_sample_plan_does_not_force_all_batches_for_slow_samples() {
+        let (samples, batches) = inspect_bench_sample_plan(Duration::from_secs(10), 1800.0, 10);
+        assert_eq!(samples, 1);
+        assert_eq!(batches, 1);
     }
 
     #[test]

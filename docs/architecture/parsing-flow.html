@@ -1,0 +1,1271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spenso Parsing Flow</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --text: #1c2430;
+      --muted: #5e6a78;
+      --line: #d8dee8;
+      --code: #eef2f7;
+      --accent: #0f766e;
+      --warn: #9a3412;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111418;
+        --panel: #181c22;
+        --text: #e8edf3;
+        --muted: #a8b3c1;
+        --line: #303843;
+        --code: #242a33;
+        --accent: #5eead4;
+        --warn: #fdba74;
+      }
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 22px 72px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 34px;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-size: 23px;
+      border-top: 1px solid var(--line);
+      margin-top: 34px;
+      padding-top: 26px;
+    }
+
+    h3 {
+      font-size: 17px;
+      margin-top: 22px;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ul,
+    ol {
+      padding-left: 24px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      background: var(--code);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow-x: auto;
+      padding: 14px 16px;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 11px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+      width: 28%;
+    }
+
+    tr:last-child td,
+    tr:last-child th {
+      border-bottom: 0;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 860px;
+    }
+
+    .box {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 16px 0;
+      padding: 15px 17px;
+    }
+
+    .tag {
+      color: var(--accent);
+      font-weight: 650;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-weight: 650;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+
+    .flowchart {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 14px 0 24px;
+      overflow-x: auto;
+      padding: 16px;
+    }
+
+    .vertical-flow {
+      align-items: center;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .flow-node {
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      flex: 1 1 180px;
+      min-width: 160px;
+      padding: 10px 12px;
+    }
+
+    .vertical-flow .flow-node {
+      max-width: 520px;
+      width: min(100%, 520px);
+    }
+
+    .flow-node strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .flow-node.start {
+      border-color: var(--accent);
+    }
+
+    .flow-node.decision {
+      border-style: dashed;
+    }
+
+    .flow-node.result {
+      background: var(--panel);
+    }
+
+    .connector {
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .branch-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 12px;
+    }
+
+    .branch {
+      border-left: 3px solid var(--accent);
+      padding-left: 12px;
+    }
+
+    .branch h4 {
+      font-size: 15px;
+      margin: 0 0 7px;
+    }
+
+    .branch ol,
+    .branch ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .split {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 10px;
+      width: 100%;
+    }
+
+    .path-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .path-card ol,
+    .path-card ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    .path-label {
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--accent);
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding: 2px 8px;
+    }
+
+    .source-ref {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 8px;
+    }
+
+    .source-ref a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .snippet-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Spenso Parsing Flow</h1>
+  <p class="lead">
+    This document describes how symbolic atoms are parsed into tensor networks in
+    <code>crates/spenso/src/network/parsing</code>. It focuses on the control
+    flow, shorthand expansion, opaque leaves, structure inference, and edge cases
+    that affect Schoonschip-style notation.
+  </p>
+
+  <section>
+    <h2>Entry Points</h2>
+    <p>
+      Parsing starts from <code>NetworkParse</code> methods such as
+      <code>parse_to_atom_net</code>. The parser creates a fresh
+      <code>ParseState</code> and calls <code>try_from_view_impl</code> on the
+      input <code>AtomView</code>.
+    </p>
+    <table>
+      <tr>
+        <th><code>ParseState</code></th>
+        <td>Tracks recursion depth and owns the dummy-index allocator used by shorthand materialization.</td>
+      </tr>
+      <tr>
+        <th>Tensor library</th>
+        <td>Maps parsed structures to library tensors when a matching key exists.</td>
+      </tr>
+      <tr>
+        <th>Function library</th>
+        <td>Used by the opaque tensor-expression boundary for target tensor types that need it.</td>
+      </tr>
+      <tr>
+        <th><code>ParseSettings</code></th>
+        <td>Controls scalar precontraction, depth leaves, shorthand mode, and sum parsing behavior.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Settings</h2>
+    <table>
+      <tr>
+        <th><code>precontract_scalars</code></th>
+        <td>When parsing products or sums, combine factors/summands that parse as pure scalars instead of keeping them as separate graph nodes.</td>
+      </tr>
+      <tr>
+        <th><code>take_first_term_from_sum</code></th>
+        <td>Parse only the first summand. This is mainly for structure discovery when all summands are expected to expose the same slots.</td>
+      </tr>
+      <tr>
+        <th><code>depth_limit</code></th>
+        <td>Turns composite expressions into leaves once the parser reaches the configured depth. The current checks live on add, mul, and pow parsing.</td>
+      </tr>
+      <tr>
+        <th><code>depth_is_product_depth</code></th>
+        <td>When true, only products increment depth. When false, sums and powers increment depth too.</td>
+      </tr>
+      <tr>
+        <th><code>shorthand_parsing</code></th>
+        <td><code>Expand</code> lowers shorthand into explicit graph structure. <code>Opaque</code> turns representation-bearing function expressions into tensor leaves after the scalar fast paths and infers their exposed structure.</td>
+      </tr>
+      <tr>
+        <th><code>parse_composite_scalars_as_tensors</code></th>
+        <td>Passed into structure parsers that want to keep composite scalar expressions inspectable instead of immediately storing them as pure scalars.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Option Examples</h2>
+    <table>
+      <tr>
+        <th><code>ShorthandParsing::Expand</code></th>
+        <td>
+          <code>F(p(mink(D)), mink(D,i))</code> is rewritten before generic leaf
+          parsing as <code>F(mink(D,d), mink(D,i)) * p(mink(D,d))</code>, where
+          <code>d</code> is a fresh dummy.
+        </td>
+      </tr>
+      <tr>
+        <th><code>ShorthandParsing::Opaque { Fast }</code></th>
+        <td>
+          <code>chain(bis(D,i), bis(D,j), F(in,out))</code> becomes one tensor
+          leaf. Its visible structure is inferred syntactically as the two
+          endpoints <code>bis(D,i)</code> and <code>bis(D,j)</code>, then
+          <code>TensorFromExpression</code> realizes the leaf.
+        </td>
+      </tr>
+      <tr>
+        <th><code>ShorthandParsing::Opaque { Expanded }</code></th>
+        <td>
+          The same expression is expanded in a temporary network only to read
+          dangling slots. The final parse still stores one opaque leaf.
+        </td>
+      </tr>
+      <tr>
+        <th><code>pure_scalar(...)</code></th>
+        <td>
+          This wrapper is a hard scalar escape hatch. It is unwrapped before the
+          representation-tag test, so opaque mode never sees it as a tensor leaf.
+        </td>
+      </tr>
+      <tr>
+        <th><code>dot(a,b,c)</code></th>
+        <td>
+          Dot syntax is accepted only with two arguments. A three-argument dot is
+          rejected before scalar fallback, opaque inference, or expand-mode
+          materialization.
+        </td>
+      </tr>
+      <tr>
+        <th><code>precontract_scalars = true</code></th>
+        <td>
+          In <code>(a + b) * F(mink(D,i))</code>, <code>a + b</code> can be kept
+          as one scalar factor next to the tensor network instead of a separate
+          graph node.
+        </td>
+      </tr>
+      <tr>
+        <th><code>take_first_term_from_sum = true</code></th>
+        <td>
+          <code>F(mink(D,i)) + G(mink(D,i))</code> is represented by the first
+          summand's structure. Use this only when the caller already knows the
+          summands expose the same slots.
+        </td>
+      </tr>
+      <tr>
+        <th><code>depth_limit = Some(1)</code></th>
+        <td>
+          A nested product can be handed to the opaque tensor-expression
+          boundary as a leaf instead of recursively expanding every child. This
+          is the same boundary used by opaque parsing.
+        </td>
+      </tr>
+      <tr>
+        <th><code>depth_is_product_depth = false</code></th>
+        <td>
+          Sums and powers count toward the depth limit too. With the default
+          <code>true</code>, only product nesting increases parse depth.
+        </td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Main Dispatch</h2>
+    <p>
+      <code>try_from_view_impl</code> dispatches by atom kind:
+    </p>
+    <pre><code>Mul  -> try_from_mul
+Fun  -> try_from_fun
+Add  -> try_from_add
+Pow  -> try_from_pow
+else -> scalar fallback</code></pre>
+    <p>
+      Products, sums, and powers may hit the depth leaf boundary before they
+      recurse. Function parsing first handles scalar escape hatches and the
+      <code>is_tensorial()</code> test, then either calls the opaque tensor-expression
+      boundary or enters expand-mode syntax dispatch.
+    </p>
+    <div class="box">
+      <p class="source-ref">
+        <a href="../../crates/spenso/src/network/parsing/mod.rs#L343">crates/spenso/src/network/parsing/mod.rs:343</a>
+      </p>
+      <pre><code>match value {
+    AtomView::Mul(m) =&gt; Self::try_from_mul(...),
+    AtomView::Fun(f) =&gt; Self::try_from_fun(...),
+    AtomView::Add(a) =&gt; Self::try_from_add(...),
+    AtomView::Pow(p) =&gt; Self::try_from_pow(...),
+    a =&gt; Ok(Network::from_scalar(a.try_into()?)),
+}</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Flow Diagrams</h2>
+    <h3>Top Level</h3>
+    <div class="flowchart">
+      <div class="vertical-flow">
+        <div class="flow-node start"><strong>Input</strong><code>parse_to_*_net(atom, settings)</code></div>
+        <div class="connector">&darr;</div>
+        <div class="flow-node"><strong>State</strong>Create <code>ParseState</code> with depth and dummy allocator.</div>
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong>Which <code>AtomView</code> variant is this?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Mul</span>
+          <h4><code>AtomView::Mul</code></h4>
+          <ol>
+            <li>Check depth leaf.</li>
+            <li>Parse factors recursively.</li>
+            <li>Optionally precontract pure scalars.</li>
+            <li>Multiply factor networks.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Add</span>
+          <h4><code>AtomView::Add</code></h4>
+          <ol>
+            <li>Check depth leaf.</li>
+            <li>Parse summands recursively.</li>
+            <li>Require compatible states.</li>
+            <li>Optionally precontract scalar summands.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Pow</span>
+          <h4><code>AtomView::Pow</code></h4>
+          <ol>
+            <li>Check depth leaf.</li>
+            <li>Parse the base.</li>
+            <li>Apply integer-power network rules.</li>
+            <li>Use scalar fallback for non-integer powers.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Fun</span>
+          <h4><code>AtomView::Fun</code></h4>
+          <ol>
+            <li>Run dot-arity, scalar, and representation-tag checks.</li>
+            <li>Handle opaque tensor-expression leaves before expansion.</li>
+            <li>Materialize generic shorthand before leaf parsing.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Other</span>
+          <h4>Other atoms</h4>
+          <p>Parse directly as scalars.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Function Parsing</h3>
+    <div class="flowchart">
+      <div class="vertical-flow">
+        <div class="flow-node start"><strong>Function</strong><code>try_from_fun(fun)</code></div>
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong><code>dot</code> with anything other than two args?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Yes</span>
+          <h4>Syntax error</h4>
+          <p>Return <code>InvalidDotFunction</code>. This is a parser syntax check, not a tensor fallback.</p>
+        </div>
+        <div class="path-card">
+          <span class="path-label">No</span>
+          <h4>Continue</h4>
+          <p>Scalar escape hatches are considered next.</p>
+        </div>
+      </div>
+      <div class="vertical-flow">
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong>Is the root <code>pure_scalar</code>?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Yes</span>
+          <h4>Hard scalar</h4>
+          <p>Require one argument and parse that payload as a scalar.</p>
+        </div>
+        <div class="path-card">
+          <span class="path-label">No</span>
+          <h4>Continue</h4>
+          <p>Look for a representation tag anywhere in the function expression.</p>
+        </div>
+      </div>
+      <div class="vertical-flow">
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong>Does <code>is_tensorial()</code> find a representation tag?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">No</span>
+          <h4>Pure scalar expression</h4>
+          <p>Return scalar fallback immediately. Opaque mode does not override this.</p>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Yes</span>
+          <h4>Tensor-capable expression</h4>
+          <p>The expression can expose tensor structure or carry compact shorthand.</p>
+        </div>
+      </div>
+      <div class="vertical-flow">
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong>Is <code>shorthand_parsing</code> opaque?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Yes</span>
+          <h4>Opaque tensor leaf</h4>
+          <ol>
+            <li>Infer exposed structure from the original atom.</li>
+            <li><code>Fast</code>: syntactic structure inference.</li>
+            <li><code>Expanded</code>: expanded net dangling slots.</li>
+            <li>Call <code>TensorFromExpression</code>.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">No</span>
+          <h4>Expand-mode parsing</h4>
+          <p>Enter symbol dispatch and materialization.</p>
+        </div>
+      </div>
+      <div class="vertical-flow">
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong>Is the symbol special expand syntax?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Yes</span>
+          <h4>Special syntax</h4>
+          <ul>
+            <li><code>bracket</code>: parse args and multiply.</li>
+            <li>tag wrappers: parse inner, then apply tag.</li>
+          </ul>
+        </div>
+        <div class="path-card">
+          <span class="path-label">No</span>
+          <h4>Ordinary function candidate</h4>
+          <p>Run shorthand materialization before ordinary leaf parsing.</p>
+        </div>
+      </div>
+      <div class="vertical-flow">
+        <div class="connector">&darr;</div>
+        <div class="flow-node"><strong>Boundary</strong><code>materialize_shorthand(fun)</code> returns a network.</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Topology</span>
+          <h4>Materialized network</h4>
+          <ol>
+            <li><code>chain</code> and <code>trace</code> return parsed topology.</li>
+            <li>Compact dot/Schoonschip rewrites recurse through normal parsing.</li>
+            <li>This prevents compact arguments from becoming metadata.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Fixed point</span>
+          <h4>Ordinary tensor leaf</h4>
+          <ol>
+            <li>If the Schoonschip atom rewriter makes no change, do not recurse.</li>
+            <li>Run <code>S::parse</code> for fast structure inference.</li>
+            <li>Use a library tensor if a key exists.</li>
+            <li>Otherwise concretize the parsed tensor shell.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Parse fails</span>
+          <h4>Fallback</h4>
+          <p>If structure parsing fails, parse the function as a scalar expression.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Shorthand Materialization</h3>
+    <div class="flowchart">
+      <div class="vertical-flow">
+        <div class="flow-node start"><strong>Root</strong><code>materialize_shorthand(fun) -&gt; Network</code></div>
+        <div class="connector">&darr;</div>
+        <div class="flow-node decision"><strong>Decision</strong>Root is <code>chain</code> or <code>trace</code>?</div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Yes</span>
+          <h4>Topology materialization</h4>
+          <ol>
+            <li>Allocate links or closure slots.</li>
+            <li>Replace <code>in</code>/<code>out</code>.</li>
+            <li>Materialize compact Schoonschip syntax inside factors.</li>
+            <li>Parse and return the resulting network.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">No</span>
+          <h4>Compact syntax check</h4>
+          <p>Use <code>SchoonschipMaterializer</code> to rewrite compact dot or compact vector arguments.</p>
+        </div>
+      </div>
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">Dot</span>
+          <h4>Compact scalar product</h4>
+          <p><code>dot(p(rep), q(rep))</code> or <code>g(p(rep), q(rep))</code></p>
+          <ol>
+            <li>Allocate one fresh dummy slot <code>d</code>.</li>
+            <li>Build <code>p(d) * q(d)</code>.</li>
+            <li>Parse that expression into a network.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">Arg</span>
+          <h4>Compact vector argument</h4>
+          <p><code>F(..., p(rep), ...)</code></p>
+          <ol>
+            <li>Allocate fresh dummy slot <code>d</code>.</li>
+            <li>Rebuild <code>F(..., d, ...)</code>.</li>
+            <li>Parse <code>F(..., d, ...) * p(d)</code>.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">No change</span>
+          <h4>Ordinary leaf candidate</h4>
+          <p>Parse as an ordinary tensor leaf. This is the recursion stop.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Chain And Trace</h3>
+    <div class="flowchart">
+      <div class="split">
+        <div class="path-card">
+          <span class="path-label">chain</span>
+          <h4><code>materialize_chain_shorthand(chain(start, end, factors...))</code></h4>
+          <ol>
+            <li>Parse <code>start</code> and <code>end</code> as concrete slots.</li>
+            <li>Branch: no factors parses <code>g(start, end)</code>.</li>
+            <li>Branch: factors allocate links, replace <code>in</code>/<code>out</code>, materialize shorthand, parse, and multiply.</li>
+          </ol>
+        </div>
+        <div class="path-card">
+          <span class="path-label">trace</span>
+          <h4><code>materialize_trace_shorthand(trace(rep, factors...))</code></h4>
+          <ol>
+            <li>Parse <code>rep</code> as a representation.</li>
+            <li>Branch: no factors parses <code>dim(rep)</code>.</li>
+            <li>Branch: one factor closes with a bridge slot and two metrics.</li>
+            <li>Branch: many factors allocate cyclic links, materialize, parse, and multiply.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Function Flow</h2>
+    <p>
+      Function parsing has the most important ordering rules.
+    </p>
+    <ol>
+      <li>
+        Reject malformed <code>dot</code> syntax first. Dot has exactly two
+        arguments in parser syntax.
+      </li>
+      <li>
+        If the root is <code>pure_scalar</code>, unwrap its single argument and
+        return a scalar. This is a hard override.
+      </li>
+      <li>
+        If <code>is_tensorial()</code> finds no representation tag pattern,
+        return the function as a scalar expression. The check searches for
+        symbols with the <code>rep_</code> tag in the root, arguments, sums,
+        products, and power bases.
+      </li>
+      <li>
+        If <code>shorthand_parsing</code> is <code>Opaque</code>, parse the
+        whole representation-bearing function as one inferred tensor leaf.
+      </li>
+      <li>
+        Handle special expand-mode syntax: <code>bracket</code> and tagged
+        wrappers. Chain and trace are handled by the shorthand materializer.
+      </li>
+      <li>
+        For other functions in <code>Expand</code> mode, run shorthand
+        materialization before ordinary leaf parsing. This always returns a
+        network: <code>chain</code> and <code>trace</code> materialize topology,
+        compact dot/Schoonschip expressions rewrite and recurse, and unchanged
+        functions parse as ordinary tensor leaves.
+      </li>
+      <li>
+        Try <code>S::parse</code>. If it succeeds, use a library tensor when
+        possible, otherwise concretize a tensor shell.
+      </li>
+      <li>
+        If structure parsing fails, parse the function as a scalar expression.
+      </li>
+    </ol>
+    <div class="snippet-grid">
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/mod.rs#L531">crates/spenso/src/network/parsing/mod.rs:531</a>
+        </p>
+        <pre><code>if symbol == SPENSO_TAG.dot &amp;&amp; value.get_nargs() != 2 {
+    return Err(TensorNetworkError::InvalidDotFunction(...));
+}
+
+if symbol == SPENSO_TAG.pure_scalar {
+    return Ok(Self::from_scalar(...));
+}
+
+if !value.as_view().is_tensorial() {
+    return Ok(Self::from_scalar(...));
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/structure_inference.rs#L44">crates/spenso/src/network/parsing/structure_inference.rs:44</a>
+        </p>
+        <pre><code>pub trait AtomStructureExt {
+    fn infer_structure&lt;S: StructureFromAtom&gt;(...);
+    fn is_tensorial(&amp;self) -&gt; bool;
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/mod.rs#L551">crates/spenso/src/network/parsing/mod.rs:551</a>
+        </p>
+        <pre><code>if let Some(inference) = settings.shorthand_parsing.opaque_inference() {
+    return Self::as_inferred_leaf(...);
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/mod.rs#L604">crates/spenso/src/network/parsing/mod.rs:604</a>
+        </p>
+        <pre><code>Self::materialize_shorthand(
+    value,
+    state,
+    library,
+    function_library,
+    settings,
+)</code></pre>
+      </div>
+    </div>
+    <div class="box">
+      <p>
+        <span class="tag">Important:</span> materialization must run before the
+        generic leaf parser. Otherwise <code>F(p(rep), slot)</code> can be
+        accepted as a lower-rank tensor with <code>p(rep)</code> stored as
+        metadata, losing the required <code>p(dummy)</code> factor.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Expand vs Opaque</h2>
+    <div class="grid">
+      <div class="box">
+        <h3>Expand</h3>
+        <p>
+          Shorthand is rewritten into explicit parser input. Chain and trace
+          allocate internal links. Compact vector arguments allocate fresh slots.
+          The parser then recurses on the rewritten expression.
+        </p>
+      </div>
+      <div class="box">
+        <h3>Opaque</h3>
+        <p>
+          Any representation-bearing function expression that survives the
+          scalar fast paths becomes one leaf. Structure is inferred first, then
+          <code>TensorFromExpression</code> constructs the target tensor from the
+          original expression and inferred structure.
+        </p>
+      </div>
+    </div>
+    <p>
+      Opaque mode is checked before chain or trace expansion. The
+      <code>pure_scalar</code> wrapper and <code>is_tensorial()</code> scalar fallback
+      run before that check, so non-tensor functions stay scalar even in opaque
+      mode.
+    </p>
+  </section>
+
+  <section>
+    <h2>Opaque Leaf Boundary</h2>
+    <p>
+      Opaque shorthand parsing is split into two steps.
+    </p>
+    <ol>
+      <li>
+        <code>StructureFromAtom::structure_from_atom</code> determines the
+        exposed slots. <code>Fast</code> uses a syntactic walk.
+        <code>Expanded</code> builds an expanded shorthand network and reads
+        dangling slots.
+      </li>
+      <li>
+        <code>TensorFromExpression::tensor_from_expression</code> turns the
+        original atom plus inferred structure into a tensor. Symbolic tensors
+        keep the original expression on a tensor with the inferred structure.
+        Concrete and parametric tensor classes parse the same atom again with
+        <code>ShorthandParsing::Expand</code>, execute that nested network, and
+        return the resulting tensor or tensor scalar.
+      </li>
+    </ol>
+    <div class="snippet-grid">
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/structure_inference.rs#L77">crates/spenso/src/network/parsing/structure_inference.rs:77</a>
+        </p>
+        <pre><code>match mode {
+    StructureInferenceMode::Fast =&gt; Self::leaf_structure_from_atom(value),
+    StructureInferenceMode::Expanded =&gt;
+        Self::expanded_shorthand_structure_from_atom(value),
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/tensor_from_expression.rs#L25">crates/spenso/src/network/parsing/tensor_from_expression.rs:25</a>
+        </p>
+        <pre><code>/// Builds a tensor leaf from an opaque expression once its structure is known.
+pub trait TensorFromExpression&lt;S, Sc, K, FK, Aind, Lib, FunLib&gt; {
+    fn tensor_from_expression(...);
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/tensor_from_expression.rs#L120">crates/spenso/src/network/parsing/tensor_from_expression.rs:120</a>
+        </p>
+        <pre><code>let mut expanded_settings = settings.clone();
+expanded_settings.shorthand_parsing = ShorthandParsing::Expand;
+
+let mut network = Network::try_from_view_with_function_library(
+    expression,
+    tensor_library,
+    function_library,
+    &amp;expanded_settings,
+)?;
+network.execute::&lt;Sequential, SmallestDegree, ...&gt;(...)?;</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/idenso/src/tensor/mod.rs#L118">crates/idenso/src/tensor/mod.rs:118</a>
+        </p>
+        <pre><code>let mut tensor = structure.structure;
+...
+tensor.expression = expression.to_owned();
+Ok(tensor)</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Structure Inference</h2>
+    <p>
+      Fast structure inference is syntactic and intentionally non-semantic.
+    </p>
+    <table>
+      <tr>
+        <th>Function</th>
+        <td>Direct slot arguments expose slots. <code>aind(...)</code> bundles are flattened. Other arguments are metadata.</td>
+      </tr>
+      <tr>
+        <th>Product</th>
+        <td>Merge the structures of all factors. Scalar factors contribute an empty structure.</td>
+      </tr>
+      <tr>
+        <th>Sum</th>
+        <td>Use the first summand's structure. The parser separately checks compatibility when it parses full sums.</td>
+      </tr>
+      <tr>
+        <th>Power</th>
+        <td>Scalars stay scalar. Even powers of fully self-dual tensors become scalar. Odd integer powers keep the base structure. Other tensor powers are rejected.</td>
+      </tr>
+      <tr>
+        <th><code>chain</code></th>
+        <td>Open endpoints are external slots. Factor slots are scanned recursively. <code>in</code> and <code>out</code> placeholders are wiring labels, not visible slots.</td>
+      </tr>
+      <tr>
+        <th><code>trace</code></th>
+        <td>The representation argument is not an external slot. Factor slots are scanned recursively.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Materialization</h2>
+    <p>
+      The parser's <code>materialize_shorthand</code> method is the expand-mode
+      shorthand boundary. It always returns a network. For <code>chain</code>
+      and <code>trace</code>, it materializes topology directly. For compact
+      dot/Schoonschip syntax, it rewrites to ordinary parser input and recurses.
+      If the atom rewriter makes no change, it stops recursion and parses the
+      original function as an ordinary tensor leaf.
+    </p>
+    <p>
+      <code>SchoonschipMaterializer</code> is the narrower atom rewriter used by
+      that network boundary. It stores a <code>current</code> atom plus
+      <code>additional_factors</code>. Additional factors are multiplied beside
+      the current atom and are not inspected by the Schoonschip materializer
+      during that same pass; they are parsed when the parser recurses on the
+      complete expression.
+    </p>
+    <div class="snippet-grid">
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L362">crates/spenso/src/network/parsing/materialization.rs:362</a>
+        </p>
+        <pre><code>fn materialize_shorthand(...)
+    -&gt; Result&lt;Self, TensorNetworkError&lt;K, Symbol&gt;&gt;
+{
+    if symbol == SPENSO_TAG.chain {
+        return Self::materialize_chain_shorthand(...);
+    }
+    if symbol == SPENSO_TAG.trace {
+        return Self::materialize_trace_shorthand(...);
+    }
+
+    let materialized = SchoonschipMaterializer::new(&amp;state)
+        .materialize_shorthand(value.as_view());
+    if materialized == value.as_view().to_owned() {
+        return Self::parse_regular_function_leaf(...);
+    }
+    Self::try_from_view_impl(materialized.as_view(), ...)
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L91">crates/spenso/src/network/parsing/materialization.rs:91</a>
+        </p>
+        <pre><code>pub(super) fn materialize_shorthand(&self, value: AtomView&lt;'_&gt;) -&gt; Atom {
+    self.materialize_shorthand_root(value)
+        .map(SchoonschipMaterialization::into_expression)
+        .unwrap_or_else(|| value.to_owned())
+}</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L184">crates/spenso/src/network/parsing/materialization.rs:184</a>
+        </p>
+        <pre><code>let rep = Self::compact_vector_rep(*lhs)?;
+if rep != Self::compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
+    return None;
+}
+
+let slot = self.state.slot(&rep).to_atom();</code></pre>
+      </div>
+      <div class="box">
+        <p class="source-ref">
+          <a href="../../crates/spenso/src/network/parsing/materialization.rs#L20">crates/spenso/src/network/parsing/materialization.rs:20</a>
+        </p>
+        <pre><code>// Chain and trace materialization chooses the symbolic in/out
+// replacements, then lets this Schoonschip helper expand compact
+// arguments inside each factor.</code></pre>
+      </div>
+    </div>
+    <h3>Compact Vector Argument</h3>
+    <pre><code>F(..., p(rep), ...)
+-> F(..., rep(dummy), ...) * p(rep(dummy))</code></pre>
+    <p>
+      The dummy slot is allocated from the active <code>ParseState</code>, so it
+      shares the namespace of the surrounding network parse.
+    </p>
+    <h3>Compact Scalar Product</h3>
+    <pre><code>g(p(rep), q(rep))
+-> p(rep(dummy)) * q(rep(dummy))</code></pre>
+    <p>
+      This currently requires both compact vectors to have the same self-dual
+      representation. <code>dot(p(rep), q(rep))</code> follows the same rule.
+    </p>
+    <p>
+      The stripped representation in <code>p(rep)</code> means that the vector
+      replaces an omitted tensor slot. It is valid only where such a slot exists:
+      inside another tensor argument, or inside a recognized compact scalar
+      product head such as <code>g</code> or <code>dot</code>. For example,
+      <code>p!(q!(mink!(4)))</code> is valid shorthand and materializes like
+      <code>p(mink(4, d)) * q(mink(4, d))</code>. A bare product such as
+      <code>p!(mink!(4)) * q!(mink!(4))</code> is malformed input, because the
+      stripped vectors are not replacing slots.
+    </p>
+    <h3>Compact Vector Detection</h3>
+    <p>
+      A compact vector is a function that:
+    </p>
+    <ul>
+      <li>is not <code>metric</code> or <code>dot</code>;</li>
+      <li>is not itself a representation;</li>
+      <li>has no explicit slot argument;</li>
+      <li>has exactly one direct argument matching the representation wildcard convention.</li>
+    </ul>
+    <p>
+      Sums are accepted only when every summand is a compact vector with the same
+      representation. Products and powers are not compact vector syntax.
+    </p>
+  </section>
+
+  <section>
+    <h2>Chain Expansion</h2>
+    <p>
+      In expand mode, <code>chain(start, end, factors...)</code> expects
+      concrete endpoint slots. The network-level shorthand materializer handles
+      the chain skeleton: it chooses the internal links and rewrites each
+      factor's <code>in</code>/<code>out</code> placeholders. Then it calls
+      <code>SchoonschipMaterializer</code> on the rewritten factor to expand any
+      compact arguments inside that factor.
+    </p>
+    <ol>
+      <li>With no factors, it becomes <code>g(start, end)</code>.</li>
+      <li>Each factor gets a left and right link slot.</li>
+      <li><code>in</code> and <code>out</code> placeholders are replaced syntactically.</li>
+      <li>The factor is passed through shorthand materialization.</li>
+      <li>Each materialized factor is parsed into one or more factor networks.</li>
+      <li>The factor networks are multiplied in chain order.</li>
+    </ol>
+    <p>
+      If a materialized chain factor is a product with scalar factors and exactly
+      one tensor factor, scalar factors are split out so they can be handled
+      separately. Otherwise the whole factor product is parsed as one expression.
+    </p>
+    <pre><code>chain(s, e, F(in, out, p(rep)))
+-> replace placeholders: F(s, e, p(rep))
+-> materialize factor:   F(s, e, d) * p(d)
+-> parse product into the chain network</code></pre>
+    <div class="box">
+      <p class="source-ref">
+        <a href="../../crates/spenso/src/network/parsing/materialization.rs#L417">crates/spenso/src/network/parsing/materialization.rs:417</a>
+      </p>
+      <pre><code>let start = Slot::try_from(args[0])?;
+let end = Slot::try_from(args[1])?;
+...
+let factor = ChainExpansion::replace_placeholders(...);
+let factor = SchoonschipMaterializer::new(&state)
+    .materialize_shorthand(factor.as_view());</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Trace Expansion</h2>
+    <p>
+      In expand mode, <code>trace(rep, factors...)</code> starts from a
+      representation, not endpoint slots. The network-level shorthand
+      materializer handles the trace topology: dimensions, cyclic links, and the
+      one-factor closure metrics. It still calls
+      <code>SchoonschipMaterializer</code> on each factor after placeholder
+      replacement so compact arguments inside the traced factor are expanded
+      before parsing.
+    </p>
+    <ol>
+      <li>No factors: parse the representation dimension.</li>
+      <li>One factor: allocate left, right, and bridge slots, then close the factor with two metrics.</li>
+      <li>Multiple factors: allocate cyclic links and replace each factor's placeholders with adjacent links.</li>
+      <li>Materialize shorthand inside each factor before parsing it.</li>
+      <li>Multiply the factor networks.</li>
+    </ol>
+    <pre><code>trace(rep, F(in, out, p(rep)))
+-> allocate left, right, bridge
+-> replace placeholders: F(left, right*, p(rep))
+-> materialize factor:   F(left, right*, d) * p(d)
+-> multiply with closure metrics:
+   g(bridge, left*) * g(right, bridge*)</code></pre>
+    <div class="box">
+      <p class="source-ref">
+        <a href="../../crates/spenso/src/network/parsing/materialization.rs#L489">crates/spenso/src/network/parsing/materialization.rs:489</a>
+      </p>
+      <pre><code>let rep = Representation::try_from(*rep_view)?;
+...
+let materialized_factor =
+    ChainExpansion::replace_placeholders(...);
+let materialized_factor =
+    SchoonschipMaterializer::new(&state)
+        .materialize_shorthand(materialized_factor.as_view());
+
+let left_closure = FunctionBuilder::new(ETS.metric).add_arg(...).finish();
+let right_closure = FunctionBuilder::new(ETS.metric).add_arg(...).finish();</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Products, Sums, Powers</h2>
+    <table>
+      <tr>
+        <th>Product</th>
+        <td>Parse every factor recursively. If scalar precontraction is enabled, pure scalar factors are combined. The old special case <code>p(rep) * q(rep)</code> is intentionally not a shorthand materialization path.</td>
+      </tr>
+      <tr>
+        <th>Sum</th>
+        <td>Parse summands recursively and require compatible network states. Pure scalar summands may be precontracted into one scalar sum.</td>
+      </tr>
+      <tr>
+        <th>Power</th>
+        <td>Integer powers recurse into the base. Tensor powers are allowed only when the network state supports the exponent. Non-integer powers fall back to scalar parsing.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Edge Cases</h2>
+    <table>
+      <tr>
+        <th><code>F(p(rep), slot)</code></th>
+        <td>Must materialize before ordinary function parsing. Expected expansion is <code>F(dummy, slot) * p(dummy)</code>, leaving <code>slot</code> external and the dummy internal.</td>
+      </tr>
+      <tr>
+        <th><code>p(rep)</code></th>
+        <td>A standalone compact vector root is not materialized. It can only become a vector when used in a materializable argument or scalar-product position.</td>
+      </tr>
+      <tr>
+        <th><code>p(rep) * q(rep)</code></th>
+        <td>Not valid shorthand in the parser. The product path does not materialize this into a dot product.</td>
+      </tr>
+      <tr>
+        <th><code>dot(a,b,c)</code></th>
+        <td>Invalid parser syntax. Dot has two arguments; the parser rejects this before any scalar or opaque fallback.</td>
+      </tr>
+      <tr>
+        <th><code>g(slot, p(rep))</code></th>
+        <td>Materializes to <code>g(slot, dummy) * p(dummy)</code>. The contraction is represented by the network, not by a pre-parser algebra rewrite.</td>
+      </tr>
+      <tr>
+        <th><code>g(p(rep), q(rep))</code></th>
+        <td>For matching self-dual reps, materializes to <code>p(dummy) * q(dummy)</code>.</td>
+      </tr>
+      <tr>
+        <th>Dualizable compact scalar products</th>
+        <td><span class="warn">Current gap:</span> compact scalar-product materialization requires self-duality. Dualizable cases produced by algebraic Schoonschip rules are not handled by this specific materializer rule.</td>
+      </tr>
+      <tr>
+        <th>Compact vector endpoints in chains</th>
+        <td>Expand-mode chain endpoints are parsed before factor materialization and must be concrete slots. A compact vector endpoint from an algebraic pre-pass is not accepted as a chain endpoint by this parser path.</td>
+      </tr>
+      <tr>
+        <th>Metadata false positives</th>
+        <td>The compact-vector convention is syntactic. Any function argument with exactly one direct representation argument and no slots can be treated as a compact vector in expand mode.</td>
+      </tr>
+      <tr>
+        <th>Opaque fast vs expanded inference</th>
+        <td>Fast inference is cheap and syntactic. Expanded inference builds an expanded network and reads dangling slots, so it is a validation oracle but more expensive.</td>
+      </tr>
+      <tr>
+        <th>Opaque scalar result</th>
+        <td>A representation-bearing composite can still finalize to a scalar tensor. Opaque mode sends it through <code>TensorFromExpression</code>; it does not return a pure scalar unless the early scalar fast paths apply.</td>
+      </tr>
+      <tr>
+        <th>Depth leaves</th>
+        <td>Depth leaves use the opaque tensor-expression boundary. Non-tensorial expressions still fall back to pure scalars unless composite scalar tensor leaves are explicitly enabled.</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Short Algorithm</h2>
+    <pre><code>parse(atom):
+  dispatch by atom kind
+
+parse_fun(fun):
+  if fun is dot with arg count != 2:
+    return InvalidDotFunction
+
+  if fun is pure_scalar(x):
+    return scalar(x)
+
+  if !fun.is_tensorial():
+    return scalar(fun)
+
+  if opaque mode:
+    infer structure
+    return TensorFromExpression(original expression, inferred structure)
+
+  return materialize_shorthand(fun)
+
+materialize_shorthand(fun):
+  if fun is chain:
+    allocate links
+    replace in/out placeholders
+    materialize compact shorthand inside each factor
+    parse factor expressions
+    return chain network
+
+  if fun is trace:
+    allocate cyclic links or closure metrics
+    replace in/out placeholders
+    materialize compact shorthand inside each factor
+    parse factor expressions
+    return trace network
+
+  if fun is compact metric/dot:
+    parse lhs(dummy) * rhs(dummy) and return that network
+
+  scan arguments:
+    compact vector argument -> current slot plus additional vector factor
+    nested function argument -> recurse
+    other argument -> unchanged
+
+  if the Schoonschip atom changed:
+    parse rebuilt current multiplied by additional_factors
+
+  if ordinary structure parsing succeeds:
+    return library tensor or concretized shell
+
+  return scalar expression</code></pre>
+  </section>
+</main>
+</body>
+</html>

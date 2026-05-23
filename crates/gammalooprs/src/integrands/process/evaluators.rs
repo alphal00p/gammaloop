@@ -1,7 +1,11 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    color::ColorSimplifier,
+    dirac::GammaSimplifier,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
@@ -16,7 +20,7 @@ use spenso::{
         algebraic_traits::RefOne,
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
-    network::{ExecutionResult, Sequential, SmallestDegree},
+    network::{ExecutionResult, MinResultRank, Sequential},
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
 use std::ops::Deref;
@@ -789,7 +793,7 @@ impl EvaluatorStack {
                 };
 
                 // println!("Executing {}", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                net.execute::<Sequential, MinResultRank, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;

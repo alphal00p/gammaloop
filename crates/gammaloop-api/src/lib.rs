@@ -46,6 +46,7 @@ use colored::Colorize;
 use console::{measure_text_width, style};
 use dirs::home_dir;
 use eyre::{eyre, Context};
+use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     initialisation::initialise,
     processes::ProcessCollection,
@@ -53,7 +54,7 @@ use gammalooprs::{
     utils::serde_utils::IsDefault,
     utils::{
         serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
-        tracing::{LogFormat, LogLevel},
+        tracing::LogLevel,
         GIT_VERSION,
     },
 };
@@ -947,7 +948,7 @@ impl OneShot {
 
         set_file_log_filter(&cli_settings.global.logfile_directive)?;
         set_stderr_log_filter(&cli_settings.global.display_directive)?;
-        set_log_style(cli_settings.global.log_style.clone());
+        set_log_style(cli_settings.global.log_style.to_runtime());
         set_log_format_override(self.logging_prefix);
         set_stderr_log_filter_override(
             self.level
@@ -2649,7 +2650,10 @@ mod tests {
         fs::remove_file(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
         let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
         assert_eq!(loaded, CLISettings::default());
-        assert_eq!(loaded.global.log_style.log_format, LogFormat::Long);
+        assert_eq!(
+            loaded.global.log_style.log_format,
+            gammalooprs::utils::tracing::LogFormat::Long
+        );
     }
 
     #[test]

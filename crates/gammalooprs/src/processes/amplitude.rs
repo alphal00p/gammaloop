@@ -13,7 +13,9 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    color::ColorSimplifier, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier,
+};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},

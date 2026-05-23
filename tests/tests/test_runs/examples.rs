@@ -30,7 +30,7 @@ fn is_generated_bench_output_dir(path: &Path) -> bool {
             window[0] == "examples"
                 && window[1] == "cli"
                 && window[2] == "bench"
-                && window[3] == "outputs"
+                && matches!(window[3], "outputs" | "OLD_outputs")
         })
 }
 

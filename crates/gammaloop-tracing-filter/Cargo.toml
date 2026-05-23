@@ -4,9 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chrono = { workspace = true }
+colored = { workspace = true }
+itertools = { workspace = true }
+pyo3 = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tabled = { workspace = true, features = ["ansi"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "registry", "std"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "registry", "std"] }
+clap = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "registry", "std"] }
+
+[features]
+default = []
+clap = ["dep:clap"]
+python_api = ["dep:pyo3"]
