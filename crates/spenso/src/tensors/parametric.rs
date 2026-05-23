@@ -1,6 +1,14 @@
 extern crate derive_more;
 
-use crate::structure::{IndexLess, slot::IsAbstractSlot};
+use std::{
+    env,
+    fmt::{Debug, Display},
+    io::Cursor,
+    path::Path,
+    sync::OnceLock,
+};
+
+use crate::structure::{IndexLess, SlotIndex, slot::IsAbstractSlot};
 use crate::structure::{StructureError, slot::AbsInd};
 use crate::structure::{
     permuted::PermuteTensor, representation::Representation, slot::ParseableAind,
@@ -15,19 +23,16 @@ use crate::{
 };
 use ahash::HashMap;
 use delegate::delegate;
-use std::{
-    fmt::{Debug, Display},
-    io::Cursor,
-    path::Path,
-};
+use linnet::half_edge::subgraph::SubSetLike;
 
 use eyre::Result;
 use eyre::eyre;
 
 use atomcore::{ReplaceBuilderGeneric, TensorAtomMaps};
-// use anyhow::Ok;
+
 use enum_try_as_inner::EnumTryAsInner;
 use log::trace;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use to_param::ToAtom;
 
@@ -42,8 +47,8 @@ use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     shadowing::{ShadowMapping, Shadowable},
     structure::{
-        CastStructure, HasName, HasStructure, NamedStructure, OrderedStructure, ScalarStructure,
-        ScalarTensor, StructureContract, TensorStructure, TracksCount,
+        CastStructure, HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure,
+        ScalarStructure, ScalarTensor, StructureContract, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, DualConciousExpandedIndex, ExpandedIndex, FlatIndex},
         slot::Slot,
     },
@@ -56,7 +61,7 @@ use crate::{
 use bincode::{Decode, Encode};
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, KeyLookup, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
     domains::{
         InternalOrdering,
         float::{FloatLike, Real, SingleFloat},
@@ -72,6 +77,47 @@ use symbolica::{
     symbol,
     utils::BorrowedOrOwned,
 };
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_entries_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| env::var_os("SPENSO_NETWORK_HORNER_CONTRACT_ENTRIES").is_some())
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_atom(atom: Atom) -> Atom {
+    if atom.as_view().get_byte_size() < 4096 && !matches!(atom.as_view(), AtomView::Add(_)) {
+        return atom;
+    }
+
+    atom.collect_horner::<Indeterminate>(None)
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_tensor<I>(tensor: DataTensor<Atom, I>) -> DataTensor<Atom, I>
+where
+    I: TensorStructure,
+{
+    if !horner_contract_entries_enabled() {
+        return tensor;
+    }
+
+    match tensor {
+        DataTensor::Dense(mut dense) => {
+            dense.data = dense.data.into_iter().map(horner_contract_atom).collect();
+            DataTensor::Dense(dense)
+        }
+        DataTensor::Sparse(mut sparse) => {
+            sparse.zero = horner_contract_atom(sparse.zero);
+            sparse.elements = sparse
+                .elements
+                .into_iter()
+                .map(|(index, atom)| (index, horner_contract_atom(atom)))
+                .collect();
+            DataTensor::Sparse(sparse)
+        }
+    }
+}
 
 use std::hash::Hash;
 
@@ -367,10 +413,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -1277,10 +1323,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -1848,13 +1894,361 @@ where
     }
 }
 
+impl<I> ParamTensor<I>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    fn one_hot_selector_contract(
+        &self,
+        other: &ParamTensor<I>,
+    ) -> Result<Option<DataTensor<Atom, I>>, ContractionError> {
+        let (resulting_structure, pos_self, pos_other, _) =
+            self.tensor.structure().merge(other.tensor.structure())?;
+
+        if pos_self.n_included() != 1 || pos_other.n_included() != 1 {
+            return Ok(None);
+        }
+
+        let self_axis = pos_self
+            .included_iter()
+            .next()
+            .expect("one included self slot")
+            .0;
+        let other_axis = pos_other
+            .included_iter()
+            .next()
+            .expect("one included other slot")
+            .0;
+
+        if let Some(result) = contract_one_hot_selector_data(
+            &self.tensor,
+            &other.tensor,
+            resulting_structure.clone(),
+            other_axis,
+        )? {
+            return Ok(Some(result));
+        }
+
+        contract_one_hot_selector_data(&other.tensor, &self.tensor, resulting_structure, self_axis)
+    }
+}
+
+fn one_hot_component<I>(tensor: &DataTensor<Atom, I>) -> Option<(ConcreteIndex, Atom)>
+where
+    I: TensorStructure,
+{
+    if tensor.order() != 1 {
+        return None;
+    }
+
+    let mut nonzero = tensor.iter_expanded().filter(|(_, value)| !value.is_zero());
+    let (index, value) = nonzero.next()?;
+    if nonzero.next().is_some() {
+        return None;
+    }
+
+    Some((index.indices[0], value.clone()))
+}
+
+fn contract_one_hot_selector_data<I>(
+    selector: &DataTensor<Atom, I>,
+    target: &DataTensor<Atom, I>,
+    resulting_structure: I,
+    target_axis: usize,
+) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
+where
+    I: TensorStructure + Clone,
+{
+    let Some((selected_component, selector_value)) = one_hot_component(selector) else {
+        return Ok(None);
+    };
+
+    let target_slot = target
+        .structure()
+        .external_structure()
+        .get(target_axis)
+        .copied()
+        .ok_or_else(|| eyre!("matched selector target axis out of bounds"))?;
+    let negative_metric_component = target_slot
+        .rep()
+        .negative()?
+        .get(selected_component)
+        .copied()
+        .ok_or_else(|| eyre!("selector component out of target representation bounds"))?;
+
+    let mut result = SparseTensor::empty(resulting_structure, Atom::Zero);
+    for (mut index, value) in target.iter_expanded() {
+        if value.is_zero() || index.indices[target_axis] != selected_component {
+            continue;
+        }
+
+        index.indices.remove(target_axis);
+        let mut value = value.clone();
+        if selector_value != Atom::num(1) {
+            value *= selector_value.clone();
+        }
+        if negative_metric_component {
+            value = -value;
+        }
+        result.smart_set(&index.indices, value)?;
+    }
+
+    Ok(Some(DataTensor::Sparse(result)))
+}
+
+fn grouped_atom_sum(terms: Vec<Atom>) -> Atom {
+    match terms.len() {
+        0 => Atom::Zero,
+        1 => terms
+            .into_iter()
+            .next()
+            .expect("single grouped atom exists"),
+        _ => Atom::add_many(&terms),
+    }
+}
+
+fn grouped_sparse_atom_contract<I>(
+    left: &DataTensor<Atom, I>,
+    right: &DataTensor<Atom, I>,
+) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+        return Ok(None);
+    };
+    if !left.zero.as_view().is_zero() || !right.zero.as_view().is_zero() {
+        return Ok(None);
+    }
+
+    let (resulting_structure, pos_left, pos_right, merge_info) =
+        left.structure().merge(right.structure())?;
+    let common_count = pos_left.n_included();
+
+    match (common_count, merge_info) {
+        (0, _) | (_, MergeInfo::Interleaved(_)) => Ok(None),
+        (1, MergeInfo::FirstBeforeSecond) => {
+            let left_axis = pos_left
+                .included_iter()
+                .next()
+                .expect("single left contraction axis");
+            let right_axis = pos_right
+                .included_iter()
+                .next()
+                .expect("single right contraction axis");
+            grouped_sparse_atom_single_contract(
+                left,
+                right,
+                resulting_structure,
+                left_axis,
+                right_axis,
+            )
+            .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (1, MergeInfo::SecondBeforeFirst) => {
+            let left_axis = pos_left
+                .included_iter()
+                .next()
+                .expect("single left contraction axis");
+            let right_axis = pos_right
+                .included_iter()
+                .next()
+                .expect("single right contraction axis");
+            grouped_sparse_atom_single_contract(
+                right,
+                left,
+                resulting_structure,
+                right_axis,
+                left_axis,
+            )
+            .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (_, MergeInfo::FirstBeforeSecond) => {
+            grouped_sparse_atom_multi_contract(left, right, resulting_structure)
+                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (_, MergeInfo::SecondBeforeFirst) => {
+            grouped_sparse_atom_multi_contract(right, left, resulting_structure)
+                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+    }
+}
+
+fn grouped_sparse_atom_single_contract<I>(
+    left: &SparseTensor<Atom, I>,
+    right: &SparseTensor<Atom, I>,
+    final_structure: I,
+    left_axis: SlotIndex,
+    right_axis: SlotIndex,
+) -> Result<SparseTensor<Atom, I>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let metric = left.external_structure()[left_axis.0].rep().negative()?;
+    let mut grouped = Vec::<(FlatIndex, Vec<Atom>)>::new();
+    let mut result_index = 0usize;
+
+    let self_iter = left.fiber_class(left_axis.into()).iter();
+    let mut other_iter = right.fiber_class(right_axis.into()).iter();
+
+    for mut fiber_a in self_iter {
+        for mut fiber_b in other_iter.by_ref() {
+            let mut items = fiber_a
+                .next()
+                .map(|(a, skip, _)| (a, skip))
+                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
+            let mut terms = Vec::new();
+
+            while let Some(((a, skip_a), (b, skip_b))) = items {
+                if skip_a > skip_b {
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    items = Some((a, skip_a)).zip(b);
+                } else if skip_b > skip_a {
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, _)| (a, skip + skip_a + 1));
+                    items = a.zip(Some((b, skip_b)));
+                } else {
+                    let mut product = a.mul_fallible(b).unwrap();
+                    if metric[skip_a] {
+                        product = -product;
+                    }
+                    terms.push(product);
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, _)| (a, skip + skip_a + 1));
+                    items = a.zip(b);
+                }
+            }
+
+            if !terms.is_empty() {
+                grouped.push((result_index.into(), terms));
+            }
+            result_index += 1;
+            fiber_a.reset();
+        }
+        other_iter.reset();
+    }
+
+    let elements = grouped
+        .into_par_iter()
+        .filter_map(|(index, terms)| {
+            let value = grouped_atom_sum(terms);
+            (!value.as_view().is_zero()).then_some((index, value))
+        })
+        .collect();
+
+    Ok(SparseTensor {
+        zero: Atom::Zero,
+        elements,
+        structure: final_structure,
+    })
+}
+
+fn grouped_sparse_atom_multi_contract<I>(
+    left: &SparseTensor<Atom, I>,
+    right: &SparseTensor<Atom, I>,
+    final_structure: I,
+) -> Result<SparseTensor<Atom, I>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let (permutation, self_matches, other_matches) =
+        left.structure().match_indices(right.structure()).unwrap();
+    let mut grouped = Vec::<(FlatIndex, Vec<Atom>)>::new();
+    let mut result_index = 0usize;
+
+    let self_iter = left
+        .fiber_class(self_matches.as_slice().into())
+        .iter_perm_metric(permutation);
+    let mut other_iter = right.fiber_class(other_matches.as_slice().into()).iter();
+
+    for mut fiber_a in self_iter {
+        for mut fiber_b in other_iter.by_ref() {
+            let mut items = fiber_a
+                .next()
+                .map(|(a, skip, (neg, _))| (a, skip, neg))
+                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
+            let mut terms = Vec::new();
+
+            while let Some(((a, skip_a, neg), (b, skip_b))) = items {
+                if skip_a > skip_b {
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    items = Some((a, skip_a, neg)).zip(b);
+                } else if skip_b > skip_a {
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                    items = a.zip(Some((b, skip_b)));
+                } else {
+                    let mut product = a.mul_fallible(b).unwrap();
+                    if neg {
+                        product = -product;
+                    }
+                    terms.push(product);
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                    items = a.zip(b);
+                }
+            }
+
+            if !terms.is_empty() {
+                grouped.push((result_index.into(), terms));
+            }
+            result_index += 1;
+            fiber_a.reset();
+        }
+        other_iter.reset();
+    }
+
+    let elements = grouped
+        .into_par_iter()
+        .filter_map(|(index, terms)| {
+            let value = grouped_atom_sum(terms);
+            (!value.as_view().is_zero()).then_some((index, value))
+        })
+        .collect();
+
+    Ok(SparseTensor {
+        zero: Atom::Zero,
+        elements,
+        structure: final_structure,
+    })
+}
+
 impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
 where
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = ParamTensor<I>;
     fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
-        let s = self.tensor.contract(&other.tensor)?;
+        let s = if let Some(s) = self.one_hot_selector_contract(other)? {
+            s
+        } else if let Some(s) = grouped_sparse_atom_contract(&self.tensor, &other.tensor)? {
+            s
+        } else {
+            self.tensor.contract(&other.tensor)?
+        };
+        let s = horner_contract_tensor(s);
 
         match (self.param_type, other.param_type) {
             (ParamOrComposite::Param, ParamOrComposite::Param) => Ok(ParamTensor::param(s)),
@@ -2356,10 +2750,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }

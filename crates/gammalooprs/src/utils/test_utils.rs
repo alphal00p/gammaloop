@@ -44,7 +44,7 @@ fn normalization() {
     let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.f(&[1]));
 
     assert_snapshot!(a.to_canonical_string(),@"0");
-    assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{}::Q(1,spenso::{}::cind(1))");
+    assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))");
 
     let c = GS.energy_delta(GS.cind(1));
     assert_snapshot!(c.to_canonical_string(),@"0");
@@ -58,7 +58,7 @@ fn normalization() {
         EdgeIndex(1),
         Minkowski {}.new_rep(4).to_symbolic([Atom::num(2)]),
     );
-    assert_snapshot!(q.to_canonical_string(),@"gammalooprs::{}::Q(1,spenso::{}::cind(2))");
+    assert_snapshot!(q.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))");
 
     let expr = parse_lit!(f(a + p + r));
     assert_snapshot!(GS.linearize.f(&[expr]).to_canonical_string(),@"gammalooprs::{}::f(gammalooprs::{}::a)+gammalooprs::{}::f(gammalooprs::{}::p)+gammalooprs::{}::f(gammalooprs::{}::r)");

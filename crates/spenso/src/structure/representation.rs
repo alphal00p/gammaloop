@@ -23,7 +23,8 @@ use bincode::{Decode, Encode};
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    self_dual_symbol,
     structure::{abstract_index::AIND_SYMBOLS, slot::SlotError},
 };
 
@@ -512,13 +513,27 @@ impl<T: RepName> Representation<T> {
     /// a is dualized, b is not.
     ///
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
+        fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
+            match value {
+                AtomView::Fun(fun) => {
+                    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+                    for arg in fun.iter() {
+                        rebuilt = rebuilt.add_arg(arg);
+                    }
+                    rebuilt.add_arg(rep).finish()
+                }
+                AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+                _ => value.to_owned(),
+            }
+        }
+
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
+        let rep = self.to_symbolic([]);
         function!(
             SPENSO_TAG.dot,
-            self.to_symbolic([]),
-            a.as_view(),
-            b.as_view()
+            with_rep(a.as_view(), &rep),
+            with_rep(b.as_view(), &rep)
         )
     }
 
@@ -722,12 +737,41 @@ impl LibraryRep {
                 name
             );
 
-            let rep_name = match self {
-                LibraryRep::SelfDual(a) => encode_base(*a as usize, &LATIN),
-                LibraryRep::Dualizable(a) => encode_base(a.unsigned_abs() as usize, &CYRILLIC),
-                LibraryRep::InlineMetric(a) => encode_base(*a as usize, &GREEK),
-                LibraryRep::Dummy => String::new(),
+            let (rep_name, tags) = match self {
+                LibraryRep::SelfDual(a) => (
+                    encode_base(*a as usize, &LATIN),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
+                LibraryRep::Dualizable(a) => (
+                    encode_base(a.unsigned_abs() as usize, &CYRILLIC),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.dualizable,
+                    ],
+                ),
+                LibraryRep::InlineMetric(a) => (
+                    encode_base(*a as usize, &GREEK),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
+                LibraryRep::Dummy => (
+                    String::new(),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
             };
+
             let name = name.to_string();
 
             symbol!(
@@ -811,7 +855,8 @@ impl LibraryRep {
                             Some(out)
                         }
                     }
-                }
+                },
+                tags = tags
             )
         }
     }
@@ -867,7 +912,7 @@ pub struct RepData {
 static DUMMY_REP_DATA: LazyLock<RepData> = LazyLock::new(|| RepData {
     name: "Dummy".to_string(),
     #[cfg(feature = "shadowing")]
-    symbol: symbol!("Dummy"),
+    symbol: self_dual_symbol!("Dummy"),
 });
 
 pub struct ExtendibleReps {
@@ -1208,7 +1253,7 @@ impl RepName for LibraryRep {
     }
 
     #[cfg(feature = "shadowing")]
-    /// yields a function builder for the representation, adding a first variable: the dimension.
+    /// yields a function builder for the representation
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
         &self,
         args: impl IntoIterator<Item = It>,
@@ -1461,19 +1506,4 @@ mod test {
 
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
-mod shadowing_tests {
-    // use symbolica::symbol;
-
-    // use crate::structure::representation::BaseRepName;
-
-    // use super::Lorentz;
-
-    // #[test]
-    // fn rep_pattern() {
-    //     println!("{}", Dual::<Lorentz>::pattern(symbol!("d_")));
-    //     println!(
-    //         "{}",
-    //         Dual::<Lorentz>::rep(3).to_pattern_wrapped(symbol!("d_"))
-    //     );
-    // }
-}
+mod shadowing_tests {}

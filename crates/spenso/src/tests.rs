@@ -3,7 +3,6 @@ use ahash::{HashMap, HashMapExt};
 use indexmap::{IndexMap, IndexSet};
 
 use log::info;
-// use slotmap::SlotMap;
 
 use insta::{assert_ron_snapshot, assert_snapshot, assert_yaml_snapshot};
 use rand::{distributions::Uniform, Rng, SeedableRng};
@@ -15,8 +14,7 @@ use symbolica::{
     parse, symbol,
 };
 
-#[cfg(feature = "shadowing")]
-use slotmap::{SecondaryMap, SlotMap};
+
 #[cfg(feature = "shadowing")]
 use std::hash::{DefaultHasher, Hash};
 
@@ -1506,43 +1504,4 @@ fn transpose() {
     let fdatatransposed = a.contract(&mdatatransposed).unwrap().contract(&b).unwrap();
 
     assert_eq!(fdatatransposed.data(), ftranspose.data());
-}
-
-#[cfg(feature = "shadowing")]
-#[test]
-fn slotmap() {
-    let mut a = SlotMap::new();
-    let mut b = SecondaryMap::new();
-    let mut c = SecondaryMap::new();
-
-    let idx0 = a.insert(0);
-    let idx1 = a.insert(1);
-    let idx2 = a.insert(2);
-
-    b.insert(idx0, 0);
-    b.insert(idx1, 1);
-    b.insert(idx2, 2);
-
-    c.insert(idx0, 0);
-    c.insert(idx1, 1);
-    c.insert(idx2, 2);
-
-    // c.remove(idx1);
-    // b.remove(idx1);
-    a.remove(idx1);
-
-    for (i, j) in b {
-        println!("{:?}:{}", i, j);
-    }
-
-    let p: ParamTensor<NamedStructure<symbolica::atom::Symbol, Vec<Atom>>> = ParamTensor::param(
-        DataTensor::Sparse(SparseTensor::empty(NamedStructure::from_iter(
-            [Lorentz {}.slot(3, 4)],
-            symbol!("name"),
-            Some(vec![parse!("q").unwrap()]),
-        ))),
-    );
-
-    let mut hasher = DefaultHasher::new();
-    p.hash(&mut hasher);
 }

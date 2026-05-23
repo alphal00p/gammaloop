@@ -689,6 +689,66 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         Ok(())
     }
 
+    /// Appends `other` without attempting to match dangling half-edges.
+    ///
+    /// Returns the half-edge offset that maps half-edge ids from `other` into
+    /// their ids after appending.
+    pub fn append_disconnected_mut(&mut self, other: Self) -> Result<Hedge, HedgeGraphError> {
+        let HedgeGraph {
+            hedge_data,
+            edge_store,
+            node_store,
+        } = other;
+
+        self.node_store.extend_mut(node_store);
+        let hedge_shift = self.edge_store.append_disconnected_mut(edge_store);
+        self.hedge_data.extend(hedge_data);
+        self.node_store.check_and_set_nodes()?;
+
+        Ok(hedge_shift)
+    }
+
+    /// Appends multiple graphs without attempting to match dangling half-edges.
+    ///
+    /// Returns the half-edge offsets that map half-edge ids from each input
+    /// graph into their ids after appending. The node store is validated once
+    /// after all inputs have been appended.
+    pub fn append_disconnected_many_mut<I>(
+        &mut self,
+        others: I,
+    ) -> Result<Vec<Hedge>, HedgeGraphError>
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        let mut edge_stores = Vec::new();
+
+        for other in others {
+            let HedgeGraph {
+                hedge_data,
+                edge_store,
+                node_store,
+            } = other;
+
+            self.node_store.extend_mut(node_store);
+            edge_stores.push(edge_store);
+            self.hedge_data.extend(hedge_data);
+        }
+
+        let hedge_shifts = self.edge_store.append_disconnected_many_mut(edge_stores);
+        self.node_store.check_and_set_nodes()?;
+        Ok(hedge_shifts)
+    }
+
+    /// Connects two dangling identity half-edges by their exact ids.
+    pub fn connect_identities(
+        &mut self,
+        source: Hedge,
+        sink: Hedge,
+        merge_fn: impl Fn(Flow, EdgeData<E>, Flow, EdgeData<E>) -> (Flow, EdgeData<E>),
+    ) {
+        self.edge_store.connect_identities(source, sink, merge_fn);
+    }
+
     /// Sews dangling edges internal to the graph, matching edges with the given function and merging them with the given function.
     /// "Sews" together pairs of dangling (identity) half-edges within the graph `self`.
     ///
@@ -1438,6 +1498,71 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         // self_edges
 
         (n, self_edges)
+    }
+
+    /// Identifies all nodes incident to `subgraph` and returns the half-edges in
+    /// `subgraph` that become self-edges because of the identification.
+    ///
+    /// This is cheaper than first collecting nodes and then rescanning their
+    /// crowns when the caller already has a subgraph containing the operation
+    /// island to collapse.
+    pub fn identify_nodes_of_subgraph_without_self_edges<S, O>(
+        &mut self,
+        subgraph: &S,
+        node_data_merge: V,
+    ) -> Option<(NodeIndex, O)>
+    where
+        S: SubSetLike<Base = N::Base>,
+        O: ModifySubSet<Hedge> + SubSetLike<Base = N::Base>,
+    {
+        let mut self_edges: O = self.empty_subgraph();
+        let n = self.identify_nodes_of_subgraph_marking_self_edges(
+            subgraph,
+            node_data_merge,
+            &mut self_edges,
+        )?;
+
+        Some((n, self_edges))
+    }
+
+    /// Identifies all nodes incident to `subgraph` and adds the half-edges in
+    /// `subgraph` that become self-edges to `self_edges`.
+    ///
+    /// This avoids allocating a temporary self-edge subgraph when the caller
+    /// already has a long-lived ignore/delete set to update.
+    pub fn identify_nodes_of_subgraph_marking_self_edges<S, O>(
+        &mut self,
+        subgraph: &S,
+        node_data_merge: V,
+        self_edges: &mut O,
+    ) -> Option<NodeIndex>
+    where
+        S: SubSetLike<Base = N::Base>,
+        O: ModifySubSet<Hedge> + SubSetLike<Base = N::Base>,
+    {
+        let mut nodes = IndexSet::new();
+
+        for hedge in subgraph.included_iter() {
+            let node = self.node_id(hedge);
+            nodes.insert(node);
+
+            let other = self.inv(hedge);
+            if other == hedge || !subgraph.includes(&other) {
+                continue;
+            }
+
+            if node != self.node_id(other) {
+                self_edges.add(hedge);
+            }
+        }
+
+        let nodes = nodes.into_iter().collect::<Vec<_>>();
+        if nodes.is_empty() {
+            return None;
+        }
+
+        let n = self.node_store.identify_nodes(&nodes, node_data_merge);
+        Some(n)
     }
 
     /// Collect all edges in the subgraph

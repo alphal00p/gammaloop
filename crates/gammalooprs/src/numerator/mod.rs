@@ -2,7 +2,7 @@
 
 use aind::Aind;
 use idenso::color::ColorSimplifier;
-use idenso::gamma::GammaSimplifier;
+use idenso::dirac::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
@@ -81,6 +81,9 @@ use symbolica::{
 };
 
 pub mod symbolica_ext;
+
+#[cfg(test)]
+mod spensotests;
 
 use symbolica::{evaluate::FunctionMap, id::Replacement};
 pub mod aind;
@@ -1200,7 +1203,7 @@ impl PolyContracted {}
 
 impl GammaSimplified {
     pub(crate) fn parse(self) -> Network {
-        let lib = DummyLibrary::<(), _>::new();
+        let lib = DummyLibrary::<MixedTensor<F<f64>, ShadowedStructure<Aind>>, _>::new();
         let net = StandardTensorNet::try_from_view(
             self.get_single_atom().unwrap().as_view(),
             &lib,
@@ -1338,7 +1341,7 @@ pub type StandardTensorNet = spenso::network::Network<
 
 impl Network {
     pub(crate) fn parse_impl(expr: AtomView) -> Self {
-        let lib = DummyLibrary::<(), _>::new();
+        let lib = DummyLibrary::<MixedTensor<F<f64>, ShadowedStructure<Aind>>, _>::new();
         let net = StandardTensorNet::try_from_view(expr, &lib, &ParseSettings::default()).unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());

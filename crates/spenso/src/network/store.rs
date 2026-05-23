@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::profile::{self, Counter, Timer};
+
 pub trait TensorScalarStore: Default + TensorScalarStoreMapping {
     fn add_tensor(&mut self, tensor: Self::Tensor) -> usize;
     fn add_scalar(&mut self, scalar: Self::Scalar) -> usize;
@@ -10,6 +12,17 @@ pub trait TensorScalarStore: Default + TensorScalarStoreMapping {
     fn n_tensors(&self) -> usize;
     fn n_scalars(&self) -> usize;
     fn extend(&mut self, other: Self);
+}
+
+#[doc(hidden)]
+pub trait NetworkStoreAccess {
+    type Tensor;
+    type Scalar;
+
+    fn tensor(&self, index: usize) -> &Self::Tensor;
+    fn scalar(&self, index: usize) -> &Self::Scalar;
+    fn push_tensor(&mut self, tensor: Self::Tensor) -> usize;
+    fn push_scalar(&mut self, scalar: Self::Scalar) -> usize;
 }
 
 pub trait TensorScalarStoreMapping: Sized {
@@ -128,6 +141,29 @@ pub struct NetworkStore<T, S> {
     pub scalar: Vec<S>,
 }
 
+#[doc(hidden)]
+pub struct NetworkStoreOverlay<'a, T, S> {
+    base_tensors: &'a [T],
+    base_scalars: &'a [S],
+    pub tensors: Vec<T>,
+    pub scalar: Vec<S>,
+}
+
+impl<'a, T, S> NetworkStoreOverlay<'a, T, S> {
+    pub fn new(base: &'a NetworkStore<T, S>) -> Self {
+        Self {
+            base_tensors: &base.tensors,
+            base_scalars: &base.scalar,
+            tensors: Vec::new(),
+            scalar: Vec::new(),
+        }
+    }
+
+    pub fn into_additions(self) -> (Vec<T>, Vec<S>) {
+        (self.tensors, self.scalar)
+    }
+}
+
 impl<T, S> Default for NetworkStore<T, S> {
     fn default() -> Self {
         NetworkStore {
@@ -136,6 +172,65 @@ impl<T, S> Default for NetworkStore<T, S> {
         }
     }
 }
+
+impl<T, S> NetworkStoreAccess for NetworkStore<T, S> {
+    type Tensor = T;
+    type Scalar = S;
+
+    fn tensor(&self, index: usize) -> &Self::Tensor {
+        &self.tensors[index]
+    }
+
+    fn scalar(&self, index: usize) -> &Self::Scalar {
+        &self.scalar[index]
+    }
+
+    fn push_tensor(&mut self, tensor: Self::Tensor) -> usize {
+        let index = self.tensors.len();
+        self.tensors.push(tensor);
+        index
+    }
+
+    fn push_scalar(&mut self, scalar: Self::Scalar) -> usize {
+        let index = self.scalar.len();
+        self.scalar.push(scalar);
+        index
+    }
+}
+
+impl<T, S> NetworkStoreAccess for NetworkStoreOverlay<'_, T, S> {
+    type Tensor = T;
+    type Scalar = S;
+
+    fn tensor(&self, index: usize) -> &Self::Tensor {
+        if index < self.base_tensors.len() {
+            &self.base_tensors[index]
+        } else {
+            &self.tensors[index - self.base_tensors.len()]
+        }
+    }
+
+    fn scalar(&self, index: usize) -> &Self::Scalar {
+        if index < self.base_scalars.len() {
+            &self.base_scalars[index]
+        } else {
+            &self.scalar[index - self.base_scalars.len()]
+        }
+    }
+
+    fn push_tensor(&mut self, tensor: Self::Tensor) -> usize {
+        let index = self.base_tensors.len() + self.tensors.len();
+        self.tensors.push(tensor);
+        index
+    }
+
+    fn push_scalar(&mut self, scalar: Self::Scalar) -> usize {
+        let index = self.base_scalars.len() + self.scalar.len();
+        self.scalar.push(scalar);
+        index
+    }
+}
+
 impl<T, S> TensorScalarStore for NetworkStore<T, S> {
     fn n_tensors(&self) -> usize {
         self.tensors.len()
@@ -146,6 +241,8 @@ impl<T, S> TensorScalarStore for NetworkStore<T, S> {
     }
 
     fn extend(&mut self, other: Self) {
+        let _span = profile::span(Timer::StoreExtend);
+        profile::bump(Counter::StoreExtend, 1);
         self.tensors.extend(other.tensors);
         self.scalar.extend(other.scalar);
     }

@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    algebra::algebraic_traits::{One, Zero},
+    algebra::{
+        ScalarMul,
+        algebraic_traits::{One, Zero},
+    },
     structure::{
         PermutedStructure,
         permuted::PermuteTensor,
@@ -11,6 +14,7 @@ use crate::{
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
+    ops::{AddAssign, MulAssign},
 };
 
 #[cfg(feature = "shadowing")]
@@ -50,7 +54,7 @@ use super::{
     library::LibraryTensor,
     store::{NetworkStore, TensorScalarStore},
 };
-use super::{Library, Network, TensorNetworkError, TensorOrScalarOrKey};
+use super::{FastTensorSum, Library, Network, Ref, TensorNetworkError, TensorOrScalarOrKey};
 
 #[derive(
     Debug,
@@ -152,9 +156,15 @@ impl<
     ) -> Result<Vec<ExecutionResult<Cow<'a, T>>>, TensorNetworkError<K, FK>>
     where
         S: 'a,
-        T: Clone + ScalarTensor + HasStructure,
+        T: Clone
+            + ScalarTensor
+            + HasStructure
+            + Ref
+            + FastTensorSum
+            + ScalarMul<S, Output = T>
+            + for<'b> AddAssign<<T as Ref>::Ref<'b>>,
+        S: Clone + Into<T::Scalar>,
         T::Scalar: One + Zero,
-        for<'b> &'b S: Into<T::Scalar>,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
         T: PermuteTensor<Permuted = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -171,7 +181,12 @@ impl<
     where
         T: Clone + ScalarTensor + 'a,
         T::Scalar: Into<S>,
-        S: One + Zero + Clone,
+        S: One
+            + Zero
+            + Clone
+            + super::Ref
+            + for<'b> AddAssign<<S as super::Ref>::Ref<'b>>
+            + for<'b> MulAssign<<S as super::Ref>::Ref<'b>>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
         self.networks.iter().map(|n| n.result_scalar()).collect()

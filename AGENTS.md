@@ -1,51 +1,18 @@
-# Repository Guidelines
+# Agent Guidance
 
-## Project Structure & Module Organization
-- `crates/gammalooprs/src/` holds the core Rust implementation.
-- `crates/gammaloop-api/` is the workspace member for the Rust API + Python bindings (`crates/gammaloop-api/src` and `crates/gammaloop-api/python/gammaloop`).
-- `tests/` contains the integration-test crate and shared fixtures in `tests/resources/`.
-- `examples/` includes command cards and notebooks for end-to-end runs.
-- `bin/` provides scripts like `compile.sh`, `run_tests.sh`, and the `gammaloop` entrypoints after build.
-- `assets/` stores schemas/data and model files (`assets/models/`); Rust benches live under `crates/gammalooprs/benches/`.
-- Architecture docs live in `docs/architecture/`:
-  - `docs/architecture/architecture-current.md` for implemented architecture.
-  - `docs/architecture/architecture-ideas.md` for roadmap/proposals.
+Agents and human contributors follow the same repository guidance. Before making
+changes, read [CONTRIBUTING.md](CONTRIBUTING.md) and treat it as authoritative
+for this repository.
 
-## Build, Test, and Development Commands
-- Build Rust CLI in dev-optim:
-  ```bash
-  just build-cli
-  ```
-- Build Rust CLI with stable Python ABI:
-  ```bash
-  just build-cli-abi
-  ```
-- Build Python API bindings:
-  ```bash
-  just build-api
-  ```
-- Build Python API bindings with stable ABI:
-  ```bash
-  just build-api-abi
-  ```
-- Format and lint:
-  ```bash
-  just fmt
-  just clippy
-  ```
-- If running into a linking issue complaining about missing `__emul...` symbol, then it may be a macos specific issue, that can be fixed by 
-  building with the following environment variable change `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` (see impact of this in file `build.rs`.
+If instructions conflict, prefer the more specific local guidance and preserve
+the user's current work unless explicitly asked to change it.
 
-## Coding Style & Naming Conventions
-### Rust
-- Always format and run cargo clippy warnings before finishing
-- Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
-- Prefer methods on types to bare functions
-- Follow the clippy suggestions religiously
-- Aggressively use pub(crate) except when absolutely necessary to have fully public exposure (helps monitor unused components with clippy)
+If a test is failing, and you want to change the test itself explicitly ask whether this is intended.
 
-### Python
-- use the ruff formatter.
+Before adding helper functions, check the codebase for similar usecases, and
+whether the functionality is already provided by the existing code. When adding a
+new helper function, confirm with the codebase maintainers that the functionality
+is not already provided by an existing helper function.
 
 ## Testing Guidelines
 - Rust integration tests live in `tests/` (files like `test_runs.rs`).

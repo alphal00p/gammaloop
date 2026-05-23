@@ -24,9 +24,8 @@ use crate::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{
             expanded_4d::{
-                Expanded4DApprox, Expanded4DSourceContext,
-                expanded_4d_terms_to_3d_parametric_integrands, expanded_4d_uv_kernel,
-                expanded_4d_uv_start,
+                Expanded4DApprox, Expanded4DSourceContext, Local4DApproximation,
+                map_expanded_4d_atom_to_3drep,
             },
             integrated::Integrated,
             local_3d::Local3DApproximation,
@@ -35,7 +34,7 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
@@ -405,25 +404,6 @@ impl Approximation {
 
     fn zero_vec(n_terms: usize) -> Vec<Atom> {
         vec![Atom::Zero; n_terms]
-    }
-
-    fn indexed_terms_from_cutset(
-        cutset: &CutSet,
-        terms: Vec<Atom>,
-        context: &str,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
-        let allowed_keys = cutset.residue_selector.generate_allowed_keys();
-        if terms.len() == allowed_keys.len() {
-            return Ok(allowed_keys.into_iter().zip(terms).collect());
-        }
-        if terms.len() == 1 && terms[0].is_zero() {
-            return Ok(Self::zero_terms(&allowed_keys));
-        }
-        Err(eyre!(
-            "{context} generated {} local residue integrands, but the residue selector allows {} indices",
-            terms.len(),
-            allowed_keys.len()
-        ))
     }
 
     fn set_zero_local_3d(&mut self, sign: Sign, allowed_keys: &[CutCFFIndex]) {
@@ -929,12 +909,14 @@ impl Approximation {
             return Ok(());
         }
 
+        let ctx = UVCtx {
+            graph,
+            settings: &settings.uv,
+        };
+        let local_4d = Local4DApproximation;
         let terms = parent_terms
             .iter()
-            .map(|parent_term| {
-                let start = expanded_4d_uv_start(graph, self, dependent, parent_term)?;
-                expanded_4d_uv_kernel(graph, self, dependent, &start)
-            })
+            .map(|parent_term| local_4d.kernel(&ctx, self, dependent, parent_term))
             .collect::<Result<Vec<_>>>()?;
 
         self.local_4d_expanded = Some(Expanded4DApprox {
@@ -1107,7 +1089,7 @@ impl Approximation {
             local_atom += sign * term.clone() * &outside_numerator;
         }
 
-        let mut integrands = expanded_4d_terms_to_3d_parametric_integrands(
+        let mut integrands = map_expanded_4d_atom_to_3drep(
             graph,
             &local_atom,
             cutset,
@@ -1119,7 +1101,7 @@ impl Approximation {
         )?;
 
         if finite.is_zero() {
-            return Self::indexed_terms_from_cutset(cutset, integrands, "expanded 4D local UV");
+            return Ok(integrands);
         }
 
         let finite_atom = {
@@ -1127,7 +1109,7 @@ impl Approximation {
             -sign * finite * reduced_denominator * &outside_numerator
         };
 
-        let mut finite_integrands = expanded_4d_terms_to_3d_parametric_integrands(
+        let finite_integrands = map_expanded_4d_atom_to_3drep(
             graph,
             &finite_atom,
             cutset,
@@ -1137,23 +1119,16 @@ impl Approximation {
             Expanded4DSourceContext::cograph_only(self.spinney.filter()),
             root_expression,
         )?;
-        if integrands.len() != finite_integrands.len() {
-            if integrands.len() == 1 && integrands[0].is_zero() {
-                integrands = Self::zero_vec(finite_integrands.len());
-            } else if finite_integrands.len() == 1 && finite_integrands[0].is_zero() {
-                finite_integrands = Self::zero_vec(integrands.len());
-            } else {
-                return Err(eyre!(
-                    "expanded 4D local UV generated {} local residue integrands, but finite integrated UV generated {}",
-                    integrands.len(),
-                    finite_integrands.len()
-                ));
-            }
+        for key in cutset.residue_selector.generate_allowed_keys() {
+            let finite = finite_integrands
+                .get(&key)
+                .ok_or_else(|| eyre!("finite integrated UV projection is missing key {key:?}"))?;
+            let sum = integrands
+                .get_mut(&key)
+                .ok_or_else(|| eyre!("expanded 4D local UV projection is missing key {key:?}"))?;
+            *sum += finite.clone();
         }
-        for (sum, finite) in integrands.iter_mut().zip(finite_integrands) {
-            *sum += finite;
-        }
-        Self::indexed_terms_from_cutset(cutset, integrands, "expanded 4D local UV")
+        Ok(integrands)
     }
 
     // pub(crate) fn simple_expr(

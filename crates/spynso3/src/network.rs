@@ -10,8 +10,9 @@ use spenso::{
         ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree,
         SmallestDegree, Steps,
         library::symbolic::ExplicitKey,
-        parsing::{ParseSettings, SPENSO_TAG, ShadowedStructure},
+        parsing::{ParseSettings, ShadowedStructure},
         store::{NetworkStore, TensorScalarStoreMapping},
+        tags::SPENSO_TAG,
     },
     structure::abstract_index::AbstractIndex,
     tensors::parametric::{MixedTensor, ParamOrConcrete, atomcore::TensorAtomMaps},
@@ -224,7 +225,7 @@ impl SpensoNet {
     #[staticmethod]
     pub fn broadcast(str: &str) -> PythonExpression {
         PythonExpression {
-            expr: Atom::var(symbol!(str, tag = SPENSO_TAG.tag)),
+            expr: Atom::var(symbol!(str, tag = SPENSO_TAG.broadcast)),
         }
     }
     #[staticmethod]
