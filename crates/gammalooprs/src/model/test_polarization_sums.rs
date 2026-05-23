@@ -5,9 +5,11 @@ use linnet::half_edge::involution::EdgeIndex;
 use spenso::{
     algebra::complex::Complex,
     network::{
-        ExecutionResult, Sequential, SmallestDegree,
-        library::panicing::ErroringLibrary,
-        library::symbolic::{ETS, ExplicitKey, TensorLibrary},
+        ExecutionResult, MinResultRank, Sequential,
+        library::{
+            panicing::ErroringLibrary,
+            symbolic::{ETS, ExplicitKey, TensorLibrary},
+        },
         parsing::ParseSettings,
     },
     structure::{
@@ -286,7 +288,7 @@ fn evaluate_tensor_network_with_constants(
         ParsingNet::try_from_view(expression.as_view(), lib, &ParseSettings::default()).unwrap();
 
     network
-        .execute::<Sequential, SmallestDegree, _, _, _>(lib, &ErroringLibrary::new())
+        .execute::<Sequential, MinResultRank, _, _, _>(lib, &ErroringLibrary::new())
         .unwrap();
 
     let ExecutionResult::Val(result) = network.result_tensor(lib).unwrap() else {

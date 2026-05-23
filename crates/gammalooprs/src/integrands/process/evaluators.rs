@@ -20,7 +20,7 @@ use spenso::{
         algebraic_traits::RefOne,
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
-    network::{ExecutionResult, Sequential, SmallestDegree},
+    network::{ExecutionResult, MinResultRank, Sequential},
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
 use std::ops::Deref;
@@ -793,7 +793,7 @@ impl EvaluatorStack {
                 };
 
                 // println!("Executing {}", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                net.execute::<Sequential, MinResultRank, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;

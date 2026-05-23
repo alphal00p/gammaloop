@@ -912,7 +912,7 @@ fn execute_actual_net(label: &str, mut net: ParsingNet) -> Atom {
     let lib = TENSORLIB.read().unwrap();
     spenso::network::profile::reset();
     let start = Instant::now();
-    net.execute::<Sequential, SmallestDegree, _, _, _>(&*lib, &*FUN_LIB)
+    net.execute::<Sequential, MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
         .unwrap_or_else(|error| panic!("{label} actual execution failed: {error}"));
     report(&format!("{label} actual_execute"), start);
     report_actual_net_stats(&format!("{label} after_execute"), &net);
@@ -1041,7 +1041,7 @@ fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
     for step in 0..steps {
         spenso::network::profile::reset();
         let start = Instant::now();
-        net.execute::<Steps<1>, SmallestDegree, _, _, _>(&*lib, &*FUN_LIB)
+        net.execute::<Steps<1>, MinResultRank, _, _, _>(&*lib, &*FUN_LIB)
             .unwrap_or_else(|error| panic!("{label} actual execution step {step} failed: {error}"));
         report(&format!("{label} actual_execute_step_{step}"), start);
         report_actual_net_stats(&format!("{label} after_step_{step}"), &net);
@@ -1102,7 +1102,7 @@ fn parse_concrete_hep_net(label: &str, expr: &Atom) -> ConcreteParsingNet {
 fn execute_concrete_hep_net(label: &str, mut net: ConcreteParsingNet) {
     let lib = spenso_hep_lib::hep_lib(F(1.0), F(0.0));
     let start = Instant::now();
-    net.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &*FUN_LIB)
+    net.execute::<Sequential, MinResultRank, _, _, _>(&lib, &*FUN_LIB)
         .unwrap_or_else(|error| panic!("{label} concrete HEP execution failed: {error}"));
     report(&format!("{label} concrete_hep_execute"), start);
     report_concrete_net_stats(&format!("{label} after_concrete_hep_execute"), &net);

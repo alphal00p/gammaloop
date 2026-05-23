@@ -55,7 +55,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::{
     algebra::complex::Complex,
-    network::{tags::SPENSO_TAG, ExecutionResult, Sequential, SmallestDegree},
+    network::{tags::SPENSO_TAG, ExecutionResult, MinResultRank, Sequential},
     structure::{
         concrete_index::ExpandedIndex,
         representation::{LibraryRep, Minkowski, RepName},
@@ -3893,7 +3893,7 @@ fn spenso_process_numerator_with_trace(numerator: &Atom) -> Result<SpensoNumerat
         .parse_into_net()
         .with_context(|| "Could not parse preprocessed numerator into Spenso network")?;
 
-    net.execute::<Sequential, SmallestDegree, _, _, _>(
+    net.execute::<Sequential, MinResultRank, _, _, _>(
         TENSORLIB.read().unwrap().deref(),
         FUN_LIB.deref(),
     )
