@@ -11,9 +11,7 @@ use tracing::warn;
 use spenso::network::library::{DummyLibrary, TensorLibraryData};
 use spenso::network::parsing::{ParseSettings, ShadowedStructure};
 use spenso::network::store::NetworkStore;
-use spenso::network::{
-    ContractScalars, MinResultRank, Sequential, SingleSmallestDegree, SmallestDegree, Steps,
-};
+use spenso::network::{ContractScalars, MinResultRank, Sequential, SingleSmallestDegree, Steps};
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
 
 use spenso::tensors::data::DataTensor;

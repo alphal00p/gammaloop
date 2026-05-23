@@ -22,7 +22,7 @@ use spenso::{
     network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
     network::library::symbolic::{ETS, ExplicitKey},
     network::{
-        ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree, Steps,
+        ExecutionResult, MinResultRank, Network, Sequential, Steps,
         parsing::StrictTensorFilter,
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
         store::NetworkStore,

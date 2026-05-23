@@ -178,6 +178,7 @@ test_gammaloop *args:
     fi
 
     want_base=0
+    run_ignored=0
     selected_modules=()
     declare -A seen_modules=()
 
@@ -185,6 +186,9 @@ test_gammaloop *args:
         if [ "$class" = "base" ]; then
             want_base=1
         elif contains_value "$class" "${gammaloop_module_classes[@]}"; then
+            if [ "$class" = "slow" ] || [ "$class" = "failing" ]; then
+                run_ignored=1
+            fi
             if [ -z "${seen_modules[$class]+x}" ]; then
                 selected_modules+=("$class")
                 seen_modules[$class]=1
@@ -234,7 +238,6 @@ test_gammaloop *args:
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
-            --run-ignored all
         )
     else
         cmd=(
@@ -243,8 +246,10 @@ test_gammaloop *args:
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
-            --run-ignored all
         )
+    fi
+    if [ "$run_ignored" -eq 1 ]; then
+        cmd+=(--run-ignored all)
     fi
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
