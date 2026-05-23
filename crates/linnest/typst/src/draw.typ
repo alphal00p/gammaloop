@@ -1,9 +1,9 @@
 // Public drawing API.
 //
 // Keep the user-facing drawing functions and their documentation here. The
-// helper-heavy implementation lives in `draw-impl.typ`.
+// helper-heavy implementation lives in `impl/draw.typ`.
 
-#import "draw-impl.typ" as _impl
+#import "impl/draw.typ" as _impl
 
 /// Split a laid-out graph edge into source and sink half-edge paths.
 ///
@@ -27,10 +27,12 @@
   _impl.edge-halves(
     edge,
     nodes,
-    omega: omega,
-    source-outset: source-outset,
-    sink-outset: sink-outset,
-    accuracy: accuracy,
+    (
+      omega: omega,
+      source-outset: source-outset,
+      sink-outset: sink-outset,
+      accuracy: accuracy,
+    ),
   )
 }
 
@@ -63,13 +65,15 @@
   _impl.to-cetz-edge-halves(
     edge,
     nodes,
-    unit: unit,
-    omega: omega,
-    source-outset: source-outset,
-    sink-outset: sink-outset,
-    accuracy: accuracy,
-    source-style: source-style,
-    sink-style: sink-style,
+    (
+      unit: unit,
+      omega: omega,
+      source-outset: source-outset,
+      sink-outset: sink-outset,
+      accuracy: accuracy,
+      source-style: source-style,
+      sink-style: sink-style,
+    ),
   )
 }
 
@@ -330,38 +334,40 @@
 ) = {
   _impl.draw(
     graph,
-    scope: scope,
-    unit: unit,
-    title: title,
-    subgraph: subgraph,
-    debug: debug,
-    node-radius: node-radius,
-    node-min-radius: node-min-radius,
-    node-label-padding: node-label-padding,
-    node-fill: node-fill,
-    node-stroke: node-stroke,
-    node-outset: node-outset,
-    node-label-style: node-label-style,
-    node-style: node-style,
-    node-label: node-label,
-    edge-stroke: edge-stroke,
-    edge-offset: edge-offset,
-    edge-length: edge-length,
-    edge-ratio: edge-ratio,
-    edge-resolve-length: edge-resolve-length,
-    edge-accuracy: edge-accuracy,
-    edge-optimize: edge-optimize,
-    source-style: source-style,
-    sink-style: sink-style,
-    edge-label: edge-label,
-    edge-omega: edge-omega,
-    edge-trim-accuracy: edge-trim-accuracy,
-    padding: padding,
-    debug-edge-radius: debug-edge-radius,
-    debug-edge-fill: debug-edge-fill,
-    debug-edge-stroke: debug-edge-stroke,
-    debug-edge-label-fill: debug-edge-label-fill,
-    subgraph-edge-style: subgraph-edge-style,
-    subgraph-edge-underlay: subgraph-edge-underlay,
+    (
+      scope: scope,
+      unit: unit,
+      title: title,
+      subgraph: subgraph,
+      debug: debug,
+      node-radius: node-radius,
+      node-min-radius: node-min-radius,
+      node-label-padding: node-label-padding,
+      node-fill: node-fill,
+      node-stroke: node-stroke,
+      node-outset: node-outset,
+      node-label-style: node-label-style,
+      node-style: node-style,
+      node-label: node-label,
+      edge-stroke: edge-stroke,
+      edge-offset: edge-offset,
+      edge-length: edge-length,
+      edge-ratio: edge-ratio,
+      edge-resolve-length: edge-resolve-length,
+      edge-accuracy: edge-accuracy,
+      edge-optimize: edge-optimize,
+      source-style: source-style,
+      sink-style: sink-style,
+      edge-label: edge-label,
+      edge-omega: edge-omega,
+      edge-trim-accuracy: edge-trim-accuracy,
+      padding: padding,
+      debug-edge-radius: debug-edge-radius,
+      debug-edge-fill: debug-edge-fill,
+      debug-edge-stroke: debug-edge-stroke,
+      debug-edge-label-fill: debug-edge-label-fill,
+      subgraph-edge-style: subgraph-edge-style,
+      subgraph-edge-underlay: subgraph-edge-underlay,
+    ),
   )
 }

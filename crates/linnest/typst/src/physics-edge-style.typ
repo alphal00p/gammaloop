@@ -1,7 +1,10 @@
-// Internal physics edge-style implementation. Public users should import
-// `physics-edge-style.typ`.
+// Public physics edge-style API.
+//
+// Keep documented defaults here. The implementation lives in
+// `impl/physics-edge-style.typ` and takes explicit values/options.
 
 #import "@preview/mitex:0.2.6" as mitex
+#import "impl/physics-edge-style.typ" as _impl
 
 #let mi = mitex.mi
 
@@ -244,247 +247,6 @@
   }
 }
 
-#let _record-data(record) = {
-  if type(record) != dictionary {
-    (:)
-  } else {
-    let data = record.at("data", default: none)
-    if type(data) == dictionary { data } else { (:) }
-  }
-}
-
-#let _data-field(record, field, default: none) = {
-  _record-data(record).at(field, default: default)
-}
-
-#let _edge-data-field(edge, field, default: none) = {
-  _data-field(edge, field, default: default)
-}
-
-#let _half-record(edge, half) = {
-  let half-edge = edge.at(half + "-half-edge", default: none)
-  if half-edge != none {
-    half-edge
-  } else {
-    let value = edge.at(half, default: none)
-    if type(value) == dictionary { value } else { none }
-  }
-}
-
-#let _half-data-field(edge, half, field, default: none) = {
-  _data-field(_half-record(edge, half), field, default: default)
-}
-
-#let _base-half-style(edge, half, map: default-map, default: default-edge, orientation-split: true) = {
-  let entry = edge-entry(edge, map: map, default: default)
-  let source = entry.at("source", default: (:))
-  let sink = entry.at("sink", default: source)
-  let base = if half == "source" {
-    source
-  } else if orientation-split {
-    sink
-  } else {
-    source
-  }
-  let has-source = edge.at("source-half-edge", default: none) != none
-  let has-sink = edge.at("sink-half-edge", default: none) != none
-  let needs-arrow = entry.at("fermion-arrow", default: false)
-  let arrow-half = needs-arrow and (
-    (half == "source" and has-source)
-      or (half == "sink" and has-sink)
-  )
-  if arrow-half {
-    base + (
-      mark: entry.at("fermion-arrow-mark", default: fermion-arrow-mark),
-      mark-position: "center-if-dangling",
-      mark-orientation: "edge",
-    )
-  } else {
-    base
-  }
-}
-
-#let _single-end-mark(mark, arrow-stroke) = {
-  let base = (
-    end: "straight",
-    stroke: arrow-stroke,
-    scale: .75,
-  )
-  if mark == auto {
-    base
-  } else if mark == none {
-    none
-  } else if type(mark) == dictionary {
-    let clean = mark
-    if clean.keys().contains("start") {
-      let _ = clean.remove("start")
-    }
-    if clean.keys().contains("end") {
-      base + clean
-    } else {
-      base + clean + (end: "barbed")
-    }
-  } else {
-    base + (end: mark)
-  }
-}
-
-#let _momentum-arrow-layer(
-  offset: momentum-arrow-defaults.offset,
-  length: momentum-arrow-defaults.length,
-  ratio: momentum-arrow-defaults.ratio,
-  stroke: none,
-  mark: momentum-arrow-defaults.mark,
-  show-mark: false,
-) = {
-  let arrow-stroke = if stroke == none {
-    momentum-arrow-defaults.stroke
-  } else {
-    stroke
-  }
-  let arrow-mark = _single-end-mark(mark, arrow-stroke)
-  let layer = (
-    offset: offset,
-    length: length,
-    ratio: ratio,
-    resolve-length: "min",
-    offset-side: "label",
-    stroke: arrow-stroke,
-  )
-  if show-mark {
-    if arrow-mark == none {
-      layer
-    } else {
-      layer + (mark: arrow-mark)
-    }
-  } else {
-    layer
-  }
-}
-
-#let _has-source(edge) = {
-  edge.at("source-half-edge", default: none) != none
-}
-
-#let _has-sink(edge) = {
-  edge.at("sink-half-edge", default: none) != none
-}
-
-#let _momentum-arrow-half(edge) = {
-  if _has-sink(edge) {
-    "sink"
-  } else if _has-source(edge) {
-    "source"
-  } else {
-    none
-  }
-}
-
-#let _half-style(
-  edge,
-  half,
-  map: default-map,
-  default: default-edge,
-  typst-fields: "plain",
-  scope: (:),
-  orientation-split: true,
-  momentum-arrows: false,
-  momentum-arrow-offset: momentum-arrow-defaults.offset,
-  momentum-arrow-length: momentum-arrow-defaults.length,
-  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
-  momentum-arrow-stroke: none,
-  momentum-arrow-mark: momentum-arrow-defaults.mark,
-) = {
-  let style = _base-half-style(edge, half, map: map, default: default, orientation-split: orientation-split)
-  style = style + style-dict(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
-  style = style + style-dict(_half-data-field(edge, half, "style"), edge, mode: typst-fields, map: map, scope: scope)
-  if momentum-arrows {
-    let show-mark = _momentum-arrow-half(edge) == half
-    (
-      style,
-      _momentum-arrow-layer(
-        offset: momentum-arrow-offset,
-        length: momentum-arrow-length,
-        ratio: momentum-arrow-ratio,
-        stroke: momentum-arrow-stroke,
-        mark: momentum-arrow-mark,
-        show-mark: show-mark,
-      ),
-    )
-  } else {
-    style
-  }
-}
-
-/// Style callback for the source half edge.
-///
-/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration while
-/// the main edge remains drawn with its normal particle style.
-/// -> dictionary | array
-#let source-style(
-  edge,
-  map: default-map,
-  default: default-edge,
-  typst-fields: "plain",
-  scope: (:),
-  orientation-split: true,
-  momentum-arrows: false,
-  momentum-arrow-offset: momentum-arrow-defaults.offset,
-  momentum-arrow-length: momentum-arrow-defaults.length,
-  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
-  momentum-arrow-stroke: none,
-  momentum-arrow-mark: momentum-arrow-defaults.mark,
-) = _half-style(
-  edge,
-  "source",
-  map: map,
-  default: default,
-  typst-fields: typst-fields,
-  scope: scope,
-  orientation-split: orientation-split,
-  momentum-arrows: momentum-arrows,
-  momentum-arrow-offset: momentum-arrow-offset,
-  momentum-arrow-length: momentum-arrow-length,
-  momentum-arrow-ratio: momentum-arrow-ratio,
-  momentum-arrow-stroke: momentum-arrow-stroke,
-  momentum-arrow-mark: momentum-arrow-mark,
-)
-
-/// Style callback for the sink half edge.
-///
-/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration toward
-/// the sink node, so momentum arrows always flow from source to sink
-/// independently of `edge.orientation`.
-/// -> dictionary | array
-#let sink-style(
-  edge,
-  map: default-map,
-  default: default-edge,
-  typst-fields: "plain",
-  scope: (:),
-  orientation-split: true,
-  momentum-arrows: false,
-  momentum-arrow-offset: momentum-arrow-defaults.offset,
-  momentum-arrow-length: momentum-arrow-defaults.length,
-  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
-  momentum-arrow-stroke: none,
-  momentum-arrow-mark: momentum-arrow-defaults.mark,
-) = _half-style(
-  edge,
-  "sink",
-  map: map,
-  default: default,
-  typst-fields: typst-fields,
-  scope: scope,
-  orientation-split: orientation-split,
-  momentum-arrows: momentum-arrows,
-  momentum-arrow-offset: momentum-arrow-offset,
-  momentum-arrow-length: momentum-arrow-length,
-  momentum-arrow-ratio: momentum-arrow-ratio,
-  momentum-arrow-stroke: momentum-arrow-stroke,
-  momentum-arrow-mark: momentum-arrow-mark,
-)
-
 #let _field-value(edge, fields) = {
   if fields == none {
     none
@@ -510,6 +272,14 @@
 /// -> none | any
 #let edge-index(edge, fields: ("id", "eid")) = _field-value(edge, fields)
 
+#let _has-source(edge) = {
+  edge.at("source-half-edge", default: none) != none
+}
+
+#let _has-sink(edge) = {
+  edge.at("sink-half-edge", default: none) != none
+}
+
 /// Return the exposed half-edge index for dangling edges only.
 /// -> none | any
 #let dangling-half-edge-index(edge) = {
@@ -531,92 +301,84 @@
   }
 }
 
-#let _prefixed-content(prefix, value) = {
-  if value == none {
-    none
-  } else if prefix == none {
-    [#text-value(value)]
-  } else {
-    prefix + [#text-value(value)]
-  }
-}
+#let _api() = eval-scope() + (
+  momentum-arrow-defaults: momentum-arrow-defaults,
+  particle-name: particle-name,
+  edge-entry: edge-entry,
+  text-value: text-value,
+  label-content: label-content,
+  style-dict: style-dict,
+  momentum-value: momentum-value,
+  edge-index: edge-index,
+  dangling-half-edge-index: dangling-half-edge-index,
+)
 
-#let _join-content(pieces, separator) = {
-  let out = none
-  for piece in pieces {
-    if piece != none {
-      if out == none {
-        out = piece
-      } else {
-        out = out + separator + piece
-      }
-    }
-  }
-  out
-}
-
-#let _selected-label(
+/// Style callback for the source half edge.
+///
+/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration while
+/// the main edge remains drawn with its normal particle style.
+/// -> dictionary | array
+#let source-style(
   edge,
-  show-momentum: false,
-  show-edge-index: false,
-  show-half-edge-index: false,
-  show-particle: false,
-  momentum-fields: ("momentum", "mom", "q"),
-  edge-index-fields: ("id", "eid"),
-  momentum-prefix: none,
-  edge-index-prefix: [e],
-  half-edge-index-prefix: [h],
-  particle-prefix: none,
-  label-separator: [, ],
-  label-size: 7pt,
-  label-fill: red,
-) = {
-  let pieces = ()
-  if show-momentum {
-    pieces.push(_prefixed-content(momentum-prefix, momentum-value(edge, fields: momentum-fields)))
-  }
-  if show-edge-index {
-    pieces.push(_prefixed-content(edge-index-prefix, edge-index(edge, fields: edge-index-fields)))
-  }
-  if show-half-edge-index {
-    pieces.push(_prefixed-content(half-edge-index-prefix, dangling-half-edge-index(edge)))
-  }
-  if show-particle {
-    pieces.push(_prefixed-content(particle-prefix, particle-name(edge)))
-  }
-  let joined = _join-content(pieces, label-separator)
-  if joined == none {
-    none
-  } else {
-    text(size: label-size, fill: label-fill)[#joined]
-  }
-}
+  map: default-map,
+  default: default-edge,
+  typst-fields: "plain",
+  scope: (:),
+  orientation-split: true,
+  momentum-arrows: false,
+  momentum-arrow-offset: momentum-arrow-defaults.offset,
+  momentum-arrow-length: momentum-arrow-defaults.length,
+  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
+  momentum-arrow-stroke: none,
+  momentum-arrow-mark: momentum-arrow-defaults.mark,
+) = _impl.source-style(edge, (
+  map: map,
+  default: default,
+  typst-fields: typst-fields,
+  scope: scope,
+  orientation-split: orientation-split,
+  momentum-arrows: momentum-arrows,
+  momentum-arrow-offset: momentum-arrow-offset,
+  momentum-arrow-length: momentum-arrow-length,
+  momentum-arrow-ratio: momentum-arrow-ratio,
+  momentum-arrow-stroke: momentum-arrow-stroke,
+  momentum-arrow-mark: momentum-arrow-mark,
+  api: _api(),
+))
 
-#let _default-label(edge, map: default-map, default: default-edge, typst-fields: "plain", scope: (:)) = {
-  let data-label = _edge-data-field(
-    edge,
-    "display-label",
-    default: _edge-data-field(edge, "label", default: none),
-  )
-  if data-label != none {
-    label-content(data-label, edge, mode: typst-fields, map: map, scope: scope)
-  } else {
-    let label-value = edge.at(
-      "display-label",
-      default: edge.at("label", default: none),
-    )
-    if label-value != none {
-      label-content(label-value, edge, mode: typst-fields, map: map, scope: scope)
-    } else {
-      label-content(
-        edge-entry(edge, map: map, default: default).at("label", default: none),
-        edge,
-        map: map,
-        scope: scope,
-      )
-    }
-  }
-}
+/// Style callback for the sink half edge.
+///
+/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration toward
+/// the sink node, so momentum arrows always flow from source to sink
+/// independently of `edge.orientation`.
+/// -> dictionary | array
+#let sink-style(
+  edge,
+  map: default-map,
+  default: default-edge,
+  typst-fields: "plain",
+  scope: (:),
+  orientation-split: true,
+  momentum-arrows: false,
+  momentum-arrow-offset: momentum-arrow-defaults.offset,
+  momentum-arrow-length: momentum-arrow-defaults.length,
+  momentum-arrow-ratio: momentum-arrow-defaults.ratio,
+  momentum-arrow-stroke: none,
+  momentum-arrow-mark: momentum-arrow-defaults.mark,
+) = _impl.sink-style(edge, (
+  map: map,
+  default: default,
+  typst-fields: typst-fields,
+  scope: scope,
+  orientation-split: orientation-split,
+  momentum-arrows: momentum-arrows,
+  momentum-arrow-offset: momentum-arrow-offset,
+  momentum-arrow-length: momentum-arrow-length,
+  momentum-arrow-ratio: momentum-arrow-ratio,
+  momentum-arrow-stroke: momentum-arrow-stroke,
+  momentum-arrow-mark: momentum-arrow-mark,
+  api: _api(),
+))
 
 /// Edge-label callback.
 ///
@@ -651,29 +413,26 @@
   label-separator: [, ],
   label-size: 7pt,
   label-fill: red,
-) = {
-  let selected = _selected-label(
-    edge,
-    show-momentum: show-momentum,
-    show-edge-index: show-edge-index,
-    show-half-edge-index: show-half-edge-index,
-    show-particle: show-particle,
-    momentum-fields: momentum-fields,
-    edge-index-fields: edge-index-fields,
-    momentum-prefix: momentum-prefix,
-    edge-index-prefix: edge-index-prefix,
-    half-edge-index-prefix: half-edge-index-prefix,
-    particle-prefix: particle-prefix,
-    label-separator: label-separator,
-    label-size: label-size,
-    label-fill: label-fill,
-  )
-  if selected != none {
-    selected
-  } else {
-    _default-label(edge, map: map, default: default, typst-fields: typst-fields, scope: scope)
-  }
-}
+) = _impl.edge-label(edge, (
+  map: map,
+  default: default,
+  typst-fields: typst-fields,
+  scope: scope,
+  show-momentum: show-momentum,
+  show-edge-index: show-edge-index,
+  show-half-edge-index: show-half-edge-index,
+  show-particle: show-particle,
+  momentum-fields: momentum-fields,
+  edge-index-fields: edge-index-fields,
+  momentum-prefix: momentum-prefix,
+  edge-index-prefix: edge-index-prefix,
+  half-edge-index-prefix: half-edge-index-prefix,
+  particle-prefix: particle-prefix,
+  label-separator: label-separator,
+  label-size: label-size,
+  label-fill: label-fill,
+  api: _api(),
+))
 
 /// Bundle source-style, sink-style, and edge-label callbacks with shared
 /// options for `linnest.draw`.

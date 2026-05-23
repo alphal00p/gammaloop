@@ -1,9 +1,9 @@
 // Internal drawing implementation. Public users should import `draw.typ`.
 
 #import "@preview/cetz:0.5.1" as cetz
-#import "curve.typ" as curve-api
-#import "graph.typ" as graph-api
-#import "subgraph.typ" as subgraph-api
+#import "../curve.typ" as curve-api
+#import "../graph.typ" as graph-api
+#import "../subgraph.typ" as subgraph-api
 
 #let _point-x(p) = if type(p) == array { p.at(0) } else { p.x }
 #let _point-y(p) = if type(p) == array { p.at(1) } else { p.y }
@@ -171,7 +171,7 @@
   value
 }
 
-#let _content(value, data, default: none) = {
+#let _content(value, data, default) = {
   if value == auto {
     default
   } else {
@@ -298,7 +298,7 @@
   same
 }
 
-#let _center-outset(base-length, style, source-outset: 0, sink-outset: 0) = {
+#let _center-outset(base-length, style, source-outset, sink-outset) = {
   let geometry = _edge-geometry(style)
   curve-api.center-outset(
     base-length,
@@ -312,7 +312,7 @@
 
 #let _clamp(value, low, high) = calc.min(high, calc.max(low, value))
 
-#let _segment-length(segment, accuracy: 0.001) = {
+#let _segment-length(segment, accuracy) = {
   curve-api.length(curve-api.from-cubic(segment), accuracy: accuracy)
 }
 
@@ -321,14 +321,14 @@
   half-start,
   half-length,
   style,
-  source-outset: 0,
-  sink-outset: 0,
+  source-outset,
+  sink-outset,
 ) = {
   let center-outset = _center-outset(
     base-length,
     style,
-    source-outset: source-outset,
-    sink-outset: sink-outset,
+    source-outset,
+    sink-outset,
   )
   let visible-start = source-outset + center-outset
   let visible-end = base-length - sink-outset - center-outset
@@ -344,7 +344,7 @@
   }
 }
 
-#let _layer(segment, style, start-outset: 0, end-outset: 0, label-pos: none, center-outset: auto) = {
+#let _layer(segment, style, start-outset, end-outset, label-pos, center-outset) = {
   let geometry = _edge-geometry(style)
   let side-point = if geometry.offset-side == "label" { label-pos } else { none }
   let length = geometry.length
@@ -372,44 +372,40 @@
 #let _geometry-segments(
   segment,
   style,
-  start-outset: 0,
-  end-outset: 0,
-  accuracy: 0.001,
-  label-pos: none,
-  center-outset: auto,
+  start-outset,
+  end-outset,
+  label-pos,
+  center-outset,
 ) = {
   curve-api.segments(_layer(
     segment,
     style,
-    start-outset: start-outset,
-    end-outset: end-outset,
-    label-pos: label-pos,
-    center-outset: center-outset,
+    start-outset,
+    end-outset,
+    label-pos,
+    center-outset,
   ))
 }
 
-#let _half-geometry(segment, style, outsets, accuracy: 0.001, label-pos: none) = {
+#let _half-geometry(segment, style, outsets, label-pos) = {
   if outsets == none {
     ()
   } else {
     _geometry-segments(
       segment,
       style,
-      start-outset: outsets.start,
-      end-outset: outsets.end,
-      accuracy: accuracy,
-      label-pos: label-pos,
-      center-outset: 0,
+      outsets.start,
+      outsets.end,
+      label-pos,
+      0,
     )
   }
 }
-
-/// Split a laid-out graph edge into source and sink half-edge paths.
-///
-/// The returned dictionary has `source`, `sink`, and `curve`. The split point is
-/// the edge layout point, so the two half-edges join smoothly there.
-/// -> dictionary
-#let edge-halves(edge, nodes, omega: 1.0, source-outset: 0, sink-outset: 0, accuracy: 0.001) = {
+#let edge-halves(edge, nodes, options) = {
+  let omega = options.omega
+  let source-outset = options.source-outset
+  let sink-outset = options.sink-outset
+  let accuracy = options.accuracy
   if edge.source == none or edge.sink == none {
     panic("edge-halves currently requires a paired edge with source and sink")
   }
@@ -433,33 +429,23 @@
     curve: split.curve,
   )
 }
-
-/// Draw the two halves of a laid-out graph edge through CeTZ.
-///
-/// `source-style` applies from the source node to the edge layout point, and
-/// `sink-style` applies from the edge layout point to the sink node.
-/// -> content
 #let to-cetz-edge-halves(
   edge,
   nodes,
-  unit: 1,
-  omega: 1.0,
-  source-outset: 0,
-  sink-outset: 0,
-  accuracy: 0.001,
-  source-style: (:),
-  sink-style: (:),
+  options,
 ) = {
   let halves = edge-halves(
     edge,
     nodes,
-    omega: omega,
-    source-outset: source-outset,
-    sink-outset: sink-outset,
-    accuracy: accuracy,
+    (
+      omega: options.omega,
+      source-outset: options.source-outset,
+      sink-outset: options.sink-outset,
+      accuracy: options.accuracy,
+    ),
   )
-  curve-api.to-cetz(halves.source, unit: unit, ..source-style)
-  curve-api.to-cetz(halves.sink, unit: unit, ..sink-style)
+  curve-api.to-cetz(halves.source, unit: options.unit, ..options.source-style)
+  curve-api.to-cetz(halves.sink, unit: options.unit, ..options.sink-style)
 }
 
 #let _edge-geometry-halves(
@@ -467,48 +453,54 @@
   nodes,
   source-style,
   sink-style,
-  omega: 1.0,
-  source-outset: 0,
-  sink-outset: 0,
-  accuracy: 0.001,
-  label-pos: none,
+  options,
 ) = {
-  let base = edge-halves(edge, nodes, omega: omega, accuracy: accuracy)
+  let omega = options.omega
+  let source-outset = options.source-outset
+  let sink-outset = options.sink-outset
+  let accuracy = options.accuracy
+  let label-pos = options.label-pos
+  let base = edge-halves(edge, nodes, (
+    omega: omega,
+    source-outset: 0,
+    sink-outset: 0,
+    accuracy: accuracy,
+  ))
   let base-segments = curve-api.segments(base.curve)
   let source-segment = base-segments.at(0)
   let sink-segment = base-segments.at(1)
-  let source-length = _segment-length(source-segment, accuracy: accuracy)
-  let sink-length = _segment-length(sink-segment, accuracy: accuracy)
+  let source-length = _segment-length(source-segment, accuracy)
+  let sink-length = _segment-length(sink-segment, accuracy)
   let base-length = source-length + sink-length
   let source-outsets = _visible-half-outsets(
     base-length,
     0,
     source-length,
     source-style,
-    source-outset: source-outset,
-    sink-outset: sink-outset,
+    source-outset,
+    sink-outset,
   )
-  let source-geometry = _half-geometry(source-segment, source-style, source-outsets, accuracy: accuracy, label-pos: label-pos)
+  let source-geometry = _half-geometry(source-segment, source-style, source-outsets, label-pos)
   let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
     let sink-outsets = _visible-half-outsets(
       base-length,
       source-length,
       sink-length,
       source-style,
-      source-outset: source-outset,
-      sink-outset: sink-outset,
+      source-outset,
+      sink-outset,
     )
-    _half-geometry(sink-segment, source-style, sink-outsets, accuracy: accuracy, label-pos: label-pos)
+    _half-geometry(sink-segment, source-style, sink-outsets, label-pos)
   } else {
     let sink-outsets = _visible-half-outsets(
       base-length,
       source-length,
       sink-length,
       sink-style,
-      source-outset: source-outset,
-      sink-outset: sink-outset,
+      source-outset,
+      sink-outset,
     )
-    _half-geometry(sink-segment, sink-style, sink-outsets, accuracy: accuracy, label-pos: label-pos)
+    _half-geometry(sink-segment, sink-style, sink-outsets, label-pos)
   }
   (
     source: source-geometry,
@@ -517,7 +509,7 @@
   )
 }
 
-#let _pattern(segment, style, phase: auto, anchor-start: true, anchor-end: true) = {
+#let _pattern(segment, style, phase, anchor-start, anchor-end) = {
   let pattern-style = _pattern-style(style)
   curve-api.pattern(
     curve-api.from-cubic(segment),
@@ -543,7 +535,7 @@
   )
 }
 
-#let _segments-elements(segments, style, phase: auto, anchor-start: true, anchor-end: true) = {
+#let _segments-elements(segments, style, phase, anchor-start, anchor-end) = {
   let elements = ()
   let length = 0
   if _has-pattern(style) {
@@ -553,12 +545,12 @@
       let piece = _pattern(
         segment,
         style,
-        phase: current-phase,
-        anchor-start: anchor-start and index == 0,
-        anchor-end: anchor-end and index == segments.len() - 1,
+        current-phase,
+        anchor-start and index == 0,
+        anchor-end and index == segments.len() - 1,
       )
       elements.push(curve-api.to-cetz(piece, .._draw-style(style)))
-      let piece-length = _segment-length(segment, accuracy: _style-value(style, "pattern-accuracy"))
+      let piece-length = _segment-length(segment, _style-value(style, "pattern-accuracy"))
       length = length + piece-length
       current-phase = current-phase + 2 * calc.pi * piece-length / wavelength
     }
@@ -577,8 +569,8 @@
   (elements: elements, length: length)
 }
 
-#let _segment-elements(segment, style, phase: auto, anchor-start: true, anchor-end: true, label-pos: none) = {
-  let path = _layer(segment, style, label-pos: label-pos)
+#let _segment-elements(segment, style, phase, anchor-start, anchor-end, label-pos) = {
+  let path = _layer(segment, style, 0, 0, label-pos, auto)
   if _has-mark(style) and _mark-position(style) == "center" and not _has-pattern(style) {
     let length = curve-api.length(path, accuracy: _style-value(style, "accuracy"))
     let first = curve-api.trim(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
@@ -589,16 +581,16 @@
     let first-elements = _segments-elements(
       curve-api.segments(first),
       first-style,
-      phase: phase,
-      anchor-start: anchor-start,
-      anchor-end: false,
+      phase,
+      anchor-start,
+      false,
     ).elements
     let second-elements = _segments-elements(
       curve-api.segments(second),
       second-style,
-      phase: phase,
-      anchor-start: false,
-      anchor-end: anchor-end,
+      phase,
+      false,
+      anchor-end,
     ).elements
     let pieces = ()
     if backward {
@@ -621,9 +613,9 @@
     _segments-elements(
       curve-api.segments(path),
       style,
-      phase: phase,
-      anchor-start: anchor-start,
-      anchor-end: anchor-end,
+      phase,
+      anchor-start,
+      anchor-end,
     )
   }
 }
@@ -631,11 +623,11 @@
 #let _pattern-edge-halves(halves, source-style, sink-style) = {
   let elements = ()
   if _same-pattern-geometry(source-style, sink-style) {
-    let source = _segments-elements(halves.source, source-style, anchor-end: false)
+    let source = _segments-elements(halves.source, source-style, auto, true, false)
     let wavelength = _style-value(source-style, "pattern-wavelength")
     let phase = _style-value(source-style, "pattern-phase")
     let sink-phase = phase + 2 * calc.pi * source.length / wavelength
-    let sink-elements = _segments-elements(halves.sink, sink-style, phase: sink-phase, anchor-start: false).elements
+    let sink-elements = _segments-elements(halves.sink, sink-style, sink-phase, false, true).elements
     if _has-mark(source-style) and not _has-mark(sink-style) {
       for element in sink-elements {
         elements.push(element)
@@ -652,8 +644,8 @@
       }
     }
   } else {
-    let source-elements = _segments-elements(halves.source, source-style).elements
-    let sink-elements = _segments-elements(halves.sink, sink-style).elements
+    let source-elements = _segments-elements(halves.source, source-style, auto, true, true).elements
+    let sink-elements = _segments-elements(halves.sink, sink-style, auto, true, true).elements
     if _has-mark(source-style) and not _has-mark(sink-style) {
       for element in sink-elements {
         elements.push(element)
@@ -673,8 +665,8 @@
   elements
 }
 
-#let _pattern-line(start, end, style, label-pos: none) = {
-  _segment-elements(curve-api.line-segment(_point(start), _point(end)), style, label-pos: label-pos).elements
+#let _pattern-line(start, end, style, label-pos) = {
+  _segment-elements(curve-api.line-segment(_point(start), _point(end)), style, auto, true, true, label-pos).elements
 }
 
 #let _node-outset(style, node-outset) = {
@@ -735,262 +727,40 @@
     panic("draw: dangling graph edge has no position; call layout(...) or pass pos: to graph.edge/build")
   }
 }
-
-/// Draw a graph object with CeTZ.
-///
-/// The graph must already have positions, either from `layout` or from explicit
-/// `pos` values passed to graph node or edge items. Paired
-/// edges without an explicit edge position use the midpoint of their endpoint
-/// nodes. Node and edge Typst style dictionaries or callbacks are evaluated and
-/// forwarded to CeTZ.
-///
-/// #example(`
-/// #let positioned = graph.build({
-///   graph.node(<left>, label: [left], pos: graph.pos(x: 0, y: 0))
-///   graph.node(<right>, label: [right], pos: graph.pos(ref: <left>, dx: 2.5, dy: 0))
-///   graph.edge(graph.source(<left>), graph.sink(<right>))
-///   graph.edge(graph.source(<right>), <right-out>, pos: graph.pos(ref: <right>, dx: 0.9, dy: 0.7))
-/// },
-///   name: "positioned",
-/// )
-/// #draw(positioned, source-style: (stroke: black + 0.7pt), sink-style: (stroke: black + 0.7pt))
-/// `,dir:ttb)
-///
-/// #example(`
-/// #let parallel-base-edge = 0
-/// #let source-patterns = (
-///   "coil",
-///   "zigzag",
-///   "coil",
-///   "wave",
-///   "zigzag",
-///   "coil",
-///   "wave",
-///   "zigzag",
-/// )
-/// #let sink-patterns = (
-///   "coil",
-///   "zigzag",
-///   "coil",
-///   "zigzag",
-///   "coil",
-///   "wave",
-///   "coil",
-///   "wave",
-/// )
-/// #let parallel-layer(edge, mark: none) = if edge.eid == parallel-base-edge {
-///   (
-///     offset: -0.5,
-///     length: 1.5,
-///     ratio: 0.5,
-///     resolve-length: "min",
-///     stroke: (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round"),
-///     mark: mark,
-///   )
-/// } else { none }
-/// #let stack(base, layer) = if layer == none { base } else { (base, layer) }
-/// #let source-stroke(edge) = if edge.eid == parallel-base-edge {
-///   (paint: gray, thickness: 0.75pt, cap: "round")
-/// } else {
-///   (paint: red, thickness: 1.2pt, cap: "round")
-/// }
-/// #let sink-stroke(edge) = if edge.eid == parallel-base-edge {
-///   (paint: gray, thickness: 0.75pt, cap: "round")
-/// } else {
-///   (paint: blue, thickness: 1.2pt, cap: "round", dash: "dotted")
-/// }
-/// #let source-style(edge) = {
-///   let base = (
-///     stroke: source-stroke(edge),
-///     pattern: source-patterns.at(edge.eid),
-///     pattern-amplitude: 0.18,
-///     pattern-wavelength: 0.55,
-///     pattern-coil-longitudinal-scale: 1.6,
-///   )
-///   stack(base, parallel-layer(edge))
-/// }
-/// #let sink-style(edge) = {
-///   let base = (
-///     stroke: sink-stroke(edge),
-///     pattern: sink-patterns.at(edge.eid),
-///     pattern-amplitude: 0.18,
-///     pattern-wavelength: 0.55,
-///     pattern-coil-longitudinal-scale: 1.6,
-///   )
-///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
-/// }
-/// #let g = graph.build({
-///   graph.node(<a>, label: [a hi])
-///   graph.node(<c>)
-///   graph.node(<d>)
-///   graph.node(<e>)
-///   graph.edge(graph.source(<a>), <ac>, graph.sink(<c>), pos: graph.pos(x: 0, y: 0.75, mode: "pin"))
-///   graph.edge(graph.source(<c>), <ca>, graph.sink(<a>, compass: "e"))
-///   graph.edge(graph.source(<c>), <cd>, graph.sink(<d>, compass: "e"))
-///   graph.edge(graph.source(<e>), <ed>, graph.sink(<d>, compass: "e"))
-///   graph.edge(graph.source(<e>), <ea>, graph.sink(<a>, compass: "e"))
-///   graph.edge(graph.source(<d>), <d-out>)
-///   graph.edge(graph.source(<e>, compass: "e"), <e-out>)
-///   graph.edge(graph.source(<a>), <a-out>)
-/// },
-///   name: "demo",
-/// )
-/// #let layed-out = layout(g)
-/// #let east = subgraph.compass(layed-out, "e")
-/// #draw(layed-out, subgraph: east, source-style: source-style, sink-style: sink-style)
-/// `,dir:ttb)
-///
-/// #example(`
-/// #let p = graph.build({
-///   graph.node(<pa>, label: [a], pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc>, label: [c], pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc1>, label: [c], pos: graph.pos(y: 0, mode: "pin"))
-///   graph.node(<pc2>, label: [c], pos: graph.pos(y: 0, mode: "pin"))
-///   graph.edge(graph.source(<pa>), <e0>, graph.sink(<pc>))
-///   graph.edge(graph.source(<pc2>), <e1>, graph.sink(<pc1>))
-/// },
-///   name: "parallel demo",
-/// )
-/// #let parallel-edge-style(edge) = (
-///     offset: -0.5,
-///     length: 1.4,
-///     ratio: 0.5,
-///     resolve-length: "min",
-///     stroke: (paint: rgb("#2f6f4e"), thickness: 1.1pt, cap: "round"),
-///   )
-///
-/// #let focused-base-style(edge) = (
-///   stroke: (paint: gray, thickness: 0.7pt, cap: "round"),
-///   pattern: "coil",
-///   pattern-amplitude: 0.14,
-///   pattern-wavelength: 0.45,
-///   pattern-coil-longitudinal-scale: 1.5,
-/// )
-/// #let focused-source-style(edge) = (focused-base-style(edge), parallel-edge-style(edge))
-/// #let focused-sink-style(edge) = (focused-base-style(edge), parallel-edge-style(edge) + (
-///   mark: (end: ">"),
-/// ))
-/// #draw(layout(p, g-center: 0.004, label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
-/// `,dir:ttb)
-///
-/// #example(`
-/// #let g = graph.build({
-///   graph.node(<a>, pos: graph.pos(x: 0, y: 0, mode: "pin"))
-///   graph.node(<c>, pos: graph.pos(x: 3, y: 0, mode: "pin"))
-///   graph.node(<d>, pos: graph.pos(x: 3, y: -1, mode: "pin"))
-///   graph.edge(graph.source(<a>), <ac>, graph.sink(<c>), orientation: "default")
-///   graph.edge(graph.source(<a>), <ad>, graph.sink(<d>), orientation: "reversed")
-/// },
-///   name: "oriented marks",
-/// )
-/// #let arrow = (
-///   end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto),
-///   scale: 0.75,
-/// )
-/// #let oriented-arrow = (
-///   stroke: black + 0.7pt,
-///   mark: arrow,
-///   mark-position: "center-if-dangling",
-///   mark-orientation: "edge",
-/// )
-/// #draw(layout(g), unit: 1.4, source-style: oriented-arrow, sink-style: oriented-arrow)
-/// `,dir:ttb)
-/// -> content
-#let draw(
-  /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> bytes
-  graph,
-  /// Additional values merged into node and edge callback dictionaries.
-  /// -> dictionary
-  scope: (:),
-  /// Coordinate length for one graph-layout unit. Numbers are interpreted as em.
-  /// -> int | float | length | ratio
-  unit: 1,
-  /// Optional title displayed above the diagram. Use `auto` for the graph name.
-  /// -> none | auto | content | string
-  title: none,
-  /// Optional subgraph whose half-edges are shaded. -> none | bytes
-  subgraph: none,
-  /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
-  /// -> bool | int
-  debug: false,
-  /// Default CeTZ node radius. Use `auto` to fit the node label. -> auto | int | float | array
-  node-radius: auto,
-  /// Minimum radius used when `node-radius` is `auto`. -> int | float
-  node-min-radius: 0.16,
-  /// Extra canvas-unit padding around labels when `node-radius` is `auto`.
-  /// -> int | float
-  node-label-padding: 0.08,
-  /// Default CeTZ node fill. -> any
-  node-fill: white,
-  /// Default CeTZ node stroke. -> any
-  node-stroke: black,
-  /// Edge clearance from node centers. `auto` uses each node circle radius.
-  /// Increase this when labels extend beyond the circle. -> auto | int | float
-  node-outset: auto,
-  /// Default node-label style forwarded to `cetz.draw.content`. -> dictionary
-  node-label-style: (:),
-  /// Node style dictionary or callback. A callback receives node data. -> dictionary | function | none
-  node-style: (:),
-  /// Node label content or callback. `auto` uses the node name. -> auto | content | string | function | none
-  node-label: auto,
-  /// Default CeTZ edge stroke. -> any
-  edge-stroke: 0.1em,
-  /// Default normal offset for edge paths. Applied to the base edge geometry
-  /// before patterns; node outsets then trim the shifted path. -> int | float
-  edge-offset: _edge-geometry-defaults.offset,
-  /// Maximum visible arc length for centered parallel edge paths. `none` keeps
-  /// the full shifted path. -> none | int | float
-  edge-length: _edge-geometry-defaults.length,
-  /// Maximum visible fraction of the base edge length for centered parallel edge
-  /// paths. Combined with `edge-length` according to `edge-resolve-length`.
-  /// -> none | int | float
-  edge-ratio: _edge-geometry-defaults.ratio,
-  /// Resolve `edge-length` and `edge-ratio`. Accepted string
-  /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
-  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
-  /// `(base-length, length, ratio)`. -> string | function
-  edge-resolve-length: _edge-geometry-defaults.resolve-length,
-  /// Arc-length accuracy for fitted parallel edge paths. -> float
-  edge-accuracy: _edge-geometry-defaults.accuracy,
-  /// Let Kurbo optimize the fitted parallel path. -> bool
-  edge-optimize: _edge-geometry-defaults.optimize,
-  /// Source half-edge style dictionary, array of layer dictionaries, or
-  /// callback. `mark-position: "center-if-dangling"` keeps an end marker at the
-  /// paired-edge split point while centering it on dangling half edges.
-  /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
-  /// of raw path direction; reversed edges move the mark to the sink half and
-  /// flip it, while undirected edges suppress it.
-  /// -> dictionary | array | function | none
-  source-style: (:),
-  /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
-  /// A callback receives edge data. `mark-position: "center-if-dangling"` has
-  /// the same dangling-edge behavior as for `source-style`, and
-  /// `mark-orientation: "edge"` participates in the same orientation-aware mark
-  /// placement.
-  /// -> dictionary | array | function | none
-  sink-style: (:),
-  /// Edge label content or callback. A callback receives edge data.
-  /// -> content | string | function | none
-  edge-label: none,
-  /// Hobby curl used at the endpoints of paired edge curves. -> float
-  edge-omega: 1.0,
-  /// Arc-length accuracy for trimming edge curves at node outsets. -> float
-  edge-trim-accuracy: 0.001,
-  /// CeTZ canvas padding. -> none | int | float | array | dictionary
-  padding: 0.4,
-  /// Radius for edge-position markers shown at `debug >= 2`. -> int | float
-  debug-edge-radius: 0.08,
-  /// Fill for edge-position markers shown at `debug >= 2`. -> any
-  debug-edge-fill: rgb("#ff9f1c"),
-  /// Stroke for edge-position markers shown at `debug >= 2`. -> any
-  debug-edge-stroke: rgb("#d72638") + 0.35pt,
-  /// Label fill for edge-position markers shown at `debug >= 2`. -> any
-  debug-edge-label-fill: rgb("#7a1020"),
-  /// CeTZ style used to shade half-edges included in `subgraph`. -> dictionary
-  subgraph-edge-style: (stroke: rgb("#ffd166") + 4.5pt),
-  /// Draw subgraph shading below the normal half-edge style. -> bool
-  subgraph-edge-underlay: true,
-) = {
+#let draw(graph, options) = {
+  let scope = options.scope
+  let unit = options.unit
+  let title = options.title
+  let subgraph = options.subgraph
+  let debug = options.debug
+  let node-radius = options.node-radius
+  let node-min-radius = options.node-min-radius
+  let node-label-padding = options.node-label-padding
+  let node-fill = options.node-fill
+  let node-stroke = options.node-stroke
+  let node-outset = options.node-outset
+  let node-label-style = options.node-label-style
+  let node-style = options.node-style
+  let node-label = options.node-label
+  let edge-stroke = options.edge-stroke
+  let edge-offset = options.edge-offset
+  let edge-length = options.edge-length
+  let edge-ratio = options.edge-ratio
+  let edge-resolve-length = options.edge-resolve-length
+  let edge-accuracy = options.edge-accuracy
+  let edge-optimize = options.edge-optimize
+  let source-style = options.source-style
+  let sink-style = options.sink-style
+  let edge-label = options.edge-label
+  let edge-omega = options.edge-omega
+  let edge-trim-accuracy = options.edge-trim-accuracy
+  let padding = options.padding
+  let debug-edge-radius = options.debug-edge-radius
+  let debug-edge-fill = options.debug-edge-fill
+  let debug-edge-stroke = options.debug-edge-stroke
+  let debug-edge-label-fill = options.debug-edge-label-fill
+  let subgraph-edge-style = options.subgraph-edge-style
+  let subgraph-edge-underlay = options.subgraph-edge-underlay
   let info = graph-api.info(graph)
   let debug-level = _debug-level(debug)
   let diagram-content = cetz.canvas(
@@ -1027,7 +797,7 @@
           )
           let default-label-value = node-data.at("label", default: node.name)
           let default-label = _as-content(default-label-value)
-          let label = _content(node-label, node-data, default: default-label)
+          let label = _content(node-label, node-data, default-label)
           let node-style-value = (
             (
               radius: node-radius,
@@ -1099,7 +869,7 @@
           let source-style-layers = _style-layers(source-style, edge-data)
           let sink-style-layers = _style-layers(sink-style, edge-data)
           let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
-          let ev-label = _content(edge-label, edge-data, default: _as-content(data-label))
+          let ev-label = _content(edge-label, edge-data, _as-content(data-label))
           let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
 
           for layer-index in range(0, layer-count) {
@@ -1142,17 +912,22 @@
                 nodes,
                 source-geometry-style,
                 sink-geometry-style,
-                omega: edge-omega,
-                source-outset: node-outsets.at(source-half-edge.node),
-                sink-outset: node-outsets.at(sink-half-edge.node),
-                accuracy: edge-trim-accuracy,
-                label-pos: label-pos,
+                (
+                  omega: edge-omega,
+                  source-outset: node-outsets.at(source-half-edge.node),
+                  sink-outset: node-outsets.at(sink-half-edge.node),
+                  accuracy: edge-trim-accuracy,
+                  label-pos: label-pos,
+                ),
               )
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for element in (
                   _segments-elements(
                     halves.source,
                     _without-mark-style(_without-pattern-style(source-style-value)) + subgraph-edge-style,
+                    auto,
+                    true,
+                    true,
                   ).elements
                 ) {
                   elements.push(element)
@@ -1163,6 +938,9 @@
                   _segments-elements(
                     halves.sink,
                     _without-mark-style(_without-pattern-style(sink-style-value)) + subgraph-edge-style,
+                    auto,
+                    true,
+                    true,
                   ).elements
                 ) {
                   elements.push(element)
@@ -1173,11 +951,11 @@
                   elements.push(element)
                 }
               } else if source-style-value != none {
-                for element in _segments-elements(halves.source, source-draw-style).elements {
+                for element in _segments-elements(halves.source, source-draw-style, auto, true, true).elements {
                   elements.push(element)
                 }
               } else if sink-style-value != none {
-                for element in _segments-elements(halves.sink, sink-draw-style).elements {
+                for element in _segments-elements(halves.sink, sink-draw-style, auto, true, true).elements {
                   elements.push(element)
                 }
               }
@@ -1192,13 +970,13 @@
                   line-start,
                   edge.pos,
                   _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-edge-style,
-                  label-pos: label-pos,
+                  label-pos,
                 ) {
                   elements.push(element)
                 }
               }
               if source-style-value != none {
-                for element in _pattern-line(line-start, edge.pos, _dangling-mark-style(source-draw-style), label-pos: label-pos) {
+                for element in _pattern-line(line-start, edge.pos, _dangling-mark-style(source-draw-style), label-pos) {
                   elements.push(element)
                 }
               }
@@ -1213,13 +991,13 @@
                   edge.pos,
                   line-end,
                   _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-edge-style,
-                  label-pos: label-pos,
+                  label-pos,
                 ) {
                   elements.push(element)
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-line(edge.pos, line-end, _dangling-mark-style(sink-draw-style), label-pos: label-pos) {
+                for element in _pattern-line(edge.pos, line-end, _dangling-mark-style(sink-draw-style), label-pos) {
                   elements.push(element)
                 }
               }
