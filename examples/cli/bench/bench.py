@@ -29,6 +29,8 @@ DEFAULT_GRAPHS = ["G1"]
 DEFAULT_PROFILES = ["minimal"]
 DEFAULT_MAX_GEN_RAM = "15GB"
 DEFAULT_MAX_GEN_TIME = "120s"
+DEFAULT_MAX_BENCH_RAM = DEFAULT_MAX_GEN_RAM
+DEFAULT_MAX_BENCH_TIME = DEFAULT_MAX_GEN_TIME
 DEFAULT_BINARY_PROFILE = "release"
 DEFAULT_TARGET_PROFILE_TIME = "10s"
 MODE_GENERATE_INSPECT = "generate+inspect"
@@ -1359,6 +1361,8 @@ def run_case(
         inspect_command_file,
         inspect_output_log,
         state_dir,
+        max_seconds=args.max_bench_time,
+        max_rss_bytes=args.max_bench_ram,
     )
     if bench.get("aborted"):
         result["status"] = "interrupted" if bench.get("interrupted") else "aborted"
@@ -1714,6 +1718,20 @@ def parse_args() -> argparse.Namespace:
         help="generation time cap",
     )
     parser.add_argument(
+        "--max-bench-RAM",
+        "--max-bench-ram",
+        dest="max_bench_ram",
+        type=parse_size_bytes,
+        default=DEFAULT_MAX_BENCH_RAM,
+        help="benchmark inspect/evaluate RAM cap",
+    )
+    parser.add_argument(
+        "--max-bench-time",
+        type=parse_duration_seconds,
+        default=DEFAULT_MAX_BENCH_TIME,
+        help="benchmark inspect/evaluate time cap",
+    )
+    parser.add_argument(
         "--profile",
         choices=["release", "debug", "dev-optim"],
         default=DEFAULT_BINARY_PROFILE,
@@ -1740,7 +1758,7 @@ def parse_args() -> argparse.Namespace:
         "--target-profile-time",
         type=parse_duration_seconds,
         default=DEFAULT_TARGET_PROFILE_TIME,
-        help="target runtime for inspect --bench",
+        help="target runtime for inspect --bench or 3Drep evaluate --profile",
     )
     parser.add_argument(
         "--no-colour",
@@ -1924,6 +1942,8 @@ def update_payload_metadata(
     metadata["binary_profile"] = args.profile
     metadata["max_gen_ram_bytes"] = args.max_gen_ram
     metadata["max_gen_time_s"] = args.max_gen_time
+    metadata["max_bench_ram_bytes"] = args.max_bench_ram
+    metadata["max_bench_time_s"] = args.max_bench_time
     metadata["target_profile_time_s"] = args.target_profile_time
     metadata["compare_eval"] = args.compare_eval
     metadata["rerun"] = args.rerun
