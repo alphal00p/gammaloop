@@ -1,6 +1,6 @@
 // Internal graph implementation. Public users should import `graph.typ`.
 
-#let _plugin = plugin("../linnest.wasm")
+#let _plugin = plugin("../../linnest.wasm")
 
 #let _graph-kind = "linnest-graph"
 
@@ -26,13 +26,13 @@
 
 #let _as-bytes(value) = if type(value) == array { bytes(value) } else { value }
 
-#let _graph-object(graph-bytes, native-data: _empty-native-data()) = (
+#let _graph-object(graph-bytes, native-data) = (
   linnest-kind: _graph-kind,
   bytes: _as-bytes(graph-bytes),
   native-data: native-data,
 )
 
-#let with-bytes(graph, graph-bytes) = _graph-object(graph-bytes, native-data: _native-data(graph))
+#let with-bytes(graph, graph-bytes) = _graph-object(graph-bytes, _native-data(graph))
 
 #let _array-at(values, index) = if index == none {
   none
@@ -51,7 +51,7 @@
   result
 }
 
-#let _with-native-data(graph, native-data) = _graph-object(_assert-graph(graph).bytes, native-data: native-data)
+#let _with-native-data(graph, native-data) = _graph-object(_assert-graph(graph).bytes, native-data)
 
 #let _payload(value) = if value == none { none } else { cbor.encode(value) }
 
@@ -63,7 +63,7 @@
   none
 }
 
-#let _get-native-data(native-data, kind, index: none) = {
+#let _get-native-data(native-data, kind, index) = {
   if kind == "graph" {
     native-data.graph
   } else if kind == "node" {
@@ -415,38 +415,19 @@
   }
   (nodes: resolved-nodes, edges: resolved-edges)
 }
-
-/// Create a grouped placement coordinate.
-///
-/// `side: "+"` keeps the solved coordinate non-negative and `side: "-"`
-/// keeps it non-positive. Groups are layout constraints and therefore require
-/// pin placement, which is the `graph.pos` default.
-///
-/// ```example
-/// #graph.group("right", side: "+")
-/// ```
-/// -> dictionary
-#let group(name, side: none) = {
+#let group(name, side) = {
   if side != none and not (side == "+" or side == "-" or side == "positive" or side == "negative") {
     panic("graph.group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
   }
   (kind: "group", name: _statement-value(name, "graph.group name"), side: side)
 }
-
-/// Create a first-class graph placement.
-///
-/// The default `mode: "pin"` turns numeric and grouped coordinates into layout
-/// constraints and also makes the coordinates immediately drawable without a
-/// layout pass. Use `mode: "start"` when the coordinate should only seed the
-/// layout.
-/// `ref` may reference a previously created node index and combines with `dx`
-/// and `dy`.
-///
-/// ```example
-/// #graph.pos(x: 0, y: graph.group("row"), mode: "pin")
-/// ```
-/// -> dictionary
-#let pos(x: none, y: none, ref: none, dx: none, dy: none, mode: "pin") = {
+#let pos(options) = {
+  let x = options.x
+  let y = options.y
+  let ref = options.ref
+  let dx = options.dx
+  let dy = options.dy
+  let mode = options.mode
   if mode != "start" and mode != "pin" {
     panic("graph.pos: mode must be \"start\" or \"pin\"")
   }
@@ -515,7 +496,7 @@
   fields
 }
 
-#let _record-with-fields(record, base-fields: (:), extra: (:)) = {
+#let _record-with-fields(record, base-fields, extra) = {
   let fields = base-fields + _record-fields(record)
   record + extra + (fields: fields)
 }
@@ -585,16 +566,7 @@
   }
 }
 
-#let _native-data-from-build(
-  graph-bytes_,
-  graph-data,
-  nodes,
-  edges,
-  default-node-data: none,
-  default-edge-data: none,
-  default-source-data: none,
-  default-sink-data: none,
-) = {
+#let _native-data-from-build(graph-bytes_, graph-data, nodes, edges, default-node-data, default-edge-data, default-source-data, default-sink-data) = {
   let native-data = _empty-native-data()
   native-data.graph = graph-data
 
@@ -657,7 +629,7 @@
   if kind == "node" and result.at("name", default: none) != none {
     result.name = _name-label(result.name, "graph.nodes")
   }
-  result.data = _get-native-data(native-data, kind, index: index)
+  result.data = _get-native-data(native-data, kind, index)
   result
 }
 
@@ -679,7 +651,7 @@
   result
 }
 
-#let _node-records(graph, subgraph: none) = {
+#let _node-records(graph, subgraph) = {
   let native-data = _native-data(graph)
   let records = if subgraph == none {
     cbor(_plugin.graph_nodes(graph-bytes(graph)))
@@ -689,7 +661,7 @@
   records.map(record => _native-record-data(record, native-data, "node", record.node))
 }
 
-#let _edge-records(graph, subgraph: none) = {
+#let _edge-records(graph, subgraph) = {
   let native-data = _native-data(graph)
   let records = if subgraph == none {
     cbor(_plugin.graph_edges(graph-bytes(graph)))
@@ -698,36 +670,16 @@
   }
   records.map(record => _native-edge-record(record, native-data))
 }
-
-/// Map graph metadata to new native data.
-///
-/// The callbacks receive decoded records plus a `fields` dictionary containing
-/// merged statements and direct record fields. A callback returns `none` to
-/// leave the record unchanged, or `(data: value)` to set new native data.
-///
-/// ```example
-/// #let g = graph.build({ graph.node(<a>) })
-/// #let g = graph.map(g, node: node => (data: (label: [A])))
-/// #graph.nodes(g).first().data.label
-/// ```
-/// -> dictionary
-#let map(
-  graph_,
-  /// Graph metadata callback. -> none | function
-  graph: none,
-  /// Node metadata callback. -> none | function
-  node: none,
-  /// Edge metadata callback. -> none | function
-  edge: none,
-  /// Source half-edge metadata callback. -> none | function
-  source: none,
-  /// Sink half-edge metadata callback. -> none | function
-  sink: none,
-) = {
+#let map(graph_, callbacks) = {
+  let graph = callbacks.graph
+  let node = callbacks.node
+  let edge = callbacks.edge
+  let source = callbacks.source
+  let sink = callbacks.sink
   let changed = false
   let native-data = _native-data(graph_)
   let info = _info-record(graph_)
-  let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))))
+  let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))), (:), (:))
   let graph-data = _mapped-data(graph, graph-record, "graph.map graph")
   if graph-data != none {
     native-data.graph = graph-data
@@ -735,8 +687,8 @@
   }
 
   if node != none {
-    for node-record in _node-records(graph_) {
-      let data = _mapped-data(node, _record-with-fields(node-record), "graph.map node")
+    for node-record in _node-records(graph_, none) {
+      let data = _mapped-data(node, _record-with-fields(node-record, (:), (:)), "graph.map node")
       if data != none {
         native-data.nodes = _array-set(native-data.nodes, node-record.node, data)
         changed = true
@@ -745,8 +697,8 @@
   }
 
   if edge != none or source != none or sink != none {
-    for edge-source in _edge-records(graph_) {
-      let edge-record = _record-with-fields(edge-source)
+    for edge-source in _edge-records(graph_, none) {
+      let edge-record = _record-with-fields(edge-source, (:), (:))
       let edge-fields = edge-record.fields
       let data = _mapped-data(edge, edge-record, "graph.map edge")
       if data != none {
@@ -758,7 +710,7 @@
       if source-record != none {
         let source-data = _mapped-data(
           source,
-          _record-with-fields(source-record, base-fields: edge-fields, extra: (edge: edge-record)),
+          _record-with-fields(source-record, edge-fields, (edge: edge-record)),
           "graph.map source",
         )
         if source-data != none {
@@ -771,7 +723,7 @@
       if sink-record != none {
         let sink-data = _mapped-data(
           sink,
-          _record-with-fields(sink-record, base-fields: edge-fields, extra: (edge: edge-record)),
+          _record-with-fields(sink-record, edge-fields, (edge: edge-record)),
           "graph.map sink",
         )
         if sink-data != none {
@@ -789,13 +741,7 @@
   }
 }
 
-#let _apply-default-data(
-  graph_,
-  default-node-data: none,
-  default-edge-data: none,
-  default-source-data: none,
-  default-sink-data: none,
-) = {
+#let _apply-default-data(graph_, default-node-data, default-edge-data, default-source-data, default-sink-data) = {
   if (
     default-node-data == none
       and default-edge-data == none
@@ -806,56 +752,23 @@
   }
   map(
     graph_,
-    node: record => _default-data-patch(default-node-data, record),
-    edge: record => _default-data-patch(default-edge-data, record),
-    source: record => _default-data-patch(default-source-data, record),
-    sink: record => _default-data-patch(default-sink-data, record),
+    (
+      graph: none,
+      node: record => _default-data-patch(default-node-data, record),
+      edge: record => _default-data-patch(default-edge-data, record),
+      source: record => _default-data-patch(default-source-data, record),
+      sink: record => _default-data-patch(default-sink-data, record),
+    ),
   )
 }
-
-/// Evaluate selected fields into native data entries.
-///
-/// Each selected field is read from the record's merged `fields` dictionary,
-/// evaluated in a scope containing those fields, and written to
-/// `data.<field>`.
-///
-/// ```example
-/// #let g = graph.build(
-///   {
-///     graph.node(<a>)
-///     graph.node(<b>)
-///     graph.edge(graph.source(<a>), graph.sink(<b>), statements: (mom: "p"))
-///   },
-///   default-edge-statements: (display-label: "$#mom$"),
-/// )
-/// #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
-/// #graph.edges(g).first().data.at("display-label")
-/// ```
-/// -> dictionary
-#let eval-fields(
-  graph_,
-
-  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
-  eval-graph-fields: (),
-
-  /// Node statement fields to evaluate into `graph.nodes(g).at(i).data`. -> string | array
-  eval-node-fields: (),
-
-  /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. -> string | array
-  eval-edge-fields: (),
-
-  /// Source half-edge fields to evaluate into `edge.source.data`. -> string | array
-  eval-source-fields: (),
-
-  /// Sink half-edge fields to evaluate into `edge.sink.data`. -> string | array
-  eval-sink-fields: (),
-
-  /// Typst `eval` mode used for string field values. -> string
-  eval-mode: "markup",
-
-  /// Additional Typst names available while evaluating field values. -> dictionary
-  scope: (:),
-) = {
+#let eval-fields(graph_, options) = {
+  let eval-graph-fields = options.eval-graph-fields
+  let eval-node-fields = options.eval-node-fields
+  let eval-edge-fields = options.eval-edge-fields
+  let eval-source-fields = options.eval-source-fields
+  let eval-sink-fields = options.eval-sink-fields
+  let eval-mode = options.eval-mode
+  let scope = options.scope
   let graph-fields = _eval-field-list(eval-graph-fields, "graph.eval-fields")
   let node-fields = _eval-field-list(eval-node-fields, "graph.eval-fields")
   let edge-fields = _eval-field-list(eval-edge-fields, "graph.eval-fields")
@@ -866,81 +779,48 @@
   }
   map(
     graph_,
-    graph: record => {
-      let data = _eval-data-value(record, graph-fields, eval-mode, scope)
-      if data == none { none } else { (data: data) }
-    },
-    node: record => {
-      let data = _eval-data-value(record, node-fields, eval-mode, scope)
-      if data == none { none } else { (data: data) }
-    },
-    edge: record => {
-      let data = _eval-data-value(record, edge-fields, eval-mode, scope)
-      if data == none { none } else { (data: data) }
-    },
-    source: record => {
-      let data = _eval-data-value(record, source-fields, eval-mode, scope)
-      if data == none { none } else { (data: data) }
-    },
-    sink: record => {
-      let data = _eval-data-value(record, sink-fields, eval-mode, scope)
-      if data == none { none } else { (data: data) }
-    },
+    (
+      graph: record => {
+        let data = _eval-data-value(record, graph-fields, eval-mode, scope)
+        if data == none { none } else { (data: data) }
+      },
+      node: record => {
+        let data = _eval-data-value(record, node-fields, eval-mode, scope)
+        if data == none { none } else { (data: data) }
+      },
+      edge: record => {
+        let data = _eval-data-value(record, edge-fields, eval-mode, scope)
+        if data == none { none } else { (data: data) }
+      },
+      source: record => {
+        let data = _eval-data-value(record, source-fields, eval-mode, scope)
+        if data == none { none } else { (data: data) }
+      },
+      sink: record => {
+        let data = _eval-data-value(record, sink-fields, eval-mode, scope)
+        if data == none { none } else { (data: data) }
+      },
+    ),
   )
 }
-
-/// Parse one or more DOT digraphs into graph objects.
-///
-/// Default data are applied before `eval-*` fields are evaluated.
-/// Parsed fields take precedence over default data fields.
-///
-/// ```example
-/// #let graphs = graph.parse("digraph first { a -> b }")
-/// #graphs.len()
-/// ```
-/// -> array
-#let parse(
-  input,
-
-  /// Default data merged into every node data. Captured node data fields override it. -> any
-  default-node-data: none,
-
-  /// Default data merged into every edge data. Captured edge data fields override it. -> any
-  default-edge-data: none,
-
-  /// Default data merged into every source half-edge data. Captured source data fields override it. -> any
-  default-source-data: none,
-
-  /// Default data merged into every sink half-edge data. Captured sink data fields override it. -> any
-  default-sink-data: none,
-
-  /// Graph statement fields to evaluate into `graph.info(g).data`. -> string | array
-  eval-graph-fields: (),
-
-  /// Node statement fields to evaluate into `graph.nodes(g).at(i).data`. -> string | array
-  eval-node-fields: (),
-
-  /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. -> string | array
-  eval-edge-fields: (),
-
-  /// Source half-edge fields to evaluate into `edge.source.data`. -> string | array
-  eval-source-fields: (),
-
-  /// Sink half-edge fields to evaluate into `edge.sink.data`. -> string | array
-  eval-sink-fields: (),
-
-  /// Typst `eval` mode used for string field values. -> string
-  eval-mode: "markup",
-
-  /// Additional Typst names available while evaluating field values. -> dictionary
-  scope: (:),
-) = {
+#let parse(input, options) = {
+  let default-node-data = options.default-node-data
+  let default-edge-data = options.default-edge-data
+  let default-source-data = options.default-source-data
+  let default-sink-data = options.default-sink-data
+  let eval-graph-fields = options.eval-graph-fields
+  let eval-node-fields = options.eval-node-fields
+  let eval-edge-fields = options.eval-edge-fields
+  let eval-source-fields = options.eval-source-fields
+  let eval-sink-fields = options.eval-sink-fields
+  let eval-mode = options.eval-mode
+  let scope = options.scope
   let graph-fields = _eval-field-list(eval-graph-fields, "graph.parse")
   let node-fields = _eval-field-list(eval-node-fields, "graph.parse")
   let edge-fields = _eval-field-list(eval-edge-fields, "graph.parse")
   let source-fields = _eval-field-list(eval-source-fields, "graph.parse")
   let sink-fields = _eval-field-list(eval-sink-fields, "graph.parse")
-  let graphs = cbor(_plugin.parse_graph(bytes(input))).map(graph => _graph-object(graph))
+  let graphs = cbor(_plugin.parse_graph(bytes(input))).map(graph => _graph-object(graph, _empty-native-data()))
   let needs-eval = graph-fields.len() != 0 or node-fields.len() != 0 or edge-fields.len() != 0 or source-fields.len() != 0 or sink-fields.len() != 0
   let needs-defaults = (
     default-node-data != none
@@ -956,82 +836,41 @@
     if needs-defaults {
       result = _apply-default-data(
         result,
-        default-node-data: default-node-data,
-        default-edge-data: default-edge-data,
-        default-source-data: default-source-data,
-        default-sink-data: default-sink-data,
+        default-node-data,
+        default-edge-data,
+        default-source-data,
+        default-sink-data,
       )
     }
     if needs-eval {
       result = eval-fields(
         result,
-        eval-graph-fields: graph-fields,
-        eval-node-fields: node-fields,
-        eval-edge-fields: edge-fields,
-        eval-source-fields: source-fields,
-        eval-sink-fields: sink-fields,
-        eval-mode: eval-mode,
-        scope: scope,
+        (
+          eval-graph-fields: graph-fields,
+          eval-node-fields: node-fields,
+          eval-edge-fields: edge-fields,
+          eval-source-fields: source-fields,
+          eval-sink-fields: sink-fields,
+          eval-mode: eval-mode,
+          scope: scope,
+        ),
       )
     }
     result
   })
 }
-
-/// Build one graph object from a stream of node and edge items.
-///
-/// Use @node, @source, @sink, and @edge to create graph items. Positional items
-/// may be passed as comma-separated arguments or yielded from a Typst code
-/// block.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>))
-/// }, name: "demo")
-/// #graph.info(g).name
-/// ```
-/// -> dictionary
-#let build(
-  /// Node and edge items returned by @node and @edge. -> array
-  ..items,
-
-  /// Graph name. -> none | string
-  name: none,
-
-  /// Native Typst graph data. -> any
-  data: none,
-
-  /// Flat graph statements. Used by DOT; values cannot nest. -> dictionary
-  statements: (:),
-
-  /// Flat default edge statements. Used by DOT; values cannot nest.
-  /// -> dictionary
-  default-edge-statements: (:),
-
-  /// Default data merged into every node data. Captured node data fields override it. -> any
-  default-node-data: none,
-
-  /// Default data merged into every edge data. Captured edge data fields override it. -> any
-  default-edge-data: none,
-
-  /// Default data merged into every source half-edge data. Captured source data fields override it. -> any
-  default-source-data: none,
-
-  /// Default data merged into every sink half-edge data. Captured sink data fields override it. -> any
-  default-sink-data: none,
-
-  /// Flat default node statements. Used by DOT; values cannot nest. -> dictionary
-  default-node-statements: (:),
-
-  /// Additional node items or raw node specs. -> array
-  /// -> array
-  nodes: (),
-
-  /// Additional edge items or raw edge specs. -> array
-  edges: (),
-) = {
+#let build(options, ..items) = {
+  let name = options.name
+  let data = options.data
+  let statements = options.statements
+  let default-edge-statements = options.default-edge-statements
+  let default-node-data = options.default-node-data
+  let default-edge-data = options.default-edge-data
+  let default-source-data = options.default-source-data
+  let default-sink-data = options.default-sink-data
+  let default-node-statements = options.default-node-statements
+  let nodes = options.nodes
+  let edges = options.edges
   let split = _split-items(items.pos(), nodes, edges)
   let keyed-nodes = _with-build-payloads(split.nodes)
   let keyed-edges = _with-build-payloads(split.edges)
@@ -1057,41 +896,19 @@
     data,
     keyed-nodes,
     keyed-edges,
-    default-node-data: default-node-data,
-    default-edge-data: default-edge-data,
-    default-source-data: default-source-data,
-    default-sink-data: default-sink-data,
+    default-node-data,
+    default-edge-data,
+    default-source-data,
+    default-sink-data,
   )
-  _graph-object(graph-bytes_, native-data: native-data)
+  _graph-object(graph-bytes_, native-data)
 }
-
-/// Create a graph node item for @build.
-///
-/// A Typst label is the node name used by @source, @sink, and @pos. The
-/// optional numeric `id` fixes the resulting graph node index. Extra named
-/// arguments are captured as node data fields. The default draw style uses
-/// `data.label` as the visible node label when present.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>, id: 0, label: [A])
-/// })
-/// #graph.nodes(g).first().name
-/// ```
-/// -> array
-#let node(
-  ..args,
-  /// Typst node name for references. -> none | label
-  name: none,
-  /// Numeric graph node index. Must be unique and in bounds when provided. -> none | int
-  id: none,
-  /// Node placement. -> none | dictionary
-  pos: none,
-  /// Drawing shift stored as a statement. -> none | string | array | dictionary
-  shift: none,
-  /// Additional flat node statements. Used by DOT; values cannot nest. -> dictionary
-  statements: (:),
-) = {
+#let node(options, ..args) = {
+  let name = options.name
+  let id = options.id
+  let pos = options.pos
+  let shift = options.shift
+  let statements = options.statements
   let resolved-data = _data-from-args("graph.node", args)
   let pos-args = args.pos()
   if pos-args.len() > 1 {
@@ -1121,25 +938,11 @@
     statements: statements,
   ),)
 }
-
-/// Create a source half-edge endpoint.
-///
-/// `node` may be a node name like `<a>` or a numeric node index. `name` gives
-/// the half-edge a Typst name; `id` is a numeric half-edge order/index
-/// override. Extra named arguments are captured as source data fields.
-///
-/// ```example
-/// #graph.source(<a>, name: <h1>, id: 0, kind: "out", compass: "e")
-/// ```
-/// -> dictionary
-#let source(
-  node,
-  ..args,
-  name: none,
-  id: none,
-  statement: none,
-  compass: none,
-) = {
+#let source(node, options, ..args) = {
+  let name = options.name
+  let id = options.id
+  let statement = options.statement
+  let compass = options.compass
   if args.pos().len() > 0 {
     panic("graph.source: expected only one positional node reference")
   }
@@ -1148,25 +951,11 @@
   _check-id(id, "graph.source")
   (linnest-kind: "source", node: node, name: name, id: id, data: data, statement: statement, compass: compass)
 }
-
-/// Create a sink half-edge endpoint.
-///
-/// `node` may be a node name like `<a>` or a numeric node index. `name` gives
-/// the half-edge a Typst name; `id` is a numeric half-edge order/index
-/// override. Extra named arguments are captured as sink data fields.
-///
-/// ```example
-/// #graph.sink(<b>, name: <h2>, id: 1, kind: "in", compass: "w")
-/// ```
-/// -> dictionary
-#let sink(
-  node,
-  ..args,
-  name: none,
-  id: none,
-  statement: none,
-  compass: none,
-) = {
+#let sink(node, options, ..args) = {
+  let name = options.name
+  let id = options.id
+  let statement = options.statement
+  let compass = options.compass
   if args.pos().len() > 0 {
     panic("graph.sink: expected only one positional node reference")
   }
@@ -1175,44 +964,16 @@
   _check-id(id, "graph.sink")
   (linnest-kind: "sink", node: node, name: name, id: id, data: data, statement: statement, compass: compass)
 }
-
-/// Create a graph edge item for @build.
-///
-/// Positional arguments may contain one @source, one @sink, and optionally one
-/// Typst label used as the edge name. The numeric `id` chooses the edge order
-/// and extra named arguments are captured as edge data fields. The default
-/// draw style uses `data.label` as the visible edge label when present.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: [$p$], particle: "g")
-/// })
-/// ```
-/// -> array
-#let edge(
-  /// Source/sink half-edges and optional edge name. -> any
-  ..args,
-  /// Typst edge name. -> none | label
-  name: none,
-  /// Numeric edge order/index override. -> none | int
-  id: none,
-  /// Edge orientation: `"default"`, `"reversed"`, or `"undirected"`. -> string
-  orientation: "default",
-  /// Edge placement. -> none | dictionary
-  pos: none,
-  /// Drawing shift stored as a statement. -> none | string | array | dictionary
-  shift: none,
-  /// Edge label position stored as a statement. -> none | string | array | dictionary
-  label-pos: none,
-  /// Edge label angle stored as a statement. -> none | int | float | string
-  label-angle: none,
-  /// Edge bend stored as a statement. -> none | int | float | string
-  bend: none,
-  /// Additional flat edge statements. Used by DOT; values cannot nest. -> dictionary
-  statements: (:),
-) = {
+#let edge(options, ..args) = {
+  let name = options.name
+  let id = options.id
+  let orientation = options.orientation
+  let pos = options.pos
+  let shift = options.shift
+  let label-pos = options.label-pos
+  let label-angle = options.label-angle
+  let bend = options.bend
+  let statements = options.statements
   let resolved-data = _data-from-args("graph.edge", args)
   let resolved-id = id
   let resolved-name = name
@@ -1268,61 +1029,10 @@
     statements: statements,
   ),)
 }
-
-/// Return graph metadata.
-///
-/// The result has `name`, `global-statements`, `default-edge-statements`, and
-/// `default-node-statements`.
-///
-/// ```example
-/// #let g = graph.build({ graph.node(<a>) }, name: "demo")
-/// #graph.info(g).name
-/// ```
-/// -> dictionary
 #let info(graph) = _info-record(graph)
-
-/// Serialize a graph object to DOT.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), graph.sink(<b>))
-/// }, name: "demo")
-/// #graph.dot(g).contains("digraph demo")
-/// ```
-/// -> string
 #let dot(graph) = cbor(_plugin.graph_dot(graph-bytes(graph)))
-
-/// Return node records, optionally filtered by an subgraph object.
-///
-/// Node `name` values are Typst labels when present.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-/// })
-/// #graph.nodes(g).map(node => str(node.name)).join(", ")
-/// ```
-/// -> array
-#let nodes(graph, subgraph: none) = _node-records(graph, subgraph: subgraph)
-
-/// Return edge records, optionally filtered by an subgraph object.
-///
-/// Edge `name` values are Typst labels when present.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>, compass: "e"), graph.sink(<b>))
-/// })
-/// #let east = subgraph.compass(g, "e")
-/// #graph.edges(g, subgraph: east).len()
-/// ```
-/// -> array
-#let edges(graph, subgraph: none) = _edge-records(graph, subgraph: subgraph)
+#let nodes(graph, subgraph) = _node-records(graph, subgraph)
+#let edges(graph, subgraph) = _edge-records(graph, subgraph)
 
 #let _name-key(value, context_) = {
   if type(value) == label {
@@ -1366,127 +1076,44 @@
     none
   }
 }
-
-/// Return one named node's native data.
-///
-/// `name` is a Typst label such as `<a>` or the corresponding string name.
-///
-/// ```example
-/// #let g = graph.build({ graph.node(<a>, label: [A]) })
-/// #graph.node-data(g, <a>).label
-/// ```
-/// -> any
 #let node-data(graph_, name) = {
   let key = _name-key(name, "graph.node-data")
-  _record-by-name(nodes(graph_), key, "graph.node-data").data
+  _record-by-name(nodes(graph_, none), key, "graph.node-data").data
 }
-
-/// Return one named edge's native data.
-///
-/// `name` is a Typst label such as `<e>` or the corresponding string name.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>), label: [$p$])
-/// })
-/// #graph.edge-data(g, <e>).label
-/// ```
-/// -> any
 #let edge-data(graph_, name) = {
   let key = _name-key(name, "graph.edge-data")
-  _record-by-name(edges(graph_), key, "graph.edge-data").data
+  _record-by-name(edges(graph_, none), key, "graph.edge-data").data
 }
-
-/// Update one named node's native data.
-///
-/// `name` is a Typst label such as `<a>` or the corresponding string name.
-/// `update` may be a replacement data value or a function
-/// `(data, node) => new-data`.
-///
-/// ```example
-/// #let g = graph.build({ graph.node(<a>) })
-/// #let g = graph.update-node-data(g, <a>, (label: [A]))
-/// #graph.nodes(g).first().data.label
-/// ```
-/// -> dictionary
 #let update-node-data(graph_, name, update) = {
   let key = _name-key(name, "graph.update-node-data")
   if update == none {
     return graph_
   }
-  let _ = _record-by-name(nodes(graph_), key, "graph.update-node-data")
-  map(graph_, node: _named-data-callback(key, update, "graph.update-node-data"))
+  let _ = _record-by-name(nodes(graph_, none), key, "graph.update-node-data")
+  map(graph_, (
+    graph: none,
+    node: _named-data-callback(key, update, "graph.update-node-data"),
+    edge: none,
+    source: none,
+    sink: none,
+  ))
 }
-
-/// Update one named edge's native data.
-///
-/// `name` is a Typst label such as `<e>` or the corresponding string name.
-/// `update` may be a replacement data value or a function
-/// `(data, edge) => new-data`.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), <e>, graph.sink(<b>))
-/// })
-/// #let g = graph.update-edge-data(g, <e>, (label: [$p$]))
-/// #graph.edges(g).first().data.label
-/// ```
-/// -> dictionary
 #let update-edge-data(graph_, name, update) = {
   let key = _name-key(name, "graph.update-edge-data")
   if update == none {
     return graph_
   }
-  let _ = _record-by-name(edges(graph_), key, "graph.update-edge-data")
-  map(graph_, edge: _named-data-callback(key, update, "graph.update-edge-data"))
+  let _ = _record-by-name(edges(graph_, none), key, "graph.update-edge-data")
+  map(graph_, (
+    graph: none,
+    node: none,
+    edge: _named-data-callback(key, update, "graph.update-edge-data"),
+    source: none,
+    sink: none,
+  ))
 }
-
-/// Join two graphs by matching dangling half-edge statements or ids on `key`.
-///
-/// Supported key values are `"statement"`, `"compass"`, and `"id"`.
-///
-/// ```example
-/// #let left = graph.build({
-///   graph.node(<a>)
-///   graph.edge(graph.sink(<a>, statement: "j"))
-/// })
-/// #let right = graph.build({
-///   graph.node(<b>)
-///   graph.edge(graph.source(<b>, statement: "j"))
-/// })
-/// #graph.edges(graph.join(left, right, key: "statement")).len()
-/// ```
-/// -> dictionary
-#let join(left, right, key: "statement") = {
-  _graph-object(_plugin.graph_join_by_hedge_key(graph-bytes(left), graph-bytes(right), cbor.encode((key: key))))
+#let join(left, right, key) = {
+  _graph-object(_plugin.graph_join_by_hedge_key(graph-bytes(left), graph-bytes(right), cbor.encode((key: key))), _empty-native-data())
 }
-
-/// Return subgraph objects for the graph's cycle basis.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), graph.sink(<b>))
-/// })
-/// #graph.cycles(g).len()
-/// ```
-/// -> array
 #let cycles(graph) = cbor(_plugin.graph_cycle_basis(graph-bytes(graph)))
-
-/// Return subgraph objects for the graph's spanning forests.
-///
-/// ```example
-/// #let g = graph.build({
-///   graph.node(<a>)
-///   graph.node(<b>)
-///   graph.edge(graph.source(<a>), graph.sink(<b>))
-/// })
-/// #graph.forests(g).len()
-/// ```
-/// -> array
 #let forests(graph) = cbor(_plugin.graph_spanning_forests(graph-bytes(graph)))
