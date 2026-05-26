@@ -10,6 +10,7 @@ use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
 
+use crate::shorthands::schoonschip::SchoonschipSettings;
 use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use crate::{gamma, gamma0, gamma5, u, v};
 
@@ -518,7 +519,9 @@ fn gamma_alg() {
         * gamma!(nu3, 4, 5)
         * gamma!(nu, 5, 1))
     .simplify_gamma()
-    .expand();
+    .schoonschip_with_net::<true, AbstractIndex>(
+        &SchoonschipSettings::default().with_expanded_contracted_sums(),
+    );
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
 
@@ -583,418 +586,380 @@ fn gamma_alg() {
     assert_snapshot!(expr.to_bare_ordered_string(), @"(-1*d^2+2*d)*g(bis(4,1),bis(4,2))");
 }
 
-mod failing {
-    use super::*;
+#[test]
+fn val_test() {
+    test_initialize();
+    // let expr = parse_lit!(
+    //     (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
+    //         + gamma(
+    //             bis(4, hedge(0, 0)),
+    //             bis(4, hedge(1, 0)),
+    //             mink(4, edge(0, 1))
+    //         ) * Q(0, mink(4, edge(0, 1))))
+    //         * (MB * g(bis(4, hedge(4, 0)), bis(4, hedge(5, 0)))
+    //             + gamma(
+    //                 bis(4, hedge(4, 0)),
+    //                 bis(4, hedge(5, 0)),
+    //                 mink(4, edge(2, 1))
+    //             ) * Q(2, mink(4, edge(2, 1))))
+    //         * (MB * g(bis(4, hedge(8, 0)), bis(4, hedge(9, 0)))
+    //             + gamma(
+    //                 bis(4, hedge(8, 0)),
+    //                 bis(4, hedge(9, 0)),
+    //                 mink(4, edge(5, 1))
+    //             ) * Q(5, mink(4, edge(5, 1))))
+    //         * gamma(
+    //             bis(4, hedge(1, 0)),
+    //             bis(4, hedge(4, 0)),
+    //             mink(4, hedge(10, 0))
+    //         )
+    //         * gamma(
+    //             bis(4, hedge(5, 0)),
+    //             bis(4, hedge(8, 0)),
+    //             mink(4, hedge(2, 0))
+    //         )
+    //         * gamma(
+    //             bis(4, hedge(9, 0)),
+    //             bis(4, hedge(11, 0)),
+    //             mink(4, hedge(7, 0))
+    //         )
+    //         * gamma(
+    //             bis(4, hedge(11, 0)),
+    //             bis(4, hedge(0, 0)),
+    //             mink(4, hedge(2, 0))
+    //         )
+    //         * p(1, mink(4, hedge(10, 0)))
+    //         * p(7, mink(4, hedge(7, 0))),
+    //     "spenso"
+    // );
 
-    #[test]
-    fn val_test() {
-        test_initialize();
-        // let expr = parse_lit!(
-        //     (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
-        //         + gamma(
-        //             bis(4, hedge(0, 0)),
-        //             bis(4, hedge(1, 0)),
-        //             mink(4, edge(0, 1))
-        //         ) * Q(0, mink(4, edge(0, 1))))
-        //         * (MB * g(bis(4, hedge(4, 0)), bis(4, hedge(5, 0)))
-        //             + gamma(
-        //                 bis(4, hedge(4, 0)),
-        //                 bis(4, hedge(5, 0)),
-        //                 mink(4, edge(2, 1))
-        //             ) * Q(2, mink(4, edge(2, 1))))
-        //         * (MB * g(bis(4, hedge(8, 0)), bis(4, hedge(9, 0)))
-        //             + gamma(
-        //                 bis(4, hedge(8, 0)),
-        //                 bis(4, hedge(9, 0)),
-        //                 mink(4, edge(5, 1))
-        //             ) * Q(5, mink(4, edge(5, 1))))
-        //         * gamma(
-        //             bis(4, hedge(1, 0)),
-        //             bis(4, hedge(4, 0)),
-        //             mink(4, hedge(10, 0))
-        //         )
-        //         * gamma(
-        //             bis(4, hedge(5, 0)),
-        //             bis(4, hedge(8, 0)),
-        //             mink(4, hedge(2, 0))
-        //         )
-        //         * gamma(
-        //             bis(4, hedge(9, 0)),
-        //             bis(4, hedge(11, 0)),
-        //             mink(4, hedge(7, 0))
-        //         )
-        //         * gamma(
-        //             bis(4, hedge(11, 0)),
-        //             bis(4, hedge(0, 0)),
-        //             mink(4, hedge(2, 0))
-        //         )
-        //         * p(1, mink(4, hedge(10, 0)))
-        //         * p(7, mink(4, hedge(7, 0))),
-        //     "spenso"
-        // );
-
-        let _expr = parse_lit!(
-            (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
+    let _expr = parse_lit!(
+        (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
+            + gamma(
+                bis(4, hedge(0, 0)),
+                bis(4, hedge(1, 0)),
+                mink(4, edge(0, 1))
+            ) * Q(0, mink(4, edge(0, 1))))
+            * (MB * g(bis(4, hedge(2, 0)), bis(4, hedge(3, 0)))
                 + gamma(
-                    bis(4, hedge(0, 0)),
-                    bis(4, hedge(1, 0)),
-                    mink(4, edge(0, 1))
-                ) * Q(0, mink(4, edge(0, 1))))
-                * (MB * g(bis(4, hedge(2, 0)), bis(4, hedge(3, 0)))
-                    + gamma(
-                        bis(4, hedge(2, 0)),
-                        bis(4, hedge(3, 0)),
-                        mink(4, edge(1, 1))
-                    ) * Q(1, mink(4, edge(1, 1))))
-                * (MB * g(bis(4, hedge(5, 0)), bis(4, hedge(6, 0)))
-                    + gamma(
-                        bis(4, hedge(5, 0)),
-                        bis(4, hedge(6, 0)),
-                        mink(4, edge(3, 1))
-                    ) * Q(3, mink(4, edge(3, 1))))
-                * (gamma(
-                    bis(4, hedge(9, 0)),
-                    bis(4, hedge(10, 0)),
-                    mink(4, edge(5, 1))
-                ) * Q(5, mink(4, edge(5, 1))))
-                * gamma(
-                    bis(4, hedge(1, 0)),
-                    bis(4, hedge(9, 0)),
-                    mink(4, hedge(7, 0))
-                )
-                * gamma(
-                    bis(4, hedge(3, 0)),
-                    bis(4, hedge(5, 0)),
-                    mink(4, hedge(7, 0))
-                )
-                * gamma(
-                    bis(4, hedge(6, 0)),
-                    bis(4, hedge(0, 0)),
-                    mink(4, hedge(11, 0))
-                )
-                * gamma(
-                    bis(4, hedge(10, 0)),
                     bis(4, hedge(2, 0)),
-                    mink(4, hedge(4, 0))
-                )
-                * p(1, mink(4, hedge(4, 0)))
-                * p(7, mink(4, hedge(11, 0))),
-            default_namespace = "spenso"
-        );
+                    bis(4, hedge(3, 0)),
+                    mink(4, edge(1, 1))
+                ) * Q(1, mink(4, edge(1, 1))))
+            * (MB * g(bis(4, hedge(5, 0)), bis(4, hedge(6, 0)))
+                + gamma(
+                    bis(4, hedge(5, 0)),
+                    bis(4, hedge(6, 0)),
+                    mink(4, edge(3, 1))
+                ) * Q(3, mink(4, edge(3, 1))))
+            * (gamma(
+                bis(4, hedge(9, 0)),
+                bis(4, hedge(10, 0)),
+                mink(4, edge(5, 1))
+            ) * Q(5, mink(4, edge(5, 1))))
+            * gamma(
+                bis(4, hedge(1, 0)),
+                bis(4, hedge(9, 0)),
+                mink(4, hedge(7, 0))
+            )
+            * gamma(
+                bis(4, hedge(3, 0)),
+                bis(4, hedge(5, 0)),
+                mink(4, hedge(7, 0))
+            )
+            * gamma(
+                bis(4, hedge(6, 0)),
+                bis(4, hedge(0, 0)),
+                mink(4, hedge(11, 0))
+            )
+            * gamma(
+                bis(4, hedge(10, 0)),
+                bis(4, hedge(2, 0)),
+                mink(4, hedge(4, 0))
+            )
+            * p(1, mink(4, hedge(4, 0)))
+            * p(7, mink(4, hedge(11, 0))),
+        default_namespace = "spenso"
+    );
 
-        // let expr = parse_lit!(
-        //     g(mink(D, left(2)), mink(D, left(5)))
-        //         * g(mink(D, left(2)), mink(D, right(2)))
-        //         * g(mink(D, left(3)), mink(D, left(6)))
-        //         * g(mink(D, left(3)), mink(D, right(3)))
-        //         * g(mink(D, left(4)), mink(D, left(7)))
-        //         * g(mink(D, left(5)), mink(D, left(6)))
-        //         * g(mink(D, right(2)), mink(D, right(5)))
-        //         * g(mink(D, right(3)), mink(D, right(6)))
-        //         * g(mink(D, right(4)), mink(D, right(7)))
-        //         * g(mink(D, right(6)), mink(D, right(7)))
-        //         * g(bis(D, left(0)), bis(D, left(5)))
-        //         * g(bis(D, left(1)), bis(D, left(4)))
-        //         * g(bis(D, right(0)), bis(D, right(5)))
-        //         * g(bis(D, right(1)), bis(D, right(4)))
-        //         * gamma(bis(D, left(1)), bis(D, right(1)), mink(D, 1337))
-        //         * gamma(bis(D, right(0)), bis(D, left(0)), mink(D, 1338))
-        //         * gamma(bis(D, left(5)), bis(D, left(4)), mink(D, left(4)))
-        //         * gamma(bis(D, right(4)), bis(D, right(5)), mink(D, right(4)))
-        //         * Q(0, mink(D, 1338))
-        //         * Q(1, mink(D, 1337))
-        //         * Q(3, mink(D, left(7)))
-        //         * Q(3, mink(D, right(5))),
-        //     "spenso"
-        // );
-        //
-        let expr = parse_lit!(
-            ((-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
-                + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
-                * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
-                    + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
-                * 2
-                * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
-                        * -1
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
-                        * 2
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
-                        * -1
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
-                    + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
-                        + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
-                        * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
-                            + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
-                        * 2
-                        * G
-                ^ 6 * P(2, mink(4, dummy(2, 2)))
-                    * P(3, mink(4, dummy(3, 3)))
-                    * g(bis(4, l(2)), bis(4, l(5)))
-                    * g(bis(4, l(3)), bis(4, l(6)))
-                    * g(bis(4, r(2)), bis(4, r(5)))
-                    * g(bis(4, r(3)), bis(4, r(6)))
-                    * g(mink(4, l(0)), mink(4, l(6)))
-                    * g(mink(4, l(0)), mink(4, r(0)))
-                    * g(mink(4, l(1)), mink(4, l(7)))
-                    * g(mink(4, l(1)), mink(4, r(1)))
-                    * g(mink(4, l(4)), mink(4, l(8)))
-                    * g(mink(4, l(4)), mink(4, r(4)))
-                    * g(mink(4, l(5)), mink(4, l(9)))
-                    * g(mink(4, r(0)), mink(4, r(6)))
-                    * g(mink(4, r(1)), mink(4, r(7)))
-                    * g(mink(4, r(4)), mink(4, r(8)))
-                    * g(mink(4, r(5)), mink(4, r(9)))
-                    * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                    * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                    * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5))))
-                * -18,
-            default_namespace = "spenso"
-        );
+    // let expr = parse_lit!(
+    //     g(mink(D, left(2)), mink(D, left(5)))
+    //         * g(mink(D, left(2)), mink(D, right(2)))
+    //         * g(mink(D, left(3)), mink(D, left(6)))
+    //         * g(mink(D, left(3)), mink(D, right(3)))
+    //         * g(mink(D, left(4)), mink(D, left(7)))
+    //         * g(mink(D, left(5)), mink(D, left(6)))
+    //         * g(mink(D, right(2)), mink(D, right(5)))
+    //         * g(mink(D, right(3)), mink(D, right(6)))
+    //         * g(mink(D, right(4)), mink(D, right(7)))
+    //         * g(mink(D, right(6)), mink(D, right(7)))
+    //         * g(bis(D, left(0)), bis(D, left(5)))
+    //         * g(bis(D, left(1)), bis(D, left(4)))
+    //         * g(bis(D, right(0)), bis(D, right(5)))
+    //         * g(bis(D, right(1)), bis(D, right(4)))
+    //         * gamma(bis(D, left(1)), bis(D, right(1)), mink(D, 1337))
+    //         * gamma(bis(D, right(0)), bis(D, left(0)), mink(D, 1338))
+    //         * gamma(bis(D, left(5)), bis(D, left(4)), mink(D, left(4)))
+    //         * gamma(bis(D, right(4)), bis(D, right(5)), mink(D, right(4)))
+    //         * Q(0, mink(D, 1338))
+    //         * Q(1, mink(D, 1337))
+    //         * Q(3, mink(D, left(7)))
+    //         * Q(3, mink(D, right(5))),
+    //     "spenso"
+    // );
+    //
+    let expr = parse_lit!(
+        ((-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+            + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
+            * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
+            * 2
+            * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * -1
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * 2
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9))))
+                    * -1
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
+                    + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
+                    * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
+                        + g(mink(4, r(6)), mink(4, r(9))) * g(mink(4, r(7)), mink(4, r(8))))
+                    * 2
+                    * G
+            ^ 6 * P(2, mink(4, dummy(2, 2)))
+                * P(3, mink(4, dummy(3, 3)))
+                * g(bis(4, l(2)), bis(4, l(5)))
+                * g(bis(4, l(3)), bis(4, l(6)))
+                * g(bis(4, r(2)), bis(4, r(5)))
+                * g(bis(4, r(3)), bis(4, r(6)))
+                * g(mink(4, l(0)), mink(4, l(6)))
+                * g(mink(4, l(0)), mink(4, r(0)))
+                * g(mink(4, l(1)), mink(4, l(7)))
+                * g(mink(4, l(1)), mink(4, r(1)))
+                * g(mink(4, l(4)), mink(4, l(8)))
+                * g(mink(4, l(4)), mink(4, r(4)))
+                * g(mink(4, l(5)), mink(4, l(9)))
+                * g(mink(4, r(0)), mink(4, r(6)))
+                * g(mink(4, r(1)), mink(4, r(7)))
+                * g(mink(4, r(4)), mink(4, r(8)))
+                * g(mink(4, r(5)), mink(4, r(9)))
+                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
+                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5))))
+            * -18,
+        default_namespace = "spenso"
+    );
 
-        let res = parse_lit!(
-            7776 * G ^ 6 * dot(P(2, mink(4)), P(3, mink(4))),
-            default_namespace = "spenso"
-        );
-        assert_eq!(
-            res,
-            expr.simplify_gamma().to_dots(),
-            "fount{}",
-            expr.simplify_gamma().to_dots()
-        );
-
-        assert_eq!(
-            res,
-            expr.simplify_gamma().to_dots(),
-            "fount{}",
-            expr.simplify_gamma().to_dots()
-        );
-
-        let expr = parse_lit!(
-            G ^ 2
-                * Q(EMRID(0, 4), mink(dim, l(20)))
-                * g(bis(4, l(2)), bis(4, l(4)))
-                * g(bis(4, l(3)), bis(4, l(7)))
-                * g(mink(dim, l(0)), mink(dim, l(5)))
-                * g(mink(dim, l(1)), mink(dim, l(4)))
-                * gamma(bis(4, l(5)), bis(4, l(4)), mink(dim, l(4)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(dim, l(20)))
-                * gamma(bis(4, l(7)), bis(4, l(6)), mink(dim, l(5))),
-            default_namespace = "spenso"
-        );
-
-        println!("{:>}", expr.simplify_gamma().expand());
-        // assert_eq!(
-        //     expr.simplify_gamma().to_dots(),
-        //     expr.simplify_gamma().simplify_gamma().to_dots(),
-        //     "\n{:>}\n not equal to \n{:>}\n diff:\n{:>}",
-        //     expr.simplify_gamma().to_dots(),
-        //     expr.simplify_gamma().simplify_gamma().to_dots(),
-        //     (expr.simplify_gamma().simplify_gamma().to_dots() - expr.simplify_gamma().to_dots())
-        //         .expand()
-        // )
-        // println!("{}", expr.simplify_gamma().to_dots());
-
-        // println!("{}", SpinAntiFundamental {}.to_symbolic([RS.a_]))
-    }
+    let res = parse_lit!(
+        7776 * G ^ 6 * g(P(2, mink(4)), P(3, mink(4))),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        res,
+        expr.simplify_gamma().to_dots(),
+        "fount{}",
+        expr.simplify_gamma().to_dots()
+    );
 }

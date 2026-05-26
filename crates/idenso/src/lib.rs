@@ -7,6 +7,7 @@ use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSet
 use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
 use spenso::{
     network::{graph::NetworkEdge, library::function_lib::INBUILTS, parsing::ParseSettings},
+    shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         HasName, TensorStructure,
         representation::RepName,
@@ -18,6 +19,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
     id::Replacement,
+    printer::AtomPrinter,
     symbol,
 };
 use thiserror::Error;
@@ -145,7 +147,7 @@ pub trait IndexTooling {
     fn wrap_indices(&self, header: Symbol) -> Atom;
 
     fn spenso_conj(&self) -> Atom;
-
+    fn spenso_print<'a>(&'a self, settings: &SpensoPrintSettings) -> AtomPrinter<'a>;
     /// Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.
     ///
     /// Identifies indices that appear contracted (e.g., one covariant, one contravariant)
@@ -187,6 +189,10 @@ impl IndexTooling for Atom {
         new_dummy: impl FnMut(usize) -> Aind,
     ) -> Atom {
         self.as_view().canonize(new_dummy)
+    }
+
+    fn spenso_print<'a>(&'a self, settings: &SpensoPrintSettings) -> AtomPrinter<'a> {
+        self.printer(settings.nice_symbolica())
     }
 
     fn spenso_conj(&self) -> Atom {
@@ -248,6 +254,10 @@ pub enum AdjointError {
 }
 
 impl IndexTooling for AtomView<'_> {
+    fn spenso_print(&self, settings: &SpensoPrintSettings) -> AtomPrinter<'_> {
+        self.printer(settings.nice_symbolica())
+    }
+
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,

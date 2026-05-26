@@ -4,7 +4,7 @@ use spenso::{
     chain, g,
     network::tags::SPENSO_TAG as T,
     rep_,
-    shadowing::{self, IntoAtom, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
+    shadowing::{self, IntoAtom, TensorCollectExt},
     structure::representation::{LibraryRep, Minkowski, RepName},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
@@ -162,6 +162,38 @@ enum DiracFactor<'a> {
     ProjectorPlus(AtomView<'a>),
     ProjectorMinus(AtomView<'a>),
     Other(AtomView<'a>),
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct DiracFactorKinds {
+    has_gamma5: bool,
+    has_gamma0: bool,
+    has_projector: bool,
+}
+
+impl DiracFactorKinds {
+    fn observe(&mut self, factor: DiracFactor<'_>) {
+        match factor {
+            DiracFactor::Gamma5(_) => self.has_gamma5 = true,
+            DiracFactor::Gamma0(_) => self.has_gamma0 = true,
+            DiracFactor::ProjectorPlus(_) | DiracFactor::ProjectorMinus(_) => {
+                self.has_projector = true;
+            }
+            DiracFactor::Gamma { .. } | DiracFactor::Other(_) => {}
+        }
+    }
+
+    fn has_non_pure_gamma(self) -> bool {
+        self.has_gamma5 || self.has_gamma0 || self.has_projector
+    }
+
+    fn has_gamma_five_or_zero(self) -> bool {
+        self.has_gamma5 || self.has_gamma0
+    }
+
+    fn has_gamma0_conjugation_candidate(self) -> bool {
+        self.has_gamma0 && (self.has_gamma5 || self.has_projector)
+    }
 }
 
 impl<'a> DiracFactor<'a> {
@@ -385,9 +417,14 @@ impl<'settings> DiracSimplifier<'settings> {
             return None;
         };
 
+        let mut factor_kinds = DiracFactorKinds::default();
         let factors = factors
             .iter()
-            .map(|factor| DiracFactor::parse(*factor))
+            .map(|factor| {
+                let factor = DiracFactor::parse(*factor);
+                factor_kinds.observe(factor);
+                factor
+            })
             .collect::<Vec<_>>();
 
         if factors.is_empty() {
@@ -395,8 +432,18 @@ impl<'settings> DiracSimplifier<'settings> {
         }
 
         Self::contract_adjacent_gamma_pair(*start, *end, &factors)
-            .or_else(|| Self::contract_adjacent_special_dirac_pair(*start, *end, &factors))
-            .or_else(|| Self::conjugate_special_factor_by_gamma0(*start, *end, &factors))
+            .or_else(|| {
+                factor_kinds
+                    .has_non_pure_gamma()
+                    .then(|| Self::contract_adjacent_special_dirac_pair(*start, *end, &factors))
+                    .flatten()
+            })
+            .or_else(|| {
+                factor_kinds
+                    .has_gamma0_conjugation_candidate()
+                    .then(|| Self::conjugate_special_factor_by_gamma0(*start, *end, &factors))
+                    .flatten()
+            })
             .or_else(|| Self::four_dim_chisholm_contraction(*start, *end, &factors))
             .or_else(|| {
                 self.settings
@@ -404,8 +451,18 @@ impl<'settings> DiracSimplifier<'settings> {
                     .then(|| Self::four_dim_three_gamma_epsilon_expansion(*start, *end, &factors))
                     .flatten()
             })
-            .or_else(|| Self::move_gamma5_right_of_gamma(*start, *end, &factors))
-            .or_else(|| Self::move_projector_right_of_gamma(*start, *end, &factors))
+            .or_else(|| {
+                factor_kinds
+                    .has_gamma5
+                    .then(|| Self::move_gamma5_right_of_gamma(*start, *end, &factors))
+                    .flatten()
+            })
+            .or_else(|| {
+                factor_kinds
+                    .has_projector
+                    .then(|| Self::move_projector_right_of_gamma(*start, *end, &factors))
+                    .flatten()
+            })
             .or_else(|| match self.settings.chain_ordering {
                 GammaChainOrdering::RepeatedPairs => {
                     Self::bubble_repeated_gamma_towards_contraction(*start, *end, &factors)
@@ -425,9 +482,11 @@ impl DiracSimplifier<'_> {
         end: AtomView<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
-        for i in 0..factors.len().saturating_sub(1) {
-            let Some((mu, nu)) =
-                Self::mink_index_pair(ADJACENT_GAMMA_CONTRACTION, &factors[i], &factors[i + 1])
+        for (i, pair) in factors.windows(2).enumerate() {
+            let [left, right] = pair else {
+                unreachable!("windows(2) always yields pairs")
+            };
+            let Some((mu, nu)) = Self::mink_index_pair(ADJACENT_GAMMA_CONTRACTION, left, right)
             else {
                 continue;
             };
@@ -458,8 +517,11 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        for i in 0..factors.len().saturating_sub(1) {
-            let replacement = match (&factors[i], &factors[i + 1]) {
+        for (i, pair) in factors.windows(2).enumerate() {
+            let [left, right] = pair else {
+                unreachable!("windows(2) always yields pairs")
+            };
+            let replacement = match (left, right) {
                 (DiracFactor::Gamma5(_), DiracFactor::Gamma5(_))
                 | (DiracFactor::Gamma0(_), DiracFactor::Gamma0(_)) => Vec::new(),
                 (DiracFactor::ProjectorPlus(_), DiracFactor::ProjectorPlus(_)) => {
@@ -498,14 +560,15 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        for i in 0..factors.len().saturating_sub(2) {
-            if !matches!(factors[i], DiracFactor::Gamma0(_))
-                || !matches!(factors[i + 2], DiracFactor::Gamma0(_))
-            {
+        for (i, triple) in factors.windows(3).enumerate() {
+            let [left, middle, right] = triple else {
+                unreachable!("windows(3) always yields triples")
+            };
+            if !matches!(left, DiracFactor::Gamma0(_)) || !matches!(right, DiracFactor::Gamma0(_)) {
                 continue;
             }
 
-            let (sign, replacement) = match factors[i + 1] {
+            let (sign, replacement) = match *middle {
                 DiracFactor::Gamma5(_) => (-1, gamma5_factor()),
                 DiracFactor::ProjectorPlus(_) => (1, endpoint_factor(AGS.projm)),
                 DiracFactor::ProjectorMinus(_) => (1, endpoint_factor(AGS.projp)),
@@ -645,11 +708,13 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        for i in 0..factors.len().saturating_sub(2) {
-            let Some(mink_indices) = Self::gamma_mink_index_sequence_for(
-                FOUR_DIM_THREE_GAMMA_EPSILON,
-                &factors[i..i + 3],
-            ) else {
+        for (i, triple) in factors.windows(3).enumerate() {
+            let [first, second, third] = triple else {
+                unreachable!("windows(3) always yields triples")
+            };
+            let Some(mink_indices) =
+                Self::gamma_mink_index_sequence_for(FOUR_DIM_THREE_GAMMA_EPSILON, triple)
+            else {
                 continue;
             };
             if !mink_indices.iter().copied().all(is_minkowski_slot) {
@@ -676,21 +741,21 @@ impl DiracSimplifier<'_> {
                 end,
                 *mu,
                 *nu,
-                Self::chain_factors(factors, i, i + 2, [factors[i + 2].as_view()]),
+                Self::chain_factors(factors, i, i + 2, [(*third).as_view()]),
             );
             let metric_mu_rho = Self::generated_metric_chain_term(
                 start,
                 end,
                 *mu,
                 *rho,
-                Self::chain_factors(factors, i, i + 2, [factors[i + 1].as_view()]),
+                Self::chain_factors(factors, i, i + 2, [(*second).as_view()]),
             );
             let metric_nu_rho = Self::generated_metric_chain_term(
                 start,
                 end,
                 *nu,
                 *rho,
-                Self::chain_factors(factors, i, i + 2, [factors[i].as_view()]),
+                Self::chain_factors(factors, i, i + 2, [(*first).as_view()]),
             );
 
             return Some(epsilon_term + metric_mu_nu - metric_mu_rho + metric_nu_rho);
@@ -735,10 +800,11 @@ impl DiracSimplifier<'_> {
         end: AtomView<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
-        for i in 0..factors.len().saturating_sub(1) {
-            let Some((mu, nu)) =
-                Self::mink_index_pair(GAMMA_ANTICOMMUTATION, &factors[i], &factors[i + 1])
-            else {
+        for (i, pair) in factors.windows(2).enumerate() {
+            let [left, right] = pair else {
+                unreachable!("windows(2) always yields pairs")
+            };
+            let Some((mu, nu)) = Self::mink_index_pair(GAMMA_ANTICOMMUTATION, left, right) else {
                 continue;
             };
 
@@ -761,11 +827,14 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        for i in 0..factors.len().saturating_sub(1) {
-            let DiracFactor::Gamma5(_) = factors[i] else {
+        for (i, pair) in factors.windows(2).enumerate() {
+            let [left, right] = pair else {
+                unreachable!("windows(2) always yields pairs")
+            };
+            let DiracFactor::Gamma5(_) = *left else {
                 continue;
             };
-            if factors[i + 1]
+            if (*right)
                 .gamma_mink_index(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
                 .is_none()
             {
@@ -792,13 +861,16 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        for i in 0..factors.len().saturating_sub(1) {
-            let opposite_projector = match factors[i] {
+        for (i, pair) in factors.windows(2).enumerate() {
+            let [left, right] = pair else {
+                unreachable!("windows(2) always yields pairs")
+            };
+            let opposite_projector = match *left {
                 DiracFactor::ProjectorPlus(_) => endpoint_factor(AGS.projm),
                 DiracFactor::ProjectorMinus(_) => endpoint_factor(AGS.projp),
                 _ => continue,
             };
-            if factors[i + 1]
+            if (*right)
                 .gamma_mink_index(FOUR_DIM_GAMMA5_ANTICOMMUTATION)
                 .is_none()
             {
@@ -806,7 +878,7 @@ impl DiracSimplifier<'_> {
             }
 
             let mut moved = Self::owned_factors(factors);
-            moved[i] = factors[i + 1].as_view().into_atom();
+            moved[i] = (*right).as_view().into_atom();
             moved[i + 1] = opposite_projector;
             return Some(chain!(start, end; moved));
         }
@@ -1074,16 +1146,25 @@ impl DiracSimplifier<'_> {
             return Self::simplify_trace_terminal(f.as_view());
         }
 
+        let mut factor_kinds = DiracFactorKinds::default();
         let factors = factors
             .iter()
-            .map(|factor| DiracFactor::parse(*factor))
+            .map(|factor| {
+                let factor = DiracFactor::parse(*factor);
+                factor_kinds.observe(factor);
+                factor
+            })
             .collect::<Vec<_>>();
 
-        if let Some(rewritten) = Self::simplify_special_trace_pair(rep, &factors) {
+        if factor_kinds.has_gamma_five_or_zero()
+            && let Some(rewritten) = Self::simplify_special_trace_pair(rep, &factors)
+        {
             return Some(rewritten);
         }
 
-        if let Some(rewritten) = Self::simplify_gamma5_trace_node(rep, &factors) {
+        if factor_kinds.has_gamma5
+            && let Some(rewritten) = Self::simplify_gamma5_trace_node(rep, &factors)
+        {
             return Some(rewritten);
         }
 
@@ -1132,8 +1213,11 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        for i in 0..factors.len().saturating_sub(1) {
-            match (&factors[i], &factors[i + 1]) {
+        for (i, pair) in factors.windows(2).enumerate() {
+            let [left, right] = pair else {
+                unreachable!("windows(2) always yields pairs")
+            };
+            match (left, right) {
                 (DiracFactor::Gamma5(_), DiracFactor::Gamma5(_))
                 | (DiracFactor::Gamma0(_), DiracFactor::Gamma0(_)) => {
                     // Four-dimensional involutions inside a trace:

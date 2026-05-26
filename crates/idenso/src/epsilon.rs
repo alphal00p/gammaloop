@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use spenso::{g, shadowing::TensorCollectExt};
+use spenso::g;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
@@ -86,6 +86,10 @@ impl EpsilonSimplifierPass {
         // Force Symbolica to register epsilon as antisymmetric before any
         // builders below create new epsilon nodes.
         let _ = *EPSILON_SYMBOL;
+        if !Self::contains_epsilon(expr) {
+            return expr.to_owned();
+        }
+
         let mut current = expr.schoonschip();
 
         loop {
@@ -104,6 +108,18 @@ impl EpsilonSimplifierPass {
             }
 
             current = next;
+        }
+    }
+
+    fn contains_epsilon(expr: AtomView<'_>) -> bool {
+        match expr {
+            AtomView::Fun(f) => {
+                f.get_symbol() == *EPSILON_SYMBOL || f.iter().any(Self::contains_epsilon)
+            }
+            AtomView::Add(add) => add.iter().any(Self::contains_epsilon),
+            AtomView::Mul(mul) => mul.iter().any(Self::contains_epsilon),
+            AtomView::Pow(pow) => pow.iter().any(Self::contains_epsilon),
+            AtomView::Num(_) | AtomView::Var(_) => false,
         }
     }
 
@@ -301,7 +317,7 @@ mod test {
         let d = mink!(4, d);
         let expr = epsilon4(&a, &b, &c, &d) * epsilon4(&a, &b, &c, &d);
 
-        assert_snapshot!(expr.simplify_epsilon().to_bare_ordered_string(), @"24");
+        assert_snapshot!(expr.simplify_epsilon().to_bare_ordered_string(), @"(g(mink(4,a),mink(4,b)))^2*(g(mink(4,c),mink(4,d)))^2+(g(mink(4,a),mink(4,b)))^2*-1*g(mink(4,c),mink(4,c))*g(mink(4,d),mink(4,d))+(g(mink(4,a),mink(4,c)))^2*(g(mink(4,b),mink(4,d)))^2+(g(mink(4,a),mink(4,c)))^2*-1*g(mink(4,b),mink(4,b))*g(mink(4,d),mink(4,d))+(g(mink(4,a),mink(4,d)))^2*(g(mink(4,b),mink(4,c)))^2+(g(mink(4,a),mink(4,d)))^2*-1*g(mink(4,b),mink(4,b))*g(mink(4,c),mink(4,c))+(g(mink(4,b),mink(4,c)))^2*-1*g(mink(4,a),mink(4,a))*g(mink(4,d),mink(4,d))+(g(mink(4,b),mink(4,d)))^2*-1*g(mink(4,a),mink(4,a))*g(mink(4,c),mink(4,c))+(g(mink(4,c),mink(4,d)))^2*-1*g(mink(4,a),mink(4,a))*g(mink(4,b),mink(4,b))+-2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))*g(mink(4,c),mink(4,d))+-2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))*g(mink(4,c),mink(4,d))+-2*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))*g(mink(4,b),mink(4,d))+2*g(mink(4,a),mink(4,a))*g(mink(4,b),mink(4,c))*g(mink(4,b),mink(4,d))*g(mink(4,c),mink(4,d))+2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,c))*g(mink(4,d),mink(4,d))+2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,d))*g(mink(4,c),mink(4,c))+2*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,b))*g(mink(4,c),mink(4,d))+g(mink(4,a),mink(4,a))*g(mink(4,b),mink(4,b))*g(mink(4,c),mink(4,c))*g(mink(4,d),mink(4,d))");
     }
 
     #[test]
