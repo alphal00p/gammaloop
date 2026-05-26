@@ -1,12 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-use super::profile::{self, Counter, Timer};
+use super::{
+    graph::ScalarRef,
+    profile::{self, Counter, Timer},
+};
 
 pub trait TensorScalarStore: Default + TensorScalarStoreMapping {
     fn add_tensor(&mut self, tensor: Self::Tensor) -> usize;
     fn add_scalar(&mut self, scalar: Self::Scalar) -> usize;
 
     fn get_scalar(&self, index: usize) -> &Self::Scalar;
+    fn get_scalar_ref(&self, scalar: ScalarRef) -> &Self::Scalar {
+        self.get_scalar(scalar.index())
+    }
     fn get_tensor(&self, index: usize) -> &Self::Tensor;
 
     fn n_tensors(&self) -> usize;
@@ -21,6 +27,9 @@ pub trait NetworkStoreAccess {
 
     fn tensor(&self, index: usize) -> &Self::Tensor;
     fn scalar(&self, index: usize) -> &Self::Scalar;
+    fn scalar_ref(&self, scalar: ScalarRef) -> &Self::Scalar {
+        self.scalar(scalar.index())
+    }
     fn push_tensor(&mut self, tensor: Self::Tensor) -> usize;
     fn push_scalar(&mut self, scalar: Self::Scalar) -> usize;
 }
@@ -139,14 +148,17 @@ pub struct NetworkStore<T, S> {
     pub tensors: Vec<T>,
     // pub params: AHashSet<Atom>,
     pub scalar: Vec<S>,
+    pub scalar_aliases: Vec<Option<S>>,
 }
 
 #[doc(hidden)]
 pub struct NetworkStoreOverlay<'a, T, S> {
     base_tensors: &'a [T],
     base_scalars: &'a [S],
+    base_scalar_aliases: &'a [Option<S>],
     pub tensors: Vec<T>,
     pub scalar: Vec<S>,
+    pub scalar_aliases: Vec<Option<S>>,
 }
 
 impl<'a, T, S> NetworkStoreOverlay<'a, T, S> {
@@ -154,13 +166,15 @@ impl<'a, T, S> NetworkStoreOverlay<'a, T, S> {
         Self {
             base_tensors: &base.tensors,
             base_scalars: &base.scalar,
+            base_scalar_aliases: &base.scalar_aliases,
             tensors: Vec::new(),
             scalar: Vec::new(),
+            scalar_aliases: Vec::new(),
         }
     }
 
-    pub fn into_additions(self) -> (Vec<T>, Vec<S>) {
-        (self.tensors, self.scalar)
+    pub fn into_additions(self) -> (Vec<T>, Vec<S>, Vec<Option<S>>) {
+        (self.tensors, self.scalar, self.scalar_aliases)
     }
 }
 
@@ -169,6 +183,7 @@ impl<T, S> Default for NetworkStore<T, S> {
         NetworkStore {
             tensors: vec![],
             scalar: vec![],
+            scalar_aliases: vec![],
         }
     }
 }
@@ -185,6 +200,17 @@ impl<T, S> NetworkStoreAccess for NetworkStore<T, S> {
         &self.scalar[index]
     }
 
+    fn scalar_ref(&self, scalar: ScalarRef) -> &Self::Scalar {
+        match scalar {
+            ScalarRef::Store(index) => &self.scalar[index],
+            ScalarRef::Alias(index) => self
+                .scalar_aliases
+                .get(index)
+                .and_then(Option::as_ref)
+                .unwrap_or(&self.scalar[index]),
+        }
+    }
+
     fn push_tensor(&mut self, tensor: Self::Tensor) -> usize {
         let index = self.tensors.len();
         self.tensors.push(tensor);
@@ -194,6 +220,7 @@ impl<T, S> NetworkStoreAccess for NetworkStore<T, S> {
     fn push_scalar(&mut self, scalar: Self::Scalar) -> usize {
         let index = self.scalar.len();
         self.scalar.push(scalar);
+        self.scalar_aliases.push(None);
         index
     }
 }
@@ -218,6 +245,27 @@ impl<T, S> NetworkStoreAccess for NetworkStoreOverlay<'_, T, S> {
         }
     }
 
+    fn scalar_ref(&self, scalar: ScalarRef) -> &Self::Scalar {
+        let index = scalar.index();
+        match scalar {
+            ScalarRef::Store(_) => self.scalar(index),
+            ScalarRef::Alias(_) => {
+                if index < self.base_scalars.len() {
+                    self.base_scalar_aliases
+                        .get(index)
+                        .and_then(Option::as_ref)
+                        .unwrap_or(&self.base_scalars[index])
+                } else {
+                    let local = index - self.base_scalars.len();
+                    self.scalar_aliases
+                        .get(local)
+                        .and_then(Option::as_ref)
+                        .unwrap_or(&self.scalar[local])
+                }
+            }
+        }
+    }
+
     fn push_tensor(&mut self, tensor: Self::Tensor) -> usize {
         let index = self.base_tensors.len() + self.tensors.len();
         self.tensors.push(tensor);
@@ -227,6 +275,7 @@ impl<T, S> NetworkStoreAccess for NetworkStoreOverlay<'_, T, S> {
     fn push_scalar(&mut self, scalar: Self::Scalar) -> usize {
         let index = self.base_scalars.len() + self.scalar.len();
         self.scalar.push(scalar);
+        self.scalar_aliases.push(None);
         index
     }
 }
@@ -245,11 +294,13 @@ impl<T, S> TensorScalarStore for NetworkStore<T, S> {
         profile::bump(Counter::StoreExtend, 1);
         self.tensors.extend(other.tensors);
         self.scalar.extend(other.scalar);
+        self.scalar_aliases.extend(other.scalar_aliases);
     }
 
     fn add_scalar(&mut self, scalar: Self::Scalar) -> usize {
         let id = self.scalar.len();
         self.scalar.push(scalar);
+        self.scalar_aliases.push(None);
         id
     }
 
@@ -261,6 +312,17 @@ impl<T, S> TensorScalarStore for NetworkStore<T, S> {
 
     fn get_scalar(&self, index: usize) -> &Self::Scalar {
         &self.scalar[index]
+    }
+
+    fn get_scalar_ref(&self, scalar: ScalarRef) -> &Self::Scalar {
+        match scalar {
+            ScalarRef::Store(index) => &self.scalar[index],
+            ScalarRef::Alias(index) => self
+                .scalar_aliases
+                .get(index)
+                .and_then(Option::as_ref)
+                .unwrap_or(&self.scalar[index]),
+        }
     }
 
     fn get_tensor(&self, index: usize) -> &Self::Tensor {
@@ -291,18 +353,23 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
 
     fn map<U, V>(
         self,
-        scalar_map: impl FnMut(S) -> U,
+        mut scalar_map: impl FnMut(S) -> U,
         tensor_map: impl FnMut(T) -> V,
     ) -> NetworkStore<V, U> {
         NetworkStore {
             tensors: self.tensors.into_iter().map(tensor_map).collect(),
-            scalar: self.scalar.into_iter().map(scalar_map).collect(),
+            scalar: self.scalar.into_iter().map(&mut scalar_map).collect(),
+            scalar_aliases: self
+                .scalar_aliases
+                .into_iter()
+                .map(|alias| alias.map(&mut scalar_map))
+                .collect(),
         }
     }
 
     fn map_result<U, V, Er>(
         self,
-        scalar_map: impl FnMut(S) -> Result<U, Er>,
+        mut scalar_map: impl FnMut(S) -> Result<U, Er>,
         tensor_map: impl FnMut(T) -> Result<V, Er>,
     ) -> Result<NetworkStore<V, U>, Er> {
         Ok(NetworkStore {
@@ -314,36 +381,57 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
             scalar: self
                 .scalar
                 .into_iter()
-                .map(scalar_map)
+                .map(&mut scalar_map)
+                .collect::<Result<Vec<_>, Er>>()?,
+            scalar_aliases: self
+                .scalar_aliases
+                .into_iter()
+                .map(|alias| alias.map(&mut scalar_map).transpose())
                 .collect::<Result<Vec<_>, Er>>()?,
         })
     }
 
     fn map_ref<'a, U, V>(
         &'a self,
-        scalar_map: impl FnMut(&'a S) -> U,
+        mut scalar_map: impl FnMut(&'a S) -> U,
         tensor_map: impl FnMut(&'a T) -> V,
     ) -> NetworkStore<V, U> {
         NetworkStore {
             tensors: self.tensors.iter().map(tensor_map).collect(),
-            scalar: self.scalar.iter().map(scalar_map).collect(),
+            scalar: self.scalar.iter().map(&mut scalar_map).collect(),
+            scalar_aliases: self
+                .scalar_aliases
+                .iter()
+                .map(|alias| alias.as_ref().map(&mut scalar_map))
+                .collect(),
         }
     }
 
     fn map_ref_enumerate<U, V>(
         &self,
-        scalar_map: impl FnMut((usize, &S)) -> U,
+        mut scalar_map: impl FnMut((usize, &S)) -> U,
         tensor_map: impl FnMut((usize, &T)) -> V,
     ) -> NetworkStore<V, U> {
         NetworkStore {
             tensors: self.tensors.iter().enumerate().map(tensor_map).collect(),
-            scalar: self.scalar.iter().enumerate().map(scalar_map).collect(),
+            scalar: self
+                .scalar
+                .iter()
+                .enumerate()
+                .map(&mut scalar_map)
+                .collect(),
+            scalar_aliases: self
+                .scalar_aliases
+                .iter()
+                .enumerate()
+                .map(|(index, alias)| alias.as_ref().map(|scalar| scalar_map((index, scalar))))
+                .collect(),
         }
     }
 
     fn map_ref_result<U, V, Er>(
         &self,
-        scalar_map: impl FnMut(&S) -> Result<U, Er>,
+        mut scalar_map: impl FnMut(&S) -> Result<U, Er>,
         tensor_map: impl FnMut(&T) -> Result<V, Er>,
     ) -> Result<NetworkStore<V, U>, Er> {
         Ok(NetworkStore {
@@ -355,14 +443,19 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
             scalar: self
                 .scalar
                 .iter()
-                .map(scalar_map)
+                .map(&mut scalar_map)
+                .collect::<Result<Vec<_>, Er>>()?,
+            scalar_aliases: self
+                .scalar_aliases
+                .iter()
+                .map(|alias| alias.as_ref().map(&mut scalar_map).transpose())
                 .collect::<Result<Vec<_>, Er>>()?,
         })
     }
 
     fn map_ref_result_enumerate<U, V, Er>(
         &self,
-        scalar_map: impl FnMut((usize, &S)) -> Result<U, Er>,
+        mut scalar_map: impl FnMut((usize, &S)) -> Result<U, Er>,
         tensor_map: impl FnMut((usize, &T)) -> Result<V, Er>,
     ) -> Result<NetworkStore<V, U>, Er> {
         Ok(NetworkStore {
@@ -376,25 +469,41 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
                 .scalar
                 .iter()
                 .enumerate()
-                .map(scalar_map)
+                .map(&mut scalar_map)
+                .collect::<Result<Vec<_>, Er>>()?,
+            scalar_aliases: self
+                .scalar_aliases
+                .iter()
+                .enumerate()
+                .map(|(index, alias)| {
+                    alias
+                        .as_ref()
+                        .map(|scalar| scalar_map((index, scalar)))
+                        .transpose()
+                })
                 .collect::<Result<Vec<_>, Er>>()?,
         })
     }
 
     fn map_ref_mut<U, V>(
         &mut self,
-        scalar_map: impl FnMut(&mut S) -> U,
+        mut scalar_map: impl FnMut(&mut S) -> U,
         tensor_map: impl FnMut(&mut T) -> V,
     ) -> NetworkStore<V, U> {
         NetworkStore {
             tensors: self.tensors.iter_mut().map(tensor_map).collect(),
-            scalar: self.scalar.iter_mut().map(scalar_map).collect(),
+            scalar: self.scalar.iter_mut().map(&mut scalar_map).collect(),
+            scalar_aliases: self
+                .scalar_aliases
+                .iter_mut()
+                .map(|alias| alias.as_mut().map(&mut scalar_map))
+                .collect(),
         }
     }
 
     fn map_ref_mut_enumerate<U, V>(
         &mut self,
-        scalar_map: impl FnMut((usize, &mut S)) -> U,
+        mut scalar_map: impl FnMut((usize, &mut S)) -> U,
         tensor_map: impl FnMut((usize, &mut T)) -> V,
     ) -> NetworkStore<V, U> {
         NetworkStore {
@@ -404,13 +513,24 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
                 .enumerate()
                 .map(tensor_map)
                 .collect(),
-            scalar: self.scalar.iter_mut().enumerate().map(scalar_map).collect(),
+            scalar: self
+                .scalar
+                .iter_mut()
+                .enumerate()
+                .map(&mut scalar_map)
+                .collect(),
+            scalar_aliases: self
+                .scalar_aliases
+                .iter_mut()
+                .enumerate()
+                .map(|(index, alias)| alias.as_mut().map(|scalar| scalar_map((index, scalar))))
+                .collect(),
         }
     }
 
     fn map_ref_mut_result<U, V, Er>(
         &mut self,
-        scalar_map: impl FnMut(&mut S) -> Result<U, Er>,
+        mut scalar_map: impl FnMut(&mut S) -> Result<U, Er>,
         tensor_map: impl FnMut(&mut T) -> Result<V, Er>,
     ) -> Result<NetworkStore<V, U>, Er> {
         Ok(NetworkStore {
@@ -422,14 +542,19 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
             scalar: self
                 .scalar
                 .iter_mut()
-                .map(scalar_map)
+                .map(&mut scalar_map)
+                .collect::<Result<Vec<_>, Er>>()?,
+            scalar_aliases: self
+                .scalar_aliases
+                .iter_mut()
+                .map(|alias| alias.as_mut().map(&mut scalar_map).transpose())
                 .collect::<Result<Vec<_>, Er>>()?,
         })
     }
 
     fn map_ref_mut_result_enumerate<U, V, Er>(
         &mut self,
-        scalar_map: impl FnMut((usize, &mut S)) -> Result<U, Er>,
+        mut scalar_map: impl FnMut((usize, &mut S)) -> Result<U, Er>,
         tensor_map: impl FnMut((usize, &mut T)) -> Result<V, Er>,
     ) -> Result<NetworkStore<V, U>, Er> {
         Ok(NetworkStore {
@@ -443,7 +568,18 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
                 .scalar
                 .iter_mut()
                 .enumerate()
-                .map(scalar_map)
+                .map(&mut scalar_map)
+                .collect::<Result<Vec<_>, Er>>()?,
+            scalar_aliases: self
+                .scalar_aliases
+                .iter_mut()
+                .enumerate()
+                .map(|(index, alias)| {
+                    alias
+                        .as_mut()
+                        .map(|scalar| scalar_map((index, scalar)))
+                        .transpose()
+                })
                 .collect::<Result<Vec<_>, Er>>()?,
         })
     }

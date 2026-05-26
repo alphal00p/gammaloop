@@ -1,5 +1,6 @@
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    coefficient::CoefficientView,
     printer::{PrintState, PrintUserData},
     symbol, tag,
 };
@@ -24,6 +25,7 @@ pub struct SpensoTags {
     pub lower: String,
     pub bracket: Symbol,
     pub pure_scalar: Symbol,
+    pub scalar: Symbol,
     pub tensor: String,
     pub tensor_: Symbol,
     pub index: String,
@@ -38,6 +40,31 @@ pub struct SpensoTags {
 }
 
 pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::new(SpensoTags::new);
+
+pub fn scalar_store_alias(index: usize) -> Atom {
+    FunctionBuilder::new(SPENSO_TAG.scalar)
+        .add_arg(Atom::num(
+            i64::try_from(index).expect("scalar alias index must fit in i64"),
+        ))
+        .finish()
+}
+
+pub fn scalar_store_alias_index(value: AtomView<'_>) -> Option<usize> {
+    let AtomView::Fun(fun) = value else {
+        return None;
+    };
+    if fun.get_symbol() != SPENSO_TAG.scalar || fun.get_nargs() != 1 {
+        return None;
+    }
+
+    let AtomView::Num(index) = fun.iter().next()? else {
+        return None;
+    };
+    match index.get_coeff_view() {
+        CoefficientView::Natural(index, 1, 0, 1) => usize::try_from(index).ok(),
+        _ => None,
+    }
+}
 
 /// Builds Symbolica atoms from a symbol and an optional argument list.
 ///
@@ -403,6 +430,7 @@ impl SpensoTags {
             rank1_: symbol!("rank1_", tags = [&tensor, &rank1]),
             bracket: symbol!("bracket"),
             pure_scalar: symbol!("pure_scalar"),
+            scalar: symbol!("scalar"),
             dot: symbol!("dot";Symmetric,Linear; print = |a, opt, _state|{
                     match opt.custom_print_mode.get("spenso") {
                         Some(PrintUserData::Integer(i))=>{

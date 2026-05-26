@@ -298,11 +298,79 @@ impl<FunKey: Display> Display for NetworkOp<FunKey> {
 }
 
 #[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Encode, bincode_trait_derive::Decode, Serialize, Deserialize,
+)]
+pub enum ScalarRef {
+    Store(usize),
+    Alias(usize),
+}
+
+impl ScalarRef {
+    pub fn index(self) -> usize {
+        match self {
+            ScalarRef::Store(index) | ScalarRef::Alias(index) => index,
+        }
+    }
+
+    pub fn map_index(self, f: impl FnOnce(usize) -> usize) -> Self {
+        match self {
+            ScalarRef::Store(index) => ScalarRef::Store(f(index)),
+            ScalarRef::Alias(index) => ScalarRef::Alias(f(index)),
+        }
+    }
+
+    pub fn rebase_from(self, base: usize, offset: usize) -> Self {
+        self.map_index(|index| {
+            if index >= base {
+                offset + (index - base)
+            } else {
+                index
+            }
+        })
+    }
+
+    pub fn with_alias_state(self, should_alias: impl FnOnce(usize) -> bool) -> Self {
+        let index = self.index();
+        if should_alias(index) {
+            ScalarRef::Alias(index)
+        } else {
+            ScalarRef::Store(index)
+        }
+    }
+
+    pub fn display_label(self) -> String {
+        match self {
+            ScalarRef::Store(index) => index.to_string(),
+            ScalarRef::Alias(index) => format!("scalar({index})"),
+        }
+    }
+
+    pub fn display_with(self, scalar_disp: impl FnOnce(usize) -> String) -> String {
+        match self {
+            ScalarRef::Store(index) => scalar_disp(index),
+            ScalarRef::Alias(index) => format!("scalar({index})"),
+        }
+    }
+}
+
+impl Display for ScalarRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.display_label())
+    }
+}
+
+impl From<usize> for ScalarRef {
+    fn from(value: usize) -> Self {
+        ScalarRef::Store(value)
+    }
+}
+
+#[derive(
     Debug, Clone, PartialEq, Eq, Encode, bincode_trait_derive::Decode, Serialize, Deserialize,
 )]
 pub struct TensorTerm {
     pub tensor: usize,
-    pub scalar: Option<usize>,
+    pub scalar: Option<ScalarRef>,
 }
 
 impl TensorTerm {
@@ -314,9 +382,19 @@ impl TensorTerm {
     }
 
     pub fn scaled(tensor: usize, scalar: usize) -> Self {
+        Self::scaled_ref(tensor, scalar.into())
+    }
+
+    pub fn scaled_ref(tensor: usize, scalar: ScalarRef) -> Self {
         Self {
             tensor,
             scalar: Some(scalar),
+        }
+    }
+
+    pub fn map_scalar_ref(&mut self, mut f: impl FnMut(ScalarRef) -> ScalarRef) {
+        if let Some(scalar) = &mut self.scalar {
+            *scalar = f(*scalar);
         }
     }
 }
@@ -333,12 +411,29 @@ pub enum NetworkLeaf<K, Aind = AbstractIndex> {
         key: PermutedStructure<K>,
         indices: Vec<Aind>,
     },
-    Scalar(usize),
+    Scalar(ScalarRef),
 }
 
 impl<K, Aind> NetworkLeaf<K, Aind> {
     pub fn is_scalar(&self) -> bool {
         matches!(self, NetworkLeaf::Scalar(_))
+    }
+
+    pub fn map_scalar_refs(&mut self, mut f: impl FnMut(ScalarRef) -> ScalarRef) {
+        match self {
+            NetworkLeaf::TensorTerm(term) => term.map_scalar_ref(&mut f),
+            NetworkLeaf::TensorTermSum(terms) => {
+                for term in terms {
+                    term.map_scalar_ref(&mut f);
+                }
+            }
+            NetworkLeaf::Scalar(scalar) => {
+                *scalar = f(*scalar);
+            }
+            NetworkLeaf::LocalTensor(_)
+            | NetworkLeaf::TensorSum(_)
+            | NetworkLeaf::LibraryKey { .. } => {}
+        }
     }
 }
 
@@ -353,7 +448,7 @@ impl<K: Display, Aind> Display for NetworkLeaf<K, Aind> {
                 None => write!(f, "Tensor:{}", term.tensor),
             },
             NetworkLeaf::TensorTermSum(terms) => write!(f, "TensorTermSum:{}", terms.len()),
-            NetworkLeaf::Scalar(s) => write!(f, "Scalar:{s}"),
+            NetworkLeaf::Scalar(s) => write!(f, "Scalar:{}", s.display_label()),
         }
     }
 }
@@ -1262,9 +1357,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     pub fn shift_scalars(&mut self, shift: usize) {
         let _span = profile::span(Timer::ShiftScalars);
         profile::bump(Counter::ShiftScalars, 1);
+        self.map_scalar_refs(|scalar| scalar.map_index(|index| index + shift));
+    }
+
+    pub fn map_scalar_refs(&mut self, mut f: impl FnMut(ScalarRef) -> ScalarRef) {
         self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
-            if let NetworkNode::Leaf(NetworkLeaf::Scalar(s)) = d {
-                *s += shift;
+            if let NetworkNode::Leaf(leaf) = d {
+                leaf.map_scalar_refs(&mut f);
             }
         });
     }
@@ -1434,13 +1533,15 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     NetworkLeaf::LocalTensor(l) => Some(format!("label = \"T{l}\"")),
                     NetworkLeaf::TensorSum(terms) => Some(format!("label = \"TS{}\"", terms.len())),
                     NetworkLeaf::TensorTerm(term) => Some(match term.scalar {
-                        Some(scalar) => format!("label = \"TT{}*S{}\"", term.tensor, scalar),
+                        Some(scalar) => {
+                            format!("label = \"TT{}*S{}\"", term.tensor, scalar.display_label())
+                        }
                         None => format!("label = \"TT{}\"", term.tensor),
                     }),
                     NetworkLeaf::TensorTermSum(terms) => {
                         Some(format!("label = \"TTS{}\"", terms.len()))
                     }
-                    NetworkLeaf::Scalar(s) => Some(format!("label = \"S{s}\"")),
+                    NetworkLeaf::Scalar(s) => Some(format!("label = \"S{}\"", s.display_label())),
                 },
                 NetworkNode::Op(o) => Some(format!("label = \"{o}\"")),
             },
@@ -1494,18 +1595,18 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     }
                     NetworkLeaf::TensorTerm(term) => Some(match term.scalar {
                         Some(scalar) => {
-                            format!(
-                                "label = \"TT:{}*{}\"",
-                                tensor_disp(term.tensor),
-                                scalar_disp(scalar)
-                            )
+                            let scalar = scalar.display_with(&scalar_disp);
+                            format!("label = \"TT:{}*{}\"", tensor_disp(term.tensor), scalar)
                         }
                         None => format!("label = \"TT:{}\"", tensor_disp(term.tensor)),
                     }),
                     NetworkLeaf::TensorTermSum(terms) => {
                         Some(format!("label = \"TTS:{}\"", terms.len()))
                     }
-                    NetworkLeaf::Scalar(s) => Some(format!("label = \"S:{}\"", scalar_disp(*s))),
+                    NetworkLeaf::Scalar(s) => {
+                        let scalar = s.display_with(&scalar_disp);
+                        Some(format!("label = \"S:{}\"", scalar))
+                    }
                 },
                 NetworkNode::Op(o) => {
                     Some(format!("label = \"{}\"", o.display_with(&function_disp)))
@@ -1548,18 +1649,18 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     }
                     NetworkLeaf::TensorTerm(term) => Some(match term.scalar {
                         Some(scalar) => {
-                            format!(
-                                "label = \"TT:{}*{}\"",
-                                tensor_disp(term.tensor),
-                                scalar_disp(scalar)
-                            )
+                            let scalar = scalar.display_with(&scalar_disp);
+                            format!("label = \"TT:{}*{}\"", tensor_disp(term.tensor), scalar)
                         }
                         None => format!("label = \"TT:{}\"", tensor_disp(term.tensor)),
                     }),
                     NetworkLeaf::TensorTermSum(terms) => {
                         Some(format!("label = \"TTS:{}\"", terms.len()))
                     }
-                    NetworkLeaf::Scalar(s) => Some(format!("label = \"S:{}\"", scalar_disp(*s))),
+                    NetworkLeaf::Scalar(s) => {
+                        let scalar = s.display_with(&scalar_disp);
+                        Some(format!("label = \"S:{}\"", scalar))
+                    }
                 },
                 NetworkNode::Op(o) => {
                     Some(format!("label = \"{}\"", o.display_with(&function_disp)))
@@ -1646,7 +1747,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     pub fn scalar(pos: usize) -> Self {
         let mut graph = HedgeGraphBuilder::new();
 
-        let head = graph.add_node(NetworkNode::Leaf(NetworkLeaf::Scalar(pos)));
+        let head = graph.add_node(NetworkNode::Leaf(NetworkLeaf::Scalar(pos.into())));
         graph.add_external_edge(head, NetworkEdge::Head, true, Flow::Source);
 
         graph.into()

@@ -24,7 +24,7 @@ use spenso::{
     network::{
         ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree, Steps,
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
-        store::NetworkStore,
+        store::{NetworkStore, NetworkStoreAccess},
     },
     structure::slot::{DummyAind, IsAbstractSlot},
     structure::{HasName, HasStructure, TensorStructure},
@@ -344,7 +344,7 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                         tensor_term_leaves += 1;
                         if let Some(scalar) = term.scalar {
                             tensor_term_scaled += 1;
-                            scalar_bytes += net.store.scalar[scalar].as_view().get_byte_size();
+                            scalar_bytes += net.store.scalar_ref(scalar).as_view().get_byte_size();
                         }
                         tensor_ref_stats.accumulate(&net.store.tensors[term.tensor]);
                     }
@@ -354,7 +354,8 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                         for term in terms {
                             if let Some(scalar) = term.scalar {
                                 tensor_term_sum_scaled += 1;
-                                scalar_bytes += net.store.scalar[scalar].as_view().get_byte_size();
+                                scalar_bytes +=
+                                    net.store.scalar_ref(scalar).as_view().get_byte_size();
                             }
                             tensor_ref_stats.accumulate(&net.store.tensors[term.tensor]);
                         }
@@ -365,7 +366,7 @@ fn report_actual_net_leaf_stats(label: &str, net: &ParsingNet) {
                     }
                     NetworkLeaf::Scalar(index) => {
                         scalar_leaves += 1;
-                        scalar_bytes += net.store.scalar[*index].as_view().get_byte_size();
+                        scalar_bytes += net.store.scalar_ref(*index).as_view().get_byte_size();
                     }
                 }
             }
@@ -625,7 +626,7 @@ fn summarize_expr_subtree(net: &ParsingNet, root: NodeIndex) -> BoundarySideSumm
                         summary.tensor_flat_entries += tensor.iter_flat().count();
                         if let Some(scalar) = term.scalar {
                             summary.scalar_bytes +=
-                                net.store.scalar[scalar].as_view().get_byte_size();
+                                net.store.scalar_ref(scalar).as_view().get_byte_size();
                         }
                     }
                     NetworkLeaf::TensorTermSum(terms) => {
@@ -637,7 +638,7 @@ fn summarize_expr_subtree(net: &ParsingNet, root: NodeIndex) -> BoundarySideSumm
                             summary.tensor_flat_entries += tensor.iter_flat().count();
                             if let Some(scalar) = term.scalar {
                                 summary.scalar_bytes +=
-                                    net.store.scalar[scalar].as_view().get_byte_size();
+                                    net.store.scalar_ref(scalar).as_view().get_byte_size();
                             }
                         }
                     }
@@ -647,7 +648,8 @@ fn summarize_expr_subtree(net: &ParsingNet, root: NodeIndex) -> BoundarySideSumm
                     }
                     NetworkLeaf::Scalar(index) => {
                         summary.scalar_leaves += 1;
-                        summary.scalar_bytes += net.store.scalar[*index].as_view().get_byte_size();
+                        summary.scalar_bytes +=
+                            net.store.scalar_ref(*index).as_view().get_byte_size();
                     }
                 }
             }

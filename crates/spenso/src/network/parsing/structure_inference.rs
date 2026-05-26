@@ -104,7 +104,7 @@ impl TensorialSyntax {
     pub(crate) fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
         let symbol = fun.get_symbol();
 
-        if symbol == SPENSO_TAG.pure_scalar {
+        if symbol == SPENSO_TAG.pure_scalar || symbol == SPENSO_TAG.scalar {
             return false;
         }
 

@@ -298,9 +298,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
 
     fn multiply_scalar_indices<Sc, Store>(
         executor: &mut Store,
-        left: Option<usize>,
-        right: Option<usize>,
-    ) -> Option<usize>
+        left: Option<super::graph::ScalarRef>,
+        right: Option<super::graph::ScalarRef>,
+    ) -> Option<super::graph::ScalarRef>
     where
         Store: NetworkStoreAccess<Scalar = Sc>,
         Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
@@ -309,9 +309,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             (None, None) => None,
             (Some(index), None) | (None, Some(index)) => Some(index),
             (Some(left), Some(right)) => {
-                let mut scalar = executor.scalar(left).clone();
-                scalar *= executor.scalar(right).refer();
-                Some(executor.push_scalar(scalar))
+                let mut scalar = executor.scalar_ref(left).clone();
+                scalar *= executor.scalar_ref(right).refer();
+                Some(executor.push_scalar(scalar).into())
             }
         }
     }
@@ -328,7 +328,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         let scalar = match term.scalar {
             Some(index) => {
                 let mut combined = scalar.clone();
-                combined *= executor.scalar(index).refer();
+                combined *= executor.scalar_ref(index).refer();
                 executor.push_scalar(combined)
             }
             None => executor.push_scalar(scalar.clone()),
@@ -369,9 +369,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             let is_scalar = match &operand.leaf {
                 NetworkLeaf::Scalar(index) => {
                     if let Some(accumulator) = &mut accumulator {
-                        *accumulator *= executor.scalar(*index).refer();
+                        *accumulator *= executor.scalar_ref(*index).refer();
                     } else {
-                        accumulator = Some(executor.scalar(*index).clone());
+                        accumulator = Some(executor.scalar_ref(*index).clone());
                     }
                     true
                 }
@@ -392,9 +392,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
                         if let Some(term_scalar) = term.scalar {
                             if let Some(accumulator) = &mut accumulator {
-                                *accumulator *= executor.scalar(term_scalar).refer();
+                                *accumulator *= executor.scalar_ref(term_scalar).refer();
                             } else {
-                                accumulator = Some(executor.scalar(term_scalar).clone());
+                                accumulator = Some(executor.scalar_ref(term_scalar).clone());
                             }
                         }
 
@@ -436,7 +436,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 {
                     return Ok(false);
                 }
-                let index = executor.push_scalar(accumulator);
+                let index = executor.push_scalar(accumulator).into();
                 self.replace_operands(
                     &scalar_positions,
                     ProductOperand {
@@ -462,7 +462,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 Ok(true)
             }
             _ if scalar_positions.len() > 1 => {
-                let index = executor.push_scalar(accumulator);
+                let index = executor.push_scalar(accumulator).into();
                 self.replace_operands(
                     &scalar_positions,
                     ProductOperand {
@@ -510,9 +510,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             let is_scalar = match &operand.leaf {
                 NetworkLeaf::Scalar(index) => {
                     if let Some(accumulator) = &mut accumulator {
-                        *accumulator *= executor.scalar(*index).refer();
+                        *accumulator *= executor.scalar_ref(*index).refer();
                     } else {
-                        accumulator = Some(executor.scalar(*index).clone());
+                        accumulator = Some(executor.scalar_ref(*index).clone());
                     }
                     true
                 }
@@ -533,9 +533,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
                         if let Some(term_scalar) = term.scalar {
                             if let Some(accumulator) = &mut accumulator {
-                                *accumulator *= executor.scalar(term_scalar).refer();
+                                *accumulator *= executor.scalar_ref(term_scalar).refer();
                             } else {
-                                accumulator = Some(executor.scalar(term_scalar).clone());
+                                accumulator = Some(executor.scalar_ref(term_scalar).clone());
                             }
                         }
 
@@ -599,7 +599,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     ) {
                     self.operands[scalar_positions[0]].leaf.clone()
                 } else {
-                    NetworkLeaf::Scalar(executor.push_scalar(accumulator))
+                    NetworkLeaf::Scalar(executor.push_scalar(accumulator).into())
                 };
                 collapse_product(graph, ignored, leaf)?;
                 Ok(ProductRewriteProgress::CollapsedProduct)
@@ -616,7 +616,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 Ok(ProductRewriteProgress::CollapsedProduct)
             }
             _ if scalar_positions.len() > 1 => {
-                let scalar = executor.push_scalar(accumulator);
+                let scalar = executor.push_scalar(accumulator).into();
                 let scalar_nodes = scalar_positions
                     .iter()
                     .map(|position| {
@@ -786,7 +786,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             let tensor = match term.scalar {
                 Some(scalar) => executor
                     .tensor(term.tensor)
-                    .scalar_mul(executor.scalar(scalar))
+                    .scalar_mul(executor.scalar_ref(scalar))
                     .expect("scaled tensor term should support scalar multiplication"),
                 None => executor.tensor(term.tensor).clone(),
             };
@@ -839,7 +839,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
 
         let tensor = executor.push_tensor(reduced);
         let factor = executor.push_scalar(factor);
-        let scalar = Self::multiply_scalar_indices(executor, term.scalar, Some(factor));
+        let scalar = Self::multiply_scalar_indices(executor, term.scalar, Some(factor.into()));
 
         TensorTerm { tensor, scalar }
     }
@@ -928,7 +928,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     .into_iter()
                     .map(|term| TensorTerm {
                         tensor: executor.push_tensor(term.tensor),
-                        scalar: term.scalar.map(|scalar| executor.push_scalar(scalar)),
+                        scalar: term
+                            .scalar
+                            .map(|scalar| executor.push_scalar(scalar).into()),
                     })
                     .collect::<Vec<_>>();
                 Self::tensor_sum_leaf(executor, terms)
@@ -1081,7 +1083,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     .contract(executor.tensor(right_tensor.tensor))?;
                 let (contracted, extra_scalar) =
                     if let Some((reduced, factor)) = contracted.split_common_factor() {
-                        (reduced, Some(executor.push_scalar(factor)))
+                        (reduced, Some(executor.push_scalar(factor).into()))
                     } else {
                         (contracted, None)
                     };

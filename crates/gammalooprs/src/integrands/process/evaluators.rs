@@ -63,6 +63,8 @@ use super::{
     param_builder::{ThresholdParams, UpdateAndGetParams},
 };
 
+const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
+
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
     Single {
@@ -599,6 +601,20 @@ impl EvaluatorStack {
                     elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
                     "Evaluator timing milestone"
                 );
+                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
+                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+                });
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
+                    atom_index,
+                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
+                    aliases_created = scalar_aliases.aliases_created(),
+                    aliased_terms = scalar_aliases.aliased_terms(),
+                    aliased_bytes = scalar_aliases.aliased_bytes(),
+                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
                 crate::debug_tags!(#generation, #compile, #term, #dump;
                     stage = "evaluator_stack_parse_atom_network_dump",
                     atom_index,
@@ -677,6 +693,7 @@ impl EvaluatorStack {
                         ExecutionResult::Zero => Atom::Zero,
                         ExecutionResult::Val(v) => v.into_owned(),
                     })
+                    .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
                     .map_err(|a| {
                         Report::from(a)
                             .with_note(|| format!("Network looks like: {}", net.dot_pretty()))

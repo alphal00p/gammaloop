@@ -11,7 +11,7 @@ use tracing::warn;
 use spenso::network::library::DummyLibrary;
 use spenso::network::parsing::{ParseSettings, ShadowedStructure};
 use spenso::network::store::NetworkStore;
-use spenso::network::{ContractScalars, Sequential, SingleSmallestDegree, SmallestDegree, Steps};
+use spenso::network::{ContractScalars, MinResultRank, Sequential, SingleSmallestDegree, Steps};
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
 
 use spenso::tensors::data::DataTensor;
@@ -1350,7 +1350,7 @@ impl Network {
                 match settings.mode {
                     ExecutionMode::All => self
                         .net
-                        .execute::<Steps<1>, SmallestDegree, _, _, _>(lib.deref(), fnlib)?,
+                        .execute::<Steps<1>, MinResultRank, _, _, _>(lib.deref(), fnlib)?,
                     ExecutionMode::Scalar => self
                         .net
                         .execute::<Steps<1>, ContractScalars, _, _, _>(lib.deref(), fnlib)?,
@@ -1366,7 +1366,7 @@ impl Network {
             match settings.mode {
                 ExecutionMode::All => {
                     self.net
-                        .execute::<Sequential, SmallestDegree, _, _, _>(lib.deref(), fnlib)?;
+                        .execute::<Sequential, MinResultRank, _, _, _>(lib.deref(), fnlib)?;
                 }
                 ExecutionMode::Scalar => {
                     self.net
