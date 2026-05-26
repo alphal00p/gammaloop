@@ -117,6 +117,12 @@ impl AmplitudeGraphTerm {
         _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_graph_term_from_graph_start",
+            graph = %graph.graph.name,
+            "Generation timing milestone"
+        );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -135,6 +141,13 @@ impl AmplitudeGraphTerm {
                 .iter()
                 .map(|a| a.data.orientation.clone())
                 .collect();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #orientation, #summary;
+            stage = "amplitude_graph_term_orientations_done",
+            graph = %graph.graph.name,
+            orientation_count = orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         if orientations.is_empty() {
             let pattern = settings
                 .generation
@@ -161,6 +174,13 @@ impl AmplitudeGraphTerm {
                 })
             })
             .collect::<HashSet<_>>();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_graph_term_esurfaces_done",
+            graph = %graph.graph.name,
+            selected_esurface_count = selected_generation_esurfaces.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
         crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
             orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS.clone()),
@@ -171,6 +191,13 @@ impl AmplitudeGraphTerm {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
+        let original_started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_graph_term_original_evaluator_start",
+            graph = %graph.graph.name,
+            orientation_count = orientations.len(),
+            "Generation timing milestone"
+        );
         let (original_integrand, evaluator_timings) = EvaluatorStack::new_with_timings(
             &[&graph.derived_data.all_mighty_integrand],
             &graph.graph.param_builder,
@@ -178,6 +205,16 @@ impl AmplitudeGraphTerm {
             None,
             &settings.generation.evaluator,
         )?;
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_graph_term_original_evaluator_done",
+            graph = %graph.graph.name,
+            evaluator_count = original_integrand.generic_evaluator_count(),
+            elapsed_ms = original_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            spenso_ms = evaluator_timings.spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = evaluator_timings.symbolica_time.as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -204,11 +241,27 @@ impl AmplitudeGraphTerm {
                 selected_generation_raised_esurfaces.contains(&raised_esurface_id)
             })
             .collect();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_graph_term_threshold_setup_done",
+            graph = %graph.graph.name,
+            threshold_count = graph.derived_data.threshold_counterterms.len(),
+            active_threshold_count = active_mask.iter().filter(|active| **active).count(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         for (raised_esurface_id, ct) in graph.derived_data.threshold_counterterms.iter_enumerated()
         {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
+            let threshold_started = std::time::Instant::now();
+            crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+                stage = "amplitude_graph_term_threshold_evaluator_start",
+                graph = %graph.graph.name,
+                raised_esurface_id = %raised_esurface_id.0,
+                active = active_mask[raised_esurface_id],
+                "Generation timing milestone"
+            );
             let masked_counterterm = if active_mask[raised_esurface_id] {
                 ct.clone()
             } else {
@@ -218,6 +271,18 @@ impl AmplitudeGraphTerm {
                 &graph.graph.param_builder,
                 &orientations,
                 settings,
+            );
+            crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+                stage = "amplitude_graph_term_threshold_evaluator_done",
+                graph = %graph.graph.name,
+                raised_esurface_id = %raised_esurface_id.0,
+                active = active_mask[raised_esurface_id],
+                evaluator_count = evaluator.generic_evaluator_count(),
+                elapsed_ms = threshold_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                spenso_ms = evaluator_timings.spenso_time.as_secs_f64() * 1000.0,
+                symbolica_ms = evaluator_timings.symbolica_time.as_secs_f64() * 1000.0,
+                "Generation timing milestone"
             );
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
@@ -247,6 +312,15 @@ impl AmplitudeGraphTerm {
         stats.evaluator_count += threshold_counterterm.helper_evaluators.len();
 
         threshold_counterterm.esurface_map = esurface_map;
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_graph_term_from_graph_done",
+            graph = %graph.graph.name,
+            evaluator_count = stats.evaluator_count,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            spenso_ms = stats.evaluator_spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = stats.evaluator_symbolica_time.as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
         Ok((
             AmplitudeGraphTerm {

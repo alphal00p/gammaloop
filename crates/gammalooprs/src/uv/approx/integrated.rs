@@ -125,10 +125,32 @@ impl Integrated<'_> {
             .unwrap();
 
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
-        t_arg = t_arg
-            .collect_metrics()
-            .simplify_metrics()
-            .simplify_gamma()
+        let t_arg_before_gamma = t_arg.collect_metrics().simplify_metrics();
+        let before_gamma_simplification = t_arg_before_gamma.to_plain_string();
+        let before_gamma_simplification_log_print =
+            t_arg_before_gamma.log_print(Some(120)).to_string();
+        let gamma_simplification_started = std::time::Instant::now();
+        let t_arg_after_gamma = t_arg_before_gamma.simplify_gamma();
+        let after_gamma_simplification = t_arg_after_gamma.to_plain_string();
+        let after_gamma_simplification_log_print =
+            t_arg_after_gamma.log_print(Some(120)).to_string();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "integrated_uv_start_after_simplify_gamma",
+            gamma_simplification_ms = %gamma_simplification_started.elapsed().as_millis(),
+            changed = before_gamma_simplification != after_gamma_simplification,
+            before_bytes = %before_gamma_simplification.len(),
+            after_bytes = %after_gamma_simplification.len(),
+            before_gamma_count = %before_gamma_simplification.matches("spenso::gamma").count(),
+            after_gamma_count = %after_gamma_simplification.matches("spenso::gamma").count(),
+            before_chain_count = %before_gamma_simplification.matches("spenso::chain").count(),
+            after_chain_count = %after_gamma_simplification.matches("spenso::chain").count(),
+            file.before_gamma_simplification = %before_gamma_simplification,
+            file.after_gamma_simplification = %after_gamma_simplification,
+            file.before_gamma_simplification_log_print = %before_gamma_simplification_log_print,
+            file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+            "Gamma simplification before Vakint"
+        );
+        t_arg = t_arg_after_gamma
             .schoonschip_net::<Aind>()
             .to_dots()
             .normalize_dots()

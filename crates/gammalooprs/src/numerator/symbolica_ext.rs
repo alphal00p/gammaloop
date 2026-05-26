@@ -5,7 +5,7 @@ use idenso::{
     representations::{ColorAdjoint, ColorFundamental},
 };
 use spenso::{
-    network::parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
+    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
     structure::representation::{Minkowski, RepName},
 };
 
@@ -127,8 +127,10 @@ impl AtomCoreExt for AtomView<'_> {
             *self,
             TENSORLIB.read().unwrap().deref(),
             &ParseSettings {
-                shorthand_parsing: ShorthandParsing::Opaque {
-                    inference: StructureInferenceMode::Fast,
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode::none(),
+                    trace: true,
+                    chain: true,
                 },
                 ..Default::default()
             },

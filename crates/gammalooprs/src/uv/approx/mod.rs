@@ -402,6 +402,13 @@ impl Approximation {
         if Self::filtered_integrated_uv_mode_is_active(settings)
             && !self.generate_only_integrated_uv_chain_matches
         {
+            debug_tags!(#generation, #profile, #uv, #graph, #summary;
+                stage = "compute_integrated_filtered_zero",
+                current = %self.spinney.dod,
+                given = %dependent.spinney.dod,
+                reduced = ?self.reduced_subgraph(dependent),
+                "UV timing milestone"
+            );
             self.integrated_4d = ApproxOp::Dependent {
                 t_arg: IntegrandExpr {
                     integrands: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
@@ -428,11 +435,32 @@ impl Approximation {
             "Computing Integrated",
         );
 
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_integrated_start",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            reduced = ?self.reduced_subgraph(dependent),
+            integrand_count = current.len(),
+            "UV timing milestone"
+        );
         let integrands = current
             .iter()
             .map(|(index, a)| {
+                let term_started = std::time::Instant::now();
                 let integrated =
                     Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a)?;
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    stage = "compute_integrated_kernel_done",
+                    graph = %graph.name,
+                    current = %self.spinney.dod,
+                    given = %dependent.spinney.dod,
+                    reduced = ?self.reduced_subgraph(dependent),
+                    cut_index = ?index,
+                    elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                    "UV timing milestone"
+                );
                 Ok((*index, integrated))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
@@ -443,6 +471,16 @@ impl Approximation {
             subgraph: unsafe { InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent)) },
         };
 
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_integrated_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            reduced = ?self.reduced_subgraph(dependent),
+            integrand_count = current.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         Ok(())
     }
 
@@ -457,9 +495,26 @@ impl Approximation {
         settings: &UVgenerationSettings,
         orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_local_3d_start",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            "UV timing milestone"
+        );
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
         };
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_local_3d_parent_expr_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            cff_count = cff.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         let (mut t4, t4_sign) = if let ApproxOp::Root = dependent.integrated_4d {
             (
                 BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
@@ -474,6 +529,7 @@ impl Approximation {
         if t4.len() != 1 {
             panic!("Should only have one t_arg for the 4d approximation");
         }
+        let finite_started = std::time::Instant::now();
         let finite = t4
             .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
@@ -484,6 +540,15 @@ impl Approximation {
             .replace(GS.m_uv_int)
             .with(GS.m_uv)
             .map_mink_dim(4);
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_local_3d_finite_integrated_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            elapsed_ms = finite_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         debug_tags!(
             #uv;
             finite = %finite.log_print(Some(80)),
@@ -491,6 +556,7 @@ impl Approximation {
             "Computing UV subtraction",
         );
 
+        let localize_started = std::time::Instant::now();
         let integrated_t = localized_integrated_reduced_factor(
             graph,
             dependent.spinney.filter(),
@@ -499,10 +565,30 @@ impl Approximation {
             valid_orientations,
             orientation_pattern,
         )?;
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_local_3d_localize_integrated_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            localized_count = integrated_t.integrands.len(),
+            elapsed_ms = localize_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
 
         let ctx = UVCtx { graph, settings };
 
         if Self::filtered_integrated_uv_mode_is_active(settings) {
+            let filtered_started = std::time::Instant::now();
+            let graph_name = graph.name.clone();
+            debug_tags!(#generation, #profile, #uv, #graph, #summary;
+                stage = "compute_local_3d_filtered_start",
+                graph = %graph_name,
+                current = %self.spinney.dod,
+                given = %dependent.spinney.dod,
+                keep_only_integrated = self.should_keep_only_integrated_uv_terms(settings),
+                "UV timing milestone"
+            );
             self.set_zero_local_3d(
                 -sign,
                 cuts.residue_selector.generate_allowed_keys().as_slice(),
@@ -518,6 +604,15 @@ impl Approximation {
             } else {
                 Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
             });
+            debug_tags!(#generation, #profile, #uv, #graph, #summary;
+                stage = "compute_local_3d_filtered_done",
+                graph = %graph_name,
+                current = %self.spinney.dod,
+                given = %dependent.spinney.dod,
+                elapsed_ms = filtered_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
             return Ok(());
         }
 
@@ -525,6 +620,7 @@ impl Approximation {
         for ((index_local, local), (index_integ, integ)) in
             cff.into_iter().zip(integrated_t.integrands)
         {
+            let term_started = std::time::Instant::now();
             if index_local != index_integ {
                 return Err(eyre!(
                     "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
@@ -536,6 +632,16 @@ impl Approximation {
             sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
             sum_3d -= Local3DApproximation {}.kernel(&ctx, &*self, dependent, &integ)?;
             integrands.insert(index_local, sum_3d);
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "compute_local_3d_term_done",
+                graph = %ctx.graph.name,
+                current = %self.spinney.dod,
+                given = %dependent.spinney.dod,
+                cut_index = ?index_local,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
         }
 
         self.local_3d = CFFapprox::Dependent {
@@ -543,6 +649,7 @@ impl Approximation {
             t_arg: IntegrandExpr { integrands },
         };
 
+        let final_started = std::time::Instant::now();
         self.final_integrand = Some(self.final_integrand(
             graph,
             cuts,
@@ -550,6 +657,15 @@ impl Approximation {
             settings,
             orientation_pattern,
         )?);
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "compute_local_3d_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            given = %dependent.spinney.dod,
+            final_integrand_elapsed_ms = final_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         Ok(())
     }
 
@@ -562,11 +678,33 @@ impl Approximation {
         _settings: &UVgenerationSettings,
         orientation_pattern: &OrientationPattern,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "final_integrand_start",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            "UV timing milestone"
+        );
         let global_num = graph.global_atom();
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "final_integrand_global_atom_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         let (t, s) = self
             .local_3d
             .expr()
             .ok_or(eyre!("Local3d not yet computed"))?;
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "final_integrand_local_expr_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            term_count = t.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         let (mut t4, t4_sign) = if let ApproxOp::Root = self.integrated_4d {
             (
                 BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
@@ -581,6 +719,7 @@ impl Approximation {
         if t4.len() != 1 {
             panic!("Should only have one t_arg for the 4d approximation");
         }
+        let finite_started = std::time::Instant::now();
         let finite = t4
             .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
@@ -593,6 +732,14 @@ impl Approximation {
             .map_mink_dim(4)
             .replace(function!(symbol!("vakint::g"), W_.a__))
             .with(function!(symbol!("spenso::g"), W_.a__));
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "final_integrand_finite_integrated_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            elapsed_ms = finite_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
 
         debug_tags!(
             #uv,#final;
@@ -601,6 +748,7 @@ impl Approximation {
             "Computing Final integrand after uv subtraction",
         );
 
+        let localize_started = std::time::Instant::now();
         let integrated_t = localized_integrated_reduced_factor(
             graph,
             self.spinney.filter(),
@@ -609,6 +757,15 @@ impl Approximation {
             valid_orientations,
             orientation_pattern,
         )?;
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "final_integrand_localize_integrated_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            localized_count = integrated_t.integrands.len(),
+            elapsed_ms = localize_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
 
         let reduced = graph
             .full_filter()
@@ -620,6 +777,14 @@ impl Approximation {
 
         for (term_index, ((local_index, local), (integrated_index, integ))) in final_integrand_terms
         {
+            let term_started = std::time::Instant::now();
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "final_integrand_term_start",
+                graph = %graph.name,
+                current = %self.spinney.dod,
+                cut_index = ?local_index,
+                "UV timing milestone"
+            );
             let mut cff = s * (local - integ);
 
             if local_index != integrated_index {
@@ -640,11 +805,27 @@ impl Approximation {
             }
 
             cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "final_integrand_term_cff_done",
+                graph = %graph.name,
+                current = %self.spinney.dod,
+                cut_index = ?local_index,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
 
             let mut resnum = graph
                 .numerator(&reduced, self.spinney.subgraph.included())
                 .get_single_atom()
                 .unwrap();
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "final_integrand_term_numerator_done",
+                graph = %graph.name,
+                current = %self.spinney.dod,
+                cut_index = ?local_index,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
 
             let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 
@@ -668,6 +849,14 @@ impl Approximation {
                 "Dumped final-integrand color simplification input"
             );
             resnum = color_simplify_input.simplify_color(); //.to_dots();
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "final_integrand_term_simplify_color_done",
+                graph = %graph.name,
+                current = %self.spinney.dod,
+                cut_index = ?local_index,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
             // println!(
             //     "Resnum {}",
             //     resnum.printer(
@@ -680,6 +869,14 @@ impl Approximation {
             // );
 
             resnum = resnum.expand_dots()?;
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "final_integrand_term_expand_dots_done",
+                graph = %graph.name,
+                current = %self.spinney.dod,
+                cut_index = ?local_index,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
 
             let debug_preview = resnum
                 .replace(function!(GS.theta, W_.a_))
@@ -706,9 +903,26 @@ impl Approximation {
             );
 
             integrands.insert(*local_index, resnum.replace_multiple(&reps));
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "final_integrand_term_done",
+                graph = %graph.name,
+                current = %self.spinney.dod,
+                cut_index = ?local_index,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "UV timing milestone"
+            );
         }
 
         // debug!("final_cff {res:>}");
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "final_integrand_done",
+            graph = %graph.name,
+            current = %self.spinney.dod,
+            integrand_count = integrands.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "UV timing milestone"
+        );
         Ok(integrands)
     }
 

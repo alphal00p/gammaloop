@@ -538,23 +538,74 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_new_start",
+            atom_count = atoms.len(),
+            orientation_count = orientations.len(),
+            iterative_orientation_optimization = settings.iterative_orientation_optimization,
+            summed_function_map = settings.summed_function_map,
+            summed = settings.summed,
+            do_algebra = settings.do_algebra,
+            "Evaluator timing milestone"
+        );
         let mut timings = EvaluatorBuildTimings::default();
         let spenso_started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_parse_atoms_start",
+            atom_count = atoms.len(),
+            do_algebra = settings.do_algebra,
+            "Evaluator timing milestone"
+        );
         let parsed_atoms = atoms
             .iter()
-            .map(|a| {
+            .enumerate()
+            .map(|(atom_index, a)| {
+                let atom_started = std::time::Instant::now();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_start",
+                    atom_index,
+                    do_algebra = settings.do_algebra,
+                    "Evaluator timing milestone"
+                );
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
                 let instant = std::time::Instant::now();
                 let mut net = if settings.do_algebra {
-                    a.as_atom_view()
+                    let simplified = a
+                        .as_atom_view()
                         .simplify_color()
                         .simplify_gamma()
                         .simplify_metrics()
-                        .to_dots()
-                        .parse_into_net()?
+                        .to_dots();
+                    crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                        stage = "evaluator_stack_parse_atom_simplify_done",
+                        atom_index,
+                        elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                        "Evaluator timing milestone"
+                    );
+                    simplified.parse_into_net()?
                 } else {
+                    crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                        stage = "evaluator_stack_parse_atom_simplify_skipped",
+                        atom_index,
+                        elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                        "Evaluator timing milestone"
+                    );
                     a.as_atom_view().parse_into_net()?
                 };
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_net_done",
+                    atom_index,
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                crate::debug_tags!(#generation, #compile, #term, #dump;
+                    stage = "evaluator_stack_parse_atom_network_dump",
+                    atom_index,
+                    file.atom = %a.as_atom_view().to_canonical_string(),
+                    file.network = %net.dot_pretty(),
+                    "Parsed evaluator network dump"
+                );
 
                 println!("Parsed: {:?}", instant.elapsed());
                 let instant = std::time::Instant::now();
@@ -612,7 +663,15 @@ impl EvaluatorStack {
 
                 println!("Executing: {:?}", instant.elapsed());
 
-                net.result_scalar()
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_execute_done",
+                    atom_index,
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+
+                let result = net
+                    .result_scalar()
                     .map(|a| match a {
                         ExecutionResult::One => Atom::num(1),
                         ExecutionResult::Zero => Atom::Zero,
@@ -621,12 +680,29 @@ impl EvaluatorStack {
                     .map_err(|a| {
                         Report::from(a)
                             .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    })
+                    });
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_done",
+                    atom_index,
+                    success = result.is_ok(),
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                result
             })
             .collect::<Result<Vec<_>>>()?;
         timings.spenso_time += spenso_started.elapsed();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_parse_atoms_done",
+            atom_count = parsed_atoms.len(),
+            orientation_count = orientations.len(),
+            elapsed_ms = timings.spenso_time.as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
 
         let symbolica_started = std::time::Instant::now();
+        let iterative_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
             Some(
                 Self::new_iterative(
@@ -641,7 +717,17 @@ impl EvaluatorStack {
         } else {
             None
         };
+        if settings.iterative_orientation_optimization {
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_stack_new_iterative_done",
+                orientation_count = orientations.len(),
+                elapsed_ms = iterative_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+        }
 
+        let summed_function_map_started = std::time::Instant::now();
         let summed_function_map = if settings.summed_function_map {
             Some(
                 Self::new_summed_function_map(
@@ -656,7 +742,17 @@ impl EvaluatorStack {
         } else {
             None
         };
+        if settings.summed_function_map {
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_stack_new_summed_function_map_done",
+                orientation_count = orientations.len(),
+                elapsed_ms = summed_function_map_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+        }
 
+        let summed_started = std::time::Instant::now();
         let summed = if settings.summed {
             Some(
                 Self::new_summed(
@@ -671,11 +767,37 @@ impl EvaluatorStack {
         } else {
             None
         };
+        if settings.summed {
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_stack_new_summed_done",
+                orientation_count = orientations.len(),
+                elapsed_ms = summed_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+        }
 
+        let single_started = std::time::Instant::now();
         let single_parametric =
             Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)
                 .with_context(|| "Failed to create parametric")?;
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_new_single_parametric_done",
+            orientation_count = orientations.len(),
+            elapsed_ms = single_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
         timings.symbolica_time += symbolica_started.elapsed();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_new_done",
+            atom_count = parsed_atoms.len(),
+            orientation_count = orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            spenso_ms = timings.spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = timings.symbolica_time.as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
 
         Ok((
             EvaluatorStack {
