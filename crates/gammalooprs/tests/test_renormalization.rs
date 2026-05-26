@@ -560,7 +560,6 @@ fn finit_part_ghlo() {
 mod failing {
     use super::*;
 
-    
     fn ghost_3loop_settings() -> UVgenerationSettings {
         UVgenerationSettings {
             softct: false,

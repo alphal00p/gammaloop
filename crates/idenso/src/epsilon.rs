@@ -93,15 +93,15 @@ impl EpsilonSimplifierPass {
         let mut current = expr.schoonschip();
 
         loop {
-            let next = current.replace_map(|term, _context, out| {
-                if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
-                    .or_else(|| Self::simplify_pair_product(term))
-                {
-                    **out = rewritten;
-                }
-            });
-            // .collect_metrics()
-            // .schoonschip();
+            let next = current
+                .replace_map(|term, _context, out| {
+                    if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
+                        .or_else(|| Self::simplify_pair_product(term))
+                    {
+                        **out = rewritten;
+                    }
+                })
+                .schoonschip();
 
             if next == current {
                 return next;
@@ -317,7 +317,7 @@ mod test {
         let d = mink!(4, d);
         let expr = epsilon4(&a, &b, &c, &d) * epsilon4(&a, &b, &c, &d);
 
-        assert_snapshot!(expr.simplify_epsilon().to_bare_ordered_string(), @"(g(mink(4,a),mink(4,b)))^2*(g(mink(4,c),mink(4,d)))^2+(g(mink(4,a),mink(4,b)))^2*-1*g(mink(4,c),mink(4,c))*g(mink(4,d),mink(4,d))+(g(mink(4,a),mink(4,c)))^2*(g(mink(4,b),mink(4,d)))^2+(g(mink(4,a),mink(4,c)))^2*-1*g(mink(4,b),mink(4,b))*g(mink(4,d),mink(4,d))+(g(mink(4,a),mink(4,d)))^2*(g(mink(4,b),mink(4,c)))^2+(g(mink(4,a),mink(4,d)))^2*-1*g(mink(4,b),mink(4,b))*g(mink(4,c),mink(4,c))+(g(mink(4,b),mink(4,c)))^2*-1*g(mink(4,a),mink(4,a))*g(mink(4,d),mink(4,d))+(g(mink(4,b),mink(4,d)))^2*-1*g(mink(4,a),mink(4,a))*g(mink(4,c),mink(4,c))+(g(mink(4,c),mink(4,d)))^2*-1*g(mink(4,a),mink(4,a))*g(mink(4,b),mink(4,b))+-2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))*g(mink(4,c),mink(4,d))+-2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))*g(mink(4,c),mink(4,d))+-2*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))*g(mink(4,b),mink(4,d))+2*g(mink(4,a),mink(4,a))*g(mink(4,b),mink(4,c))*g(mink(4,b),mink(4,d))*g(mink(4,c),mink(4,d))+2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,c))*g(mink(4,d),mink(4,d))+2*g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,d))*g(mink(4,c),mink(4,c))+2*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,b))*g(mink(4,c),mink(4,d))+g(mink(4,a),mink(4,a))*g(mink(4,b),mink(4,b))*g(mink(4,c),mink(4,c))*g(mink(4,d),mink(4,d))");
+        assert_snapshot!(&expr.simplify_epsilon().to_bare_ordered_string(), @"24");
     }
 
     #[test]

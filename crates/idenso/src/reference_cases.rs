@@ -456,6 +456,7 @@ pub fn reference_cases() -> &'static [ReferenceCase] {
 mod tests {
     use insta::assert_snapshot;
     use spenso::shadowing::symbolica_utils::AtomCoreExt;
+    use symbolica::atom::AtomCore;
 
     use super::*;
 
@@ -469,13 +470,18 @@ mod tests {
                     ReferenceValidation::Enabled => "enabled".to_string(),
                     ReferenceValidation::Blocked(reason) => format!("blocked: {reason}"),
                 };
+                let simplified = case.simplified();
+                let simplified = match case.domain {
+                    ReferenceDomain::Dirac4 => simplified.expand_num(),
+                    ReferenceDomain::ColorSu3 => simplified,
+                };
                 format!(
                     "{} [{:?}, {:?}, {}]\n{}",
                     case.name,
                     case.domain,
                     case.simplification,
                     validation,
-                    case.simplified().to_bare_ordered_string(),
+                    simplified.to_bare_ordered_string(),
                 )
             })
             .collect::<Vec<_>>()

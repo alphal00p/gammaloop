@@ -10,7 +10,10 @@ use spenso::{
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
-use crate::tensor::{SymbolicNetParse, SymbolicTensor};
+use crate::{
+    shorthands::metric::MetricSimplifier,
+    tensor::{SymbolicNetParse, SymbolicTensor},
+};
 
 use super::{
     contraction::{
@@ -43,6 +46,13 @@ pub trait Schoonschip {
         &self,
         settings: &SchoonschipSettings,
     ) -> Atom;
+
+    fn schoonschip_with_net_full<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
+        &self,
+    ) -> Atom {
+        let settings = SchoonschipSettings::default().with_expanded_contracted_sums();
+        self.schoonschip_with_net::<true, Aind>(&settings)
+    }
 }
 
 impl Schoonschip for Atom {
@@ -287,6 +297,7 @@ impl Schoonschip for AtomView<'_> {
 
     fn to_dots(&self) -> Atom {
         self.schoonschip_with_settings(&SchoonschipSettings::default().with_rank1_tensors())
+            .metric_shorthand_to_dot()
     }
 
     fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {

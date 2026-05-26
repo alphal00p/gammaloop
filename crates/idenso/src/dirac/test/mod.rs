@@ -10,7 +10,6 @@ use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
 
-use crate::shorthands::schoonschip::SchoonschipSettings;
 use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use crate::{gamma, gamma0, gamma5, u, v};
 
@@ -519,9 +518,7 @@ fn gamma_alg() {
         * gamma!(nu3, 4, 5)
         * gamma!(nu, 5, 1))
     .simplify_gamma()
-    .schoonschip_with_net::<true, AbstractIndex>(
-        &SchoonschipSettings::default().with_expanded_contracted_sums(),
-    );
+    .schoonschip_with_net_full::<AbstractIndex>();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+-4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))+4*p(mink(4,nu))*q(mink(4,mu))+8*p(mink(4,mu))*p(mink(4,nu))");
 
@@ -539,7 +536,8 @@ fn gamma_alg() {
         * gamma!(mu, 3, 4)
         * gamma!(nu, 4, 5)
         * gamma!(nu3, 5, 1))
-    .simplify_gamma();
+    .simplify_gamma()
+    .schoonschip_with_net_full::<AbstractIndex>();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-4*p(mink(4,nu))*q(mink(4,mu))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),p(mink(4)))+4*g(mink(4,mu),mink(4,nu))*g(p(mink(4)),q(mink(4)))+4*p(mink(4,mu))*q(mink(4,nu))");
 
@@ -572,7 +570,8 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
         * gamma!(slot!(mink_dim, nu2), slot!(bis4, 5), slot!(bis4, 1)))
     .simplify_gamma()
-    .to_dots();
+    .schoonschip_with_net_full::<AbstractIndex>()
+    .metric_shorthand_to_dot();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"(dot(p(mink(d)),q(mink(d))))^2*8+-4*dot(p(mink(d)),p(mink(d)))*dot(q(mink(d)),q(mink(d)))+4*dot(p(mink(d)),q(mink(d)))*dot(q(mink(d)),q(mink(d)))");
 
@@ -580,10 +579,9 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
         * gamma!(slot!(mink_dim, mu), slot!(bis4, 4), slot!(bis4, 5))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 2)))
-    .simplify_gamma()
-    .to_dots();
+    .simplify_gamma();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"(-1*d^2+2*d)*g(bis(4,1),bis(4,2))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d^2*g(bis(4,1),bis(4,2))+2*d*g(bis(4,1),bis(4,2))");
 }
 
 #[test]
@@ -953,7 +951,7 @@ fn val_test() {
     );
 
     let res = parse_lit!(
-        7776 * G ^ 6 * g(P(2, mink(4)), P(3, mink(4))),
+        7776 * G ^ 6 * dot(P(2, mink(4)), P(3, mink(4))),
         default_namespace = "spenso"
     );
     assert_eq!(

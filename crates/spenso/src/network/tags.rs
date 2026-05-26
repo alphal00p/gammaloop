@@ -5,8 +5,7 @@ use symbolica::{
 };
 
 use crate::{
-    shadowing::{CYCLIC, symbolica_utils::SpensoPrintSettings},
-    structure::abstract_index::AIND_SYMBOLS,
+    shadowing::symbolica_utils::SpensoPrintSettings, structure::abstract_index::AIND_SYMBOLS,
 };
 
 pub struct SpensoTags {

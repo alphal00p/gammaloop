@@ -591,7 +591,7 @@ mod test {
         assert_eq!(expr, Atom::var(symbol!("dim")), "got {:#}", expr);
     }
     #[test]
-    fn dots() {
+    fn dotsx() {
         test_initialize();
 
         let a = parse_lit!(P(label, spenso::mink(4, 2)) * P(spenso::mink(4, 2))).to_dots();

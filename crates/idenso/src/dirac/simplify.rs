@@ -369,25 +369,25 @@ impl<'settings> DiracSimplifier<'settings> {
             .collect_chains(rep);
 
         loop {
-            let mut time = std::time::Instant::now();
+            // let mut time = std::time::Instant::now();
             let mut next = self.settings.rewrite_expression(expr.clone());
-            let elapsed = time.elapsed();
-            println!(
-                "Rewrite ({}ms)",
-                // next.printer(SpensoPrintSettings::compact().nice_symbolica()),
-                elapsed.as_millis()
-            );
+            // let elapsed = time.elapsed();
+            // println!(
+            //     "Rewrite ({}ms)",
+            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica()),
+            //     elapsed.as_millis()
+            // );
 
-            time = std::time::Instant::now();
+            // time = std::time::Instant::now();
 
             next = next.schoonschip();
 
-            println!(
-                "Schoonschip: {:?}",
-                time.elapsed(),
-                // next.printer(SpensoPrintSettings::compact().nice_symbolica())
-            );
-            time = std::time::Instant::now();
+            // println!(
+            //     "Schoonschip: {:?}",
+            //     time.elapsed(),
+            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica())
+            // );
+            // time = std::time::Instant::now();
             // next = next.simplify_epsilon();
 
             // println!(
@@ -397,11 +397,11 @@ impl<'settings> DiracSimplifier<'settings> {
             // );
             next = next.normalize_chains();
 
-            println!(
-                "Normalize Chains: {:?}",
-                time.elapsed(),
-                // next.printer(SpensoPrintSettings::compact().nice_symbolica())
-            );
+            // println!(
+            //     "Normalize Chains: {:?}",
+            //     time.elapsed(),
+            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica())
+            // );
 
             if next == expr {
                 return next;
