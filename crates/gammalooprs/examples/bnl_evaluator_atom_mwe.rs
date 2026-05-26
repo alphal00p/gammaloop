@@ -3,7 +3,7 @@ use std::{
     env, fs,
     io::{self, Write},
     ops::Deref,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -13,12 +13,19 @@ use color_eyre::{
 };
 use gammalooprs::{
     initialisation::test_initialise,
-    numerator::symbolica_ext::AtomCoreExt,
+    numerator::{aind::Aind, symbolica_ext::AtomCoreExt},
     utils::{FUN_LIB, TENSORLIB, symbolica_ext::LogPrint},
 };
-use spenso::network::{ExecutionResult, MinResultRank, Sequential};
+use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
+use spenso::network::{
+    ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree,
+    library::{DummyLibrary, function_lib::Wrap},
+    parsing::{ParseSettings as NetworkParseSettings, ShorthandParsing, StructureInferenceMode},
+    store::NetworkStore,
+};
 use symbolica::{
     atom::{Atom, AtomView},
+    id::AliasedAtom,
     parser::ParseSettings as SymbolicaParseSettings,
     wrap_input,
 };
@@ -77,6 +84,8 @@ struct Config {
     scalar_details: bool,
     alias_scalar_threshold: Option<usize>,
     resolve_aliases: bool,
+    dump_aliased_path: Option<PathBuf>,
+    symbolic_net: bool,
 }
 
 fn main() -> Result<()> {
@@ -144,6 +153,12 @@ fn main() -> Result<()> {
         selected_stats.bytes.to_string(),
         "",
     );
+
+    if config.symbolic_net {
+        run_symbolic_net(&config, &selected, &mut summary)?;
+        summary.print();
+        return Ok(());
+    }
 
     print_metric_table("network_parse", [("status", "start".to_owned())]);
     io::stdout().flush()?;
@@ -311,6 +326,24 @@ fn main() -> Result<()> {
         };
         if let Some(aliases) = &scalar_aliases {
             let aliased = net.aliased_atom(aliases, root);
+            if let Some(path) = &config.dump_aliased_path {
+                let bytes = write_aliased_atom_dump(path, &aliased)?;
+                print_metric_table(
+                    "aliased_dump",
+                    [
+                        ("path", path.display().to_string()),
+                        ("bytes", bytes.to_string()),
+                    ],
+                );
+                summary.push(
+                    "aliased_dump",
+                    "written",
+                    "",
+                    "",
+                    bytes.to_string(),
+                    path.display().to_string(),
+                );
+            }
             print_metric_table(
                 "result_aliased_root",
                 [
@@ -355,6 +388,24 @@ fn main() -> Result<()> {
                 summary.push("result_alias_resolve", "skipped", "", "", "", "");
             }
         } else {
+            if let Some(path) = &config.dump_aliased_path {
+                let bytes = write_aliased_atom_dump(path, &AliasedAtom::from(root.clone()))?;
+                print_metric_table(
+                    "aliased_dump",
+                    [
+                        ("path", path.display().to_string()),
+                        ("bytes", bytes.to_string()),
+                    ],
+                );
+                summary.push(
+                    "aliased_dump",
+                    "written",
+                    "",
+                    "",
+                    bytes.to_string(),
+                    path.display().to_string(),
+                );
+            }
             print_metric_table(
                 "result_atom",
                 [
@@ -390,6 +441,8 @@ impl Config {
         let mut scalar_details = false;
         let mut alias_scalar_threshold = None;
         let mut resolve_aliases = false;
+        let mut dump_aliased_path = None;
+        let mut symbolic_net = false;
         let mut input_path_seen = false;
         let mut selection_seen = false;
 
@@ -405,6 +458,13 @@ impl Config {
                 "--unit-scalars" => unit_scalars = true,
                 "--scalar-details" => scalar_details = true,
                 "--resolve-aliases" => resolve_aliases = true,
+                "--symbolic-net" => symbolic_net = true,
+                "--dump-aliased" => {
+                    let Some(path) = args.next() else {
+                        bail!("--dump-aliased requires a path");
+                    };
+                    dump_aliased_path = Some(PathBuf::from(path));
+                }
                 "--alias-scalars" => {
                     let Some(threshold) = args.next() else {
                         bail!("--alias-scalars requires a byte threshold");
@@ -454,6 +514,8 @@ impl Config {
             scalar_details,
             alias_scalar_threshold,
             resolve_aliases,
+            dump_aliased_path,
+            symbolic_net,
         })
     }
 }
@@ -467,7 +529,7 @@ fn looks_like_selector(value: &str) -> bool {
 
 fn print_usage() {
     println!(
-        "usage: cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- [INPUT] [all|first:N|term:N|range:START..END] [--skip-execute] [--print-log] [--scalar-details] [--unit-scalars|--keep-scalars INDICES] [--alias-scalars BYTES] [--dump-network PATH]"
+        "usage: cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- [INPUT] [all|first:N|term:N|range:START..END] [--skip-execute] [--print-log] [--scalar-details] [--unit-scalars|--keep-scalars INDICES] [--alias-scalars BYTES] [--dump-network PATH] [--dump-aliased PATH] [--symbolic-net]"
     );
     println!("term indices are zero-based; range END is exclusive");
     println!(
@@ -475,6 +537,8 @@ fn print_usage() {
     );
     println!("--alias-scalars replaces scalar refs at or above BYTES with scalar(INDEX) aliases");
     println!("--resolve-aliases expands aliased results back into a full Symbolica atom");
+    println!("--dump-aliased writes the post-execution aliased atom JSON dump");
+    println!("--symbolic-net executes a SymbolicTensor network and aliases scalar-store atoms");
 }
 
 fn parse_index(label: &str, value: &str) -> Result<usize> {
@@ -629,8 +693,306 @@ fn print_atom_shape(label: &str, atom: &Atom) {
     );
 }
 
-fn print_scalar_store_stats(
-    net: &gammalooprs::numerator::ParsingNet,
+fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable) -> Result<()> {
+    print_metric_table("symbolic_network_parse", [("status", "start".to_owned())]);
+    io::stdout().flush()?;
+    let network_parse_started = Instant::now();
+    let mut net = selected
+        .parse_to_symbolic_net::<Aind>(&NetworkParseSettings {
+            shorthand_parsing: ShorthandParsing::Opaque {
+                inference: StructureInferenceMode::Fast,
+            },
+            ..Default::default()
+        })
+        .wrap_err("failed to parse evaluator atom into symbolic tensor network")?;
+    let network_parse_elapsed = network_parse_started.elapsed();
+    print_metric_table(
+        "symbolic_network_parse",
+        [
+            ("status", "done".to_owned()),
+            ("elapsed", format_duration(network_parse_elapsed)),
+            ("nodes", net.graph.n_nodes().to_string()),
+            ("edges", net.graph.graph.n_edges().to_string()),
+            ("tensors", net.store.tensors.len().to_string()),
+        ],
+    );
+    summary.push(
+        "symbolic_network_parse",
+        "done",
+        format_duration(network_parse_elapsed),
+        "",
+        "",
+        format!(
+            "nodes={} edges={} tensors={}",
+            net.graph.n_nodes(),
+            net.graph.graph.n_edges(),
+            net.store.tensors.len()
+        ),
+    );
+
+    let scalar_store_stats = print_scalar_store_stats(&net, config.scalar_details);
+    summary.push(
+        "scalar_store",
+        "done",
+        "",
+        scalar_store_stats.total_terms.to_string(),
+        scalar_store_stats.total_bytes.to_string(),
+        format!(
+            "count={} top_level_sums={} max_terms={} max_bytes={}",
+            scalar_store_stats.count,
+            scalar_store_stats.top_level_sums,
+            scalar_store_stats.max_terms,
+            scalar_store_stats.max_bytes
+        ),
+    );
+
+    if config.unit_scalars || config.kept_scalars.is_some() {
+        let replacement_stats =
+            replace_scalars(&mut net, config.unit_scalars, config.kept_scalars.as_ref())?;
+        summary.push(
+            "scalar_replacement",
+            replacement_stats.mode,
+            "",
+            "",
+            "",
+            format!(
+                "replaced={} kept={}",
+                replacement_stats.replaced, replacement_stats.kept
+            ),
+        );
+    }
+
+    let scalar_aliases = if let Some(threshold) = config.alias_scalar_threshold {
+        let aliases =
+            net.alias_scalar_refs(|_, scalar| scalar.as_view().get_byte_size() >= threshold);
+        print_metric_table(
+            "scalar_aliases",
+            [
+                ("threshold_bytes", threshold.to_string()),
+                ("created", aliases.aliases_created().to_string()),
+                ("terms", aliases.aliased_terms().to_string()),
+                ("bytes", aliases.aliased_bytes().to_string()),
+                ("max_bytes", aliases.max_aliased_bytes().to_string()),
+            ],
+        );
+        summary.push(
+            "scalar_aliases",
+            "enabled",
+            "",
+            aliases.aliased_terms().to_string(),
+            aliases.aliased_bytes().to_string(),
+            format!(
+                "threshold_bytes={threshold} created={} max_bytes={}",
+                aliases.aliases_created(),
+                aliases.max_aliased_bytes()
+            ),
+        );
+        Some(aliases)
+    } else {
+        summary.push("scalar_aliases", "disabled", "", "", "", "");
+        None
+    };
+
+    if let Some(path) = &config.dump_network_path {
+        fs::write(path, net.snapshot_dot())
+            .with_context(|| format!("failed to write {}", path.display()))?;
+        print_metric_table(
+            "symbolic_network_dump",
+            [("path", path.display().to_string())],
+        );
+        summary.push(
+            "symbolic_network_dump",
+            "written",
+            "",
+            "",
+            "",
+            path.display().to_string(),
+        );
+    }
+
+    if !config.execute {
+        print_metric_table("symbolic_network_execute", [("skipped", "true".to_owned())]);
+        summary.push("symbolic_network_execute", "skipped", "", "", "", "");
+        return Ok(());
+    }
+
+    print_metric_table("symbolic_network_execute", [("status", "start".to_owned())]);
+    io::stdout().flush()?;
+    let execute_started = Instant::now();
+    let lib = DummyLibrary::new();
+    net.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &Wrap {})
+        .wrap_err("failed to execute symbolic tensor network")?;
+    let execute_elapsed = execute_started.elapsed();
+    print_metric_table(
+        "symbolic_network_execute",
+        [
+            ("status", "done".to_owned()),
+            ("elapsed", format_duration(execute_elapsed)),
+        ],
+    );
+    summary.push(
+        "symbolic_network_execute",
+        "done",
+        format_duration(execute_elapsed),
+        "",
+        "",
+        "",
+    );
+
+    let result_started = Instant::now();
+    let result = net.result_tensor(&lib);
+    let result_elapsed = result_started.elapsed();
+    let result_status = if result.is_ok() { "ok" } else { "err" };
+    print_metric_table(
+        "symbolic_result_tensor",
+        [
+            ("status", result_status.to_owned()),
+            ("elapsed", format_duration(result_elapsed)),
+        ],
+    );
+    summary.push(
+        "symbolic_result_tensor",
+        result_status,
+        format_duration(result_elapsed),
+        "",
+        "",
+        "",
+    );
+
+    let root = match result.wrap_err("failed to read symbolic tensor result")? {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(tensor) => tensor.expression.clone(),
+    };
+    let aliased = match &scalar_aliases {
+        Some(aliases) => net.aliased_atom(aliases, root),
+        None => AliasedAtom::from(root),
+    };
+    let operations = aliased.count_operations();
+    print_metric_table(
+        "symbolic_result_aliased_root",
+        [
+            ("aliases", aliased.get_aliases().len().to_string()),
+            ("terms", aliased.get_root().nterms().to_string()),
+            (
+                "bytes",
+                aliased.get_root().as_view().get_byte_size().to_string(),
+            ),
+            ("adds", operations.additions.to_string()),
+            ("muls", operations.multiplications.to_string()),
+        ],
+    );
+    summary.push(
+        "symbolic_result_aliased_root",
+        "done",
+        "",
+        aliased.get_root().nterms().to_string(),
+        aliased.get_root().as_view().get_byte_size().to_string(),
+        format!(
+            "aliases={} adds={} muls={}",
+            aliased.get_aliases().len(),
+            operations.additions,
+            operations.multiplications
+        ),
+    );
+
+    if let Some(path) = &config.dump_aliased_path {
+        let bytes = write_aliased_atom_dump(path, &aliased)?;
+        print_metric_table(
+            "aliased_dump",
+            [
+                ("path", path.display().to_string()),
+                ("bytes", bytes.to_string()),
+            ],
+        );
+        summary.push(
+            "aliased_dump",
+            "written",
+            "",
+            "",
+            bytes.to_string(),
+            path.display().to_string(),
+        );
+    }
+
+    println!("{}", aliased.log_print(Some(120)));
+    if config.resolve_aliases {
+        let resolve_started = Instant::now();
+        let resolved = aliased.into_inner();
+        let resolve_elapsed = resolve_started.elapsed();
+        print_metric_table(
+            "symbolic_result_alias_resolve",
+            [
+                ("elapsed", format_duration(resolve_elapsed)),
+                ("terms", resolved.nterms().to_string()),
+                ("bytes", resolved.as_view().get_byte_size().to_string()),
+            ],
+        );
+        summary.push(
+            "symbolic_result_alias_resolve",
+            "done",
+            format_duration(resolve_elapsed),
+            resolved.nterms().to_string(),
+            resolved.as_view().get_byte_size().to_string(),
+            "",
+        );
+    } else {
+        print_metric_table(
+            "symbolic_result_alias_resolve",
+            [("skipped", "true".to_owned())],
+        );
+        summary.push("symbolic_result_alias_resolve", "skipped", "", "", "", "");
+    }
+
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct AliasedAtomDump {
+    format: &'static str,
+    version: usize,
+    root: String,
+    aliases: Vec<AliasedAtomDumpEntry>,
+}
+
+#[derive(serde::Serialize)]
+struct AliasedAtomDumpEntry {
+    alias: String,
+    original: String,
+}
+
+fn write_aliased_atom_dump(path: &Path, aliased: &AliasedAtom) -> Result<usize> {
+    let mut aliases = aliased
+        .get_aliases()
+        .iter()
+        .map(|(alias, original)| AliasedAtomDumpEntry {
+            alias: alias.to_plain_string(),
+            original: original.to_plain_string(),
+        })
+        .collect::<Vec<_>>();
+    aliases.sort_by(|left, right| left.alias.cmp(&right.alias));
+
+    let dump = AliasedAtomDump {
+        format: "gammaloop-aliased-atom",
+        version: 1,
+        root: aliased.get_root().to_plain_string(),
+        aliases,
+    };
+    let bytes = serde_json::to_vec(&dump)?;
+
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    fs::write(path, &bytes).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(bytes.len())
+}
+
+fn print_scalar_store_stats<T, K, FK, A>(
+    net: &Network<NetworkStore<T, Atom>, K, FK, A>,
     print_details: bool,
 ) -> ScalarStoreStats {
     let mut top_level_sums = 0;
@@ -688,8 +1050,8 @@ fn print_scalar_store_stats(
     }
 }
 
-fn replace_scalars(
-    net: &mut gammalooprs::numerator::ParsingNet,
+fn replace_scalars<T, K, FK, A>(
+    net: &mut Network<NetworkStore<T, Atom>, K, FK, A>,
     unit_scalars: bool,
     kept_scalars: Option<&BTreeSet<usize>>,
 ) -> Result<ScalarReplacementStats> {

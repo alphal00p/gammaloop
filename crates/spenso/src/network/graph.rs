@@ -1560,7 +1560,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     {
         self.graph.dot_impl(
             &self.graph.full_filter(),
-            "",
+            format!("tree = {}", self.expression_subgraph().string_label()),
             &|_| None,
             &|e| {
                 if let NetworkEdge::Slot(s) = e {
