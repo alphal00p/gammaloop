@@ -150,11 +150,29 @@ impl Integrated<'_> {
             file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
             "Gamma simplification before Vakint"
         );
-        t_arg = t_arg_after_gamma
-            .schoonschip_net::<Aind>()
-            .to_dots()
-            .normalize_dots()
-            / graph.denominator(&reduced, |_| 1);
+        let t_arg_after_schoonschip_net = t_arg_after_gamma.schoonschip_net::<Aind>();
+        let after_schoonschip_net = t_arg_after_schoonschip_net.to_plain_string();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "integrated_uv_start_after_schoonschip_net",
+            dummy_count = %after_schoonschip_net.matches("dummy(").count(),
+            dummy_1000034_count = %after_schoonschip_net.matches("dummy(1000034)").count(),
+            bytes = %after_schoonschip_net.len(),
+            expr = %t_arg_after_schoonschip_net.log_print(Some(120)),
+            file.expr = %after_schoonschip_net,
+            "Integrated UV start after Schoonschip net"
+        );
+        let t_arg_after_dots = t_arg_after_schoonschip_net.to_dots().normalize_dots();
+        let after_dots = t_arg_after_dots.to_plain_string();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "integrated_uv_start_after_dots",
+            dummy_count = %after_dots.matches("dummy(").count(),
+            dummy_1000034_count = %after_dots.matches("dummy(1000034)").count(),
+            bytes = %after_dots.len(),
+            expr = %t_arg_after_dots.log_print(Some(120)),
+            file.expr = %after_dots,
+            "Integrated UV start after dots"
+        );
+        t_arg = t_arg_after_dots / graph.denominator(&reduced, |_| 1);
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg

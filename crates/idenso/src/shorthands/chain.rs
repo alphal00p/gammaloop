@@ -15,9 +15,39 @@ use symbolica::{
 };
 
 use crate::W_;
-
-static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
+static SINGLE_LENGTH_NORM: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     let sd_rep = self_dual_!(1; W_.d_, W_.i_);
+
+    let sd_rep2 = self_dual_!(2; W_.d_, W_.i_);
+    let d_rep = dualizable_!(1; W_.d_, W_.i_);
+    let dd_rep = dualizable_dual_!(2; W_.d_, W_.i_);
+
+    [
+        Replacement::new(
+            chain!(
+                &sd_rep,
+                &sd_rep2,
+                function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
+            )
+            .to_pattern(),
+            function!(W_.a_, W_.a___, &sd_rep, W_.b___, &sd_rep2, W_.c___),
+        ),
+        Replacement::new(
+            chain!(
+                &d_rep,
+                &dd_rep,
+                function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
+            )
+            .to_pattern(),
+            function!(W_.a_, W_.a___, &d_rep, W_.b___, &dd_rep, W_.c___),
+        ),
+    ]
+});
+
+static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
+    let sd_rep = self_dual_!(1; W_.d_, W_.i_);
+
+    let sd_rep2 = self_dual_!(2; W_.d_, W_.i_);
     let sd_stripped_rep = self_dual_!(1; W_.d_);
     let d_rep = dualizable_!(1; W_.d_, W_.i_);
     let dd_rep = dualizable_dual_!(1; W_.d_, W_.i_);
@@ -29,6 +59,15 @@ static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
             // chain(rep(d,i), rep(d,i), factors...) -> trace(rep(d), factors...).
             chain!(&sd_rep, &sd_rep, W_.a___).to_pattern(),
             trace!(sd_stripped_rep, W_.a___),
+        ),
+        Replacement::new(
+            chain!(
+                &sd_rep,
+                &sd_rep2,
+                function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
+            )
+            .to_pattern(),
+            function!(W_.a_, W_.a___, &sd_rep, W_.b___, &sd_rep2, W_.c___),
         ),
         Replacement::new(
             chain!(&d_rep, &dd_rep, W_.a___).to_pattern(),
@@ -52,6 +91,9 @@ pub trait Chain {
     /// `chain(rep(d,i), rep(d,i), ...)` becomes `trace(rep(d),...)`
     fn normalize_chains(&self) -> Atom;
 
+    /// and single length chains back into the corresponding tensor
+    fn undo_single_length(&self) -> Atom;
+
     /// turns tensors with two indices of the representation into chain expressions, for collecting using [`Atom::collect_chains`]
     ///
     /// `A(..,rep(d,i),rep(d,j),...)` becomes `chain(rep(d,i),rep(d,j),A(..,in,out...))`
@@ -62,6 +104,10 @@ pub trait Chain {
 impl Chain for Atom {
     fn collect_chains(&self, representation: LibraryRep) -> Atom {
         self.as_view().collect_chains(representation)
+    }
+
+    fn undo_single_length(&self) -> Atom {
+        self.as_view().undo_single_length()
     }
 
     fn chainify(&self, representation: LibraryRep) -> Atom {
@@ -141,6 +187,11 @@ impl<'a> Chain for AtomView<'a> {
     fn normalize_chains(&self) -> Atom {
         self.to_owned()
             .replace_multiple_repeat(CHAIN_NORMALIZATIONS.as_ref())
+    }
+
+    fn undo_single_length(&self) -> Atom {
+        self.to_owned()
+            .replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref())
     }
 }
 

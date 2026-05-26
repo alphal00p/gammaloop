@@ -64,6 +64,7 @@ symbolica = { workspace = true, default-features = false, features = [
 ], optional = true }
 tabled = "0.20.0"
 thiserror = { workspace = true }
+tracing = { workspace = true }
 # approx-derive = "0.2.6"
 
 pyo3 = { workspace = true, optional = true }

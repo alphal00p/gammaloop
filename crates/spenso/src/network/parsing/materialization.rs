@@ -170,6 +170,19 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         let rep = Self::compact_vector_rep(value)?;
         let slot = self.state.slot(&rep).to_atom();
         let factor = Self::materialize_compact_vector_with_slot(value, &rep, &slot)?;
+        tracing::debug!(
+            target: "spenso::network::parsing",
+            spenso_parser = true,
+            generation = true,
+            compile = true,
+            inspect = true,
+            stage = "schoonschip_compact_vector_slot",
+            slot = %slot.to_plain_string(),
+            representation = %rep,
+            file.value = %value.to_plain_string(),
+            file.factor = %factor.to_plain_string(),
+            "Spenso parser allocated Schoonschip compact vector slot"
+        );
 
         Some(SchoonschipMaterialization {
             current: slot,
@@ -220,6 +233,20 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         let slot = self.state.slot(&rep).to_atom();
         let lhs = Self::materialize_compact_vector_with_slot(lhs, &rep, &slot)?;
         let rhs = Self::materialize_compact_vector_with_slot(rhs, &rep, &slot)?;
+        tracing::debug!(
+            target: "spenso::network::parsing",
+            spenso_parser = true,
+            generation = true,
+            compile = true,
+            inspect = true,
+            stage = "schoonschip_compact_scalar_product_slot",
+            slot = %slot.to_plain_string(),
+            representation = %rep,
+            file.value = %value.as_view().to_plain_string(),
+            file.lhs = %lhs.to_plain_string(),
+            file.rhs = %rhs.to_plain_string(),
+            "Spenso parser allocated Schoonschip scalar-product slot"
+        );
 
         Some(SchoonschipMaterialization {
             current: Atom::num(1),
@@ -561,11 +588,31 @@ where
         let mut factor_networks = Vec::new();
         let mut left = start;
         for (position, factor) in factors.iter().enumerate() {
+            let fresh_right = position + 1 != factors.len();
             let right = if position + 1 == factors.len() {
                 end.dual()
             } else {
                 state.slot(&left.rep)
             };
+            if fresh_right {
+                tracing::debug!(
+                    target: "spenso::network::parsing",
+                    spenso_parser = true,
+                    generation = true,
+                    compile = true,
+                    inspect = true,
+                    stage = "chain_shorthand_link_slot",
+                    position,
+                    factor_count = factors.len(),
+                    left = %left,
+                    right = %right,
+                    right_atom = %right.to_atom().to_plain_string(),
+                    start = %start,
+                    end = %end,
+                    file.factor = %factor.to_plain_string(),
+                    "Spenso parser allocated chain shorthand link slot"
+                );
+            }
             let factor = ChainExpansion::replace_placeholders(
                 *factor,
                 &left.to_atom(),
@@ -629,7 +676,25 @@ where
         }
 
         let links = (0..factors.len())
-            .map(|_| state.slot(&rep))
+            .map(|position| {
+                let slot = state.slot(&rep);
+                tracing::debug!(
+                    target: "spenso::network::parsing",
+                    spenso_parser = true,
+                    generation = true,
+                    compile = true,
+                    inspect = true,
+                    stage = "trace_shorthand_link_slot",
+                    position,
+                    factor_count = factors.len(),
+                    slot = %slot,
+                    slot_atom = %slot.to_atom().to_plain_string(),
+                    representation = %rep,
+                    file.factor = %factors[position].to_plain_string(),
+                    "Spenso parser allocated trace shorthand link slot"
+                );
+                slot
+            })
             .collect::<Vec<_>>();
         let factor_schoonschip_mode = settings
             .shorthand_parsing

@@ -369,39 +369,14 @@ impl<'settings> DiracSimplifier<'settings> {
             .collect_chains(rep);
 
         loop {
-            // let mut time = std::time::Instant::now();
-            let mut next = self.settings.rewrite_expression(expr.clone());
-            // let elapsed = time.elapsed();
-            // println!(
-            //     "Rewrite ({}ms)",
-            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica()),
-            //     elapsed.as_millis()
-            // );
-
-            // time = std::time::Instant::now();
-
-            next = next.schoonschip();
-
-            // println!(
-            //     "Schoonschip: {:?}",
-            //     time.elapsed(),
-            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica())
-            // );
-            // time = std::time::Instant::now();
-            // next = next.simplify_epsilon();
-
-            // println!(
-            //     "Simplify Eps: {:?}",
-            //     time.elapsed(),
-            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica())
-            // );
-            next = next.normalize_chains();
-
-            // println!(
-            //     "Normalize Chains: {:?}",
-            //     time.elapsed(),
-            //     // next.printer(SpensoPrintSettings::compact().nice_symbolica())
-            // );
+            let next = self
+                .settings
+                .rewrite_expression(expr.clone())
+                .collect_tensors()
+                .schoonschip()
+                .simplify_epsilon()
+                .schoonschip()
+                .simplify_epsilon();
 
             if next == expr {
                 return next;

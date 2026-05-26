@@ -69,7 +69,14 @@ impl AbsInd for Aind {}
 
 impl DummyAind for Aind {
     fn new_dummy() -> Self {
-        Aind::Dummy(DUMMYCOUNTER.fetch_add(1, Ordering::Relaxed))
+        let index = DUMMYCOUNTER.fetch_add(1, Ordering::Relaxed);
+        crate::debug_tags!(#generation, #inspect;
+            aind_dummy = true,
+            stage = "aind_new_dummy",
+            dummy_index = index,
+            "Aind dummy allocated"
+        );
+        Aind::Dummy(index)
     }
 
     fn is_dummy(&self) -> bool {
@@ -290,6 +297,12 @@ fn parse_dummy_aind(f: FunView<'_>) -> Result<Aind, AindError> {
     let i = parse_natural_i64(f.iter().next().unwrap())?;
     let i = usize::try_from(i).map_err(|e| AindError::NotIndex(e.to_string()))?;
     DUMMYCOUNTER.fetch_max(i + 1, Ordering::Relaxed);
+    crate::debug_tags!(#generation, #inspect;
+        aind_dummy = true,
+        stage = "aind_parse_dummy",
+        dummy_index = i,
+        "Aind dummy parsed"
+    );
     Ok(Aind::Dummy(i))
 }
 
