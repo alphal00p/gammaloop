@@ -40,13 +40,104 @@ fn max_lazy_tensor_sum_distributed_terms() -> usize {
     })
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+const PAIR_SCORE_ORDER_LEN: usize = 12;
+const PAIR_SCORE_ORDER_END: u8 = u8::MAX;
+
+pub const PAIR_SCORE_RESULT_RANK: u8 = 0;
+pub const PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES: u8 = 1;
+pub const PAIR_SCORE_OUTPUT_DENSE_SIZE: u8 = 2;
+pub const PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS: u8 = 3;
+pub const PAIR_SCORE_SIMPLE_TENSOR_PENALTY: u8 = 4;
+pub const PAIR_SCORE_COMMON_FACTOR_PENALTY: u8 = 5;
+pub const PAIR_SCORE_ATOM_WORK: u8 = 6;
+pub const PAIR_SCORE_MAX_ENTRY_GROWTH: u8 = 7;
+pub const PAIR_SCORE_ENTRY_WORK: u8 = 8;
+pub const PAIR_SCORE_INVERSE_DEGREE: u8 = 9;
+
+pub const DEFAULT_EXACT_JOIN_LIMIT: usize = 20_000;
+
+pub const fn pack_pair_score_order(components: [u8; PAIR_SCORE_ORDER_LEN]) -> u128 {
+    let mut packed = 0u128;
+    let mut index = 0;
+    while index < PAIR_SCORE_ORDER_LEN {
+        packed |= (components[index] as u128) << (index * 8);
+        index += 1;
+    }
+    packed
+}
+
+pub const PAIR_SCORE_SPARSE_ATOM_AWARE: u128 = pack_pair_score_order([
+    PAIR_SCORE_RESULT_RANK,
+    PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES,
+    PAIR_SCORE_OUTPUT_DENSE_SIZE,
+    PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS,
+    PAIR_SCORE_SIMPLE_TENSOR_PENALTY,
+    PAIR_SCORE_COMMON_FACTOR_PENALTY,
+    PAIR_SCORE_ATOM_WORK,
+    PAIR_SCORE_MAX_ENTRY_GROWTH,
+    PAIR_SCORE_ENTRY_WORK,
+    PAIR_SCORE_INVERSE_DEGREE,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+]);
+
+pub const PAIR_SCORE_ATOM_AWARE: u128 = pack_pair_score_order([
+    PAIR_SCORE_RESULT_RANK,
+    PAIR_SCORE_ATOM_WORK,
+    PAIR_SCORE_MAX_ENTRY_GROWTH,
+    PAIR_SCORE_ENTRY_WORK,
+    PAIR_SCORE_INVERSE_DEGREE,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+]);
+
+pub const PAIR_SCORE_RESULT_RANK_ONLY: u128 = pack_pair_score_order([
+    PAIR_SCORE_RESULT_RANK,
+    PAIR_SCORE_INVERSE_DEGREE,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+]);
+
+pub const PAIR_SCORE_ENTRY_AWARE: u128 = pack_pair_score_order([
+    PAIR_SCORE_RESULT_RANK,
+    PAIR_SCORE_ENTRY_WORK,
+    PAIR_SCORE_ATOM_WORK,
+    PAIR_SCORE_INVERSE_DEGREE,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+    PAIR_SCORE_ORDER_END,
+]);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ResultRankPairScore {
-    result_rank: u32,
+    result_rank: u128,
+    estimated_output_entries: u128,
+    output_dense_size: u128,
+    max_output_entry_products: u128,
+    simple_tensor_penalty: u128,
+    common_factor_penalty: u128,
     atom_work: u128,
     max_entry_growth: u128,
     entry_work: u128,
-    inverse_degree: u32,
+    inverse_degree: u128,
 }
 
 impl ResultRankPairScore {
@@ -55,6 +146,7 @@ impl ResultRankPairScore {
         degree: u32,
         left: TensorContractionProfile,
         right: TensorContractionProfile,
+        pair: super::TensorContractionPairEstimate,
     ) -> Self {
         let left_entries = left.entries.max(1) as u128;
         let right_entries = right.entries.max(1) as u128;
@@ -68,7 +160,12 @@ impl ResultRankPairScore {
         let right_max_bytes = right.max_bytes.max(1) as u128;
 
         Self {
-            result_rank,
+            result_rank: result_rank as u128,
+            estimated_output_entries: pair.estimated_output_entries,
+            output_dense_size: pair.output_dense_size,
+            max_output_entry_products: pair.max_output_entry_products,
+            simple_tensor_penalty: pair.simple_tensor_penalty,
+            common_factor_penalty: pair.common_factor_penalty,
             atom_work: left_bytes
                 .saturating_mul(right_terms)
                 .saturating_add(right_bytes.saturating_mul(left_terms)),
@@ -76,7 +173,40 @@ impl ResultRankPairScore {
                 .saturating_mul(right_max_terms)
                 .saturating_add(right_max_bytes.saturating_mul(left_max_terms)),
             entry_work: left_entries.saturating_mul(right_entries),
-            inverse_degree: u32::MAX - degree,
+            inverse_degree: (u32::MAX - degree) as u128,
+        }
+    }
+
+    fn less_by<const SCORE_ORDER: u128>(&self, other: &Self) -> bool {
+        let mut index = 0;
+        while index < PAIR_SCORE_ORDER_LEN {
+            let component = ((SCORE_ORDER >> (index * 8)) & 0xff) as u8;
+            if component == PAIR_SCORE_ORDER_END {
+                return false;
+            }
+            let left = self.component(component);
+            let right = other.component(component);
+            if left != right {
+                return left < right;
+            }
+            index += 1;
+        }
+        false
+    }
+
+    fn component(&self, component: u8) -> u128 {
+        match component {
+            PAIR_SCORE_RESULT_RANK => self.result_rank,
+            PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES => self.estimated_output_entries,
+            PAIR_SCORE_OUTPUT_DENSE_SIZE => self.output_dense_size,
+            PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS => self.max_output_entry_products,
+            PAIR_SCORE_SIMPLE_TENSOR_PENALTY => self.simple_tensor_penalty,
+            PAIR_SCORE_COMMON_FACTOR_PENALTY => self.common_factor_penalty,
+            PAIR_SCORE_ATOM_WORK => self.atom_work,
+            PAIR_SCORE_MAX_ENTRY_GROWTH => self.max_entry_growth,
+            PAIR_SCORE_ENTRY_WORK => self.entry_work,
+            PAIR_SCORE_INVERSE_DEGREE => self.inverse_degree,
+            _ => u128::MAX,
         }
     }
 }
@@ -97,11 +227,20 @@ pub struct SmallestDegreeIter<const N: usize, CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
 }
 
-pub struct MinResultRank<CStrat = ()> {
+pub struct MinResultRankWith<
+    const SCORE_ORDER: u128,
+    const EXACT_JOIN_LIMIT: usize = DEFAULT_EXACT_JOIN_LIMIT,
+    CStrat = (),
+> {
     phantom: std::marker::PhantomData<CStrat>,
 }
 
-impl<CStrat> Default for MinResultRank<CStrat> {
+pub type MinResultRank<CStrat = ()> =
+    MinResultRankWith<PAIR_SCORE_SPARSE_ATOM_AWARE, DEFAULT_EXACT_JOIN_LIMIT, CStrat>;
+
+impl<const SCORE_ORDER: u128, const EXACT_JOIN_LIMIT: usize, CStrat> Default
+    for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat>
+{
     fn default() -> Self {
         Self {
             phantom: std::marker::PhantomData,
@@ -1408,7 +1547,15 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         .map(|(left, right, degree, _)| (left, right, degree))
     }
 
-    pub fn best_result_rank_pair<Sc, Store>(&self, executor: &Store) -> Option<(usize, usize, u32)>
+    pub fn best_result_rank_pair<
+        Sc,
+        Store,
+        const SCORE_ORDER: u128,
+        const EXACT_JOIN_LIMIT: usize,
+    >(
+        &self,
+        executor: &Store,
+    ) -> Option<(usize, usize, u32)>
     where
         Store: NetworkStoreAccess,
         Store::Tensor: HasStructure + FastTensorSumContractible<Sc>,
@@ -1420,33 +1567,59 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             .filter_map(|(operand, _)| {
                 self.local_tensor_index(operand).map(|index| {
                     let tensor = executor.tensor(index);
-                    (operand, tensor.structure(), tensor.contraction_profile())
+                    (
+                        operand,
+                        tensor,
+                        tensor.structure(),
+                        tensor.contraction_profile(),
+                    )
                 })
             })
             .collect::<Vec<_>>();
 
         let mut best = None;
-        for (left_position, (left_operand, left_structure, left_profile)) in
+        for (left_position, (left_operand, left_tensor, left_structure, left_profile)) in
             tensors.iter().enumerate()
         {
-            for (right_operand, right_structure, right_profile) in &tensors[left_position + 1..] {
-                let degree = matching_degree(*left_structure, *right_structure);
+            for (right_operand, right_tensor, right_structure, right_profile) in
+                &tensors[left_position + 1..]
+            {
+                let Some((_, left_matches, right_matches)) =
+                    left_structure.match_indices(right_structure)
+                else {
+                    continue;
+                };
+                let degree = left_matches.iter().filter(|matched| **matched).count() as u32;
                 if degree == 0 {
                     continue;
                 }
 
-                let result_rank =
-                    left_structure.order() + right_structure.order() - 2 * degree as usize;
+                let result_rank = left_matches.iter().filter(|matched| !**matched).count()
+                    + right_matches.iter().filter(|matched| !**matched).count();
+                let output_dense_size = output_dense_size(
+                    *left_structure,
+                    *right_structure,
+                    &left_matches,
+                    &right_matches,
+                );
+                let pair_estimate = left_tensor.contraction_pair_estimate(
+                    right_tensor,
+                    &left_matches,
+                    &right_matches,
+                    output_dense_size,
+                    EXACT_JOIN_LIMIT,
+                );
                 let score = ResultRankPairScore::new(
                     result_rank as u32,
                     degree,
                     *left_profile,
                     *right_profile,
+                    pair_estimate,
                 );
 
                 let replace = match &best {
                     None => true,
-                    Some((_, _, _, best_score)) => score < *best_score,
+                    Some((_, _, _, best_score)) => score.less_by::<SCORE_ORDER>(best_score),
                 };
 
                 if replace {
@@ -1459,7 +1632,17 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn contract_one_by_result_rank<LT, T, L, Sc, CStrat, FK, Store>(
+    pub fn contract_one_by_result_rank<
+        LT,
+        T,
+        L,
+        Sc,
+        CStrat,
+        FK,
+        Store,
+        const SCORE_ORDER: u128,
+        const EXACT_JOIN_LIMIT: usize,
+    >(
         &mut self,
         executor: &mut Store,
         graph: &NetworkGraph<K, FK, Aind>,
@@ -1489,7 +1672,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             IsAbstractSlot<Aind = Aind>,
     {
         self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
-        let Some((left, right, degree)) = self.best_result_rank_pair::<Sc, Store>(executor) else {
+        let Some((left, right, degree)) =
+            self.best_result_rank_pair::<Sc, Store, SCORE_ORDER, EXACT_JOIN_LIMIT>(executor)
+        else {
             return Ok(false);
         };
 
@@ -1678,6 +1863,25 @@ where
     left.match_indices(right)
         .map(|(_, matched, _)| matched.into_iter().filter(|matched| *matched).count() as u32)
         .unwrap_or(0)
+}
+
+fn output_dense_size<S>(left: &S, right: &S, left_matches: &[bool], right_matches: &[bool]) -> u128
+where
+    S: TensorStructure,
+{
+    let left_size = left
+        .external_dims_iter()
+        .enumerate()
+        .filter(|(axis, _)| !left_matches.get(*axis).copied().unwrap_or(false))
+        .map(|(_, dim)| usize::try_from(dim).unwrap_or(usize::MAX) as u128)
+        .fold(1u128, u128::saturating_mul);
+    let right_size = right
+        .external_dims_iter()
+        .enumerate()
+        .filter(|(axis, _)| !right_matches.get(*axis).copied().unwrap_or(false))
+        .map(|(_, dim)| usize::try_from(dim).unwrap_or(usize::MAX) as u128)
+        .fold(1u128, u128::saturating_mul);
+    left_size.saturating_mul(right_size).max(1)
 }
 
 impl<
@@ -1939,7 +2143,10 @@ impl<
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
-> ContractionStrategy<Store, L, K, FK, Aind> for MinResultRank<CStrat>
+    const SCORE_ORDER: u128,
+    const EXACT_JOIN_LIMIT: usize,
+> ContractionStrategy<Store, L, K, FK, Aind>
+    for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -1962,7 +2169,17 @@ where
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         while product
-            .contract_one_by_result_rank::<LT, T, L, Sc, CStrat, FK, Store>(executor, graph, lib)?
+            .contract_one_by_result_rank::<
+                LT,
+                T,
+                L,
+                Sc,
+                CStrat,
+                FK,
+                Store,
+                SCORE_ORDER,
+                EXACT_JOIN_LIMIT,
+            >(executor, graph, lib)?
         {
             product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         }

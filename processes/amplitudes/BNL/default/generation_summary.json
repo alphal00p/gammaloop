@@ -1,0 +1,29 @@
+{
+  "peak_ram_bytes": 3461152768,
+  "reports": [
+    {
+      "process_id": 0,
+      "integrand_name": "default",
+      "graph_name": "BNL",
+      "stats": {
+        "evaluator_count": 1,
+        "total_time": {
+          "secs": 12,
+          "nanos": 452738791
+        },
+        "evaluator_spenso_time": {
+          "secs": 0,
+          "nanos": 726602709
+        },
+        "evaluator_symbolica_time": {
+          "secs": 6,
+          "nanos": 67380916
+        },
+        "evaluator_compile_time": {
+          "secs": 0,
+          "nanos": 0
+        }
+      }
+    }
+  ]
+}

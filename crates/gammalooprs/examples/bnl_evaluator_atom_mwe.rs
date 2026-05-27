@@ -14,11 +14,14 @@ use color_eyre::{
 use gammalooprs::{
     initialisation::test_initialise,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
+    processes::TensorNetworkContractionOrder,
     utils::{FUN_LIB, TENSORLIB, symbolica_ext::LogPrint},
 };
 use idenso::tensor::{SymbolicNet, SymbolicNetExt, SymbolicTensor};
 use spenso::network::{
-    ExecutionResult, MinResultRank, Network, ScalarAliases, Sequential, SmallestDegree,
+    DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith, Network,
+    PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases,
+    Sequential, SmallestDegree,
     library::{DummyLibrary, function_lib::Wrap},
     parsing::{
         ParseSettings as NetworkParseSettings, SchoonschipExpansionMode, ShorthandParsing,
@@ -35,6 +38,41 @@ use symbolica::{
     wrap_input,
 };
 use tabled::{builder::Builder, settings::Style};
+
+macro_rules! execute_concrete_network {
+    ($net:expr, $order:expr) => {
+        match $order {
+            TensorNetworkContractionOrder::SparseAtomAware => $net.execute::<
+                Sequential,
+                MinResultRank,
+                _,
+                _,
+                _,
+            >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
+            TensorNetworkContractionOrder::AtomAware => $net.execute::<
+                Sequential,
+                MinResultRankWith<{ PAIR_SCORE_ATOM_AWARE }, { DEFAULT_EXACT_JOIN_LIMIT }>,
+                _,
+                _,
+                _,
+            >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
+            TensorNetworkContractionOrder::ResultRankOnly => $net.execute::<
+                Sequential,
+                MinResultRankWith<{ PAIR_SCORE_RESULT_RANK_ONLY }, { DEFAULT_EXACT_JOIN_LIMIT }>,
+                _,
+                _,
+                _,
+            >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
+            TensorNetworkContractionOrder::EntryAware => $net.execute::<
+                Sequential,
+                MinResultRankWith<{ PAIR_SCORE_ENTRY_AWARE }, { DEFAULT_EXACT_JOIN_LIMIT }>,
+                _,
+                _,
+                _,
+            >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
+        }
+    };
+}
 
 #[derive(Debug, Clone, Copy)]
 enum TermSelection {
@@ -96,6 +134,7 @@ struct Config {
     collect_tensors_before_concrete: bool,
     symbolic_expand_shorthands: bool,
     symbolic_strict_filter: StrictTensorFilter,
+    contraction_order: TensorNetworkContractionOrder,
 }
 
 fn main() -> Result<()> {
@@ -120,6 +159,21 @@ fn main() -> Result<()> {
         "",
         input.len().to_string(),
         format!("path={}", config.input_path.display()),
+    );
+    print_metric_table(
+        "contraction_order",
+        [(
+            "order",
+            contraction_order_label(config.contraction_order).to_owned(),
+        )],
+    );
+    summary.push(
+        "contraction_order",
+        contraction_order_label(config.contraction_order),
+        "",
+        "",
+        "",
+        "",
     );
 
     let parse_started = Instant::now();
@@ -342,11 +396,8 @@ fn main() -> Result<()> {
     print_metric_table("network_execute", [("status", "start".to_owned())]);
     io::stdout().flush()?;
     let execute_started = Instant::now();
-    net.execute::<Sequential, MinResultRank, _, _, _>(
-        TENSORLIB.read().unwrap().deref(),
-        FUN_LIB.deref(),
-    )
-    .wrap_err("failed to execute evaluator atom tensor network")?;
+    execute_concrete_network!(net, config.contraction_order)
+        .wrap_err("failed to execute evaluator atom tensor network")?;
     let execute_elapsed = execute_started.elapsed();
     print_metric_table(
         "network_execute",
@@ -523,6 +574,7 @@ impl Config {
         let mut collect_tensors_before_concrete = false;
         let mut symbolic_expand_shorthands = false;
         let mut symbolic_strict_filter = StrictTensorFilter::ContainsReps;
+        let mut contraction_order = TensorNetworkContractionOrder::default();
         let mut input_path_seen = false;
         let mut selection_seen = false;
 
@@ -549,6 +601,14 @@ impl Config {
                         );
                     };
                     symbolic_strict_filter = parse_strict_tensor_filter(&filter)?;
+                }
+                "--contraction-order" => {
+                    let Some(order) = args.next() else {
+                        bail!(
+                            "--contraction-order requires sparse-atom-aware, atom-aware, result-rank-only, or entry-aware"
+                        );
+                    };
+                    contraction_order = parse_contraction_order(&order)?;
                 }
                 "--dump-aliased" => {
                     let Some(path) = args.next() else {
@@ -621,6 +681,7 @@ impl Config {
             collect_tensors_before_concrete,
             symbolic_expand_shorthands,
             symbolic_strict_filter,
+            contraction_order,
         })
     }
 }
@@ -632,9 +693,28 @@ fn looks_like_selector(value: &str) -> bool {
         || value.starts_with("range:")
 }
 
+fn parse_contraction_order(value: &str) -> Result<TensorNetworkContractionOrder> {
+    match value {
+        "sparse-atom-aware" => Ok(TensorNetworkContractionOrder::SparseAtomAware),
+        "atom-aware" => Ok(TensorNetworkContractionOrder::AtomAware),
+        "result-rank-only" => Ok(TensorNetworkContractionOrder::ResultRankOnly),
+        "entry-aware" => Ok(TensorNetworkContractionOrder::EntryAware),
+        _ => bail!("unknown contraction order {value:?}"),
+    }
+}
+
+fn contraction_order_label(order: TensorNetworkContractionOrder) -> &'static str {
+    match order {
+        TensorNetworkContractionOrder::SparseAtomAware => "sparse-atom-aware",
+        TensorNetworkContractionOrder::AtomAware => "atom-aware",
+        TensorNetworkContractionOrder::ResultRankOnly => "result-rank-only",
+        TensorNetworkContractionOrder::EntryAware => "entry-aware",
+    }
+}
+
 fn print_usage() {
     println!(
-        "usage: cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- [INPUT] [all|first:N|term:N|range:START..END] [--skip-execute] [--print-log] [--scalar-details] [--unit-scalars|--keep-scalars INDICES] [--alias-scalars BYTES] [--dump-network PATH] [--dump-aliased PATH] [--symbolic-net]"
+        "usage: cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- [INPUT] [all|first:N|term:N|range:START..END] [--skip-execute] [--print-log] [--scalar-details] [--unit-scalars|--keep-scalars INDICES] [--alias-scalars BYTES] [--contraction-order ORDER] [--dump-network PATH] [--dump-aliased PATH] [--symbolic-net]"
     );
     println!("term indices are zero-based; range END is exclusive");
     println!(
@@ -644,6 +724,9 @@ fn print_usage() {
     println!("--resolve-aliases expands aliased results back into a full Symbolica atom");
     println!("--dump-aliased writes the post-execution aliased atom JSON dump");
     println!("--dump-scalar-aliases-md writes aliased scalar-store log_print markdown");
+    println!(
+        "--contraction-order selects sparse-atom-aware, atom-aware, result-rank-only, or entry-aware"
+    );
     println!("--symbolic-net executes a SymbolicTensor network and aliases scalar-store atoms");
     println!(
         "--symbolic-then-concrete executes symbolically with aliases, keeps alias placeholders, then parses and executes a concrete tensor network"
@@ -1277,11 +1360,7 @@ fn run_symbolic_then_concrete(
     print_metric_table("concrete_network_execute", [("status", "start".to_owned())]);
     io::stdout().flush()?;
     let concrete_execute_started = Instant::now();
-    concrete_net
-        .execute::<Sequential, MinResultRank, _, _, _>(
-            TENSORLIB.read().unwrap().deref(),
-            FUN_LIB.deref(),
-        )
+    execute_concrete_network!(concrete_net, config.contraction_order)
         .wrap_err("failed to execute concrete tensor network")?;
     let concrete_execute_elapsed = concrete_execute_started.elapsed();
     print_metric_table(

@@ -120,6 +120,8 @@ pub struct TensorContractionProfile {
     pub max_terms: usize,
     pub total_bytes: usize,
     pub max_bytes: usize,
+    pub common_factor_count: usize,
+    pub simple_tensor: bool,
 }
 
 impl Default for TensorContractionProfile {
@@ -136,6 +138,8 @@ impl TensorContractionProfile {
             max_terms: 1,
             total_bytes: 1,
             max_bytes: 1,
+            common_factor_count: 0,
+            simple_tensor: false,
         }
     }
 
@@ -150,9 +154,19 @@ impl TensorContractionProfile {
             max_terms: 0,
             total_bytes: 0,
             max_bytes: 0,
+            common_factor_count: 0,
+            simple_tensor: false,
         };
+        let mut nonzero_entries = 0usize;
+        let mut numeric_entries = 0usize;
 
-        let observe = |profile: &mut Self, atom: AtomView<'_>| {
+        let mut observe = |profile: &mut Self, atom: AtomView<'_>| {
+            if !atom.is_zero() {
+                nonzero_entries += 1;
+                if matches!(atom, AtomView::Num(_)) {
+                    numeric_entries += 1;
+                }
+            }
             let terms = atom.nterms();
             let bytes = atom.get_byte_size();
             profile.total_terms += terms;
@@ -171,6 +185,7 @@ impl TensorContractionProfile {
                 for atom in sparse.elements.values() {
                     observe(&mut profile, atom.as_view());
                 }
+                profile.common_factor_count = common_sparse_atom_factors(sparse).len();
             }
         }
 
@@ -178,8 +193,46 @@ impl TensorContractionProfile {
         profile.max_terms = profile.max_terms.max(1);
         profile.total_bytes = profile.total_bytes.max(1);
         profile.max_bytes = profile.max_bytes.max(1);
+        profile.simple_tensor = nonzero_entries > 0 && nonzero_entries == numeric_entries;
         profile
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TensorContractionPairEstimate {
+    pub estimated_output_entries: u128,
+    pub output_dense_size: u128,
+    pub max_output_entry_products: u128,
+    pub simple_tensor_penalty: u128,
+    pub common_factor_penalty: u128,
+}
+
+impl TensorContractionPairEstimate {
+    pub fn from_profiles(
+        left: TensorContractionProfile,
+        right: TensorContractionProfile,
+        output_dense_size: u128,
+    ) -> Self {
+        let entry_work = (left.entries.max(1) as u128).saturating_mul(right.entries.max(1) as u128);
+        let output_dense_size = output_dense_size.max(1);
+        let estimated_output_entries = output_dense_size.min(entry_work).max(1);
+        Self {
+            estimated_output_entries,
+            output_dense_size,
+            max_output_entry_products: div_ceil_u128(entry_work, estimated_output_entries).max(1),
+            simple_tensor_penalty: u128::from(!(left.simple_tensor || right.simple_tensor)),
+            common_factor_penalty: u128::from(
+                left.common_factor_count == 0 && right.common_factor_count == 0,
+            ),
+        }
+    }
+}
+
+fn div_ceil_u128(numerator: u128, denominator: u128) -> u128 {
+    if denominator == 0 {
+        return numerator;
+    }
+    numerator.div_ceil(denominator)
 }
 
 pub trait FastTensorSumContractible<Sc>: Sized {
@@ -193,6 +246,21 @@ pub trait FastTensorSumContractible<Sc>: Sized {
 
     fn contraction_profile(&self) -> TensorContractionProfile {
         TensorContractionProfile::unit()
+    }
+
+    fn contraction_pair_estimate(
+        &self,
+        other: &Self,
+        _left_matches: &[bool],
+        _right_matches: &[bool],
+        output_dense_size: u128,
+        _exact_join_limit: usize,
+    ) -> TensorContractionPairEstimate {
+        TensorContractionPairEstimate::from_profiles(
+            self.contraction_profile(),
+            other.contraction_profile(),
+            output_dense_size,
+        )
     }
 }
 
@@ -312,6 +380,24 @@ where
         TensorContractionProfile::from_param_tensor(self)
     }
 
+    fn contraction_pair_estimate(
+        &self,
+        other: &Self,
+        left_matches: &[bool],
+        right_matches: &[bool],
+        output_dense_size: u128,
+        exact_join_limit: usize,
+    ) -> TensorContractionPairEstimate {
+        sparse_atom_pair_estimate(
+            self,
+            other,
+            left_matches,
+            right_matches,
+            output_dense_size,
+            exact_join_limit,
+        )
+    }
+
     fn fast_tensor_sum_contract<CStrat>(
         terms: &[&Self],
         other: &Self,
@@ -365,6 +451,149 @@ where
 }
 
 #[cfg(feature = "shadowing")]
+fn sparse_atom_pair_estimate<S>(
+    left: &ParamTensor<S>,
+    right: &ParamTensor<S>,
+    left_matches: &[bool],
+    right_matches: &[bool],
+    output_dense_size: u128,
+    exact_join_limit: usize,
+) -> TensorContractionPairEstimate
+where
+    S: TensorStructure + Clone,
+{
+    let left_profile = TensorContractionProfile::from_param_tensor(left);
+    let right_profile = TensorContractionProfile::from_param_tensor(right);
+    let fallback = TensorContractionPairEstimate::from_profiles(
+        left_profile,
+        right_profile,
+        output_dense_size,
+    );
+
+    let DataTensor::Sparse(left_sparse) = &left.tensor else {
+        return fallback;
+    };
+    let DataTensor::Sparse(right_sparse) = &right.tensor else {
+        return fallback;
+    };
+    if !left_sparse.zero.as_view().is_zero() || !right_sparse.zero.as_view().is_zero() {
+        return fallback;
+    }
+
+    let left_groups = sparse_free_keys_by_match(left_sparse, left_matches);
+    let right_groups = sparse_free_keys_by_match(right_sparse, right_matches);
+    if left_groups.is_empty() || right_groups.is_empty() {
+        return TensorContractionPairEstimate {
+            estimated_output_entries: 1,
+            output_dense_size: output_dense_size.max(1),
+            max_output_entry_products: 1,
+            simple_tensor_penalty: u128::from(
+                !(left_profile.simple_tensor || right_profile.simple_tensor),
+            ),
+            common_factor_penalty: u128::from(
+                left_profile.common_factor_count == 0 && right_profile.common_factor_count == 0,
+            ),
+        };
+    }
+
+    let mut join_cardinality = 0u128;
+    let mut max_key_products = 0u128;
+    let mut exact_combinations = 0usize;
+    for (key, left_free_keys) in &left_groups {
+        let Some(right_free_keys) = right_groups.get(key) else {
+            continue;
+        };
+        let key_products =
+            (left_free_keys.len() as u128).saturating_mul(right_free_keys.len() as u128);
+        join_cardinality = join_cardinality.saturating_add(key_products);
+        max_key_products = max_key_products.max(key_products);
+        exact_combinations = exact_combinations
+            .saturating_add(left_free_keys.len().saturating_mul(right_free_keys.len()));
+    }
+
+    if join_cardinality == 0 {
+        return TensorContractionPairEstimate {
+            estimated_output_entries: 1,
+            output_dense_size: output_dense_size.max(1),
+            max_output_entry_products: 1,
+            simple_tensor_penalty: u128::from(
+                !(left_profile.simple_tensor || right_profile.simple_tensor),
+            ),
+            common_factor_penalty: u128::from(
+                left_profile.common_factor_count == 0 && right_profile.common_factor_count == 0,
+            ),
+        };
+    }
+
+    let output_dense_size = output_dense_size.max(1);
+    let (estimated_output_entries, max_output_entry_products) = if exact_combinations
+        <= exact_join_limit
+    {
+        let mut output_counts = HashMap::<(Vec<ConcreteIndex>, Vec<ConcreteIndex>), u128>::new();
+        for (key, left_free_keys) in &left_groups {
+            let Some(right_free_keys) = right_groups.get(key) else {
+                continue;
+            };
+            for left_key in left_free_keys {
+                for right_key in right_free_keys {
+                    *output_counts
+                        .entry((left_key.clone(), right_key.clone()))
+                        .or_default() += 1;
+                }
+            }
+        }
+        let estimated_output_entries = (output_counts.len() as u128).clamp(1, output_dense_size);
+        let max_output_entry_products = output_counts.values().copied().max().unwrap_or(1);
+        (estimated_output_entries, max_output_entry_products)
+    } else {
+        let estimated_output_entries = output_dense_size.min(join_cardinality).max(1);
+        let max_output_entry_products = max_key_products
+            .max(div_ceil_u128(join_cardinality, estimated_output_entries))
+            .max(1);
+        (estimated_output_entries, max_output_entry_products)
+    };
+
+    TensorContractionPairEstimate {
+        estimated_output_entries,
+        output_dense_size,
+        max_output_entry_products,
+        simple_tensor_penalty: u128::from(
+            !(left_profile.simple_tensor || right_profile.simple_tensor),
+        ),
+        common_factor_penalty: u128::from(
+            left_profile.common_factor_count == 0 && right_profile.common_factor_count == 0,
+        ),
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn sparse_free_keys_by_match<S>(
+    sparse: &SparseTensor<Atom, S>,
+    matches: &[bool],
+) -> HashMap<Vec<ConcreteIndex>, Vec<Vec<ConcreteIndex>>>
+where
+    S: TensorStructure,
+{
+    let mut groups = HashMap::<Vec<ConcreteIndex>, Vec<Vec<ConcreteIndex>>>::new();
+    for (expanded, atom) in sparse.iter_expanded() {
+        if atom.as_view().is_zero() {
+            continue;
+        }
+        let mut matched_key = Vec::new();
+        let mut free_key = Vec::new();
+        for (axis, index) in expanded.indices.iter().copied().enumerate() {
+            if matches.get(axis).copied().unwrap_or(false) {
+                matched_key.push(index);
+            } else {
+                free_key.push(index);
+            }
+        }
+        groups.entry(matched_key).or_default().push(free_key);
+    }
+    groups
+}
+
+#[cfg(feature = "shadowing")]
 impl<C, S> FastTensorSum for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Sync,
@@ -393,6 +622,33 @@ where
         match self {
             ParamOrConcrete::Param(param) => TensorContractionProfile::from_param_tensor(param),
             ParamOrConcrete::Concrete(_) => TensorContractionProfile::unit(),
+        }
+    }
+
+    fn contraction_pair_estimate(
+        &self,
+        other: &Self,
+        left_matches: &[bool],
+        right_matches: &[bool],
+        output_dense_size: u128,
+        exact_join_limit: usize,
+    ) -> TensorContractionPairEstimate {
+        match (self, other) {
+            (ParamOrConcrete::Param(left), ParamOrConcrete::Param(right)) => {
+                sparse_atom_pair_estimate(
+                    left,
+                    right,
+                    left_matches,
+                    right_matches,
+                    output_dense_size,
+                    exact_join_limit,
+                )
+            }
+            _ => TensorContractionPairEstimate::from_profiles(
+                <Self as FastTensorSumContractible<Atom>>::contraction_profile(self),
+                <Self as FastTensorSumContractible<Atom>>::contraction_profile(other),
+                output_dense_size,
+            ),
         }
     }
 
@@ -2468,8 +2724,10 @@ pub mod parsing;
 // use log::trace;
 pub mod contract;
 pub use contract::{
-    ContractScalars, ContractionStrategy, MinResultRank, ProductContraction, SingleSmallestDegree,
-    SmallestDegree, SmallestDegreeIter,
+    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinResultRank,
+    MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY,
+    PAIR_SCORE_SPARSE_ATOM_AWARE, ProductContraction, SingleSmallestDegree, SmallestDegree,
+    SmallestDegreeIter,
 };
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where

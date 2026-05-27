@@ -1,0 +1,165 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/v0.3.3/assets/schemas/runtime.json
+[general]
+use_ltd = false
+evaluator_method = "SingleParametric"
+load_compiled_cff = false
+enable_cache = false
+debug_cache = false
+m_uv = 1000.0
+mu_r = 1000.0
+numerator_sampling_scale = 1.0
+additional_param_values = []
+integral_unit = "none"
+disable_flux_factor = false
+generate_events = false
+store_additional_weights_in_event = false
+
+[general.orientation_pat]
+
+[model]
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [
+    500.0,
+    0.0,
+    0.0,
+    500.0,
+],
+    [
+    500.0,
+    0.0,
+    0.0,
+    -500.0,
+],
+    [
+    163.5141597587927,
+    -155.7860143642699,
+    -12.32488779805292,
+    48.12167194606676,
+],
+    [
+    146.5267245560251,
+    -18.94527369806406,
+    33.44069886802352,
+    -141.3961713514227,
+],
+    [
+    162.3143263141399,
+    4.025183527597962,
+    -151.4903823484999,
+    58.14122874765845,
+],
+    [
+    296.8259181161096,
+    175.6763342487531,
+    137.9119270904214,
+    -195.5089553360614,
+],
+    [
+    230.8188712549325,
+    -4.970229714017088,
+    -7.53735581189216,
+    230.6422259937584,
+],
+]
+helicities = [
+    -1,
+    1,
+    -1,
+    1,
+    1,
+    -1,
+    1,
+]
+
+[kinematics.externals.data.improvement_settings]
+mode = "none"
+large_deformation_check = 0.000000000001
+only_warn_on_large_deformation = false
+
+[integrator]
+n_bins = 64
+min_samples_for_update = 1000
+n_start = 1000
+n_increase = 0
+n_max = 1000
+integrated_phase = "real"
+discrete_dim_learning_rate = 1.0
+continuous_dim_learning_rate = 1.0
+train_on_avg = false
+show_max_wgt_info = true
+max_prob_ratio = 30.0
+seed = 1337
+
+[integrator.observables_output]
+format = [
+    "hwu",
+    "json",
+]
+
+[quantities]
+
+[observables]
+
+[selectors]
+
+[stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[stability.rotation_axis]]
+type = "euler_angles"
+alpha = 0.1
+beta = 0.2
+gamma = 0.3
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[subtraction.local_ct_settings.uv_localisation]
+function = "gaussian"
+sliver_width = 10.0
+dynamic_width = false
+gaussian_width = 1.0
+force_uv_dampers_to_one = false
+
+[subtraction.integrated_ct_settings.range]
+type = "infinite"
+
+[subtraction.integrated_ct_settings.range.h_function_settings]
+function = "poly_exponential"
+sigma = 1.0
+enabled_dampening = true
+
+[subtraction.overlap_settings]
+check_global_center = true
+try_origin = true
+try_origin_all_lmbs = false
+
+[h_function]
+function = "poly_exponential"
+sigma = 1.0
+enabled_dampening = true

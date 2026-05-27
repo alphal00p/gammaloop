@@ -21,8 +21,9 @@ use spenso::{
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
     network::{
-        ExecutionResult, MinResultRank, Sequential, SequentialExtract, SequentialRef,
-        SmallestDegree,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith,
+        PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY, Sequential,
+        SequentialExtract, SequentialRef, SmallestDegree,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
@@ -49,7 +50,10 @@ use crate::{
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::AtomCoreExt,
-    processes::{ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode},
+    processes::{
+        ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode,
+        TensorNetworkContractionOrder,
+    },
     settings::{RuntimeSettings, global::FrozenCompilationMode},
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
@@ -659,6 +663,55 @@ impl EvaluatorStack {
                 println!("Parsed: {:?}", instant.elapsed());
                 let instant = std::time::Instant::now();
 
+                macro_rules! execute_min_result_rank {
+                    ($execution_strategy:ty) => {
+                        match settings.tensor_network_contraction_order {
+                            TensorNetworkContractionOrder::SparseAtomAware => {
+                                net.execute::<$execution_strategy, MinResultRank, _, _, _>(
+                                    TENSORLIB.read().unwrap().deref(),
+                                    FUN_LIB.deref(),
+                                )
+                            }
+                            TensorNetworkContractionOrder::AtomAware => {
+                                net.execute::<
+                                    $execution_strategy,
+                                    MinResultRankWith<
+                                        { PAIR_SCORE_ATOM_AWARE },
+                                        { DEFAULT_EXACT_JOIN_LIMIT },
+                                    >,
+                                    _,
+                                    _,
+                                    _,
+                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
+                            }
+                            TensorNetworkContractionOrder::ResultRankOnly => {
+                                net.execute::<
+                                    $execution_strategy,
+                                    MinResultRankWith<
+                                        { PAIR_SCORE_RESULT_RANK_ONLY },
+                                        { DEFAULT_EXACT_JOIN_LIMIT },
+                                    >,
+                                    _,
+                                    _,
+                                    _,
+                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
+                            }
+                            TensorNetworkContractionOrder::EntryAware => {
+                                net.execute::<
+                                    $execution_strategy,
+                                    MinResultRankWith<
+                                        { PAIR_SCORE_ENTRY_AWARE },
+                                        { DEFAULT_EXACT_JOIN_LIMIT },
+                                    >,
+                                    _,
+                                    _,
+                                    _,
+                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
+                            }
+                        }
+                    };
+                }
+
                 match settings.spenso_execution_mode {
                     (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
                         net.execute::<Sequential, SmallestDegree, _, _, _>(
@@ -667,10 +720,7 @@ impl EvaluatorStack {
                         )?;
                     }
                     (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
-                        net.execute::<Sequential, MinResultRank, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
+                        execute_min_result_rank!(Sequential)?;
                     }
                     (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
                         net.execute::<SequentialRef, SmallestDegree, _, _, _>(
@@ -679,10 +729,7 @@ impl EvaluatorStack {
                         )?;
                     }
                     (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
-                        net.execute::<SequentialRef, MinResultRank, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
+                        execute_min_result_rank!(SequentialRef)?;
                     }
                     (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
                         net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
@@ -691,10 +738,7 @@ impl EvaluatorStack {
                         )?;
                     }
                     (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
-                        net.execute::<SequentialExtract, MinResultRank, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
+                        execute_min_result_rank!(SequentialExtract)?;
                     }
                     _ => {
                         net.execute::<Sequential, SmallestDegree, _, _, _>(
@@ -711,7 +755,6 @@ impl EvaluatorStack {
                 )?;
 
                 println!("Executing: {:?}", instant.elapsed());
-
                 crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                     stage = "evaluator_stack_parse_atom_execute_done",
                     atom_index,

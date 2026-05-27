@@ -1,0 +1,476 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/v0.3.3/assets/schemas/runhistory.json
+commands = ["run generate_bnl_reference_case -D generate_integrated=true -D generate_cores=1 -D explicit_orientation_sum_only=false -D summed=false -D summed_function_map=false -D enable_thresholds=false -D disable_threshold_subtraction=true -D mt=510.0 -D ymt=510.0"]
+
+[default_runtime_settings.general]
+m_uv = 91.188
+mu_r = 91.188
+integral_unit = "none"
+
+[default_runtime_settings.integrator]
+n_start = 1000
+n_increase = 0
+n_max = 1000
+seed = 1337
+
+[default_runtime_settings.integrator.observables_output]
+format = [
+    "hwu",
+    "json",
+]
+
+[default_runtime_settings.stability]
+escalate_if_exact_zero = false
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+horner_iterations = 0
+cpe_iterations = 0
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = true
+
+[cli_settings.global.generation.uv]
+softct = false
+generate_integrated = false
+
+[cli_settings.global.n_cores]
+generate = 4
+
+[[command_blocks]]
+name = "load_graph"
+commands = [
+    "import model sm-default.json",
+    "remove processes",
+    "import graphs ./examples/cli/BNL/BNL.dot -p BNL -i default -o --process-spec 'e+ e- > mu+ mu- a a a | e+ e- mu+ mu- a t t~ g ghG ghG~ QCD==2 QED==7 [{2}]'",
+]
+
+[[command_blocks]]
+name = "set_model"
+commands = [
+    "set model MT=$(mt:300.0)",
+    "set model WT=$(wt:0.0)",
+    "set model ymt=$(ymt:300.0)",
+    "set model aS=$(aS:0.118)",
+    "set model aEWM1=$(aEWM1:137.036)",
+    "set model Gf=$(Gf:1.166390e-05)",
+    "set model MZ=$(MZ:91.188)",
+]
+
+[[command_blocks]]
+name = "set_model_no_threshold"
+commands = ["run set_model -D mt=300.0 -D ymt=300.0"]
+
+[[command_blocks]]
+name = "set_model_threshold"
+commands = ["run set_model -D mt=200.0 -D ymt=200.0"]
+
+[[command_blocks]]
+name = "set_kinematics_no_threshold"
+commands = ["""
+set default-runtime string '
+[general]
+mu_r = 300.0
+m_uv = 300.0
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[kinematics]
+e_cm = 300.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [ 150.0, 0.0, 0.0, 150.0 ],
+    [ 150.0, 0.0, 0.0, -150.0 ],
+    [ 53.51825383938285, 48.50595583701992, -21.22845370767228, -7.792848999878412 ],
+    [ 52.10277750612693, 32.60751621535558, 35.30275695907613, -20.1287024223294 ],
+    [ 65.95531624240965, -34.11832218221586, -14.79775199306813, -54.47082125375412 ],
+    [ 47.73033742918369, -37.67976738110368, 28.40763499639253, 7.171228285404366 ],
+    [ 80.69331498289687, -9.315382489055963, -27.68418625472827, 75.22114439055757 ],
+]
+helicities = [1, -1, 1, -1, 1, -1, 1]
+'"""]
+
+[[command_blocks]]
+name = "set_kinematics_threshold"
+commands = ["""
+set default-runtime string '
+[general]
+mu_r = 1000.0
+m_uv = 1000.0
+
+[subtraction]
+disable_threshold_subtraction = false
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [ 500.0, 0.0, 0.0, 500.0 ],
+    [ 500.0, 0.0, 0.0, -500.0 ],
+    [ 78.22337260359126, 38.91950322582873, 47.55768659790618, -48.39870592888109 ],
+    [ 98.14848119739173, -12.83259962132507, -82.28070358716674, 51.94549610422768 ],
+    [ 209.0330590144503, -200.2675149055817, 16.95972004460731, -57.44658502025857 ],
+    [ 345.8405394121186, 128.9915847499842, 145.4638237201425, 286.0194499562365 ],
+    [ 268.7545477724482, 45.18902655109381, -127.7005267754893, -232.1196551113246 ],
+]
+helicities = [1, -1, 1, -1, 1, -1, 1]
+'"""]
+
+[[command_blocks]]
+name = "set_default_kinematics_no_threshold"
+commands = ["run set_kinematics_no_threshold"]
+
+[[command_blocks]]
+name = "set_default_kinematics_threshold"
+commands = ["run set_kinematics_threshold"]
+
+[[command_blocks]]
+name = "set_integrand_kinematics_no_threshold"
+commands = [
+    "run set_kinematics_no_threshold",
+    "set process -p BNL -i default defaults",
+]
+
+[[command_blocks]]
+name = "set_integrand_kinematics_threshold"
+commands = [
+    "run set_kinematics_threshold",
+    "set process -p BNL -i default defaults",
+]
+
+[[command_blocks]]
+name = "set_generation_settings"
+commands = ["set global kv global.3d_representation=$(representation:CFF) global.generation.explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) global.generation.evaluator.compile=$(compile:false) global.generation.evaluator.summed=$(summed:false) global.generation.evaluator.summed_function_map=$(summed_function_map:false) global.generation.evaluator.horner_iterations=$(horner_iterations:0) global.generation.evaluator.cpe_iterations=$(cpe_iterations:0) global.generation.compile.compilation_mode=$(compilation_mode:symjit) global.generation.uv.generate_integrated=$(generate_integrated:false) global.generation.uv.local_uv_cts_from_expanded_4d_integrands=$(local_uv_from_expanded_4d:false)"]
+
+[[command_blocks]]
+name = "set_optimized_generation_settings"
+commands = ["run set_generation_settings -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5)"]
+
+[[command_blocks]]
+name = "generate_case"
+commands = [
+    "run set_generation_settings -D representation=$(representation:CFF) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D compile=$(compile:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D horner_iterations=$(horner_iterations:0) -D cpe_iterations=$(cpe_iterations:0) -D compilation_mode=$(compilation_mode:symjit) -D generate_integrated=$(generate_integrated:false) -D local_uv_from_expanded_4d=$(local_uv_from_expanded_4d:false)",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=$(enable_thresholds:false)",
+    "run load_graph",
+    "run $(model_block:set_model_no_threshold)",
+    "run $(default_kinematics_block:set_default_kinematics_no_threshold)",
+    "generate existing -p BNL -i default",
+    "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_no_threshold"
+commands = ["run generate_case -D enable_thresholds=false -D model_block=set_model_no_threshold -D default_kinematics_block=set_default_kinematics_no_threshold"]
+
+[[command_blocks]]
+name = "generate_threshold"
+commands = ["run generate_case -D enable_thresholds=true -D model_block=set_model_threshold -D default_kinematics_block=set_default_kinematics_threshold"]
+
+[[command_blocks]]
+name = "generate_no_threshold_optimized"
+commands = ["run generate_case -D enable_thresholds=false -D model_block=set_model_no_threshold -D default_kinematics_block=set_default_kinematics_no_threshold -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5)"]
+
+[[command_blocks]]
+name = "generate_threshold_optimized"
+commands = ["run generate_case -D enable_thresholds=true -D model_block=set_model_threshold -D default_kinematics_block=set_default_kinematics_threshold -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5)"]
+
+[[command_blocks]]
+name = "generate_no_threshold_cpe10000"
+commands = ["run generate_no_threshold_optimized -D cpe_iterations=10000"]
+
+[[command_blocks]]
+name = "generate_threshold_cpe10000"
+commands = ["run generate_threshold_optimized -D cpe_iterations=10000"]
+
+[[command_blocks]]
+name = "inspect_case"
+commands = [
+    "run $(model_block:set_model_no_threshold)",
+    "run $(integrand_kinematics_block:set_integrand_kinematics_no_threshold)",
+    "inspect -p BNL -i default -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) --json-output ./examples/cli/BNL/outputs/$(output_file:no_threshold_inspect.json)",
+]
+
+[[command_blocks]]
+name = "inspect_no_threshold"
+commands = ["run inspect_case -D output_file=no_threshold_inspect.json"]
+
+[[command_blocks]]
+name = "inspect_threshold"
+commands = ["run inspect_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D x0=0.19 -D x1=0.33 -D x2=0.47 -D x3=0.61 -D x4=0.75 -D x5=0.89 -D output_file=threshold_inspect.json"]
+
+[[command_blocks]]
+name = "inspect_no_threshold_optimized"
+commands = ["run inspect_case -D output_file=no_threshold_optimized_inspect.json"]
+
+[[command_blocks]]
+name = "inspect_threshold_optimized"
+commands = ["run inspect_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D x0=0.19 -D x1=0.33 -D x2=0.47 -D x3=0.61 -D x4=0.75 -D x5=0.89 -D output_file=threshold_optimized_inspect.json"]
+
+[[command_blocks]]
+name = "bench_case"
+commands = [
+    "run $(model_block:set_model_no_threshold)",
+    "run $(integrand_kinematics_block:set_integrand_kinematics_no_threshold)",
+    "inspect -p BNL -i default -x $(x0:0.13) $(x1:0.27) $(x2:0.41) $(x3:0.58) $(x4:0.72) $(x5:0.86) --bench $(bench_seconds:5) --n_batches $(n_batches:10) --minimal-integrand --json-output ./examples/cli/BNL/outputs/$(output_file:no_threshold_bench.json)",
+]
+
+[[command_blocks]]
+name = "bench_no_threshold"
+commands = ["run bench_case -D output_file=no_threshold_bench.json"]
+
+[[command_blocks]]
+name = "bench_threshold"
+commands = ["run bench_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D x0=0.19 -D x1=0.33 -D x2=0.47 -D x3=0.61 -D x4=0.75 -D x5=0.89 -D output_file=threshold_bench.json"]
+
+[[command_blocks]]
+name = "bench_no_threshold_optimized"
+commands = ["run bench_case -D output_file=no_threshold_optimized_bench.json"]
+
+[[command_blocks]]
+name = "bench_threshold_optimized"
+commands = ["run bench_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D x0=0.19 -D x1=0.33 -D x2=0.47 -D x3=0.61 -D x4=0.75 -D x5=0.89 -D output_file=threshold_optimized_bench.json"]
+
+[[command_blocks]]
+name = "bench_no_threshold_cpe10000"
+commands = ["run bench_case -D output_file=no_threshold_cpe10000_bench.json"]
+
+[[command_blocks]]
+name = "bench_threshold_cpe10000"
+commands = ["run bench_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D x0=0.19 -D x1=0.33 -D x2=0.47 -D x3=0.61 -D x4=0.75 -D x5=0.89 -D output_file=threshold_cpe10000_bench.json"]
+
+[[command_blocks]]
+name = "integrate_case"
+commands = [
+    "run $(model_block:set_model_no_threshold)",
+    "run $(integrand_kinematics_block:set_integrand_kinematics_no_threshold)",
+    "set process -p BNL -i default kv integrator.n_start=$(n_start:1000) integrator.n_increase=$(n_increase:0) integrator.n_max=$(n_max:1000) integrator.seed=$(seed:1337)",
+    "integrate -p BNL -i default --n-cores $(n_cores:1) --batch-size $(batch_size:100) --renderer tabled --no-stream-iterations --workspace-path ./examples/cli/BNL/workspaces/$(workspace:no_threshold) --restart",
+]
+
+[[command_blocks]]
+name = "integrate_no_threshold"
+commands = ["run integrate_case -D workspace=no_threshold -D seed=1337"]
+
+[[command_blocks]]
+name = "integrate_threshold"
+commands = ["run integrate_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D workspace=threshold -D seed=7331"]
+
+[[command_blocks]]
+name = "integrate_no_threshold_optimized"
+commands = ["run integrate_case -D workspace=no_threshold_optimized -D seed=1337"]
+
+[[command_blocks]]
+name = "integrate_threshold_optimized"
+commands = ["run integrate_case -D model_block=set_model_threshold -D integrand_kinematics_block=set_integrand_kinematics_threshold -D workspace=threshold_optimized -D seed=7331"]
+
+[[command_blocks]]
+name = "set_kinematics_bnl_reference"
+commands = ["""
+set default-runtime string '
+[general]
+mu_r = $(e_cm:1000.0)
+m_uv = $(e_cm:1000.0)
+
+[subtraction]
+disable_threshold_subtraction = $(disable_threshold_subtraction:false)
+
+[kinematics]
+e_cm = $(e_cm:1000.0)
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [ 500.0, 0.0, 0.0, 500.0 ],
+    [ 500.0, 0.0, 0.0, -500.0 ],
+    [ 163.5141597587927, -155.7860143642699, -12.32488779805292, 48.12167194606676 ],
+    [ 146.5267245560251, -18.94527369806406, 33.44069886802352, -141.3961713514227 ],
+    [ 162.3143263141399, 4.025183527597962, -151.4903823484999, 58.14122874765845 ],
+    [ 296.8259181161096, 175.6763342487531, 137.9119270904214, -195.5089553360614 ],
+    [ 230.8188712549325, -4.970229714017088, -7.53735581189216, 230.6422259937584 ],
+]
+helicities = [$(helicities:-1, 1, -1, 1, 1, -1, 1)]
+'"""]
+
+[[command_blocks]]
+name = "set_bnl_reference_generation_settings"
+commands = [
+    "run set_generation_settings -D representation=$(representation:CFF) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D compile=$(compile:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D horner_iterations=$(horner_iterations:0) -D cpe_iterations=$(cpe_iterations:0) -D compilation_mode=$(compilation_mode:symjit) -D generate_integrated=$(generate_integrated:false) -D local_uv_from_expanded_4d=$(local_uv_from_expanded_4d:false)",
+    "set global kv global.n_cores.generate=$(generate_cores:4) global.generation.threshold_subtraction.enable_thresholds=$(enable_thresholds:false) global.generation.threshold_subtraction.check_esurface_at_generation=true global.generation.threshold_subtraction.skip_thresholds_that_are_cuts=true",
+]
+
+[[command_blocks]]
+name = "generate_bnl_reference_case"
+commands = [
+    "run set_bnl_reference_generation_settings -D representation=$(representation:CFF) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D compilation_mode=$(compilation_mode:symjit) -D local_uv_from_expanded_4d=$(local_uv_from_expanded_4d:false) -D enable_thresholds=$(enable_thresholds:false) -D compile=$(compile:false) -D horner_iterations=$(horner_iterations:0) -D cpe_iterations=$(cpe_iterations:0) -D generate_integrated=$(generate_integrated:false) -D generate_cores=$(generate_cores:4)",
+    "run load_graph",
+    "run set_model -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)",
+    "run set_kinematics_bnl_reference -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D helicities=$(helicities:-1,1,-1,1,1,-1,1)",
+    "generate existing -p BNL -i default",
+    "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_bnl_no_threshold_reference"
+commands = ["run generate_bnl_reference_case -D enable_thresholds=false -D disable_threshold_subtraction=true -D mt=$(mt:510.0) -D ymt=$(ymt:510.0)"]
+
+[[command_blocks]]
+name = "generate_bnl_no_threshold_reference_optimized"
+commands = ["run generate_bnl_reference_case -D enable_thresholds=false -D disable_threshold_subtraction=true -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5) -D mt=$(mt:510.0) -D ymt=$(ymt:510.0)"]
+
+[[command_blocks]]
+name = "generate_bnl_threshold_reference"
+commands = ["run generate_bnl_reference_case -D enable_thresholds=true -D disable_threshold_subtraction=false -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)"]
+
+[[command_blocks]]
+name = "generate_bnl_threshold_reference_optimized"
+commands = ["run generate_bnl_reference_case -D enable_thresholds=true -D disable_threshold_subtraction=false -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5) -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)"]
+
+[[command_blocks]]
+name = "generate_bnl_no_threshold_reference_physical"
+commands = [
+    "set global kv global.generation.uv.generate_only_integrated_uv_with_n_loops=$(integrated_uv_loop_filter:1)",
+    "run generate_bnl_reference_case -D generate_integrated=true -D generate_cores=$(generate_cores:1) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D enable_thresholds=false -D disable_threshold_subtraction=true -D mt=$(mt:510.0) -D ymt=$(ymt:510.0)",
+]
+
+[[command_blocks]]
+name = "generate_bnl_no_threshold_reference_physical_optimized"
+commands = [
+    "set global kv global.generation.uv.generate_only_integrated_uv_with_n_loops=$(integrated_uv_loop_filter:1)",
+    "run generate_bnl_reference_case -D generate_integrated=true -D generate_cores=$(generate_cores:1) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D enable_thresholds=false -D disable_threshold_subtraction=true -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5) -D mt=$(mt:510.0) -D ymt=$(ymt:510.0)",
+]
+
+[[command_blocks]]
+name = "generate_bnl_threshold_reference_physical"
+commands = [
+    "set global kv global.generation.uv.generate_only_integrated_uv_with_n_loops=$(integrated_uv_loop_filter:1)",
+    "run generate_bnl_reference_case -D generate_integrated=true -D generate_cores=$(generate_cores:1) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D enable_thresholds=true -D disable_threshold_subtraction=false -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)",
+]
+
+[[command_blocks]]
+name = "generate_bnl_threshold_reference_physical_optimized"
+commands = [
+    "set global kv global.generation.uv.generate_only_integrated_uv_with_n_loops=$(integrated_uv_loop_filter:1)",
+    "run generate_bnl_reference_case -D generate_integrated=true -D generate_cores=$(generate_cores:1) -D explicit_orientation_sum_only=$(explicit_orientation_sum_only:false) -D summed=$(summed:false) -D summed_function_map=$(summed_function_map:false) -D enable_thresholds=true -D disable_threshold_subtraction=false -D compile=true -D horner_iterations=5 -D cpe_iterations=$(cpe_iterations:5) -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)",
+]
+
+[[command_blocks]]
+name = "set_bnl_reference_runtime"
+commands = [
+    "run set_model -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)",
+    "run set_kinematics_bnl_reference -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D helicities=$(helicities:-1,1,-1,1,1,-1,1)",
+    "set process -p BNL -i default defaults",
+    "set process -p BNL -i default kv general.evaluator_method=$(evaluator_method:SingleParametric) sampling.graphs=summed sampling.orientations=summed sampling.lmb_multichanneling=false sampling.lmb_channels=summed sampling.coordinate_system=spherical sampling.mapping=linear sampling.b=$(b:1.0) subtraction.disable_threshold_subtraction=$(disable_threshold_subtraction:false) subtraction.integrated_ct_settings.range.type=infinite subtraction.integrated_ct_settings.range.h_function_settings.sigma=$(integrated_h_sigma:1.0) subtraction.integrated_ct_settings.range.h_function_settings.function=poly_exponential subtraction.integrated_ct_settings.range.h_function_settings.enabled_dampening=true subtraction.local_ct_settings.uv_localisation.gaussian_width=$(local_gaussian_width:1.0) subtraction.local_ct_settings.uv_localisation.sliver_width=$(local_sliver_width:10.0)",
+    """
+set process -p BNL -i default string '
+[stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[stability.rotation_axis]]
+type = "euler_angles"
+alpha = 0.1
+beta = 0.2
+gamma = 0.3
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
+
+[[stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-8
+required_precision_for_im = 1.0e-8
+escalate_for_large_weight_threshold = -1.0
+'""",
+]
+
+[[command_blocks]]
+name = "set_bnl_reference_runtime_variant"
+commands = [
+    "run set_model -D mt=$(mt:400.0) -D ymt=$(ymt:400.0)",
+    "run set_kinematics_bnl_reference -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D helicities=$(helicities:-1,1,-1,1,1,-1,1)",
+    "set process -p BNL -i default defaults",
+    "set process -p BNL -i default kv general.evaluator_method=$(evaluator_method:SingleParametric) general.mu_r=$(mu_r:1000.0) general.m_uv=$(m_uv:1000.0) sampling.graphs=$(graphs:summed) sampling.orientations=$(orientations:summed) sampling.lmb_multichanneling=$(lmb_multichanneling:false) sampling.lmb_channels=$(lmb_channels:summed) sampling.coordinate_system=spherical sampling.mapping=$(mapping:linear) sampling.b=$(b:1.0) subtraction.disable_threshold_subtraction=$(disable_threshold_subtraction:false) subtraction.integrated_ct_settings.range.type=infinite subtraction.integrated_ct_settings.range.h_function_settings.sigma=$(integrated_h_sigma:1.0) subtraction.integrated_ct_settings.range.h_function_settings.function=poly_exponential subtraction.integrated_ct_settings.range.h_function_settings.enabled_dampening=true subtraction.local_ct_settings.uv_localisation.gaussian_width=$(local_gaussian_width:1.0) subtraction.local_ct_settings.uv_localisation.sliver_width=$(local_sliver_width:10.0)",
+    """
+set process -p BNL -i default string '
+[stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[stability.rotation_axis]]
+type = "euler_angles"
+alpha = 0.1
+beta = 0.2
+gamma = 0.3
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
+
+[[stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-8
+required_precision_for_im = 1.0e-8
+escalate_for_large_weight_threshold = -1.0
+'""",
+]
+
+[[command_blocks]]
+name = "bench_bnl_reference"
+commands = [
+    "run set_bnl_reference_runtime -D mt=$(mt:400.0) -D ymt=$(ymt:400.0) -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D integrated_h_sigma=$(integrated_h_sigma:1.0) -D local_gaussian_width=$(local_gaussian_width:1.0) -D helicities=$(helicities:-1,1,-1,1,1,-1,1)",
+    "inspect -p BNL -i default -x $(x0:0.19) $(x1:0.33) $(x2:0.47) $(x3:0.61) $(x4:0.75) $(x5:0.89) --bench $(bench_seconds:5) --n_batches $(n_batches:10) --minimal-integrand --json-output ./examples/cli/BNL/outputs/$(output_file:bnl_reference_bench.json)",
+]
+
+[[command_blocks]]
+name = "integrate_bnl_reference"
+commands = [
+    "run set_bnl_reference_runtime -D mt=$(mt:400.0) -D ymt=$(ymt:400.0) -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D integrated_h_sigma=$(integrated_h_sigma:1.0) -D local_gaussian_width=$(local_gaussian_width:1.0) -D helicities=$(helicities:-1,1,-1,1,1,-1,1)",
+    "set process -p BNL -i default kv integrator.n_start=$(n_start:200000) integrator.n_increase=0 integrator.n_max=$(n_max:2000000) integrator.seed=$(seed:990401)",
+    "integrate -p BNL -i default --n-cores $(n_cores:5) --batch-size $(batch_size:5000) --renderer tabled --no-stream-iterations --workspace-path ./examples/cli/BNL/workspaces/$(workspace:bnl_reference) --restart",
+]
+
+[[command_blocks]]
+name = "integrate_bnl_reference_continue"
+commands = [
+    "run set_bnl_reference_runtime -D mt=$(mt:400.0) -D ymt=$(ymt:400.0) -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D integrated_h_sigma=$(integrated_h_sigma:1.0) -D local_gaussian_width=$(local_gaussian_width:1.0) -D helicities=$(helicities:-1,1,-1,1,1,-1,1)",
+    "set process -p BNL -i default kv integrator.n_start=$(n_start:200000) integrator.n_increase=0 integrator.n_max=$(n_max:2000000) integrator.seed=$(seed:990401)",
+    "integrate -p BNL -i default --n-cores $(n_cores:5) --batch-size $(batch_size:5000) --renderer tabled --no-stream-iterations --workspace-path ./examples/cli/BNL/workspaces/$(workspace:bnl_reference)",
+]
+
+[[command_blocks]]
+name = "integrate_bnl_reference_variant"
+commands = [
+    "run set_bnl_reference_runtime_variant -D mt=$(mt:400.0) -D ymt=$(ymt:400.0) -D disable_threshold_subtraction=$(disable_threshold_subtraction:false) -D integrated_h_sigma=$(integrated_h_sigma:1.0) -D local_gaussian_width=$(local_gaussian_width:1.0) -D helicities=$(helicities:-1,1,-1,1,1,-1,1) -D graphs=$(graphs:summed) -D orientations=$(orientations:summed) -D lmb_multichanneling=$(lmb_multichanneling:false) -D lmb_channels=$(lmb_channels:summed) -D mapping=$(mapping:linear) -D b=$(b:1.0) -D mu_r=$(mu_r:1000.0) -D m_uv=$(m_uv:1000.0)",
+    "set process -p BNL -i default kv integrator.n_start=$(n_start:100000) integrator.n_increase=0 integrator.n_max=$(n_max:1000000) integrator.seed=$(seed:990501)",
+    "integrate -p BNL -i default --n-cores $(n_cores:5) --batch-size $(batch_size:5000) --renderer tabled --no-stream-iterations --workspace-path ./examples/cli/BNL/workspaces/$(workspace:bnl_reference_variant) --restart",
+]

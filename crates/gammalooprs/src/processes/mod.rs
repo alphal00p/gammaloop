@@ -25,6 +25,19 @@ pub use generation_report::{
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TensorNetworkContractionOrder {
+    #[default]
+    SparseAtomAware,
+    AtomAware,
+    ResultRankOnly,
+    EntryAware,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum ExecutionMode {
     Sequential,
@@ -91,6 +104,8 @@ pub struct EvaluatorSettings {
         skip_serializing_if = "is_usize::<1000>"
     )]
     pub max_common_pair_distance: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub tensor_network_contraction_order: TensorNetworkContractionOrder,
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
 
@@ -151,6 +166,7 @@ impl Default for EvaluatorSettings {
             max_horner_scheme_variables: evaluator_default_max_horner_scheme_variables(),
             max_common_pair_cache_entries: evaluator_default_max_common_pair_cache_entries(),
             max_common_pair_distance: evaluator_default_max_common_pair_distance(),
+            tensor_network_contraction_order: TensorNetworkContractionOrder::default(),
             verbose: false,
             spenso_execution_mode: evaluator_default_spenso_execution_mode(),
         }
