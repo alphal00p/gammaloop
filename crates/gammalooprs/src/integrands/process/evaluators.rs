@@ -64,6 +64,9 @@ use super::{
 };
 
 const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
+const DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str = "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE";
+const STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str =
+    "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE";
 
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
@@ -572,7 +575,7 @@ impl EvaluatorStack {
                 );
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
                 let instant = std::time::Instant::now();
-                let mut net = if settings.do_algebra {
+                let network_input = if settings.do_algebra {
                     let color_simplified = a.as_atom_view().simplify_color();
                     let gamma_simplified = color_simplified.simplify_gamma();
                     let after_gamma_simplification = gamma_simplified.to_plain_string();
@@ -593,7 +596,7 @@ impl EvaluatorStack {
                         elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
                         "Evaluator timing milestone"
                     );
-                    simplified.parse_into_net()?
+                    simplified
                 } else {
                     crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                         stage = "evaluator_stack_parse_atom_simplify_skipped",
@@ -601,8 +604,30 @@ impl EvaluatorStack {
                         elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
                         "Evaluator timing milestone"
                     );
-                    a.as_atom_view().parse_into_net()?
+                    a.as_atom_view().to_owned()
                 };
+                crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
+                    stage = "evaluator_stack_parse_atom_before_network_parse",
+                    atom_index,
+                    terms = network_input.nterms(),
+                    bytes = network_input.as_view().get_byte_size(),
+                    preview = %network_input.log_print(Some(120)),
+                    file.atom = %network_input.to_plain_string(),
+                    "Evaluator atom before network parsing"
+                );
+                if let Some(path) =
+                    std::env::var_os(DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV).map(std::path::PathBuf::from)
+                {
+                    std::fs::write(&path, network_input.to_plain_string()).with_context(|| {
+                        format!("failed to write evaluator pre-network atom to {}", path.display())
+                    })?;
+                }
+                if std::env::var_os(STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV).is_some() {
+                    return Err(eyre!(
+                        "stopped after evaluator pre-network parse dump because {STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV} is set"
+                    ));
+                }
+                let mut net = network_input.parse_into_net()?;
                 crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                     stage = "evaluator_stack_parse_atom_net_done",
                     atom_index,

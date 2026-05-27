@@ -18,7 +18,7 @@ use gammalooprs::{
 };
 use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
 use spenso::network::{
-    ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree,
+    ExecutionResult, MinResultRank, Network, ScalarAliases, Sequential, SmallestDegree,
     library::{DummyLibrary, function_lib::Wrap},
     parsing::{ParseSettings as NetworkParseSettings, ShorthandParsing, StructureInferenceMode},
     store::NetworkStore,
@@ -85,6 +85,7 @@ struct Config {
     alias_scalar_threshold: Option<usize>,
     resolve_aliases: bool,
     dump_aliased_path: Option<PathBuf>,
+    dump_scalar_aliases_md_path: Option<PathBuf>,
     symbolic_net: bool,
 }
 
@@ -252,6 +253,34 @@ fn main() -> Result<()> {
         summary.push("scalar_aliases", "disabled", "", "", "", "");
         None
     };
+
+    if let Some(path) = &config.dump_scalar_aliases_md_path {
+        let Some(aliases) = &scalar_aliases else {
+            bail!("--dump-scalar-aliases-md requires --alias-scalars");
+        };
+        let bytes = write_scalar_aliases_markdown(
+            path,
+            &config.input_path,
+            config.alias_scalar_threshold.unwrap_or_default(),
+            aliases,
+            &net,
+        )?;
+        print_metric_table(
+            "scalar_aliases_md",
+            [
+                ("path", path.display().to_string()),
+                ("bytes", bytes.to_string()),
+            ],
+        );
+        summary.push(
+            "scalar_aliases_md",
+            "written",
+            "",
+            "",
+            bytes.to_string(),
+            path.display().to_string(),
+        );
+    }
 
     if let Some(path) = config.dump_network_path {
         fs::write(&path, net.dot_pretty())
@@ -442,6 +471,7 @@ impl Config {
         let mut alias_scalar_threshold = None;
         let mut resolve_aliases = false;
         let mut dump_aliased_path = None;
+        let mut dump_scalar_aliases_md_path = None;
         let mut symbolic_net = false;
         let mut input_path_seen = false;
         let mut selection_seen = false;
@@ -464,6 +494,12 @@ impl Config {
                         bail!("--dump-aliased requires a path");
                     };
                     dump_aliased_path = Some(PathBuf::from(path));
+                }
+                "--dump-scalar-aliases-md" => {
+                    let Some(path) = args.next() else {
+                        bail!("--dump-scalar-aliases-md requires a path");
+                    };
+                    dump_scalar_aliases_md_path = Some(PathBuf::from(path));
                 }
                 "--alias-scalars" => {
                     let Some(threshold) = args.next() else {
@@ -515,6 +551,7 @@ impl Config {
             alias_scalar_threshold,
             resolve_aliases,
             dump_aliased_path,
+            dump_scalar_aliases_md_path,
             symbolic_net,
         })
     }
@@ -538,6 +575,7 @@ fn print_usage() {
     println!("--alias-scalars replaces scalar refs at or above BYTES with scalar(INDEX) aliases");
     println!("--resolve-aliases expands aliased results back into a full Symbolica atom");
     println!("--dump-aliased writes the post-execution aliased atom JSON dump");
+    println!("--dump-scalar-aliases-md writes aliased scalar-store log_print markdown");
     println!("--symbolic-net executes a SymbolicTensor network and aliases scalar-store atoms");
 }
 
@@ -793,6 +831,34 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
         None
     };
 
+    if let Some(path) = &config.dump_scalar_aliases_md_path {
+        let Some(aliases) = &scalar_aliases else {
+            bail!("--dump-scalar-aliases-md requires --alias-scalars");
+        };
+        let bytes = write_scalar_aliases_markdown(
+            path,
+            &config.input_path,
+            config.alias_scalar_threshold.unwrap_or_default(),
+            aliases,
+            &net,
+        )?;
+        print_metric_table(
+            "scalar_aliases_md",
+            [
+                ("path", path.display().to_string()),
+                ("bytes", bytes.to_string()),
+            ],
+        );
+        summary.push(
+            "scalar_aliases_md",
+            "written",
+            "",
+            "",
+            bytes.to_string(),
+            path.display().to_string(),
+        );
+    }
+
     if let Some(path) = &config.dump_network_path {
         fs::write(path, net.snapshot_dot())
             .with_context(|| format!("failed to write {}", path.display()))?;
@@ -989,6 +1055,51 @@ fn write_aliased_atom_dump(path: &Path, aliased: &AliasedAtom) -> Result<usize> 
     }
     fs::write(path, &bytes).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(bytes.len())
+}
+
+fn write_scalar_aliases_markdown<T, K, FK, A>(
+    path: &Path,
+    input_path: &Path,
+    threshold: usize,
+    aliases: &ScalarAliases,
+    net: &Network<NetworkStore<T, Atom>, K, FK, A>,
+) -> Result<usize> {
+    let mut markdown = String::new();
+    markdown.push_str("# BNL Scalar Alias Captures\n\n");
+    markdown.push_str("Source atom:\n\n");
+    markdown.push_str("```text\n");
+    markdown.push_str(&input_path.display().to_string());
+    markdown.push_str("\n```\n\n");
+    markdown.push_str("This file only shows `log_print(Some(120))` fields.\n\n");
+    markdown.push_str(&format!("Alias threshold: `{threshold}` bytes.\n\n"));
+
+    for (position, index) in aliases.aliased_indices().enumerate() {
+        let scalar = net
+            .store
+            .scalar
+            .get(index)
+            .ok_or_else(|| eyre!("scalar alias index {index} is out of bounds"))?;
+        markdown.push_str(&format!("## Alias {}: `scalar({index})`\n\n", position + 1));
+        markdown.push_str(&format!(
+            "- terms: `{}`\n- bytes: `{}`\n\n",
+            scalar.nterms(),
+            scalar.as_view().get_byte_size()
+        ));
+        markdown.push_str("```text\n");
+        markdown.push_str(&scalar.log_print(Some(120)).to_string());
+        markdown.push_str("\n```\n\n");
+    }
+
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    fs::write(path, markdown.as_bytes())
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(markdown.len())
 }
 
 fn print_scalar_store_stats<T, K, FK, A>(
