@@ -94,6 +94,10 @@ pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
 
+    #[serde(
+        default = "evaluator_default_spenso_execution_mode",
+        skip_serializing_if = "is_default_spenso_execution_mode"
+    )]
     pub spenso_execution_mode: (ExecutionMode, ContractionMode),
 }
 
@@ -121,6 +125,14 @@ const fn evaluator_default_max_common_pair_distance() -> usize {
     1000
 }
 
+const fn evaluator_default_spenso_execution_mode() -> (ExecutionMode, ContractionMode) {
+    (ExecutionMode::Sequential, ContractionMode::MinResultRank)
+}
+
+fn is_default_spenso_execution_mode(mode: &(ExecutionMode, ContractionMode)) -> bool {
+    mode == &evaluator_default_spenso_execution_mode()
+}
+
 impl Default for EvaluatorSettings {
     fn default() -> Self {
         Self {
@@ -140,7 +152,7 @@ impl Default for EvaluatorSettings {
             max_common_pair_cache_entries: evaluator_default_max_common_pair_cache_entries(),
             max_common_pair_distance: evaluator_default_max_common_pair_distance(),
             verbose: false,
-            spenso_execution_mode: (ExecutionMode::Sequential, ContractionMode::SmallestDegree),
+            spenso_execution_mode: evaluator_default_spenso_execution_mode(),
         }
     }
 }

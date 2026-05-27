@@ -21,7 +21,7 @@ use spenso::{
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
     network::{
-        ExecutionResult, MinResultRank, Parallel, Sequential, SequentialExtract, SequentialRef,
+        ExecutionResult, MinResultRank, Sequential, SequentialExtract, SequentialRef,
         SmallestDegree,
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
