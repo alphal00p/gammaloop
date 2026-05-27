@@ -18,9 +18,9 @@ use crate::W_;
 static SINGLE_LENGTH_NORM: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     let sd_rep = self_dual_!(1; W_.d_, W_.i_);
 
-    let sd_rep2 = self_dual_!(2; W_.d_, W_.i_);
+    let sd_rep2 = self_dual_!(2; W_.d_, W_.j_);
     let d_rep = dualizable_!(1; W_.d_, W_.i_);
-    let dd_rep = dualizable_dual_!(2; W_.d_, W_.i_);
+    let dd_rep = dualizable_dual_!(2; W_.d_, W_.j_);
 
     [
         Replacement::new(
@@ -44,10 +44,9 @@ static SINGLE_LENGTH_NORM: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     ]
 });
 
-static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
+static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     let sd_rep = self_dual_!(1; W_.d_, W_.i_);
 
-    let sd_rep2 = self_dual_!(2; W_.d_, W_.i_);
     let sd_stripped_rep = self_dual_!(1; W_.d_);
     let d_rep = dualizable_!(1; W_.d_, W_.i_);
     let dd_rep = dualizable_dual_!(1; W_.d_, W_.i_);
@@ -59,15 +58,6 @@ static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
             // chain(rep(d,i), rep(d,i), factors...) -> trace(rep(d), factors...).
             chain!(&sd_rep, &sd_rep, W_.a___).to_pattern(),
             trace!(sd_stripped_rep, W_.a___),
-        ),
-        Replacement::new(
-            chain!(
-                &sd_rep,
-                &sd_rep2,
-                function!(W_.a_, W_.a___, T.chain_in, W_.b___, T.chain_out, W_.c___)
-            )
-            .to_pattern(),
-            function!(W_.a_, W_.a___, &sd_rep, W_.b___, &sd_rep2, W_.c___),
         ),
         Replacement::new(
             chain!(&d_rep, &dd_rep, W_.a___).to_pattern(),
@@ -239,6 +229,31 @@ mod tests {
         let rep = Bispinor {}.into();
 
         assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
+    }
+
+    #[test]
+    fn undo_single_gamma_chain() {
+        let r = TestReps::new();
+        let chain = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+        );
+
+        assert_snapshot!(chain.undo_single_length().to_bare_ordered_string(), @"gamma(bis(4,a),bis(4,b),mink(4,mu))");
+    }
+
+    #[test]
+    fn collect_chains_leaves_single_gamma_chain_for_explicit_undo() {
+        let r = TestReps::new();
+        let chain = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+        );
+        let rep = Bispinor {}.into();
+
+        assert_snapshot!(chain.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))");
     }
 
     #[test]

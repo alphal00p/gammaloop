@@ -32,7 +32,7 @@ use tracing::{debug, instrument};
 
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::momentum::{PolDef, PolType};
-use crate::utils::{FUN_LIB, GS, TENSORLIB, W_};
+use crate::utils::{FUN_LIB, GS, TENSORLIB, W_, symbolica_ext::LogPrint};
 use crate::{
     model::Model,
     utils::{F, serde_utils::IsDefault},
@@ -938,10 +938,20 @@ impl Numerator<AppliedFeynmanRule> {
 impl Numerator<ColorSimplified> {
     pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
+        let expr = self.state.expr.simplify_gamma();
+        let after_gamma_simplification = expr.to_plain_string();
+        let after_gamma_simplification_log_print = expr.log_print(Some(120)).to_string();
+        crate::debug_tags!(#generation, #inspect, #dump;
+            stage = "numerator_after_simplify_gamma",
+            after_gamma = %after_gamma_simplification_log_print,
+            file.after_gamma_simplification = %after_gamma_simplification,
+            file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+            "Numerator after gamma simplification"
+        );
 
         Numerator {
             state: GammaSimplified {
-                expr: self.state.expr.simplify_gamma(),
+                expr,
                 state: Default::default(),
             },
         }

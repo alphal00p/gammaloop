@@ -573,12 +573,20 @@ impl EvaluatorStack {
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
                 let instant = std::time::Instant::now();
                 let mut net = if settings.do_algebra {
-                    let simplified = a
-                        .as_atom_view()
-                        .simplify_color()
-                        .simplify_gamma()
-                        .simplify_metrics()
-                        .to_dots();
+                    let color_simplified = a.as_atom_view().simplify_color();
+                    let gamma_simplified = color_simplified.simplify_gamma();
+                    let after_gamma_simplification = gamma_simplified.to_plain_string();
+                    let after_gamma_simplification_log_print =
+                        gamma_simplified.log_print(Some(120)).to_string();
+                    crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
+                        stage = "evaluator_stack_parse_atom_after_simplify_gamma",
+                        atom_index,
+                        after_gamma = %after_gamma_simplification_log_print,
+                        file.after_gamma_simplification = %after_gamma_simplification,
+                        file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+                        "Evaluator atom after gamma simplification"
+                    );
+                    let simplified = gamma_simplified.simplify_metrics().to_dots();
                     crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                         stage = "evaluator_stack_parse_atom_simplify_done",
                         atom_index,

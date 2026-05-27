@@ -3,7 +3,10 @@ use color_eyre::Result;
 use eyre::eyre;
 use idenso::{
     dirac::GammaSimplifier,
-    shorthands::{UndoShorthands, metric::MetricSimplifier, schoonschip::Schoonschip},
+    representations::Bispinor,
+    shorthands::{
+        UndoShorthands, chain::Chain, metric::MetricSimplifier, schoonschip::Schoonschip,
+    },
 };
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
@@ -144,6 +147,8 @@ impl Integrated<'_> {
             after_gamma_count = %after_gamma_simplification.matches("spenso::gamma").count(),
             before_chain_count = %before_gamma_simplification.matches("spenso::chain").count(),
             after_chain_count = %after_gamma_simplification.matches("spenso::chain").count(),
+            before_gamma = %before_gamma_simplification_log_print,
+            after_gamma = %after_gamma_simplification_log_print,
             file.before_gamma_simplification = %before_gamma_simplification,
             file.after_gamma_simplification = %after_gamma_simplification,
             file.before_gamma_simplification_log_print = %before_gamma_simplification_log_print,
@@ -158,7 +163,7 @@ impl Integrated<'_> {
             dummy_1000034_count = %after_schoonschip_net.matches("dummy(1000034)").count(),
             bytes = %after_schoonschip_net.len(),
             expr = %t_arg_after_schoonschip_net.log_print(Some(120)),
-            file.expr = %after_schoonschip_net,
+            file.expr_plain = %after_schoonschip_net,
             "Integrated UV start after Schoonschip net"
         );
         let t_arg_after_dots = t_arg_after_schoonschip_net.to_dots().normalize_dots();
@@ -169,7 +174,7 @@ impl Integrated<'_> {
             dummy_1000034_count = %after_dots.matches("dummy(1000034)").count(),
             bytes = %after_dots.len(),
             expr = %t_arg_after_dots.log_print(Some(120)),
-            file.expr = %after_dots,
+            file.expr_plain = %after_dots,
             "Integrated UV start after dots"
         );
         t_arg = t_arg_after_dots / graph.denominator(&reduced, |_| 1);
@@ -201,7 +206,7 @@ impl Integrated<'_> {
 
         let mut a = a.to_atom();
 
-        debug_tags!(#uv,#integrated;res = %a.log_print(None),file.res = %a.to_plain_string(),"Series expanded");
+        debug_tags!(#uv,#integrated;res = %a.log_print(None),file.res_plain = %a.to_plain_string(),"Series expanded");
         a = a.replace(GS.rescale).with(Atom::num(1));
         debug_tags!(#uv,#integrated;res = %a.log_print(None),"Series expanded");
 
@@ -433,6 +438,42 @@ impl Integrated<'_> {
         }
 
         res = pole_stripped;
+        // This strips as many dummies as possible after undoing chains and traces,
+        // so that terms can merge later on.
+        let before_chain_cleanup = res.to_plain_string();
+        let before_chain_cleanup_log_print = res.log_print(Some(120)).to_string();
+        let bispinor_rep = Bispinor {}.into();
+        let after_chainify = res.chainify(bispinor_rep);
+        let after_collect_chains = after_chainify.collect_chains(bispinor_rep);
+        let after_collect_chains_plain = after_collect_chains.to_plain_string();
+        let after_collect_chains_log_print = after_collect_chains.log_print(Some(120)).to_string();
+        res = after_collect_chains.undo_single_length();
+        let after_undo_single_length = res.to_plain_string();
+        let after_undo_single_length_log_print = res.log_print(Some(120)).to_string();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "integrate_and_truncate_after_collect_chains",
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
+            changed_by_collect = before_chain_cleanup != after_collect_chains_plain,
+            changed_by_undo_single_length = after_collect_chains_plain != after_undo_single_length,
+            before_bytes = %before_chain_cleanup.len(),
+            after_collect_bytes = %after_collect_chains_plain.len(),
+            after_undo_bytes = %after_undo_single_length.len(),
+            before_gamma_count = %before_chain_cleanup.matches("spenso::gamma").count(),
+            after_collect_gamma_count = %after_collect_chains_plain.matches("spenso::gamma").count(),
+            after_undo_gamma_count = %after_undo_single_length.matches("spenso::gamma").count(),
+            before_chain_count = %before_chain_cleanup.matches("spenso::chain").count(),
+            after_collect_chain_count = %after_collect_chains_plain.matches("spenso::chain").count(),
+            after_undo_chain_count = %after_undo_single_length.matches("spenso::chain").count(),
+            before_log_print = %before_chain_cleanup_log_print,
+            after_collect_log_print = %after_collect_chains_log_print,
+            after_undo_single_length_log_print = %after_undo_single_length_log_print,
+            file.before_plain = %before_chain_cleanup,
+            file.after_collect_plain = %after_collect_chains_plain,
+            file.after_undo_single_length_plain = %after_undo_single_length,
+            "Integrated UV chain cleanup after collect_chains"
+        );
 
         if !settings.pole_part {
             // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV

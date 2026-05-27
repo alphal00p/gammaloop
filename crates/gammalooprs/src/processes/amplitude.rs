@@ -944,6 +944,8 @@ impl AmplitudeGraph {
             after_gamma_count = %after_gamma_simplification.matches("spenso::gamma").count(),
             before_chain_count = %before_gamma_simplification.matches("spenso::chain").count(),
             after_chain_count = %after_gamma_simplification.matches("spenso::chain").count(),
+            before_gamma = %before_gamma_simplification_log_print,
+            after_gamma = %after_gamma_simplification_log_print,
             file.before_gamma_simplification = %before_gamma_simplification,
             file.after_gamma_simplification = %after_gamma_simplification,
             file.before_gamma_simplification_log_print = %before_gamma_simplification_log_print,
