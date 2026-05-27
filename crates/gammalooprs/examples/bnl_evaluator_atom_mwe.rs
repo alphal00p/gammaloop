@@ -13,16 +13,21 @@ use color_eyre::{
 };
 use gammalooprs::{
     initialisation::test_initialise,
-    numerator::{aind::Aind, symbolica_ext::AtomCoreExt},
+    numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     utils::{FUN_LIB, TENSORLIB, symbolica_ext::LogPrint},
 };
-use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
+use idenso::tensor::{SymbolicNet, SymbolicNetExt, SymbolicTensor};
 use spenso::network::{
     ExecutionResult, MinResultRank, Network, ScalarAliases, Sequential, SmallestDegree,
     library::{DummyLibrary, function_lib::Wrap},
-    parsing::{ParseSettings as NetworkParseSettings, ShorthandParsing, StructureInferenceMode},
+    parsing::{
+        ParseSettings as NetworkParseSettings, SchoonschipExpansionMode, ShorthandParsing,
+        StrictTensorFilter, StructureInferenceMode,
+    },
     store::NetworkStore,
 };
+use spenso::shadowing::TensorCollectExt;
+use spenso::tensors::{data::HasTensorData, parametric::ParamOrConcrete};
 use symbolica::{
     atom::{Atom, AtomView},
     id::AliasedAtom,
@@ -87,6 +92,10 @@ struct Config {
     dump_aliased_path: Option<PathBuf>,
     dump_scalar_aliases_md_path: Option<PathBuf>,
     symbolic_net: bool,
+    symbolic_then_concrete: bool,
+    collect_tensors_before_concrete: bool,
+    symbolic_expand_shorthands: bool,
+    symbolic_strict_filter: StrictTensorFilter,
 }
 
 fn main() -> Result<()> {
@@ -154,6 +163,12 @@ fn main() -> Result<()> {
         selected_stats.bytes.to_string(),
         "",
     );
+
+    if config.symbolic_then_concrete {
+        run_symbolic_then_concrete(&config, &selected, &mut summary)?;
+        summary.print();
+        return Ok(());
+    }
 
     if config.symbolic_net {
         run_symbolic_net(&config, &selected, &mut summary)?;
@@ -223,9 +238,30 @@ fn main() -> Result<()> {
         );
     }
 
+    let tensor_entry_stats =
+        print_tensor_entry_scalar_stats("tensor_entry_scalars_before_alias", &net);
+    summary.push(
+        "tensor_entry_scalars",
+        "before_alias",
+        "",
+        tensor_entry_stats.total_terms.to_string(),
+        tensor_entry_stats.total_bytes.to_string(),
+        tensor_entry_stats.summary_details(),
+    );
+
     let scalar_aliases = if let Some(threshold) = config.alias_scalar_threshold {
         let aliases =
             net.alias_scalar_refs(|_, scalar| scalar.as_view().get_byte_size() >= threshold);
+        let tensor_entry_stats =
+            print_tensor_entry_scalar_stats("tensor_entry_scalars_after_alias", &net);
+        summary.push(
+            "tensor_entry_scalars",
+            "after_alias",
+            "",
+            tensor_entry_stats.total_terms.to_string(),
+            tensor_entry_stats.total_bytes.to_string(),
+            tensor_entry_stats.summary_details(),
+        );
         print_metric_table(
             "scalar_aliases",
             [
@@ -326,6 +362,16 @@ fn main() -> Result<()> {
         "",
         "",
         "",
+    );
+    let tensor_entry_stats =
+        print_tensor_entry_scalar_stats("tensor_entry_scalars_after_execute", &net);
+    summary.push(
+        "tensor_entry_scalars",
+        "after_execute",
+        "",
+        tensor_entry_stats.total_terms.to_string(),
+        tensor_entry_stats.total_bytes.to_string(),
+        tensor_entry_stats.summary_details(),
     );
 
     let result_started = Instant::now();
@@ -473,6 +519,10 @@ impl Config {
         let mut dump_aliased_path = None;
         let mut dump_scalar_aliases_md_path = None;
         let mut symbolic_net = false;
+        let mut symbolic_then_concrete = false;
+        let mut collect_tensors_before_concrete = false;
+        let mut symbolic_expand_shorthands = false;
+        let mut symbolic_strict_filter = StrictTensorFilter::ContainsReps;
         let mut input_path_seen = false;
         let mut selection_seen = false;
 
@@ -489,6 +539,17 @@ impl Config {
                 "--scalar-details" => scalar_details = true,
                 "--resolve-aliases" => resolve_aliases = true,
                 "--symbolic-net" => symbolic_net = true,
+                "--symbolic-then-concrete" => symbolic_then_concrete = true,
+                "--collect-tensors-before-concrete" => collect_tensors_before_concrete = true,
+                "--symbolic-expand-shorthands" => symbolic_expand_shorthands = true,
+                "--symbolic-strict-filter" => {
+                    let Some(filter) = args.next() else {
+                        bail!(
+                            "--symbolic-strict-filter requires tagged, tagged-checked, or contains-reps"
+                        );
+                    };
+                    symbolic_strict_filter = parse_strict_tensor_filter(&filter)?;
+                }
                 "--dump-aliased" => {
                     let Some(path) = args.next() else {
                         bail!("--dump-aliased requires a path");
@@ -538,6 +599,9 @@ impl Config {
         if unit_scalars && kept_scalars.is_some() {
             bail!("--unit-scalars and --keep-scalars are mutually exclusive");
         }
+        if symbolic_net && symbolic_then_concrete {
+            bail!("--symbolic-net and --symbolic-then-concrete are mutually exclusive");
+        }
 
         Ok(Self {
             input_path,
@@ -553,6 +617,10 @@ impl Config {
             dump_aliased_path,
             dump_scalar_aliases_md_path,
             symbolic_net,
+            symbolic_then_concrete,
+            collect_tensors_before_concrete,
+            symbolic_expand_shorthands,
+            symbolic_strict_filter,
         })
     }
 }
@@ -577,6 +645,18 @@ fn print_usage() {
     println!("--dump-aliased writes the post-execution aliased atom JSON dump");
     println!("--dump-scalar-aliases-md writes aliased scalar-store log_print markdown");
     println!("--symbolic-net executes a SymbolicTensor network and aliases scalar-store atoms");
+    println!(
+        "--symbolic-then-concrete executes symbolically with aliases, keeps alias placeholders, then parses and executes a concrete tensor network"
+    );
+    println!(
+        "--collect-tensors-before-concrete applies collect_tensors() to the aliased symbolic root before the concrete parse"
+    );
+    println!(
+        "--symbolic-expand-shorthands uses the same chain/trace shorthand expansion mode as parse_into_net for symbolic parsing"
+    );
+    println!(
+        "--symbolic-strict-filter selects symbolic tensor-head detection: tagged, tagged-checked, or contains-reps"
+    );
 }
 
 fn parse_index(label: &str, value: &str) -> Result<usize> {
@@ -597,6 +677,17 @@ fn parse_index_set(value: &str) -> Result<BTreeSet<usize>> {
         bail!("at least one scalar index is required");
     }
     Ok(indices)
+}
+
+fn parse_strict_tensor_filter(value: &str) -> Result<StrictTensorFilter> {
+    match value {
+        "tagged" => Ok(StrictTensorFilter::Tagged),
+        "tagged-checked" => Ok(StrictTensorFilter::TaggedChecked),
+        "contains-reps" => Ok(StrictTensorFilter::ContainsReps),
+        _ => bail!(
+            "invalid symbolic strict tensor filter {value:?}; use tagged, tagged-checked, or contains-reps"
+        ),
+    }
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -628,6 +719,36 @@ struct ScalarStoreStats {
     max_terms: usize,
     total_bytes: usize,
     max_bytes: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TensorEntryStats {
+    tensor_count: usize,
+    param_tensor_count: usize,
+    concrete_tensor_count: usize,
+    entry_count: usize,
+    total_terms: usize,
+    max_terms: usize,
+    total_bytes: usize,
+    max_bytes: usize,
+    max_tensor_index: usize,
+    max_entry_index: usize,
+}
+
+impl TensorEntryStats {
+    fn summary_details(self) -> String {
+        format!(
+            "tensors={} param_tensors={} concrete_tensors={} entries={} max_terms={} max_bytes={} max_at=tensor:{} entry:{}",
+            self.tensor_count,
+            self.param_tensor_count,
+            self.concrete_tensor_count,
+            self.entry_count,
+            self.max_terms,
+            self.max_bytes,
+            self.max_tensor_index,
+            self.max_entry_index
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -731,18 +852,578 @@ fn print_atom_shape(label: &str, atom: &Atom) {
     );
 }
 
+fn parse_symbolic_network(config: &Config, selected: &Atom) -> Result<SymbolicNet<Aind>> {
+    let shorthand_parsing = if config.symbolic_expand_shorthands {
+        ShorthandParsing::Expand {
+            schoonschip: SchoonschipExpansionMode::none(),
+            trace: true,
+            chain: true,
+        }
+    } else {
+        ShorthandParsing::Opaque {
+            inference: StructureInferenceMode::Fast,
+        }
+    };
+    let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
+
+    SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<Aind>, _>(
+        selected.as_view(),
+        &lib,
+        &NetworkParseSettings {
+            shorthand_parsing,
+            strict_tensor_filter: config.symbolic_strict_filter,
+            ..Default::default()
+        },
+    )
+    .wrap_err("failed to parse evaluator atom into symbolic tensor network")
+}
+
+fn run_symbolic_then_concrete(
+    config: &Config,
+    selected: &Atom,
+    summary: &mut SummaryTable,
+) -> Result<()> {
+    print_metric_table("symbolic_network_parse", [("status", "start".to_owned())]);
+    io::stdout().flush()?;
+    let symbolic_parse_started = Instant::now();
+    let mut symbolic_net = parse_symbolic_network(config, selected)?;
+    let symbolic_parse_elapsed = symbolic_parse_started.elapsed();
+    print_metric_table(
+        "symbolic_network_parse",
+        [
+            ("status", "done".to_owned()),
+            ("elapsed", format_duration(symbolic_parse_elapsed)),
+            ("nodes", symbolic_net.graph.n_nodes().to_string()),
+            ("edges", symbolic_net.graph.graph.n_edges().to_string()),
+            ("tensors", symbolic_net.store.tensors.len().to_string()),
+            (
+                "strict_filter",
+                format!("{:?}", config.symbolic_strict_filter),
+            ),
+        ],
+    );
+    summary.push(
+        "symbolic_network_parse",
+        "done",
+        format_duration(symbolic_parse_elapsed),
+        "",
+        "",
+        format!(
+            "nodes={} edges={} tensors={} strict_filter={:?}",
+            symbolic_net.graph.n_nodes(),
+            symbolic_net.graph.graph.n_edges(),
+            symbolic_net.store.tensors.len(),
+            config.symbolic_strict_filter
+        ),
+    );
+
+    let symbolic_scalar_store_stats =
+        print_scalar_store_stats(&symbolic_net, config.scalar_details);
+    summary.push(
+        "symbolic_scalar_store",
+        "done",
+        "",
+        symbolic_scalar_store_stats.total_terms.to_string(),
+        symbolic_scalar_store_stats.total_bytes.to_string(),
+        format!(
+            "count={} top_level_sums={} max_terms={} max_bytes={}",
+            symbolic_scalar_store_stats.count,
+            symbolic_scalar_store_stats.top_level_sums,
+            symbolic_scalar_store_stats.max_terms,
+            symbolic_scalar_store_stats.max_bytes
+        ),
+    );
+
+    if config.unit_scalars || config.kept_scalars.is_some() {
+        let replacement_stats = replace_scalars(
+            &mut symbolic_net,
+            config.unit_scalars,
+            config.kept_scalars.as_ref(),
+        )?;
+        summary.push(
+            "symbolic_scalar_replacement",
+            replacement_stats.mode,
+            "",
+            "",
+            "",
+            format!(
+                "replaced={} kept={}",
+                replacement_stats.replaced, replacement_stats.kept
+            ),
+        );
+    }
+
+    let symbolic_aliases = if let Some(threshold) = config.alias_scalar_threshold {
+        let aliases = symbolic_net
+            .alias_scalar_refs(|_, scalar| scalar.as_view().get_byte_size() >= threshold);
+        print_metric_table(
+            "symbolic_scalar_aliases",
+            [
+                ("threshold_bytes", threshold.to_string()),
+                ("created", aliases.aliases_created().to_string()),
+                ("terms", aliases.aliased_terms().to_string()),
+                ("bytes", aliases.aliased_bytes().to_string()),
+                ("max_bytes", aliases.max_aliased_bytes().to_string()),
+            ],
+        );
+        summary.push(
+            "symbolic_scalar_aliases",
+            "enabled",
+            "",
+            aliases.aliased_terms().to_string(),
+            aliases.aliased_bytes().to_string(),
+            format!(
+                "threshold_bytes={threshold} created={} max_bytes={}",
+                aliases.aliases_created(),
+                aliases.max_aliased_bytes()
+            ),
+        );
+        Some(aliases)
+    } else {
+        summary.push("symbolic_scalar_aliases", "disabled", "", "", "", "");
+        None
+    };
+
+    if let Some(path) = &config.dump_scalar_aliases_md_path {
+        let Some(aliases) = &symbolic_aliases else {
+            bail!("--dump-scalar-aliases-md requires --alias-scalars");
+        };
+        let bytes = write_scalar_aliases_markdown(
+            path,
+            &config.input_path,
+            config.alias_scalar_threshold.unwrap_or_default(),
+            aliases,
+            &symbolic_net,
+        )?;
+        print_metric_table(
+            "symbolic_scalar_aliases_md",
+            [
+                ("path", path.display().to_string()),
+                ("bytes", bytes.to_string()),
+            ],
+        );
+        summary.push(
+            "symbolic_scalar_aliases_md",
+            "written",
+            "",
+            "",
+            bytes.to_string(),
+            path.display().to_string(),
+        );
+    }
+
+    if !config.execute {
+        print_metric_table("symbolic_network_execute", [("skipped", "true".to_owned())]);
+        summary.push("symbolic_network_execute", "skipped", "", "", "", "");
+        return Ok(());
+    }
+
+    print_metric_table("symbolic_network_execute", [("status", "start".to_owned())]);
+    io::stdout().flush()?;
+    let symbolic_execute_started = Instant::now();
+    let symbolic_lib = DummyLibrary::new();
+    symbolic_net
+        .execute::<Sequential, SmallestDegree, _, _, _>(&symbolic_lib, &Wrap {})
+        .wrap_err("failed to execute symbolic tensor network")?;
+    let symbolic_execute_elapsed = symbolic_execute_started.elapsed();
+    print_metric_table(
+        "symbolic_network_execute",
+        [
+            ("status", "done".to_owned()),
+            ("elapsed", format_duration(symbolic_execute_elapsed)),
+        ],
+    );
+    summary.push(
+        "symbolic_network_execute",
+        "done",
+        format_duration(symbolic_execute_elapsed),
+        "",
+        "",
+        "",
+    );
+
+    let symbolic_result_started = Instant::now();
+    let symbolic_result = symbolic_net.result_tensor(&symbolic_lib);
+    let symbolic_result_elapsed = symbolic_result_started.elapsed();
+    let symbolic_result_status = if symbolic_result.is_ok() { "ok" } else { "err" };
+    print_metric_table(
+        "symbolic_result_tensor",
+        [
+            ("status", symbolic_result_status.to_owned()),
+            ("elapsed", format_duration(symbolic_result_elapsed)),
+        ],
+    );
+    summary.push(
+        "symbolic_result_tensor",
+        symbolic_result_status,
+        format_duration(symbolic_result_elapsed),
+        "",
+        "",
+        "",
+    );
+
+    let symbolic_root = match symbolic_result.wrap_err("failed to read symbolic tensor result")? {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(tensor) => tensor.expression.clone(),
+    };
+    let symbolic_aliased = match &symbolic_aliases {
+        Some(aliases) => symbolic_net.aliased_atom(aliases, symbolic_root),
+        None => AliasedAtom::from(symbolic_root),
+    };
+    let symbolic_operations = symbolic_aliased.count_operations();
+    print_metric_table(
+        "symbolic_result_aliased_root",
+        [
+            ("aliases", symbolic_aliased.get_aliases().len().to_string()),
+            ("terms", symbolic_aliased.get_root().nterms().to_string()),
+            (
+                "bytes",
+                symbolic_aliased
+                    .get_root()
+                    .as_view()
+                    .get_byte_size()
+                    .to_string(),
+            ),
+            ("adds", symbolic_operations.additions.to_string()),
+            ("muls", symbolic_operations.multiplications.to_string()),
+        ],
+    );
+    summary.push(
+        "symbolic_result_aliased_root",
+        "done",
+        "",
+        symbolic_aliased.get_root().nterms().to_string(),
+        symbolic_aliased
+            .get_root()
+            .as_view()
+            .get_byte_size()
+            .to_string(),
+        format!(
+            "aliases={} adds={} muls={}",
+            symbolic_aliased.get_aliases().len(),
+            symbolic_operations.additions,
+            symbolic_operations.multiplications
+        ),
+    );
+
+    if let Some(path) = &config.dump_aliased_path {
+        let bytes = write_aliased_atom_dump(path, &symbolic_aliased)?;
+        print_metric_table(
+            "symbolic_aliased_dump",
+            [
+                ("path", path.display().to_string()),
+                ("bytes", bytes.to_string()),
+            ],
+        );
+        summary.push(
+            "symbolic_aliased_dump",
+            "written",
+            "",
+            "",
+            bytes.to_string(),
+            path.display().to_string(),
+        );
+    }
+
+    let root_for_concrete = symbolic_aliased.get_root().clone();
+    let concrete_input = if config.collect_tensors_before_concrete {
+        print_metric_table(
+            "collect_tensors_before_concrete",
+            [("status", "start".to_owned())],
+        );
+        io::stdout().flush()?;
+        let collect_started = Instant::now();
+        let collected = root_for_concrete.collect_tensors();
+        let collect_elapsed = collect_started.elapsed();
+        print_metric_table(
+            "collect_tensors_before_concrete",
+            [
+                ("status", "done".to_owned()),
+                ("elapsed", format_duration(collect_elapsed)),
+                ("terms", collected.nterms().to_string()),
+                ("bytes", collected.as_view().get_byte_size().to_string()),
+            ],
+        );
+        summary.push(
+            "collect_tensors_before_concrete",
+            "done",
+            format_duration(collect_elapsed),
+            collected.nterms().to_string(),
+            collected.as_view().get_byte_size().to_string(),
+            "",
+        );
+        collected
+    } else {
+        summary.push("collect_tensors_before_concrete", "skipped", "", "", "", "");
+        root_for_concrete
+    };
+    print_metric_table(
+        "concrete_parse_input",
+        [
+            ("source", "symbolic_aliased_root".to_owned()),
+            (
+                "aliases_retained",
+                symbolic_aliased.get_aliases().len().to_string(),
+            ),
+            ("terms", concrete_input.nterms().to_string()),
+            (
+                "bytes",
+                concrete_input.as_view().get_byte_size().to_string(),
+            ),
+        ],
+    );
+    summary.push(
+        "concrete_parse_input",
+        "aliases_retained",
+        "",
+        concrete_input.nterms().to_string(),
+        concrete_input.as_view().get_byte_size().to_string(),
+        format!("aliases={}", symbolic_aliased.get_aliases().len()),
+    );
+
+    print_metric_table("concrete_network_parse", [("status", "start".to_owned())]);
+    io::stdout().flush()?;
+    let concrete_parse_started = Instant::now();
+    let mut concrete_net = concrete_input
+        .parse_into_net()
+        .wrap_err("failed to parse aliased symbolic result into concrete tensor network")?;
+    let concrete_parse_elapsed = concrete_parse_started.elapsed();
+    print_metric_table(
+        "concrete_network_parse",
+        [
+            ("status", "done".to_owned()),
+            ("elapsed", format_duration(concrete_parse_elapsed)),
+            ("nodes", concrete_net.graph.n_nodes().to_string()),
+            ("edges", concrete_net.graph.graph.n_edges().to_string()),
+            ("tensors", concrete_net.store.tensors.len().to_string()),
+        ],
+    );
+    summary.push(
+        "concrete_network_parse",
+        "done",
+        format_duration(concrete_parse_elapsed),
+        "",
+        "",
+        format!(
+            "nodes={} edges={} tensors={}",
+            concrete_net.graph.n_nodes(),
+            concrete_net.graph.graph.n_edges(),
+            concrete_net.store.tensors.len()
+        ),
+    );
+
+    let concrete_scalar_store_stats =
+        print_scalar_store_stats(&concrete_net, config.scalar_details);
+    summary.push(
+        "concrete_scalar_store",
+        "done",
+        "",
+        concrete_scalar_store_stats.total_terms.to_string(),
+        concrete_scalar_store_stats.total_bytes.to_string(),
+        format!(
+            "count={} top_level_sums={} max_terms={} max_bytes={}",
+            concrete_scalar_store_stats.count,
+            concrete_scalar_store_stats.top_level_sums,
+            concrete_scalar_store_stats.max_terms,
+            concrete_scalar_store_stats.max_bytes
+        ),
+    );
+
+    let concrete_tensor_entry_stats =
+        print_tensor_entry_scalar_stats("concrete_tensor_entry_scalars", &concrete_net);
+    summary.push(
+        "concrete_tensor_entry_scalars",
+        "before_execute",
+        "",
+        concrete_tensor_entry_stats.total_terms.to_string(),
+        concrete_tensor_entry_stats.total_bytes.to_string(),
+        concrete_tensor_entry_stats.summary_details(),
+    );
+
+    print_metric_table(
+        "concrete_scalar_aliases",
+        [
+            ("skipped", "true".to_owned()),
+            ("reason", "symbolic_aliases_retained".to_owned()),
+        ],
+    );
+    summary.push(
+        "concrete_scalar_aliases",
+        "skipped",
+        "",
+        "",
+        "",
+        "symbolic_aliases_retained",
+    );
+
+    if let Some(path) = &config.dump_network_path {
+        fs::write(path, concrete_net.dot_pretty())
+            .with_context(|| format!("failed to write {}", path.display()))?;
+        print_metric_table(
+            "concrete_network_dump",
+            [("path", path.display().to_string())],
+        );
+        summary.push(
+            "concrete_network_dump",
+            "written",
+            "",
+            "",
+            "",
+            path.display().to_string(),
+        );
+    }
+
+    print_metric_table("concrete_network_execute", [("status", "start".to_owned())]);
+    io::stdout().flush()?;
+    let concrete_execute_started = Instant::now();
+    concrete_net
+        .execute::<Sequential, MinResultRank, _, _, _>(
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+        )
+        .wrap_err("failed to execute concrete tensor network")?;
+    let concrete_execute_elapsed = concrete_execute_started.elapsed();
+    print_metric_table(
+        "concrete_network_execute",
+        [
+            ("status", "done".to_owned()),
+            ("elapsed", format_duration(concrete_execute_elapsed)),
+        ],
+    );
+    summary.push(
+        "concrete_network_execute",
+        "done",
+        format_duration(concrete_execute_elapsed),
+        "",
+        "",
+        "",
+    );
+    let concrete_tensor_entry_stats = print_tensor_entry_scalar_stats(
+        "concrete_tensor_entry_scalars_after_execute",
+        &concrete_net,
+    );
+    summary.push(
+        "concrete_tensor_entry_scalars",
+        "after_execute",
+        "",
+        concrete_tensor_entry_stats.total_terms.to_string(),
+        concrete_tensor_entry_stats.total_bytes.to_string(),
+        concrete_tensor_entry_stats.summary_details(),
+    );
+
+    let concrete_result_started = Instant::now();
+    let concrete_result = concrete_net.result_scalar();
+    let concrete_result_elapsed = concrete_result_started.elapsed();
+    let concrete_result_status = if concrete_result.is_ok() { "ok" } else { "err" };
+    print_metric_table(
+        "concrete_result_scalar",
+        [
+            ("status", concrete_result_status.to_owned()),
+            ("elapsed", format_duration(concrete_result_elapsed)),
+        ],
+    );
+    summary.push(
+        "concrete_result_scalar",
+        concrete_result_status,
+        format_duration(concrete_result_elapsed),
+        "",
+        "",
+        "",
+    );
+
+    let concrete_root = match concrete_result {
+        Ok(ExecutionResult::One) => Atom::num(1),
+        Ok(ExecutionResult::Zero) => Atom::Zero,
+        Ok(ExecutionResult::Val(value)) => value.into_owned(),
+        Err(error) => return Err(error).wrap_err("failed to read concrete scalar result"),
+    };
+
+    if symbolic_aliased.get_aliases().is_empty() {
+        print_metric_table(
+            "concrete_result_atom",
+            [
+                ("terms", concrete_root.nterms().to_string()),
+                ("bytes", concrete_root.as_view().get_byte_size().to_string()),
+            ],
+        );
+        summary.push(
+            "concrete_result_atom",
+            "done",
+            "",
+            concrete_root.nterms().to_string(),
+            concrete_root.as_view().get_byte_size().to_string(),
+            "",
+        );
+    } else {
+        let mut concrete_aliased = AliasedAtom::from(concrete_root);
+        for (alias, original) in symbolic_aliased.get_aliases() {
+            concrete_aliased = concrete_aliased.add_alias(alias.clone(), original.clone());
+        }
+        print_metric_table(
+            "concrete_result_aliased_root",
+            [
+                ("aliases", concrete_aliased.get_aliases().len().to_string()),
+                ("terms", concrete_aliased.get_root().nterms().to_string()),
+                (
+                    "bytes",
+                    concrete_aliased
+                        .get_root()
+                        .as_view()
+                        .get_byte_size()
+                        .to_string(),
+                ),
+            ],
+        );
+        summary.push(
+            "concrete_result_aliased_root",
+            "done",
+            "",
+            concrete_aliased.get_root().nterms().to_string(),
+            concrete_aliased
+                .get_root()
+                .as_view()
+                .get_byte_size()
+                .to_string(),
+            format!("aliases={}", concrete_aliased.get_aliases().len()),
+        );
+        if config.resolve_aliases {
+            let resolve_started = Instant::now();
+            let resolved = concrete_aliased.into_inner();
+            let resolve_elapsed = resolve_started.elapsed();
+            print_metric_table(
+                "concrete_result_alias_resolve",
+                [
+                    ("elapsed", format_duration(resolve_elapsed)),
+                    ("terms", resolved.nterms().to_string()),
+                    ("bytes", resolved.as_view().get_byte_size().to_string()),
+                ],
+            );
+            summary.push(
+                "concrete_result_alias_resolve",
+                "done",
+                format_duration(resolve_elapsed),
+                resolved.nterms().to_string(),
+                resolved.as_view().get_byte_size().to_string(),
+                "",
+            );
+        } else {
+            print_metric_table(
+                "concrete_result_alias_resolve",
+                [("skipped", "true".to_owned())],
+            );
+            summary.push("concrete_result_alias_resolve", "skipped", "", "", "", "");
+        }
+    }
+
+    Ok(())
+}
+
 fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable) -> Result<()> {
     print_metric_table("symbolic_network_parse", [("status", "start".to_owned())]);
     io::stdout().flush()?;
     let network_parse_started = Instant::now();
-    let mut net = selected
-        .parse_to_symbolic_net::<Aind>(&NetworkParseSettings {
-            shorthand_parsing: ShorthandParsing::Opaque {
-                inference: StructureInferenceMode::Fast,
-            },
-            ..Default::default()
-        })
-        .wrap_err("failed to parse evaluator atom into symbolic tensor network")?;
+    let mut net = parse_symbolic_network(config, selected)?;
     let network_parse_elapsed = network_parse_started.elapsed();
     print_metric_table(
         "symbolic_network_parse",
@@ -752,6 +1433,10 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
             ("nodes", net.graph.n_nodes().to_string()),
             ("edges", net.graph.graph.n_edges().to_string()),
             ("tensors", net.store.tensors.len().to_string()),
+            (
+                "strict_filter",
+                format!("{:?}", config.symbolic_strict_filter),
+            ),
         ],
     );
     summary.push(
@@ -761,10 +1446,11 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
         "",
         "",
         format!(
-            "nodes={} edges={} tensors={}",
+            "nodes={} edges={} tensors={} strict_filter={:?}",
             net.graph.n_nodes(),
             net.graph.graph.n_edges(),
-            net.store.tensors.len()
+            net.store.tensors.len(),
+            config.symbolic_strict_filter
         ),
     );
 
@@ -1159,6 +1845,103 @@ fn print_scalar_store_stats<T, K, FK, A>(
         total_bytes,
         max_bytes,
     }
+}
+
+fn print_tensor_entry_scalar_stats(stage: &str, net: &ParsingNet) -> TensorEntryStats {
+    let mut stats = TensorEntryStats {
+        tensor_count: net.store.tensors.len(),
+        param_tensor_count: 0,
+        concrete_tensor_count: 0,
+        entry_count: 0,
+        total_terms: 0,
+        max_terms: 0,
+        total_bytes: 0,
+        max_bytes: 0,
+        max_tensor_index: 0,
+        max_entry_index: 0,
+    };
+    let mut top_tensors = Vec::new();
+
+    for (tensor_index, tensor) in net.store.tensors.iter().enumerate() {
+        let ParamOrConcrete::Param(tensor) = tensor else {
+            stats.concrete_tensor_count += 1;
+            continue;
+        };
+        stats.param_tensor_count += 1;
+
+        let entries = tensor.data();
+        let mut tensor_terms = 0;
+        let mut tensor_bytes = 0;
+        let mut tensor_max_bytes = 0;
+
+        for (entry_index, entry) in entries.iter().enumerate() {
+            let terms = entry.nterms();
+            let bytes = entry.as_view().get_byte_size();
+            stats.entry_count += 1;
+            stats.total_terms += terms;
+            stats.total_bytes += bytes;
+            stats.max_terms = stats.max_terms.max(terms);
+
+            tensor_terms += terms;
+            tensor_bytes += bytes;
+            tensor_max_bytes = tensor_max_bytes.max(bytes);
+
+            if bytes > stats.max_bytes {
+                stats.max_bytes = bytes;
+                stats.max_tensor_index = tensor_index;
+                stats.max_entry_index = entry_index;
+            }
+        }
+
+        top_tensors.push((
+            tensor_index,
+            entries.len(),
+            tensor_terms,
+            tensor_bytes,
+            tensor_max_bytes,
+        ));
+    }
+
+    top_tensors.sort_by(|left, right| right.3.cmp(&left.3));
+
+    print_metric_table(
+        stage,
+        [
+            ("tensors", stats.tensor_count.to_string()),
+            ("param_tensors", stats.param_tensor_count.to_string()),
+            ("concrete_tensors", stats.concrete_tensor_count.to_string()),
+            ("entries", stats.entry_count.to_string()),
+            ("total_terms", stats.total_terms.to_string()),
+            ("max_terms", stats.max_terms.to_string()),
+            ("total_bytes", stats.total_bytes.to_string()),
+            ("max_bytes", stats.max_bytes.to_string()),
+            ("max_tensor", stats.max_tensor_index.to_string()),
+            ("max_entry", stats.max_entry_index.to_string()),
+        ],
+    );
+
+    let top_rows = top_tensors
+        .into_iter()
+        .take(8)
+        .map(|(tensor_index, entries, terms, bytes, max_entry_bytes)| {
+            vec![
+                tensor_index.to_string(),
+                entries.to_string(),
+                terms.to_string(),
+                bytes.to_string(),
+                max_entry_bytes.to_string(),
+            ]
+        })
+        .collect::<Vec<_>>();
+    if !top_rows.is_empty() {
+        println!("{stage}_top_tensors");
+        print_table(
+            ["tensor", "entries", "terms", "bytes", "max_entry_bytes"],
+            top_rows,
+        );
+    }
+
+    stats
 }
 
 fn replace_scalars<T, K, FK, A>(
