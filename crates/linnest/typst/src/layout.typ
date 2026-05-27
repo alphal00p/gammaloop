@@ -106,8 +106,8 @@
   /// Edge-label target offset as a multiple of the graph spring length. Label
   /// layout runs after both graph layout modes. -> float
   label-length-scale: 0.6,
-  /// Spring strength pulling each label toward its target offset. Label layout
-  /// runs after both modes. -> float
+  /// Spring strength pulling each label toward its target offset in the
+  /// spring-based label layouts. -> float
   label-spring: 23.0,
   /// Repulsion strength between labels and graph points, scaled by spring
   /// length squared. Label layout runs after both modes. -> float
@@ -115,6 +115,12 @@
   /// Maximum number of post-layout label relaxation steps. Set to `0` to
   /// skip label placement. Applies after both modes. -> int
   label-steps: 20,
+  /// Edge-label relaxation model. `"normal"` uses a perpendicular offset,
+  /// `"dangling-tangent"` uses the edge direction for dangling half-edge labels
+  /// and a perpendicular offset for paired edges, and `"fixed-length"` keeps
+  /// each label at a fixed distance from its edge point and only lets that
+  /// segment rotate. -> string
+  label-layout: "normal",
   /// Label relaxation step size. Applies after both modes. -> float
   label-step: 0.15,
   /// Label relaxation early stop threshold. Applies after both modes. -> float
@@ -184,6 +190,7 @@
     label-spring: str(label-spring),
     label-charge: str(label-charge),
     label-steps: str(label-steps),
+    label-layout: label-layout,
     label-step: str(label-step),
     label-early-tol: str(label-early-tol),
     label-max-delta-scale: str(label-max-delta-scale),

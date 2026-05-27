@@ -109,7 +109,14 @@ The main usecase however is of course to automatically place the nodes and edges
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#draw(g, subgraph: east, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
+#draw(
+  g,
+  subgraph: east,
+  edge-label: edge-label,
+  edge-label-style: (anchor: "south"),
+  source-style: source-style,
+  sink-style: sink-style,
+)
 ```
 
 #import "../src/lib.typ": draw, graph, layout, subgraph
@@ -140,7 +147,14 @@ The main usecase however is of course to automatically place the nodes and edges
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#draw(g, subgraph: east, edge-label: edge-label, source-style: source-style, sink-style: sink-style)
+#draw(
+  g,
+  subgraph: east,
+  edge-label: edge-label,
+  edge-label-style: (anchor: "south"),
+  source-style: source-style,
+  sink-style: sink-style,
+)
 
 == Graph Objects
 
@@ -413,6 +427,10 @@ records, and the edge index:
 #let sink-style(edge) = (stroke: blue + 0.5pt)
 #draw(layout(g), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
 ```
+
+Edge labels are drawn with CeTZ content at the layout label position. Use
+`edge-label-style: (anchor: "south")`, or an edge-data callback returning a
+style dictionary, to choose which point of the label is anchored there.
 
 Marks can follow graph orientation as a first-class draw option. Put the same
 mark layer on both halves and set `mark-orientation: "edge"`; default-oriented
@@ -690,8 +708,13 @@ label target distance and $q_l$ is the label repulsion strength, then
 $L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
 `label-length-scale` for $alpha_l$ and `label-charge` for $beta_l$.
 `label-spring` is the spring constant pulling each label toward its target.
-`label-steps`, `label-step`, `label-early-tol`, and `label-max-delta-scale`
-control the label relaxation iteration.
+`label-layout: "normal"` uses a perpendicular offset target. With
+`label-layout: "dangling-tangent"`, paired edges still use that perpendicular
+target, but dangling half-edge labels are offset along the edge direction away
+from the attached node. With `label-layout: "fixed-length"`, the label remains
+at distance $L_l$ from the edge point and only rotates around it under repulsive
+forces. `label-steps`, `label-step`, `label-early-tol`, and
+`label-max-delta-scale` control the label relaxation iteration.
 
 == Subgraphs
 

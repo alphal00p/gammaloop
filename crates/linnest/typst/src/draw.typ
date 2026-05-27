@@ -313,6 +313,11 @@
   /// Edge label content or callback. A callback receives edge data.
   /// -> content | string | function | none
   edge-label: none,
+  /// Edge-label style forwarded to `cetz.draw.content`; use `anchor` to choose
+  /// which point of the label is placed at the layout label position. A
+  /// callback receives edge data.
+  /// -> dictionary | function | none
+  edge-label-style: (:),
   /// Hobby curl used at the endpoints of paired edge curves. -> float
   edge-omega: 1.0,
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
@@ -359,6 +364,7 @@
       source-style: source-style,
       sink-style: sink-style,
       edge-label: edge-label,
+      edge-label-style: edge-label-style,
       edge-omega: edge-omega,
       edge-trim-accuracy: edge-trim-accuracy,
       padding: padding,

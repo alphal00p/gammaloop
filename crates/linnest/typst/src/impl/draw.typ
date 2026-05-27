@@ -752,6 +752,7 @@
   let source-style = options.source-style
   let sink-style = options.sink-style
   let edge-label = options.edge-label
+  let edge-label-style = options.edge-label-style
   let edge-omega = options.edge-omega
   let edge-trim-accuracy = options.edge-trim-accuracy
   let padding = options.padding
@@ -838,6 +839,7 @@
           let statement-label = data.at("label", default: none)
           let data-label = if record-label == none { statement-label } else { record-label }
           let orientation = edge.orientation
+          let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
           let edge-data = (
             scope
               + data
@@ -851,6 +853,7 @@
                 sink-half-edge: sink-half-edge,
                 data: edge.at("data", default: none),
                 label: data-label,
+                label-pos: label-pos,
                 orientation: orientation,
                 ext: ext,
               )
@@ -870,7 +873,7 @@
           let sink-style-layers = _style-layers(sink-style, edge-data)
           let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
           let ev-label = _content(edge-label, edge-data, _as-content(data-label))
-          let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
+          let edge-label-style = _style(edge-label-style, edge-data)
 
           for layer-index in range(0, layer-count) {
             let source-layer = _style-layer(source-style-layers, layer-index)
@@ -1005,7 +1008,7 @@
           }
 
           if ev-label != none {
-            elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0))
+            elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0, ..edge-label-style))
           }
 
           if debug-level >= 2 {

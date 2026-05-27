@@ -71,6 +71,7 @@ fn explicit_layout_figment_configures_layout() {
     let figment = Figment::from(Serialized::from(
         BTreeMap::from([
             ("layout-algo".to_string(), "tree".to_string()),
+            ("label-layout".to_string(), "fixed-length".to_string()),
             ("tree-dx".to_string(), "3.0".to_string()),
         ]),
         Profile::Default,
@@ -80,6 +81,10 @@ fn explicit_layout_figment_configures_layout() {
     assert!(matches!(
         graph.layout_config.layout_algo,
         crate::LayoutAlgo::Tree
+    ));
+    assert!(matches!(
+        graph.layout_config.label_layout,
+        crate::LabelLayout::FixedLength
     ));
     assert_eq!(graph.layout_config.tree_dx, 3.0);
 }
@@ -254,6 +259,27 @@ fn dot_pos_axis_bangs_apply_per_axis() {
 fn dot_pos_group_axis_requires_axis_bang() {
     let err = DotPlacementExpr::parse("x:@left,y:0").unwrap_err();
     assert!(err.contains("must be pinned with !"));
+}
+
+#[test]
+fn quoted_dot_statement_keys_are_normalized() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph {
+            ext [style=invis]
+            ext -> a [id=0 label="$x$" "label-pos"="1,1" "label-anchor"="east"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    let edge = edges.first().unwrap();
+
+    assert_eq!(edge.label_pos, Some(crate::TypstPoint { x: 1.0, y: 1.0 }));
+    assert_eq!(
+        edge.statements.get("label-anchor").map(String::as_str),
+        Some("east")
+    );
+    assert!(!edge.statements.contains_key("\"label-anchor\""));
 }
 
 #[derive(Serialize)]
@@ -763,6 +789,170 @@ fn test_named_node_and_edge_data_api() {
 
     let dot: String = decode_cbor(&graph_dot_bytes(&graph).unwrap());
     assert!(!dot.contains("__linnest-edge-name"));
+}
+
+#[test]
+fn fixed_length_label_layout_keeps_label_radius() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "fixed-label".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "a".to_string(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            sink: None,
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+
+    let label_distance = |label_layout: &str| {
+        let laid_out = layout_parsed_graph_bytes(
+            &graph,
+            &encode_cbor(&BTreeMap::from([
+                ("layout-algo".to_string(), "tree".to_string()),
+                ("label-layout".to_string(), label_layout.to_string()),
+                ("label-spring".to_string(), "0".to_string()),
+                ("label-charge".to_string(), "100".to_string()),
+                ("label-steps".to_string(), "2".to_string()),
+            ])),
+        )
+        .unwrap();
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+        let edge = edges.first().unwrap();
+        let edge_pos = edge.pos.as_ref().unwrap();
+        let label_pos = edge.label_pos.as_ref().unwrap();
+        let dx = label_pos.x - edge_pos.x;
+        let dy = label_pos.y - edge_pos.y;
+        (dx * dx + dy * dy).sqrt()
+    };
+
+    let expected_radius = crate::default_label_length_scale()
+        * crate::default_length_scale()
+        * (crate::default_viewport_w() * crate::default_viewport_h()).sqrt();
+    let fixed_distance = label_distance("fixed-length");
+    let normal_distance = label_distance("normal");
+
+    assert!((fixed_distance - expected_radius).abs() < 1e-9);
+    assert!((normal_distance - expected_radius).abs() > 1e-3);
+}
+
+#[test]
+fn dangling_tangent_label_layout_keeps_paired_labels_normal() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestPlacementGraphSpec {
+        name: "dangling-tangent-label".to_string(),
+        nodes: vec![
+            TestPlacedNodeSpec {
+                name: "a".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(0.0)),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestPlacedNodeSpec {
+                name: "b".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(2.0)),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![
+            TestPlacedEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: None,
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(2.0)),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestPlacedEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: None,
+                    statement: None,
+                }),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(1.0)),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+        ],
+    }))
+    .unwrap();
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("label-layout".to_string(), "dangling-tangent".to_string()),
+            ("label-charge".to_string(), "0".to_string()),
+            ("label-steps".to_string(), "1".to_string()),
+        ])),
+    )
+    .unwrap();
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let expected_offset = crate::default_label_length_scale()
+        * crate::default_length_scale()
+        * (crate::default_viewport_w() * crate::default_viewport_h() / 2.0).sqrt();
+
+    let dangling = &edges[0];
+    let dangling_pos = dangling.pos.as_ref().unwrap();
+    let dangling_label = dangling.label_pos.as_ref().unwrap();
+    let dangling_dx = dangling_label.x - dangling_pos.x;
+    let dangling_dy = dangling_label.y - dangling_pos.y;
+    assert!(
+        (dangling_dx - expected_offset).abs() < 1e-9,
+        "{dangling_dx} != {expected_offset}"
+    );
+    assert!(dangling_dy.abs() < 1e-9, "{dangling_dy} != 0");
+
+    let paired = &edges[1];
+    let paired_pos = paired.pos.as_ref().unwrap();
+    let paired_label = paired.label_pos.as_ref().unwrap();
+    let paired_dx = paired_label.x - paired_pos.x;
+    let paired_dy = paired_label.y - paired_pos.y;
+    assert!(paired_dx.abs() < 1e-9, "{paired_dx} != 0");
+    assert!(
+        (paired_dy - expected_offset).abs() < 1e-9,
+        "{paired_dy} != {expected_offset}"
+    );
 }
 
 #[test]

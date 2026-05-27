@@ -73,6 +73,15 @@ use crate::geom::{tangent_angle_toward_c_side, GeomError};
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
 
+fn dot_statement_value<'a>(
+    statements: &'a BTreeMap<String, String>,
+    key: &str,
+) -> Option<&'a String> {
+    statements
+        .get(key)
+        .or_else(|| statements.get(&format!("\"{key}\"")))
+}
+
 struct Point2Rkyv;
 
 impl ArchiveWith<Point2<f64>> for Point2Rkyv {
@@ -304,7 +313,7 @@ impl TypstNode {
         statements: &std::collections::BTreeMap<String, String>,
         attr: &str,
     ) -> Option<(f64, f64)> {
-        if let Some(value) = statements.get(attr) {
+        if let Some(value) = dot_statement_value(statements, attr) {
             // Remove outer quotes from DOT parsing: "\"1.0,2.0\"" -> "1.0,2.0"
             let unquoted = value.trim().trim_matches('"');
             // Parse formats like "1.0,2.0" or "1.0 2.0" or "(1.0,2.0)"
@@ -329,7 +338,7 @@ impl TypstNode {
     fn parse_position_flags(
         statements: &std::collections::BTreeMap<String, String>,
     ) -> (bool, bool) {
-        if !statements.contains_key("pos") {
+        if dot_statement_value(statements, "pos").is_none() {
             return (false, false);
         }
         (
@@ -342,8 +351,7 @@ impl TypstNode {
         statements: &std::collections::BTreeMap<String, String>,
         key: &str,
     ) -> Option<bool> {
-        statements
-            .get(key)
+        dot_statement_value(statements, key)
             .and_then(|value| value.trim().trim_matches('"').parse::<bool>().ok())
     }
 }
@@ -419,7 +427,7 @@ impl TypstEdge {
 
             let label_pos = TypstNode::parse_position(&d.statements, "label-pos")
                 .map(|(x, y)| Point2::new(x, y));
-            let label_angle = d.statements.get("label-angle").and_then(|value| {
+            let label_angle = dot_statement_value(&d.statements, "label-angle").and_then(|value| {
                 let unquoted = value.trim().trim_matches('"');
                 let cleaned = unquoted.trim().trim_end_matches("rad");
                 cleaned.trim().parse::<f64>().ok()
@@ -670,7 +678,7 @@ impl DotPlacementContext {
             if let Some(index) = node.index {
                 node_id_map.insert(index.0, node_id.0);
             }
-            if let Some(expr) = node.statements.get("pos").and_then(|value| {
+            if let Some(expr) = dot_statement_value(&node.statements, "pos").and_then(|value| {
                 DotPlacementExpr::parse(value)
                     .unwrap_or_else(|err| panic!("invalid DOT node pos {value:?}: {err}"))
             }) {
@@ -682,10 +690,12 @@ impl DotPlacementContext {
             if let Some(index) = edge.data.edge_id {
                 edge_id_map.insert(index.0, edge_id.0);
             }
-            if let Some(expr) = edge.data.statements.get("pos").and_then(|value| {
-                DotPlacementExpr::parse(value)
-                    .unwrap_or_else(|err| panic!("invalid DOT edge pos {value:?}: {err}"))
-            }) {
+            if let Some(expr) =
+                dot_statement_value(&edge.data.statements, "pos").and_then(|value| {
+                    DotPlacementExpr::parse(value)
+                        .unwrap_or_else(|err| panic!("invalid DOT edge pos {value:?}: {err}"))
+                })
+            {
                 edge_exprs.insert(edge_id.0, expr);
             }
         }
@@ -1033,9 +1043,8 @@ fn initial_point_constraint(
     placement: Option<&DotResolvedPlacement>,
     group_map: &mut HashMap<String, usize>,
 ) -> (Point2<f64>, PointConstraint) {
-    let explicit_pin = statements
-        .get("pin")
-        .and_then(|value| PinConstraint::parse(value));
+    let explicit_pin =
+        dot_statement_value(statements, "pin").and_then(|value| PinConstraint::parse(value));
     let pin = explicit_pin.or_else(|| placement.and_then(|placement| placement.pin.clone()));
 
     if let Some(pin) = pin {
@@ -1129,8 +1138,9 @@ impl TypstGraph {
                 .statements
                 .into_iter()
                 .map(|(k, v)| {
+                    let clean_key = k.trim().trim_matches('"').to_string();
                     let clean_value = v.trim().trim_matches('"').to_string();
-                    (k, clean_value)
+                    (clean_key, clean_value)
                 })
                 .collect(),
             layout_config: config,
@@ -1185,6 +1195,20 @@ impl LayoutNodeMode {
 }
 
 #[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+enum LabelLayout {
+    DanglingTangent,
+    FixedLength,
+    Normal,
+}
+
+fn default_label_layout() -> LabelLayout {
+    LabelLayout::Normal
+}
+
+#[derive(
     Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
 #[serde(rename_all = "kebab-case")]
@@ -1222,6 +1246,8 @@ struct LayoutConfig {
         deserialize_with = "deserialize_usize"
     )]
     label_steps: usize,
+    #[serde(default = "default_label_layout")]
+    label_layout: LabelLayout,
     #[serde(default = "default_label_step", deserialize_with = "deserialize_f64")]
     label_step: f64,
     #[serde(
@@ -1275,6 +1301,7 @@ impl Default for LayoutConfig {
             z_spring: default_z_spring(),
             z_spring_growth: default_z_spring_growth(),
             label_steps: default_label_steps(),
+            label_layout: default_label_layout(),
             label_step: default_label_step(),
             label_length_scale: default_label_length_scale(),
             label_charge: default_label_charge(),
@@ -1317,6 +1344,7 @@ impl LayoutConfig {
                 | "k-spring"
                 | "label-charge"
                 | "label-early-tol"
+                | "label-layout"
                 | "label-length-scale"
                 | "label-max-delta-scale"
                 | "label-spring"
@@ -2158,12 +2186,12 @@ impl TypstGraph {
         let max_delta = cfg.label_max_delta_scale * spring_length;
         let eps = 1e-4;
 
-        let normals: EdgeVec<Vector2<f64>> =
-            self.new_edgevec(|_e, idx, pair| self.edge_label_normal(idx, pair));
+        let axes: EdgeVec<Vector2<f64>> =
+            self.new_edgevec(|_e, idx, pair| self.edge_label_axis(idx, pair));
 
         let mut labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
             let edge_pos = self.graph[idx].pos;
-            edge_pos + normals[idx] * label_length
+            edge_pos + axes[idx] * label_length
         });
 
         for _ in 0..cfg.label_steps {
@@ -2171,12 +2199,18 @@ impl TypstGraph {
 
             for i in 0..labels.len().0 {
                 let idx = EdgeIndex(i);
-                let mut force = Vector2::zero();
                 let edge_pos = self.graph[idx].pos;
-                let target = edge_pos + normals[idx] * label_length;
-                if label_spring != 0.0 {
-                    force += (target - labels[idx]) * label_spring;
-                }
+                let mut force = match cfg.label_layout {
+                    LabelLayout::DanglingTangent | LabelLayout::Normal => {
+                        let target = edge_pos + axes[idx] * label_length;
+                        if label_spring != 0.0 {
+                            (target - labels[idx]) * label_spring
+                        } else {
+                            Vector2::zero()
+                        }
+                    }
+                    LabelLayout::FixedLength => Vector2::zero(),
+                };
 
                 if label_charge != 0.0 {
                     for n in 0..self.n_nodes() {
@@ -2218,16 +2252,42 @@ impl TypstGraph {
                     }
                 }
 
-                let mut move_vec = force * step;
+                let mut move_vec = match cfg.label_layout {
+                    LabelLayout::DanglingTangent | LabelLayout::Normal => force * step,
+                    LabelLayout::FixedLength => {
+                        let offset = labels[idx] - edge_pos;
+                        let radial = if offset.magnitude2() > 1e-12 {
+                            offset.normalize()
+                        } else {
+                            axes[idx]
+                        };
+                        let tangent = Vector2::new(-radial.y, radial.x);
+                        tangent * force.dot(tangent) * step
+                    }
+                };
                 let mag = move_vec.magnitude();
                 if max_delta > 0.0 && mag > max_delta {
                     move_vec *= max_delta / mag;
                 }
                 labels[idx] += move_vec;
                 let offset = labels[idx] - edge_pos;
-                if offset.dot(normals[idx]) < 0.0 {
-                    let dist = offset.magnitude();
-                    labels[idx] = edge_pos + normals[idx] * dist;
+                match cfg.label_layout {
+                    LabelLayout::DanglingTangent | LabelLayout::Normal => {
+                        if offset.dot(axes[idx]) < 0.0 {
+                            let dist = offset.magnitude();
+                            labels[idx] = edge_pos + axes[idx] * dist;
+                        }
+                    }
+                    LabelLayout::FixedLength => {
+                        let radius = label_length.abs();
+                        labels[idx] = if radius <= 1e-12 {
+                            edge_pos
+                        } else if offset.magnitude2() > 1e-12 {
+                            edge_pos + offset.normalize() * radius
+                        } else {
+                            edge_pos + axes[idx] * label_length
+                        };
+                    }
                 }
                 max_move = max_move.max(move_vec.magnitude());
             }
@@ -2245,7 +2305,19 @@ impl TypstGraph {
         }
     }
 
-    fn edge_label_normal(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
+    fn edge_label_axis(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
+        if matches!(
+            self.layout_config.label_layout,
+            LabelLayout::DanglingTangent
+        ) && matches!(pair, HedgePair::Unpaired { .. })
+        {
+            self.edge_label_tangent(edge, pair)
+        } else {
+            self.edge_label_normal(edge, pair)
+        }
+    }
+
+    fn edge_label_tangent(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
         let edge_pos = self.graph[edge].pos;
         let mut tangent = match pair {
             HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
@@ -2263,6 +2335,12 @@ impl TypstGraph {
             tangent = Vector2::new(1.0, 0.0);
         }
 
+        tangent.normalize()
+    }
+
+    fn edge_label_normal(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
+        let edge_pos = self.graph[edge].pos;
+        let tangent = self.edge_label_tangent(edge, pair);
         let mut normal = Vector2::new(-tangent.y, tangent.x);
         if normal.magnitude2() <= 1e-12 {
             normal = Vector2::new(0.0, 1.0);

@@ -21,6 +21,19 @@ use serde::{Deserialize, Serialize};
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
 
+fn normalize_statement_key(key: &str) -> String {
+    key.trim().trim_matches('"').to_string()
+}
+
+fn statement_map_value<'a>(
+    statements: &'a BTreeMap<String, String>,
+    key: &str,
+) -> Option<&'a String> {
+    statements
+        .get(key)
+        .or_else(|| statements.get(&format!("\"{key}\"")))
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstDotGraphInfo {
@@ -680,17 +693,32 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
         global_statements: global_data
             .statements
             .iter()
-            .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
+            .map(|(key, value)| {
+                (
+                    normalize_statement_key(key.as_str()),
+                    value.as_str().to_string(),
+                )
+            })
             .collect(),
         default_edge_statements: global_data
             .edge_statements
             .iter()
-            .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
+            .map(|(key, value)| {
+                (
+                    normalize_statement_key(key.as_str()),
+                    value.as_str().to_string(),
+                )
+            })
             .collect(),
         default_node_statements: global_data
             .node_statements
             .iter()
-            .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
+            .map(|(key, value)| {
+                (
+                    normalize_statement_key(key.as_str()),
+                    value.as_str().to_string(),
+                )
+            })
             .collect(),
     }
 }
@@ -1122,7 +1150,12 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
         .data
         .statements
         .iter()
-        .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
+        .map(|(key, value)| {
+            (
+                normalize_statement_key(key.as_str()),
+                value.as_str().to_string(),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
 
     TypstDotNode {
@@ -1147,7 +1180,12 @@ fn edge_view_to_output(
         .data
         .statements
         .iter()
-        .map(|(key, value)| (key.as_str().to_string(), value.as_str().to_string()))
+        .map(|(key, value)| {
+            (
+                normalize_statement_key(key.as_str()),
+                value.as_str().to_string(),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     let endpoints = graph.endpoints_of_edge(&edge);
 
@@ -1243,7 +1281,7 @@ fn decode_compass(arg: &[u8]) -> Result<Option<CompassPt>, String> {
 }
 
 fn parse_point(statements: &BTreeMap<String, String>, key: &str) -> Option<TypstPoint> {
-    let value = statements.get(key)?;
+    let value = statement_map_value(statements, key)?;
     let cleaned = value
         .trim()
         .trim_matches('"')
@@ -1263,7 +1301,7 @@ fn parse_point(statements: &BTreeMap<String, String>, key: &str) -> Option<Typst
 }
 
 fn parse_rad(statements: &BTreeMap<String, String>, key: &str) -> Option<f64> {
-    statements.get(key).and_then(|value| {
+    statement_map_value(statements, key).and_then(|value| {
         value
             .trim()
             .trim_matches('"')
