@@ -26,7 +26,7 @@ use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
 use tracing::instrument;
-use vakint::{Vakint, vakint_symbol};
+use vakint::Vakint;
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 use super::{IntegrandExpr, UltravioletGraph};
 
@@ -534,7 +534,7 @@ impl Approximation {
             .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
             .unwrap()
-            .series(vakint_symbol!("ε"), Atom::Zero, 0)
+            .series(GS.dim_epsilon, Atom::Zero, 0)
             .unwrap()
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)
@@ -724,7 +724,7 @@ impl Approximation {
             .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
             .unwrap()
-            .series(vakint_symbol!("ε"), Atom::Zero, 0)
+            .series(GS.dim_epsilon, Atom::Zero, 0)
             .unwrap()
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)
