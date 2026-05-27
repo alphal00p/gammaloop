@@ -113,6 +113,75 @@ pub trait FastTensorSum: Sized {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TensorContractionProfile {
+    pub entries: usize,
+    pub total_terms: usize,
+    pub max_terms: usize,
+    pub total_bytes: usize,
+    pub max_bytes: usize,
+}
+
+impl Default for TensorContractionProfile {
+    fn default() -> Self {
+        Self::unit()
+    }
+}
+
+impl TensorContractionProfile {
+    pub fn unit() -> Self {
+        Self {
+            entries: 1,
+            total_terms: 1,
+            max_terms: 1,
+            total_bytes: 1,
+            max_bytes: 1,
+        }
+    }
+
+    #[cfg(feature = "shadowing")]
+    fn from_param_tensor<S>(tensor: &ParamTensor<S>) -> Self
+    where
+        S: TensorStructure + Clone,
+    {
+        let mut profile = Self {
+            entries: tensor.tensor.actual_size().max(1),
+            total_terms: 0,
+            max_terms: 0,
+            total_bytes: 0,
+            max_bytes: 0,
+        };
+
+        let observe = |profile: &mut Self, atom: AtomView<'_>| {
+            let terms = atom.nterms();
+            let bytes = atom.get_byte_size();
+            profile.total_terms += terms;
+            profile.max_terms = profile.max_terms.max(terms);
+            profile.total_bytes += bytes;
+            profile.max_bytes = profile.max_bytes.max(bytes);
+        };
+
+        match &tensor.tensor {
+            DataTensor::Dense(dense) => {
+                for atom in &dense.data {
+                    observe(&mut profile, atom.as_view());
+                }
+            }
+            DataTensor::Sparse(sparse) => {
+                for atom in sparse.elements.values() {
+                    observe(&mut profile, atom.as_view());
+                }
+            }
+        }
+
+        profile.total_terms = profile.total_terms.max(1);
+        profile.max_terms = profile.max_terms.max(1);
+        profile.total_bytes = profile.total_bytes.max(1);
+        profile.max_bytes = profile.max_bytes.max(1);
+        profile
+    }
+}
+
 pub trait FastTensorSumContractible<Sc>: Sized {
     fn fast_tensor_sum_contract<CStrat>(
         _terms: &[&Self],
@@ -120,6 +189,10 @@ pub trait FastTensorSumContractible<Sc>: Sized {
         _terms_on_left: bool,
     ) -> Option<Result<FastTensorSumContract<Self, Sc>, ContractionError>> {
         None
+    }
+
+    fn contraction_profile(&self) -> TensorContractionProfile {
+        TensorContractionProfile::unit()
     }
 }
 
@@ -235,6 +308,10 @@ where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
     S::Slot: Send + Sync,
 {
+    fn contraction_profile(&self) -> TensorContractionProfile {
+        TensorContractionProfile::from_param_tensor(self)
+    }
+
     fn fast_tensor_sum_contract<CStrat>(
         terms: &[&Self],
         other: &Self,
@@ -312,6 +389,13 @@ where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
     S::Slot: Send + Sync,
 {
+    fn contraction_profile(&self) -> TensorContractionProfile {
+        match self {
+            ParamOrConcrete::Param(param) => TensorContractionProfile::from_param_tensor(param),
+            ParamOrConcrete::Concrete(_) => TensorContractionProfile::unit(),
+        }
+    }
+
     fn fast_tensor_sum_contract<CStrat>(
         terms: &[&Self],
         other: &Self,
@@ -343,6 +427,13 @@ where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
     S::Slot: Send + Sync,
 {
+    fn contraction_profile(&self) -> TensorContractionProfile {
+        match self {
+            ParamOrConcrete::Param(param) => TensorContractionProfile::from_param_tensor(param),
+            ParamOrConcrete::Concrete(_) => TensorContractionProfile::unit(),
+        }
+    }
+
     fn fast_tensor_sum_contract<CStrat>(
         terms: &[&Self],
         other: &Self,

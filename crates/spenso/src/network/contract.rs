@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     FastTensorSum, FastTensorSumContract, FastTensorSumContractible, Ref, TensorCommonFactor,
-    TensorNetworkError,
+    TensorContractionProfile, TensorNetworkError,
     graph::NetworkGraph,
     library::{Library, LibraryTensor},
     profile,
@@ -38,6 +38,47 @@ fn max_lazy_tensor_sum_distributed_terms() -> usize {
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(MAX_LAZY_TENSOR_SUM_DISTRIBUTED_TERMS)
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ResultRankPairScore {
+    result_rank: u32,
+    atom_work: u128,
+    max_entry_growth: u128,
+    entry_work: u128,
+    inverse_degree: u32,
+}
+
+impl ResultRankPairScore {
+    fn new(
+        result_rank: u32,
+        degree: u32,
+        left: TensorContractionProfile,
+        right: TensorContractionProfile,
+    ) -> Self {
+        let left_entries = left.entries.max(1) as u128;
+        let right_entries = right.entries.max(1) as u128;
+        let left_terms = left.total_terms.max(1) as u128;
+        let right_terms = right.total_terms.max(1) as u128;
+        let left_bytes = left.total_bytes.max(1) as u128;
+        let right_bytes = right.total_bytes.max(1) as u128;
+        let left_max_terms = left.max_terms.max(1) as u128;
+        let right_max_terms = right.max_terms.max(1) as u128;
+        let left_max_bytes = left.max_bytes.max(1) as u128;
+        let right_max_bytes = right.max_bytes.max(1) as u128;
+
+        Self {
+            result_rank,
+            atom_work: left_bytes
+                .saturating_mul(right_terms)
+                .saturating_add(right_bytes.saturating_mul(left_terms)),
+            max_entry_growth: left_max_bytes
+                .saturating_mul(right_max_terms)
+                .saturating_add(right_max_bytes.saturating_mul(left_max_terms)),
+            entry_work: left_entries.saturating_mul(right_entries),
+            inverse_degree: u32::MAX - degree,
+        }
+    }
 }
 
 pub struct SmallestDegree<CStrat = ()> {
@@ -1367,24 +1408,54 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         .map(|(left, right, degree, _)| (left, right, degree))
     }
 
-    pub fn best_result_rank_pair<Store>(&self, executor: &Store) -> Option<(usize, usize, u32)>
+    pub fn best_result_rank_pair<Sc, Store>(&self, executor: &Store) -> Option<(usize, usize, u32)>
     where
         Store: NetworkStoreAccess,
-        Store::Tensor: HasStructure,
+        Store::Tensor: HasStructure + FastTensorSumContractible<Sc>,
     {
-        self.best_tensor_pair_structure_by::<Store, _, false>(
-            executor,
-            |_, _, degree, left, right| {
+        let tensors = self
+            .operands
+            .iter()
+            .enumerate()
+            .filter_map(|(operand, _)| {
+                self.local_tensor_index(operand).map(|index| {
+                    let tensor = executor.tensor(index);
+                    (operand, tensor.structure(), tensor.contraction_profile())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut best = None;
+        for (left_position, (left_operand, left_structure, left_profile)) in
+            tensors.iter().enumerate()
+        {
+            for (right_operand, right_structure, right_profile) in &tensors[left_position + 1..] {
+                let degree = matching_degree(*left_structure, *right_structure);
                 if degree == 0 {
-                    return (u32::MAX, u32::MAX);
+                    continue;
                 }
 
-                let result_rank = left.order() + right.order() - 2 * degree as usize;
+                let result_rank =
+                    left_structure.order() + right_structure.order() - 2 * degree as usize;
+                let score = ResultRankPairScore::new(
+                    result_rank as u32,
+                    degree,
+                    *left_profile,
+                    *right_profile,
+                );
 
-                (result_rank as u32, u32::MAX - degree)
-            },
-        )
-        .map(|(left, right, degree, _)| (left, right, degree))
+                let replace = match &best {
+                    None => true,
+                    Some((_, _, _, best_score)) => score < *best_score,
+                };
+
+                if replace {
+                    best = Some((*left_operand, *right_operand, degree, score));
+                }
+            }
+        }
+
+        best.map(|(left, right, degree, _)| (left, right, degree))
     }
 
     #[allow(clippy::result_large_err)]
@@ -1418,7 +1489,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             IsAbstractSlot<Aind = Aind>,
     {
         self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
-        let Some((left, right, degree)) = self.best_result_rank_pair::<Store>(executor) else {
+        let Some((left, right, degree)) = self.best_result_rank_pair::<Sc, Store>(executor) else {
             return Ok(false);
         };
 
