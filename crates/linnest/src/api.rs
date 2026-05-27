@@ -1,6 +1,6 @@
 use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
-use linnet::parser::{set::DotGraphSet, DotGraph};
+use linnet::parser::set::DotGraphSet;
 
 use crate::{
     graph_api::{decode_graph_bytes_list, encode_cbor},
@@ -51,7 +51,14 @@ fn decode_dot_string(arg: &[u8]) -> Result<&str, String> {
 pub fn parse_dot_graphs_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let dot_string = decode_dot_string(arg)?;
     let dots = DotGraphSet::from_string(dot_string).map_err(|err| err.to_string())?;
-    let graph_bytes = dots.into_graph_bytes_set::<4096>()?.graphs;
+    let mut graph_bytes = Vec::with_capacity(dots.set.len());
+    for dot in dots {
+        graph_bytes.push(
+            rkyv::to_bytes::<_, 4096>(&TypstGraph::from_dot(dot, &crate::default_figment()))
+                .map(|bytes| bytes.to_vec())
+                .map_err(|err| err.to_string())?,
+        );
+    }
     encode_cbor(&graph_bytes)
 }
 
@@ -60,26 +67,25 @@ pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Str
     let subgraph_label = take_layout_subgraph(&mut cbor_map)?;
     let figment = Figment::from(Serialized::from(cbor_map, Profile::Default));
 
-    let graph = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let mut typst_graph = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(arg) }
+        .map_err(|err| format!("Failed to deserialize archived Typst graph: {err}"))?;
     let subgraph = subgraph_label
         .as_deref()
         .map(|label| {
-            SuBitGraph::from_base62(label, graph.n_hedges()).ok_or_else(|| {
+            SuBitGraph::from_base62(label, typst_graph.n_hedges()).ok_or_else(|| {
                 format!(
                     "Invalid subgraph label {label:?} for graph with {} half edges",
-                    graph.n_hedges()
+                    typst_graph.n_hedges()
                 )
             })
         })
         .transpose()?;
 
-    let mut typst_graph = TypstGraph::from_dot(graph, &figment);
+    typst_graph.layout_config = crate::LayoutConfig::from_figment(&figment);
     typst_graph.layout_with_subgraph(subgraph.as_ref())?;
-    typst_graph
-        .to_dot_graph()
-        .to_rkyv_bytes::<4096>()
+    rkyv::to_bytes::<_, 4096>(&typst_graph)
         .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())
 }
 
 pub fn layout_parsed_graphs_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -113,6 +119,12 @@ pub fn graph_from_spec(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn graph_with_data(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_with_data_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_apply_structural_patches(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_apply_structural_patches_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]

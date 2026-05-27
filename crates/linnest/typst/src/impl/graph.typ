@@ -421,22 +421,56 @@
   }
   (kind: "group", name: _statement-value(name, "graph.group name"), side: side)
 }
+#let _axis-placement-kind = "axis-placement"
+#let _axis-placement(mode, value, context_) = {
+  if value == none {
+    panic(context_ + ": expected an axis coordinate value")
+  }
+  (kind: _axis-placement-kind, mode: mode, value: value)
+}
+#let pin(value) = _axis-placement("pin", value, "graph.pin")
+#let start(value) = _axis-placement("start", value, "graph.start")
+#let _axis-value(value, context_) = {
+  if type(value) == dictionary and value.at("kind", default: none) == _axis-placement-kind {
+    let mode = value.at("mode", default: none)
+    if mode != "start" and mode != "pin" {
+      panic(context_ + ": axis mode must be \"start\" or \"pin\"")
+    }
+    (value: value.at("value", default: none), mode: mode)
+  } else {
+    (value: value, mode: none)
+  }
+}
 #let pos(options) = {
-  let x = options.x
-  let y = options.y
+  let x = _axis-value(options.x, "graph.pos x")
+  let y = _axis-value(options.y, "graph.pos y")
   let ref = options.ref
   let dx = options.dx
   let dy = options.dy
   let mode = options.mode
+  let x-mode = options.at("x-mode", default: x.mode)
+  let y-mode = options.at("y-mode", default: y.mode)
   if mode != "start" and mode != "pin" {
     panic("graph.pos: mode must be \"start\" or \"pin\"")
   }
-  let result = (mode: mode)
-  if x != none {
-    result.insert("x", x)
+  if x-mode != none and x-mode != "start" and x-mode != "pin" {
+    panic("graph.pos: x-mode must be none, \"start\", or \"pin\"")
   }
-  if y != none {
-    result.insert("y", y)
+  if y-mode != none and y-mode != "start" and y-mode != "pin" {
+    panic("graph.pos: y-mode must be none, \"start\", or \"pin\"")
+  }
+  let result = (mode: mode)
+  if x-mode != none {
+    result.insert("x-mode", x-mode)
+  }
+  if y-mode != none {
+    result.insert("y-mode", y-mode)
+  }
+  if x.value != none {
+    result.insert("x", x.value)
+  }
+  if y.value != none {
+    result.insert("y", y.value)
   }
   if ref != none {
     result.insert("ref", ref)
@@ -555,6 +589,62 @@
   } else {
     result.at("data", default: none)
   }
+}
+
+#let _structural-keys(kind) = {
+  if kind == "node" {
+    ("pos", "shift")
+  } else if kind == "edge" {
+    ("pos", "shift", "label-pos", "label-angle", "bend")
+  } else {
+    ()
+  }
+}
+
+#let _mapped-patch(callback, record, kind, context_) = {
+  if callback == none {
+    return (data: none, structural: none)
+  }
+  let result = callback(record)
+  if result == none {
+    return (data: none, structural: none)
+  }
+  if type(result) != dictionary {
+    panic(context_ + ": callback must return none or a dictionary")
+  }
+
+  let structural-keys = _structural-keys(kind)
+  let structural = (:)
+  for key in structural-keys {
+    if result.keys().contains(key) {
+      structural.insert(key, result.at(key))
+    }
+  }
+
+  let data = none
+  if result.keys().contains("data") {
+    data = result.data
+  } else {
+    let data-patch = (:)
+    for key in result.keys() {
+      if not structural-keys.contains(key) {
+        data-patch.insert(key, result.at(key))
+      }
+    }
+    if data-patch.len() != 0 {
+      let existing = record.at("data", default: none)
+      data = if type(existing) == dictionary {
+        existing + data-patch
+      } else {
+        data-patch
+      }
+    }
+  }
+
+  (
+    data: data,
+    structural: if structural.len() == 0 { none } else { structural },
+  )
 }
 
 #let _default-data-patch(default, record) = {
@@ -677,21 +767,29 @@
   let source = callbacks.source
   let sink = callbacks.sink
   let changed = false
+  let structural-changed = false
+  let structural-patches = (nodes: (), edges: ())
   let native-data = _native-data(graph_)
   let info = _info-record(graph_)
   let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))), (:), (:))
-  let graph-data = _mapped-data(graph, graph-record, "graph.map graph")
-  if graph-data != none {
-    native-data.graph = graph-data
+  let graph-patch = _mapped-patch(graph, graph-record, "graph", "graph.map graph")
+  if graph-patch.data != none {
+    native-data.graph = graph-patch.data
     changed = true
   }
 
   if node != none {
     for node-record in _node-records(graph_, none) {
-      let data = _mapped-data(node, _record-with-fields(node-record, (:), (:)), "graph.map node")
-      if data != none {
-        native-data.nodes = _array-set(native-data.nodes, node-record.node, data)
+      let node-record = _record-with-fields(node-record, (:), (:))
+      let patch = _mapped-patch(node, node-record, "node", "graph.map node")
+      if patch.data != none {
+        native-data.nodes = _array-set(native-data.nodes, node-record.node, patch.data)
         changed = true
+      }
+      if patch.structural != none {
+        let structural = patch.structural + (index: node-record.node)
+        structural-patches.nodes.push(structural)
+        structural-changed = true
       }
     }
   }
@@ -700,44 +798,60 @@
     for edge-source in _edge-records(graph_, none) {
       let edge-record = _record-with-fields(edge-source, (:), (:))
       let edge-fields = edge-record.fields
-      let data = _mapped-data(edge, edge-record, "graph.map edge")
-      if data != none {
-        native-data.edges = _array-set(native-data.edges, edge-source.edge, data)
+      let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
+      if patch.data != none {
+        native-data.edges = _array-set(native-data.edges, edge-source.edge, patch.data)
         changed = true
+      }
+      if patch.structural != none {
+        let structural = patch.structural + (index: edge-source.edge)
+        structural-patches.edges.push(structural)
+        structural-changed = true
       }
 
       let source-record = edge-source.at("source", default: none)
       if source-record != none {
-        let source-data = _mapped-data(
+        let source-patch = _mapped-patch(
           source,
           _record-with-fields(source-record, edge-fields, (edge: edge-record)),
+          "hedge",
           "graph.map source",
         )
-        if source-data != none {
-          native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-data)
+        if source-patch.data != none {
+          native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-patch.data)
           changed = true
         }
       }
 
       let sink-record = edge-source.at("sink", default: none)
       if sink-record != none {
-        let sink-data = _mapped-data(
+        let sink-patch = _mapped-patch(
           sink,
           _record-with-fields(sink-record, edge-fields, (edge: edge-record)),
+          "hedge",
           "graph.map sink",
         )
-        if sink-data != none {
-          native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-data)
+        if sink-patch.data != none {
+          native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-patch.data)
           changed = true
         }
       }
     }
   }
 
-  if not changed {
+  if structural-changed {
+    graph_ = _graph-object(
+      _plugin.graph_apply_structural_patches(graph-bytes(graph_), cbor.encode(structural-patches)),
+      native-data,
+    )
+  }
+
+  if not changed and not structural-changed {
     graph_
-  } else {
+  } else if not structural-changed {
     _with-native-data(graph_, native-data)
+  } else {
+    graph_
   }
 }
 

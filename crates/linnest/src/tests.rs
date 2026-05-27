@@ -5,18 +5,15 @@ use figment::{Figment, Profile};
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
 use linnet::half_edge::swap::Swap;
-use linnet::{
-    dot,
-    parser::{set::DotGraphSet, DotGraph},
-};
+use linnet::{dot, parser::set::DotGraphSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    graph_archived_compass_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
-    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
-    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
-    graph_info_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
-    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
+    graph_apply_structural_patches_bytes, graph_archived_compass_subgraph_bytes,
+    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes,
+    graph_edge_data_by_name_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
+    graph_edges_of_bytes, graph_from_spec_bytes, graph_info_bytes, graph_node_data_by_name_bytes,
+    graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
     graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
     graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes, layout_graph_bytes,
     layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes,
@@ -282,6 +279,24 @@ fn quoted_dot_statement_keys_are_normalized() {
     assert!(!edge.statements.contains_key("\"label-anchor\""));
 }
 
+#[test]
+fn explicit_dot_bend_survives_parse_and_layout() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph {
+            ext [style=invis]
+            a -> ext [id=0 bend=19]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(edges[0].bend, Some(19.0));
+
+    let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
+    let laid_out_edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    assert_eq!(laid_out_edges[0].bend, Some(19.0));
+}
+
 #[derive(Serialize)]
 struct TestGraphSpec {
     name: String,
@@ -351,6 +366,34 @@ struct TestPlacedEdgeSpec {
 }
 
 #[derive(Serialize)]
+struct TestStructuralPatch {
+    #[serde(default)]
+    nodes: Vec<TestNodeStructuralPatch>,
+    #[serde(default)]
+    edges: Vec<TestEdgeStructuralPatch>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct TestNodeStructuralPatch {
+    index: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pos: Option<TestPlacementSpec>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct TestEdgeStructuralPatch {
+    index: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pos: Option<TestPlacementSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label_pos: Option<(f64, f64)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bend: Option<f64>,
+}
+
+#[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct TestPlacementSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -392,17 +435,17 @@ struct TestEndpointSpec {
 }
 
 #[test]
-fn test_parse_pass_returns_archived_dot_graphs() {
+fn test_parse_pass_returns_archived_typst_graphs() {
     let parsed =
         parse_dot_graphs_bytes(br#"digraph first { a -> b } digraph second { c -> d }"#).unwrap();
 
     let archived = decode_graphs(&parsed);
 
     assert_eq!(archived.len(), 2);
-    let first = DotGraph::archived_view(&archived[0]);
-    let second = DotGraph::archived_view(&archived[1]);
-    assert_eq!(first.global_data().name.as_str(), "first");
-    assert_eq!(second.global_data().name.as_str(), "second");
+    let first = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(&archived[0]).unwrap() };
+    let second = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(&archived[1]).unwrap() };
+    assert_eq!(first.name, "first");
+    assert_eq!(second.name, "second");
 }
 
 #[test]
@@ -450,7 +493,7 @@ fn test_graph_query_api_reads_nodes_edges_and_subgraphs() {
     .unwrap();
     assert_eq!(north_edges.len(), 1);
 
-    let view = DotGraph::archived_view(graph);
+    let view = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(graph).unwrap() };
     let mut south_bits = vec![false; view.n_hedges()];
     south_bits[view.n_hedges() - 1] = true;
     let subgraph = graph_subgraph_bytes(graph, &encode_cbor(&south_bits)).unwrap();
@@ -1114,6 +1157,163 @@ fn test_graph_spec_uses_first_class_placements() {
         laid_out_nodes[1].pos,
         Some(crate::TypstPoint { x: 4.0, y: 1.0 })
     );
+}
+
+#[test]
+fn test_graph_structural_patch_updates_edge_position() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestPlacementGraphSpec {
+        name: "patchable".to_string(),
+        nodes: vec![
+            TestPlacedNodeSpec {
+                name: "a".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(0.0)),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestPlacedNodeSpec {
+                name: "b".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(1.0)),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![TestPlacedEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: 1,
+                compass: None,
+                statement: None,
+            }),
+            pos: None,
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+
+    let patched = graph_apply_structural_patches_bytes(
+        &graph,
+        &encode_cbor(&TestStructuralPatch {
+            nodes: Vec::new(),
+            edges: vec![TestEdgeStructuralPatch {
+                index: 0,
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Group(TestPlacementGroup {
+                        kind: "group",
+                        name: "right",
+                        side: Some("+"),
+                    })),
+                    y: Some(TestPlacementCoord::Number(10.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                label_pos: Some((1.5, -0.5)),
+                bend: Some(0.75),
+            }],
+        }),
+    )
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
+    assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 0.0, y: 10.0 }));
+    assert_eq!(
+        edges[0].label_pos,
+        Some(crate::TypstPoint { x: 1.5, y: -0.5 })
+    );
+    assert_eq!(edges[0].bend, Some(0.75));
+
+    let dot: String = decode_cbor(&graph_dot_bytes(&patched).unwrap());
+    assert!(dot.contains("pin=\"x:@+right,y:10\""), "{dot}");
+    assert!(dot.contains("bend=\"0.75rad\""), "{dot}");
+}
+
+#[test]
+fn test_graph_spec_axis_modes_pin_axes_independently() {
+    #[derive(Serialize)]
+    struct AxisModeGraphSpec {
+        name: String,
+        nodes: Vec<AxisModeNodeSpec>,
+        edges: Vec<TestEdgeSpec>,
+    }
+
+    #[derive(Serialize)]
+    struct AxisModeNodeSpec {
+        name: String,
+        pos: AxisModePlacementSpec,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "kebab-case")]
+    struct AxisModePlacementSpec {
+        mode: &'static str,
+        x: f64,
+        y: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        x_mode: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        y_mode: Option<&'static str>,
+    }
+
+    let graph = graph_from_spec_bytes(&encode_cbor(&AxisModeGraphSpec {
+        name: "axis-modes".to_string(),
+        nodes: vec![
+            AxisModeNodeSpec {
+                name: "a".to_string(),
+                pos: AxisModePlacementSpec {
+                    mode: "pin",
+                    x: 1.0,
+                    y: 2.0,
+                    x_mode: None,
+                    y_mode: Some("start"),
+                },
+            },
+            AxisModeNodeSpec {
+                name: "b".to_string(),
+                pos: AxisModePlacementSpec {
+                    mode: "start",
+                    x: 3.0,
+                    y: 4.0,
+                    x_mode: Some("pin"),
+                    y_mode: None,
+                },
+            },
+        ],
+        edges: Vec::new(),
+    }))
+    .unwrap();
+
+    let graph = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(&graph).unwrap() };
+    let mut nodes = BTreeMap::new();
+    for (_, _, node) in graph.iter_nodes() {
+        nodes.insert(node.name.as_deref().unwrap(), node);
+    }
+
+    assert_eq!(nodes["a"].pos.x, 1.0);
+    assert_eq!(nodes["a"].pos.y, 2.0);
+    assert!(matches!(nodes["a"].constraints.x, Constraint::Fixed));
+    assert!(matches!(nodes["a"].constraints.y, Constraint::Free));
+
+    assert_eq!(nodes["b"].pos.x, 3.0);
+    assert_eq!(nodes["b"].pos.y, 4.0);
+    assert!(matches!(nodes["b"].constraints.x, Constraint::Fixed));
+    assert!(matches!(nodes["b"].constraints.y, Constraint::Free));
 }
 
 #[test]

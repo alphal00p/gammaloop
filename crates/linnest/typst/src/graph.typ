@@ -686,15 +686,31 @@
   side: none,
 ) = _impl.group(name, side)
 
+/// Mark one coordinate as a layout constraint.
+/// -> dictionary
+#let pin(
+  /// Coordinate value to constrain. -> int | float | dictionary
+  value,
+) = _impl.pin(value)
+
+/// Mark one coordinate as an initial layout value only.
+/// -> dictionary
+#let start(
+  /// Coordinate value to use as the layout seed. -> int | float
+  value,
+) = _impl.start(value)
+
 /// Create a first-class graph placement.
 ///
-/// The default `mode: "pin"` turns numeric and grouped coordinates into layout
-/// constraints and also makes the coordinates immediately drawable without a
-/// layout pass. Use `mode: "start"` when the coordinate should only seed the
-/// layout.
+/// The default `mode: "pin"` turns numeric coordinates into layout constraints
+/// and also makes the coordinates immediately drawable without a layout pass.
+/// Use `start(value)` for an individual coordinate that should only seed the
+/// layout, or `pin(value)` to pin an individual numeric coordinate when
+/// `mode: "start"` is used. Grouped coordinates are always layout constraints
+/// for their axis.
 ///
 /// ```example
-/// #pos(x: 0, y: group("row"), mode: "pin")
+/// #pos(x: group("right", side: "+"), y: start(10))
 /// ```
 /// -> dictionary
 #let pos(

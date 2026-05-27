@@ -17,14 +17,13 @@ digraph BNL {
 
   edge [label=""]
   ext [style=invis]
-  ext  -> 0:0 [dir=back id=0 particle="e+" label="$e^+(p_#edge)$" pos="x:@-left!,y:0" "label-anchor"="east"];
-  ext -> 0:1 [id=1 particle="e-" label="$e^-(p_#edge)$" pos="x:@-left!,y:1" "label-anchor"="east"];
-
-  1:2 -> ext [ dir=back id=2 particle="mu+" label="$mu^+(p_#edge)$" pos="x:@+right!,y:20" "label-anchor"="west"];
-  1:3 -> ext [id=3 particle="mu-" label="$mu^-(p_#edge)$" pos="x:@+right!,y:10" "label-anchor"="west"];
-  2:4 -> ext [id=4 particle="a" label="$gamma(p_#edge)$" pos="x:@+right!,y:0" "label-anchor"="west"];
-  3:5 -> ext [id=5 particle="a" label="$gamma(p_#edge)$" pos="x:@+right!,y:-10" "label-anchor"="west"];
-  4:6 -> ext [id=6 particle="a" label="$gamma(p_#edge)$" pos="x:@+right!,y:-20" "label-anchor"="west"];
+  ext  -> 0:0 [dir=back id=0 particle="e+"];
+  ext -> 0:1 [id=1 particle="e-"];
+  1:2 -> ext [ dir=back id=2 particle="mu+"];
+  1:3 -> ext [id=3 particle="mu-"];
+  2:4 -> ext [id=4 particle="a"];
+  3:5 -> ext [id=5 particle="a"];
+  4:6 -> ext [id=6 particle="a"];
 
   0 -> 5 [id=7 particle="a"  label="$gamma^star$"];
   6 -> 1 [id=8 particle="a" label="$gamma^star$"];
