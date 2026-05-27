@@ -18,6 +18,8 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::{default_figment, TypstGraph};
+
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
 
@@ -74,6 +76,10 @@ enum PlacementMode {
 pub struct TypstPlacementSpec {
     #[serde(default)]
     mode: PlacementMode,
+    #[serde(default)]
+    x_mode: Option<PlacementMode>,
+    #[serde(default)]
+    y_mode: Option<PlacementMode>,
     #[serde(default)]
     x: Option<TypstPlacementCoord>,
     #[serde(default)]
@@ -249,6 +255,49 @@ pub struct TypstGraphDataPatch {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TypstGraphStructuralPatch {
+    #[serde(default)]
+    pub nodes: Vec<TypstNodeStructuralPatch>,
+    #[serde(default)]
+    pub edges: Vec<TypstEdgeStructuralPatch>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TypstNodeStructuralPatch {
+    pub index: usize,
+    #[serde(default)]
+    pub pos: Option<TypstPlacementSpec>,
+    #[serde(default)]
+    pub shift: Option<TypstPointSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TypstEdgeStructuralPatch {
+    pub index: usize,
+    #[serde(default)]
+    pub pos: Option<TypstPlacementSpec>,
+    #[serde(default)]
+    pub shift: Option<TypstPointSpec>,
+    #[serde(default)]
+    pub label_pos: Option<TypstPointSpec>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
+    pub label_angle: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
+    pub bend: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum TypstPointSpec {
+    Point { x: TypstNumber, y: TypstNumber },
+    Tuple(TypstNumber, TypstNumber),
+    Text(String),
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TypstIndexedDataPatch {
     pub index: usize,
     #[serde(default)]
@@ -301,6 +350,35 @@ fn decode_subgraph(arg: &[u8]) -> Result<SuBitGraph, String> {
         .map_err(|err| format!("Failed to deserialize archived subgraph: {err}"))
 }
 
+fn decode_typst_graph(arg: &[u8]) -> Result<TypstGraph, String> {
+    unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(arg) }
+        .map_err(|err| format!("Failed to deserialize archived Typst graph: {err}"))
+}
+
+fn encode_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
+    to_rkyv_bytes::<_, 4096>(graph)
+}
+
+fn typst_graph_from_dot(dot: DotGraph) -> TypstGraph {
+    TypstGraph::from_dot(dot, &default_figment())
+}
+
+fn dot_bytes_from_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
+    graph
+        .to_dot_graph()
+        .to_rkyv_bytes::<4096>()
+        .map(|bytes| bytes.to_vec())
+}
+
+fn with_dot_view<T>(
+    graph: &TypstGraph,
+    callback: impl FnOnce(&ArchivedDotGraphView<'_>) -> Result<T, String>,
+) -> Result<T, String> {
+    let dot_bytes = dot_bytes_from_typst_graph(graph)?;
+    let dot = DotGraph::archived_view(&dot_bytes);
+    callback(&dot)
+}
+
 fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
     to_rkyv_bytes::<_, 256>(subgraph)
 }
@@ -308,58 +386,62 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
 pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: TypstGraphSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize graph spec: {err}"))?;
-    graph_from_spec(spec)?
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
+    encode_typst_graph(&typst_graph_from_dot(graph_from_spec(spec)?))
 }
 
 pub fn graph_with_data_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let graph = decode_typst_graph(arg)?;
+    let layout_config = graph.layout_config.clone();
+    let mut graph = graph.to_dot_graph();
     let patch: TypstGraphDataPatch = decode_cbor(arg2, "graph data patch")?;
     apply_graph_data_patch(&mut graph, patch)?;
-    graph
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
-        .map_err(|err| err.to_string())
+    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+        graph,
+        layout_config,
+    ))
 }
 
 pub fn graph_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let name: String = decode_cbor(arg2, "node name")?;
-    let graph = DotGraph::archived_view(arg);
-    let data = graph
-        .vertex_data()
-        .find(|node| {
-            node.data
-                .name
-                .as_ref()
-                .is_some_and(|value| value.as_str() == name)
-        })
-        .ok_or_else(|| format!("No node named {name:?}"))?
-        .data
-        .payload
-        .as_ref()
-        .map(|value| value.to_vec());
+    let graph = decode_typst_graph(arg)?;
+    let data = with_dot_view(&graph, |graph| {
+        Ok(graph
+            .vertex_data()
+            .find(|node| {
+                node.data
+                    .name
+                    .as_ref()
+                    .is_some_and(|value| value.as_str() == name)
+            })
+            .ok_or_else(|| format!("No node named {name:?}"))?
+            .data
+            .payload
+            .as_ref()
+            .map(|value| value.to_vec()))
+    })?;
     encode_cbor(&data)
 }
 
 pub fn graph_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let name: String = decode_cbor(arg2, "edge name")?;
-    let graph = DotGraph::archived_view(arg);
-    let data = graph
-        .edge_data()
-        .find(|edge| archived_edge_name(*edge).as_deref() == Some(name.as_str()))
-        .ok_or_else(|| format!("No edge named {name:?}"))?
-        .data
-        .payload
-        .as_ref()
-        .map(|value| value.to_vec());
+    let graph = decode_typst_graph(arg)?;
+    let data = with_dot_view(&graph, |graph| {
+        Ok(graph
+            .edge_data()
+            .find(|edge| archived_edge_name(*edge).as_deref() == Some(name.as_str()))
+            .ok_or_else(|| format!("No edge named {name:?}"))?
+            .data
+            .payload
+            .as_ref()
+            .map(|value| value.to_vec()))
+    })?;
     encode_cbor(&data)
 }
 
 pub fn graph_set_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let graph = decode_typst_graph(arg)?;
+    let layout_config = graph.layout_config.clone();
+    let mut graph = graph.to_dot_graph();
     let patch: TypstNamedDataPatch = decode_cbor(arg2, "named node data patch")?;
     let node = graph
         .graph
@@ -369,15 +451,16 @@ pub fn graph_set_node_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
         })
         .ok_or_else(|| format!("No node named {:?}", patch.name))?;
     graph.graph[node].payload = Some(patch.data);
-    graph
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
-        .map_err(|err| err.to_string())
+    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+        graph,
+        layout_config,
+    ))
 }
 
 pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let mut graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let graph = decode_typst_graph(arg)?;
+    let layout_config = graph.layout_config.clone();
+    let mut graph = graph.to_dot_graph();
     let patch: TypstNamedDataPatch = decode_cbor(arg2, "named edge data patch")?;
     let edge = graph
         .graph
@@ -393,10 +476,19 @@ pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
         })
         .ok_or_else(|| format!("No edge named {:?}", patch.name))?;
     graph.graph[edge].payload = Some(patch.data);
-    graph
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
-        .map_err(|err| err.to_string())
+    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+        graph,
+        layout_config,
+    ))
+}
+
+pub fn graph_apply_structural_patches_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let graph = decode_typst_graph(arg)?;
+    let layout_config = graph.layout_config.clone();
+    let mut dot = graph.to_dot_graph();
+    let patch: TypstGraphStructuralPatch = decode_cbor(arg2, "graph structural patch")?;
+    apply_graph_structural_patch(&mut dot, patch)?;
+    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(dot, layout_config))
 }
 
 fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> Result<(), String> {
@@ -461,6 +553,78 @@ fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> R
     Ok(())
 }
 
+fn apply_graph_structural_patch(
+    graph: &mut DotGraph,
+    patch: TypstGraphStructuralPatch,
+) -> Result<(), String> {
+    let mut node_positions = graph_node_positions(graph);
+
+    for node in patch.nodes {
+        if node.index >= graph.graph.n_nodes() {
+            return Err(format!(
+                "Node structural patch index {} is out of bounds for graph with {} nodes",
+                node.index,
+                graph.graph.n_nodes()
+            ));
+        }
+
+        let index = NodeIndex(node.index);
+        if let Some(pos) = node.pos {
+            let placement = pos.resolve(&node_positions, "node structural patch")?;
+            let statements = std::mem::take(&mut graph.graph[index].statements);
+            graph.graph[index].statements =
+                apply_placement_statements(statements, Some(&placement));
+            node_positions[node.index] = placement.point;
+        }
+        if let Some(shift) = node.shift {
+            graph.graph[index]
+                .statements
+                .insert("shift".to_string(), shift.to_statement()?);
+        }
+    }
+
+    for edge in patch.edges {
+        if edge.index >= graph.graph.n_edges() {
+            return Err(format!(
+                "Edge structural patch index {} is out of bounds for graph with {} edges",
+                edge.index,
+                graph.graph.n_edges()
+            ));
+        }
+
+        let index = EdgeIndex(edge.index);
+        let mut statements = std::mem::take(&mut graph.graph[index].statements);
+        if let Some(pos) = edge.pos {
+            let placement = pos.resolve(&node_positions, "edge structural patch")?;
+            statements = apply_placement_statements(statements, Some(&placement));
+        }
+        if let Some(shift) = edge.shift {
+            statements.insert("shift".to_string(), shift.to_statement()?);
+        }
+        if let Some(label_pos) = edge.label_pos {
+            statements.insert("label-pos".to_string(), label_pos.to_statement()?);
+        }
+        if let Some(label_angle) = edge.label_angle {
+            statements.insert("label-angle".to_string(), format!("{label_angle}rad"));
+        }
+        if let Some(bend) = edge.bend {
+            statements.insert("bend".to_string(), format!("{bend}rad"));
+        }
+        graph.graph[index].local_statements = statements.clone();
+        graph.graph[index].statements = statements;
+    }
+
+    Ok(())
+}
+
+fn graph_node_positions(graph: &DotGraph) -> Vec<ResolvedPoint> {
+    let mut positions = vec![ResolvedPoint::default(); graph.graph.n_nodes()];
+    for (index, _, data) in graph.graph.iter_nodes() {
+        positions[index.0] = resolved_point_from_statements(&data.statements);
+    }
+    positions
+}
+
 fn endpoint_hedge(pair: HedgePair, side: Flow, edge_index: usize) -> Result<Hedge, String> {
     match (pair, side) {
         (HedgePair::Paired { source, .. } | HedgePair::Split { source, .. }, Flow::Source) => {
@@ -480,102 +644,112 @@ pub fn decode_graph_bytes_list(arg: &[u8]) -> Result<Vec<Vec<u8>>, String> {
 }
 
 pub fn graph_info_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    encode_cbor(&graph_info(&graph))
+    let graph = decode_typst_graph(arg)?;
+    let info = with_dot_view(&graph, |graph| Ok(graph_info(graph)))?;
+    encode_cbor(&info)
 }
 
 pub fn graph_dot_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
-    encode_cbor(&graph.debug_dot())
+    let graph = decode_typst_graph(arg)?;
+    encode_cbor(&graph.to_dot_graph().debug_dot())
 }
 
 pub fn graph_nodes_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    encode_cbor(
-        &graph
+    let graph = decode_typst_graph(arg)?;
+    let nodes = with_dot_view(&graph, |graph| {
+        Ok(graph
             .vertex_data()
             .map(node_view_to_output)
-            .collect::<Vec<_>>(),
-    )
+            .collect::<Vec<_>>())
+    })?;
+    encode_cbor(&nodes)
 }
 
 pub fn graph_nodes_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    let subgraph = decode_subgraph_spec(&graph, arg2)?;
-    encode_cbor(
-        &graph
+    let graph = decode_typst_graph(arg)?;
+    let nodes = with_dot_view(&graph, |graph| {
+        let subgraph = decode_subgraph_spec(graph, arg2)?;
+        Ok(graph
             .vertex_data_of(&subgraph)
             .map(node_view_to_output)
-            .collect::<Vec<_>>(),
-    )
+            .collect::<Vec<_>>())
+    })?;
+    encode_cbor(&nodes)
 }
 
 pub fn graph_edges_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    encode_cbor(
-        &graph
+    let graph = decode_typst_graph(arg)?;
+    let edges = with_dot_view(&graph, |graph| {
+        Ok(graph
             .edge_data()
-            .map(|edge| edge_view_to_output(&graph, edge))
-            .collect::<Vec<_>>(),
-    )
+            .map(|edge| edge_view_to_output(graph, edge))
+            .collect::<Vec<_>>())
+    })?;
+    encode_cbor(&edges)
 }
 
 pub fn graph_edges_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    let subgraph = decode_subgraph_spec(&graph, arg2)?;
-    encode_cbor(
-        &graph
+    let graph = decode_typst_graph(arg)?;
+    let edges = with_dot_view(&graph, |graph| {
+        let subgraph = decode_subgraph_spec(graph, arg2)?;
+        Ok(graph
             .edge_data_of(&subgraph)
-            .map(|edge| edge_view_to_output(&graph, edge))
-            .collect::<Vec<_>>(),
-    )
+            .map(|edge| edge_view_to_output(graph, edge))
+            .collect::<Vec<_>>())
+    })?;
+    encode_cbor(&edges)
 }
 
 pub fn graph_nodes_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
+    let graph = decode_typst_graph(arg)?;
     let subgraph = decode_subgraph(arg2)?;
-    encode_cbor(
-        &graph
+    let nodes = with_dot_view(&graph, |graph| {
+        Ok(graph
             .vertex_data_of(&subgraph)
             .map(node_view_to_output)
-            .collect::<Vec<_>>(),
-    )
+            .collect::<Vec<_>>())
+    })?;
+    encode_cbor(&nodes)
 }
 
 pub fn graph_edges_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
+    let graph = decode_typst_graph(arg)?;
     let subgraph = decode_subgraph(arg2)?;
-    encode_cbor(
-        &graph
+    let edges = with_dot_view(&graph, |graph| {
+        Ok(graph
             .edge_data_of(&subgraph)
-            .map(|edge| edge_view_to_output(&graph, edge))
-            .collect::<Vec<_>>(),
-    )
+            .map(|edge| edge_view_to_output(graph, edge))
+            .collect::<Vec<_>>())
+    })?;
+    encode_cbor(&edges)
 }
 
 pub fn graph_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    let subgraph = decode_subgraph_spec(&graph, arg2)?;
+    let graph = decode_typst_graph(arg)?;
+    let subgraph = with_dot_view(&graph, |graph| decode_subgraph_spec(graph, arg2))?;
     encode_cbor(&subgraph.string_label())
 }
 
 pub fn graph_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
-    let subgraph = decode_subgraph_spec(&graph, arg2)?;
+    let graph = decode_typst_graph(arg)?;
+    let subgraph = with_dot_view(&graph, |graph| decode_subgraph_spec(graph, arg2))?;
     encode_subgraph(&subgraph)
 }
 
 pub fn graph_compass_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
+    let graph = decode_typst_graph(arg)?;
     let compass = decode_compass(arg2)?;
-    encode_cbor(&graph.compass_subgraph(compass).string_label())
+    let label = graph
+        .to_dot_graph()
+        .compass_subgraph::<SuBitGraph>(compass)
+        .string_label();
+    encode_cbor(&label)
 }
 
 pub fn graph_archived_compass_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = DotGraph::archived_view(arg);
+    let graph = decode_typst_graph(arg)?;
     let compass = decode_compass(arg2)?;
-    encode_subgraph(&graph.compass_subgraph(compass))
+    encode_subgraph(&graph.to_dot_graph().compass_subgraph::<SuBitGraph>(compass))
 }
 
 pub fn subgraph_label_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -600,8 +774,7 @@ pub fn subgraph_contains_hedge_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>,
 }
 
 pub fn graph_cycle_basis_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let graph = decode_typst_graph(arg)?.to_dot_graph();
     let (cycles, _) = graph.cycle_basis();
     let archived = cycles
         .into_iter()
@@ -611,8 +784,7 @@ pub fn graph_cycle_basis_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 pub fn graph_spanning_forests_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let graph: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    let graph = decode_typst_graph(arg)?.to_dot_graph();
     let forests = graph.all_spanning_forests_of(&graph.full_filter());
     let archived = forests
         .into_iter()
@@ -626,10 +798,10 @@ pub fn graph_join_by_edge_key_bytes(
     arg2: &[u8],
     arg3: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let left: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize left archived dot graph: {err}"))?;
-    let right: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg2) }
-        .map_err(|err| format!("Failed to deserialize right archived dot graph: {err}"))?;
+    let left_typst = decode_typst_graph(arg)?;
+    let left_layout_config = left_typst.layout_config.clone();
+    let left = left_typst.to_dot_graph();
+    let right = decode_typst_graph(arg2)?.to_dot_graph();
     let spec: TypstJoinSpec = decode_cbor(arg3, "join spec")?;
     let key = spec.key;
 
@@ -648,9 +820,10 @@ pub fn graph_join_by_edge_key_bytes(
         )
         .map_err(|err| err.to_string())?;
 
-    DotGraph { global_data, graph }
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
+    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+        DotGraph { global_data, graph },
+        left_layout_config,
+    ))
 }
 
 pub fn graph_join_by_hedge_key_bytes(
@@ -658,10 +831,10 @@ pub fn graph_join_by_hedge_key_bytes(
     arg2: &[u8],
     arg3: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let left: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg) }
-        .map_err(|err| format!("Failed to deserialize left archived dot graph: {err}"))?;
-    let right: DotGraph = unsafe { rkyv::from_bytes_unchecked(arg2) }
-        .map_err(|err| format!("Failed to deserialize right archived dot graph: {err}"))?;
+    let left_typst = decode_typst_graph(arg)?;
+    let left_layout_config = left_typst.layout_config.clone();
+    let left = left_typst.to_dot_graph();
+    let right = decode_typst_graph(arg2)?.to_dot_graph();
     let spec: TypstJoinSpec = decode_cbor(arg3, "join spec")?;
     let key = spec.key;
 
@@ -680,9 +853,10 @@ pub fn graph_join_by_hedge_key_bytes(
         )
         .map_err(|err| err.to_string())?;
 
-    DotGraph { global_data, graph }
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
+    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+        DotGraph { global_data, graph },
+        left_layout_config,
+    ))
 }
 
 fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
@@ -944,44 +1118,51 @@ impl TypstPlacementSpec {
             }
         };
 
+        let x_mode = self.x_mode.unwrap_or(self.mode);
+        let y_mode = self.y_mode.unwrap_or(self.mode);
         let x_pin = self
             .x
             .as_ref()
-            .map(|coord| coord.resolve("x", self.mode, &mut point))
-            .transpose()?;
+            .map(|coord| coord.resolve("x", x_mode, &mut point))
+            .transpose()?
+            .flatten();
         let y_pin = self
             .y
             .as_ref()
-            .map(|coord| coord.resolve("y", self.mode, &mut point))
-            .transpose()?;
+            .map(|coord| coord.resolve("y", y_mode, &mut point))
+            .transpose()?
+            .flatten();
 
-        let pin = if self.mode == PlacementMode::Pin {
-            let mut parts = Vec::new();
-            if let Some(x_pin) = x_pin {
-                parts.push(x_pin);
-            } else if point.x_set {
-                parts.push(format!("x:{}", point.x));
-            }
-            if let Some(y_pin) = y_pin {
-                parts.push(y_pin);
-            } else if point.y_set {
-                parts.push(format!("y:{}", point.y));
-            }
-            if parts.is_empty() {
+        let mut parts = Vec::new();
+        if let Some(x_pin) = x_pin {
+            parts.push(x_pin);
+        } else if x_mode == PlacementMode::Pin && point.x_set {
+            parts.push(format!("x:{}", point.x));
+        }
+        if let Some(y_pin) = y_pin {
+            parts.push(y_pin);
+        } else if y_mode == PlacementMode::Pin && point.y_set {
+            parts.push(format!("y:{}", point.y));
+        }
+
+        let pin = if parts.is_empty() {
+            if self.mode == PlacementMode::Pin && self.x_mode.is_none() && self.y_mode.is_none() {
                 return Err(format!(
                     "{context} pin placement must constrain x, y, or ref"
                 ));
             }
-            Some(parts.join(","))
-        } else {
             None
+        } else {
+            Some(parts.join(","))
         };
 
-        Ok(ResolvedPlacement {
-            point,
-            pin,
-            mode: self.mode,
-        })
+        let mode = if pin.is_some() {
+            PlacementMode::Pin
+        } else {
+            PlacementMode::Start
+        };
+
+        Ok(ResolvedPlacement { point, pin, mode })
     }
 }
 
@@ -989,9 +1170,9 @@ impl TypstPlacementCoord {
     fn resolve(
         &self,
         axis: &str,
-        mode: PlacementMode,
+        _mode: PlacementMode,
         point: &mut ResolvedPoint,
-    ) -> Result<String, String> {
+    ) -> Result<Option<String>, String> {
         match self {
             TypstPlacementCoord::Number(value) => {
                 let value = value.as_f64();
@@ -1002,7 +1183,7 @@ impl TypstPlacementCoord {
                     point.y = value;
                     point.y_set = true;
                 }
-                Ok(format!("{axis}:{value}"))
+                Ok(None)
             }
             TypstPlacementCoord::Group(group) => {
                 if group.kind != "group" {
@@ -1011,15 +1192,12 @@ impl TypstPlacementCoord {
                         group.kind
                     ));
                 }
-                if mode != PlacementMode::Pin {
-                    return Err("group coordinates require graph.pos(..., mode: \"pin\")".into());
-                }
                 if axis == "x" {
                     point.x_set = true;
                 } else {
                     point.y_set = true;
                 }
-                Ok(format!("{axis}:{}", group.pin_token()?))
+                Ok(Some(format!("{axis}:{}", group.pin_token()?)))
             }
         }
     }
@@ -1033,6 +1211,40 @@ impl TypstNumber {
             TypstNumber::Unsigned(value) => value as f64,
         }
     }
+}
+
+impl TypstPointSpec {
+    fn to_statement(&self) -> Result<String, String> {
+        match self {
+            TypstPointSpec::Point { x, y } => Ok(format!("{},{}", x.as_f64(), y.as_f64())),
+            TypstPointSpec::Tuple(x, y) => Ok(format!("{},{}", x.as_f64(), y.as_f64())),
+            TypstPointSpec::Text(value) => {
+                let value = value.trim();
+                if parse_point_text(value).is_some() {
+                    Ok(value.to_string())
+                } else {
+                    Err(format!(
+                        "point value {value:?} must contain two numeric coordinates"
+                    ))
+                }
+            }
+        }
+    }
+}
+
+fn parse_point_text(value: &str) -> Option<(f64, f64)> {
+    let cleaned = value
+        .trim()
+        .trim_matches('"')
+        .trim_matches(|c| c == '(' || c == ')');
+    let parts: Vec<&str> = cleaned
+        .split([',', ' '])
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
 }
 
 impl TypstPlacementGroup {

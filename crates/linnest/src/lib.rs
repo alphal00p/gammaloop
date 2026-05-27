@@ -12,13 +12,13 @@ pub use api::{
     parse_dot_graphs_bytes,
 };
 pub use graph_api::{
-    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
-    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes,
-    graph_edge_data_by_name_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
-    graph_edges_of_bytes, graph_from_spec_bytes, graph_info_bytes, graph_join_by_edge_key_bytes,
-    graph_join_by_hedge_key_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
-    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
-    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
+    graph_apply_structural_patches_bytes, graph_archived_compass_subgraph_bytes,
+    graph_archived_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
+    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
+    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
+    graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
+    graph_node_data_by_name_bytes, graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes,
+    graph_nodes_of_bytes, graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
     graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes,
     subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge,
     TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstPoint,
@@ -356,6 +356,12 @@ impl TypstNode {
     }
 }
 
+fn parse_rad_statement(value: &str) -> Option<Rad<f64>> {
+    let unquoted = value.trim().trim_matches('"');
+    let cleaned = unquoted.trim().trim_end_matches("rad");
+    cleaned.trim().parse::<f64>().ok().map(Rad)
+}
+
 #[derive(
     Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
@@ -374,6 +380,7 @@ pub struct TypstEdge {
     label_angle: Option<f64>,
     #[with(rkyv::with::Map<Vector2Rkyv>)]
     shift: Option<Vector2<f64>>,
+    bend_explicit: bool,
     statements: BTreeMap<String, String>,
     pub constraints: PointConstraint,
 }
@@ -406,6 +413,7 @@ impl Default for TypstEdge {
             label_pos: None,
             label_angle: None,
             shift: None,
+            bend_explicit: false,
             statements: BTreeMap::new(),
             constraints: PointConstraint::default(),
         }
@@ -432,6 +440,10 @@ impl TypstEdge {
                 let cleaned = unquoted.trim().trim_end_matches("rad");
                 cleaned.trim().parse::<f64>().ok()
             });
+            let bend = dot_statement_value(&d.statements, "bend")
+                .and_then(|value| parse_rad_statement(value))
+                .ok_or(GeomError::NotComputed);
+            let bend_explicit = bend.is_ok();
 
             let mut from = None;
             let mut to = None;
@@ -468,9 +480,10 @@ impl TypstEdge {
                 label_pos,
                 label_angle,
                 shift,
+                bend,
+                bend_explicit,
                 data: d.payload,
                 statements: d.statements,
-                ..Default::default()
             }
         })
     }
@@ -599,6 +612,8 @@ pub struct TypstGraph {
     name: String,
     data: Option<Vec<u8>>,
     global_statements: BTreeMap<String, String>,
+    default_edge_statements: BTreeMap<String, String>,
+    default_node_statements: BTreeMap<String, String>,
     layout_config: LayoutConfig,
 }
 
@@ -1076,6 +1091,11 @@ fn initial_point_constraint(
 
 impl TypstGraph {
     pub fn from_dot(dot: DotGraph, figment: &Figment) -> Self {
+        let config = LayoutConfig::from_figment(figment);
+        Self::from_dot_with_layout_config(dot, config)
+    }
+
+    pub(crate) fn from_dot_with_layout_config(dot: DotGraph, config: LayoutConfig) -> Self {
         let mut placement_context = DotPlacementContext::new(&dot);
         let node_placements = dot
             .graph
@@ -1124,8 +1144,6 @@ impl TypstGraph {
             TypstHedge::parse,
         );
 
-        let config = LayoutConfig::from_figment(figment);
-
         let global_eval: Option<String> = dot.global_data.statements.get("eval").cloned();
 
         Self {
@@ -1136,6 +1154,26 @@ impl TypstGraph {
             global_statements: dot
                 .global_data
                 .statements
+                .into_iter()
+                .map(|(k, v)| {
+                    let clean_key = k.trim().trim_matches('"').to_string();
+                    let clean_value = v.trim().trim_matches('"').to_string();
+                    (clean_key, clean_value)
+                })
+                .collect(),
+            default_edge_statements: dot
+                .global_data
+                .edge_statements
+                .into_iter()
+                .map(|(k, v)| {
+                    let clean_key = k.trim().trim_matches('"').to_string();
+                    let clean_value = v.trim().trim_matches('"').to_string();
+                    (clean_key, clean_value)
+                })
+                .collect(),
+            default_node_statements: dot
+                .global_data
+                .node_statements
                 .into_iter()
                 .map(|(k, v)| {
                     let clean_key = k.trim().trim_matches('"').to_string();
@@ -1369,7 +1407,7 @@ impl LayoutConfig {
     }
 }
 
-fn default_figment() -> Figment {
+pub(crate) fn default_figment() -> Figment {
     Figment::from(Serialized::from(
         BTreeMap::<String, String>::new(),
         Profile::Default,
@@ -2168,7 +2206,9 @@ impl TypstGraph {
                 }
             };
 
-            self.graph[i].bend = angle;
+            if !self.graph[i].bend_explicit {
+                self.graph[i].bend = angle;
+            }
             self.graph[i].pos = p;
         });
     }
@@ -2931,6 +2971,8 @@ impl TypstGraph {
             name: self.name.clone(),
             data: self.data.clone(),
             global_statements: self.global_statements.clone(),
+            default_edge_statements: self.default_edge_statements.clone(),
+            default_node_statements: self.default_node_statements.clone(),
         }
     }
 
@@ -2957,6 +2999,8 @@ impl TypstGraph {
             .filter(|(key, _)| !LayoutConfig::is_layout_statement_key(key))
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
+        global_data.edge_statements = self.default_edge_statements.clone();
+        global_data.node_statements = self.default_node_statements.clone();
         if let Some(eval) = &self.global_eval {
             global_data
                 .statements
@@ -2975,6 +3019,8 @@ pub struct CBORTypstGraph {
     name: String,
     data: Option<Vec<u8>>,
     global_statements: BTreeMap<String, String>,
+    default_edge_statements: BTreeMap<String, String>,
+    default_node_statements: BTreeMap<String, String>,
 }
 
 impl CBORTypstGraph {

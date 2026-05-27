@@ -669,6 +669,32 @@
   _segment-elements(curve-api.line-segment(_point(start), _point(end)), style, auto, true, true, label-pos).elements
 }
 
+#let _bent-line-segment(start, end, bend) = {
+  let start = _point(start)
+  let end = _point(end)
+  if bend == none or bend == 0 {
+    return curve-api.line-segment(start, end)
+  }
+
+  let dx = _point-x(end) - _point-x(start)
+  let dy = _point-y(end) - _point-y(start)
+  let length = calc.sqrt(dx * dx + dy * dy)
+  if length == 0 {
+    return curve-api.line-segment(start, end)
+  }
+
+  let amount = calc.sin(bend) * length * 0.5
+  let control = (
+    (_point-x(start) + _point-x(end)) / 2 - dy / length * amount,
+    (_point-y(start) + _point-y(end)) / 2 + dx / length * amount,
+  )
+  curve-api.segments(curve-api.quad(start, control, end)).first()
+}
+
+#let _pattern-dangling(start, end, bend, style, label-pos) = {
+  _segment-elements(_bent-line-segment(start, end, bend), style, auto, true, true, label-pos).elements
+}
+
 #let _node-outset(style, node-outset) = {
   if node-outset == auto {
     _radius-outset(style.at("radius", default: 0))
@@ -968,10 +994,12 @@
 	                _point(edge.pos),
 	                distance: node-outsets.at(source-half-edge.node),
 	              )
+              let bend = edge.at("bend", default: none)
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
-                for element in _pattern-line(
+                for element in _pattern-dangling(
                   line-start,
                   edge.pos,
+                  bend,
                   _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-edge-style,
                   label-pos,
                 ) {
@@ -979,7 +1007,7 @@
                 }
               }
               if source-style-value != none {
-                for element in _pattern-line(line-start, edge.pos, _dangling-mark-style(source-draw-style), label-pos) {
+                for element in _pattern-dangling(line-start, edge.pos, bend, _dangling-mark-style(source-draw-style), label-pos) {
                   elements.push(element)
                 }
               }
@@ -989,10 +1017,12 @@
 	                _point(edge.pos),
 	                distance: node-outsets.at(sink-half-edge.node),
 	              )
+              let bend = edge.at("bend", default: none)
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
-                for element in _pattern-line(
+                for element in _pattern-dangling(
                   edge.pos,
                   line-end,
+                  bend,
                   _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-edge-style,
                   label-pos,
                 ) {
@@ -1000,7 +1030,7 @@
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-line(edge.pos, line-end, _dangling-mark-style(sink-draw-style), label-pos) {
+                for element in _pattern-dangling(edge.pos, line-end, bend, _dangling-mark-style(sink-draw-style), label-pos) {
                   elements.push(element)
                 }
               }
