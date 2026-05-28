@@ -217,6 +217,9 @@ impl<V> ParentChildStore<V> {
 
     /// Returns the first child of `node_id`, if one exists.
     pub fn first_child(&self, node_id: TreeNodeId) -> Option<TreeNodeId> {
+        if node_id.is_empty() {
+            return None;
+        }
         self.nodes[node_id.0].child
     }
 
@@ -505,6 +508,17 @@ impl<V> ForestNodeStore for ParentChildStore<V> {
         node_id
     }
 
+    fn add_dataless_root(&mut self, root_id: super::RootId) -> TreeNodeId {
+        let node_id = TreeNodeId(self.nodes.len());
+        self.nodes.push(PCNode {
+            parent_pointer: PPNode::dataless_root(root_id),
+            child: None,
+            neighbor_left: node_id,
+            neighbor_right: node_id,
+        });
+        node_id
+    }
+
     fn add_dataless_child(&mut self, parent: TreeNodeId) -> TreeNodeId {
         let child = TreeNodeId(self.nodes.len());
         debug_assert!(parent.0 < self.nodes.len(), "Parent ID out of bounds");
@@ -582,7 +596,7 @@ mod pc_preorder {
         pub fn new(store: &'a ParentChildStore<V>, start: TreeNodeId) -> Self {
             PreorderIter {
                 store,
-                current: Some(start),
+                current: (!start.is_empty()).then_some(start),
             }
         }
 
@@ -643,7 +657,9 @@ mod pc_bfs {
     impl<'a, V> BfsTreeIter<'a, V> {
         pub fn new(store: &'a ParentChildStore<V>, start: TreeNodeId) -> Self {
             let mut queue = VecDeque::new();
-            queue.push_back(start);
+            if !start.is_empty() {
+                queue.push_back(start);
+            }
             BfsTreeIter { store, queue }
         }
     }

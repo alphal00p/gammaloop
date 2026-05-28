@@ -39,7 +39,7 @@
       let g = layout(
         g,
         layout-algo: "dot",
-        // subgraph: tree,
+        subgraph: tree,
         layout-roots: (0,),
         tree-dx: 34.0,
         tree-dy: 34.0,
