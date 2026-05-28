@@ -66,6 +66,31 @@ pub const fn pack_pair_score_order(components: [u8; PAIR_SCORE_ORDER_LEN]) -> u1
     packed
 }
 
+pub const fn pair_score_order_contains(score_order: u128, component: u8) -> bool {
+    let mut index = 0;
+    while index < PAIR_SCORE_ORDER_LEN {
+        let current = ((score_order >> (index * 8)) & 0xff) as u8;
+        if current == PAIR_SCORE_ORDER_END {
+            return false;
+        }
+        if current == component {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+const fn pair_score_order_needs_sparse_estimate(score_order: u128) -> bool {
+    pair_score_order_contains(score_order, PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES)
+        || pair_score_order_contains(score_order, PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS)
+}
+
+const fn pair_score_order_needs_output_dense_size(score_order: u128) -> bool {
+    pair_score_order_needs_sparse_estimate(score_order)
+        || pair_score_order_contains(score_order, PAIR_SCORE_OUTPUT_DENSE_SIZE)
+}
+
 pub const PAIR_SCORE_SPARSE_ATOM_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_RESULT_RANK,
     PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES,
@@ -1596,20 +1621,32 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
 
                 let result_rank = left_matches.iter().filter(|matched| !**matched).count()
                     + right_matches.iter().filter(|matched| !**matched).count();
-                let output_dense_size = output_dense_size(
-                    *left_structure,
-                    *right_structure,
-                    &left_matches,
-                    &right_matches,
-                );
-                let pair_estimate = left_tensor.contraction_pair_estimate(
-                    right_tensor,
-                    &left_match_permutation,
-                    &left_matches,
-                    &right_matches,
-                    output_dense_size,
-                    EXACT_JOIN_LIMIT,
-                );
+                let output_dense_size = if pair_score_order_needs_output_dense_size(SCORE_ORDER) {
+                    output_dense_size(
+                        *left_structure,
+                        *right_structure,
+                        &left_matches,
+                        &right_matches,
+                    )
+                } else {
+                    1
+                };
+                let pair_estimate = if pair_score_order_needs_sparse_estimate(SCORE_ORDER) {
+                    left_tensor.contraction_pair_estimate(
+                        right_tensor,
+                        &left_match_permutation,
+                        &left_matches,
+                        &right_matches,
+                        output_dense_size,
+                        EXACT_JOIN_LIMIT,
+                    )
+                } else {
+                    super::TensorContractionPairEstimate::from_profiles(
+                        *left_profile,
+                        *right_profile,
+                        output_dense_size,
+                    )
+                };
                 let score = ResultRankPairScore::new(
                     result_rank as u32,
                     degree,
