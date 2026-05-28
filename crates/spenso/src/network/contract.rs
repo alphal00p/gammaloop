@@ -1637,6 +1637,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                         &left_match_permutation,
                         &left_matches,
                         &right_matches,
+                        *left_profile,
+                        *right_profile,
                         output_dense_size,
                         EXACT_JOIN_LIMIT,
                     )

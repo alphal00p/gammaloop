@@ -253,18 +253,16 @@ pub trait FastTensorSumContractible<Sc>: Sized {
 
     fn contraction_pair_estimate(
         &self,
-        other: &Self,
+        _other: &Self,
         _left_match_permutation: &Permutation,
         _left_matches: &[bool],
         _right_matches: &[bool],
+        left_profile: TensorContractionProfile,
+        right_profile: TensorContractionProfile,
         output_dense_size: u128,
         _exact_join_limit: usize,
     ) -> TensorContractionPairEstimate {
-        TensorContractionPairEstimate::from_profiles(
-            self.contraction_profile(),
-            other.contraction_profile(),
-            output_dense_size,
-        )
+        TensorContractionPairEstimate::from_profiles(left_profile, right_profile, output_dense_size)
     }
 }
 
@@ -390,6 +388,8 @@ where
         left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
+        left_profile: TensorContractionProfile,
+        right_profile: TensorContractionProfile,
         output_dense_size: u128,
         exact_join_limit: usize,
     ) -> TensorContractionPairEstimate {
@@ -399,6 +399,8 @@ where
             left_match_permutation,
             left_matches,
             right_matches,
+            left_profile,
+            right_profile,
             output_dense_size,
             exact_join_limit,
         )
@@ -463,14 +465,14 @@ fn sparse_atom_pair_estimate<S>(
     left_match_permutation: &Permutation,
     left_matches: &[bool],
     right_matches: &[bool],
+    left_profile: TensorContractionProfile,
+    right_profile: TensorContractionProfile,
     output_dense_size: u128,
     exact_join_limit: usize,
 ) -> TensorContractionPairEstimate
 where
     S: TensorStructure + Clone,
 {
-    let left_profile = TensorContractionProfile::from_param_tensor(left);
-    let right_profile = TensorContractionProfile::from_param_tensor(right);
     let fallback = TensorContractionPairEstimate::from_profiles(
         left_profile,
         right_profile,
@@ -643,6 +645,8 @@ where
         left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
+        left_profile: TensorContractionProfile,
+        right_profile: TensorContractionProfile,
         output_dense_size: u128,
         exact_join_limit: usize,
     ) -> TensorContractionPairEstimate {
@@ -654,13 +658,15 @@ where
                     left_match_permutation,
                     left_matches,
                     right_matches,
+                    left_profile,
+                    right_profile,
                     output_dense_size,
                     exact_join_limit,
                 )
             }
             _ => TensorContractionPairEstimate::from_profiles(
-                <Self as FastTensorSumContractible<Atom>>::contraction_profile(self),
-                <Self as FastTensorSumContractible<Atom>>::contraction_profile(other),
+                left_profile,
+                right_profile,
                 output_dense_size,
             ),
         }
