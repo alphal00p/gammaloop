@@ -22,6 +22,10 @@ use super::{
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct PCNode<V> {
     /// Parent pointer and node data.
     pub(crate) parent_pointer: PPNode<V>,
@@ -99,6 +103,10 @@ impl<V> PCNode<V> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct ParentChildStore<V> {
     /// The flat list of nodes. The index in the vector corresponds to the `TreeNodeId`.
     pub(crate) nodes: Vec<PCNode<V>>,
