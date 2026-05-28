@@ -275,6 +275,12 @@
   node-style: (:),
   /// Node label content or callback. `auto` uses the node name. -> auto | content | string | function | none
   node-label: auto,
+  /// CeTZ-compatible node drawing callback. `auto` draws the default circular
+  /// node and label. A callback receives `(node, box)` and should return CeTZ
+  /// draw elements; `box` contains `name`, `center`, `width`, `height`, `unit`,
+  /// `label`, `label-style`, `style`, `radius`, and `node`.
+  /// -> auto | function
+  draw-node: auto,
   /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
   /// Default normal offset for edge paths. Applied to the base edge geometry
@@ -302,6 +308,10 @@
   /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
   /// of raw path direction; reversed edges move the mark to the sink half and
   /// flip it, while undirected edges suppress it.
+  /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
+  /// to route this endpoint from a measured node-box anchor.
+  /// `route: "direct"` connects anchored paired edges through the midpoint
+  /// between endpoint anchors instead of through the edge layout point.
   /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
@@ -309,6 +319,9 @@
   /// the same dangling-edge behavior as for `source-style`, and
   /// `mark-orientation: "edge"` participates in the same orientation-aware mark
   /// placement.
+  /// `sink-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
+  /// to route this endpoint into a measured node-box anchor.
+  /// `route: "direct"` has the same meaning as in `source-style`.
   /// -> dictionary | array | function | none
   sink-style: (:),
   /// Edge label content or callback. A callback receives edge data.
@@ -321,6 +334,10 @@
   edge-label-style: (:),
   /// Hobby curl used at the endpoints of paired edge curves. -> float
   edge-omega: 1.0,
+  /// Optional style key for anchored source/sink routes. Set
+  /// `anchor-control-distance` in `source-style` or `sink-style` to override
+  /// the automatic Hobby control distance near node anchors.
+  /// -> auto | int | float
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
   edge-trim-accuracy: 0.001,
   /// CeTZ canvas padding. -> none | int | float | array | dictionary
@@ -355,6 +372,7 @@
       node-label-style: node-label-style,
       node-style: node-style,
       node-label: node-label,
+      draw-node: draw-node,
       edge-stroke: edge-stroke,
       edge-offset: edge-offset,
       edge-length: edge-length,

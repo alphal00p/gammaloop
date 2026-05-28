@@ -11,6 +11,17 @@
 #let _point-y(p) = if type(p) == array { p.at(1) } else { p.y }
 #let _point(p) = (_point-x(p), _point-y(p))
 
+#let _statement-number(record, key, default: none) = {
+  let value = record.statements.at(key, default: none)
+  if value == none {
+    default
+  } else if type(value) in (int, float) {
+    value
+  } else {
+    float(str(value))
+  }
+}
+
 #let _canvas-length(unit) = {
   if type(unit) in (int, float) {
     unit * 1em
@@ -46,6 +57,13 @@
   offset-side: none,
 )
 
+#let _edge-routing-defaults = (
+  source-anchor: auto,
+  sink-anchor: auto,
+  anchor-control-distance: auto,
+  route: "edge-pos",
+)
+
 #let _mark-defaults = (
   mark-position: "end",
   mark-orientation: "path",
@@ -77,6 +95,7 @@
 #let _draw-style(style) = {
   let clean = _without-pattern-style(style)
   clean = _without-keys(clean, _edge-geometry-defaults.keys())
+  clean = _without-keys(clean, _edge-routing-defaults.keys())
   _without-keys(clean, _mark-defaults.keys())
 }
 
@@ -121,6 +140,8 @@
 #let _style-value(style, key) = {
   if _edge-geometry-defaults.keys().contains(key) {
     style.at(key, default: _edge-geometry-defaults.at(key))
+  } else if _edge-routing-defaults.keys().contains(key) {
+    style.at(key, default: _edge-routing-defaults.at(key))
   } else if _pattern-defaults.keys().contains(key) {
     style.at(key, default: _pattern-defaults.at(key))
   } else if _mark-defaults.keys().contains(key) {
@@ -131,6 +152,8 @@
 }
 
 #let _edge-geometry(style) = _edge-geometry-defaults + style
+
+#let _edge-routing(style) = _edge-routing-defaults + style
 
 #let _pattern-style(style) = _pattern-defaults + style
 
@@ -323,6 +346,56 @@
 
 #let _clamp(value, low, high) = calc.min(high, calc.max(low, value))
 
+#let _node-anchor-point(box, anchor) = {
+  let anchor = if anchor == auto or anchor == none { "center" } else { anchor }
+  let center = box.center
+  let half-width = box.width / 2
+  let half-height = box.height / 2
+  if anchor == "center" {
+    center
+  } else if anchor == "north" {
+    (center.at(0), center.at(1) + half-height)
+  } else if anchor == "south" {
+    (center.at(0), center.at(1) - half-height)
+  } else if anchor == "east" {
+    (center.at(0) + half-width, center.at(1))
+  } else if anchor == "west" {
+    (center.at(0) - half-width, center.at(1))
+  } else if anchor == "north-east" {
+    (center.at(0) + half-width, center.at(1) + half-height)
+  } else if anchor == "north-west" {
+    (center.at(0) - half-width, center.at(1) + half-height)
+  } else if anchor == "south-east" {
+    (center.at(0) + half-width, center.at(1) - half-height)
+  } else if anchor == "south-west" {
+    (center.at(0) - half-width, center.at(1) - half-height)
+  } else {
+    center
+  }
+}
+
+#let _anchor-control-point(anchor, point, amount) = {
+  if anchor == "north" {
+    (point.at(0), point.at(1) + amount)
+  } else if anchor == "south" {
+    (point.at(0), point.at(1) - amount)
+  } else if anchor == "east" {
+    (point.at(0) + amount, point.at(1))
+  } else if anchor == "west" {
+    (point.at(0) - amount, point.at(1))
+  } else if anchor == "north-east" {
+    (point.at(0) + amount, point.at(1) + amount)
+  } else if anchor == "north-west" {
+    (point.at(0) - amount, point.at(1) + amount)
+  } else if anchor == "south-east" {
+    (point.at(0) + amount, point.at(1) - amount)
+  } else if anchor == "south-west" {
+    (point.at(0) - amount, point.at(1) - amount)
+  } else {
+    point
+  }
+}
+
 #let _segment-length(segment, accuracy) = {
   curve-api.length(curve-api.from-cubic(segment), accuracy: accuracy)
 }
@@ -398,6 +471,38 @@
   ))
 }
 
+#let _geometry-path-segments(
+  path,
+  style,
+  start-outset,
+  end-outset,
+  label-pos,
+  center-outset,
+) = {
+  let geometry = _edge-geometry(style)
+  let side-point = if geometry.offset-side == "label" { label-pos } else { none }
+  let length = geometry.length
+  let ratio = geometry.ratio
+  if center-outset != auto {
+    start-outset = start-outset + center-outset
+    end-outset = end-outset + center-outset
+    length = none
+    ratio = none
+  }
+  curve-api.segments(curve-api.layer(
+    path,
+    offset: geometry.offset,
+    length: length,
+    ratio: ratio,
+    resolve-length: geometry.resolve-length,
+    start-outset: start-outset,
+    end-outset: end-outset,
+    side-point: if side-point == none { none } else { _point(side-point) },
+    accuracy: geometry.accuracy,
+    optimize: geometry.optimize,
+  ))
+}
+
 #let _half-geometry(segment, style, outsets, label-pos) = {
   if outsets == none {
     ()
@@ -412,6 +517,87 @@
     )
   }
 }
+
+#let _auto-anchor-control-distance(start, route, end) = {
+  let dx = calc.abs(_point-x(end) - _point-x(start))
+  let dy = calc.abs(_point-y(end) - _point-y(start))
+  calc.max(0.35, calc.min(2.0, 0.16 * dx + 0.22 * dy))
+}
+
+#let _anchor-control-distance(source-style, sink-style, start, route, end) = {
+  let value = _style-value(source-style, "anchor-control-distance")
+  if value == auto {
+    value = _style-value(sink-style, "anchor-control-distance")
+  }
+  if value == auto {
+    _auto-anchor-control-distance(start, route, end)
+  } else {
+    value
+  }
+}
+
+#let _anchor-points(start, anchor, route, amount, reverse: false) = {
+  if anchor == auto or anchor == none or anchor == "center" {
+    (start, route)
+  } else if reverse {
+    (route, _anchor-control-point(anchor, start, amount), start)
+  } else {
+    (start, _anchor-control-point(anchor, start, amount), route)
+  }
+}
+
+#let _anchored-edge-geometry-halves(
+  edge,
+  node-boxes,
+  source-style,
+  sink-style,
+  options,
+) = {
+  let omega = options.omega
+  let source-outset = options.source-outset
+  let sink-outset = options.sink-outset
+  let accuracy = options.accuracy
+  let label-pos = options.label-pos
+  let source-anchor = _style-value(source-style, "source-anchor")
+  let sink-anchor = _style-value(sink-style, "sink-anchor")
+  let source-box = node-boxes.at(edge.source.node)
+  let sink-box = node-boxes.at(edge.sink.node)
+  let start = _node-anchor-point(source-box, source-anchor)
+  let end = _node-anchor-point(sink-box, sink-anchor)
+  let route-mode = _style-value(source-style, "route")
+  let route = if route-mode == "direct" {
+    ((_point-x(start) + _point-x(end)) / 2, (_point-y(start) + _point-y(end)) / 2)
+  } else {
+    _point(edge.pos)
+  }
+  let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
+  let source-path = if route-mode == "direct" and source-anchor != auto and source-anchor != none {
+    curve-api.quad(start, _anchor-control-point(source-anchor, start, amount), route)
+  } else {
+    curve-api.hobby-spline(
+      _anchor-points(start, source-anchor, route, amount),
+      omega: omega,
+      accuracy: accuracy,
+    )
+  }
+  let sink-path = if route-mode == "direct" and sink-anchor != auto and sink-anchor != none {
+    curve-api.quad(route, _anchor-control-point(sink-anchor, end, amount), end)
+  } else {
+    curve-api.hobby-spline(
+      _anchor-points(end, sink-anchor, route, amount, reverse: true),
+      omega: omega,
+      accuracy: accuracy,
+    )
+  }
+  let source-start-outset = if source-anchor == auto { source-outset } else { 0 }
+  let sink-end-outset = if sink-anchor == auto { sink-outset } else { 0 }
+  (
+    source: _geometry-path-segments(source-path, source-style, source-start-outset, 0, label-pos, 0),
+    sink: _geometry-path-segments(sink-path, sink-style, 0, sink-end-outset, label-pos, 0),
+    curve: curve-api.hobby-spline((start, route, end), omega: omega, accuracy: accuracy),
+  )
+}
+
 #let edge-halves(edge, nodes, options) = {
   let omega = options.omega
   let source-outset = options.source-outset
@@ -462,10 +648,18 @@
 #let _edge-geometry-halves(
   edge,
   nodes,
+  node-boxes,
   source-style,
   sink-style,
   options,
 ) = {
+  if (
+    _style-value(source-style, "source-anchor") != auto
+      or _style-value(sink-style, "sink-anchor") != auto
+  ) {
+    return _anchored-edge-geometry-halves(edge, node-boxes, source-style, sink-style, options)
+  }
+
   let omega = options.omega
   let source-outset = options.source-outset
   let sink-outset = options.sink-outset
@@ -779,6 +973,7 @@
   let node-label-style = options.node-label-style
   let node-style = options.node-style
   let node-label = options.node-label
+  let draw-node = options.draw-node
   let edge-stroke = options.edge-stroke
   let edge-offset = options.edge-offset
   let edge-length = options.edge-length
@@ -825,6 +1020,7 @@
         let elements = ()
         let node-elements = ()
         let node-outsets = ()
+        let node-boxes = ()
         let debug-level = _debug-level(debug)
         let subgraph-hedges = if subgraph == none { none } else { subgraph-api.hedges(subgraph) }
 
@@ -864,17 +1060,47 @@
                 radius: _node-radius(ctx, label, node-style-value, node-min-radius, node-label-padding),
               )
           )
-          node-elements.push(cetz.draw.circle(_point(pos), name: "n" + str(i), ..node-style))
-          node-outsets.push(_node-outset(node-style, node-outset))
+          let node-label-draw-style = _style(graph-node-label-style, node-data) + node-label-style
+          let layout-width = _statement-number(v, "layout-width", default: none)
+          let layout-height = _statement-number(v, "layout-height", default: none)
+          let node-width = if layout-width == none { 2 * node-style.radius } else { layout-width }
+          let node-height = if layout-height == none { 2 * node-style.radius } else { layout-height }
+          let box = (
+            name: "n" + str(i),
+            center: _point(pos),
+            pos: pos,
+            width: node-width,
+            height: node-height,
+            unit: unit,
+            label: label,
+            label-style: node-label-draw-style,
+            style: node-style,
+            radius: node-style.radius,
+            node: node,
+          )
+          node-boxes.push(box)
+          node-outsets.push(if draw-node == auto {
+            _node-outset(node-style, node-outset)
+          } else if node-outset == auto {
+            calc.max(node-width, node-height) / 2
+          } else {
+            node-outset
+          })
 
+          if draw-node == auto {
+            node-elements.push(cetz.draw.circle(_point(pos), name: box.name, ..node-style))
+          } else {
+            node-elements.push(draw-node(node-data, box))
+          }
           if label != none {
-            let node-label-draw-style = _style(graph-node-label-style, node-data) + node-label-style
-            node-elements.push(cetz.draw.content(
-              _point(pos),
-              label,
-              padding: 0,
-              ..node-label-draw-style,
-            ))
+            if draw-node == auto {
+              node-elements.push(cetz.draw.content(
+                _point(pos),
+                label,
+                padding: 0,
+                ..node-label-draw-style,
+              ))
+            }
           }
         }
 
@@ -885,6 +1111,8 @@
           let sink-half-edge = edge.sink
           let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
           let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
+          let source-node = if source-half-edge == none { none } else { node-boxes.at(source-half-edge.node).node }
+          let sink-node = if sink-half-edge == none { none } else { node-boxes.at(sink-half-edge.node).node }
           let ext = source-half-edge == none or sink-half-edge == none
           let data = edge.statements
           let record-label = _data-label(edge)
@@ -903,6 +1131,8 @@
                 sink-statement: sink-statement,
                 source-half-edge: source-half-edge,
                 sink-half-edge: sink-half-edge,
+                source-node: source-node,
+                sink-node: sink-node,
                 data: edge.at("data", default: none),
                 label: data-label,
                 label-pos: label-pos,
@@ -965,6 +1195,7 @@
               let halves = _edge-geometry-halves(
                 edge,
                 nodes,
+                node-boxes,
                 source-geometry-style,
                 sink-geometry-style,
                 (
@@ -1015,11 +1246,17 @@
                 }
               }
 	            } else if source-half-edge != none {
-	              let line-start = curve-api.outset-point(
-	                _point(_node-pos(nodes.at(source-half-edge.node))),
-	                _point(edge.pos),
-	                distance: node-outsets.at(source-half-edge.node),
-	              )
+              let source-geometry-style = if source-style-value == none { sink-style-value } else { source-style-value }
+              let source-anchor = _style-value(source-geometry-style, "source-anchor")
+              let line-start = if source-anchor == auto {
+                curve-api.outset-point(
+                  _point(_node-pos(nodes.at(source-half-edge.node))),
+                  _point(edge.pos),
+                  distance: node-outsets.at(source-half-edge.node),
+                )
+              } else {
+                _node-anchor-point(node-boxes.at(source-half-edge.node), source-anchor)
+              }
               let bend = edge.at("bend", default: none)
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-dangling(
@@ -1038,11 +1275,17 @@
                 }
               }
 	            } else if sink-half-edge != none {
-	              let line-end = curve-api.outset-point(
-	                _point(_node-pos(nodes.at(sink-half-edge.node))),
-	                _point(edge.pos),
-	                distance: node-outsets.at(sink-half-edge.node),
-	              )
+              let sink-geometry-style = if sink-style-value == none { source-style-value } else { sink-style-value }
+              let sink-anchor = _style-value(sink-geometry-style, "sink-anchor")
+              let line-end = if sink-anchor == auto {
+                curve-api.outset-point(
+                  _point(_node-pos(nodes.at(sink-half-edge.node))),
+                  _point(edge.pos),
+                  distance: node-outsets.at(sink-half-edge.node),
+                )
+              } else {
+                _node-anchor-point(node-boxes.at(sink-half-edge.node), sink-anchor)
+              }
               let bend = edge.at("bend", default: none)
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for element in _pattern-dangling(

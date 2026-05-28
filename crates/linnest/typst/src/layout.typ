@@ -210,3 +210,21 @@
   let graph-bytes = _plugin.layout_parsed_graph(graph-module.graph-bytes(graph), cbor.encode(settings))
   graph-module.with-bytes(graph, graph-bytes)
 }
+
+/// Apply multiple layout passes in order.
+///
+/// Each pass is a dictionary of named arguments accepted by `layout`, excluding
+/// the graph itself.
+/// -> dictionary
+#let sequence(
+  /// Graph object returned by `graph.build` or `graph.parse`. -> dictionary
+  graph,
+  /// Array of layout option dictionaries. -> array
+  passes,
+) = {
+  let result = graph
+  for pass in passes {
+    result = layout(result, ..pass)
+  }
+  result
+}

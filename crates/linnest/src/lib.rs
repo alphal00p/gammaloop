@@ -3264,6 +3264,7 @@ impl TypstGraph {
         let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
         let mut targets = self.new_edgevec(|_, _, _| None::<Point2<f64>>);
         let mut paired_groups = BTreeMap::<(usize, usize), Vec<EdgeIndex>>::new();
+        let mut same_rank_groups = BTreeMap::<i64, Vec<EdgeIndex>>::new();
         let mut dangling_groups = BTreeMap::<(usize, Flow), Vec<EdgeIndex>>::new();
 
         for (pair, _, _) in self.iter_edges() {
@@ -3278,10 +3279,16 @@ impl TypstGraph {
                 HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
                     let source_node = self.node_id(source);
                     let sink_node = self.node_id(sink);
-                    paired_groups
-                        .entry((source_node.0, sink_node.0))
-                        .or_default()
-                        .push(eid);
+                    let source_pos = pos_v[source_node];
+                    let sink_pos = pos_v[sink_node];
+                    if let Some(rank) = Self::same_rank_key(source_pos, sink_pos) {
+                        same_rank_groups.entry(rank).or_default().push(eid);
+                    } else {
+                        paired_groups
+                            .entry((source_node.0, sink_node.0))
+                            .or_default()
+                            .push(eid);
+                    }
                 }
                 HedgePair::Unpaired { hedge, flow } => {
                     let node = self.node_id(hedge);
@@ -3292,8 +3299,9 @@ impl TypstGraph {
 
         for edges in paired_groups.values_mut() {
             edges.sort_by_key(|edge| edge.0);
-            let count = edges.len();
-            for (position, &eid) in edges.iter().enumerate() {
+            let offsets =
+                self.centered_edge_label_offsets(edges, cfg.dx * 0.35, cfg.dx * 0.12, true);
+            for (&eid, offset) in edges.iter().zip(offsets) {
                 let (_, pair) = &self.graph[&eid];
                 let (source, sink) = match pair {
                     HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
@@ -3303,19 +3311,49 @@ impl TypstGraph {
                 };
                 let a = pos_v[self.node_id(source)];
                 let b = pos_v[self.node_id(sink)];
-                let slot = Self::centered_slot(position, count);
                 let normal = Self::edge_route_normal(a, b);
-                targets[eid] = Some(a.midpoint(b) + normal * slot * cfg.dx * 0.35);
+                targets[eid] = Some(a.midpoint(b) + normal * offset);
+            }
+        }
+
+        for edges in same_rank_groups.values_mut() {
+            edges.sort_by(|a, b| {
+                let ax = self.edge_midpoint(*a, &pos_v).x;
+                let bx = self.edge_midpoint(*b, &pos_v).x;
+                ax.partial_cmp(&bx)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a.0.cmp(&b.0))
+            });
+            let lane_gap = cfg.dx * 0.12;
+            let default_spacing = cfg.dx * 0.35;
+            let lane_step = self.same_rank_label_lane_step(edges, default_spacing, lane_gap);
+            let mut lane_right_edges = Vec::<f64>::new();
+            for &eid in edges.iter() {
+                let midpoint = self.edge_midpoint(eid, &pos_v);
+                let half_width = self
+                    .edge_label_route_half_extent(eid, false)
+                    .max(default_spacing * 0.5);
+                let left = midpoint.x - half_width;
+                let right = midpoint.x + half_width;
+                let lane = lane_right_edges
+                    .iter()
+                    .position(|&lane_right| left >= lane_right + lane_gap)
+                    .unwrap_or_else(|| {
+                        lane_right_edges.push(f64::NEG_INFINITY);
+                        lane_right_edges.len() - 1
+                    });
+                lane_right_edges[lane] = right;
+                targets[eid] = Some(midpoint + Vector2::new(0.0, (lane + 1) as f64 * lane_step));
             }
         }
 
         for ((node, _flow), edges) in dangling_groups.iter_mut() {
             edges.sort_by_key(|edge| edge.0);
-            let count = edges.len();
+            let offsets =
+                self.centered_edge_label_offsets(edges, cfg.dx * 0.35, cfg.dx * 0.12, false);
             let anchor = pos_v[NodeIndex(*node)];
-            for (position, &eid) in edges.iter().enumerate() {
-                let slot = Self::centered_slot(position, count);
-                targets[eid] = Some(anchor + Vector2::new(slot * cfg.dx * 0.35, cfg.dy * 0.5));
+            for (&eid, offset) in edges.iter().zip(offsets) {
+                targets[eid] = Some(anchor + Vector2::new(offset, cfg.dy * 0.5));
             }
         }
 
@@ -3342,8 +3380,84 @@ impl TypstGraph {
         (pos_v, pos_e)
     }
 
-    fn centered_slot(position: usize, count: usize) -> f64 {
-        position as f64 - 0.5 * count.saturating_sub(1) as f64
+    fn same_rank_key(a: Point2<f64>, b: Point2<f64>) -> Option<i64> {
+        if (a.y - b.y).abs() <= 1e-6 {
+            Some(((a.y + b.y) * 500_000.0).round() as i64)
+        } else {
+            None
+        }
+    }
+
+    fn edge_midpoint(&self, edge: EdgeIndex, pos_v: &NodeVec<Point2<f64>>) -> Point2<f64> {
+        let (_, pair) = &self.graph[&edge];
+        match pair {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                let a = pos_v[self.node_id(*source)];
+                let b = pos_v[self.node_id(*sink)];
+                a.midpoint(b)
+            }
+            HedgePair::Unpaired { .. } => self.graph[edge].pos,
+        }
+    }
+
+    fn same_rank_label_lane_step(
+        &self,
+        edges: &[EdgeIndex],
+        default_spacing: f64,
+        label_gap: f64,
+    ) -> f64 {
+        let max_label_height = edges
+            .iter()
+            .map(|&edge| {
+                Self::positive_statement_f64(&self.graph[edge].statements, "label-height")
+                    .unwrap_or(0.0)
+            })
+            .fold(0.0, f64::max);
+        default_spacing.max(max_label_height + label_gap.max(0.0))
+    }
+
+    fn centered_edge_label_offsets(
+        &self,
+        edges: &[EdgeIndex],
+        default_spacing: f64,
+        label_gap: f64,
+        radial_extent: bool,
+    ) -> Vec<f64> {
+        if edges.is_empty() {
+            return Vec::new();
+        }
+
+        let half_extents = edges
+            .iter()
+            .map(|&edge| self.edge_label_route_half_extent(edge, radial_extent))
+            .collect::<Vec<_>>();
+
+        let mut offsets = vec![0.0; edges.len()];
+        for index in 1..edges.len() {
+            let measured_spacing =
+                half_extents[index - 1] + half_extents[index] + label_gap.max(0.0);
+            offsets[index] = offsets[index - 1] + default_spacing.max(measured_spacing);
+        }
+
+        let min = offsets.first().copied().unwrap_or(0.0) - half_extents[0];
+        let max =
+            offsets.last().copied().unwrap_or(0.0) + half_extents.last().copied().unwrap_or(0.0);
+        let center = 0.5 * (min + max);
+        for offset in &mut offsets {
+            *offset -= center;
+        }
+        offsets
+    }
+
+    fn edge_label_route_half_extent(&self, edge: EdgeIndex, radial_extent: bool) -> f64 {
+        let edge = &self.graph[edge];
+        let width = Self::positive_statement_f64(&edge.statements, "label-width").unwrap_or(0.0);
+        let height = Self::positive_statement_f64(&edge.statements, "label-height").unwrap_or(0.0);
+        if radial_extent {
+            0.5 * width.hypot(height)
+        } else {
+            0.5 * width
+        }
     }
 
     fn edge_route_normal(a: Point2<f64>, b: Point2<f64>) -> Vector2<f64> {
