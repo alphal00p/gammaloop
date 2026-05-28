@@ -1,5 +1,5 @@
 use crate::{
-    cff::CutCFFIndex,
+    cff::{CutCFFIndex, ResidueSelectedTerms},
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
@@ -13,9 +13,9 @@ use crate::{
     },
 };
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use std::{collections::BTreeMap, hash::Hash};
+use std::hash::Hash;
 use tracing::debug;
 
 use symbolica::{
@@ -70,10 +70,12 @@ pub trait ApproxKernel {
 pub enum ApproxOp {
     NotComputed,
     Union {
+        sign: Sign,
         t_args: Vec<IntegrandExpr>,
         subgraphs: Vec<InternalSubGraph>,
     },
     Dependent {
+        sign: Sign,
         t_arg: IntegrandExpr,
         subgraph: InternalSubGraph,
     },
@@ -137,7 +139,7 @@ impl SimpleApprox {
 pub struct Approximation {
     pub spinney: Spinney,
     pub local_3d: CFFapprox, //3d denoms
-    pub final_integrand: Option<BTreeMap<CutCFFIndex, Atom>>,
+    pub final_integrand: Option<ResidueSelectedTerms>,
     pub integrated_4d: ApproxOp,
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
@@ -195,8 +197,40 @@ pub enum CFFapprox {
     Dependent { sign: Sign, t_arg: IntegrandExpr },
 }
 
+#[derive(Clone)]
 pub struct CutStructure {
     pub cuts: Vec<CutSet>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct OrientationProjection<'a> {
+    pub(crate) valid_orientations: &'a [EdgeVec<Orientation>],
+    pub(crate) orientation_pattern: &'a OrientationPattern,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ResidueProjection<'a> {
+    pub(crate) cutset: &'a CutSet,
+    pub(crate) orientation: OrientationProjection<'a>,
+}
+
+impl<'a> OrientationProjection<'a> {
+    pub(crate) fn new(
+        valid_orientations: &'a [EdgeVec<Orientation>],
+        orientation_pattern: &'a OrientationPattern,
+    ) -> Self {
+        Self {
+            valid_orientations,
+            orientation_pattern,
+        }
+    }
+
+    pub(crate) fn for_cut(self, cutset: &'a CutSet) -> ResidueProjection<'a> {
+        ResidueProjection {
+            cutset,
+            orientation: self,
+        }
+    }
 }
 
 impl CutStructure {
@@ -208,7 +242,7 @@ impl CutStructure {
 }
 
 impl CFFapprox {
-    pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(ResidueSelectedTerms, Sign)> {
         match self {
             CFFapprox::NotComputed => None,
             CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrands.clone(), *sign)),
@@ -218,17 +252,16 @@ impl CFFapprox {
     pub(crate) fn dependent(
         graph: &mut Graph,
         to_contract: &SuBitGraph,
-        cuts: &CutSet,
+        projection: ResidueProjection<'_>,
         _settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<CFFapprox> {
         let cff = graph
             .cff(
                 &to_contract
                     .union(&graph.tree_edges)
                     .subtract(&graph.initial_state_cut),
-                cuts,
-                orientation_pattern,
+                projection.cutset,
+                projection.orientation.orientation_pattern,
             )?
             .expression_with_selectors();
 
@@ -239,26 +272,21 @@ impl CFFapprox {
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
             t_arg: IntegrandExpr {
-                integrands: cff
-                    .iter()
-                    .map(|(index, a)| (*index, a * &fourddenoms))
-                    .collect(),
+                integrands: cff.map(|a| a * &fourddenoms),
             },
         })
     }
 
     pub(crate) fn root(
         graph: &mut Graph,
-        cuts: &CutSet,
+        projection: ResidueProjection<'_>,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<CFFapprox> {
         Self::dependent(
             graph,
             &graph.empty_subgraph::<SuBitGraph>(),
-            cuts,
+            projection,
             settings,
-            orientation_pattern,
         )
     }
 }
@@ -279,47 +307,67 @@ impl Approximation {
                 });
     }
 
+    fn filtered_integrated_uv_mode_is_active(settings: &UVgenerationSettings) -> bool {
+        settings.generate_integrated && settings.add_integrated_uv_with_n_loops.is_some()
+    }
+
+    fn zero_terms(allowed_keys: &[CutCFFIndex]) -> ResidueSelectedTerms {
+        ResidueSelectedTerms::zero_for_keys(allowed_keys)
+    }
+
+    fn set_zero_local_3d(&mut self, sign: Sign, allowed_keys: &[CutCFFIndex]) {
+        self.local_3d = CFFapprox::Dependent {
+            sign,
+            t_arg: IntegrandExpr {
+                integrands: Self::zero_terms(allowed_keys),
+            },
+        };
+    }
+
+    fn should_keep_only_integrated_uv_terms(&self, settings: &UVgenerationSettings) -> bool {
+        Self::filtered_integrated_uv_mode_is_active(settings) && !self.excluded_by_filters
+    }
+
     pub(crate) fn root(
         &mut self,
         graph: &mut Graph,
         cuts: &CutSet,
-        valid_orientations: &[EdgeVec<Orientation>],
+        orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
+        let projection = orientation.for_cut(cuts);
         self.excluded_by_filters = false;
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
         if settings.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
-            self.local_3d = CFFapprox::root(graph, cuts, settings, orientation_pattern)?;
-            let (local_terms, local_sign) = self
-                .local_3d
-                .expr()
-                .expect("root local CFF should have been computed");
-            let uv_marker = (settings.add_sigma && settings.keep_sigma).then(|| {
-                self.simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter())
-            });
-            self.final_integrand = Some(
-                FinalIntegrand::new(
-                    valid_orientations,
-                    orientation_pattern,
-                    uv_marker.as_ref(),
-                    true,
-                )
-                .build(
-                    graph,
-                    self,
-                    &local_terms,
-                    local_sign,
-                    &self.integrated_4d,
-                    cuts,
-                )?,
-            );
+            self.local_3d = CFFapprox::root(graph, projection, settings)?;
+            if Self::filtered_integrated_uv_mode_is_active(settings) {
+                self.final_integrand = Some(Self::zero_terms(
+                    &cuts.residue_selector.generate_allowed_keys(),
+                ));
+            } else {
+                let (local_terms, local_sign) = self
+                    .local_3d
+                    .expr()
+                    .expect("root local CFF should have been computed");
+                let uv_marker = (settings.add_sigma && settings.keep_sigma).then(|| {
+                    self.simple_approx
+                        .as_ref()
+                        .unwrap()
+                        .expr(&graph.full_filter())
+                });
+                self.final_integrand = Some(
+                    FinalIntegrand::new(projection, uv_marker.as_ref(), true).build(
+                        graph,
+                        self,
+                        &local_terms,
+                        local_sign,
+                        &self.integrated_4d,
+                    )?,
+                );
+            }
         }
 
         Ok(())
@@ -358,8 +406,9 @@ impl Approximation {
             );
             self.integrated_4d = ApproxOp::Dependent {
                 t_arg: IntegrandExpr {
-                    integrands: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
+                    integrands: ResidueSelectedTerms::all_none(Atom::Zero),
                 },
+                sign: Sign::Positive,
                 subgraph: unsafe {
                     InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent))
                 },
@@ -369,7 +418,7 @@ impl Approximation {
 
         let ctx = UVCtx { graph, settings };
 
-        let Some(current) = &dependent.integrated_4d.expr() else {
+        let Some((current, sign)) = &dependent.integrated_4d.expr() else {
             return Err(eyre!("integrated_4d not computed"));
         };
 
@@ -393,11 +442,6 @@ impl Approximation {
                 let term_started = std::time::Instant::now();
                 let integrated =
                     Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a)?;
-                let integrated = if dependent.subgraph().is_empty() {
-                    integrated
-                } else {
-                    -integrated
-                };
                 debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                     stage = "compute_integrated_kernel_done",
                     cut_index = ?index,
@@ -406,10 +450,11 @@ impl Approximation {
                 );
                 Ok((*index, integrated))
             })
-            .collect::<Result<BTreeMap<_, _>>>()?;
+            .collect::<Result<ResidueSelectedTerms>>()?;
 
         self.integrated_4d = ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrands },
+            sign: -*sign,
             subgraph: unsafe { InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent)) },
         };
 
@@ -434,10 +479,10 @@ impl Approximation {
         graph: &mut Graph,
         cuts: &CutSet,
         dependent: &Self,
-        valid_orientations: &[EdgeVec<Orientation>],
+        orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
+        let projection = orientation.for_cut(cuts);
         let started = std::time::Instant::now();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_local_3d_start",
@@ -452,19 +497,14 @@ impl Approximation {
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Loaded parent local 3D UV CT"
         );
-        let final_integrand =
-            FinalIntegrand::new(valid_orientations, orientation_pattern, None, false);
+        let final_integrand = FinalIntegrand::new(projection, None, false);
 
         let localize_started = std::time::Instant::now();
-        let integrated_t = final_integrand.localized_integrated_ct(
-            graph,
-            dependent,
-            &dependent.integrated_4d,
-            cuts,
-        )?;
+        let integrated_t =
+            final_integrand.localized_integrated_ct(graph, dependent, &dependent.integrated_4d)?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_local_3d_localize_integrated_done",
-            localized_count = integrated_t.active.integrands.len(),
+            localized_count = integrated_t.active.len(),
             elapsed_ms = localize_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Localized integrated UV CT for local 3D subtraction"
@@ -478,92 +518,91 @@ impl Approximation {
                 .expr(&ctx.graph.full_filter())
         });
 
-        let mut integrands = BTreeMap::new();
-        let mut tagged_integrands = uv_marker.as_ref().map(|_| BTreeMap::new());
-        for (((index_local, local), (index_integ, integ)), (index_frozen, frozen)) in cff
-            .into_iter()
-            .zip(integrated_t.active.integrands)
-            .zip(integrated_t.frozen_integrands)
-        {
-            let term_started = std::time::Instant::now();
-            if index_local != index_integ {
-                return Err(eyre!(
-                    "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
-                    index_local,
-                    index_integ
-                ));
-            }
-            if index_local != index_frozen {
-                return Err(eyre!(
-                    "Mismatched indices for local integrated active and frozen factors: {:?} vs {:?}",
-                    index_local,
-                    index_frozen
-                ));
-            }
-            let mut sum_3d = Atom::Zero;
-
-            debug_tags!(#generation, #profile, #uv, #integrated, #local, #graph, #term, #trace;
-                stage = "compute_local_3d_term_inputs",
-                cut_index = ?index_local,
-                log.local = local,
-                log.localized_integrated = integ,
-                log.frozen = frozen,
-                "Local 3D UV CT term inputs"
+        if Self::filtered_integrated_uv_mode_is_active(settings) {
+            self.set_zero_local_3d(
+                -sign,
+                cuts.residue_selector.generate_allowed_keys().as_slice(),
             );
-
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                "adding localT(expr)"
-            );
-            let local_ct = Local3DApproximation::full().kernel(&ctx, &*self, dependent, &local)?;
-            debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
-                stage = "compute_local_3d_term_local_done",
-                cut_index = ?index_local,
-                log.local_ct = local_ct,
-                "Computed localT(expr)"
-            );
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                "subtracting localT(integrated(expr))"
-            );
-            let localized_integrated_ct =
-                Local3DApproximation::reduced().kernel(&ctx, &*self, dependent, &integ)? * frozen;
-            debug_tags!(#generation, #profile, #uv, #integrated, #local, #graph, #term, #trace;
-                stage = "compute_local_3d_term_integrated_done",
-                cut_index = ?index_local,
-                log.localized_integrated_ct = localized_integrated_ct,
-                "Computed localT(integrated(expr))"
-            );
-            if let (Some(marker), Some(tagged_integrands)) =
-                (uv_marker.as_ref(), tagged_integrands.as_mut())
-            {
-                let tagged_sum_3d = local_ct.clone() * function!(GS.uv_local, marker.clone())
-                    - localized_integrated_ct.clone() * function!(GS.uv_integrated, marker.clone());
-                tagged_integrands.insert(index_local, tagged_sum_3d.clone());
-                debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
-                    stage = "compute_local_3d_term_tagged_output",
-                    cut_index = ?index_local,
-                    log.tagged_local_3d_ct = tagged_sum_3d,
-                    "Computed tagged local 3D UV CT expression"
-                );
-            }
-            sum_3d += local_ct;
-            sum_3d -= localized_integrated_ct;
-            debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
-                stage = "compute_local_3d_term_output",
-                cut_index = ?index_local,
-                log.local_3d_ct = sum_3d,
-                "Computed local 3D UV CT expression"
-            );
-            integrands.insert(index_local, sum_3d);
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                stage = "compute_local_3d_term_done",
-                cut_index = ?index_local,
-                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
-                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                "Computed local 3D UV CT term"
-            );
+            self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
+                self.final_integrand(graph, projection, settings)?
+            } else {
+                Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
+            });
+            return Ok(());
         }
 
+        let mut tagged_integrands = uv_marker.as_ref().map(|_| ResidueSelectedTerms::empty());
         let output_sign = -sign;
+        let integrands = cff
+            .try_zip_with(&integrated_t.active, |index, local, integ| {
+                let term_started = std::time::Instant::now();
+                let frozen = integrated_t.frozen_integrands.get(index)?;
+                let mut sum_3d = Atom::Zero;
+
+                debug_tags!(#generation, #profile, #uv, #integrated, #local, #graph, #term, #trace;
+                    stage = "compute_local_3d_term_inputs",
+                    cut_index = ?index,
+                    log.local = local,
+                    log.localized_integrated = integ,
+                    log.frozen = frozen,
+                    "Local 3D UV CT term inputs"
+                );
+
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    "adding localT(expr)"
+                );
+                let local_ct =
+                    Local3DApproximation::full().kernel(&ctx, &*self, dependent, local)?;
+                debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
+                    stage = "compute_local_3d_term_local_done",
+                    cut_index = ?index,
+                    log.local_ct = local_ct,
+                    "Computed localT(expr)"
+                );
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    "subtracting localT(integrated(expr))"
+                );
+                let localized_integrated_ct = Local3DApproximation::reduced()
+                    .kernel(&ctx, &*self, dependent, integ)?
+                    * frozen;
+                debug_tags!(#generation, #profile, #uv, #integrated, #local, #graph, #term, #trace;
+                    stage = "compute_local_3d_term_integrated_done",
+                    cut_index = ?index,
+                    log.localized_integrated_ct = localized_integrated_ct,
+                    "Computed localT(integrated(expr))"
+                );
+                if let (Some(marker), Some(tagged_integrands)) =
+                    (uv_marker.as_ref(), tagged_integrands.as_mut())
+                {
+                    let tagged_sum_3d = local_ct.clone() * function!(GS.uv_local, marker.clone())
+                        - localized_integrated_ct.clone()
+                            * function!(GS.uv_integrated, marker.clone());
+                    tagged_integrands.add_assign_term(index, tagged_sum_3d.clone());
+                    debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
+                        stage = "compute_local_3d_term_tagged_output",
+                        cut_index = ?index,
+                        log.tagged_local_3d_ct = tagged_sum_3d,
+                        "Computed tagged local 3D UV CT expression"
+                    );
+                }
+                sum_3d += local_ct;
+                sum_3d -= localized_integrated_ct;
+                debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
+                    stage = "compute_local_3d_term_output",
+                    cut_index = ?index,
+                    log.local_3d_ct = sum_3d,
+                    "Computed local 3D UV CT expression"
+                );
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    stage = "compute_local_3d_term_done",
+                    cut_index = ?index,
+                    elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                    total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                    "Computed local 3D UV CT term"
+                );
+                Ok(sum_3d)
+            })
+            .wrap_err("while combining legacy local and integrated approximations")?;
         self.local_3d = CFFapprox::Dependent {
             sign: output_sign,
             t_arg: IntegrandExpr { integrands },
@@ -579,19 +618,12 @@ impl Approximation {
                 Some(tagged_integrands) => tagged_integrands,
                 None => &local_terms,
             };
-            FinalIntegrand::new(
-                valid_orientations,
-                orientation_pattern,
-                uv_marker.as_ref(),
-                false,
-            )
-            .build(
+            FinalIntegrand::new(projection, uv_marker.as_ref(), false).build(
                 graph,
                 self,
                 final_local_terms,
                 local_sign,
                 &self.integrated_4d,
-                cuts,
             )?
         });
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -603,6 +635,26 @@ impl Approximation {
             "Computed local 3D UV CT"
         );
         Ok(())
+    }
+
+    pub(crate) fn final_integrand(
+        &self,
+        graph: &mut Graph,
+        projection: ResidueProjection<'_>,
+        _settings: &UVgenerationSettings,
+    ) -> Result<ResidueSelectedTerms> {
+        let (local_terms, local_sign) = self
+            .local_3d
+            .expr()
+            .ok_or(eyre!("Local3d not yet computed"))?;
+
+        FinalIntegrand::new(projection, None, false).build(
+            graph,
+            self,
+            &local_terms,
+            local_sign,
+            &self.integrated_4d,
+        )
     }
 
     // pub(crate) fn simple_expr(
@@ -617,7 +669,7 @@ impl Approximation {
 }
 
 impl ApproxOp {
-    pub(crate) fn expr(&self) -> Option<BTreeMap<CutCFFIndex, Atom>> {
+    pub(crate) fn expr(&self) -> Option<(ResidueSelectedTerms, Sign)> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { .. } => {
@@ -626,11 +678,8 @@ impl ApproxOp {
                     "Should not call expr on a union approximation, need to compute the union first"
                 );
             }
-            ApproxOp::Dependent { t_arg, .. } => Some(t_arg.integrands.clone()),
-            ApproxOp::Root => Some(BTreeMap::from([(
-                CutCFFIndex::new_all_none(),
-                Atom::num(1),
-            )])),
+            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrands.clone(), *sign)),
+            ApproxOp::Root => Some((ResidueSelectedTerms::all_none(Atom::num(1)), Sign::Positive)),
         }
     }
 }

@@ -1,6 +1,6 @@
-use std::{collections::BTreeMap, hash::Hash};
+use std::hash::Hash;
 
-use crate::{cff::CutCFFIndex, numerator::aind::Aind, utils::GS};
+use crate::{cff::ResidueSelectedTerms, numerator::aind::Aind, utils::GS};
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
@@ -30,7 +30,7 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntegrandExpr {
-    integrands: BTreeMap<CutCFFIndex, Atom>,
+    integrands: ResidueSelectedTerms,
     // add_arg: Option<Atom>,
 }
 
@@ -43,7 +43,9 @@ pub mod hedge_poset;
 pub mod renormalization;
 pub use renormalization::{RenormalizationPart, RenormalizationStats};
 pub mod settings;
-pub use settings::{ApproximationType, CTIdentifier, CTRenormalizationRule, UVgenerationSettings};
+pub use settings::{
+    ApproximationType, CTIdentifier, CTRenormalizationRule, UVOrchestrator, UVgenerationSettings,
+};
 pub mod uv_graph;
 pub use uv_graph::UltravioletGraph;
 
@@ -61,6 +63,8 @@ pub use approx::ApproxOp;
 
 pub mod forest;
 pub use forest::Forest;
+
+pub(crate) mod orchestrator;
 
 pub mod profile;
 pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};

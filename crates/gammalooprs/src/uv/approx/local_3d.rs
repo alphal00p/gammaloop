@@ -1,11 +1,10 @@
-use std::{collections::BTreeMap, sync::LazyLock};
-
 use eyre::eyre;
 use gammaloop_tracing_filter::debug_instrument;
 use linnet::half_edge::{
     involution::HedgePair,
     subgraph::{SuBitGraph, SubSetOps},
 };
+use std::sync::LazyLock;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
@@ -15,14 +14,13 @@ use symbolica::{
 use tracing::instrument;
 
 use crate::{
-    cff::CutCFFIndex,
+    cff::ResidueSelectedTerms,
     debug_tags,
-    graph::{Graph, LMBext, cuts::CutSet},
-    settings::global::OrientationPattern,
+    graph::{Graph, LMBext},
     utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         ApproximationType, UltravioletGraph,
-        approx::{ApproximationKernel, UVCtx},
+        approx::{ApproximationKernel, ResidueProjection, UVCtx},
         uv_graph::UVE,
     },
 };
@@ -70,16 +68,15 @@ impl Local3DApproximation {
     pub(crate) fn dependent(
         graph: &mut Graph,
         to_contract: &SuBitGraph,
-        cuts: &CutSet,
-        orientation_pattern: &OrientationPattern,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        projection: ResidueProjection<'_>,
+    ) -> Result<ResidueSelectedTerms> {
         let cff = graph
             .cff(
                 &to_contract
                     .union(&graph.tree_edges)
                     .subtract(&graph.initial_state_cut),
-                cuts,
-                orientation_pattern,
+                projection.cutset,
+                projection.orientation.orientation_pattern,
             )?
             .expression_with_selectors();
 
@@ -87,24 +84,14 @@ impl Local3DApproximation {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
-        Ok(cff
-            .iter()
-            .map(|(index, a)| (*index, a * &fourddenoms))
-            .collect())
+        Ok(cff.map(|a| a * &fourddenoms))
     }
 
     pub(crate) fn root(
         graph: &mut Graph,
-        cuts: &CutSet,
-        orientation_pattern: &OrientationPattern,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
-        // debug_tags!(;"Computing root");
-        Self::dependent(
-            graph,
-            &graph.empty_subgraph::<SuBitGraph>(),
-            cuts,
-            orientation_pattern,
-        )
+        projection: ResidueProjection<'_>,
+    ) -> Result<ResidueSelectedTerms> {
+        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), projection)
     }
 
     #[debug_instrument(

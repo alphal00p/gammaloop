@@ -6,7 +6,7 @@ use gammalooprs::{
     processes::{Amplitude, AmplitudeGraph},
     utils::{GS, load_generic_model, symbolica_ext::LogPrint},
     uv::{
-        RenormalizationPart, UVgenerationSettings,
+        RenormalizationPart, UVOrchestrator, UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
     },
 };
@@ -375,7 +375,7 @@ fn finite_part_ghost_2loop() {
     let settings = finite_part_uv_settings();
 
     let new_settings = UVgenerationSettings {
-        use_legacy: false,
+        orchestrator: UVOrchestrator::HedgePoset,
         cached: false,
         ..settings.clone()
     };

@@ -1,6 +1,10 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::{BTreeMap, btree_map},
+    fmt::Display,
+};
 
 use bincode_trait_derive::{Decode, Encode};
+use eyre::eyre;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubGraphLike, SubSetLike, SubSetOps},
@@ -8,6 +12,7 @@ use linnet::half_edge::{
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
+    GammaLoopContext,
     cff::expression::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
     settings::global::OrientationPattern,
@@ -81,12 +86,250 @@ impl Display for CutCFFIndex {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct ResidueSelectedTerms {
+    terms: BTreeMap<CutCFFIndex, Atom>,
+}
+
+impl ResidueSelectedTerms {
+    pub fn new(terms: BTreeMap<CutCFFIndex, Atom>) -> Self {
+        Self { terms }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(BTreeMap::new())
+    }
+
+    pub fn all_none(atom: Atom) -> Self {
+        Self::new(BTreeMap::from([(CutCFFIndex::new_all_none(), atom)]))
+    }
+
+    pub fn zero_for_keys(allowed_keys: &[CutCFFIndex]) -> Self {
+        allowed_keys.iter().map(|&key| (key, Atom::Zero)).collect()
+    }
+
+    pub fn zero_like(&self) -> Self {
+        self.terms.keys().map(|&key| (key, Atom::Zero)).collect()
+    }
+
+    pub fn map<F: FnMut(Atom) -> Atom>(self, mut map: F) -> Self {
+        self.terms
+            .into_iter()
+            .map(|(index, atom)| (index, map(atom)))
+            .collect()
+    }
+
+    pub fn try_map<F>(&self, mut map: F) -> Result<Self>
+    where
+        F: FnMut(CutCFFIndex, &Atom) -> Result<Atom>,
+    {
+        self.terms
+            .iter()
+            .map(|(&index, atom)| Ok((index, map(index, atom)?)))
+            .collect()
+    }
+
+    pub fn try_zip_with<F>(&self, other: &Self, mut combine: F) -> Result<Self>
+    where
+        F: FnMut(CutCFFIndex, &Atom, &Atom) -> Result<Atom>,
+    {
+        if self.len() != other.len() {
+            return Err(eyre!(
+                "Mismatched residue-selected term counts: {} vs {}",
+                self.len(),
+                other.len()
+            ));
+        }
+
+        self.terms
+            .iter()
+            .map(|(&index, left)| {
+                let right = other.get(index)?;
+                Ok((index, combine(index, left, right)?))
+            })
+            .collect()
+    }
+
+    pub fn multiply_assign_aligned(&mut self, other: Self) -> Result<()> {
+        for (index, atom) in other {
+            let entry = self.get_mut(index)?;
+            *entry *= atom;
+        }
+        Ok(())
+    }
+
+    pub fn add_assign_term(&mut self, index: CutCFFIndex, term: Atom) {
+        self.terms
+            .entry(index)
+            .and_modify(|current| *current += &term)
+            .or_insert(term);
+    }
+
+    pub fn len(&self) -> usize {
+        self.terms.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.terms.is_empty()
+    }
+
+    pub fn iter(&self) -> btree_map::Iter<'_, CutCFFIndex, Atom> {
+        self.terms.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> btree_map::IterMut<'_, CutCFFIndex, Atom> {
+        self.terms.iter_mut()
+    }
+
+    pub fn keys(&self) -> btree_map::Keys<'_, CutCFFIndex, Atom> {
+        self.terms.keys()
+    }
+
+    pub fn values_mut(&mut self) -> btree_map::ValuesMut<'_, CutCFFIndex, Atom> {
+        self.terms.values_mut()
+    }
+
+    pub fn values(&self) -> btree_map::Values<'_, CutCFFIndex, Atom> {
+        self.terms.values()
+    }
+
+    pub fn pop_first(&mut self) -> Option<(CutCFFIndex, Atom)> {
+        self.terms.pop_first()
+    }
+
+    pub fn get(&self, index: CutCFFIndex) -> Result<&Atom> {
+        self.terms
+            .get(&index)
+            .ok_or_else(|| eyre!("Missing residue-selected term key {:?}", index))
+    }
+
+    pub fn get_mut(&mut self, index: CutCFFIndex) -> Result<&mut Atom> {
+        self.terms
+            .get_mut(&index)
+            .ok_or_else(|| eyre!("Missing residue-selected term key {:?}", index))
+    }
+
+    pub fn into_only_all_none(mut self) -> Result<Atom> {
+        if self.len() != 1 {
+            return Err(eyre!(
+                "Expected exactly one residue-selected term, got {}",
+                self.len()
+            ));
+        }
+        let scalar_key = CutCFFIndex::new_all_none();
+        self.terms
+            .remove(&scalar_key)
+            .ok_or_else(|| eyre!("Missing residue-selected term key {:?}", scalar_key))
+    }
+
+    pub fn into_inner(self) -> BTreeMap<CutCFFIndex, Atom> {
+        self.terms
+    }
+}
+
+impl FromIterator<(CutCFFIndex, Atom)> for ResidueSelectedTerms {
+    fn from_iter<T: IntoIterator<Item = (CutCFFIndex, Atom)>>(iter: T) -> Self {
+        Self::new(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for ResidueSelectedTerms {
+    type Item = (CutCFFIndex, Atom);
+    type IntoIter = btree_map::IntoIter<CutCFFIndex, Atom>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a ResidueSelectedTerms {
+    type Item = (&'a CutCFFIndex, &'a Atom);
+    type IntoIter = btree_map::Iter<'a, CutCFFIndex, Atom>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut ResidueSelectedTerms {
+    type Item = (&'a CutCFFIndex, &'a mut Atom);
+    type IntoIter = btree_map::IterMut<'a, CutCFFIndex, Atom>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CutCFFIndex, ResidueSelectedTerms};
+    use eyre::WrapErr;
+    use std::collections::BTreeMap;
+    use symbolica::{atom::Atom, symbol};
+
+    fn left_threshold_key() -> CutCFFIndex {
+        CutCFFIndex {
+            left_threshold_order: Some(1),
+            right_threshold_order: None,
+            lu_cut_order: None,
+        }
+    }
+
+    #[test]
+    fn residue_selected_terms_zero_like_preserves_keys() {
+        let terms = ResidueSelectedTerms::new(BTreeMap::from([
+            (CutCFFIndex::new_all_none(), Atom::var(symbol!("x"))),
+            (left_threshold_key(), Atom::num(3)),
+        ]));
+
+        assert_eq!(
+            terms.zero_like(),
+            ResidueSelectedTerms::new(BTreeMap::from([
+                (CutCFFIndex::new_all_none(), Atom::Zero),
+                (left_threshold_key(), Atom::Zero),
+            ]))
+        );
+    }
+
+    #[test]
+    fn residue_selected_terms_zip_combines_matching_keys() {
+        let left = ResidueSelectedTerms::all_none(Atom::var(symbol!("x")));
+        let right = ResidueSelectedTerms::all_none(Atom::num(2));
+
+        let combined = left
+            .try_zip_with(&right, |_, lhs, rhs| Ok(lhs.clone() + rhs.clone()))
+            .unwrap();
+
+        assert_eq!(
+            combined.get(CutCFFIndex::new_all_none()).unwrap(),
+            &(Atom::var(symbol!("x")) + Atom::num(2))
+        );
+    }
+
+    #[test]
+    fn residue_selected_terms_zip_reports_missing_key_with_context() {
+        let left = ResidueSelectedTerms::all_none(Atom::var(symbol!("x")));
+        let right =
+            ResidueSelectedTerms::new(BTreeMap::from([(left_threshold_key(), Atom::num(2))]));
+
+        let err = left
+            .try_zip_with(&right, |_, lhs, rhs| Ok(lhs.clone() + rhs.clone()))
+            .wrap_err("while aligning residue-selected terms for test zip")
+            .unwrap_err();
+        let report = format!("{err:?}");
+
+        assert!(report.contains("while aligning residue-selected terms for test zip"));
+        assert!(report.contains("Missing residue-selected term key"));
+    }
+}
+
 pub struct CutCFF {
     pub terms: BTreeMap<CutCFFIndex, CFFTerm>,
 }
 
 impl CutCFF {
-    pub fn expression_with_selectors(&self) -> BTreeMap<CutCFFIndex, Atom> {
+    pub fn expression_with_selectors(&self) -> ResidueSelectedTerms {
         self.terms
             .iter()
             .map(|(index, term)| (*index, term.expression_with_selectors()))

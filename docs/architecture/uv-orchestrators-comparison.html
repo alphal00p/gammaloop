@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UV Orchestrators: Legacy DAG Forest vs Hedge Poset</title>
+  <style>
+    :root {
+      --bg: #f7f7f4;
+      --ink: #171717;
+      --muted: #5f655f;
+      --rule: #d7d8d2;
+      --panel: #ffffff;
+      --panel-alt: #f0f4f2;
+      --code-bg: #101214;
+      --code-ink: #e8ecef;
+      --code-muted: #8d969f;
+      --kw: #ff8a7a;
+      --ty: #82d6ff;
+      --fn: #c9e879;
+      --st: #ffd37a;
+      --var: #d7c6ff;
+      --macro: #7ee7c4;
+      --op: #b8c0c8;
+      --shared-bg: #d8f46d;
+      --shared-ink: #101214;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(1440px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 36px 0 56px;
+    }
+
+    header {
+      max-width: 980px;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: var(--muted);
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0 30px;
+    }
+
+    .summary div {
+      background: var(--panel);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .summary strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    .col-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #20251f;
+      color: white;
+      padding: 16px 18px;
+      border-bottom: 1px solid #303830;
+    }
+
+    .col-head + .col-head {
+      border-left: 1px solid #303830;
+    }
+
+    .cell {
+      padding: 18px;
+      border-top: 1px solid var(--rule);
+      min-width: 0;
+    }
+
+    .cell:nth-child(4n) {
+      border-left: 1px solid var(--rule);
+    }
+
+    .cell.alt {
+      background: var(--panel-alt);
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 13px 14px;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      font-size: 0.86rem;
+      line-height: 1.45;
+      tab-size: 4;
+    }
+
+    .kw { color: var(--kw); }
+    .ty { color: var(--ty); }
+    .fn { color: var(--fn); }
+    .st { color: var(--st); }
+    .var { color: var(--var); }
+    .mc { color: var(--macro); }
+    .op { color: var(--op); }
+    .cm { color: var(--code-muted); font-style: italic; }
+
+    .shared-call {
+      display: inline-block;
+      padding: 0 0.2em;
+      border-radius: 4px;
+      background: var(--shared-bg);
+      color: var(--shared-ink);
+      box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.28);
+    }
+
+    .method-map {
+      margin: 0 0 30px;
+      padding: 18px;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .method {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: #fbfcf7;
+    }
+
+    .method code {
+      display: inline-block;
+      max-width: 100%;
+      margin-bottom: 6px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--shared-bg);
+      color: var(--shared-ink);
+      font-size: 0.86rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .method p {
+      margin-bottom: 0;
+      font-size: 0.91rem;
+    }
+
+    .reuse {
+      margin: 0 0 30px;
+    }
+
+    .reuse-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .reuse-panel {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .reuse-panel h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .badge.reused {
+      background: #d8f46d;
+      color: #101214;
+    }
+
+    .badge.partial {
+      background: #ffe08a;
+      color: #30220d;
+    }
+
+    .badge.separate {
+      background: #ffd0c8;
+      color: #3d1510;
+    }
+
+    .note {
+      margin-top: 28px;
+      padding: 18px;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .note pre {
+      margin-top: 10px;
+    }
+
+    @media (max-width: 920px) {
+      main {
+        width: min(100vw - 24px, 760px);
+        padding-top: 24px;
+      }
+
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .method-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .reuse-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .col-head {
+        position: static;
+      }
+
+      .col-head + .col-head,
+      .cell:nth-child(4n) {
+        border-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>UV Orchestrators</h1>
+    <p>
+      A side-by-side comparison of the current legacy DAG forest backend and the
+      new hedge-poset backend. Both are selected through
+      <code>UVgenerationSettings::orchestrator</code>.
+    </p>
+  </header>
+
+  <section class="summary" aria-label="summary">
+    <div>
+      <strong>Default</strong>
+      <p><code>legacy_dag_forest</code> remains the reference path.</p>
+    </div>
+    <div>
+      <strong>New Backend</strong>
+      <p><code>hedge_poset</code> exposes trace levels and compute-store reuse; disconnected policies are still being validated.</p>
+    </div>
+    <div>
+      <strong>Validation</strong>
+      <p><code>compare</code> runs both backends, checks normalized results, and returns legacy output.</p>
+    </div>
+  </section>
+
+  <section class="method-map" aria-label="shared operational methods">
+    <h2>Shared Operational Methods</h2>
+    <p>
+      Highlighted method names are the intended common lifecycle. The backends
+      keep different internals, but the orchestration reads as the same set of
+      operations wherever possible.
+    </p>
+    <div class="method-grid">
+      <div class="method">
+        <code>unfold</code>
+        <p>Turn the wood into an executable forest representation.</p>
+      </div>
+      <div class="method">
+        <code>compute</code>
+        <p>Populate local terms, integrated state where supported, and final terms.</p>
+      </div>
+      <div class="method">
+        <code>orientation_parametric_exprs</code>
+        <p>Assemble cut-indexed parametric integrands from computed terms.</p>
+      </div>
+      <div class="method">
+        <code>pole_part_of_ends</code>
+        <p>Extract the integrated renormalization output from terminal terms.</p>
+      </div>
+      <div class="method">
+        <code>final_integrand_builder</code>
+        <p>Reuse final-integrand assembly through the forest-node invariant.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reuse" aria-label="reuse boundaries">
+    <div class="reuse-grid">
+      <article class="reuse-panel">
+        <h2><span class="badge partial">Partial Reuse</span> Local 3D</h2>
+        <p>
+          The <code>Local3DApproximation::kernel</code> implementation is shared.
+          The outer local algorithm is not shared: legacy walks one dependent
+          DAG node at a time, while hedge-poset walks trace levels from a cut
+          root. The local kernel approximates a full incoming atom, so
+          disconnected local 3D is not solved by multiplying full
+          <code>local_step</code> outputs; that duplicates the root/common
+          ancestor. The unresolved hedge-poset policy is to make disconnected
+          local composition operational: return to the common ancestor for each
+          component and multiply only the operation effects.
+        </p>
+        <pre><code class="language-rust"><span class="cm">// legacy Approximation::compute</span>
+sum_3d += <span class="ty">Local3DApproximation</span> {}
+    .<span class="fn shared-call">kernel</span>(&amp;ctx, <span class="kw">self</span>, dependent, &amp;local)?;
+sum_3d -= <span class="ty">Local3DApproximation</span> {}
+    .<span class="fn shared-call">kernel</span>(&amp;ctx, <span class="kw">self</span>, dependent, &amp;integ)?;</code></pre>
+        <pre><code class="language-rust"><span class="cm">// hedge-poset OperationNode::local, current structural shape</span>
+<span class="kw">for</span> level <span class="kw">in</span> levels.<span class="fn">iter_levels_top_down</span>() {
+    <span class="kw">let</span> <span class="kw">mut</span> level_product: <span class="ty">Option</span>&lt;<span class="ty">ResidueSelectedTerms</span>&gt; = <span class="ty">None</span>;
+    <span class="kw">let</span> dependent_integrated_finite =
+        ctx.<span class="fn">dependent_integrated_finite</span>(&amp;completed_levels)?;
+
+    <span class="kw">for</span> op <span class="kw">in</span> level.<span class="fn">iter_leaf_ops</span>() {
+        <span class="kw">let</span> (current, given) =
+            ctx.wood.<span class="fn">current_given_pair</span>(op.data, order);
+        <span class="kw">let</span> stepped = ctx.<span class="fn">local_step</span>(
+            &amp;acc,
+            &amp;current,
+            &amp;given,
+            &amp;local,
+            dependent_integrated_finite.<span class="fn">as_ref</span>(),
+        )?;
+
+        <span class="cm">// This multiplication is structural, not yet the final</span>
+        <span class="cm">// disconnected-local policy.</span>
+        <span class="kw">if let</span> <span class="ty">Some</span>(product) = &amp;<span class="kw">mut</span> level_product {
+            product.<span class="fn">multiply_assign_aligned</span>(
+                stepped,
+                <span class="st">"hedge-poset level product"</span>,
+            )?;
+        } <span class="kw">else</span> {
+            level_product = <span class="ty">Some</span>(stepped);
+        }
+    }
+}</code></pre>
+        <p>
+          The reusable boundary is the analytic kernel: it only needs
+          <code>ForestNodeLike</code> inputs. Scheduling, caching, and
+          disconnected-component composition belong to the orchestrator.
+        </p>
+      </article>
+
+      <article class="reuse-panel">
+        <h2><span class="badge reused">Reused</span> Final Integrand</h2>
+        <p>
+          Final-integrand assembly is shared directly through
+          <code>FinalIntegrandNode</code>. Legacy calls it on
+          <code>Approximation</code>; hedge-poset converts an operation into an
+          <code>OwnedForestNode</code>. Both types implement
+          <code>ForestNodeLike</code>, so the builder owns the numerator,
+          orientation localization, finite integrated subtraction, and color
+          simplification path.
+        </p>
+        <pre><code class="language-rust"><span class="cm">// legacy Approximation::final_integrand</span>
+<span class="ty">FinalIntegrandNode</span>::<span class="fn shared-call">final_integrand_builder</span>(
+    <span class="kw">self</span>,
+    &amp;t,
+    cutset,
+    valid_orientations,
+    orientation_pattern,
+    debug_label,
+)
+.<span class="fn">with_local_sign</span>(s)
+.<span class="fn">with_integrated_4d</span>(integrated_4d)
+.<span class="fn">build</span>(graph)</code></pre>
+        <pre><code class="language-rust"><span class="cm">// hedge-poset Forests::compute</span>
+<span class="kw">let</span> forest_node = operation.<span class="fn">forest_node</span>(graph, order);
+<span class="kw">let</span> final_integrand = forest_node
+        .<span class="fn shared-call">final_integrand_builder</span>(
+        &amp;integrands,
+        cuts,
+        valid_orientations,
+        orientation_pattern,
+        operation.<span class="fn">to_atom</span>(),
+    )
+    .<span class="fn">with_integrated_4d</span>(integrated_4d)
+    .<span class="fn">build</span>(graph)?;</code></pre>
+        <p>
+          With <code>generate_integrated</code>, hedge-poset now precomputes
+          signed integrated CTs with <code>integrate</code> on supported paths
+          and passes the operation's stored CT into the same builder. The root
+          still passes <code>None</code>, matching legacy <code>ApproxOp::Root</code>.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section class="grid" aria-label="orchestrator comparison">
+    <div class="col-head">
+      <h2>Legacy DAG Forest</h2>
+      <p>Validated reference backend built around spinney DAG forests.</p>
+    </div>
+    <div class="col-head">
+      <h2>Hedge Poset</h2>
+      <p>New backend built around trace-unfolded hedge operations.</p>
+    </div>
+
+    <article class="cell">
+      <h3>Dispatch</h3>
+      <p>The enum chooses a method on the shared orchestration context.</p>
+      <pre><code class="language-rust"><span class="kw">impl</span> <span class="ty">UVOrchestrator</span> {
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn</span> <span class="fn">parametric_integrands</span>(
+        <span class="kw">self</span>,
+        orchestration: <span class="ty">ParametricIntegrandsOrchestration</span>&lt;<span class="op">'_</span>&gt;,
+    ) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">ParametricIntegrands</span>&gt;&gt; {
+        <span class="kw">match</span> <span class="kw">self</span> {
+            <span class="ty">Self</span>::LegacyDagForest =&gt; orchestration.<span class="fn">legacy_dag_forest</span>(),
+            <span class="ty">Self</span>::HedgePoset =&gt; orchestration.<span class="fn">hedge_poset</span>(),
+            <span class="ty">Self</span>::Compare =&gt; orchestration.<span class="fn">compare</span>(),
+        }
+    }
+}</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Dispatch</h3>
+      <p>Call sites construct an orchestration and run it; backend details stay inside the context.</p>
+      <pre><code class="language-rust"><span class="ty">ParametricIntegrandsOrchestration</span>::<span class="fn">new</span>(
+    &amp;<span class="kw">mut</span> self.graph,
+    cut_structure,
+    vakint,
+    &amp;valid_orientations,
+    &amp;settings.uv,
+    &amp;settings.orientation_pattern,
+)
+.<span class="fn">run</span>()?</code></pre>
+    </article>
+
+    <article class="cell alt">
+      <h3>Wood Construction</h3>
+      <p>For each cut, spinneys are classified and converted into legacy woods, then unfolded into DAG forests.</p>
+      <pre><code class="language-rust"><span class="kw">let</span> cut_woods = <span class="ty">CutWoods</span>::<span class="fn">new</span>(
+    self.cut_structure,
+    self.graph,
+    self.settings,
+);
+<span class="kw">let</span> <span class="kw">mut</span> cut_forests = cut_woods.<span class="fn shared-call">unfold</span>(self.graph);
+cut_forests.<span class="fn shared-call">compute</span>(...)?;
+cut_forests.<span class="fn shared-call">orientation_parametric_exprs</span>(
+    self.graph,
+    self.settings,
+)</code></pre>
+      <pre><code class="language-rust"><span class="kw">let</span> spinneys = graph.<span class="fn">classified_spinneys</span>(
+    &amp;subgraph,
+    settings,
+    &amp;graph.loop_momentum_basis,
+);
+<span class="kw">let</span> wood = <span class="ty">Wood</span>::<span class="fn">from_spinneys</span>(spinneys, graph);</code></pre>
+    </article>
+
+    <article class="cell alt">
+      <h3>Wood Construction</h3>
+      <p>The hedge-poset backend builds a trace-unfoldable structure over hedge operations.</p>
+      <pre><code class="language-rust"><span class="kw">let</span> wood = <span class="ty">HedgePosetWood</span>::<span class="fn">new</span>(
+    self.cut_structure,
+    self.graph,
+    self.settings,
+);
+<span class="kw">let</span> <span class="kw">mut</span> forests = wood.<span class="fn shared-call">unfold</span>();
+forests.<span class="fn shared-call">compute</span>(...)?;
+forests.<span class="fn shared-call">orientation_parametric_exprs</span>(
+    self.graph,
+    self.settings,
+)</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Traversal</h3>
+      <p>Legacy execution is a topological DAG computation over <code>Approximation</code> nodes.</p>
+      <pre><code class="language-rust"><span class="kw">let</span> order = self.dag.<span class="fn">compute_topological_order</span>();
+
+<span class="kw">for</span> (i, n) <span class="kw">in</span> order.<span class="fn">into_iter</span>().<span class="fn">enumerate</span>() {
+    <span class="kw">match</span> self.dag.nodes[n].parents.<span class="fn">len</span>() {
+        <span class="op">0</span> =&gt; self.dag.nodes[n].data.<span class="fn">root</span>(...)?,
+        <span class="op">1</span> =&gt; current.data.<span class="fn">compute</span>(...)?,
+        _ =&gt; <span class="fn">unimplemented!</span>(<span class="st">"Union not implemented"</span>),
+    }
+}</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Traversal</h3>
+      <p>Hedge-poset traversal normalizes each compatible cut order so root/frontier state is present.</p>
+      <pre><code class="language-rust"><span class="kw">fn</span> <span class="fn">compatible_topological_order</span>(
+    &amp;<span class="kw">self</span>,
+    subset: &amp;<span class="ty">SuBitGraph</span>,
+) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">NodeIndex</span>&gt;&gt; {
+    <span class="kw">let</span> <span class="kw">mut</span> order = self.graph.<span class="fn">topo_sort_kahn_of</span>(subset)?;
+    <span class="kw">if</span> !order.<span class="fn">contains</span>(&amp;self.root) {
+        order.<span class="fn">insert</span>(<span class="op">0</span>, self.root);
+    }
+    <span class="ty">Ok</span>(order)
+}</code></pre>
+    </article>
+
+    <article class="cell alt">
+      <h3>Local Subtraction</h3>
+      <p>Legacy stores local, integrated, and final terms on the <code>Approximation</code> node.</p>
+      <pre><code class="language-rust">self.local_3d = <span class="ty">CFFapprox</span>::Dependent {
+    sign: -sign,
+    t_arg: <span class="ty">IntegrandExpr</span> { integrands },
+};
+
+self.final_integrand = <span class="ty">Some</span>(self.<span class="fn">final_integrand</span>(
+    graph,
+    cuts,
+    valid_orientations,
+    settings,
+    orientation_pattern,
+)?);</code></pre>
+    </article>
+
+    <article class="cell alt">
+      <h3>Local Subtraction</h3>
+      <p>Hedge-poset computes and stores per-operation terms in <code>ComputeStore</code>.</p>
+      <pre><code class="language-rust"><span class="kw">let</span> operation = self.graph[nidx].<span class="fn">clone</span>();
+<span class="kw">let</span> integrands = {
+    <span class="kw">let</span> <span class="kw">mut</span> local_context = <span class="ty">LocalOperationContext</span> {
+        graph,
+        cutset: cuts,
+        root: &amp;root,
+        compute_store: &amp;<span class="kw">mut</span> self.compute_store,
+        wood: &amp;self.wood,
+        valid_orientations,
+        settings,
+        orientation_pattern,
+    };
+    operation.<span class="fn">local</span>(&amp;<span class="kw">mut</span> local_context)?
+};
+
+<span class="kw">let</span> forest_node = operation.<span class="fn">forest_node</span>(graph, order);
+<span class="kw">let</span> integrated_4d =
+    operation.<span class="fn">integrated_4d_from_store</span>(&amp;self.compute_store, settings)?;
+<span class="kw">let</span> final_integrand = forest_node
+    .<span class="fn shared-call">final_integrand_builder</span>(
+        &amp;integrands,
+        cuts,
+        valid_orientations,
+        orientation_pattern,
+        operation.<span class="fn">to_atom</span>(),
+    )
+    .<span class="fn">with_integrated_4d</span>(integrated_4d)
+    .<span class="fn">build</span>(graph)?;</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Independent Components</h3>
+      <p>Legacy can build union-shaped DAG nodes, but execution of multi-parent union nodes is not implemented in <code>Forest::compute</code>.</p>
+      <pre><code class="language-rust"><span class="kw">if let</span> <span class="ty">Some</span>(tagged_union) = unions.<span class="fn">get_mut</span>(*c) {
+    <span class="kw">if</span> all_supplied {
+        <span class="kw">let</span> child = dag.<span class="fn">add_node</span>(
+            <span class="ty">Approximation</span>::<span class="fn">new</span>(...)
+        );
+        <span class="kw">for</span> (_, d) <span class="kw">in</span> union {
+            dag.<span class="fn">add_edge</span>(d.<span class="fn">unwrap</span>(), child);
+        }
+    }
+}
+
+<span class="cm">// Later, during execution:</span>
+_ =&gt; <span class="fn">unimplemented!</span>(<span class="st">"Union not implemented"</span>),</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Independent Components</h3>
+      <p>
+        Hedge-poset exposes independent operations as trace levels. Integrated
+        disconnected terms are the simpler case: component integrated CTs can be
+        multiplied as scalar terms. Local 3D is different because
+        <code>local_step</code> applies an operation to a full incoming
+        accumulator; disconnected local composition must return to the common
+        ancestor for each component and multiply only operation effects.
+      </p>
+      <pre><code class="language-rust"><span class="kw">for</span> level <span class="kw">in</span> levels.<span class="fn">iter_levels_top_down</span>() {
+    <span class="kw">let</span> <span class="kw">mut</span> mul = <span class="ty">Atom</span>::<span class="fn">one</span>();
+
+    <span class="kw">for</span> op <span class="kw">in</span> level.<span class="fn">iter_leaf_ops</span>() {
+        <span class="kw">let</span> (current, given) = wood.<span class="fn">current_given_pair</span>(op.data, order);
+        mul *= -integrated_orchestrator.<span class="fn">kernel</span>(
+            &amp;uvctx,
+            &amp;current,
+            &amp;given,
+            &amp;acc,
+        )?;
+    }
+
+    acc = mul;
+}</code></pre>
+      <pre><code class="language-rust"><span class="cm">// Current local 3D level multiplication is structural only.</span>
+<span class="cm">// It is not the final disconnected-local semantics.</span>
+product.<span class="fn">multiply_assign_aligned</span>(
+    stepped,
+    <span class="st">"hedge-poset level product"</span>,
+)?;</code></pre>
+    </article>
+
+    <article class="cell alt">
+      <h3>Integrated Renormalization</h3>
+      <p>Legacy unfolds the old wood, computes with Vakint settings, and extracts the pole part.</p>
+      <pre><code class="language-rust"><span class="kw">let</span> wood = self.graph.<span class="fn">wood_with_settings</span>(
+    &amp;self.graph.<span class="fn">no_dummy</span>(),
+    self.settings,
+    &amp;self.graph.loop_momentum_basis,
+);
+<span class="kw">let</span> <span class="kw">mut</span> forest =
+    wood.<span class="fn shared-call">unfold</span>(self.graph, &amp;self.graph.loop_momentum_basis);
+forest.<span class="fn shared-call">compute</span>(...)?;
+forest.<span class="fn shared-call">pole_part_of_ends</span>(self.graph)</code></pre>
+    </article>
+
+    <article class="cell alt">
+      <h3>Integrated Renormalization</h3>
+      <p>Hedge-poset integrated renormalization uses the hedge-poset wood and compute store on supported paths.</p>
+      <pre><code class="language-rust"><span class="kw">let</span> cuts = <span class="ty">CutStructure</span>::<span class="fn">empty</span>(self.graph);
+<span class="kw">let</span> wood = <span class="ty">HedgePosetWood</span>::<span class="fn">new</span>(
+    cuts,
+    self.graph,
+    self.settings,
+);
+<span class="kw">let</span> <span class="kw">mut</span> forest = wood.<span class="fn shared-call">unfold</span>();
+forest.<span class="fn">integrate</span>(
+    self.graph,
+    crate::utils::<span class="fn">vakint</span>()?,
+    self.settings,
+)?;
+forest.<span class="fn shared-call">pole_part_of_ends</span>(self.graph)</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Output Assembly</h3>
+      <p>Legacy asks each computed DAG forest for its orientation-parametric expression.</p>
+      <pre><code class="language-rust"><span class="kw">for</span> (forest, cuts) <span class="kw">in</span>
+    self.forests.<span class="fn">iter</span>().<span class="fn">zip</span>(self.cuts.cuts)
+{
+    <span class="kw">let</span> <span class="kw">mut</span> integrands =
+        forest.<span class="fn">orientation_parametric_expr</span>(
+            graph,
+            settings.add_sigma,
+        )?;
+    <span class="kw">if</span> !settings.keep_sigma {
+        integrands.<span class="fn">values_mut</span>().<span class="fn">for_each</span>(|s| {
+            *s = s.<span class="fn">replace</span>(<span class="fn">function!</span>(GS.if_sigma, W_.a___))
+                .<span class="fn">with</span>(<span class="ty">Atom</span>::<span class="fn">num</span>(<span class="op">1</span>));
+        });
+    }
+    exprs.<span class="fn">push</span>(<span class="ty">ParametricIntegrands</span> { integrands, cuts });
+}</code></pre>
+    </article>
+
+    <article class="cell">
+      <h3>Output Assembly</h3>
+      <p>Hedge-poset fetches stored final integrands by operation and sums them into the cut result.</p>
+      <pre><code class="language-rust"><span class="kw">for</span> nidx <span class="kw">in</span> self.<span class="fn">compatible_topological_order</span>(cut_subset)? {
+    <span class="kw">let</span> operation = &amp;self.graph[nidx];
+    <span class="kw">let</span> computed = self.compute_store.<span class="fn">require</span>(operation)?;
+    <span class="kw">let</span> <span class="ty">Integrands</span>::Multiple(final_integrand) =
+        &amp;computed.final_integrand
+    <span class="kw">else</span> { ... };
+
+    <span class="kw">let</span> sigma = settings.add_sigma
+        .<span class="fn">then</span>(|| <span class="fn">function!</span>(GS.if_sigma, operation.<span class="fn">to_atom</span>()));
+    <span class="kw">let</span> sum = sum.<span class="fn">get_or_insert_with</span>(<span class="ty">ResidueSelectedTerms</span>::<span class="fn">empty</span>);
+
+    <span class="kw">for</span> (cut_index, integrand) <span class="kw">in</span> final_integrand {
+        <span class="kw">let</span> <span class="kw">mut</span> term = integrand.<span class="fn">clone</span>();
+        <span class="kw">if let</span> <span class="ty">Some</span>(sigma) = &amp;sigma {
+            term *= sigma;
+        }
+        sum.<span class="fn">add_assign_term</span>(*cut_index, term);
+    }
+}</code></pre>
+    </article>
+  </section>
+
+  <section class="note">
+    <h2>Shared Final-Integrand Construction</h2>
+    <p>
+      Both orchestrators use the same final-integrand builder through
+      <code>ForestNodeLike</code> and <code>FinalIntegrandNode</code>. This is
+      the reuse boundary: it depends on the forest-node invariant, not on the
+      legacy <code>Approximation</code> storage layout.
+    </p>
+    <pre><code class="language-rust"><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait</span> <span class="ty">FinalIntegrandNode</span>: <span class="ty">ForestNodeLike</span> {
+    <span class="kw">fn</span> <span class="fn shared-call">final_integrand_builder</span>&lt;<span class="op">'a</span>&gt;(
+        &amp;<span class="op">'a</span> <span class="kw">self</span>,
+        local_3d: &amp;<span class="op">'a</span> <span class="ty">ResidueSelectedTerms</span>,
+        cutset: &amp;<span class="op">'a</span> <span class="ty">CutSet</span>,
+        valid_orientations: &amp;<span class="op">'a</span> [<span class="ty">EdgeVec</span>&lt;<span class="ty">Orientation</span>&gt;],
+        orientation_pattern: &amp;<span class="op">'a</span> <span class="ty">OrientationPattern</span>,
+        debug_label: <span class="ty">Atom</span>,
+    ) -&gt; <span class="ty">FinalIntegrandBuilder</span>&lt;<span class="op">'a</span>, <span class="ty">Self</span>&gt;
+    <span class="kw">where</span>
+        <span class="ty">Self</span>: <span class="ty">Sized</span>;
+}</code></pre>
+  </section>
+
+  <section class="note">
+    <h2>Current Status</h2>
+    <p>
+      The hedge-poset path has the structure needed for component-wise local
+      traversal: operation levels, a root/frontier-aware compatible order, and a
+      shared final-integrand construction path. Integrated disconnected spinneys
+      should factorize as products of component integrated terms, but the full
+      spectacles regression is not validated yet and currently exposes Vakint
+      topology/momentum-mapping issues. Local 3D disconnected composition is
+      not implemented semantically: it must be made operational so each
+      disconnected component acts from the common ancestor/root without
+      duplicating that ancestor in the product. Dedicated integration tests
+      should cover spectacles integrated factorization and local 3D common-root
+      composition separately.
+    </p>
+  </section>
+</main>
+</body>
+</html>

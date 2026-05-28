@@ -19,10 +19,10 @@ use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
 use crate::utils::{GS, W_};
-use crate::uv::approx::CutStructure;
+use crate::uv::approx::{CutStructure, OrientationProjection};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
-use crate::uv::{Spinney, UVgenerationSettings, UltravioletGraph};
+use crate::uv::{Spinney, UVOrchestrator, UVgenerationSettings, UltravioletGraph};
 
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -84,9 +84,11 @@ fn scalar_bubble_root_integrand_reference(
         .compute(
             &mut amplitude_graph.graph,
             vakint,
-            &valid_orientations,
+            OrientationProjection::new(
+                &valid_orientations,
+                &generation_settings.orientation_pattern,
+            ),
             &reference_settings.uv,
-            &generation_settings.orientation_pattern,
         )
         .unwrap();
 
@@ -304,7 +306,7 @@ fn scalars_profile_new() {
         add_sigma: true,
         keep_sigma: false,
         subtract_uv: true,
-        use_legacy: false,
+        orchestrator: UVOrchestrator::HedgePoset,
         ..Default::default()
     });
 
@@ -318,6 +320,48 @@ fn scalars_profile_new() {
         "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
         scalar_profile_tables(&analysis, -0.9)
     );
+}
+
+#[test]
+fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
+    test_initialise().unwrap();
+    let mut amp: AmplitudeGraph = dot!(
+        digraph bub {
+            edge [particle=H]
+            node [num=1]
+            e        [style=invis]
+            e -> A:0   [ id=3]
+            B:1 -> e   [ id=2]
+            A -> B    [ id=1]
+            A -> B    [ id=0]
+        }
+    )
+    .unwrap();
+
+    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    let orientation_pattern = OrientationPattern::from_orientation(
+        &amp.derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations[OrientationID(0)],
+    );
+    let settings = GenerationSettings {
+        orientation_pattern,
+        uv: UVgenerationSettings {
+            generate_integrated: true,
+            softct: false,
+            add_sigma: true,
+            keep_sigma: false,
+            subtract_uv: true,
+            orchestrator: UVOrchestrator::Compare,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
+        .unwrap();
 }
 
 /*

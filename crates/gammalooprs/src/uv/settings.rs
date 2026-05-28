@@ -58,6 +58,42 @@ impl Display for ApproximationType {
     }
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    PartialEq,
+    Eq,
+    Hash,
+    JsonSchema,
+    Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(deny_unknown_fields)]
+pub enum UVOrchestrator {
+    #[default]
+    #[serde(rename = "legacy_dag_forest", alias = "LegacyDagForest")]
+    LegacyDagForest,
+    #[serde(rename = "hedge_poset", alias = "HedgePoset")]
+    HedgePoset,
+    #[serde(rename = "compare", alias = "Compare")]
+    Compare,
+}
+
+impl Display for UVOrchestrator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UVOrchestrator::LegacyDagForest => write!(f, "legacy_dag_forest"),
+            UVOrchestrator::HedgePoset => write!(f, "hedge_poset"),
+            UVOrchestrator::Compare => write!(f, "compare"),
+        }
+    }
+}
+
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -346,8 +382,8 @@ pub struct UVgenerationSettings {
     pub keep_sigma: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
-    #[serde(skip_serializing_if = "is_true")]
-    pub use_legacy: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub orchestrator: UVOrchestrator,
     #[serde(skip_serializing_if = "is_true")]
     pub cached: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -372,7 +408,7 @@ impl Default for UVgenerationSettings {
             pole_part: false,
             only_integrated: false,
             inner_products: true,
-            use_legacy: true,
+            orchestrator: UVOrchestrator::LegacyDagForest,
             cached: true,
             add_integrated_uv_with_n_loops: None,
             add_sigma: false,
@@ -445,7 +481,7 @@ mod ct_renormalization_map_serde {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApproximationType, CTIdentifier, UVgenerationSettings};
+    use super::{ApproximationType, CTIdentifier, UVOrchestrator, UVgenerationSettings};
     use std::collections::{BTreeMap, BTreeSet};
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
@@ -513,5 +549,17 @@ mod tests {
                 .approximation_scheme_for(&CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])))),
             ApproximationType::MUV
         );
+    }
+
+    #[test]
+    fn orchestrator_defaults_to_legacy_and_accepts_explicit_modes() {
+        let legacy = UVgenerationSettings::default();
+        assert_eq!(legacy.orchestrator, UVOrchestrator::LegacyDagForest);
+
+        let compare = UVgenerationSettings {
+            orchestrator: UVOrchestrator::Compare,
+            ..Default::default()
+        };
+        assert_eq!(compare.orchestrator, UVOrchestrator::Compare);
     }
 }

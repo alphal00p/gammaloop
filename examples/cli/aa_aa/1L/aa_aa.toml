@@ -7,7 +7,7 @@ name = "generate"
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
-    #"set global kv global.generation.uv.use_legacy=true",
+    #"set global kv global.generation.uv.orchestrator=legacy_dag_forest",
 
     "remove processes -p aa_aa",
     """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]

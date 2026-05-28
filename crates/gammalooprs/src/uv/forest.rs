@@ -1,21 +1,17 @@
-use std::collections::BTreeMap;
-
 use crate::{
     GammaLoopContext,
-    cff::CutCFFIndex,
+    cff::{CutCFFIndex, ResidueSelectedTerms},
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
-    uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
+    uv::approx::{CFFapprox, CutStructure, ForestNodeLike, OrientationProjection},
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeVec, Orientation};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -39,29 +35,21 @@ pub struct CutForests {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParametricIntegrands {
-    pub integrands: BTreeMap<CutCFFIndex, Atom>,
+    pub integrands: ResidueSelectedTerms,
     pub cuts: CutSet,
 }
 
 impl ParametricIntegrands {
-    pub fn map<F: FnMut(Atom) -> Atom>(self, mut map: F) -> Self {
+    pub fn map<F: FnMut(Atom) -> Atom>(self, map: F) -> Self {
         Self {
-            integrands: self
-                .integrands
-                .into_iter()
-                .map(|(index, atom)| (index, map(atom)))
-                .collect(),
+            integrands: self.integrands.map(map),
             cuts: self.cuts,
         }
     }
 
     pub fn zero_like(&self) -> Self {
         Self {
-            integrands: self
-                .integrands
-                .keys()
-                .map(|index| (*index, Atom::Zero))
-                .collect(),
+            integrands: self.integrands.zero_like(),
             cuts: self.cuts.clone(),
         }
     }
@@ -73,9 +61,8 @@ impl CutForests {
         &mut self,
         graph: &mut Graph,
         vakint: &Vakint,
-        valid_orientations: &[EdgeVec<Orientation>],
+        orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
@@ -90,9 +77,8 @@ impl CutForests {
                 graph,
                 (vakint, vakint_settings),
                 cuts,
-                valid_orientations,
+                orientation,
                 settings,
-                orientation_pattern,
             )?;
         }
         Ok(())
@@ -188,9 +174,8 @@ impl Forest {
         graph: &mut Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
         cut_data: &CutSet,
-        valid_orientations: &[EdgeVec<Orientation>],
+        orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
         let started = std::time::Instant::now();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -217,13 +202,9 @@ impl Forest {
                 0 => {
                     self.dag.nodes[n].data.topo_order = i;
                     let root_started = std::time::Instant::now();
-                    self.dag.nodes[n].data.root(
-                        graph,
-                        cut_data,
-                        valid_orientations,
-                        settings,
-                        orientation_pattern,
-                    )?;
+                    self.dag.nodes[n]
+                        .data
+                        .root(graph, cut_data, orientation, settings)?;
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "forest_node_root_done",
                         elapsed_ms = root_started.elapsed().as_secs_f64() * 1000.0,
@@ -277,14 +258,9 @@ impl Forest {
                         stage = "forest_node_compute_local_3d_start",
                         "Computing local 3D UV forest node"
                     );
-                    current.data.compute(
-                        graph,
-                        cut_data,
-                        &parent.data,
-                        valid_orientations,
-                        settings,
-                        orientation_pattern,
-                    )?;
+                    current
+                        .data
+                        .compute(graph, cut_data, &parent.data, orientation, settings)?;
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         elapsed_ms = local_started.elapsed().as_secs_f64() * 1000.0,
                         "Computed local 3D UV forest node"
@@ -324,7 +300,7 @@ impl Forest {
                 continue;
             }
 
-            let atom = n.data.integrated_4d.expr().ok_or(eyre!(
+            let (atom, sign) = n.data.integrated_4d.expr().ok_or(eyre!(
                 "Integrated pole part not computed for {} of graph {}",
                 n.data
                     .simple_approx
@@ -334,7 +310,12 @@ impl Forest {
                 graph.name
             ))?;
 
-            let atom = atom[&CutCFFIndex::new_all_none()].clone();
+            let scalar_key = CutCFFIndex::new_all_none();
+            let mut atom = atom.get(scalar_key).cloned().wrap_err(
+                "missing scalar residue-selected term while computing legacy pole part",
+            )?;
+
+            atom = sign * atom;
 
             // debug!(
             //     forest_term=%
@@ -411,7 +392,7 @@ impl Forest {
     pub(crate) fn orientation_parametric_expr(
         &self,
         graph: &Graph,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+    ) -> Result<ResidueSelectedTerms> {
         let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
@@ -426,14 +407,7 @@ impl Forest {
                     .unwrap()
                     .expr(&graph.full_filter()),"Terms"
             );
-            let mut first = false;
-
-            if sum.is_none() {
-                first = true;
-                sum = Some(BTreeMap::new());
-            }
-
-            let sum = sum.as_mut().unwrap();
+            let sum = sum.get_or_insert_with(ResidueSelectedTerms::empty);
 
             for (cut_index, integrand) in n
                 .data
@@ -443,12 +417,7 @@ impl Forest {
                 .iter()
             {
                 let a = integrand.clone().collect_color();
-
-                if first {
-                    sum.insert(*cut_index, a);
-                } else {
-                    *sum.get_mut(cut_index).unwrap() += a;
-                }
+                sum.add_assign_term(*cut_index, a);
             }
         }
 
@@ -504,13 +473,13 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::ParametricIntegrands;
-    use crate::{cff::CutCFFIndex, graph::cuts::CutSet};
+    use crate::{cff::CutCFFIndex, cff::ResidueSelectedTerms, graph::cuts::CutSet};
     use symbolica::{atom::Atom, symbol};
 
     #[test]
     fn zero_like_preserves_shape_and_cuts() {
         let integrands = ParametricIntegrands {
-            integrands: BTreeMap::from([
+            integrands: ResidueSelectedTerms::new(BTreeMap::from([
                 (CutCFFIndex::new_all_none(), Atom::var(symbol!("x"))),
                 (
                     CutCFFIndex {
@@ -520,7 +489,7 @@ mod tests {
                     },
                     Atom::num(7),
                 ),
-            ]),
+            ])),
             cuts: CutSet::empty(3),
         };
 
@@ -528,7 +497,7 @@ mod tests {
 
         assert_eq!(
             zeroed.integrands,
-            BTreeMap::from([
+            ResidueSelectedTerms::new(BTreeMap::from([
                 (CutCFFIndex::new_all_none(), Atom::Zero),
                 (
                     CutCFFIndex {
@@ -538,7 +507,7 @@ mod tests {
                     },
                     Atom::Zero,
                 ),
-            ]),
+            ])),
         );
         assert_eq!(zeroed.cuts, CutSet::empty(3));
     }

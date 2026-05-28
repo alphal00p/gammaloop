@@ -27,7 +27,7 @@ pole_part = false
 add_sigma = false
 keep_sigma = true
 inner_products = true
-use_legacy = true
+orchestrator = "legacy_dag_forest"
 cached = true
 renormalization_schemes = []
 
@@ -74,7 +74,7 @@ name = "generate_diagrams"
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
-  # "set global kv global.generation.uv.use_legacy=true",
+  # "set global kv global.generation.uv.orchestrator=legacy_dag_forest",
 
   # --select-graphs GL00 GL06 GL08 GL16
   # --select-graphs GL16

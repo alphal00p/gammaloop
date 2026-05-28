@@ -1,20 +1,19 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    cff::{CutCFFIndex, expression::GraphOrientation},
+    cff::{ResidueSelectedTerms, expression::GraphOrientation},
     debug_tags,
-    graph::{Graph, cuts::CutSet},
+    graph::Graph,
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::global::OrientationPattern,
-    utils::{GS, W_},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
         IntegrandExpr, UltravioletGraph,
-        approx::{ApproxOp, ForestNodeLike},
+        approx::{ApproxOp, ForestNodeLike, ResidueProjection},
     },
 };
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use linnet::half_edge::{
@@ -34,15 +33,14 @@ struct RepresentativeScore {
 }
 
 pub(crate) struct FinalIntegrand<'a> {
-    valid_orientations: &'a [EdgeVec<Orientation>],
-    orientation_pattern: &'a OrientationPattern,
+    projection: ResidueProjection<'a>,
     uv_marker: Option<&'a Atom>,
     tag_local_terms: bool,
 }
 
 pub(crate) struct LocalizedIntegratedCt {
-    pub active: IntegrandExpr,
-    pub frozen_integrands: BTreeMap<CutCFFIndex, Atom>,
+    pub active: ResidueSelectedTerms,
+    pub frozen_integrands: ResidueSelectedTerms,
 }
 
 impl TryFrom<LocalizedIntegratedCt> for IntegrandExpr {
@@ -51,20 +49,10 @@ impl TryFrom<LocalizedIntegratedCt> for IntegrandExpr {
     fn try_from(value: LocalizedIntegratedCt) -> Result<Self, Self::Error> {
         let integrands = value
             .active
-            .integrands
-            .into_iter()
-            .zip(value.frozen_integrands)
-            .map(|((active_index, active), (frozen_index, frozen))| {
-                if active_index != frozen_index {
-                    return Err(eyre!(
-                        "Mismatched indices for localized integrated CT active and frozen factors: {:?} vs {:?}",
-                        active_index,
-                        frozen_index
-                    ));
-                }
-                Ok((active_index, active * frozen))
+            .try_zip_with(&value.frozen_integrands, |_, active, frozen| {
+                Ok(active * frozen)
             })
-            .collect::<Result<BTreeMap<_, _>>>()?;
+            .wrap_err("while combining localized integrated CT active/frozen factors")?;
 
         Ok(IntegrandExpr { integrands })
     }
@@ -72,14 +60,12 @@ impl TryFrom<LocalizedIntegratedCt> for IntegrandExpr {
 
 impl<'a> FinalIntegrand<'a> {
     pub(crate) fn new(
-        valid_orientations: &'a [EdgeVec<Orientation>],
-        orientation_pattern: &'a OrientationPattern,
+        projection: ResidueProjection<'a>,
         uv_marker: Option<&'a Atom>,
         tag_local_terms: bool,
     ) -> Self {
         Self {
-            valid_orientations,
-            orientation_pattern,
+            projection,
             uv_marker,
             tag_local_terms,
         }
@@ -264,33 +250,42 @@ impl<'a> FinalIntegrand<'a> {
         edge_ids
     }
 
-    fn finite_integrated_ct(&self, integrated_4d: &ApproxOp) -> Atom {
-        let mut t4 = match integrated_4d {
-            ApproxOp::Root => BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-            _ => integrated_4d
-                .expr()
-                .unwrap_or(BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)])),
-        };
-        if t4.len() != 1 {
-            panic!("Should only have one t_arg for the 4d approximation");
-        }
+    pub(crate) fn finite_integrated_ct_terms(
+        integrated_4d: Option<(ResidueSelectedTerms, Sign)>,
+    ) -> Result<Atom> {
+        let (t4, t4_sign) =
+            integrated_4d.unwrap_or((ResidueSelectedTerms::all_none(Atom::Zero), Sign::Positive));
+        let t4_debug = t4
+            .iter()
+            .map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80))))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let finite = (t4_sign
+            * t4.into_only_all_none()
+                .wrap_err("while extracting scalar integrated 4d approximation")?)
+        .series(GS.dim_epsilon, Atom::Zero, 0)
+        .unwrap()
+        .coefficient((0, 1).into())
+        .map_mink_dim(4)
+        .replace(function!(symbol!("vakint::g"), W_.a__))
+        .with(function!(symbol!("spenso::g"), W_.a__));
 
-        let t4 = t4.remove(&CutCFFIndex::new_all_none()).unwrap();
-        let finite = t4
-            .series(GS.dim_epsilon, Atom::Zero, 0)
-            .unwrap()
-            .coefficient((0, 1).into());
-        debug_tags!(#generation, #profile, #uv, #integrated, #local, #trace;
-            stage = "finite_integrated_ct",
-            log.t4 = t4,
-            log.finite = finite,
-            "Extracted finite integrated UV CT"
+        debug_tags!(
+            #uv,#final;
+            finite = %finite.log_print(Some(80)),
+            t4 = %t4_debug,
+            "Computing Final integrand after uv subtraction",
         );
 
-        finite
-            .map_mink_dim(4)
-            .replace(function!(symbol!("vakint::g"), W_.a__))
-            .with(function!(symbol!("spenso::g"), W_.a__))
+        Ok(finite)
+    }
+
+    fn finite_integrated_ct(&self, integrated_4d: &ApproxOp) -> Result<Atom> {
+        let integrated_4d = match integrated_4d {
+            ApproxOp::Root => None,
+            _ => integrated_4d.expr(),
+        };
+        Self::finite_integrated_ct_terms(integrated_4d)
     }
 
     fn localize_integrated_ct<S: ForestNodeLike>(
@@ -298,15 +293,16 @@ impl<'a> FinalIntegrand<'a> {
         graph: &mut Graph,
         integrated_node: &S,
         finite_ct: &Atom,
-        cuts: &CutSet,
     ) -> Result<LocalizedIntegratedCt> {
         debug_tags!(#uv; log.expr = finite_ct, "Localizing integrated UV CT");
         if finite_ct.is_zero() {
-            let indices = cuts.residue_selector.generate_allowed_keys();
+            let indices = self
+                .projection
+                .cutset
+                .residue_selector
+                .generate_allowed_keys();
             return Ok(LocalizedIntegratedCt {
-                active: IntegrandExpr {
-                    integrands: indices.iter().map(|index| (*index, Atom::Zero)).collect(),
-                },
+                active: ResidueSelectedTerms::zero_for_keys(&indices),
                 frozen_integrands: indices
                     .into_iter()
                     .map(|index| (index, Atom::one()))
@@ -329,8 +325,8 @@ impl<'a> FinalIntegrand<'a> {
             &to_contract
                 .union(&graph.tree_edges)
                 .subtract(&graph.initial_state_cut),
-            cuts,
-            self.orientation_pattern,
+            self.projection.cutset,
+            self.projection.orientation.orientation_pattern,
         )?;
 
         let fourddenoms = GS.wrap_tree_denoms(
@@ -358,7 +354,7 @@ impl<'a> FinalIntegrand<'a> {
                 localized += Self::localized_orientation_term(
                     &(cff_term * &fourddenoms),
                     &orientation,
-                    self.valid_orientations,
+                    self.projection.orientation.valid_orientations,
                     &internal_edges,
                     average_compatible_orientations,
                 )?;
@@ -381,10 +377,8 @@ impl<'a> FinalIntegrand<'a> {
         }
 
         Ok(LocalizedIntegratedCt {
-            active: IntegrandExpr {
-                integrands: active_integrands,
-            },
-            frozen_integrands,
+            active: ResidueSelectedTerms::new(active_integrands),
+            frozen_integrands: ResidueSelectedTerms::new(frozen_integrands),
         })
     }
 
@@ -397,9 +391,8 @@ impl<'a> FinalIntegrand<'a> {
         graph: &mut Graph,
         integrated_node: &S,
         integrated_4d: &ApproxOp,
-        cuts: &CutSet,
     ) -> Result<LocalizedIntegratedCt> {
-        let finite = self.finite_integrated_ct(integrated_4d);
+        let finite = self.finite_integrated_ct(integrated_4d)?;
 
         // let n_loops = graph.n_loops(integrated_node.subgraph());
 
@@ -421,13 +414,36 @@ impl<'a> FinalIntegrand<'a> {
         //     }
         // }
 
+        self.localized_finite_integrated_ct(graph, integrated_node, &finite)
+    }
+
+    #[debug_instrument(
+        graph = %graph.log_display(),
+        current = %integrated_node.log_display(),
+    )]
+    pub(crate) fn localized_integrated_ct_from_terms<S: ForestNodeLike>(
+        &self,
+        graph: &mut Graph,
+        integrated_node: &S,
+        integrated_4d: Option<(ResidueSelectedTerms, Sign)>,
+    ) -> Result<LocalizedIntegratedCt> {
+        let finite = Self::finite_integrated_ct_terms(integrated_4d)?;
+        self.localized_finite_integrated_ct(graph, integrated_node, &finite)
+    }
+
+    pub(crate) fn localized_finite_integrated_ct<S: ForestNodeLike>(
+        &self,
+        graph: &mut Graph,
+        integrated_node: &S,
+        finite: &Atom,
+    ) -> Result<LocalizedIntegratedCt> {
         debug_tags!(
             #uv;
             log.finite = finite,
             "Computing localized integrated UV CT",
         );
 
-        self.localize_integrated_ct(graph, integrated_node, &finite, cuts)
+        self.localize_integrated_ct(graph, integrated_node, finite)
     }
 
     #[debug_instrument(
@@ -435,15 +451,14 @@ impl<'a> FinalIntegrand<'a> {
         current = %current.log_display(),
         term_count = local_terms.len(),
     )]
-    pub(crate) fn build<S: ForestNodeLike>(
+    pub(crate) fn build_with_integrated_4d_terms<S: ForestNodeLike>(
         &self,
         graph: &mut Graph,
         current: &S,
-        local_terms: &BTreeMap<CutCFFIndex, Atom>,
+        local_terms: &ResidueSelectedTerms,
         local_sign: Sign,
-        integrated_4d: &ApproxOp,
-        cutset: &CutSet,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        integrated_4d: Option<(ResidueSelectedTerms, Sign)>,
+    ) -> Result<ResidueSelectedTerms> {
         let global_num = graph.global_atom();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             global_num = %global_num.log_display(),
@@ -451,7 +466,7 @@ impl<'a> FinalIntegrand<'a> {
         );
 
         let integrated_t: IntegrandExpr = self
-            .localized_integrated_ct(graph, current, integrated_4d, cutset)?
+            .localized_integrated_ct_from_terms(graph, current, integrated_4d)?
             .try_into()?;
 
         let reduced = graph
@@ -459,147 +474,147 @@ impl<'a> FinalIntegrand<'a> {
             .subtract(current.subgraph())
             .subtract(&graph.initial_state_cut);
 
-        let mut integrands = BTreeMap::new();
-
-        for (term_index, ((local_index, local), (integrated_index, integ))) in local_terms
-            .iter()
-            .zip(integrated_t.integrands.iter())
-            .enumerate()
-        {
-            let mut term_started = std::time::Instant::now();
-            let mut cff;
-            if let Some(marker) = self.uv_marker {
-                let local_term = if self.tag_local_terms {
-                    local * function!(GS.uv_local, marker.clone())
+        let mut term_index = 0;
+        local_terms
+            .try_zip_with(&integrated_t.integrands, |index, local, integ| {
+                let mut term_started = std::time::Instant::now();
+                let mut cff;
+                if let Some(marker) = self.uv_marker {
+                    let local_term = if self.tag_local_terms {
+                        local * function!(GS.uv_local, marker.clone())
+                    } else {
+                        local.clone()
+                    };
+                    let integrated_term = integ * function!(GS.uv_integrated, marker.clone());
+                    cff = local_sign * (&local_term - &integrated_term);
+                    debug_tags!(#generation, #profile, #uv, #graph, #term, #trace;
+                        stage = "final_integrand_cff_inputs",
+                        cut_index = ?index,
+                        local_sign = ?local_sign,
+                        tag_local_terms = self.tag_local_terms,
+                        log.local = local_term,
+                        log.integrated = integrated_term,
+                        log.cff_before_replacements = cff,
+                        "Built final UV CFF inputs"
+                    );
                 } else {
-                    local.clone()
-                };
-                let integrated_term = integ * function!(GS.uv_integrated, marker.clone());
-                cff = local_sign * (&local_term - &integrated_term);
-                debug_tags!(#generation, #profile, #uv, #graph, #term, #trace;
-                    stage = "final_integrand_cff_inputs",
-                    cut_index = ?local_index,
-                    local_sign = ?local_sign,
-                    tag_local_terms = self.tag_local_terms,
-                    log.local = local_term,
-                    log.integrated = integrated_term,
-                    log.cff_before_replacements = cff,
-                    "Built final UV CFF inputs"
-                );
-            } else {
-                cff = local_sign * (local - integ);
-                debug_tags!(#generation, #profile, #uv, #graph, #term, #trace;
-                    stage = "final_integrand_cff_inputs",
-                    cut_index = ?local_index,
-                    local_sign = ?local_sign,
-                    tag_local_terms = self.tag_local_terms,
-                    log.local = local,
-                    log.integrated = integ,
-                    log.cff_before_replacements = cff,
-                    "Built final UV CFF inputs"
-                );
-            }
-
-            if local_index != integrated_index {
-                return Err(eyre!(
-                    "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
-                    local_index,
-                    integrated_index
-                ));
-            }
-
-            for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
-                let eid = usize::from(eid) as i64;
-                if p.is_paired() {
-                    cff = cff
-                        .replace(function!(GS.energy, eid))
-                        .with(function!(GS.ose, eid));
+                    cff = local_sign * (local - integ);
+                    debug_tags!(#generation, #profile, #uv, #graph, #term, #trace;
+                        stage = "final_integrand_cff_inputs",
+                        cut_index = ?index,
+                        local_sign = ?local_sign,
+                        tag_local_terms = self.tag_local_terms,
+                        log.local = local,
+                        log.integrated = integ,
+                        log.cff_before_replacements = cff,
+                        "Built final UV CFF inputs"
+                    );
                 }
-            }
 
-            cff = cff
-                .replace(function!(GS.ose, W_.mass_, W_.prop_))
-                .with(W_.prop_);
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                stage = "final_integrand_cff_done",
-                cut_index = ?local_index,
-                log.expression = cff,
-                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
-                "Built final UV CFF"
-            );
-            term_started += term_started.elapsed();
-
-            let mut resnum = graph
-                .numerator(&reduced, current.subgraph())
-                .get_single_atom()
-                .unwrap();
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                stage = "final_integrand_reduced_numerator_done",
-                log.expression = resnum,
-                cut_index = ?local_index,
-                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
-                "Built reduced numerator for final UV integrand"
-            );
-            term_started += term_started.elapsed();
-
-            let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
-
-            let mut reps = Vec::new();
-            for (p, eid, _) in graph.as_ref().iter_edges_of(&bridgeless_reduced) {
-                if p.is_paired() {
-                    reps.push(GS.add_parametric_sign(eid));
+                for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
+                    let eid = usize::from(eid) as i64;
+                    if p.is_paired() {
+                        cff = cff
+                            .replace(function!(GS.energy, eid))
+                            .with(function!(GS.ose, eid));
+                    }
                 }
-            }
 
-            resnum = resnum.replace_multiple(&reps);
-            resnum *= cff * &global_num;
+                cff = cff
+                    .replace(function!(GS.ose, W_.mass_, W_.prop_))
+                    .with(W_.prop_);
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    stage = "final_integrand_cff_done",
+                    cut_index = ?index,
+                    log.expression = cff,
+                    elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                    "Built final UV CFF"
+                );
+                term_started += term_started.elapsed();
 
-            let color_simplify_input = resnum.replace(GS.dim).with(4);
+                let mut resnum = graph
+                    .numerator(&reduced, current.subgraph())
+                    .get_single_atom()
+                    .unwrap();
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    stage = "final_integrand_reduced_numerator_done",
+                    log.expression = resnum,
+                    cut_index = ?index,
+                    elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                    "Built reduced numerator for final UV integrand"
+                );
+                term_started += term_started.elapsed();
 
-            debug_tags!(#generation,#algebra,#color,#before, #uv, #inspect, #dump;
-                log.expression = color_simplify_input,
-                term_index = term_index,
-                "Final UV term before color simplification"
-            );
+                let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 
-            term_started += term_started.elapsed();
-            resnum = color_simplify_input
-                .collect_factors()
-                .simplify_metrics()
-                .simplify_color();
-            debug_tags!(#generation, #algebra,#color, #uv, #graph, #term, #summary;
-                stage = "final_integrand_color_simplify_done",
-                cut_index = ?local_index,
-                log.expression = resnum,
-                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
-                "Simplified final UV term color"
-            );
+                let mut reps = Vec::new();
+                for (p, eid, _) in graph.as_ref().iter_edges_of(&bridgeless_reduced) {
+                    if p.is_paired() {
+                        reps.push(GS.add_parametric_sign(eid));
+                    }
+                }
 
-            term_started += term_started.elapsed();
-            resnum = resnum.expand_dots()?;
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                stage = "final_integrand_expand_dots_done",
-                cut_index = ?local_index,
-                log.expression = resnum,
-                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
-                "Expanded final UV term dots"
-            );
+                resnum = resnum.replace_multiple(&reps);
+                resnum *= cff * &global_num;
 
-            resnum = resnum.replace_multiple(&reps);
+                let color_simplify_input = resnum.replace(GS.dim).with(4);
 
-            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                stage = "final_integrand_replace_multiple_done",
-                log.expression = resnum,
-                cut_index = ?local_index,
-                "Applied final UV parametric replacements"
-            );
-            integrands.insert(
-                *local_index,
-                resnum.replace(GS.m_uv_expansion).with(GS.m_uv_vacuum),
-            );
-        }
+                debug_tags!(#generation,#algebra,#color,#before, #uv, #inspect, #dump;
+                    log.expression = color_simplify_input,
+                    term_index = term_index,
+                    "Final UV term before color simplification"
+                );
 
-        Ok(integrands)
+                term_started += term_started.elapsed();
+                resnum = color_simplify_input
+                    .collect_factors()
+                    .simplify_metrics()
+                    .simplify_color();
+                debug_tags!(#generation, #algebra,#color, #uv, #graph, #term, #summary;
+                    stage = "final_integrand_color_simplify_done",
+                    cut_index = ?index,
+                    log.expression = resnum,
+                    elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                    "Simplified final UV term color"
+                );
+
+                term_started += term_started.elapsed();
+                resnum = resnum.expand_dots()?;
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    stage = "final_integrand_expand_dots_done",
+                    cut_index = ?index,
+                    log.expression = resnum,
+                    elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                    "Expanded final UV term dots"
+                );
+
+                resnum = resnum.replace_multiple(&reps);
+
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                    stage = "final_integrand_replace_multiple_done",
+                    log.expression = resnum,
+                    cut_index = ?index,
+                    "Applied final UV parametric replacements"
+                );
+                term_index += 1;
+                Ok(resnum.replace(GS.m_uv_expansion).with(GS.m_uv_vacuum))
+            })
+            .wrap_err("while combining final integrand local/integrated approximations")
+    }
+
+    pub(crate) fn build<S: ForestNodeLike>(
+        &self,
+        graph: &mut Graph,
+        current: &S,
+        local_terms: &ResidueSelectedTerms,
+        local_sign: Sign,
+        integrated_4d: &ApproxOp,
+    ) -> Result<ResidueSelectedTerms> {
+        let integrated_4d = match integrated_4d {
+            ApproxOp::Root => None,
+            _ => integrated_4d.expr(),
+        };
+        self.build_with_integrated_4d_terms(graph, current, local_terms, local_sign, integrated_4d)
     }
 }
 
