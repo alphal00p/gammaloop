@@ -6,14 +6,17 @@ use std::{
 };
 
 use eyre::eyre;
-use linnet::half_edge::{NodeIndex, subgraph::SuBitGraph};
+use linnet::half_edge::{
+    NodeIndex,
+    subgraph::{SuBitGraph, SubSetLike},
+};
 
 use crate::{
     algebra::ScalarMul,
     contraction::Contract,
     network::graph::{NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation, TensorTerm},
     structure::{
-        HasStructure, PermutedStructure, TensorStructure,
+        HasStructure, PermutedStructure, StructureContract, TensorStructure,
         permuted::PermuteTensor,
         slot::{AbsInd, IsAbstractSlot},
     },
@@ -1657,7 +1660,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         .map(|(left, right, degree, _)| (left, right, degree))
     }
 
-    pub fn best_result_rank_pair<
+    fn best_result_rank_pair_by_degree<
         Sc,
         Store,
         const SCORE_ORDER: u128,
@@ -1665,6 +1668,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     >(
         &self,
         executor: &Store,
+        mut accept_degree: impl FnMut(u32) -> bool,
     ) -> Option<(usize, usize, u32)>
     where
         Store: NetworkStoreAccess,
@@ -1695,7 +1699,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     continue;
                 };
                 let degree = left_matches.iter().filter(|matched| **matched).count() as u32;
-                if degree == 0 {
+                if !accept_degree(degree) {
                     continue;
                 }
 
@@ -1740,6 +1744,101 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 };
                 let score = ResultRankPairScore::new(
                     result_rank as u32,
+                    degree,
+                    *left_profile,
+                    *right_profile,
+                    pair_estimate,
+                );
+
+                let replace = match &best {
+                    None => true,
+                    Some((_, _, _, best_score)) => score.less_by::<SCORE_ORDER>(best_score),
+                };
+
+                if replace {
+                    best = Some((*left_operand, *right_operand, degree, score));
+                }
+            }
+        }
+
+        best.map(|(left, right, degree, _)| (left, right, degree))
+    }
+
+    pub fn best_result_rank_pair<
+        Sc,
+        Store,
+        const SCORE_ORDER: u128,
+        const EXACT_JOIN_LIMIT: usize,
+    >(
+        &self,
+        executor: &Store,
+    ) -> Option<(usize, usize, u32)>
+    where
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure + FastTensorSumContractible<Sc>,
+    {
+        self.best_result_rank_pair_by_degree::<Sc, Store, SCORE_ORDER, EXACT_JOIN_LIMIT>(
+            executor,
+            |degree| degree > 0,
+        )
+    }
+
+    pub fn best_exterior_result_rank_pair<
+        Sc,
+        Store,
+        const SCORE_ORDER: u128,
+        const EXACT_JOIN_LIMIT: usize,
+    >(
+        &self,
+        executor: &Store,
+    ) -> Option<(usize, usize, u32)>
+    where
+        Store: NetworkStoreAccess,
+        Store::Tensor: HasStructure + FastTensorSumContractible<Sc>,
+        <Store::Tensor as HasStructure>::Structure: StructureContract,
+    {
+        let tensors = self
+            .operands
+            .iter()
+            .enumerate()
+            .filter_map(|(operand, _)| {
+                let structure = self.tensor_structure(executor, operand)?;
+                let (_, profile) = self.tensor_operand_profile::<Sc, Store>(executor, operand)?;
+                Some((operand, structure, profile))
+            })
+            .collect::<Vec<_>>();
+
+        let mut best = None;
+        for (left_position, (left_operand, left_structure, left_profile)) in
+            tensors.iter().enumerate()
+        {
+            for (right_operand, right_structure, right_profile) in &tensors[left_position + 1..] {
+                let Ok((result_structure, left_matches, _, _)) =
+                    left_structure.merge(right_structure)
+                else {
+                    continue;
+                };
+                let degree = left_matches.n_included() as u32;
+                if degree != 0 {
+                    continue;
+                }
+
+                let output_dense_size = if pair_score_order_needs_output_dense_size(SCORE_ORDER) {
+                    result_structure
+                        .size()
+                        .map(|size| size as u128)
+                        .unwrap_or(u128::MAX)
+                        .max(1)
+                } else {
+                    1
+                };
+                let pair_estimate = super::TensorContractionPairEstimate::from_profiles(
+                    *left_profile,
+                    *right_profile,
+                    output_dense_size,
+                );
+                let score = ResultRankPairScore::new(
+                    result_structure.order() as u32,
                     degree,
                     *left_profile,
                     *right_profile,
@@ -1809,18 +1908,152 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             return Ok(false);
         };
 
+        self.contract_result_rank_pair::<LT, T, L, Sc, CStrat, COpt, FK, Store>(
+            left,
+            right,
+            degree,
+            "result_rank_pair_start",
+            "result_rank_slow_pair",
+            executor,
+            graph,
+            lib,
+        )?;
+
+        Ok(true)
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn contract_one_exterior_by_result_rank<
+        LT,
+        T,
+        L,
+        Sc,
+        CStrat,
+        COpt,
+        FK,
+        Store,
+        const SCORE_ORDER: u128,
+        const EXACT_JOIN_LIMIT: usize,
+    >(
+        &mut self,
+        executor: &mut Store,
+        graph: &NetworkGraph<K, FK, Aind>,
+        lib: &L,
+    ) -> Result<bool, TensorNetworkError<K, FK>>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        K: Clone + Debug + Display,
+        FK: Debug + Display,
+        Aind: AbsInd,
+        LT: LibraryTensor + Clone,
+        T: HasStructure
+            + From<LT::WithIndices>
+            + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
+            + Clone
+            + Ref
+            + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + TensorCommonFactor<Sc>
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        T::Structure: Display + StructureContract,
+        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+            IsAbstractSlot<Aind = Aind>,
+    {
+        self.materialize_libraries::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        let Some((left, right, degree)) = self
+            .best_exterior_result_rank_pair::<Sc, Store, SCORE_ORDER, EXACT_JOIN_LIMIT>(executor)
+        else {
+            return Ok(false);
+        };
+
+        self.contract_result_rank_pair::<LT, T, L, Sc, CStrat, COpt, FK, Store>(
+            left,
+            right,
+            degree,
+            "result_rank_exterior_pair_start",
+            "result_rank_exterior_slow_pair",
+            executor,
+            graph,
+            lib,
+        )?;
+
+        Ok(true)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn contract_result_rank_pair<LT, T, L, Sc, CStrat, COpt, FK, Store>(
+        &mut self,
+        left: usize,
+        right: usize,
+        degree: u32,
+        start_event: &str,
+        slow_event: &str,
+        executor: &mut Store,
+        graph: &NetworkGraph<K, FK, Aind>,
+        lib: &L,
+    ) -> Result<(), TensorNetworkError<K, FK>>
+    where
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        K: Clone + Debug + Display,
+        FK: Debug + Display,
+        Aind: AbsInd,
+        LT: LibraryTensor + Clone,
+        T: HasStructure
+            + From<LT::WithIndices>
+            + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
+            + Clone
+            + Ref
+            + FastTensorSum
+            + FastTensorSumContractible<Sc>
+            + TensorCommonFactor<Sc>
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        T::Structure: Display,
+        L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>,
+        Sc: for<'a> MulAssign<Sc::Ref<'a>> + Clone + Ref,
+        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+            IsAbstractSlot<Aind = Aind>,
+    {
         let profile_pair = profile::enabled();
-        let log_pair = profile::verbose() && (self.operands.len() > 4 || degree > 1);
+        let left_profile = profile_pair
+            .then(|| self.tensor_operand_profile::<Sc, Store>(executor, left))
+            .flatten()
+            .map(|(_, profile)| profile);
+        let right_profile = profile_pair
+            .then(|| self.tensor_operand_profile::<Sc, Store>(executor, right))
+            .flatten()
+            .map(|(_, profile)| profile);
+        let large_profile_pair = match (left_profile, right_profile) {
+            (Some(left_profile), Some(right_profile)) => {
+                left_profile.entries.saturating_mul(right_profile.entries) > 100_000
+                    || left_profile
+                        .total_bytes
+                        .saturating_add(right_profile.total_bytes)
+                        > 100_000_000
+            }
+            _ => false,
+        };
+        let log_pair = (profile_pair && large_profile_pair)
+            || (profile::verbose() && (self.operands.len() > 4 || degree > 1));
         let pair_start = if profile_pair {
             if log_pair {
                 eprintln!(
-                    "spenso_profile product.result_rank_pair_start operands={} left_operand={} right_operand={} degree={} left={} right={}",
+                    "spenso_profile product.{start_event} operands={} left_operand={} right_operand={} degree={} left={} right={} left_profile={:?} right_profile={:?}",
                     self.operands.len(),
                     left,
                     right,
                     degree,
                     self.tensor_structure(executor, left).unwrap(),
                     self.tensor_structure(executor, right).unwrap(),
+                    left_profile,
+                    right_profile,
                 );
             }
             Some(std::time::Instant::now())
@@ -1836,13 +2069,13 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             let elapsed = pair_start.elapsed();
             if profile::verbose() || elapsed.as_millis() >= 100 {
                 eprintln!(
-                    "spenso_profile product.result_rank_slow_pair elapsed_ms={:.3}",
+                    "spenso_profile product.{slow_event} elapsed_ms={:.3}",
                     elapsed.as_secs_f64() * 1000.0,
                 );
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 
     pub fn best_tensor_pair_by<Store, Score: Ord, const LARGEST: bool>(
@@ -2359,7 +2592,7 @@ where
         + ScalarMul<Sc, Output = T>
         + PermuteTensor<Permuted = LT::WithIndices>,
     <LT::WithIndices as HasStructure>::Structure: Display,
-    T::Structure: Display,
+    T::Structure: Display + StructureContract,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -2377,6 +2610,22 @@ where
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         while product
             .contract_one_by_result_rank::<
+                LT,
+                T,
+                L,
+                Sc,
+                CStrat,
+                COpt,
+                FK,
+                Store,
+                SCORE_ORDER,
+                EXACT_JOIN_LIMIT,
+            >(executor, graph, lib)?
+        {
+            product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
+        }
+        while product
+            .contract_one_exterior_by_result_rank::<
                 LT,
                 T,
                 L,

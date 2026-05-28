@@ -581,7 +581,7 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 2)))
     .simplify_gamma();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d^2*g(bis(4,1),bis(4,2))+2*d*g(bis(4,1),bis(4,2))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"(-1*d^2+2*d)*g(bis(4,1),bis(4,2))");
 }
 
 #[test]

@@ -2108,6 +2108,23 @@ fn component_horner_small_examples() {
 }
 
 #[test]
+fn min_result_rank_disconnected_tensor_product_mwe() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+
+    let expr = parse_inline_expression(
+        "Q(1,spenso::mink(4,mu))
+        *Q(2,spenso::mink(4,rho))",
+    );
+    let tensor = execute_actual_net_min_result_rank_parallel_tensor(
+        "min_result_rank_disconnected_tensor_product_mwe",
+        parse_actual_net("min_result_rank_disconnected_tensor_product_mwe", &expr),
+    );
+
+    assert_eq!(tensor.structure().order(), 2);
+    assert_eq!(tensor.structure().size().unwrap(), 16);
+}
+
+#[test]
 #[ignore = "diagnostic staged orchestration for a late tensor-valued sum"]
 fn late_tensor_sum_mwe_staged_disconnect_reconnect_metric() {
     test_initialise().expect("GammaLoop initialization should succeed");
