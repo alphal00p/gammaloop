@@ -243,9 +243,10 @@
   /// Additional values merged into node and edge callback dictionaries.
   /// -> dictionary
   scope: (:),
-  /// Coordinate length for one graph-layout unit. Numbers are interpreted as em.
-  /// -> int | float | length | ratio
-  unit: 1,
+  /// Coordinate length for one graph-layout unit. `auto` uses any unit stored
+  /// by `graph.style`, falling back to `1em`. Numbers are interpreted as em.
+  /// -> auto | int | float | length | ratio
+  unit: auto,
   /// Optional title displayed above the diagram. Use `auto` for the graph name.
   /// -> none | auto | content | string
   title: none,

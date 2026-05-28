@@ -734,7 +734,9 @@
 ///
 /// The callbacks receive decoded records plus a `fields` dictionary containing
 /// merged statements and direct record fields. A callback returns `none` to
-/// leave the record unchanged, or `(data: value)` to set new native data.
+/// leave the record unchanged, `(data: value)` to set new native data, or
+/// structural fields such as `pos`, `shift`, and `statements` to patch data
+/// seen by later layout calls.
 ///
 /// ```example
 /// #let g = build({ node(<a>) })
@@ -757,6 +759,48 @@
   sink: none,
 ) = {
   _impl.map(graph_, (graph: graph, node: node, edge: edge, source: source, sink: sink))
+}
+
+/// Attach layout-relevant drawing style to a graph.
+///
+/// Node style is measured immediately and stored as `layout-width` /
+/// `layout-height` statements for later layout calls. Edge labels are measured
+/// as `label-width` / `label-height` statements for label placement. `draw`
+/// uses the stored node and edge-label style by default.
+/// -> dictionary
+#let style(
+  /// Graph object to style. -> dictionary
+  graph_,
+  /// Extra scope visible to label/style callbacks. -> dictionary
+  scope: (:),
+  /// Coordinate length for one graph-layout unit. Numbers are interpreted as em.
+  /// -> int | float | length | ratio
+  unit: 1,
+  /// Node label content or callback. `auto` uses node data/statement label or
+  /// node name. -> auto | content | string | function | none
+  node-label: auto,
+  /// CeTZ content style for node labels. Its padding contributes to measured
+  /// node size. -> dictionary | function
+  node-label-style: (:),
+  /// CeTZ node shape style or callback. Explicit numeric radii contribute to
+  /// measured node size. -> dictionary | function | none
+  node-style: (:),
+  /// Edge label content or callback. `none` leaves edge labels unstyled and
+  /// unmeasured. -> content | string | function | none
+  edge-label: none,
+  /// CeTZ content style for edge labels. Its padding contributes to measured
+  /// edge-label size. -> dictionary | function
+  edge-label-style: (:),
+) = {
+  _impl.style(graph_, (
+    scope: scope,
+    unit: unit,
+    node-label: node-label,
+    node-label-style: node-label-style,
+    node-style: node-style,
+    edge-label: edge-label,
+    edge-label-style: edge-label-style,
+  ))
 }
 
 /// Evaluate selected fields into native data entries.

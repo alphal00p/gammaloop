@@ -1,7 +1,26 @@
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": graph, layout, subgraph
+#import "@preview/cetz:0.5.1" as cetz
 
 #set page(width: auto, height: auto)
 #set text(size: 5pt)
+
+#let diagram-unit = 1.0
+#let render-y-scale = 3.0
+#let node-label-padding = 0.08
+#let tree-node-style = (
+  padding: node-label-padding,
+  frame: "rect",
+  fill: white,
+  stroke: 0.55pt + rgb("#777777"),
+)
+
+#let canvas-length(unit) = {
+  if type(unit) in (int, float) {
+    unit * 1em
+  } else {
+    unit
+  }
+}
 
 #let tree-label(g) = {
   let value = graph.info(g).global-statements.at("tree", default: none)
@@ -50,9 +69,9 @@
   let frontier = (root,)
   depths.insert(str(root), 0)
   while frontier.len() > 0 {
-      let next = ()
-      for node in frontier {
-        for child in adjacency.at(str(node), default: ()) {
+    let next = ()
+    for node in frontier {
+      for child in adjacency.at(str(node), default: ()) {
         if not (str(child) in depths) {
           depths.insert(str(child), depths.at(str(node)) + 1)
           next.push(child)
@@ -65,8 +84,8 @@
 }
 
 #let tree-edge(edge, tree-hedges) = {
-  let source = edge.at("source-half-edge")
-  let sink = edge.at("sink-half-edge")
+  let source = edge.at("source-half-edge", default: edge.source)
+  let sink = edge.at("sink-half-edge", default: edge.sink)
   let source-in-tree = source != none and tree-hedges.contains(source.hedge)
   let sink-in-tree = sink != none and tree-hedges.contains(sink.hedge)
   source-in-tree or sink-in-tree
@@ -74,7 +93,10 @@
 
 #let edge-depth(edge, depths) = {
   let depth = none
-  for half-edge in (edge.at("source-half-edge"), edge.at("sink-half-edge")) {
+  for half-edge in (
+    edge.at("source-half-edge", default: edge.source),
+    edge.at("sink-half-edge", default: edge.sink),
+  ) {
     if half-edge != none {
       let value = depths.at(str(half-edge.node), default: 0)
       if depth == none or value < depth {
@@ -86,7 +108,14 @@
 }
 
 #let node-label(node) = {
-  let value = node.at("label", default: node.name)
+  let value = node.at("label", default: none)
+  let statements = node.at("statements", default: none)
+  if value == none and statements != none {
+    value = statements.at("label", default: none)
+  }
+  if value == none {
+    value = node.at("name", default: none)
+  }
   if value == none {
     none
   } else {
@@ -103,13 +132,179 @@
     let depth = edge-depth(edge, depths)
     (stroke: rgb("#555555") + 1.7pt / (1 + depth / 3))
   } else {
-    (stroke: rgb("#b9bec7") + 0.35pt)
+    (stroke: rgb("#d8dce3") + 0.18pt)
   }
+}
+
+#let scaled-point(x, y) = (x, y * render-y-scale)
+
+#let point(item) = scaled-point(item.pos.x, item.pos.y)
+
+#let node-name(node) = "n" + str(node.node)
+
+#let statement-float(record, key, default: 0.0) = {
+  let value = record.statements.at(key, default: none)
+  if value == none {
+    default
+  } else {
+    float(str(value))
+  }
+}
+
+#let node-anchor(node, anchor) = {
+  let width = statement-float(node, "layout-width")
+  let height = statement-float(node, "layout-height")
+  let center = point(node)
+  if anchor == "north" {
+    (center.at(0), center.at(1) + height / 2)
+  } else if anchor == "south" {
+    (center.at(0), center.at(1) - height / 2)
+  } else if anchor == "east" {
+    (center.at(0) + width / 2, center.at(1))
+  } else if anchor == "west" {
+    (center.at(0) - width / 2, center.at(1))
+  } else {
+    center
+  }
+}
+
+#let nodes-by-index(nodes) = {
+  let result = (:)
+  for node in nodes {
+    result.insert(str(node.node), node)
+  }
+  result
+}
+
+#let stored-style(g) = {
+  let data = graph.info(g).data
+  if type(data) == dictionary {
+    data.at("linnest-style", default: (:))
+  } else {
+    (:)
+  }
+}
+
+#let call-style(value, data) = {
+  if type(value) == function {
+    value(data)
+  } else {
+    value
+  }
+}
+
+#let styled-node-label(node, style) = {
+  let label = style.at("node-label", default: node-label)
+  if label == auto {
+    node-label(node)
+  } else {
+    call-style(label, node)
+  }
+}
+
+#let endpoint-anchor(from, to) = {
+  let dx = to.pos.x - from.pos.x
+  let dy = to.pos.y - from.pos.y
+  if calc.abs(dx) > calc.abs(dy) {
+    if dx >= 0 { "east" } else { "west" }
+  } else {
+    if dy >= 0 { "north" } else { "south" }
+  }
+}
+
+#let draw-paired-edge(edge, nodes, style, tree: false) = {
+  let source = nodes.at(str(edge.source.node))
+  let sink = nodes.at(str(edge.sink.node))
+  if tree {
+    let parent = source
+    let child = sink
+    if child.pos.y > parent.pos.y {
+      parent = sink
+      child = source
+    }
+    let parent-point = point(parent)
+    let child-point = point(child)
+    let drop = calc.max(0.65, calc.abs(parent-point.at(1) - child-point.at(1)) * 0.38)
+    cetz.draw.bezier(
+      node-anchor(parent, "south"),
+      node-anchor(child, "north"),
+      (parent-point.at(0), parent-point.at(1) - drop),
+      (child-point.at(0), child-point.at(1) + drop),
+      ..style,
+    )
+  } else {
+    cetz.draw.bezier(
+      node-anchor(source, endpoint-anchor(source, sink)),
+      node-anchor(sink, endpoint-anchor(sink, source)),
+      point(edge),
+      ..style,
+    )
+  }
+}
+
+#let draw-dangling-edge(edge, nodes, style) = {
+  let side = if edge.source != none { edge.source } else { edge.sink }
+  let node = nodes.at(str(side.node))
+  let anchor = if edge.pos.y >= node.pos.y { "north" } else { "south" }
+  cetz.draw.line(node-anchor(node, anchor), point(edge), ..style)
+}
+
+#let draw-measured-tree(g, tree, depths, tree-hedges) = {
+  let nodes = graph.nodes(g)
+  let node-map = nodes-by-index(nodes)
+  let style-for = edge-style(depths, tree-hedges)
+  let style = stored-style(g)
+  let node-content-style = style.at("node-label-style", default: tree-node-style)
+  cetz.canvas(length: canvas-length(diagram-unit), padding: 0.4, {
+    for edge in graph.edges(g) {
+      let style = style-for(edge)
+      if edge.source != none and edge.sink != none {
+        draw-paired-edge(edge, node-map, style, tree: tree-edge(edge, tree-hedges))
+      } else {
+        draw-dangling-edge(edge, node-map, style)
+      }
+    }
+    for node in nodes {
+      let label = styled-node-label(node, style)
+      let width = statement-float(node, "layout-width")
+      let height = statement-float(node, "layout-height")
+      if label != none {
+        let content-style = call-style(node-content-style, node)
+        let center = point(node)
+        cetz.draw.group(name: node-name(node), {
+          cetz.draw.anchor("north", (center.at(0), center.at(1) + height / 2))
+          cetz.draw.anchor("south", (center.at(0), center.at(1) - height / 2))
+          cetz.draw.anchor("east", (center.at(0) + width / 2, center.at(1)))
+          cetz.draw.anchor("west", (center.at(0) - width / 2, center.at(1)))
+          cetz.draw.rect(
+            (center.at(0) - width / 2, center.at(1) - height / 2),
+            (center.at(0) + width / 2, center.at(1) + height / 2),
+            fill: content-style.at("fill", default: white),
+            stroke: content-style.at("stroke", default: none),
+          )
+          cetz.draw.content(
+            point(node),
+            label,
+            padding: 0,
+          )
+        })
+      } else {
+        let center = point(node)
+        cetz.draw.group(name: node-name(node), {
+          cetz.draw.anchor("north", (center.at(0), center.at(1) + height / 2))
+          cetz.draw.anchor("south", (center.at(0), center.at(1) - height / 2))
+          cetz.draw.anchor("east", (center.at(0) + width / 2, center.at(1)))
+          cetz.draw.anchor("west", (center.at(0) - width / 2, center.at(1)))
+        })
+      }
+    }
+  })
 }
 
 #let draw_tree_dot(doc) = {
   show raw: it => if it.at("lang") == "dot" {
     for g in graph.parse(it.text) {
+      let g = graph.style(g, node-label: node-label, node-label-style: tree-node-style, unit: diagram-unit)
       let tree = subgraph.label(g, tree-label(g))
       let rest = complement-subgraph(g, tree)
       let tree-hedges = subgraph.hedges(tree)
@@ -118,42 +313,26 @@
         layout-algo: "tree",
         subgraph: tree,
         layout-roots: (0,),
-        tree-dx: 26.0,
-        tree-dy: 12.0,
+        tree-dx: 0.9,
+        tree-dy: 13.4,
         label-steps: 0,
       )
       let g = layout(
         g,
-        layout-algo: "dot",
+        layout-algo: "force",
         subgraph: rest,
         layout-nodes: "fixed",
-        tree-dx: 26.0,
-        tree-dy: 12.0,
+        steps: 60,
+        epochs: 8,
+        length-scale: 0.22,
+        gamma-ee: 0.08,
+        gamma-ev: 0.04,
         label-steps: 0,
       )
       let depths = tree-depths(g, tree)
-      draw(
-        g,
-        subgraph: tree,
-        unit: 1.0,
-        edge-stroke: 0.35pt,
-        edge-omega: 1.18,
-        source-style: edge-style(depths, tree-hedges),
-        sink-style: edge-style(depths, tree-hedges),
-        node-fill: none,
-        node-stroke: none,
-        node-min-radius: 0.01,
-        node-label-padding: 0.0,
-        node-label: node-label,
-        node-label-style: (
-          padding: 0.08,
-          frame: "rect",
-          fill: white,
-          stroke: 0.55pt + rgb("#777777"),
-        ),
-        node-outset: 0.28,
-        subgraph-edge-style: (stroke: rgb("#72b7b2") + 1.2pt),
-      )
+      [#metadata(graph.nodes(g)) <linnest-tree-nodes>]
+      [#metadata(graph.edges(g)) <linnest-tree-edges>]
+      draw-measured-tree(g, tree, depths, tree-hedges)
     }
   }
   doc

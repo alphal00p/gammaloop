@@ -3,6 +3,7 @@
 #let _plugin = plugin("../../linnest.wasm")
 
 #let _graph-kind = "linnest-graph"
+#let _style-key = "linnest-style"
 
 #let _empty-native-data() = (
   graph: none,
@@ -577,6 +578,186 @@
   }
 }
 
+#let _canvas-length(unit) = {
+  if type(unit) in (int, float) {
+    unit * 1em
+  } else {
+    unit
+  }
+}
+
+#let _call(value, data) = {
+  if type(value) == function {
+    value(data)
+  } else {
+    value
+  }
+}
+
+#let _style(value, data) = {
+  let value = _call(value, data)
+  if value == none { (:) } else { value }
+}
+
+#let _as-content(value) = if value == none {
+  none
+} else if type(value) == str or type(value) == label {
+  [#str(value)]
+} else {
+  value
+}
+
+#let _content(value, data, default) = {
+  if value == auto {
+    default
+  } else {
+    _as-content(_call(value, data))
+  }
+}
+
+#let _data-label(record) = {
+  let data = record.at("data", default: none)
+  if type(data) == dictionary {
+    data.at("label", default: none)
+  } else {
+    none
+  }
+}
+
+#let _data-fields(record) = {
+  let data = record.at("data", default: none)
+  if type(data) == dictionary { data } else { (:) }
+}
+
+#let _padding-side(padding, side) = {
+  if type(padding) in (int, float) {
+    0
+  } else if type(padding) == dictionary {
+    padding.at(side, default: 0)
+  } else {
+    0
+  }
+}
+
+#let _numeric(value, default: 0) = {
+  if type(value) in (int, float) {
+    value
+  } else {
+    default
+  }
+}
+
+#let _node-style-data(record, style-record) = {
+  let record-label = _data-label(record)
+  let statement-label = record.statements.at("label", default: none)
+  let data-label = if record-label == none { statement-label } else { record-label }
+  (
+    style-record.at("scope", default: (:))
+      + record.statements
+      + _data-fields(record)
+      + (
+        vid: record.node,
+        node: record,
+        name: record.name,
+        data: record.at("data", default: none),
+        label: data-label,
+      )
+  )
+}
+
+#let _node-layout-statements(record, style-record) = {
+  let node-data = _node-style-data(record, style-record)
+  let default-label-value = node-data.at("label", default: record.name)
+  let default-label = _as-content(default-label-value)
+  let label = _content(style-record.at("node-label", default: auto), node-data, default-label)
+  let content-style = _style(style-record.at("node-label-style", default: (:)), node-data)
+  let draw-style = _style(style-record.at("node-style", default: (:)), node-data)
+  let unit = style-record.at("unit", default: 1)
+  let length = _canvas-length(unit)
+
+  let width = 0.0
+  let height = 0.0
+  if label != none {
+    let size = measure(text(top-edge: "cap-height", bottom-edge: "bounds", label))
+    width = calc.abs(size.width.to-absolute() / length.to-absolute())
+    height = calc.abs(size.height.to-absolute() / length.to-absolute())
+  }
+
+  let padding = content-style.at("padding", default: 0)
+  width += _numeric(_padding-side(padding, "left")) + _numeric(_padding-side(padding, "right"))
+  height += _numeric(_padding-side(padding, "top")) + _numeric(_padding-side(padding, "bottom"))
+  if type(padding) in (int, float) {
+    width += 2 * padding
+    height += 2 * padding
+  }
+
+  let radius = draw-style.at("radius", default: none)
+  if type(radius) in (int, float) {
+    width = calc.max(width, 2 * radius)
+    height = calc.max(height, 2 * radius)
+  } else if type(radius) == array and radius.len() > 0 {
+    let radius = calc.max(..radius)
+    width = calc.max(width, 2 * radius)
+    height = calc.max(height, 2 * radius)
+  }
+
+  ("layout-width": width, "layout-height": height)
+}
+
+#let _edge-style-data(record, style-record) = {
+  let source-half-edge = record.at("source", default: none)
+  let sink-half-edge = record.at("sink", default: none)
+  let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
+  let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
+  let ext = source-half-edge == none or sink-half-edge == none
+  let record-label = _data-label(record)
+  let statement-label = record.statements.at("label", default: none)
+  let data-label = if record-label == none { statement-label } else { record-label }
+  (
+    style-record.at("scope", default: (:))
+      + record.statements
+      + _data-fields(record)
+      + (
+        eid: record.edge,
+        edge: record,
+        source-statement: source-statement,
+        sink-statement: sink-statement,
+        source-half-edge: source-half-edge,
+        sink-half-edge: sink-half-edge,
+        data: record.at("data", default: none),
+        label: data-label,
+        orientation: record.orientation,
+        ext: ext,
+      )
+  )
+}
+
+#let _edge-label-layout-statements(record, style-record) = {
+  let edge-data = _edge-style-data(record, style-record)
+  let label = _content(
+    style-record.at("edge-label", default: none),
+    edge-data,
+    _as-content(edge-data.at("label", default: none)),
+  )
+  if label == none {
+    return none
+  }
+
+  let content-style = _style(style-record.at("edge-label-style", default: (:)), edge-data)
+  let length = _canvas-length(style-record.at("unit", default: 1))
+  let size = measure(text(top-edge: "cap-height", bottom-edge: "bounds", label))
+  let padding = content-style.at("padding", default: 0)
+  let width = calc.abs(size.width.to-absolute() / length.to-absolute())
+  let height = calc.abs(size.height.to-absolute() / length.to-absolute())
+  width += _numeric(_padding-side(padding, "left")) + _numeric(_padding-side(padding, "right"))
+  height += _numeric(_padding-side(padding, "top")) + _numeric(_padding-side(padding, "bottom"))
+  if type(padding) in (int, float) {
+    width += 2 * padding
+    height += 2 * padding
+  }
+  ("label-width": width, "label-height": height)
+}
+
 #let _mapped-data(callback, record, context_) = {
   if callback == none {
     return none
@@ -593,9 +774,9 @@
 
 #let _structural-keys(kind) = {
   if kind == "node" {
-    ("pos", "shift")
+    ("pos", "shift", "statements")
   } else if kind == "edge" {
-    ("pos", "shift", "label-pos", "label-angle", "bend")
+    ("pos", "shift", "label-pos", "label-angle", "bend", "statements")
   } else {
     ()
   }
@@ -617,7 +798,11 @@
   let structural = (:)
   for key in structural-keys {
     if result.keys().contains(key) {
-      structural.insert(key, result.at(key))
+      if key == "statements" {
+        structural.insert(key, _flat-statements(result.at(key), context_ + " statements"))
+      } else {
+        structural.insert(key, result.at(key))
+      }
     }
   }
 
@@ -854,6 +1039,46 @@
     graph_
   }
 }
+
+#let style(graph_, options) = {
+  let style-record = (
+    node-label: options.node-label,
+    node-label-style: options.node-label-style,
+    node-style: options.node-style,
+    edge-label: options.edge-label,
+    edge-label-style: options.edge-label-style,
+    scope: options.scope,
+    unit: options.unit,
+  )
+  map(graph_, (
+    graph: graph-record => {
+      let data = graph-record.at("data", default: none)
+      data = if type(data) == dictionary {
+        data
+      } else if data == none {
+        (:)
+      } else {
+        (value: data)
+      }
+      data.insert(_style-key, style-record)
+      (data: data)
+    },
+    node: node-record => (
+      statements: _node-layout-statements(node-record, style-record),
+    ),
+    edge: edge-record => {
+      let statements = _edge-label-layout-statements(edge-record, style-record)
+      if statements == none {
+        none
+      } else {
+        (statements: statements)
+      }
+    },
+    source: none,
+    sink: none,
+  ))
+}
+
 
 #let _apply-default-data(graph_, default-node-data, default-edge-data, default-source-data, default-sink-data) = {
   if (

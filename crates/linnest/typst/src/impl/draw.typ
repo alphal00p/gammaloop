@@ -5,6 +5,8 @@
 #import "../graph.typ" as graph-api
 #import "../subgraph.typ" as subgraph-api
 
+#let _style-key = "linnest-style"
+
 #let _point-x(p) = if type(p) == array { p.at(0) } else { p.x }
 #let _point-y(p) = if type(p) == array { p.at(1) } else { p.y }
 #let _point(p) = (_point-x(p), _point-y(p))
@@ -14,6 +16,15 @@
     unit * 1em
   } else {
     unit
+  }
+}
+
+#let _graph-style(info) = {
+  let data = info.at("data", default: none)
+  if type(data) == dictionary {
+    data.at(_style-key, default: (:))
+  } else {
+    (:)
   }
 }
 
@@ -789,6 +800,19 @@
   let subgraph-edge-style = options.subgraph-edge-style
   let subgraph-edge-underlay = options.subgraph-edge-underlay
   let info = graph-api.info(graph)
+  let graph-style = _graph-style(info)
+  unit = if unit == auto { graph-style.at("unit", default: 1) } else { unit }
+  scope = graph-style.at("scope", default: (:)) + scope
+  node-label = if node-label == auto {
+    graph-style.at("node-label", default: auto)
+  } else {
+    node-label
+  }
+  let graph-node-label-style = graph-style.at("node-label-style", default: (:))
+  let graph-node-style = graph-style.at("node-style", default: (:))
+  let graph-edge-label = graph-style.at("edge-label", default: none)
+  edge-label = if edge-label == none { graph-edge-label } else { edge-label }
+  let graph-edge-label-style = graph-style.at("edge-label-style", default: (:))
   let debug-level = _debug-level(debug)
   let diagram-content = cetz.canvas(
     length: _canvas-length(unit),
@@ -831,6 +855,7 @@
               fill: node-fill,
               stroke: node-stroke,
             )
+              + _style(graph-node-style, node-data)
               + _style(node-style, node-data)
           )
           let node-style = (
@@ -843,11 +868,12 @@
           node-outsets.push(_node-outset(node-style, node-outset))
 
           if label != none {
+            let node-label-draw-style = _style(graph-node-label-style, node-data) + node-label-style
             node-elements.push(cetz.draw.content(
               _point(pos),
               label,
               padding: 0,
-              ..node-label-style,
+              ..node-label-draw-style,
             ))
           }
         }
@@ -899,7 +925,7 @@
           let sink-style-layers = _style-layers(sink-style, edge-data)
           let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
           let ev-label = _content(edge-label, edge-data, _as-content(data-label))
-          let edge-label-style = _style(edge-label-style, edge-data)
+          let edge-label-draw-style = _style(graph-edge-label-style, edge-data) + _style(edge-label-style, edge-data)
 
           for layer-index in range(0, layer-count) {
             let source-layer = _style-layer(source-style-layers, layer-index)
@@ -1038,7 +1064,7 @@
           }
 
           if ev-label != none {
-            elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0, ..edge-label-style))
+            elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0, ..edge-label-draw-style))
           }
 
           if debug-level >= 2 {
