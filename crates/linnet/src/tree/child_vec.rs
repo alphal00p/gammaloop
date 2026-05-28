@@ -531,6 +531,15 @@ impl<V> ForestNodeStore for ChildVecStore<V> {
         node_id
     }
 
+    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId {
+        let node_id = TreeNodeId(self.nodes.len());
+        self.nodes.push(CVNode {
+            parent_pointer: PPNode::dataless_root(root_id),
+            children: Vec::new(),
+        });
+        node_id
+    }
+
     fn add_child(&mut self, data: Self::NodeData, parent: TreeNodeId) -> TreeNodeId {
         let node_id = TreeNodeId(self.nodes.len());
         self.nodes.push(CVNode {
@@ -597,7 +606,12 @@ impl<V> ForestNodeStoreDown for ChildVecStore<V> {
 
     fn iter_children(&self, node_id: TreeNodeId) -> impl Iterator<Item = TreeNodeId> {
         // Clone the children vector (or borrow as iterator) – they are stored in order.
-        self.nodes[node_id.0].children.clone().into_iter()
+        if node_id.is_empty() {
+            Vec::new()
+        } else {
+            self.nodes[node_id.0].children.clone()
+        }
+        .into_iter()
     }
 }
 

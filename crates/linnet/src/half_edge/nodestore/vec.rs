@@ -581,11 +581,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
                     nodes[i.0] = Some(PPNode::dataless_root(RootId(roots.len())));
                 }
             }
-            let root_id = first.unwrap_or_else(|| {
-                let id = TreeNodeId(nodes.len());
-                nodes.push(Some(PPNode::dataless_root(RootId(roots.len()))));
-                id
-            });
+            let root_id = first.unwrap_or(TreeNodeId::EMPTY);
             roots.push(RootData {
                 root_id,
                 data: map_data(d),

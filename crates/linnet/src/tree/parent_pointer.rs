@@ -399,6 +399,12 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
         node_id
     }
 
+    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId {
+        let node_id = TreeNodeId(self.nodes.len());
+        self.nodes.push(PPNode::dataless_root(root_id));
+        node_id
+    }
+
     fn iter_nodes(&self) -> impl Iterator<Item = (TreeNodeId, Option<&Self::NodeData>)> {
         self.nodes
             .iter()

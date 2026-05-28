@@ -52,9 +52,31 @@ pub mod parent_pointer;
 )]
 pub struct TreeNodeId(pub usize);
 
+impl TreeNodeId {
+    /// Root marker for a graph node with no incident tree/hedge nodes.
+    ///
+    /// Use a 32-bit sentinel so the value is stable across the wasm/rkyv boundary.
+    pub const EMPTY: Self = TreeNodeId(u32::MAX as usize);
+    pub(crate) const HISTORICAL_EMPTY: Self = TreeNodeId(u32::MAX as usize - 1);
+
+    pub fn is_empty(self) -> bool {
+        matches!(self, Self::EMPTY | Self::HISTORICAL_EMPTY)
+    }
+
+    pub(crate) fn is_active_empty(self) -> bool {
+        self == Self::EMPTY
+    }
+}
+
 impl Display for TreeNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Node ({})", self.0)
+        if *self == Self::EMPTY {
+            write!(f, "Empty node")
+        } else if *self == Self::HISTORICAL_EMPTY {
+            write!(f, "Historical empty node")
+        } else {
+            write!(f, "Node ({})", self.0)
+        }
     }
 }
 
@@ -404,12 +426,26 @@ pub enum ForestError {
 
 impl<U, P: ForestNodeStore> Forest<U, P> {
     pub fn root_node(&self, nodeid: TreeNodeId) -> TreeNodeId {
+        if nodeid.is_empty() {
+            return nodeid;
+        }
         self.nodes.root_node(nodeid)
     }
+    pub(crate) fn is_active_root(&self, root: RootId) -> bool {
+        let root_id = self.roots[root.0].root_id;
+        if root_id.is_empty() {
+            return root_id.is_active_empty();
+        }
+        self.nodes.root_node(root_id) == root_id && self.nodes.root(root_id) == root
+    }
+
     pub fn validate_structure(&self) -> Result<(), ForestError> {
         let roots = self.nodes.validate()?;
 
         for (rid, nid) in roots {
+            if rid.0 >= self.roots.len() {
+                return Err(ForestError::InvalidRootId(rid));
+            }
             if self.roots[rid.0].root_id != nid {
                 return Err(ForestError::WrongRootPointer(rid));
             }
@@ -495,6 +531,11 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
                 "{root_id}:{root_data_str}", // RootId needs Debug
             );
 
+            if start_node_id.is_empty() {
+                let _ = writeln!(output, "  empty");
+                continue;
+            }
+
             // 2. Print the connector line
             let _ = writeln!(output, "  │"); // Fixed indent for the connector
 
@@ -542,11 +583,14 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
         }
 
         let roota = self.roots[a.0].root_id;
-        if roota == self.nodes.root_node(roota) {
+        let roota_active = self.is_active_root(a);
+        let rootb = self.roots[b.0].root_id;
+        let rootb_active = self.is_active_root(b);
+
+        if roota_active && !roota.is_empty() {
             self.nodes.set_root(roota, b);
         }
-        let rootb = self.roots[b.0].root_id;
-        if rootb == self.nodes.root_node(rootb) {
+        if rootb_active && !rootb.is_empty() {
             self.nodes.set_root(rootb, a);
         }
 
@@ -606,7 +650,7 @@ impl<U, V> Forest<U, ParentPointerStore<V>> {
                 }
             }
             roots.push(RootData {
-                root_id: first.unwrap(),
+                root_id: first.unwrap_or(TreeNodeId::EMPTY),
                 data: d,
             });
         }
@@ -706,6 +750,7 @@ pub trait ForestNodeStore:
     }
     /// Adds a new root node.
     fn add_root(&mut self, data: Self::NodeData, root_id: RootId) -> TreeNodeId;
+    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId;
 
     /// Adds a new child node as the *last* child of the parent.
     fn add_child(&mut self, data: Self::NodeData, parent: TreeNodeId) -> TreeNodeId;
