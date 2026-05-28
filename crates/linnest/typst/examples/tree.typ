@@ -1,13 +1,90 @@
-#import "draw-raw-dot.typ": *
+#import "../src/lib.typ": draw, graph, layout, subgraph
+
 #set page(width: auto, height: auto)
-#show: draw_dot
+#set text(size: 5pt)
+
+#let tree-label(g) = {
+  let value = graph.info(g).global-statements.at("tree", default: none)
+  if value == none {
+    panic("tree.typ: expected a graph-level `tree` statement")
+  }
+  str(value).trim("\"")
+}
+
+#let half-edge-count(g) = {
+  let count = 0
+  for edge in graph.edges(g) {
+    for endpoint in (edge.source, edge.sink) {
+      if endpoint != none {
+        count = calc.max(count, endpoint.hedge + 1)
+      }
+    }
+  }
+  count
+}
+
+#let complement-subgraph(g, selected) = {
+  let selected-hedges = subgraph.hedges(selected)
+  subgraph.bits(
+    g,
+    range(half-edge-count(g)).map(i => not selected-hedges.contains(i)),
+  )
+}
+
+#let draw_tree_dot(doc) = {
+  show raw: it => if it.at("lang") == "dot" {
+    for g in graph.parse(it.text) {
+      let tree = subgraph.label(g, tree-label(g))
+      let rest = complement-subgraph(g, tree)
+      let g = layout(
+        g,
+        layout-algo: "dot",
+        // subgraph: tree,
+        layout-roots: (0,),
+        tree-dx: 34.0,
+        tree-dy: 34.0,
+        label-steps: 0,
+      )
+      let g = layout(
+        g,
+        layout-algo: "force",
+        subgraph: rest,
+        layout-nodes: "fixed",
+        epochs: 40,
+        steps: 50,
+        beta: 35,
+        k-spring: 5,
+        gamma-ee: 0.25,
+        gamma-ev: 0.06,
+        gamma-dangling: 1.5,
+        g-center: 0,
+        step: 0.45,
+        delta: 0.25,
+        length-scale: 0.35,
+        label-steps: 0,
+      )
+      draw(
+        g,
+        subgraph: tree,
+        unit: 1.0,
+        edge-stroke: 0.45pt,
+        node-min-radius: 0.1,
+        node-label-padding: 0.02,
+        subgraph-edge-style: (stroke: rgb("#72b7b2") + 2.5pt),
+      )
+    }
+  }
+  doc
+}
+
+#show: draw_tree_dot
 
 ```dot
 digraph {
   node	 [shape=circle,height=0.1,label=""];
   overlap = "scale";
   layout = "neato";
-  tree = 3UDua8U1UeS1uIlguU5mUxjPAMQX5nq1VXmmhhorLyBLdGBJYSqx8ebV2lOp
+  tree = "3UDua8U1UeS1uIlguU5mUxjPAMQX5nq1VXmmhhorLyBLdGBJYSqx8ebV2lOp"
   0	 [label = "∏"];
   1	 [label = "S:scalar(0)"];
   2	 [label = "∑"];

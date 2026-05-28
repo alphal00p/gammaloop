@@ -2504,10 +2504,7 @@ impl TypstGraph {
     }
 
     fn spanning_forest_of(&self, subgraph: &SuBitGraph) -> SuBitGraph {
-        self.all_spanning_forests_of(subgraph)
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| self.empty_subgraph())
+        self.cycle_basis_of(subgraph).1
     }
 
     fn direct_layout_positions(

@@ -167,39 +167,91 @@ impl<'a> ArchivedDotGraphView<'a> {
     }
 
     pub fn n_vertices(&self) -> usize {
-        self.graph.node_store.node_data.0.len()
+        #[cfg(feature = "nodestore-forest-child-vec")]
+        {
+            self.graph.node_store.roots.as_slice().len()
+        }
+        #[cfg(not(feature = "nodestore-forest-child-vec"))]
+        {
+            self.graph.node_store.node_data.0.len()
+        }
     }
 
-    pub fn vertex_data(&self) -> impl Iterator<Item = ArchivedDotVertexView<'_>> + '_ {
-        self.graph
-            .node_store
-            .node_data
-            .0
-            .as_slice()
-            .iter()
-            .enumerate()
-            .map(|(node, data)| ArchivedDotVertexView {
-                node: crate::half_edge::NodeIndex(node),
-                data,
-            })
+    pub fn vertex_data(&self) -> Box<dyn Iterator<Item = ArchivedDotVertexView<'_>> + '_> {
+        #[cfg(feature = "nodestore-forest-child-vec")]
+        {
+            Box::new(
+                self.graph
+                    .node_store
+                    .roots
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .map(|(node, root)| ArchivedDotVertexView {
+                        node: crate::half_edge::NodeIndex(node),
+                        data: &root.data,
+                    }),
+            )
+        }
+        #[cfg(not(feature = "nodestore-forest-child-vec"))]
+        {
+            Box::new(
+                self.graph
+                    .node_store
+                    .node_data
+                    .0
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .map(|(node, data)| ArchivedDotVertexView {
+                        node: crate::half_edge::NodeIndex(node),
+                        data,
+                    }),
+            )
+        }
     }
 
     pub fn vertex_data_of<'b>(
         &'b self,
         subgraph: &'b SuBitGraph,
-    ) -> impl Iterator<Item = ArchivedDotVertexView<'b>> + 'b {
-        self.graph
-            .node_store
-            .nodes
-            .0
-            .as_slice()
-            .iter()
-            .enumerate()
-            .filter(move |(_, neighbors)| neighbors.intersects_owned(subgraph))
-            .map(move |(node, _)| ArchivedDotVertexView {
-                node: crate::half_edge::NodeIndex(node),
-                data: &self.graph.node_store.node_data.0.as_slice()[node],
-            })
+    ) -> Box<dyn Iterator<Item = ArchivedDotVertexView<'b>> + 'b> {
+        #[cfg(feature = "nodestore-forest-child-vec")]
+        {
+            Box::new(
+                self.graph
+                    .node_store
+                    .roots
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .filter(move |(node, _)| {
+                        subgraph
+                            .included_iter()
+                            .any(|hedge| self.node_of_hedge(hedge).0 == *node)
+                    })
+                    .map(|(node, root)| ArchivedDotVertexView {
+                        node: crate::half_edge::NodeIndex(node),
+                        data: &root.data,
+                    }),
+            )
+        }
+        #[cfg(not(feature = "nodestore-forest-child-vec"))]
+        {
+            Box::new(
+                self.graph
+                    .node_store
+                    .nodes
+                    .0
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .filter(move |(_, neighbors)| neighbors.intersects_owned(subgraph))
+                    .map(move |(node, _)| ArchivedDotVertexView {
+                        node: crate::half_edge::NodeIndex(node),
+                        data: &self.graph.node_store.node_data.0.as_slice()[node],
+                    }),
+            )
+        }
     }
 
     pub fn edge_data(&self) -> impl Iterator<Item = ArchivedDotEdgeView<'_>> + '_ {
@@ -312,8 +364,32 @@ impl<'a> ArchivedDotGraphView<'a> {
     }
 
     fn node_of_hedge(&self, hedge: Hedge) -> crate::half_edge::NodeIndex {
-        let node = &self.graph.node_store.hedge_data.0.as_slice()[hedge.0];
-        crate::half_edge::NodeIndex(node.0.try_into().unwrap())
+        #[cfg(feature = "nodestore-forest-child-vec")]
+        {
+            crate::half_edge::NodeIndex(self.forest_root_id_of_hedge(hedge))
+        }
+        #[cfg(not(feature = "nodestore-forest-child-vec"))]
+        {
+            let node = &self.graph.node_store.hedge_data.0.as_slice()[hedge.0];
+            crate::half_edge::NodeIndex(node.0.try_into().unwrap())
+        }
+    }
+
+    #[cfg(feature = "nodestore-forest-child-vec")]
+    fn forest_root_id_of_hedge(&self, hedge: Hedge) -> usize {
+        let mut current = hedge.0;
+        loop {
+            let node = &self.graph.node_store.nodes.nodes.as_slice()[current];
+            match &node.parent_pointer.parent {
+                crate::tree::parent_pointer::ArchivedParentId::Root(root) => {
+                    return root.0.try_into().unwrap();
+                }
+                crate::tree::parent_pointer::ArchivedParentId::Node(parent)
+                | crate::tree::parent_pointer::ArchivedParentId::PointingRoot(parent) => {
+                    current = parent.0.try_into().unwrap();
+                }
+            }
+        }
     }
 
     fn orientation_of_hedge(&self, hedge: Hedge) -> &'a Archived<Orientation> {
