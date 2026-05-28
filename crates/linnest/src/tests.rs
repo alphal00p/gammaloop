@@ -1722,9 +1722,133 @@ fn test_dot_layout_layers_directed_graph() {
         .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
         .collect::<BTreeMap<_, _>>();
 
-    assert!(by_name["a"].y < by_name["b"].y);
+    assert!(by_name["a"].y > by_name["b"].y);
     assert_eq!(by_name["b"].y, by_name["c"].y);
-    assert!(by_name["b"].y < by_name["d"].y);
+    assert!(by_name["b"].y > by_name["d"].y);
+}
+
+#[test]
+fn test_tree_layout_centers_parents_over_child_subtrees() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph tidy {
+            r
+            a
+            b
+            c
+            d
+            e
+            r -> a
+            r -> b
+            a -> c
+            a -> d
+            d -> e
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let initial_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    let root_index = initial_nodes
+        .iter()
+        .position(|node| node.name.as_deref() == Some("r"))
+        .unwrap();
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("layout-roots".to_string(), root_index.to_string()),
+            ("tree-dx".to_string(), "1.0".to_string()),
+            ("tree-dy".to_string(), "1.0".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!((by_name["a"].x - 0.5 * (by_name["c"].x + by_name["d"].x)).abs() < 1e-9);
+    assert!((by_name["d"].x - by_name["e"].x).abs() < 1e-9);
+    assert!((by_name["r"].x - 0.5 * (by_name["a"].x + by_name["b"].x)).abs() < 1e-9);
+    assert_eq!(by_name["r"].y, 0.0);
+    assert!(by_name["r"].y > by_name["a"].y);
+    assert!(by_name["a"].y > by_name["e"].y);
+}
+
+#[test]
+fn test_dot_layout_reorders_rank_to_reduce_crossing() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph crossing {
+            a
+            b
+            d
+            c
+            a -> c
+            b -> d
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!(by_name["a"].x < by_name["b"].x);
+    assert!(by_name["c"].x < by_name["d"].x);
+    assert_eq!(by_name["a"].y, by_name["b"].y);
+    assert_eq!(by_name["c"].y, by_name["d"].y);
+}
+
+#[test]
+fn test_dot_layout_handles_cycles_deterministically() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph cycle {
+            a -> b
+            b -> c
+            c -> a
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let first = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let second = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let first_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&first).unwrap());
+    let second_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&second).unwrap());
+
+    for (left, right) in first_nodes.iter().zip(second_nodes.iter()) {
+        let left = left.pos.as_ref().unwrap();
+        let right = right.pos.as_ref().unwrap();
+        assert!(left.x.is_finite() && left.y.is_finite());
+        assert_point_close(left, right);
+    }
 }
 
 #[test]
@@ -1807,7 +1931,7 @@ fn test_dot_layout_uses_explicit_roots_as_first_rank() {
 
     assert!(by_name["c"].x < by_name["a"].x);
     assert_eq!(by_name["c"].y, by_name["a"].y);
-    assert!(by_name["c"].y < by_name["d"].y);
+    assert!(by_name["c"].y > by_name["d"].y);
 }
 
 #[test]
@@ -2006,6 +2130,59 @@ fn test_fixed_node_iterative_layout_keeps_nodes_and_complement_fixed() {
     assert!(
         (selected_edge.x - 2.0).abs() > 1e-6 || (selected_edge.y - 3.0).abs() > 1e-6,
         "selected edge control point should remain free when layout-nodes is fixed"
+    );
+}
+
+#[test]
+fn test_fixed_node_dot_layout_routes_only_selected_edges() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph fixed_dot {
+            a [pos="0,0"]
+            b [pos="4,0"]
+            c [pos="8,0"]
+            a -> b [pos="2,3"]
+            b -> c [pos="88,88"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let selected_label: String = decode_cbor(
+        &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, false, false])).unwrap(),
+    );
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("subgraph".to_string(), selected_label),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+
+    assert_point_close(
+        nodes[0].pos.as_ref().unwrap(),
+        &TypstPoint { x: 0.0, y: 0.0 },
+    );
+    assert_point_close(
+        nodes[1].pos.as_ref().unwrap(),
+        &TypstPoint { x: 4.0, y: 0.0 },
+    );
+    assert_point_close(
+        nodes[2].pos.as_ref().unwrap(),
+        &TypstPoint { x: 8.0, y: 0.0 },
+    );
+    assert_point_close(
+        edges[0].pos.as_ref().unwrap(),
+        &TypstPoint { x: 2.0, y: 0.0 },
+    );
+    assert_point_close(
+        edges[1].pos.as_ref().unwrap(),
+        &TypstPoint { x: 88.0, y: 88.0 },
     );
 }
 
