@@ -379,6 +379,8 @@ struct TestNodeStructuralPatch {
     index: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pos: Option<TestPlacementSpec>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    statements: BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -1245,6 +1247,40 @@ fn test_graph_structural_patch_updates_edge_position() {
 }
 
 #[test]
+fn test_graph_structural_statement_patch_does_not_pin_nodes() {
+    let parsed = parse_dot_graphs_bytes(br#"digraph { a -> b; b -> c }"#).unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let patched = graph_apply_structural_patches_bytes(
+        &graph,
+        &encode_cbor(&TestStructuralPatch {
+            nodes: vec![TestNodeStructuralPatch {
+                index: 0,
+                pos: None,
+                statements: BTreeMap::from([("layout-width".to_string(), "4".to_string())]),
+            }],
+            edges: Vec::new(),
+        }),
+    )
+    .unwrap();
+
+    let laid_out = layout_parsed_graph_bytes(
+        &patched,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+
+    assert!(
+        nodes[1].pos.as_ref().unwrap().y < -0.1,
+        "statement-only structural patches must not freeze layout positions: {nodes:?}"
+    );
+}
+
+#[test]
 fn test_graph_spec_axis_modes_pin_axes_independently() {
     #[derive(Serialize)]
     struct AxisModeGraphSpec {
@@ -1771,10 +1807,51 @@ fn test_tree_layout_centers_parents_over_child_subtrees() {
 
     assert!((by_name["a"].x - 0.5 * (by_name["c"].x + by_name["d"].x)).abs() < 1e-9);
     assert!((by_name["d"].x - by_name["e"].x).abs() < 1e-9);
-    assert!((by_name["r"].x - 0.5 * (by_name["a"].x + by_name["b"].x)).abs() < 1e-9);
+    assert!((by_name["r"].x - 0.5 * (by_name["c"].x + by_name["b"].x)).abs() < 1e-9);
     assert_eq!(by_name["r"].y, 0.0);
     assert!(by_name["r"].y > by_name["a"].y);
     assert!(by_name["a"].y > by_name["e"].y);
+}
+
+#[test]
+fn test_tree_layout_uses_node_size_hints() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph sizes {
+            r ["layout-height"=2]
+            a ["layout-width"=6, "layout-height"=4]
+            b ["layout-width"=2]
+            r -> a
+            r -> b
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let initial_nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    let root_index = initial_nodes
+        .iter()
+        .position(|node| node.name.as_deref() == Some("r"))
+        .unwrap();
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("layout-roots".to_string(), root_index.to_string()),
+            ("tree-dx".to_string(), "0.0".to_string()),
+            ("tree-dy".to_string(), "0.0".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!((by_name["b"].x - by_name["a"].x - 4.0).abs() < 1e-9);
+    assert!((by_name["r"].y - by_name["a"].y - 3.0).abs() < 1e-9);
+    assert_eq!(by_name["a"].y, by_name["b"].y);
 }
 
 #[test]
@@ -1810,6 +1887,41 @@ fn test_dot_layout_reorders_rank_to_reduce_crossing() {
     assert!(by_name["c"].x < by_name["d"].x);
     assert_eq!(by_name["a"].y, by_name["b"].y);
     assert_eq!(by_name["c"].y, by_name["d"].y);
+}
+
+#[test]
+fn test_dot_layout_uses_node_size_hints() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph sizes {
+            a ["layout-width"=6, "layout-height"=2]
+            b ["layout-width"=2]
+            c ["layout-height"=4]
+            a -> c
+            b -> c
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("tree-dx".to_string(), "0.0".to_string()),
+            ("tree-dy".to_string(), "0.0".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!((by_name["b"].x - by_name["a"].x - 4.0).abs() < 1e-9);
+    assert!((by_name["a"].y - by_name["c"].y - 3.0).abs() < 1e-9);
+    assert_eq!(by_name["a"].y, by_name["b"].y);
 }
 
 #[test]

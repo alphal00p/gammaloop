@@ -1,5 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
+use cgmath::{Point2, Rad, Vector2};
 use dot_parser::ast::CompassPt;
 use linnet::{
     half_edge::{
@@ -7,6 +8,7 @@ use linnet::{
         involution::{
             ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation,
         },
+        layout::spring::{Constraint, PointConstraint},
         nodestore::DefaultNodeStore,
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         NodeIndex,
@@ -18,7 +20,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{default_figment, TypstGraph};
+use crate::{default_figment, PinConstraint, TypstGraph};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -271,6 +273,8 @@ struct TypstNodeStructuralPatch {
     pub pos: Option<TypstPlacementSpec>,
     #[serde(default)]
     pub shift: Option<TypstPointSpec>,
+    #[serde(default)]
+    pub statements: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -287,6 +291,8 @@ struct TypstEdgeStructuralPatch {
     pub label_angle: Option<f64>,
     #[serde(default, deserialize_with = "deserialize_optional_f64")]
     pub bend: Option<f64>,
+    #[serde(default)]
+    pub statements: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -483,12 +489,205 @@ pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
 }
 
 pub fn graph_apply_structural_patches_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let graph = decode_typst_graph(arg)?;
-    let layout_config = graph.layout_config.clone();
-    let mut dot = graph.to_dot_graph();
+    let mut graph = decode_typst_graph(arg)?;
     let patch: TypstGraphStructuralPatch = decode_cbor(arg2, "graph structural patch")?;
-    apply_graph_structural_patch(&mut dot, patch)?;
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(dot, layout_config))
+    apply_typst_graph_structural_patch(&mut graph, patch)?;
+    encode_typst_graph(&graph)
+}
+
+fn apply_typst_graph_structural_patch(
+    graph: &mut TypstGraph,
+    patch: TypstGraphStructuralPatch,
+) -> Result<(), String> {
+    let mut node_positions = typst_node_positions(graph);
+
+    for node in patch.nodes {
+        if node.index >= graph.graph.n_nodes() {
+            return Err(format!(
+                "Node structural patch index {} is out of bounds for graph with {} nodes",
+                node.index,
+                graph.graph.n_nodes()
+            ));
+        }
+
+        let index = NodeIndex(node.index);
+        if let Some(pos) = node.pos {
+            let placement = pos.resolve(&node_positions, "node structural patch")?;
+            let statements = std::mem::take(&mut graph.graph[index].statements);
+            graph.graph[index].statements =
+                apply_placement_statements(statements, Some(&placement));
+            node_positions[node.index] = placement.point;
+        }
+        if let Some(shift) = node.shift {
+            graph.graph[index]
+                .statements
+                .insert("shift".to_string(), shift.to_statement()?);
+        }
+        graph.graph[index].statements.extend(node.statements);
+    }
+
+    for edge in patch.edges {
+        if edge.index >= graph.graph.n_edges() {
+            return Err(format!(
+                "Edge structural patch index {} is out of bounds for graph with {} edges",
+                edge.index,
+                graph.graph.n_edges()
+            ));
+        }
+
+        let index = EdgeIndex(edge.index);
+        if let Some(pos) = edge.pos {
+            let placement = pos.resolve(&node_positions, "edge structural patch")?;
+            let statements = std::mem::take(&mut graph.graph[index].statements);
+            graph.graph[index].statements =
+                apply_placement_statements(statements, Some(&placement));
+        }
+        if let Some(shift) = edge.shift {
+            graph.graph[index]
+                .statements
+                .insert("shift".to_string(), shift.to_statement()?);
+        }
+        if let Some(label_pos) = edge.label_pos {
+            graph.graph[index]
+                .statements
+                .insert("label-pos".to_string(), label_pos.to_statement()?);
+        }
+        if let Some(label_angle) = edge.label_angle {
+            graph.graph[index]
+                .statements
+                .insert("label-angle".to_string(), format!("{label_angle}rad"));
+        }
+        if let Some(bend) = edge.bend {
+            graph.graph[index]
+                .statements
+                .insert("bend".to_string(), format!("{bend}rad"));
+        }
+        graph.graph[index].statements.extend(edge.statements);
+    }
+
+    refresh_structural_state_from_statements(graph);
+    Ok(())
+}
+
+fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
+    let mut positions = vec![ResolvedPoint::default(); graph.graph.n_nodes()];
+    for (index, _, node) in graph.graph.iter_nodes() {
+        positions[index.0] = ResolvedPoint {
+            x: node.pos.x,
+            y: node.pos.y,
+            x_set: true,
+            y_set: true,
+        };
+    }
+    positions
+}
+
+fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
+    let mut node_group_map = HashMap::new();
+    for index in 0..graph.graph.n_nodes() {
+        let index = NodeIndex(index);
+        let node = &mut graph.graph[index];
+        let statements = node.statements.clone();
+        if let Some((x, y)) = statement_point(&statements, "shift") {
+            node.shift = Some(Vector2::new(x, y));
+        }
+        refresh_point_state(
+            index.0,
+            &statements,
+            &mut node.pos,
+            &mut node.constraints,
+            &mut node.start_x,
+            &mut node.start_y,
+            &mut node_group_map,
+        );
+    }
+
+    let mut edge_group_map = HashMap::new();
+    for index in 0..graph.graph.n_edges() {
+        let index = EdgeIndex(index);
+        let edge = &mut graph.graph[index];
+        let statements = edge.statements.clone();
+        if let Some((x, y)) = statement_point(&statements, "shift") {
+            edge.shift = Some(Vector2::new(x, y));
+        }
+        if let Some((x, y)) = statement_point(&statements, "label-pos") {
+            edge.label_pos = Some(Point2::new(x, y));
+        }
+        if let Some(angle) = statement_radians(&statements, "label-angle") {
+            edge.label_angle = Some(angle);
+        }
+        if let Some(bend) = statement_radians(&statements, "bend") {
+            edge.bend = Ok(Rad(bend));
+            edge.bend_explicit = true;
+        }
+        refresh_point_state(
+            index.0,
+            &statements,
+            &mut edge.pos,
+            &mut edge.constraints,
+            &mut edge.start_x,
+            &mut edge.start_y,
+            &mut edge_group_map,
+        );
+    }
+}
+
+fn refresh_point_state(
+    index: usize,
+    statements: &BTreeMap<String, String>,
+    point: &mut Point2<f64>,
+    constraints: &mut PointConstraint,
+    start_x: &mut bool,
+    start_y: &mut bool,
+    group_map: &mut HashMap<String, usize>,
+) {
+    let position = parse_statement_point(statements, "pos");
+    let pin = statement_map_value(statements, "pin").and_then(|value| PinConstraint::parse(value));
+
+    match pin {
+        Some(pin) => {
+            let (mut pin_point, pin_constraints) = pin.point_constraint(index, group_map);
+            if let Some(position) = position {
+                if matches!(pin_constraints.x, Constraint::Free) && position.x_set {
+                    pin_point.x = position.x;
+                }
+                if matches!(pin_constraints.y, Constraint::Free) && position.y_set {
+                    pin_point.y = position.y;
+                }
+                *start_x = position.x_set;
+                *start_y = position.y_set;
+            } else {
+                *start_x = false;
+                *start_y = false;
+            }
+            *point = pin_point;
+            *constraints = pin_constraints;
+        }
+        None => {
+            if let Some(position) = position {
+                *point = Point2::new(position.x, position.y);
+                *constraints = PointConstraint::default();
+                *start_x = position.x_set;
+                *start_y = position.y_set;
+            }
+        }
+    }
+}
+
+fn statement_point(statements: &BTreeMap<String, String>, key: &str) -> Option<(f64, f64)> {
+    statement_map_value(statements, key).and_then(|value| parse_point_text(value))
+}
+
+fn statement_radians(statements: &BTreeMap<String, String>, key: &str) -> Option<f64> {
+    statement_map_value(statements, key).and_then(|value| {
+        value
+            .trim()
+            .trim_matches('"')
+            .trim_end_matches("rad")
+            .trim()
+            .parse::<f64>()
+            .ok()
+    })
 }
 
 fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> Result<(), String> {
@@ -551,78 +750,6 @@ fn apply_graph_data_patch(graph: &mut DotGraph, patch: TypstGraphDataPatch) -> R
     }
 
     Ok(())
-}
-
-fn apply_graph_structural_patch(
-    graph: &mut DotGraph,
-    patch: TypstGraphStructuralPatch,
-) -> Result<(), String> {
-    let mut node_positions = graph_node_positions(graph);
-
-    for node in patch.nodes {
-        if node.index >= graph.graph.n_nodes() {
-            return Err(format!(
-                "Node structural patch index {} is out of bounds for graph with {} nodes",
-                node.index,
-                graph.graph.n_nodes()
-            ));
-        }
-
-        let index = NodeIndex(node.index);
-        if let Some(pos) = node.pos {
-            let placement = pos.resolve(&node_positions, "node structural patch")?;
-            let statements = std::mem::take(&mut graph.graph[index].statements);
-            graph.graph[index].statements =
-                apply_placement_statements(statements, Some(&placement));
-            node_positions[node.index] = placement.point;
-        }
-        if let Some(shift) = node.shift {
-            graph.graph[index]
-                .statements
-                .insert("shift".to_string(), shift.to_statement()?);
-        }
-    }
-
-    for edge in patch.edges {
-        if edge.index >= graph.graph.n_edges() {
-            return Err(format!(
-                "Edge structural patch index {} is out of bounds for graph with {} edges",
-                edge.index,
-                graph.graph.n_edges()
-            ));
-        }
-
-        let index = EdgeIndex(edge.index);
-        let mut statements = std::mem::take(&mut graph.graph[index].statements);
-        if let Some(pos) = edge.pos {
-            let placement = pos.resolve(&node_positions, "edge structural patch")?;
-            statements = apply_placement_statements(statements, Some(&placement));
-        }
-        if let Some(shift) = edge.shift {
-            statements.insert("shift".to_string(), shift.to_statement()?);
-        }
-        if let Some(label_pos) = edge.label_pos {
-            statements.insert("label-pos".to_string(), label_pos.to_statement()?);
-        }
-        if let Some(label_angle) = edge.label_angle {
-            statements.insert("label-angle".to_string(), format!("{label_angle}rad"));
-        }
-        if let Some(bend) = edge.bend {
-            statements.insert("bend".to_string(), format!("{bend}rad"));
-        }
-        graph.graph[index].local_statements = statements.clone();
-        graph.graph[index].statements = statements;
-    }
-
-    Ok(())
-}
-
-fn graph_node_positions(graph: &DotGraph) -> Vec<ResolvedPoint> {
-    let mut positions = vec![ResolvedPoint::default(); graph.graph.n_nodes()];
-    for (index, _, data) in graph.graph.iter_nodes() {
-        positions[index.0] = resolved_point_from_statements(&data.statements);
-    }
-    positions
 }
 
 fn endpoint_hedge(pair: HedgePair, side: Flow, edge_index: usize) -> Result<Hedge, String> {

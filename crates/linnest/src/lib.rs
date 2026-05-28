@@ -2228,6 +2228,8 @@ impl TypstGraph {
 
         let axes: EdgeVec<Vector2<f64>> =
             self.new_edgevec(|_e, idx, pair| self.edge_label_axis(idx, pair));
+        let label_radii = self.edge_label_radii();
+        let node_radii = self.node_layout_radii();
 
         let mut labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
             let edge_pos = self.graph[idx].pos;
@@ -2260,7 +2262,9 @@ impl TypstGraph {
                         let dist = d.magnitude();
                         if dist > 1e-9 {
                             let dir = d / dist;
-                            force += dir * (label_charge / (dist + eps).powi(2));
+                            let repel_dist =
+                                (dist - label_radii[idx] - node_radii[ni]).max(0.0) + eps;
+                            force += dir * (label_charge / repel_dist.powi(2));
                         }
                     }
 
@@ -2274,7 +2278,8 @@ impl TypstGraph {
                         let dist = d.magnitude();
                         if dist > 1e-9 {
                             let dir = d / dist;
-                            force += dir * (label_charge / (dist + eps).powi(2));
+                            let repel_dist = (dist - label_radii[idx]).max(0.0) + eps;
+                            force += dir * (label_charge / repel_dist.powi(2));
                         }
                     }
 
@@ -2287,7 +2292,9 @@ impl TypstGraph {
                         let dist = d.magnitude();
                         if dist > 1e-9 {
                             let dir = d / dist;
-                            force += dir * (label_charge / (dist + eps).powi(2));
+                            let repel_dist =
+                                (dist - label_radii[idx] - label_radii[ej]).max(0.0) + eps;
+                            force += dir * (label_charge / repel_dist.powi(2));
                         }
                     }
                 }
@@ -2343,6 +2350,22 @@ impl TypstGraph {
             let angle = self.edge_label_angle(idx);
             self.graph[idx].label_angle = Some(angle);
         }
+    }
+
+    fn node_layout_radii(&self) -> NodeVec<f64> {
+        let widths = self.node_layout_extents("layout-width");
+        let heights = self.node_layout_extents("layout-height");
+        self.new_nodevec(|node, _, _| 0.5 * widths[node].hypot(heights[node]))
+    }
+
+    fn edge_label_radii(&self) -> EdgeVec<f64> {
+        self.new_edgevec(|edge, _, _pair| {
+            let width =
+                Self::positive_statement_f64(&edge.statements, "label-width").unwrap_or(0.0);
+            let height =
+                Self::positive_statement_f64(&edge.statements, "label-height").unwrap_or(0.0);
+            0.5 * width.hypot(height)
+        })
     }
 
     fn edge_label_axis(&self, edge: EdgeIndex, pair: &HedgePair) -> Vector2<f64> {
@@ -2715,22 +2738,38 @@ impl TypstGraph {
             }
         }
 
+        let widths = self.node_layout_extents("layout-width");
+        let heights = self.node_layout_extents("layout-height");
+        let mut subtree_widths = self.new_nodevec(|_, _, _| 0.0);
+        for &root in &roots {
+            Self::compute_tidy_tree_width(root, &children, &widths, cfg.dx, &mut subtree_widths);
+        }
+
         let mut x_slots = self.new_nodevec(|_, _, _| None::<f64>);
         let mut cursor = 0.0;
         for (root_index, &root) in roots.iter().enumerate() {
-            Self::assign_tidy_tree_x(root, &children, &mut x_slots, &mut cursor);
-            if root_index + 1 < roots.len() {
-                cursor += 1.0;
+            if root_index > 0 {
+                cursor += cfg.dx;
             }
+            Self::assign_tidy_tree_x(
+                root,
+                &children,
+                &subtree_widths,
+                cfg.dx,
+                cursor,
+                &mut x_slots,
+            );
+            cursor += subtree_widths[root];
         }
 
+        let level_y = self.layer_y_positions(&included, &depth, &heights, cfg.dy);
         let mut targets = self.new_nodevec(|_, _, _| None);
         for (node, slot) in x_slots.iter() {
             if let Some(slot) = *slot {
-                targets[node] = Some(Point2::new(slot * cfg.dx, -(depth[node] as f64) * cfg.dy));
+                targets[node] = Some(Point2::new(slot, level_y[depth[node]]));
             }
         }
-        Self::center_targets_x(&mut targets);
+        Self::center_targets_x_by_extents(&mut targets, &widths);
         targets
     }
 
@@ -2855,39 +2894,69 @@ impl TypstGraph {
             }
         }
 
+        let widths = self.node_layout_extents("layout-width");
+        let heights = self.node_layout_extents("layout-height");
+        let rank_y = self.rank_y_positions(&ranks, &heights, cfg.dy);
         let mut targets = self.new_nodevec(|_, _, _| None);
         for (rank_index, nodes) in ranks.iter().enumerate() {
-            let width = nodes.len().saturating_sub(1) as f64 * cfg.dx;
-            for (position, &node) in nodes.iter().enumerate() {
-                targets[node] = Some(Point2::new(
-                    position as f64 * cfg.dx - 0.5 * width,
-                    -(rank_index as f64) * cfg.dy,
-                ));
+            for (&node, x) in nodes
+                .iter()
+                .zip(Self::rank_x_positions(nodes, &widths, cfg.dx))
+            {
+                targets[node] = Some(Point2::new(x, rank_y[rank_index]));
             }
         }
-        Self::center_targets_x(&mut targets);
+        Self::center_targets_x_by_extents(&mut targets, &widths);
         targets
+    }
+
+    fn compute_tidy_tree_width(
+        node: NodeIndex,
+        children: &NodeVec<Vec<NodeIndex>>,
+        widths: &NodeVec<f64>,
+        gap: f64,
+        subtree_widths: &mut NodeVec<f64>,
+    ) -> f64 {
+        let children_width = if children[node].is_empty() {
+            0.0
+        } else {
+            children[node]
+                .iter()
+                .map(|&child| {
+                    Self::compute_tidy_tree_width(child, children, widths, gap, subtree_widths)
+                })
+                .sum::<f64>()
+                + gap * children[node].len().saturating_sub(1) as f64
+        };
+        let width = widths[node].max(children_width);
+        subtree_widths[node] = width;
+        width
     }
 
     fn assign_tidy_tree_x(
         node: NodeIndex,
         children: &NodeVec<Vec<NodeIndex>>,
+        subtree_widths: &NodeVec<f64>,
+        gap: f64,
+        left: f64,
         x_slots: &mut NodeVec<Option<f64>>,
-        cursor: &mut f64,
     ) -> f64 {
-        let x = if children[node].is_empty() {
-            let x = *cursor;
-            *cursor += 1.0;
-            x
-        } else {
-            for &child in &children[node] {
-                Self::assign_tidy_tree_x(child, children, x_slots, cursor);
-            }
-            let first = x_slots[children[node][0]].unwrap();
-            let last = x_slots[*children[node].last().unwrap()].unwrap();
-            0.5 * (first + last)
-        };
+        let subtree_width = subtree_widths[node];
+        let x = left + 0.5 * subtree_width;
         x_slots[node] = Some(x);
+
+        if !children[node].is_empty() {
+            let children_width = children[node]
+                .iter()
+                .map(|&child| subtree_widths[child])
+                .sum::<f64>()
+                + gap * children[node].len().saturating_sub(1) as f64;
+            let mut child_left = left + 0.5 * (subtree_width - children_width).max(0.0);
+            for &child in &children[node] {
+                Self::assign_tidy_tree_x(child, children, subtree_widths, gap, child_left, x_slots);
+                child_left += subtree_widths[child] + gap;
+            }
+        }
         x
     }
 
@@ -2951,13 +3020,96 @@ impl TypstGraph {
         *nodes = keyed.into_iter().map(|(_, _, node)| node).collect();
     }
 
-    fn center_targets_x(targets: &mut NodeVec<Option<Point2<f64>>>) {
+    fn rank_x_positions(nodes: &[NodeIndex], widths: &NodeVec<f64>, gap: f64) -> Vec<f64> {
+        let mut positions = Vec::with_capacity(nodes.len());
+        let mut x = 0.0;
+        for (index, &node) in nodes.iter().enumerate() {
+            if index > 0 {
+                let previous = nodes[index - 1];
+                x += 0.5 * widths[previous] + gap + 0.5 * widths[node];
+            }
+            positions.push(x);
+        }
+
+        if let (Some(&first), Some(&last)) = (nodes.first(), nodes.last()) {
+            let min_x = positions.first().copied().unwrap_or(0.0) - 0.5 * widths[first];
+            let max_x = positions.last().copied().unwrap_or(0.0) + 0.5 * widths[last];
+            let center = 0.5 * (min_x + max_x);
+            for x in &mut positions {
+                *x -= center;
+            }
+        }
+        positions
+    }
+
+    fn layer_y_positions(
+        &self,
+        included: &NodeVec<bool>,
+        ranks: &NodeVec<usize>,
+        heights: &NodeVec<f64>,
+        gap: f64,
+    ) -> Vec<f64> {
+        let max_rank = ranks
+            .iter()
+            .filter_map(|(node, rank)| included[node].then_some(*rank))
+            .max()
+            .unwrap_or(0);
+        let mut rank_heights: Vec<f64> = vec![0.0; max_rank + 1];
+        for (node, &is_included) in included.iter() {
+            if is_included {
+                rank_heights[ranks[node]] = rank_heights[ranks[node]].max(heights[node]);
+            }
+        }
+        Self::layer_positions_from_heights(&rank_heights, gap)
+    }
+
+    fn rank_y_positions(
+        &self,
+        ranks: &[Vec<NodeIndex>],
+        heights: &NodeVec<f64>,
+        gap: f64,
+    ) -> Vec<f64> {
+        let rank_heights = ranks
+            .iter()
+            .map(|nodes| nodes.iter().map(|&node| heights[node]).fold(0.0, f64::max))
+            .collect::<Vec<_>>();
+        Self::layer_positions_from_heights(&rank_heights, gap)
+    }
+
+    fn layer_positions_from_heights(heights: &[f64], gap: f64) -> Vec<f64> {
+        let mut positions = vec![0.0; heights.len()];
+        for index in 1..heights.len() {
+            positions[index] =
+                positions[index - 1] - (0.5 * heights[index - 1] + gap + 0.5 * heights[index]);
+        }
+        positions
+    }
+
+    fn node_layout_extents(&self, key: &str) -> NodeVec<f64> {
+        self.new_nodevec(|_, _, node| {
+            Self::positive_statement_f64(&node.statements, key).unwrap_or(0.0)
+        })
+    }
+
+    fn positive_statement_f64(statements: &BTreeMap<String, String>, key: &str) -> Option<f64> {
+        let value = dot_statement_value(statements, key)?
+            .trim()
+            .trim_matches('"')
+            .parse::<f64>()
+            .ok()?;
+        value.is_finite().then_some(value.max(0.0))
+    }
+
+    fn center_targets_x_by_extents(
+        targets: &mut NodeVec<Option<Point2<f64>>>,
+        widths: &NodeVec<f64>,
+    ) {
         let mut min_x = f64::INFINITY;
         let mut max_x = f64::NEG_INFINITY;
-        for (_, target) in targets.iter() {
+        for (node, target) in targets.iter() {
             if let Some(target) = target {
-                min_x = min_x.min(target.x);
-                max_x = max_x.max(target.x);
+                min_x = min_x.min(target.x - 0.5 * widths[node]);
+                max_x = max_x.max(target.x + 0.5 * widths[node]);
             }
         }
         if !min_x.is_finite() || !max_x.is_finite() {
@@ -3163,8 +3315,7 @@ impl TypstGraph {
             let anchor = pos_v[NodeIndex(*node)];
             for (position, &eid) in edges.iter().enumerate() {
                 let slot = Self::centered_slot(position, count);
-                targets[eid] =
-                    Some(anchor + Vector2::new(slot * cfg.dx * 0.35, cfg.dy * 0.5));
+                targets[eid] = Some(anchor + Vector2::new(slot * cfg.dx * 0.35, cfg.dy * 0.5));
             }
         }
 
