@@ -7,7 +7,7 @@ use std::{
 use gammalooprs::{
     initialisation::test_initialise,
     numerator::{ParsingNet, aind::Aind},
-    utils::{F, FUN_LIB, TENSORLIB},
+    utils::{F, FUN_LIB, TENSORLIB, symbolica_ext::LogPrint},
 };
 use idenso::shorthands::{
     metric::MetricSimplifier,
@@ -22,8 +22,9 @@ use spenso::{
     network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
     network::library::symbolic::{ETS, ExplicitKey},
     network::{
-        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith, Network,
-        PAIR_SCORE_ATOM_AWARE, ScalarAliases, Sequential, SmallestDegree, Steps,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, HornerAtomComponents, MinResultRank,
+        MinResultRankWith, Network, PAIR_SCORE_ATOM_AWARE, ScalarAliases, Sequential,
+        SmallestDegree, Steps,
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
         store::{NetworkStore, NetworkStoreAccess},
     },
@@ -998,6 +999,47 @@ fn execute_actual_net_min_result_rank_parallel(label: &str, mut net: ParsingNet)
     result
 }
 
+fn execute_actual_net_min_result_rank_parallel_horner<const MIN_BYTE_SIZE: usize>(
+    label: &str,
+    mut net: ParsingNet,
+) -> Atom {
+    let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    net.execute_parallel::<MinResultRank<HornerAtomComponents<MIN_BYTE_SIZE>>, _, _, _>(
+        &*lib, &*FUN_LIB,
+    )
+    .unwrap_or_else(|error| {
+        panic!("{label} parallel min-result-rank component-Horner actual execution failed: {error}")
+    });
+    report(
+        &format!("{label} parallel_min_result_rank_component_horner_actual_execute"),
+        start,
+    );
+    report_actual_net_stats(
+        &format!("{label} parallel_min_result_rank_component_horner_after_execute"),
+        &net,
+    );
+    spenso::network::profile::report(&format!(
+        "{label} after_parallel_min_result_rank_component_horner_actual_execute"
+    ));
+
+    let result = net.result_scalar().unwrap_or_else(|error| {
+        panic!("{label} parallel min-result-rank component-Horner scalar result failed: {error}")
+    });
+    let result = match result {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(value) => value.into_owned(),
+    };
+    eprintln!(
+        "{label} parallel_min_result_rank_component_horner_actual_result stats: terms={} bytes={}",
+        result.nterms(),
+        result.as_view().get_byte_size()
+    );
+    result
+}
+
 fn execute_actual_net_min_result_rank_parallel_tensor(
     label: &str,
     mut net: ParsingNet,
@@ -1038,6 +1080,48 @@ fn execute_actual_net_min_result_rank_parallel_tensor(
     tensor
 }
 
+fn execute_actual_net_min_result_rank_parallel_tensor_horner<const MIN_BYTE_SIZE: usize>(
+    label: &str,
+    mut net: ParsingNet,
+) -> ActualTensor {
+    let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    net.execute_parallel::<MinResultRank<HornerAtomComponents<MIN_BYTE_SIZE>>, _, _, _>(
+        &*lib, &*FUN_LIB,
+    )
+    .unwrap_or_else(|error| {
+        panic!("{label} parallel min-result-rank tensor component-Horner execution failed: {error}")
+    });
+    report(
+        &format!("{label} parallel_min_result_rank_tensor_component_horner_execute"),
+        start,
+    );
+    report_actual_net_stats(
+        &format!("{label} parallel_min_result_rank_tensor_component_horner_after_execute"),
+        &net,
+    );
+    spenso::network::profile::report(&format!(
+        "{label} after_parallel_min_result_rank_tensor_component_horner_execute"
+    ));
+
+    let result = net.result_tensor(&*lib).unwrap_or_else(|error| {
+        panic!("{label} parallel min-result-rank component-Horner tensor result failed: {error}")
+    });
+    let tensor = match result {
+        ExecutionResult::Val(value) => value.into_owned(),
+        ExecutionResult::One => panic!("{label} produced tensor result One"),
+        ExecutionResult::Zero => panic!("{label} produced tensor result Zero"),
+    };
+    eprintln!(
+        "{label} component_horner_tensor_result stats: order={} logical_entries={} flat_entries={}",
+        tensor.structure().order(),
+        tensor.structure().size().unwrap_or(0),
+        tensor.iter_flat().count()
+    );
+    tensor
+}
+
 fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
     let lib = TENSORLIB.read().unwrap();
     for step in 0..steps {
@@ -1053,12 +1137,6 @@ fn execute_actual_net_steps(label: &str, mut net: ParsingNet, steps: usize) {
 
 fn parse_actual_net(label: &str, expr: &Atom) -> ParsingNet {
     parse_actual_net_with_settings(label, expr, actual_parse_settings())
-}
-
-fn parse_actual_net_with_boundary_factor(label: &str, expr: &Atom) -> ParsingNet {
-    let mut settings = actual_parse_settings();
-    settings.factor_add_boundaries = true;
-    parse_actual_net_with_settings(label, expr, settings)
 }
 
 fn actual_parse_settings() -> ParseSettings {
@@ -1278,6 +1356,18 @@ fn execute_actual_net_min_result_rank_parallel_aliased_summary(
     )
 }
 
+fn execute_actual_net_min_result_rank_parallel_horner_aliased_summary<
+    const HORNER_MIN_BYTE_SIZE: usize,
+>(
+    label: &str,
+    mut net: ParsingNet,
+) -> std::time::Duration {
+    execute_actual_net_parallel_horner_aliased_summary::<
+        { spenso::network::PAIR_SCORE_SPARSE_ATOM_AWARE },
+        HORNER_MIN_BYTE_SIZE,
+    >(label, "sparse-aware-component-horner", &mut net)
+}
+
 fn execute_actual_net_parallel_aliased_summary<const SCORE_ORDER: u128>(
     label: &str,
     order_label: &str,
@@ -1293,6 +1383,51 @@ fn execute_actual_net_parallel_aliased_summary<const SCORE_ORDER: u128>(
         _,
         _,
     >(&*lib, &*FUN_LIB)
+        .unwrap_or_else(|error| {
+            panic!("{label} parallel {order_label} aliased execution failed: {error}")
+        });
+    let elapsed = start.elapsed();
+    report_actual_net_stats(&format!("{label} aliased_after_execute"), &net);
+    spenso::network::profile::report(&format!("{label} after_aliased_execute"));
+
+    let result_start = Instant::now();
+    let result = net
+        .result_scalar()
+        .unwrap_or_else(|error| panic!("{label} aliased scalar result failed: {error}"));
+    let root = match result {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(value) => value.into_owned(),
+    };
+    let aliased = net.aliased_atom(&aliases, root);
+    let result_elapsed = result_start.elapsed();
+    eprintln!(
+        "{label} aliased_summary order={order_label} kind=scalar execute={elapsed:.3?} result={result_elapsed:.3?} aliases={} root_terms={} root_bytes={}",
+        aliased.get_aliases().len(),
+        aliased.get_root().nterms(),
+        aliased.get_root().as_view().get_byte_size()
+    );
+    elapsed
+}
+
+fn execute_actual_net_parallel_horner_aliased_summary<
+    const SCORE_ORDER: u128,
+    const HORNER_MIN_BYTE_SIZE: usize,
+>(
+    label: &str,
+    order_label: &str,
+    net: &mut ParsingNet,
+) -> std::time::Duration {
+    let aliases = alias_large_scalar_refs(label, net);
+    let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    net.execute_parallel::<MinResultRankWith<
+        { SCORE_ORDER },
+        { DEFAULT_EXACT_JOIN_LIMIT },
+        (),
+        HornerAtomComponents<HORNER_MIN_BYTE_SIZE>,
+    >, _, _, _>(&*lib, &*FUN_LIB)
         .unwrap_or_else(|error| {
             panic!("{label} parallel {order_label} aliased execution failed: {error}")
         });
@@ -1457,16 +1592,18 @@ fn symbolica_expression_input_actual_network_sparse_alias_summary() {
 }
 
 #[test]
-#[ignore = "diagnostic timing for boundary-factored symbolica_expression.txt with scalar aliases and sparse-aware order"]
-fn symbolica_expression_input_boundary_factor_sparse_alias_summary() {
+#[ignore = "diagnostic timing for symbolica_expression.txt with scalar aliases, sparse-aware order, and component Hornering"]
+fn symbolica_expression_input_component_horner_sparse_alias_summary() {
     test_initialise().expect("GammaLoop initialization should succeed");
     let expr = parse_root_input("symbolica_expression.txt");
-    let net = parse_actual_net_with_boundary_factor(
-        "symbolica_expression_boundary_factor_sparse_alias",
-        &expr,
+    let net = parse_actual_net("symbolica_expression_component_horner_sparse_alias", &expr);
+    report_product_interleaving(
+        "symbolica_expression_component_horner_sparse_alias",
+        &net,
+        8,
     );
-    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
-        "symbolica_expression_boundary_factor_sparse_alias",
+    let _ = execute_actual_net_min_result_rank_parallel_horner_aliased_summary::<4096>(
+        "symbolica_expression_component_horner_sparse_alias",
         net,
     );
 }
@@ -1650,16 +1787,25 @@ fn spenso_eval_input_0_sum46_individual_term_execute() {
 }
 
 #[test]
-#[ignore = "diagnostic timing for boundary-factored spenso_eval_input_0.txt parallel MinResultRank"]
-fn spenso_eval_input_0_boundary_factor_actual_network_parallel_min_result_rank_execute() {
+#[ignore = "diagnostic timing for spenso_eval_input_0.txt with scalar aliases, sparse-aware order, and component Hornering"]
+fn spenso_eval_input_0_component_horner_sparse_alias_summary() {
     test_initialise().expect("GammaLoop initialization should succeed");
     let expr = parse_root_input("spenso_eval_input_0.txt");
-    let net = parse_actual_net_with_boundary_factor(
-        "spenso_eval_input_0_boundary_factor_parallel_min_result_rank",
-        &expr,
+    let net = parse_actual_net("spenso_eval_input_0_component_horner_sparse_alias", &expr);
+    let _ = execute_actual_net_min_result_rank_parallel_horner_aliased_summary::<4096>(
+        "spenso_eval_input_0_component_horner_sparse_alias",
+        net,
     );
-    let _ = execute_actual_net_min_result_rank_parallel(
-        "spenso_eval_input_0_boundary_factor_parallel_min_result_rank",
+}
+
+#[test]
+#[ignore = "diagnostic timing for spenso_eval_input_0.txt with scalar aliases and sparse-aware order"]
+fn spenso_eval_input_0_sparse_alias_summary() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let net = parse_actual_net("spenso_eval_input_0_sparse_alias", &expr);
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "spenso_eval_input_0_sparse_alias",
         net,
     );
 }
@@ -1686,25 +1832,6 @@ fn spenso_eval_input_0_sparse_alias_graph_boundary_candidate_diagnostics() {
     report_actual_net_leaf_stats("spenso_eval_input_0_sparse_alias", &net);
     log_product_boundary_candidates(
         "spenso_eval_input_0_sparse_alias_boundary_candidates",
-        &net,
-        24,
-    );
-}
-
-#[test]
-#[ignore = "diagnostic boundary-factored parse and boundary selection for spenso_eval_input_0.txt with scalar aliases"]
-fn spenso_eval_input_0_boundary_factor_sparse_alias_graph_boundary_candidate_diagnostics() {
-    test_initialise().expect("GammaLoop initialization should succeed");
-    let expr = parse_root_input("spenso_eval_input_0.txt");
-    let mut net = parse_actual_net_with_boundary_factor(
-        "spenso_eval_input_0_boundary_factor_sparse_alias_boundary_candidates",
-        &expr,
-    );
-    let _aliases =
-        alias_large_scalar_refs("spenso_eval_input_0_boundary_factor_sparse_alias", &mut net);
-    report_actual_net_leaf_stats("spenso_eval_input_0_boundary_factor_sparse_alias", &net);
-    log_product_boundary_candidates(
-        "spenso_eval_input_0_boundary_factor_sparse_alias_boundary_candidates",
         &net,
         24,
     );
@@ -1813,7 +1940,7 @@ fn gamma_ladder_mwe_order_results_match_after_expand() {
 }
 
 #[test]
-#[ignore = "diagnostic MWE for a late tensor-valued sum that should be factored before execution"]
+#[ignore = "diagnostic MWE comparing explicit user Hornering with component-level Hornering"]
 fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
     test_initialise().expect("GammaLoop initialization should succeed");
     let expanded = late_tensor_sum_mwe_expr(12, 12);
@@ -1824,9 +1951,9 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
         "late_tensor_sum_mwe_expanded",
         parse_actual_net("late_tensor_sum_mwe_expanded", &expanded),
     );
-    let boundary_factor_result = execute_actual_net_min_result_rank_parallel(
-        "late_tensor_sum_mwe_boundary_factor",
-        parse_actual_net_with_boundary_factor("late_tensor_sum_mwe_boundary_factor", &expanded),
+    let component_horner_result = execute_actual_net_min_result_rank_parallel_horner::<1>(
+        "late_tensor_sum_mwe_component_horner",
+        parse_actual_net("late_tensor_sum_mwe_component_horner", &expanded),
     );
     let factored_result = execute_actual_net_min_result_rank_parallel(
         "late_tensor_sum_mwe_factored",
@@ -1847,15 +1974,16 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
     );
 
     let start = Instant::now();
-    let expanded_boundary_factor_diff = (expanded_result.clone() - boundary_factor_result).expand();
+    let expanded_component_horner_diff =
+        (expanded_result.clone() - component_horner_result).expand();
     report(
-        "late_tensor_sum_mwe_expanded_boundary_factor_diff_expand",
+        "late_tensor_sum_mwe_expanded_component_horner_diff_expand",
         start,
     );
     assert!(
-        expanded_boundary_factor_diff.is_zero(),
-        "expanded and boundary-factored MWE forms produced different scalar values: {}",
-        expanded_boundary_factor_diff
+        expanded_component_horner_diff.is_zero(),
+        "expanded and component-Hornered MWE forms produced different scalar values: {}",
+        expanded_component_horner_diff
     );
 
     let start = Instant::now();
@@ -1869,7 +1997,7 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
 }
 
 #[test]
-#[ignore = "diagnostic MWE for late tensor-valued sum with scalar aliases and sparse-aware order"]
+#[ignore = "diagnostic MWE for late tensor-valued sum with scalar aliases, sparse-aware order, and component Hornering"]
 fn late_tensor_sum_mwe_expanded_factored_and_hornered_aliased_summary() {
     test_initialise().expect("GammaLoop initialization should succeed");
     let expanded = late_tensor_sum_mwe_expr(12, 12);
@@ -1882,13 +2010,11 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered_aliased_summary() {
         expanded_net,
     );
 
-    let boundary_factor_net = parse_actual_net_with_boundary_factor(
-        "late_tensor_sum_mwe_boundary_factor_alias",
-        &expanded,
-    );
-    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
-        "late_tensor_sum_mwe_boundary_factor_alias",
-        boundary_factor_net,
+    let component_horner_net =
+        parse_actual_net("late_tensor_sum_mwe_component_horner_alias", &expanded);
+    let _ = execute_actual_net_min_result_rank_parallel_horner_aliased_summary::<1>(
+        "late_tensor_sum_mwe_component_horner_alias",
+        component_horner_net,
     );
 
     let factored_net = parse_actual_net("late_tensor_sum_mwe_factored_alias", &factored);
@@ -1902,6 +2028,83 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered_aliased_summary() {
         "late_tensor_sum_mwe_hornered_alias",
         hornered_net,
     );
+}
+
+fn tensor_atom_entries(tensor: &ActualTensor) -> Vec<(String, Atom)> {
+    let mut entries = tensor
+        .iter_flat()
+        .filter_map(|(index, value)| match value {
+            AtomViewOrConcrete::Atom(atom) => Some((format!("{index:?}"), atom.to_owned())),
+            AtomViewOrConcrete::Concrete(_) => None,
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    entries
+}
+
+fn report_tensor_atom_entry_stats(label: &str, entries: &[(String, Atom)]) {
+    let max_terms = entries
+        .iter()
+        .map(|(_, atom)| atom.nterms())
+        .max()
+        .unwrap_or(0);
+    let max_bytes = entries
+        .iter()
+        .map(|(_, atom)| atom.as_view().get_byte_size())
+        .max()
+        .unwrap_or(0);
+    let total_bytes = entries
+        .iter()
+        .map(|(_, atom)| atom.as_view().get_byte_size())
+        .sum::<usize>();
+    let sample = entries
+        .iter()
+        .find(|(_, atom)| !atom.as_view().is_zero())
+        .map(|(_, atom)| atom.log_print(Some(120)))
+        .unwrap_or_else(|| "0".to_string());
+    eprintln!(
+        "{label} atom_entry_stats entries={} max_terms={} max_bytes={} total_bytes={} sample={sample}",
+        entries.len(),
+        max_terms,
+        max_bytes,
+        total_bytes,
+    );
+}
+
+#[test]
+#[ignore = "small validated example for component-level Hornering"]
+fn component_horner_small_examples() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+
+    let expr = parse_inline_expression(
+        "((x1*Q(1,spenso::mink(4,mu)))+(x2*Q(3,spenso::mink(4,mu))))
+        *((Q(2,spenso::mink(4,mu)))+(Q(4,spenso::mink(4,mu))))
+        *Q(5,spenso::mink(4,rho))",
+    );
+    let raw = execute_actual_net_min_result_rank_parallel_tensor(
+        "component_horner_small_raw",
+        parse_actual_net("component_horner_small_raw", &expr),
+    );
+    let hornered = execute_actual_net_min_result_rank_parallel_tensor_horner::<1>(
+        "component_horner_small_hornered",
+        parse_actual_net("component_horner_small_hornered", &expr),
+    );
+
+    let raw_entries = tensor_atom_entries(&raw);
+    let hornered_entries = tensor_atom_entries(&hornered);
+    report_tensor_atom_entry_stats("component_horner_small_raw", &raw_entries);
+    report_tensor_atom_entry_stats("component_horner_small_hornered", &hornered_entries);
+    assert_eq!(raw_entries.len(), hornered_entries.len());
+    for ((raw_index, raw_atom), (hornered_index, hornered_atom)) in
+        raw_entries.iter().zip(&hornered_entries)
+    {
+        assert_eq!(raw_index, hornered_index);
+        let diff = (raw_atom.clone() - hornered_atom.clone()).expand();
+        assert!(
+            diff.is_zero(),
+            "component Hornering changed tensor entry {raw_index}: {diff}"
+        );
+    }
 }
 
 #[test]

@@ -213,8 +213,10 @@ atom. Avoiding forced intermediate materialization matters much more than the
 
 ### Horner Contract Entries
 
-Change: `topxkqvv`, controlled by
-`SPENSO_NETWORK_HORNER_CONTRACT_ENTRIES`.
+Earlier experiment: `topxkqvv`, originally controlled by the now-removed
+`SPENSO_NETWORK_HORNER_CONTRACT_ENTRIES` environment variable. The current
+version selects the same idea explicitly through the contraction strategy type,
+for example `MinResultRank<HornerAtomComponents<4096>>`.
 
 This applies `collect_horner` to atom entries produced by tensor contractions.
 It does not affect parsing or network shape, only scalar payloads after

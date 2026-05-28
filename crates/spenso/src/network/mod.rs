@@ -116,6 +116,29 @@ pub trait FastTensorSum: Sized {
     }
 }
 
+pub trait AtomComponentOptimizer {
+    const HORNER_MIN_BYTES: Option<usize> = None;
+}
+
+impl AtomComponentOptimizer for () {}
+
+pub trait AtomComponentOptimizable<CStrat>: Sized {
+    fn optimize_atom_components(self) -> Self;
+}
+
+impl<T> AtomComponentOptimizable<()> for T {
+    fn optimize_atom_components(self) -> Self {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HornerAtomComponents<const MIN_BYTE_SIZE: usize = 4096>;
+
+impl<const MIN_BYTE_SIZE: usize> AtomComponentOptimizer for HornerAtomComponents<MIN_BYTE_SIZE> {
+    const HORNER_MIN_BYTES: Option<usize> = Some(MIN_BYTE_SIZE);
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TensorContractionProfile {
     pub entries: usize,

@@ -20,8 +20,8 @@ use crate::{
 };
 
 use super::{
-    FastTensorSum, FastTensorSumContract, FastTensorSumContractible, Ref, TensorCommonFactor,
-    TensorContractionProfile, TensorNetworkError,
+    AtomComponentOptimizable, FastTensorSum, FastTensorSumContract, FastTensorSumContractible, Ref,
+    TensorCommonFactor, TensorContractionProfile, TensorNetworkError,
     graph::NetworkGraph,
     library::{Library, LibraryTensor},
     profile,
@@ -236,11 +236,11 @@ impl ResultRankPairScore {
     }
 }
 
-pub struct SmallestDegree<CStrat = ()> {
-    phantom: std::marker::PhantomData<CStrat>,
+pub struct SmallestDegree<CStrat = (), COpt = ()> {
+    phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
-impl<CStrat> Default for SmallestDegree<CStrat> {
+impl<CStrat, COpt> Default for SmallestDegree<CStrat, COpt> {
     fn default() -> Self {
         Self {
             phantom: std::marker::PhantomData,
@@ -248,23 +248,24 @@ impl<CStrat> Default for SmallestDegree<CStrat> {
     }
 }
 
-pub struct SmallestDegreeIter<const N: usize, CStrat = ()> {
-    phantom: std::marker::PhantomData<CStrat>,
+pub struct SmallestDegreeIter<const N: usize, CStrat = (), COpt = ()> {
+    phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
 pub struct MinResultRankWith<
     const SCORE_ORDER: u128,
     const EXACT_JOIN_LIMIT: usize = DEFAULT_EXACT_JOIN_LIMIT,
     CStrat = (),
+    COpt = (),
 > {
-    phantom: std::marker::PhantomData<CStrat>,
+    phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
-pub type MinResultRank<CStrat = ()> =
-    MinResultRankWith<PAIR_SCORE_SPARSE_ATOM_AWARE, DEFAULT_EXACT_JOIN_LIMIT, CStrat>;
+pub type MinResultRank<COpt = ()> =
+    MinResultRankWith<PAIR_SCORE_SPARSE_ATOM_AWARE, DEFAULT_EXACT_JOIN_LIMIT, (), COpt>;
 
-impl<const SCORE_ORDER: u128, const EXACT_JOIN_LIMIT: usize, CStrat> Default
-    for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat>
+impl<const SCORE_ORDER: u128, const EXACT_JOIN_LIMIT: usize, CStrat, COpt> Default
+    for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat, COpt>
 {
     fn default() -> Self {
         Self {
@@ -285,12 +286,12 @@ impl<CStrat> Default for ContractScalars<CStrat> {
     }
 }
 
-pub struct SingleSmallestDegree<const D: bool, CStrat = ()> {
-    phantom: std::marker::PhantomData<CStrat>,
+pub struct SingleSmallestDegree<const D: bool, CStrat = (), COpt = ()> {
+    phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
-pub struct SingleLargestDegree<const D: bool, CStrat = ()> {
-    phantom: std::marker::PhantomData<CStrat>,
+pub struct SingleLargestDegree<const D: bool, CStrat = (), COpt = ()> {
+    phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
 pub enum ContractionMode {
@@ -463,6 +464,49 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Store::Tensor: HasStructure,
     {
         self.tensor_structure(executor, operand)
+    }
+
+    fn tensor_operand_profile<Sc, Store>(
+        &self,
+        executor: &Store,
+        operand: usize,
+    ) -> Option<(Option<usize>, TensorContractionProfile)>
+    where
+        Store: NetworkStoreAccess,
+        Store::Tensor: FastTensorSumContractible<Sc>,
+    {
+        let terms = self.tensor_terms(operand)?;
+        let single_tensor = (terms.len() == 1).then_some(terms[0].tensor);
+        let mut profile = TensorContractionProfile {
+            entries: 0,
+            total_terms: 0,
+            max_terms: 0,
+            total_bytes: 0,
+            max_bytes: 0,
+            common_factor_count: 0,
+            simple_tensor: true,
+        };
+
+        for term in terms {
+            let term_profile = executor.tensor(term.tensor).contraction_profile();
+            profile.entries = profile.entries.saturating_add(term_profile.entries);
+            profile.total_terms = profile.total_terms.saturating_add(term_profile.total_terms);
+            profile.max_terms = profile.max_terms.max(term_profile.max_terms);
+            profile.total_bytes = profile.total_bytes.saturating_add(term_profile.total_bytes);
+            profile.max_bytes = profile.max_bytes.max(term_profile.max_bytes);
+            profile.common_factor_count = profile
+                .common_factor_count
+                .saturating_add(term_profile.common_factor_count);
+            profile.simple_tensor &= term_profile.simple_tensor && term.scalar.is_none();
+        }
+
+        profile.entries = profile.entries.max(1);
+        profile.total_terms = profile.total_terms.max(1);
+        profile.max_terms = profile.max_terms.max(1);
+        profile.total_bytes = profile.total_bytes.max(1);
+        profile.max_bytes = profile.max_bytes.max(1);
+
+        Some((single_tensor, profile))
     }
 
     #[allow(clippy::result_large_err)]
@@ -1049,7 +1093,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         TensorTerm { tensor, scalar }
     }
 
-    fn try_fast_tensor_sum_contract<T, Sc, Store, CStrat, FK>(
+    fn try_fast_tensor_sum_contract<T, Sc, Store, CStrat, COpt, FK>(
         executor: &mut Store,
         left_terms: &[TensorTerm],
         right_terms: &[TensorTerm],
@@ -1061,6 +1105,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             + Ref
             + FastTensorSum
             + FastTensorSumContractible<Sc>
+            + AtomComponentOptimizable<COpt>
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         Sc: Clone,
         K: Display,
@@ -1081,7 +1126,11 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 true,
             ) {
                 return result
-                    .map(|result| Some(Self::fast_tensor_sum_contract_leaf(executor, result)))
+                    .map(|result| {
+                        Some(Self::fast_tensor_sum_contract_leaf::<T, Sc, Store, COpt>(
+                            executor, result,
+                        ))
+                    })
                     .map_err(|error| TensorNetworkError::Other(error.into()));
             }
         }
@@ -1101,7 +1150,11 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 false,
             ) {
                 return result
-                    .map(|result| Some(Self::fast_tensor_sum_contract_leaf(executor, result)))
+                    .map(|result| {
+                        Some(Self::fast_tensor_sum_contract_leaf::<T, Sc, Store, COpt>(
+                            executor, result,
+                        ))
+                    })
                     .map_err(|error| TensorNetworkError::Other(error.into()));
             }
         }
@@ -1109,22 +1162,29 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(None)
     }
 
-    fn fast_tensor_sum_contract_leaf<T, Sc, Store>(
+    fn fast_tensor_sum_contract_leaf<T, Sc, Store, COpt>(
         executor: &mut Store,
         result: FastTensorSumContract<T, Sc>,
     ) -> NetworkLeaf<K, Aind>
     where
         Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
-        T: HasStructure + Clone + Ref + FastTensorSum + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        T: HasStructure
+            + Clone
+            + Ref
+            + FastTensorSum
+            + AtomComponentOptimizable<COpt>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     {
         match result {
             FastTensorSumContract::Materialized(tensor) => {
-                NetworkLeaf::LocalTensor(executor.push_tensor(tensor))
+                NetworkLeaf::LocalTensor(executor.push_tensor(tensor.optimize_atom_components()))
             }
             FastTensorSumContract::Terms(terms) => {
                 let terms = terms
                     .into_iter()
-                    .map(|tensor| TensorTerm::tensor(executor.push_tensor(tensor)))
+                    .map(|tensor| {
+                        TensorTerm::tensor(executor.push_tensor(tensor.optimize_atom_components()))
+                    })
                     .collect::<Vec<_>>();
                 Self::tensor_sum_leaf(executor, terms)
             }
@@ -1132,7 +1192,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 let terms = terms
                     .into_iter()
                     .map(|term| TensorTerm {
-                        tensor: executor.push_tensor(term.tensor),
+                        tensor: executor.push_tensor(term.tensor.optimize_atom_components()),
                         scalar: term
                             .scalar
                             .map(|scalar| executor.push_scalar(scalar).into()),
@@ -1144,7 +1204,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn contract_pair<LT, T, L, Sc, CStrat, FK, Store>(
+    pub fn contract_pair<LT, T, L, Sc, CStrat, COpt, FK, Store>(
         &mut self,
         left: usize,
         right: usize,
@@ -1161,6 +1221,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         T: HasStructure
             + From<LT::WithIndices>
             + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
             + Clone
             + Ref
             + FastTensorSum
@@ -1235,7 +1296,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             );
         }
 
-        if let Some(leaf) = Self::try_fast_tensor_sum_contract::<T, Sc, Store, CStrat, FK>(
+        if let Some(leaf) = Self::try_fast_tensor_sum_contract::<T, Sc, Store, CStrat, COpt, FK>(
             executor,
             &left_terms,
             &right_terms,
@@ -1257,7 +1318,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 true,
             ) {
                 let leaf = result
-                    .map(|result| Self::fast_tensor_sum_contract_leaf(executor, result))
+                    .map(|result| {
+                        Self::fast_tensor_sum_contract_leaf::<T, Sc, Store, COpt>(executor, result)
+                    })
                     .map_err(|error| TensorNetworkError::Other(error.into()))?;
                 let mut positions = [left, right];
                 positions.sort_unstable();
@@ -1271,7 +1334,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 false,
             ) {
                 let leaf = result
-                    .map(|result| Self::fast_tensor_sum_contract_leaf(executor, result))
+                    .map(|result| {
+                        Self::fast_tensor_sum_contract_leaf::<T, Sc, Store, COpt>(executor, result)
+                    })
                     .map_err(|error| TensorNetworkError::Other(error.into()))?;
                 let mut positions = [left, right];
                 positions.sort_unstable();
@@ -1292,6 +1357,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     } else {
                         (contracted, None)
                     };
+                let contracted = contracted.optimize_atom_components();
                 let tensor = executor.push_tensor(contracted);
                 let scalar = Self::multiply_scalar_indices(
                     executor,
@@ -1319,6 +1385,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         L,
         Sc,
         CStrat,
+        COpt,
         FK,
         Store,
     >(
@@ -1336,6 +1403,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         T: HasStructure
             + From<LT::WithIndices>
             + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
             + Clone
             + Ref
             + FastTensorSum
@@ -1381,7 +1449,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             None
         };
 
-        self.contract_pair::<LT, T, L, Sc, CStrat, FK, Store>(left, right, executor, graph, lib)?;
+        self.contract_pair::<LT, T, L, Sc, CStrat, COpt, FK, Store>(
+            left, right, executor, graph, lib,
+        )?;
         if let Some(pair_start) = pair_start {
             let elapsed = pair_start.elapsed();
             if profile::verbose() || elapsed.as_millis() >= 100 {
@@ -1408,6 +1478,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         L,
         Sc,
         CStrat,
+        COpt,
         FK,
         Store,
     >(
@@ -1425,6 +1496,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         T: HasStructure
             + From<LT::WithIndices>
             + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
             + Clone
             + Ref
             + FastTensorSum
@@ -1476,7 +1548,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             None
         };
 
-        self.contract_pair::<LT, T, L, Sc, CStrat, FK, Store>(left, right, executor, graph, lib)?;
+        self.contract_pair::<LT, T, L, Sc, CStrat, COpt, FK, Store>(
+            left, right, executor, graph, lib,
+        )?;
         if let Some(pair_start) = pair_start {
             let elapsed = pair_start.elapsed();
             if profile::verbose() || elapsed.as_millis() >= 100 {
@@ -1508,6 +1582,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         L,
         Sc,
         CStrat,
+        COpt,
         FK,
         Store,
     >(
@@ -1526,6 +1601,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         T: HasStructure
             + From<LT::WithIndices>
             + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
             + Clone
             + Ref
             + FastTensorSum
@@ -1541,9 +1617,18 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             IsAbstractSlot<Aind = Aind>,
     {
         let Some(replacement) = self
-            .contract_one_by_degree_replacement::<DEBUG, LARGEST, LT, T, L, Sc, CStrat, FK, Store>(
-                executor, graph, lib,
-            )?
+            .contract_one_by_degree_replacement::<
+                DEBUG,
+                LARGEST,
+                LT,
+                T,
+                L,
+                Sc,
+                CStrat,
+                COpt,
+                FK,
+                Store,
+            >(executor, graph, lib)?
         else {
             return Ok(false);
         };
@@ -1590,15 +1675,10 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             .iter()
             .enumerate()
             .filter_map(|(operand, _)| {
-                self.local_tensor_index(operand).map(|index| {
-                    let tensor = executor.tensor(index);
-                    (
-                        operand,
-                        tensor,
-                        tensor.structure(),
-                        tensor.contraction_profile(),
-                    )
-                })
+                let structure = self.tensor_structure(executor, operand)?;
+                let (single_tensor, profile) =
+                    self.tensor_operand_profile::<Sc, Store>(executor, operand)?;
+                Some((operand, single_tensor, structure, profile))
             })
             .collect::<Vec<_>>();
 
@@ -1632,16 +1712,25 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     1
                 };
                 let pair_estimate = if pair_score_order_needs_sparse_estimate(SCORE_ORDER) {
-                    left_tensor.contraction_pair_estimate(
-                        right_tensor,
-                        &left_match_permutation,
-                        &left_matches,
-                        &right_matches,
-                        *left_profile,
-                        *right_profile,
-                        output_dense_size,
-                        EXACT_JOIN_LIMIT,
-                    )
+                    match (left_tensor, right_tensor) {
+                        (Some(left_tensor), Some(right_tensor)) => {
+                            executor.tensor(*left_tensor).contraction_pair_estimate(
+                                executor.tensor(*right_tensor),
+                                &left_match_permutation,
+                                &left_matches,
+                                &right_matches,
+                                *left_profile,
+                                *right_profile,
+                                output_dense_size,
+                                EXACT_JOIN_LIMIT,
+                            )
+                        }
+                        _ => super::TensorContractionPairEstimate::from_profiles(
+                            *left_profile,
+                            *right_profile,
+                            output_dense_size,
+                        ),
+                    }
                 } else {
                     super::TensorContractionPairEstimate::from_profiles(
                         *left_profile,
@@ -1678,6 +1767,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         L,
         Sc,
         CStrat,
+        COpt,
         FK,
         Store,
         const SCORE_ORDER: u128,
@@ -1697,6 +1787,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         T: HasStructure
             + From<LT::WithIndices>
             + Contract<T, CStrat, LCM = T>
+            + AtomComponentOptimizable<COpt>
             + Clone
             + Ref
             + FastTensorSum
@@ -1737,7 +1828,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             None
         };
 
-        self.contract_pair::<LT, T, L, Sc, CStrat, FK, Store>(left, right, executor, graph, lib)?;
+        self.contract_pair::<LT, T, L, Sc, CStrat, COpt, FK, Store>(
+            left, right, executor, graph, lib,
+        )?;
 
         if let Some(pair_start) = pair_start {
             let elapsed = pair_start.elapsed();
@@ -1879,9 +1972,62 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         if self.operands.len() == 1 {
             Ok(self.operands.remove(0).leaf)
         } else {
+            let operands = self
+                .operands
+                .iter()
+                .enumerate()
+                .map(|(position, operand)| {
+                    let kind = match &operand.leaf {
+                        NetworkLeaf::LocalTensor(_) => "LocalTensor".to_string(),
+                        NetworkLeaf::TensorSum(indices) => format!("TensorSum({})", indices.len()),
+                        NetworkLeaf::TensorTerm(term) => {
+                            format!("TensorTerm(scaled={})", term.scalar.is_some())
+                        }
+                        NetworkLeaf::TensorTermSum(terms) => {
+                            let scaled = terms.iter().filter(|term| term.scalar.is_some()).count();
+                            format!("TensorTermSum(terms={},scaled={scaled})", terms.len())
+                        }
+                        NetworkLeaf::LibraryKey { .. } => "LibraryKey".to_string(),
+                        NetworkLeaf::Scalar(_) => "Scalar".to_string(),
+                    };
+                    let structure = self
+                        .tensor_structure(executor, position)
+                        .map(|structure| {
+                            format!(
+                                "order={},dense_size={}",
+                                structure.order(),
+                                structure.size().unwrap_or(0)
+                            )
+                        })
+                        .unwrap_or_else(|| "no_tensor_structure".to_string());
+                    format!("#{position}:{kind}:{structure}:source={:?}", operand.source)
+                })
+                .collect::<Vec<_>>();
+            let mut matching_pairs = Vec::new();
+            for left in 0..self.operands.len() {
+                let Some(left_structure) = self.tensor_structure(executor, left) else {
+                    continue;
+                };
+                for right in left + 1..self.operands.len() {
+                    let Some(right_structure) = self.tensor_structure(executor, right) else {
+                        continue;
+                    };
+                    let Some((_, left_matches, _)) = left_structure.match_indices(right_structure)
+                    else {
+                        continue;
+                    };
+                    let degree = left_matches.iter().filter(|matched| **matched).count();
+                    if degree > 0 {
+                        matching_pairs.push(format!("#{left}-#{right}:degree={degree}"));
+                    }
+                }
+            }
+
             Err(TensorNetworkError::Other(eyre!(
-                "product contraction did not collapse to one leaf; {} operands remain",
-                self.operands.len()
+                "product contraction did not collapse to one leaf; {} operands remain; operands=[{}]; matching_pairs=[{}]",
+                self.operands.len(),
+                operands.join(", "),
+                matching_pairs.join(", ")
             )))
         }
     }
@@ -1997,11 +2143,13 @@ where
 
 impl<
     CStrat,
+    COpt,
     LT: LibraryTensor + Clone,
     T: HasStructure
         + TensorStructure
         + Clone
         + Contract<T, CStrat, LCM = T>
+        + AtomComponentOptimizable<COpt>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
@@ -2020,7 +2168,7 @@ impl<
     K: Display + Debug + Clone,
     FK: Display + Debug + Clone,
     Aind: AbsInd,
-> ContractionStrategy<Store, L, K, FK, Aind> for SmallestDegree<CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SmallestDegree<CStrat, COpt>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -2042,9 +2190,11 @@ where
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
-        while product.contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, FK, Store>(
-            executor, graph, lib,
-        )? {
+        while product
+            .contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, COpt, FK, Store>(
+                executor, graph, lib,
+            )?
+        {
             product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         }
         product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
@@ -2053,11 +2203,13 @@ where
 
 impl<
     CStrat,
+    COpt,
     LT: LibraryTensor + Clone,
     T: HasStructure
         + TensorStructure
         + Clone
         + Contract<T, CStrat, LCM = T>
+        + AtomComponentOptimizable<COpt>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
@@ -2077,7 +2229,7 @@ impl<
     FK: Display + Debug + Clone,
     Aind: AbsInd,
     const N: usize,
-> ContractionStrategy<Store, L, K, FK, Aind> for SmallestDegreeIter<N, CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SmallestDegreeIter<N, CStrat, COpt>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -2102,9 +2254,11 @@ where
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         for _ in 0..N {
-            if !product.contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, FK, Store>(
-                executor, graph, lib,
-            )? {
+            if !product
+                .contract_one_by_degree::<false, false, LT, T, L, Sc, CStrat, COpt, FK, Store>(
+                    executor, graph, lib,
+                )?
+            {
                 break;
             }
             product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
@@ -2137,7 +2291,18 @@ where
 
         for _ in 0..N {
             if !product
-                .contract_one_by_degree_in_place::<false, false, LT, T, L, Sc, CStrat, FK, Store>(
+                .contract_one_by_degree_in_place::<
+                    false,
+                    false,
+                    LT,
+                    T,
+                    L,
+                    Sc,
+                    CStrat,
+                    COpt,
+                    FK,
+                    Store,
+                >(
                     executor, graph, lib, ignored,
                 )?
             {
@@ -2160,11 +2325,13 @@ where
 
 impl<
     CStrat,
+    COpt,
     LT: LibraryTensor + Clone,
     T: HasStructure
         + TensorStructure
         + Clone
         + Contract<T, CStrat, LCM = T>
+        + AtomComponentOptimizable<COpt>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
@@ -2186,7 +2353,7 @@ impl<
     const SCORE_ORDER: u128,
     const EXACT_JOIN_LIMIT: usize,
 > ContractionStrategy<Store, L, K, FK, Aind>
-    for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat>
+    for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat, COpt>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -2215,6 +2382,7 @@ where
                 L,
                 Sc,
                 CStrat,
+                COpt,
                 FK,
                 Store,
                 SCORE_ORDER,
@@ -2229,11 +2397,13 @@ where
 
 impl<
     CStrat,
+    COpt,
     LT: LibraryTensor + Clone,
     T: HasStructure
         + TensorStructure
         + Clone
         + Contract<T, CStrat, LCM = T>
+        + AtomComponentOptimizable<COpt>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
@@ -2253,7 +2423,7 @@ impl<
     FK: Display + Debug + Clone,
     Aind: AbsInd,
     const D: bool,
-> ContractionStrategy<Store, L, K, FK, Aind> for SingleSmallestDegree<D, CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SingleSmallestDegree<D, CStrat, COpt>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -2277,7 +2447,7 @@ where
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
-        product.contract_one_by_degree::<D, false, LT, T, L, Sc, CStrat, FK, Store>(
+        product.contract_one_by_degree::<D, false, LT, T, L, Sc, CStrat, COpt, FK, Store>(
             executor, graph, lib,
         )?;
         product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
@@ -2296,7 +2466,7 @@ where
         Aind: AbsInd,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_one_by_degree_in_place::<D, false, LT, T, L, Sc, CStrat, FK, Store>(
+        product.contract_one_by_degree_in_place::<D, false, LT, T, L, Sc, CStrat, COpt, FK, Store>(
             executor, graph, lib, ignored,
         )
     }
@@ -2304,11 +2474,13 @@ where
 
 impl<
     CStrat,
+    COpt,
     LT: LibraryTensor + Clone,
     T: HasStructure
         + TensorStructure
         + Clone
         + Contract<T, CStrat, LCM = T>
+        + AtomComponentOptimizable<COpt>
         + ScalarMul<Sc, Output = T>
         + Contract<LT::WithIndices, LCM = T>
         + From<LT::WithIndices>
@@ -2328,7 +2500,7 @@ impl<
     FK: Display + Debug + Clone,
     Aind: AbsInd,
     const D: bool,
-> ContractionStrategy<Store, L, K, FK, Aind> for SingleLargestDegree<D, CStrat>
+> ContractionStrategy<Store, L, K, FK, Aind> for SingleLargestDegree<D, CStrat, COpt>
 where
     LT::WithIndices: Contract<LT::WithIndices, LCM = T>
         + ScalarMul<Sc, Output = T>
@@ -2352,7 +2524,7 @@ where
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
-        product.contract_one_by_degree::<D, true, LT, T, L, Sc, CStrat, FK, Store>(
+        product.contract_one_by_degree::<D, true, LT, T, L, Sc, CStrat, COpt, FK, Store>(
             executor, graph, lib,
         )?;
         product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
@@ -2371,7 +2543,7 @@ where
         Aind: AbsInd,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_one_by_degree_in_place::<D, true, LT, T, L, Sc, CStrat, FK, Store>(
+        product.contract_one_by_degree_in_place::<D, true, LT, T, L, Sc, CStrat, COpt, FK, Store>(
             executor, graph, lib, ignored,
         )
     }

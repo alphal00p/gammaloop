@@ -16,21 +16,22 @@ before execution where execution is attempted.
 The situation has improved compared to the original investigation.
 
 - `symbolica_expression.txt` now completes end-to-end in the aliased
-  sparse-aware path in about 4 seconds.
+  sparse-aware path in about 4.6 seconds.
 - `spenso_eval_input_0.txt` can be parsed, aliased, and analyzed for graph
-  boundary candidates in a few seconds without exercising the old runaway
-  execution path.
+  boundary candidates in a few seconds. Full execution currently fails
+  structurally with a disconnected product, both with and without
+  component-level Hornering.
 - The BNL four-term MWE completes in milliseconds when scalar aliases are kept
   unresolved, and cleanly reproduces the benefit of not carrying large parsed
   scalar payloads through every tensor entry.
-- Boundary factoring was rerun on the large inputs with scalar aliasing. It
-  remains useful on the distilled MWE, but it does not currently solve the
-  large inputs: `symbolica_expression.txt` fails during boundary-factored
-  execution, and `spenso_eval_input_0.txt` remains only a bounded
-  parse/candidate diagnostic.
+- Component-level Hornering is the Spenso-owned optimization: generated tensor
+  components can be Horner-collected after concrete/parametric component
+  contraction, using the contraction strategy marker
+  `HornerAtomComponents<N>`.
 - The late tensor-sum MWE is no longer a 10s-of-ms direct execution problem
-  under the current order; direct execution is around 0.5 ms, and boundary
-  factoring/Hornering still improves it further.
+  under the current order; direct execution is sub-millisecond to
+  low-millisecond in these diagnostics. Component-level Hornering remains a
+  useful comparison.
 - A naive `result-rank-only` order is still bad enough to get killed on
   `symbolica_expression.txt`, so contraction order does matter.
 
@@ -51,9 +52,9 @@ SPENSO_ALIAS_SCALAR_THRESHOLD=4096
 ```
 
 The contraction order is the current default `MinResultRank`, which is the
-sparse-aware pair score. Full execution of `spenso_eval_input_0.txt` was not
-rerun in this pass; only parse, aliasing, and boundary-candidate diagnostics
-were rerun for that larger input.
+sparse-aware pair score. `spenso_eval_input_0.txt` was attempted both with and
+without component-level Hornering; both runs failed before producing a scalar
+result because the product executor reached disconnected tensor operands.
 
 ## `spenso_eval_input_0.txt`
 
@@ -61,8 +62,8 @@ Parsing is not the current bottleneck:
 
 ```text
 input bytes=53331469
-symbolica_parse: 1.348 s, terms=1, bytes=39268617
-actual_network_parse: 1.061 s
+symbolica_parse: 1.441 s, terms=1, bytes=39268617
+actual_network_parse: 1.129 s
 graph_nodes=23711
 graph_edges=38052
 tensors=6559
@@ -82,6 +83,24 @@ scalar_aliases threshold_bytes=4096
   max_bytes=1856190
 post-alias leaf scalar_bytes=1392399
 ```
+
+Plain and component-Horner execution both fail after parsing and aliasing with
+the same residual product shape:
+
+```text
+error: product contraction did not collapse to one leaf; 3 operands remain
+operands=[
+  #0:Scalar:no_tensor_structure,
+  #1:LocalTensor:order=1,dense_size=4,
+  #2:LocalTensor:order=2,dense_size=16
+]
+matching_pairs=[]
+max_rss=646053888 bytes
+```
+
+So for this input, the failure should not be attributed to component-level
+Hornering. The product has already reached a disconnected tensor-valued state
+with no matching index pairs.
 
 The graph-derived product-boundary diagnostic still finds the same small set of
 strong top-level candidates:
@@ -109,8 +128,8 @@ sparse-aware order:
 ```text
 input bytes=6529054
 stripped bytes=4720678
-symbolica_parse: 100 ms, terms=1, bytes=3016471
-actual_network_parse: 623 ms
+symbolica_parse: 109 ms, terms=1, bytes=3016471
+actual_network_parse: 710 ms
 graph_nodes=69975
 graph_edges=123483
 tensors=13720
@@ -126,8 +145,8 @@ scalar_aliases threshold_bytes=4096
   terms=22
   bytes=100397
   max_bytes=5733
-sparse-aware execute: 4.110 s
-result construction: 3.365 ms
+sparse-aware execute: 4.567 s
+result construction: 3.345 ms
 result aliases=22
 root_terms=1
 root_bytes=204416860
@@ -246,115 +265,104 @@ safe orders, while naive result-rank-only ordering remains pathological. The
 remaining large-root problem needs a materialization/aliasing fix inside or
 after execution, not only a lower pre-execution alias threshold.
 
-## Boundary Factoring
+## Component-Level Hornering
 
-`ParseSettings::factor_add_boundaries` runs Horner collection on large Add
-nodes before parsing them as tensor-network sums. It is off by default.
+Spenso's Hornering hook is now component-level. A contraction strategy such as
+`MinResultRank<HornerAtomComponents<4096>>` keeps the same parsed graph and
+only Horner-collects generated `Atom` entries inside parametric tensor
+components after contraction. Lowering the threshold, for example
+`HornerAtomComponents<1>`, forces the behavior on small MWEs.
 
-On the distilled late tensor-sum MWE, boundary factoring and Hornering remain
-effective. This was rerun with sparse-aware order and the scalar alias pass at
-the 4096-byte threshold; aliasing creates no aliases for this MWE, so these
-numbers are effectively the current sparse-aware execution costs:
+On the distilled late tensor-sum MWE, component-level Hornering is compared
+against the expanded baseline:
 
 ```text
-parse.add_boundary_factor terms=12 after_terms=1
 expanded:
   aliases=0
-  execute=0.983 ms
+  execute=2.000 ms
   root_terms=4
   root_bytes=10374
-boundary-factored:
+component-Hornered:
   aliases=0
-  execute=0.054 ms
-  root_terms=1
-  root_bytes=2389
-factored:
-  aliases=0
-  execute=0.041 ms
-  root_terms=1
-  root_bytes=2389
-Hornered:
-  aliases=0
-  execute=0.036 ms
+  execute=0.050 ms
   root_terms=1
   root_bytes=2389
 ```
 
-On `spenso_eval_input_0.txt`, the pass still fires:
+For tensor-valued products like
 
 ```text
-parse.add_boundary_factor terms=46 before_bytes=39256877 after_terms=4 after_bytes=39254919
+(x1*Q1(mu) + x2*Q3(mu)) * (Q2(rho) + Q4(rho))
 ```
 
-Historically, this did not make the full parsed graph much smaller:
+the graph is valid: it is an outer product with free `mu` and `rho`
+components. Component Hornering should act on the generated entries, for
+example
 
 ```text
-graph_nodes roughly 23750
-graph_edges roughly 38169
-tensors 6559
-scalars roughly 5764
+(x1*Q1_i + x2*Q3_i) * (Q2_j + Q4_j)
 ```
 
-So boundary factoring is a good local improvement and a useful MWE fix, but it
-does not by itself solve the large root-level inputs.
+not on the full raw expression before the graph is built.
 
-For `symbolica_expression.txt`, boundary factoring with scalar aliasing parses
-to a smaller graph than the unfactored form:
+For `symbolica_expression.txt`, the component-Horner diagnostic uses the same
+aliased sparse-aware network:
 
 ```text
-actual_network_parse: 3.208 s
-graph_nodes=61757
-graph_edges=111171
-tensors=10980
-scalars=11664
-logical_entries=43920
+actual_network_parse: 668 ms
+graph_nodes=69975
+graph_edges=123483
+tensors=13720
+scalars=11663
 scalar_aliases threshold_bytes=4096
   created=22
   terms=22
-  bytes=100045
-  max_bytes=5717
+  bytes=100397
+  max_bytes=5733
+execute=5.387 s
+result=3.632 ms
+root_terms=1
+root_bytes=200970362
+max_rss=3338059776 bytes
 ```
 
-but execution currently fails:
+Compared to the plain aliased sparse-aware run, component Hornering is slower
+here (`5.387 s` vs `4.567 s`) and only slightly reduces the unresolved root
+payload (`200.97 MB` vs `204.42 MB`). The large generated root remains the same
+issue.
+
+For `spenso_eval_input_0.txt`, the normal parse with scalar aliasing was rerun
+through parse, aliasing, plain execution attempt, component-Horner execution
+attempt, and boundary-candidate diagnostics:
 
 ```text
-error: product contraction did not collapse to one leaf; 9 operands remain
-```
-
-So this is not an improvement over the unfactored aliased sparse-aware run,
-which executes in about 4 seconds.
-
-For `spenso_eval_input_0.txt`, boundary factoring with scalar aliasing was
-rerun only through parse and boundary-candidate diagnostics:
-
-```text
-symbolica_parse: 1.416 s
-actual_network_parse: 1.293 s
-graph_nodes=23750
-graph_edges=38169
+symbolica_parse: 1.441 s
+actual_network_parse: 1.129 s
+graph_nodes=23711
+graph_edges=38052
 tensors=6559
-scalars=5764
+scalars=5751
 logical_entries=26236
 scalar_aliases threshold_bytes=4096
   created=369
   terms=3138
-  bytes=37513085
+  bytes=37515435
   max_bytes=1856190
-post-alias leaf scalar_bytes=1392651
+post-alias leaf scalar_bytes=1392399
 boundary_candidates total=15
 top candidates: six edges crossing from a huge sum-heavy subtree
-  left_nodes=23739
-  left_sums=3406
-  left_max_sum_children=23
+  left_nodes=23700
+  left_sums=3393
+  left_max_sum_children=46
   left_tensor_entries=49852
-  left_scalar_bytes=1392641
+  left_scalar_bytes=1392389
 to single tensor leaves with 16 or 64 tensor entries
 ```
 
-The candidate shape remains essentially the same as the unfactored aliased
-diagnostic. The top-level maximum sum arity drops from 46 to 23, but the graph
-does not become smaller and the strong boundary candidates remain the same kind
-of large-subtree-to-small-leaf edges.
+The strong boundary candidates remain large-subtree-to-small-leaf edges.
+Component-level Hornering does not change this graph shape. The plain and
+component-Horner execution attempts both fail before reaching a single scalar
+result with the same disconnected residual product.
 
 ## Staged Disconnection
 
@@ -416,8 +424,8 @@ The current pathological ingredients are:
    they can be used again.
 
 The current improvement is real: the `symbolica_expression.txt` diagnostic now
-finishes, and `spenso_eval_input_0.txt` can be parsed and analyzed with aliases
-without the diagnostic itself being dominated by parsed scalar bytes.
+finishes, and `spenso_eval_input_0.txt` can be parsed and aliased without the
+diagnostic itself being dominated by parsed scalar bytes.
 
 The remaining work is to control scalar materialization during or immediately
 after execution. Good next directions are:

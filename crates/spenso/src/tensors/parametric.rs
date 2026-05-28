@@ -1,11 +1,9 @@
 extern crate derive_more;
 
 use std::{
-    env,
     fmt::{Debug, Display},
     io::Cursor,
     path::Path,
-    sync::OnceLock,
 };
 
 use crate::structure::{IndexLess, SlotIndex, slot::IsAbstractSlot};
@@ -79,14 +77,12 @@ use symbolica::{
 };
 
 #[cfg(feature = "shadowing")]
-fn horner_contract_entries_enabled() -> bool {
-    static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| env::var_os("SPENSO_NETWORK_HORNER_CONTRACT_ENTRIES").is_some())
-}
-
-#[cfg(feature = "shadowing")]
-fn horner_contract_atom(atom: Atom) -> Atom {
-    if atom.as_view().get_byte_size() < 4096 && !matches!(atom.as_view(), AtomView::Add(_)) {
+fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
+    let Some(min_byte_size) = CStrat::HORNER_MIN_BYTES else {
+        return atom;
+    };
+    if atom.as_view().get_byte_size() < min_byte_size && !matches!(atom.as_view(), AtomView::Add(_))
+    {
         return atom;
     }
 
@@ -94,29 +90,43 @@ fn horner_contract_atom(atom: Atom) -> Atom {
 }
 
 #[cfg(feature = "shadowing")]
-fn horner_contract_tensor<I>(tensor: DataTensor<Atom, I>) -> DataTensor<Atom, I>
+fn horner_contract_tensor<CStrat, I>(tensor: DataTensor<Atom, I>) -> DataTensor<Atom, I>
 where
+    CStrat: crate::network::AtomComponentOptimizer,
     I: TensorStructure,
 {
-    if !horner_contract_entries_enabled() {
+    if CStrat::HORNER_MIN_BYTES.is_none() {
         return tensor;
     }
 
     match tensor {
         DataTensor::Dense(mut dense) => {
-            dense.data = dense.data.into_iter().map(horner_contract_atom).collect();
+            dense.data = dense
+                .data
+                .into_iter()
+                .map(horner_contract_atom::<CStrat>)
+                .collect();
             DataTensor::Dense(dense)
         }
         DataTensor::Sparse(mut sparse) => {
-            sparse.zero = horner_contract_atom(sparse.zero);
+            sparse.zero = horner_contract_atom::<CStrat>(sparse.zero);
             sparse.elements = sparse
                 .elements
                 .into_iter()
-                .map(|(index, atom)| (index, horner_contract_atom(atom)))
+                .map(|(index, atom)| (index, horner_contract_atom::<CStrat>(atom)))
                 .collect();
             DataTensor::Sparse(sparse)
         }
     }
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_composite<CStrat, I>(tensor: DataTensor<Atom, I>) -> ParamTensor<I>
+where
+    CStrat: crate::network::AtomComponentOptimizer,
+    I: TensorStructure,
+{
+    ParamTensor::composite(horner_contract_tensor::<CStrat, _>(tensor))
 }
 
 use std::hash::Hash;
@@ -2232,12 +2242,17 @@ where
     })
 }
 
-impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
+impl<I> ParamTensor<I>
 where
     I: TensorStructure + Clone + StructureContract,
 {
-    type LCM = ParamTensor<I>;
-    fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
+    fn contract_with_component_optimizer<CStrat>(
+        &self,
+        other: &ParamTensor<I>,
+    ) -> Result<Self, ContractionError>
+    where
+        CStrat: crate::network::AtomComponentOptimizer,
+    {
         let s = if let Some(s) = self.one_hot_selector_contract(other)? {
             s
         } else if let Some(s) = grouped_sparse_atom_contract(&self.tensor, &other.tensor)? {
@@ -2245,7 +2260,7 @@ where
         } else {
             self.tensor.contract(&other.tensor)?
         };
-        let s = horner_contract_tensor(s);
+        let s = horner_contract_tensor::<CStrat, _>(s);
 
         match (self.param_type, other.param_type) {
             (ParamOrComposite::Param, ParamOrComposite::Param) => Ok(ParamTensor::param(s)),
@@ -2254,6 +2269,55 @@ where
             }
             (ParamOrComposite::Param, ParamOrComposite::Composite) => Ok(ParamTensor::composite(s)),
             (ParamOrComposite::Composite, ParamOrComposite::Param) => Ok(ParamTensor::composite(s)),
+        }
+    }
+}
+
+impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = ParamTensor<I>;
+
+    fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
+        self.contract_with_component_optimizer::<()>(other)
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<I, const MIN_BYTE_SIZE: usize>
+    crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
+    for ParamTensor<I>
+where
+    I: TensorStructure,
+{
+    fn optimize_atom_components(self) -> Self {
+        ParamTensor {
+            tensor: horner_contract_tensor::<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>, _>(
+                self.tensor,
+            ),
+            param_type: self.param_type,
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<C, I, const MIN_BYTE_SIZE: usize>
+    crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
+    for ParamOrConcrete<C, I>
+where
+    I: TensorStructure,
+{
+    fn optimize_atom_components(self) -> Self {
+        match self {
+            ParamOrConcrete::Concrete(concrete) => ParamOrConcrete::Concrete(concrete),
+            ParamOrConcrete::Param(param) => ParamOrConcrete::Param(ParamTensor {
+                tensor: horner_contract_tensor::<
+                    crate::network::HornerAtomComponents<MIN_BYTE_SIZE>,
+                    _,
+                >(param.tensor),
+                param_type: param.param_type,
+            }),
         }
     }
 }
@@ -2278,7 +2342,7 @@ where
     }
 }
 
-impl<I, T> Contract<ParamOrConcrete<DataTensor<T, I>, I>> for ParamOrConcrete<DataTensor<T, I>, I>
+impl<I, T> ParamOrConcrete<DataTensor<T, I>, I>
 where
     I: TensorStructure + Clone + StructureContract,
     T: ContractableWith<Atom, Out = Atom>
@@ -2291,37 +2355,57 @@ where
         + IsZero,
     Atom: TrySmallestUpgrade<T, LCM = Atom>, // Atom: ContractableWith<T, Out = Atom> + ContractableWith<Atom, Out = Atom>,
 {
-    type LCM = ParamOrConcrete<DataTensor<T, I>, I>;
-    fn contract(
+    fn contract_with_component_optimizer<CStrat>(
         &self,
         other: &ParamOrConcrete<DataTensor<T, I>, I>,
-    ) -> Result<Self::LCM, ContractionError> {
+    ) -> Result<Self, ContractionError>
+    where
+        CStrat: crate::network::AtomComponentOptimizer,
+    {
         match (self, other) {
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => {
-                Ok(ParamOrConcrete::Param(s.contract(o)?))
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => Ok(ParamOrConcrete::Param(
+                s.contract_with_component_optimizer::<CStrat>(o)?,
+            )),
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => {
+                Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.tensor.contract(o)?),
+                ))
             }
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => match s.param_type {
-                ParamOrComposite::Composite => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.tensor.contract(o)?,
-                ))),
-                ParamOrComposite::Param => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.tensor.contract(o)?,
-                ))),
-            },
-            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => match o.param_type {
-                ParamOrComposite::Composite => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.contract(&o.tensor)?,
-                ))),
-                ParamOrComposite::Param => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.contract(&o.tensor)?,
-                ))),
-            },
+            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => {
+                Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.contract(&o.tensor)?),
+                ))
+            }
             (ParamOrConcrete::Concrete(s), ParamOrConcrete::Concrete(o)) => {
                 Ok(ParamOrConcrete::Concrete(s.contract(o)?))
             }
         }
     }
 }
+
+impl<I, T> Contract<ParamOrConcrete<DataTensor<T, I>, I>> for ParamOrConcrete<DataTensor<T, I>, I>
+where
+    I: TensorStructure + Clone + StructureContract,
+    T: ContractableWith<Atom, Out = Atom>
+        + ContractableWith<T, Out = T>
+        + Clone
+        + FallibleMul<Output = T>
+        + FallibleAddAssign<T>
+        + FallibleSubAssign<T>
+        + RefZero
+        + IsZero,
+    Atom: TrySmallestUpgrade<T, LCM = Atom>,
+{
+    type LCM = ParamOrConcrete<DataTensor<T, I>, I>;
+
+    fn contract(
+        &self,
+        other: &ParamOrConcrete<DataTensor<T, I>, I>,
+    ) -> Result<Self::LCM, ContractionError> {
+        self.contract_with_component_optimizer::<()>(other)
+    }
+}
+
 impl<I, T> Trace for ParamOrConcrete<RealOrComplexTensor<T, I>, I>
 where
     I: TensorStructure + Clone + StructureContract,
@@ -2353,6 +2437,63 @@ where
     }
 }
 
+impl<I, T> ParamOrConcrete<RealOrComplexTensor<T, I>, I>
+where
+    I: TensorStructure + Clone + StructureContract,
+    T: ContractableWith<Atom, Out = Atom>
+        + ContractableWith<T, Out = T>
+        + ContractableWith<Complex<T>, Out = Complex<T>>
+        + Clone
+        + FallibleMul<Output = T>
+        + FallibleAddAssign<T>
+        + FallibleSubAssign<T>
+        + RefZero
+        + IsZero,
+    Complex<T>: ContractableWith<Atom, Out = Atom>
+        + ContractableWith<T, Out = Complex<T>>
+        + ContractableWith<Complex<T>, Out = Complex<T>>
+        + Clone
+        + FallibleMul<Output = Complex<T>>
+        + FallibleAddAssign<Complex<T>>
+        + FallibleSubAssign<Complex<T>>
+        + RefZero
+        + IsZero,
+    Atom: TrySmallestUpgrade<T, LCM = Atom> + TrySmallestUpgrade<Complex<T>, LCM = Atom>,
+{
+    fn contract_with_component_optimizer<CStrat>(
+        &self,
+        other: &ParamOrConcrete<RealOrComplexTensor<T, I>, I>,
+    ) -> Result<Self, ContractionError>
+    where
+        CStrat: crate::network::AtomComponentOptimizer,
+    {
+        match (self, other) {
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => Ok(ParamOrConcrete::Param(
+                s.contract_with_component_optimizer::<CStrat>(o)?,
+            )),
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => match o {
+                RealOrComplexTensor::Real(o) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.tensor.contract(o)?),
+                )),
+                RealOrComplexTensor::Complex(o) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.tensor.contract(o)?),
+                )),
+            },
+            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => match s {
+                RealOrComplexTensor::Real(s) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(o.tensor.contract(s)?),
+                )),
+                RealOrComplexTensor::Complex(s) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(o.tensor.contract(s)?),
+                )),
+            },
+            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Concrete(o)) => {
+                Ok(ParamOrConcrete::Concrete(s.contract(o)?))
+            }
+        }
+    }
+}
+
 impl<I, T> Contract<ParamOrConcrete<RealOrComplexTensor<T, I>, I>>
     for ParamOrConcrete<RealOrComplexTensor<T, I>, I>
 where
@@ -2378,46 +2519,12 @@ where
     Atom: TrySmallestUpgrade<T, LCM = Atom> + TrySmallestUpgrade<Complex<T>, LCM = Atom>,
 {
     type LCM = ParamOrConcrete<RealOrComplexTensor<T, I>, I>;
+
     fn contract(
         &self,
         other: &ParamOrConcrete<RealOrComplexTensor<T, I>, I>,
     ) -> Result<Self::LCM, ContractionError> {
-        match (self, other) {
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => {
-                Ok(ParamOrConcrete::Param(s.contract(o)?))
-            }
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => match (s.param_type, o) {
-                (ParamOrComposite::Composite, RealOrComplexTensor::Real(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-                (ParamOrComposite::Composite, RealOrComplexTensor::Complex(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Real(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Complex(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-            },
-            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => match (o.param_type, s) {
-                (ParamOrComposite::Composite, RealOrComplexTensor::Real(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-                (ParamOrComposite::Composite, RealOrComplexTensor::Complex(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Real(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Complex(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-            },
-            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Concrete(o)) => {
-                Ok(ParamOrConcrete::Concrete(s.contract(o)?))
-            }
-        }
+        self.contract_with_component_optimizer::<()>(other)
     }
 }
 

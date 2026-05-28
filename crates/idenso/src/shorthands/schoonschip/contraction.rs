@@ -787,6 +787,7 @@ where
                  _,
                  _,
                  Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+                 (),
                  _,
                  _,
              >(executor, graph, lib)?;
@@ -963,6 +964,7 @@ where
                      _,
                      _,
                      Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+                     (),
                      _,
                      _,
                  >(left, right, executor, graph, lib)?;
@@ -1017,6 +1019,7 @@ where
              _,
              _,
              Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+             (),
              _,
              _,
          >(executor, graph, lib)?

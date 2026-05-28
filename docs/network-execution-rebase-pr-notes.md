@@ -274,36 +274,27 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Boundary Factor Extraction Diagnostics
+### Component Horner Diagnostics
 
 Trace commit: `zlvxmnxm`.
 
 What this adds:
 
-- Adds opt-in parser settings that try to factor large additions at parse
-  boundaries before the parser turns them into tensor-network sums.
-- Adds diagnostics comparing raw, Hornered, and boundary-factored
-  parsing/execution paths.
-- Keeps the pass diagnostic-only and disabled by default.
+- Adds diagnostics comparing raw and component-Hornered execution paths.
+- Adds the type-level contraction setting `HornerAtomComponents<N>`, used as
+  `MinResultRank<HornerAtomComponents<N>>`, to Horner generated tensor
+  component atoms after contraction.
 
 How it works:
 
-- `ParseSettings::factor_add_boundaries` enables the pass.
-- `ParseSettings::factor_add_boundary_min_terms` controls the minimum add size
-  before Horner collection; it defaults to `8`.
-- In the modular parser's Add path, large Add views are converted to an `Atom`
-  and `collect_horner::<Indeterminate>(None)` is applied.
-- If collection reduces the top-level term count, or rewrites the Add into a
-  non-Add expression, the collected expression is parsed recursively with
-  `factor_add_boundaries` disabled to avoid repeated collection loops.
-- Profiling emits `spenso_profile parse.add_boundary_factor ...` with term
-  counts, byte sizes, and elapsed collection time.
+- Parametric tensor contraction keeps the parsed graph unchanged, then maps the
+  generated `Atom` entries through Horner collection when the contraction
+  strategy requests it.
 - The obsolete flat `crates/spenso/src/network/parsing.rs` stays deleted; only
-  the new setting and Add-boundary logic are ported into
-  `crates/spenso/src/network/parsing/mod.rs`.
+  the modular parser remains.
 - GammaLoop diagnostics use `ShorthandParsing::Opaque` with
-  `StructureInferenceMode::Fast`, then enable boundary factoring by mutating
-  the same settings object.
+  `StructureInferenceMode::Fast`; component Hornering is selected through the
+  execution strategy type, not by mutating parse settings.
 
 Validation run:
 
@@ -323,7 +314,7 @@ What this adds:
 - Executes the disconnected tensor-valued intermediate first, then reconnects
   it with an explicit metric in a second network execution.
 - Adds `docs/architecture/spenso-large-expression-pathology.md`, summarizing
-  the large-expression behavior and what the lazy-sum, boundary-factor, and
+  the large-expression behavior and what the lazy-sum, component-Horner, and
   staged-disconnect experiments show.
 
 How it works:

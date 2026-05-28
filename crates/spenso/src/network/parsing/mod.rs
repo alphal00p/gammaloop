@@ -1,4 +1,4 @@
-use symbolica::atom::{AtomCore, Indeterminate, Symbol};
+use symbolica::atom::Symbol;
 
 use super::*;
 
@@ -245,17 +245,6 @@ pub struct ParseSettings {
     /// require tensor tags, require tensor tags plus visible representation
     /// arguments, or accept untagged heads that contain representation syntax.
     pub strict_tensor_filter: StrictTensorFilter,
-
-    /// Try to factor large additions before parsing them as network sums.
-    ///
-    /// This is a diagnostic boundary optimization: when a large addition is
-    /// really a product with common factors, Horner collection can expose that
-    /// product before the parser turns each summand into a separate network
-    /// branch.
-    pub factor_add_boundaries: bool,
-
-    /// Minimum number of summands before `factor_add_boundaries` is attempted.
-    pub factor_add_boundary_min_terms: usize,
 }
 
 impl Default for ParseSettings {
@@ -268,8 +257,6 @@ impl Default for ParseSettings {
             shorthand_parsing: ShorthandParsing::default(),
             parse_composite_scalars_as_tensors: false,
             strict_tensor_filter: StrictTensorFilter::Tagged,
-            factor_add_boundaries: false,
-            factor_add_boundary_min_terms: 8,
         }
     }
 }
@@ -899,48 +886,6 @@ where
 
         if !settings.depth_is_product_depth {
             state.depth += 1;
-        }
-
-        if settings.factor_add_boundaries
-            && value
-                .iter()
-                .take(settings.factor_add_boundary_min_terms)
-                .count()
-                >= settings.factor_add_boundary_min_terms
-        {
-            let original_terms = value.iter().count();
-            let collect_start = profile::enabled().then(std::time::Instant::now);
-            let collected = value
-                .as_view()
-                .to_owned()
-                .collect_horner::<Indeterminate>(None);
-            let collected_terms = collected.nterms();
-            if let Some(collect_start) = collect_start
-                && (collected_terms < original_terms || profile::verbose())
-            {
-                eprintln!(
-                    "spenso_profile parse.add_boundary_factor terms={} before_bytes={} after_terms={} after_bytes={} elapsed_ms={:.3}",
-                    original_terms,
-                    value.as_view().get_byte_size(),
-                    collected_terms,
-                    collected.as_view().get_byte_size(),
-                    collect_start.elapsed().as_secs_f64() * 1000.0,
-                );
-            }
-            if collected_terms < original_terms || !matches!(collected.as_view(), AtomView::Add(_))
-            {
-                let collected_settings = ParseSettings {
-                    factor_add_boundaries: false,
-                    ..settings.clone()
-                };
-                return Self::try_from_view_impl(
-                    collected.as_view(),
-                    state,
-                    library,
-                    function_library,
-                    &collected_settings,
-                );
-            }
         }
 
         let mut iter = value.iter();
