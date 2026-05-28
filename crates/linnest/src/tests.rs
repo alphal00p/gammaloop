@@ -2288,13 +2288,85 @@ fn test_fixed_node_dot_layout_routes_only_selected_edges() {
         nodes[2].pos.as_ref().unwrap(),
         &TypstPoint { x: 8.0, y: 0.0 },
     );
-    assert_point_close(
-        edges[0].pos.as_ref().unwrap(),
-        &TypstPoint { x: 2.0, y: 0.0 },
+    let selected_edge = edges[0].pos.as_ref().unwrap();
+    assert!((selected_edge.x - 2.0).abs() < 1e-9);
+    assert!(
+        selected_edge.y > 0.0,
+        "same-rank fixed-node dot edges should be routed off the node rank"
     );
     assert_point_close(
         edges[1].pos.as_ref().unwrap(),
         &TypstPoint { x: 88.0, y: 88.0 },
+    );
+}
+
+#[test]
+fn test_fixed_node_dot_layout_uses_edge_label_size_for_parallel_edges() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph fixed_dot_labels {
+            a [pos="0,0"]
+            b [pos="10,0"]
+            a -> b ["label-width"="8", "label-height"="1"]
+            a -> b ["label-width"="8", "label-height"="1"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let first = edges[0].pos.as_ref().unwrap();
+    let second = edges[1].pos.as_ref().unwrap();
+    assert!((first.x - 5.0).abs() < 1e-9);
+    assert!((second.x - 5.0).abs() < 1e-9);
+    assert!(
+        (first.y - second.y).abs() > 1.0,
+        "parallel same-rank edge labels should be assigned distinct measured-height lanes: {first:?} {second:?}"
+    );
+}
+
+#[test]
+fn test_fixed_node_dot_layout_lanes_same_rank_edge_labels() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph fixed_dot_same_rank_labels {
+            a [pos="0,0"]
+            b [pos="3,0"]
+            c [pos="6,0"]
+            d [pos="9,0"]
+            a -> c ["label-width"="4", "label-height"="1"]
+            b -> d ["label-width"="4", "label-height"="1"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("layout-nodes".to_string(), "fixed".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let first = edges[0].pos.as_ref().unwrap();
+    let second = edges[1].pos.as_ref().unwrap();
+    assert!(first.y > 0.0);
+    assert!(second.y > 0.0);
+    assert!(
+        (first.y - second.y).abs() > 0.5,
+        "same-rank edge labels with overlapping x ranges should be assigned distinct lanes"
     );
 }
 
