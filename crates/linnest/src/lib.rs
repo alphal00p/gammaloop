@@ -1932,10 +1932,10 @@ impl TypstGraph {
                 LayoutAlgo::Tree | LayoutAlgo::Dot => {
                     if fixed_nodes {
                         let (_, selected_edges) = self.selected_layout_items(subgraph);
-                        self.edge_layout_positions_from_current_nodes(
+                        self.fixed_node_partial_layout_positions(
                             tree_cfg,
+                            self.layout_config.layout_algo,
                             Some(&selected_edges),
-                            false,
                         )
                     } else {
                         self.partial_layout_positions(
@@ -1960,7 +1960,7 @@ impl TypstGraph {
             LayoutAlgo::Tree | LayoutAlgo::Dot
         ) {
             let (mut vertex_points, mut edge_points) = if fixed_nodes {
-                self.edge_layout_positions_from_current_nodes(tree_cfg, None, false)
+                self.fixed_node_direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
             } else {
                 self.direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
             };
@@ -2535,6 +2535,31 @@ impl TypstGraph {
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, subgraph, false)
     }
 
+    fn fixed_node_direct_layout_positions(
+        &self,
+        cfg: TreeInitCfg,
+        algo: LayoutAlgo,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        self.fixed_node_partial_layout_positions(cfg, algo, None)
+    }
+
+    fn fixed_node_partial_layout_positions(
+        &self,
+        cfg: TreeInitCfg,
+        algo: LayoutAlgo,
+        selected_edges: Option<&EdgeVec<bool>>,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        match algo {
+            LayoutAlgo::Tree => {
+                self.edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
+            }
+            LayoutAlgo::Dot => {
+                self.dot_edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
+            }
+            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+        }
+    }
+
     fn partial_optimized_positions(
         &mut self,
         cfg: TreeInitCfg,
@@ -2655,42 +2680,58 @@ impl TypstGraph {
             }
         }
 
-        let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
-        let mut n_per_level: Vec<usize> = vec![];
-        let roots = self.ordered_layout_nodes(&included);
-        for root_node in roots {
-            let is_included = included[root_node];
-            if !is_included || level[root_node] >= 0 {
+        let ordered_nodes = self.ordered_layout_nodes(&included);
+        let order = self.layout_order_positions(&ordered_nodes);
+        for (node, children) in adjacency.iter_mut() {
+            if included[node] {
+                children.sort_by_key(|child| order[child.0]);
+            }
+        }
+
+        let mut visited = self.new_nodevec(|_, _, _| false);
+        let mut depth = self.new_nodevec(|_, _, _| 0usize);
+        let mut children = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
+        let mut roots = Vec::new();
+
+        for root_node in ordered_nodes {
+            if !included[root_node] || visited[root_node] {
                 continue;
             }
 
             let mut q = std::collections::VecDeque::new();
-            level[root_node] = 0;
-            if n_per_level.is_empty() {
-                n_per_level.push(1);
-            } else {
-                n_per_level[0] += 1;
-            }
+            visited[root_node] = true;
             q.push_back(root_node);
+            roots.push(root_node);
             while let Some(v) = q.pop_front() {
-                let next_level = level[v] + 1;
                 for &u in &adjacency[v] {
-                    if level[u] < 0 {
-                        level[u] = next_level;
-                        if level[u] == n_per_level.len() as i32 {
-                            n_per_level.push(1);
-                        } else if level[u] < n_per_level.len() as i32 {
-                            n_per_level[level[u] as usize] += 1;
-                        } else {
-                            panic!("Level out of bounds");
-                        }
-                        q.push_back(u);
+                    if !included[u] || visited[u] {
+                        continue;
                     }
+                    visited[u] = true;
+                    depth[u] = depth[v] + 1;
+                    children[v].push(u);
+                    q.push_back(u);
                 }
             }
         }
 
-        self.targets_from_levels(cfg, &included, &level, &n_per_level)
+        let mut x_slots = self.new_nodevec(|_, _, _| None::<f64>);
+        let mut cursor = 0.0;
+        for (root_index, &root) in roots.iter().enumerate() {
+            Self::assign_tidy_tree_x(root, &children, &mut x_slots, &mut cursor);
+            if root_index + 1 < roots.len() {
+                cursor += 1.0;
+            }
+        }
+
+        let mut targets = self.new_nodevec(|_, _, _| None);
+        for (node, slot) in x_slots.iter() {
+            if let Some(slot) = *slot {
+                targets[node] = Some(Point2::new(slot * cfg.dx, -(depth[node] as f64) * cfg.dy));
+            }
+        }
+        Self::center_targets_x(&mut targets);
+        targets
     }
 
     fn dot_layout_targets(
@@ -2701,6 +2742,7 @@ impl TypstGraph {
     ) -> NodeVec<Option<Point2<f64>>> {
         let included = self.selected_layout_nodes(subgraph, include_all_nodes);
         let mut outgoing = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
+        let mut incoming = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
         let mut indegree = self.new_nodevec(|_, _, _| 0usize);
         let mut included_count = 0usize;
 
@@ -2717,11 +2759,16 @@ impl TypstGraph {
                     let sink_node = self.node_id(sink);
                     if source_node != sink_node && included[source_node] && included[sink_node] {
                         outgoing[source_node].push(sink_node);
+                        incoming[sink_node].push(source_node);
                         indegree[sink_node] += 1;
                     }
                 }
                 HedgePair::Unpaired { .. } => {}
             }
+        }
+
+        if included_count == 0 {
+            return self.new_nodevec(|_, _, _| None);
         }
 
         let mut rank: NodeVec<usize> = self.new_nodevec(|_, _, _| 0);
@@ -2743,57 +2790,186 @@ impl TypstGraph {
             }
         }
 
+        let ordered_nodes = self.ordered_layout_nodes(&included);
+        let mut indegree_work = indegree.clone();
         let mut visited = 0usize;
         let mut processed = self.new_nodevec(|_, _, _| false);
-        while let Some(node) = queue.pop_front() {
-            if processed[node] {
-                continue;
-            }
-            processed[node] = true;
-            visited += 1;
-            let next_rank = rank[node] + 1;
-            for child in outgoing[node].clone() {
-                if processed[child] {
+        while visited < included_count {
+            while let Some(node) = queue.pop_front() {
+                if processed[node] {
                     continue;
                 }
-                if rank[child] < next_rank {
-                    rank[child] = next_rank;
+                processed[node] = true;
+                visited += 1;
+                let next_rank = rank[node] + 1;
+                for child in outgoing[node].clone() {
+                    if processed[child] {
+                        continue;
+                    }
+                    if rank[child] < next_rank {
+                        rank[child] = next_rank;
+                    }
+                    if indegree_work[child] > 0 {
+                        indegree_work[child] -= 1;
+                    }
+                    if indegree_work[child] == 0 && !enqueued[child] {
+                        enqueued[child] = true;
+                        queue.push_back(child);
+                    }
                 }
-                if indegree[child] > 0 {
-                    indegree[child] -= 1;
-                }
-                if indegree[child] == 0 && !enqueued[child] {
-                    enqueued[child] = true;
-                    queue.push_back(child);
+            }
+
+            if visited < included_count {
+                if let Some(&node) = ordered_nodes.iter().find(|&&node| !processed[node]) {
+                    enqueued[node] = true;
+                    queue.push_back(node);
+                } else {
+                    break;
                 }
             }
         }
 
-        if visited != included_count {
-            let forest = self.spanning_forest_of(subgraph);
-            return self.tree_layout_targets(cfg, &forest, subgraph, include_all_nodes);
-        }
+        self.compact_ranks(&included, &mut rank);
 
         let max_rank = rank
             .iter()
             .filter_map(|(node, rank)| included[node].then_some(*rank))
             .max()
             .unwrap_or(0);
-        let mut n_per_rank = vec![0usize; max_rank + 1];
-        for (node, &is_included) in included.iter() {
-            if is_included {
-                n_per_rank[rank[node]] += 1;
+        let mut ranks = vec![Vec::<NodeIndex>::new(); max_rank + 1];
+        for &node in &ordered_nodes {
+            if included[node] {
+                ranks[rank[node]].push(node);
             }
         }
 
-        let mut level: NodeVec<i32> = self.new_nodevec(|_, _, _| -1);
-        for (node, &is_included) in included.iter() {
-            if is_included {
-                level[node] = rank[node] as i32;
+        for _ in 0..8 {
+            let mut positions = self.dot_rank_positions(&ranks);
+            for nodes in ranks.iter_mut().skip(1) {
+                Self::sort_dot_rank_by_barycenter(nodes, &incoming, &positions);
+            }
+
+            positions = self.dot_rank_positions(&ranks);
+            for nodes in ranks.iter_mut().rev().skip(1) {
+                Self::sort_dot_rank_by_barycenter(nodes, &outgoing, &positions);
             }
         }
 
-        self.targets_from_levels(cfg, &included, &level, &n_per_rank)
+        let mut targets = self.new_nodevec(|_, _, _| None);
+        for (rank_index, nodes) in ranks.iter().enumerate() {
+            let width = nodes.len().saturating_sub(1) as f64 * cfg.dx;
+            for (position, &node) in nodes.iter().enumerate() {
+                targets[node] = Some(Point2::new(
+                    position as f64 * cfg.dx - 0.5 * width,
+                    -(rank_index as f64) * cfg.dy,
+                ));
+            }
+        }
+        Self::center_targets_x(&mut targets);
+        targets
+    }
+
+    fn assign_tidy_tree_x(
+        node: NodeIndex,
+        children: &NodeVec<Vec<NodeIndex>>,
+        x_slots: &mut NodeVec<Option<f64>>,
+        cursor: &mut f64,
+    ) -> f64 {
+        let x = if children[node].is_empty() {
+            let x = *cursor;
+            *cursor += 1.0;
+            x
+        } else {
+            for &child in &children[node] {
+                Self::assign_tidy_tree_x(child, children, x_slots, cursor);
+            }
+            let first = x_slots[children[node][0]].unwrap();
+            let last = x_slots[*children[node].last().unwrap()].unwrap();
+            0.5 * (first + last)
+        };
+        x_slots[node] = Some(x);
+        x
+    }
+
+    fn compact_ranks(&self, included: &NodeVec<bool>, rank: &mut NodeVec<usize>) {
+        let mut used = BTreeMap::new();
+        for (node, &is_included) in included.iter() {
+            if is_included {
+                used.entry(rank[node]).or_insert(0usize);
+            }
+        }
+        for (new_rank, (_, mapped)) in used.iter_mut().enumerate() {
+            *mapped = new_rank;
+        }
+        for (node, is_included) in included.iter() {
+            if *is_included {
+                rank[node] = used[&rank[node]];
+            }
+        }
+    }
+
+    fn dot_rank_positions(&self, ranks: &[Vec<NodeIndex>]) -> NodeVec<Option<usize>> {
+        let mut positions = self.new_nodevec(|_, _, _| None);
+        for nodes in ranks {
+            for (position, &node) in nodes.iter().enumerate() {
+                positions[node] = Some(position);
+            }
+        }
+        positions
+    }
+
+    fn sort_dot_rank_by_barycenter(
+        nodes: &mut Vec<NodeIndex>,
+        neighbors: &NodeVec<Vec<NodeIndex>>,
+        positions: &NodeVec<Option<usize>>,
+    ) {
+        let mut keyed = nodes
+            .iter()
+            .enumerate()
+            .map(|(old_position, &node)| {
+                let mut sum = 0.0;
+                let mut count = 0usize;
+                for &neighbor in &neighbors[node] {
+                    if let Some(position) = positions[neighbor] {
+                        sum += position as f64;
+                        count += 1;
+                    }
+                }
+                let barycenter = if count == 0 {
+                    old_position as f64
+                } else {
+                    sum / count as f64
+                };
+                (barycenter, old_position, node)
+            })
+            .collect::<Vec<_>>();
+        keyed.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
+        });
+        *nodes = keyed.into_iter().map(|(_, _, node)| node).collect();
+    }
+
+    fn center_targets_x(targets: &mut NodeVec<Option<Point2<f64>>>) {
+        let mut min_x = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        for (_, target) in targets.iter() {
+            if let Some(target) = target {
+                min_x = min_x.min(target.x);
+                max_x = max_x.max(target.x);
+            }
+        }
+        if !min_x.is_finite() || !max_x.is_finite() {
+            return;
+        }
+
+        let center = 0.5 * (min_x + max_x);
+        for (_, target) in targets.iter_mut() {
+            if let Some(target) = target {
+                target.x -= center;
+            }
+        }
     }
 
     fn ordered_layout_nodes(&self, included: &NodeVec<bool>) -> Vec<NodeIndex> {
@@ -2820,34 +2996,12 @@ impl TypstGraph {
         nodes
     }
 
-    fn targets_from_levels(
-        &self,
-        cfg: TreeInitCfg,
-        included: &NodeVec<bool>,
-        level: &NodeVec<i32>,
-        n_per_level: &[usize],
-    ) -> NodeVec<Option<Point2<f64>>> {
-        let mut targets = self.new_nodevec(|_, _, _| None);
-        let mut level_counters: Vec<usize> = vec![0; n_per_level.len()];
-        let ordered_nodes = self.ordered_layout_nodes(included);
-
-        for (cl, &n) in n_per_level.iter().enumerate() {
-            let k = n as f64;
-            let width = (k - 1.0) * cfg.dx;
-            let y = (cl as f64) * cfg.dy;
-            for &node in &ordered_nodes {
-                let node_level = level[node];
-                if !included[node] || node_level != cl as i32 {
-                    continue;
-                }
-                let position_in_level = level_counters[cl];
-                let x = -0.5 * width + (position_in_level as f64) * cfg.dx;
-                level_counters[cl] += 1;
-                targets[node] = Some(Point2::new(x, y));
-            }
+    fn layout_order_positions(&self, ordered_nodes: &[NodeIndex]) -> Vec<usize> {
+        let mut order = vec![usize::MAX; self.n_nodes()];
+        for (position, node) in ordered_nodes.iter().enumerate() {
+            order[node.0] = position;
         }
-
-        targets
+        order
     }
 
     fn positions_from_node_targets(
@@ -2883,7 +3037,7 @@ impl TypstGraph {
                 }
                 HedgePair::Unpaired { hedge, .. } => {
                     let node = self.node_id(hedge);
-                    pos_v[node] + Vector2::new(1.0, 1.0)
+                    pos_v[node] + Vector2::new(0.0, cfg.dy * 0.5)
                 }
             };
             Self::apply_target_point(
@@ -2926,7 +3080,7 @@ impl TypstGraph {
                 }
                 HedgePair::Unpaired { hedge, .. } => {
                     let node = self.node_id(hedge);
-                    pos_v[node] + Vector2::new(1.0, 1.0)
+                    pos_v[node] + Vector2::new(0.0, cfg.dy * 0.5)
                 }
             };
             let (start_x, start_y) = if respect_start {
@@ -2946,6 +3100,109 @@ impl TypstGraph {
         }
 
         (pos_v, pos_e)
+    }
+
+    fn dot_edge_layout_positions_from_current_nodes(
+        &self,
+        cfg: TreeInitCfg,
+        selected_edges: Option<&EdgeVec<bool>>,
+        respect_start: bool,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let pos_v = self.new_nodevec(|_, _, n| n.pos);
+        let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
+        let mut targets = self.new_edgevec(|_, _, _| None::<Point2<f64>>);
+        let mut paired_groups = BTreeMap::<(usize, usize), Vec<EdgeIndex>>::new();
+        let mut dangling_groups = BTreeMap::<(usize, Flow), Vec<EdgeIndex>>::new();
+
+        for (pair, _, _) in self.iter_edges() {
+            let eid = self[&pair.any_hedge()];
+            if let Some(selected_edges) = selected_edges {
+                if !selected_edges[eid] {
+                    continue;
+                }
+            }
+
+            match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let source_node = self.node_id(source);
+                    let sink_node = self.node_id(sink);
+                    paired_groups
+                        .entry((source_node.0, sink_node.0))
+                        .or_default()
+                        .push(eid);
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let node = self.node_id(hedge);
+                    dangling_groups.entry((node.0, flow)).or_default().push(eid);
+                }
+            }
+        }
+
+        for edges in paired_groups.values_mut() {
+            edges.sort_by_key(|edge| edge.0);
+            let count = edges.len();
+            for (position, &eid) in edges.iter().enumerate() {
+                let (_, pair) = &self.graph[&eid];
+                let (source, sink) = match pair {
+                    HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                        (*source, *sink)
+                    }
+                    HedgePair::Unpaired { .. } => unreachable!(),
+                };
+                let a = pos_v[self.node_id(source)];
+                let b = pos_v[self.node_id(sink)];
+                let slot = Self::centered_slot(position, count);
+                let normal = Self::edge_route_normal(a, b);
+                targets[eid] = Some(a.midpoint(b) + normal * slot * cfg.dx * 0.35);
+            }
+        }
+
+        for ((node, _flow), edges) in dangling_groups.iter_mut() {
+            edges.sort_by_key(|edge| edge.0);
+            let count = edges.len();
+            let anchor = pos_v[NodeIndex(*node)];
+            for (position, &eid) in edges.iter().enumerate() {
+                let slot = Self::centered_slot(position, count);
+                targets[eid] =
+                    Some(anchor + Vector2::new(slot * cfg.dx * 0.35, cfg.dy * 0.5));
+            }
+        }
+
+        for (eid, target) in targets.iter() {
+            let Some(target) = *target else {
+                continue;
+            };
+            let (start_x, start_y) = if respect_start {
+                (self[eid].start_x, self[eid].start_y)
+            } else {
+                (false, false)
+            };
+            Self::apply_target_point(
+                &self[eid].constraints,
+                start_x,
+                start_y,
+                target,
+                Vector2::new(cfg.dx * 0.5, cfg.dy * 0.5),
+                eid,
+                &mut pos_e,
+            );
+        }
+
+        (pos_v, pos_e)
+    }
+
+    fn centered_slot(position: usize, count: usize) -> f64 {
+        position as f64 - 0.5 * count.saturating_sub(1) as f64
+    }
+
+    fn edge_route_normal(a: Point2<f64>, b: Point2<f64>) -> Vector2<f64> {
+        let direction = b - a;
+        let length = direction.magnitude();
+        if length <= 1e-9 {
+            Vector2::unit_x()
+        } else {
+            Vector2::new(-direction.y, direction.x) / length
+        }
     }
 
     /// Generate new positions based on the default traversal-tree placement.

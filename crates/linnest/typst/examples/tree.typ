@@ -31,46 +31,128 @@
   )
 }
 
+#let tree-depths(g, tree, root: 0) = {
+  let tree-hedges = subgraph.hedges(tree)
+  let adjacency = (:)
+  for edge in graph.edges(g) {
+    if edge.source != none and edge.sink != none {
+      let in-tree = tree-hedges.contains(edge.source.hedge) or tree-hedges.contains(edge.sink.hedge)
+      if in-tree {
+        let source = str(edge.source.node)
+        let sink = str(edge.sink.node)
+        adjacency.insert(source, adjacency.at(source, default: ()) + (edge.sink.node,))
+        adjacency.insert(sink, adjacency.at(sink, default: ()) + (edge.source.node,))
+      }
+    }
+  }
+
+  let depths = (:)
+  let frontier = (root,)
+  depths.insert(str(root), 0)
+  while frontier.len() > 0 {
+      let next = ()
+      for node in frontier {
+        for child in adjacency.at(str(node), default: ()) {
+        if not (str(child) in depths) {
+          depths.insert(str(child), depths.at(str(node)) + 1)
+          next.push(child)
+        }
+      }
+    }
+    frontier = next
+  }
+  depths
+}
+
+#let tree-edge(edge, tree-hedges) = {
+  let source = edge.at("source-half-edge")
+  let sink = edge.at("sink-half-edge")
+  let source-in-tree = source != none and tree-hedges.contains(source.hedge)
+  let sink-in-tree = sink != none and tree-hedges.contains(sink.hedge)
+  source-in-tree or sink-in-tree
+}
+
+#let edge-depth(edge, depths) = {
+  let depth = none
+  for half-edge in (edge.at("source-half-edge"), edge.at("sink-half-edge")) {
+    if half-edge != none {
+      let value = depths.at(str(half-edge.node), default: 0)
+      if depth == none or value < depth {
+        depth = value
+      }
+    }
+  }
+  if depth == none { 0 } else { depth }
+}
+
+#let node-label(node) = {
+  let value = node.at("label", default: node.name)
+  if value == none {
+    none
+  } else {
+    let value = str(value).trim("\"")
+    if value == "" {
+      value = str(node.name)
+    }
+    text(weight: "bold")[#value]
+  }
+}
+
+#let edge-style(depths, tree-hedges) = edge => {
+  if tree-edge(edge, tree-hedges) {
+    let depth = edge-depth(edge, depths)
+    (stroke: rgb("#555555") + 1.7pt / (1 + depth / 3))
+  } else {
+    (stroke: rgb("#b9bec7") + 0.35pt)
+  }
+}
+
 #let draw_tree_dot(doc) = {
   show raw: it => if it.at("lang") == "dot" {
     for g in graph.parse(it.text) {
       let tree = subgraph.label(g, tree-label(g))
       let rest = complement-subgraph(g, tree)
+      let tree-hedges = subgraph.hedges(tree)
+      let g = layout(
+        g,
+        layout-algo: "tree",
+        subgraph: tree,
+        layout-roots: (0,),
+        tree-dx: 26.0,
+        tree-dy: 12.0,
+        label-steps: 0,
+      )
       let g = layout(
         g,
         layout-algo: "dot",
-        subgraph: tree,
-        layout-roots: (0,),
-        tree-dx: 34.0,
-        tree-dy: 34.0,
-        label-steps: 0,
-      )
-      let g = layout(
-        g,
-        layout-algo: "force",
         subgraph: rest,
         layout-nodes: "fixed",
-        epochs: 40,
-        steps: 50,
-        beta: 35,
-        k-spring: 5,
-        gamma-ee: 0.25,
-        gamma-ev: 0.06,
-        gamma-dangling: 1.5,
-        g-center: 0,
-        step: 0.45,
-        delta: 0.25,
-        length-scale: 0.35,
+        tree-dx: 26.0,
+        tree-dy: 12.0,
         label-steps: 0,
       )
+      let depths = tree-depths(g, tree)
       draw(
         g,
         subgraph: tree,
         unit: 1.0,
-        edge-stroke: 0.45pt,
-        node-min-radius: 0.1,
-        node-label-padding: 0.02,
-        subgraph-edge-style: (stroke: rgb("#72b7b2") + 2.5pt),
+        edge-stroke: 0.35pt,
+        edge-omega: 1.18,
+        source-style: edge-style(depths, tree-hedges),
+        sink-style: edge-style(depths, tree-hedges),
+        node-fill: none,
+        node-stroke: none,
+        node-min-radius: 0.01,
+        node-label-padding: 0.0,
+        node-label: node-label,
+        node-label-style: (
+          padding: 0.08,
+          frame: "rect",
+          fill: white,
+          stroke: 0.55pt + rgb("#777777"),
+        ),
+        node-outset: 0.28,
+        subgraph-edge-style: (stroke: rgb("#72b7b2") + 1.2pt),
       )
     }
   }
@@ -81,7 +163,7 @@
 
 ```dot
 digraph {
-  node	 [shape=circle,height=0.1,label=""];
+  node	 [shape=circle,height=0.1];
   overlap = "scale";
   layout = "neato";
   tree = "3UDua8U1UeS1uIlguU5mUxjPAMQX5nq1VXmmhhorLyBLdGBJYSqx8ebV2lOp"
