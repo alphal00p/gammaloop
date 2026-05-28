@@ -22,7 +22,8 @@ use spenso::{
     network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
     network::library::symbolic::{ETS, ExplicitKey},
     network::{
-        ExecutionResult, MinResultRank, Network, Sequential, SmallestDegree, Steps,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith, Network,
+        PAIR_SCORE_ATOM_AWARE, ScalarAliases, Sequential, SmallestDegree, Steps,
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
         store::{NetworkStore, NetworkStoreAccess},
     },
@@ -1248,6 +1249,87 @@ fn execute_actual_net_min_result_rank_parallel_summary(
     elapsed
 }
 
+fn alias_large_scalar_refs(label: &str, net: &mut ParsingNet) -> ScalarAliases {
+    let threshold = std::env::var("SPENSO_ALIAS_SCALAR_THRESHOLD")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(4096);
+    let start = Instant::now();
+    let aliases = net.alias_scalar_refs(|_, scalar| scalar.as_view().get_byte_size() >= threshold);
+    eprintln!(
+        "{label} scalar_aliases threshold_bytes={threshold} created={} terms={} bytes={} max_bytes={} elapsed={:.3?}",
+        aliases.aliases_created(),
+        aliases.aliased_terms(),
+        aliases.aliased_bytes(),
+        aliases.max_aliased_bytes(),
+        start.elapsed()
+    );
+    aliases
+}
+
+fn execute_actual_net_min_result_rank_parallel_aliased_summary(
+    label: &str,
+    mut net: ParsingNet,
+) -> std::time::Duration {
+    execute_actual_net_parallel_aliased_summary::<{ spenso::network::PAIR_SCORE_SPARSE_ATOM_AWARE }>(
+        label,
+        "sparse-aware",
+        &mut net,
+    )
+}
+
+fn execute_actual_net_parallel_aliased_summary<const SCORE_ORDER: u128>(
+    label: &str,
+    order_label: &str,
+    net: &mut ParsingNet,
+) -> std::time::Duration {
+    let aliases = alias_large_scalar_refs(label, net);
+    let lib = TENSORLIB.read().unwrap();
+    spenso::network::profile::reset();
+    let start = Instant::now();
+    net.execute_parallel::<
+        MinResultRankWith<{ SCORE_ORDER }, { DEFAULT_EXACT_JOIN_LIMIT }>,
+        _,
+        _,
+        _,
+    >(&*lib, &*FUN_LIB)
+        .unwrap_or_else(|error| {
+            panic!("{label} parallel {order_label} aliased execution failed: {error}")
+        });
+    let elapsed = start.elapsed();
+    report_actual_net_stats(&format!("{label} aliased_after_execute"), &net);
+    spenso::network::profile::report(&format!("{label} after_aliased_execute"));
+
+    let result_start = Instant::now();
+    let result = net
+        .result_scalar()
+        .unwrap_or_else(|error| panic!("{label} aliased scalar result failed: {error}"));
+    let root = match result {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(value) => value.into_owned(),
+    };
+    let aliased = net.aliased_atom(&aliases, root);
+    let result_elapsed = result_start.elapsed();
+    eprintln!(
+        "{label} aliased_summary order={order_label} kind=scalar execute={elapsed:.3?} result={result_elapsed:.3?} aliases={} root_terms={} root_bytes={}",
+        aliased.get_aliases().len(),
+        aliased.get_root().nterms(),
+        aliased.get_root().as_view().get_byte_size()
+    );
+    elapsed
+}
+
+fn parse_and_execute_symbolica_expression_order<const SCORE_ORDER: u128>(
+    expr: &Atom,
+    label: &str,
+    order_label: &str,
+) {
+    let mut net = parse_actual_net(label, expr);
+    let _ =
+        execute_actual_net_parallel_aliased_summary::<SCORE_ORDER>(label, order_label, &mut net);
+}
+
 fn parse_actual_net_quiet(label: &str, expr: &Atom) -> ParsingNet {
     let lib = TENSORLIB.read().unwrap();
     let start = Instant::now();
@@ -1360,6 +1442,50 @@ fn symbolica_expression_input_actual_network_parallel_min_result_rank_execute() 
     let expr = parse_root_input("symbolica_expression.txt");
     let net = parse_actual_net("raw_parallel_min_result_rank", &expr);
     let _ = execute_actual_net_min_result_rank_parallel("raw_parallel_min_result_rank", net);
+}
+
+#[test]
+#[ignore = "diagnostic timing for symbolica_expression.txt with scalar aliases and sparse-aware order"]
+fn symbolica_expression_input_actual_network_sparse_alias_summary() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("symbolica_expression.txt");
+    let net = parse_actual_net("symbolica_expression_sparse_alias", &expr);
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "symbolica_expression_sparse_alias",
+        net,
+    );
+}
+
+#[test]
+#[ignore = "diagnostic timing for boundary-factored symbolica_expression.txt with scalar aliases and sparse-aware order"]
+fn symbolica_expression_input_boundary_factor_sparse_alias_summary() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("symbolica_expression.txt");
+    let net = parse_actual_net_with_boundary_factor(
+        "symbolica_expression_boundary_factor_sparse_alias",
+        &expr,
+    );
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "symbolica_expression_boundary_factor_sparse_alias",
+        net,
+    );
+}
+
+#[test]
+#[ignore = "diagnostic comparison for symbolica_expression.txt aliased execution order"]
+fn symbolica_expression_input_actual_network_alias_order_compare() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("symbolica_expression.txt");
+    parse_and_execute_symbolica_expression_order::<{ PAIR_SCORE_ATOM_AWARE }>(
+        &expr,
+        "symbolica_expression_alias_atom_aware",
+        "atom-aware",
+    );
+    parse_and_execute_symbolica_expression_order::<{ spenso::network::PAIR_SCORE_SPARSE_ATOM_AWARE }>(
+        &expr,
+        "symbolica_expression_alias_sparse_aware",
+        "sparse-aware",
+    );
 }
 
 #[test]
@@ -1548,6 +1674,43 @@ fn spenso_eval_input_0_graph_boundary_candidate_diagnostics() {
 }
 
 #[test]
+#[ignore = "diagnostic parse and boundary selection for spenso_eval_input_0.txt with scalar aliases"]
+fn spenso_eval_input_0_sparse_alias_graph_boundary_candidate_diagnostics() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let mut net = parse_actual_net(
+        "spenso_eval_input_0_sparse_alias_boundary_candidates",
+        &expr,
+    );
+    let _aliases = alias_large_scalar_refs("spenso_eval_input_0_sparse_alias", &mut net);
+    report_actual_net_leaf_stats("spenso_eval_input_0_sparse_alias", &net);
+    log_product_boundary_candidates(
+        "spenso_eval_input_0_sparse_alias_boundary_candidates",
+        &net,
+        24,
+    );
+}
+
+#[test]
+#[ignore = "diagnostic boundary-factored parse and boundary selection for spenso_eval_input_0.txt with scalar aliases"]
+fn spenso_eval_input_0_boundary_factor_sparse_alias_graph_boundary_candidate_diagnostics() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expr = parse_root_input("spenso_eval_input_0.txt");
+    let mut net = parse_actual_net_with_boundary_factor(
+        "spenso_eval_input_0_boundary_factor_sparse_alias_boundary_candidates",
+        &expr,
+    );
+    let _aliases =
+        alias_large_scalar_refs("spenso_eval_input_0_boundary_factor_sparse_alias", &mut net);
+    report_actual_net_leaf_stats("spenso_eval_input_0_boundary_factor_sparse_alias", &net);
+    log_product_boundary_candidates(
+        "spenso_eval_input_0_boundary_factor_sparse_alias_boundary_candidates",
+        &net,
+        24,
+    );
+}
+
+#[test]
 #[ignore = "diagnostic timing for the larger spenso_eval_input_0.txt after Hornering"]
 fn spenso_eval_input_0_horner_actual_network_parse() {
     test_initialise().expect("GammaLoop initialization should succeed");
@@ -1702,6 +1865,42 @@ fn late_tensor_sum_mwe_expanded_factored_and_hornered() {
         expanded_hornered_diff.is_zero(),
         "expanded and Hornered MWE forms produced different scalar values: {}",
         expanded_hornered_diff
+    );
+}
+
+#[test]
+#[ignore = "diagnostic MWE for late tensor-valued sum with scalar aliases and sparse-aware order"]
+fn late_tensor_sum_mwe_expanded_factored_and_hornered_aliased_summary() {
+    test_initialise().expect("GammaLoop initialization should succeed");
+    let expanded = late_tensor_sum_mwe_expr(12, 12);
+    let factored = factored_tensor_sum_mwe_expr(12, 12);
+    let hornered = collect_horner(&expanded);
+
+    let expanded_net = parse_actual_net("late_tensor_sum_mwe_expanded_alias", &expanded);
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "late_tensor_sum_mwe_expanded_alias",
+        expanded_net,
+    );
+
+    let boundary_factor_net = parse_actual_net_with_boundary_factor(
+        "late_tensor_sum_mwe_boundary_factor_alias",
+        &expanded,
+    );
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "late_tensor_sum_mwe_boundary_factor_alias",
+        boundary_factor_net,
+    );
+
+    let factored_net = parse_actual_net("late_tensor_sum_mwe_factored_alias", &factored);
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "late_tensor_sum_mwe_factored_alias",
+        factored_net,
+    );
+
+    let hornered_net = parse_actual_net("late_tensor_sum_mwe_hornered_alias", &hornered);
+    let _ = execute_actual_net_min_result_rank_parallel_aliased_summary(
+        "late_tensor_sum_mwe_hornered_alias",
+        hornered_net,
     );
 }
 
