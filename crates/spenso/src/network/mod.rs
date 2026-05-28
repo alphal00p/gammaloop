@@ -2,9 +2,12 @@ use graph::{
     NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation,
     TensorTerm,
 };
-use linnet::half_edge::{
-    NodeIndex,
-    subgraph::{Inclusion, SuBitGraph, SubSetLike},
+use linnet::{
+    half_edge::{
+        NodeIndex,
+        subgraph::{Inclusion, SuBitGraph, SubSetLike},
+    },
+    permutation::Permutation,
 };
 use profile::{Counter, Timer};
 use rayon::prelude::*;
@@ -251,6 +254,7 @@ pub trait FastTensorSumContractible<Sc>: Sized {
     fn contraction_pair_estimate(
         &self,
         other: &Self,
+        _left_match_permutation: &Permutation,
         _left_matches: &[bool],
         _right_matches: &[bool],
         output_dense_size: u128,
@@ -383,6 +387,7 @@ where
     fn contraction_pair_estimate(
         &self,
         other: &Self,
+        left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
         output_dense_size: u128,
@@ -391,6 +396,7 @@ where
         sparse_atom_pair_estimate(
             self,
             other,
+            left_match_permutation,
             left_matches,
             right_matches,
             output_dense_size,
@@ -454,6 +460,7 @@ where
 fn sparse_atom_pair_estimate<S>(
     left: &ParamTensor<S>,
     right: &ParamTensor<S>,
+    left_match_permutation: &Permutation,
     left_matches: &[bool],
     right_matches: &[bool],
     output_dense_size: u128,
@@ -480,8 +487,9 @@ where
         return fallback;
     }
 
-    let left_groups = sparse_free_keys_by_match(left_sparse, left_matches);
-    let right_groups = sparse_free_keys_by_match(right_sparse, right_matches);
+    let left_groups =
+        sparse_free_keys_by_match(left_sparse, left_matches, Some(left_match_permutation));
+    let right_groups = sparse_free_keys_by_match(right_sparse, right_matches, None);
     if left_groups.is_empty() || right_groups.is_empty() {
         return TensorContractionPairEstimate {
             estimated_output_entries: 1,
@@ -570,6 +578,7 @@ where
 fn sparse_free_keys_by_match<S>(
     sparse: &SparseTensor<Atom, S>,
     matches: &[bool],
+    matched_key_permutation: Option<&Permutation>,
 ) -> HashMap<Vec<ConcreteIndex>, Vec<Vec<ConcreteIndex>>>
 where
     S: TensorStructure,
@@ -588,6 +597,9 @@ where
                 free_key.push(index);
             }
         }
+        let matched_key = matched_key_permutation
+            .map(|permutation| permutation.apply_slice(&matched_key))
+            .unwrap_or(matched_key);
         groups.entry(matched_key).or_default().push(free_key);
     }
     groups
@@ -628,6 +640,7 @@ where
     fn contraction_pair_estimate(
         &self,
         other: &Self,
+        left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
         output_dense_size: u128,
@@ -638,6 +651,7 @@ where
                 sparse_atom_pair_estimate(
                     left,
                     right,
+                    left_match_permutation,
                     left_matches,
                     right_matches,
                     output_dense_size,

@@ -1584,7 +1584,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             for (right_operand, right_tensor, right_structure, right_profile) in
                 &tensors[left_position + 1..]
             {
-                let Some((_, left_matches, right_matches)) =
+                let Some((left_match_permutation, left_matches, right_matches)) =
                     left_structure.match_indices(right_structure)
                 else {
                     continue;
@@ -1604,6 +1604,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 );
                 let pair_estimate = left_tensor.contraction_pair_estimate(
                     right_tensor,
+                    &left_match_permutation,
                     &left_matches,
                     &right_matches,
                     output_dense_size,
