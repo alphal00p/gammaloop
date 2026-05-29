@@ -818,6 +818,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
 
     fn straighten(&mut self) {
         self.solve_horizontal_constraints();
+        self.expand_leaf_slots();
 
         if self.config.profile == LayeredProfile::Stable {
             self.offset_stable_dummy_runs();
@@ -867,6 +868,57 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             return;
         }
         self.resolve_layer_overlaps(rank);
+        self.center_layer(rank);
+    }
+
+    fn expand_leaf_slots(&mut self) {
+        for rank in 0..self.layers.len() {
+            let mut groups = BTreeMap::<usize, Vec<usize>>::new();
+            for (position, &item) in self.layers[rank].iter().enumerate() {
+                let ItemKind::Real(_) = self.items[item].kind else {
+                    continue;
+                };
+                if self.neighbors[item].len() != 1 {
+                    continue;
+                }
+                let neighbor = self.neighbors[item][0].0;
+                groups.entry(neighbor).or_default().push(position);
+            }
+
+            for positions in groups.values() {
+                if positions.len() < 2 || !positions.windows(2).all(|pair| pair[1] == pair[0] + 1) {
+                    continue;
+                }
+                let items = positions
+                    .iter()
+                    .map(|&position| self.layers[rank][position])
+                    .collect::<Vec<_>>();
+                let center = self.items[self.neighbors[items[0]][0].0].x;
+                self.spread_items_around(rank, &items, center);
+            }
+            self.resolve_layer_overlaps(rank);
+        }
+    }
+
+    fn spread_items_around(&mut self, rank: usize, items: &[usize], center: f64) {
+        let span = items
+            .windows(2)
+            .map(|pair| {
+                0.5 * self.items[pair[0]].width
+                    + self.config.node_gap
+                    + 0.5 * self.items[pair[1]].width
+            })
+            .sum::<f64>();
+        let mut x = center - 0.5 * span;
+        for (index, &item) in items.iter().enumerate() {
+            if index > 0 {
+                let previous = items[index - 1];
+                x += 0.5 * self.items[previous].width
+                    + self.config.node_gap
+                    + 0.5 * self.items[item].width;
+            }
+            self.items[item].x = x;
+        }
         self.center_layer(rank);
     }
 
