@@ -1355,6 +1355,21 @@ struct LayoutConfig {
     layout_roots: Vec<usize>,
     #[serde(default, deserialize_with = "deserialize_string_vec")]
     rank_same: Vec<String>,
+    #[serde(
+        default = "default_route_edge_weight",
+        deserialize_with = "deserialize_f64"
+    )]
+    route_edge_weight: f64,
+    #[serde(
+        default = "default_route_label_width_scale",
+        deserialize_with = "deserialize_f64"
+    )]
+    route_label_width_scale: f64,
+    #[serde(
+        default = "default_route_label_width_cap",
+        deserialize_with = "deserialize_f64"
+    )]
+    route_label_width_cap: f64,
     #[serde(default, flatten)]
     spring: SpringConfig,
     #[serde(default, flatten)]
@@ -1388,6 +1403,9 @@ impl Default for LayoutConfig {
             layout_nodes: default_layout_node_mode(),
             layout_roots: Vec::new(),
             rank_same: Vec::new(),
+            route_edge_weight: default_route_edge_weight(),
+            route_label_width_scale: default_route_label_width_scale(),
+            route_label_width_cap: default_route_label_width_cap(),
             spring: SpringConfig::default(),
             schedule: ScheduleConfig::default(),
         }
@@ -1431,6 +1449,9 @@ impl LayoutConfig {
                 | "layout-roots"
                 | "length-scale"
                 | "rank-same"
+                | "route-edge-weight"
+                | "route-label-width-cap"
+                | "route-label-width-scale"
                 | "seed"
                 | "step"
                 | "step-shrink"
@@ -1527,6 +1548,18 @@ fn default_label_max_delta_scale() -> f64 {
 
 fn default_incremental_energy() -> bool {
     true
+}
+
+fn default_route_edge_weight() -> f64 {
+    0.15
+}
+
+fn default_route_label_width_scale() -> f64 {
+    1.0
+}
+
+fn default_route_label_width_cap() -> f64 {
+    2.0
 }
 
 fn default_crossing_penalty() -> f64 {
@@ -2041,7 +2074,14 @@ impl TypstGraph {
             };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(vertex_points, edge_points);
-            self.layout_edge_labels(energy.spring_length);
+            if matches!(
+                self.layout_config.layout_algo,
+                LayoutAlgo::Dot | LayoutAlgo::StableLayered
+            ) {
+                self.clear_edge_label_positions();
+            } else {
+                self.layout_edge_labels(energy.spring_length);
+            }
             return Ok(());
         }
 
@@ -2056,7 +2096,14 @@ impl TypstGraph {
             };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(vertex_points, edge_points);
-            self.layout_edge_labels(energy.spring_length);
+            if matches!(
+                self.layout_config.layout_algo,
+                LayoutAlgo::Dot | LayoutAlgo::StableLayered
+            ) {
+                self.clear_edge_label_positions();
+            } else {
+                self.layout_edge_labels(energy.spring_length);
+            }
             return Ok(());
         }
 
@@ -2457,6 +2504,12 @@ impl TypstGraph {
             self.graph[idx].label_pos = Some(labels[idx]);
             let angle = self.edge_label_angle(idx);
             self.graph[idx].label_angle = Some(angle);
+        }
+    }
+
+    fn clear_edge_label_positions(&mut self) {
+        for i in 0..self.graph.n_edges() {
+            self.graph[EdgeIndex(i)].label_pos = None;
         }
     }
 
@@ -2957,6 +3010,9 @@ impl TypstGraph {
             layer_gap: cfg.dy,
             node_gap: cfg.dx,
             edge_gap: cfg.dx * 0.35,
+            route_edge_weight: self.layout_config.route_edge_weight,
+            route_label_width_scale: self.layout_config.route_label_width_scale,
+            route_label_width_cap: self.layout_config.route_label_width_cap,
             sweeps: self.layout_config.schedule.epochs.clamp(1, 24),
             roots: self
                 .layout_config

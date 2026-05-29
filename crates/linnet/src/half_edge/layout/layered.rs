@@ -21,6 +21,9 @@ pub struct LayeredConfig {
     pub layer_gap: f64,
     pub node_gap: f64,
     pub edge_gap: f64,
+    pub route_edge_weight: f64,
+    pub route_label_width_scale: f64,
+    pub route_label_width_cap: f64,
     pub sweeps: usize,
     pub roots: Vec<NodeIndex>,
     pub rank_same: Vec<Vec<NodeIndex>>,
@@ -34,6 +37,9 @@ impl Default for LayeredConfig {
             layer_gap: 1.2,
             node_gap: 0.9,
             edge_gap: 0.35,
+            route_edge_weight: 0.15,
+            route_label_width_scale: 1.0,
+            route_label_width_cap: 2.0,
             sweeps: 8,
             roots: Vec::new(),
             rank_same: Vec::new(),
@@ -520,11 +526,19 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                     let label_width = geometry.edge_label_widths[edge.edge];
                     let label_height = geometry.edge_label_heights[edge.edge];
                     let width = if is_middle {
-                        let width = label_width.max(config.edge_gap);
                         if edge.rank_edge {
-                            width
+                            label_width.max(config.edge_gap)
                         } else {
-                            width.min((config.node_gap * 2.0).max(config.edge_gap))
+                            let width =
+                                (label_width * config.route_label_width_scale).max(config.edge_gap);
+                            if config.route_label_width_cap > 0.0 {
+                                width.min(
+                                    (config.node_gap * config.route_label_width_cap)
+                                        .max(config.edge_gap),
+                                )
+                            } else {
+                                width
+                            }
                         }
                     } else {
                         config.edge_gap * 0.5
@@ -548,7 +562,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             layout.edge_weights[edge.edge] = if edge.rank_edge {
                 geometry.edge_weights[edge.edge].max(0.0)
             } else {
-                geometry.edge_weights[edge.edge].max(0.0) * 0.15
+                geometry.edge_weights[edge.edge].max(0.0) * config.route_edge_weight.max(0.0)
             };
         }
 

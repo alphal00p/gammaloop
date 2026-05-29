@@ -161,6 +161,16 @@
   /// These are layout hints supplied by Typst rather than parsed graph
   /// structure. -> array
   rank-same: (),
+  /// Relative layout weight for paired edges outside the dot/stable-layered
+  /// rank subgraph. Lower values make these edges guide routing without
+  /// dominating the rank tree. -> float
+  route-edge-weight: 0.15,
+  /// Multiplier for measured edge-label width when sizing non-rank dummy
+  /// routing vertices in dot/stable-layered layout. -> float
+  route-label-width-scale: 1.0,
+  /// Maximum non-rank dummy label width as a multiple of `tree-dx`. Set to
+  /// `0` or a negative value to disable the cap. -> float
+  route-label-width-cap: 2.0,
   /// Force-only spring pulling temporary z coordinates back toward the layout
   /// plane. Use with `z-spring-growth` to help separate overlapping
   /// points during integration. -> float
@@ -209,6 +219,9 @@
     layout-nodes: layout-nodes,
     layout-roots: layout-roots,
     rank-same: rank-same.map(subgraph-module.to-label),
+    route-edge-weight: str(route-edge-weight),
+    route-label-width-scale: str(route-label-width-scale),
+    route-label-width-cap: str(route-label-width-cap),
     z-spring: str(z-spring),
     z-spring-growth: str(z-spring-growth),
     length-scale: str(length-scale),

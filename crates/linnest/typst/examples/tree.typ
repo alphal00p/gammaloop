@@ -332,6 +332,7 @@
         layout-roots: (0,),
         tree-dx: 0.35,
         tree-dy: 14.,
+        route-label-width-cap: 0.,
         label-steps: 40,
         label-length-scale: 0.35,
       )
