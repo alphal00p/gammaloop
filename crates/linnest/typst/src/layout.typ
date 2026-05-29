@@ -32,10 +32,12 @@
   /// Graph object returned by `graph.build` or `graph.parse`.
   /// -> dictionary
   graph,
-  /// Optional subgraph object to lay out. With `"tree"`, `"dot"`, and
-  /// `"stable-layered"`, other edges are drawn from the resulting node
-  /// positions. With `"force"` and `"anneal"`, nodes and edges outside the
-  /// subgraph are fixed boundary points during optimization.
+  /// Optional subgraph object to lay out. With `"tree"`, other edges are drawn
+  /// from the resulting node positions. With `"dot"` and `"stable-layered"`,
+  /// the subgraph determines rank constraints, while all paired edges between
+  /// included nodes get dummy routing vertices and edge positions. With
+  /// `"force"` and `"anneal"`, nodes and edges outside the subgraph are fixed
+  /// boundary points during optimization.
   /// -> none | bytes
   subgraph: none,
   /// Width of the layout viewport used to derive the natural spring length.

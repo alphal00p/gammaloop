@@ -607,6 +607,64 @@
   )
 }
 
+#let _split-edge-geometry(
+  source-path,
+  sink-path,
+  curve,
+  source-style,
+  sink-style,
+  source-outset,
+  sink-outset,
+  label-pos,
+  accuracy,
+) = {
+  let source-length = curve-api.length(source-path, accuracy: accuracy)
+  let sink-length = curve-api.length(sink-path, accuracy: accuracy)
+  let base-length = source-length + sink-length
+  let source-outsets = _visible-half-outsets(
+    base-length,
+    0,
+    source-length,
+    source-style,
+    source-outset,
+    sink-outset,
+  )
+  let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
+  let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
+    let sink-outsets = _visible-half-outsets(
+      base-length,
+      source-length,
+      sink-length,
+      source-style,
+      source-outset,
+      sink-outset,
+    )
+    _half-path-geometry(sink-path, source-style, sink-outsets, label-pos)
+  } else {
+    let sink-outsets = _visible-half-outsets(
+      base-length,
+      source-length,
+      sink-length,
+      sink-style,
+      source-outset,
+      sink-outset,
+    )
+    _half-path-geometry(sink-path, sink-style, sink-outsets, label-pos)
+  }
+  let whole-geometry = if _same-layer-geometry(source-style, sink-style) {
+    let center-outset = _center-outset(base-length, source-style, source-outset, sink-outset)
+    _geometry-path-segments(curve, source-style, source-outset, sink-outset, label-pos, center-outset)
+  } else {
+    none
+  }
+  (
+    source: source-geometry,
+    sink: sink-geometry,
+    curve: curve,
+    whole: whole-geometry,
+  )
+}
+
 #let _anchored-edge-geometry-halves(
   edge,
   node-boxes,
@@ -627,59 +685,46 @@
   let end = _node-anchor-point(sink-box, sink-anchor)
   let route-mode = _style-value(source-style, "route")
   let route = _point(edge.pos)
-  let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
   let source-start-outset = if source-anchor == auto { source-outset } else { 0 }
   let sink-end-outset = if sink-anchor == auto { sink-outset } else { 0 }
   if route-mode in ("direct", "edge-pos") {
+    let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
     let split = _anchored-cubic-route-split(start, source-anchor, route, sink-anchor, end, amount)
-    let source-path = split.source
-    let sink-path = split.sink
-    let source-length = curve-api.length(source-path, accuracy: accuracy)
-    let sink-length = curve-api.length(sink-path, accuracy: accuracy)
-    let base-length = source-length + sink-length
-    let source-outsets = _visible-half-outsets(
-      base-length,
-      0,
-      source-length,
+    return _split-edge-geometry(
+      split.source,
+      split.sink,
+      split.curve,
       source-style,
+      sink-style,
       source-start-outset,
       sink-end-outset,
+      label-pos,
+      accuracy,
     )
-    let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
-    let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
-      let sink-outsets = _visible-half-outsets(
-        base-length,
-        source-length,
-        sink-length,
-        source-style,
-        source-start-outset,
-        sink-end-outset,
-      )
-      _half-path-geometry(sink-path, source-style, sink-outsets, label-pos)
-    } else {
-      let sink-outsets = _visible-half-outsets(
-        base-length,
-        source-length,
-        sink-length,
-        sink-style,
-        source-start-outset,
-        sink-end-outset,
-      )
-      _half-path-geometry(sink-path, sink-style, sink-outsets, label-pos)
-    }
-    let whole-geometry = if _same-layer-geometry(source-style, sink-style) {
-      let center-outset = _center-outset(base-length, source-style, source-start-outset, sink-end-outset)
-      _geometry-path-segments(split.curve, source-style, source-start-outset, sink-end-outset, label-pos, center-outset)
-    } else {
-      none
-    }
-    return (
-      source: source-geometry,
-      sink: sink-geometry,
-      curve: split.curve,
-      whole: whole-geometry,
+  } else if route-mode == "hobby-through" {
+    let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
+    let source-guide = _anchor-control-guide(source-anchor, start, _point-lerp(start, route, 1 / 3), amount)
+    let sink-guide = _anchor-control-guide(sink-anchor, end, _point-lerp(end, route, 1 / 3), amount)
+    let split = curve-api.split-through(
+      (start, source-guide, route, sink-guide, end),
+      omega: omega,
+      accuracy: accuracy,
+    )
+    let source-path = curve-api.path(split.parts.at(0), split.parts.at(1))
+    let sink-path = curve-api.path(split.parts.at(2), split.parts.at(3))
+    return _split-edge-geometry(
+      source-path,
+      sink-path,
+      split.curve,
+      source-style,
+      sink-style,
+      source-start-outset,
+      sink-end-outset,
+      label-pos,
+      accuracy,
     )
   }
+  let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
   let source-path = curve-api.hobby-spline(
     _anchor-points(start, source-anchor, route, amount),
     omega: omega,

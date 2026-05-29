@@ -65,6 +65,7 @@ struct LayoutEdge {
     edge: EdgeIndex,
     source: NodeIndex,
     sink: NodeIndex,
+    rank_edge: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +103,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         let ordered_nodes = self.layered_ordered_nodes(&included, &config.roots);
         let order = self.layered_order_positions(&ordered_nodes);
         let selected_edges = self.layered_selected_edges(subgraph, &included);
+        let route_edges = self.layered_route_edges(&included, &selected_edges);
         let same_rank_group = self.layered_same_rank_groups(&included, &config.rank_same);
         let ranks = self.layered_ranks(
             &included,
@@ -133,7 +135,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             &included,
             &ordered_nodes,
             &layout_order,
-            &selected_edges,
+            &route_edges,
             &ranks,
         );
         layout.order_items();
@@ -142,7 +144,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         let lane_offsets = layout.same_rank_lane_offsets();
         let rank_track_heights = layout.rank_track_heights(&lane_offsets);
         let rank_y = layout.rank_y_positions(&rank_track_heights);
-        layout.into_output(&ranks, &selected_edges, &lane_offsets, &rank_y)
+        layout.into_output(&ranks, &route_edges, &lane_offsets, &rank_y)
     }
 
     fn layered_included_nodes<S: SubSetLike>(
@@ -206,6 +208,34 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                         edge,
                         source,
                         sink,
+                        rank_edge: true,
+                    })
+                }
+                HedgePair::Unpaired { .. } => None,
+            })
+            .collect()
+    }
+
+    fn layered_route_edges(
+        &self,
+        included: &NodeVec<bool>,
+        selected_edges: &[LayoutEdge],
+    ) -> Vec<LayoutEdge> {
+        let mut rank_edge = (0..self.n_edges()).map(|_| false).collect::<EdgeVec<_>>();
+        for edge in selected_edges {
+            rank_edge[edge.edge] = true;
+        }
+
+        self.iter_edges()
+            .filter_map(|(pair, edge, _)| match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let source = self.node_id(source);
+                    let sink = self.node_id(sink);
+                    (source != sink && included[source] && included[sink]).then_some(LayoutEdge {
+                        edge,
+                        source,
+                        sink,
+                        rank_edge: rank_edge[edge],
                     })
                 }
                 HedgePair::Unpaired { .. } => None,
@@ -420,6 +450,7 @@ struct LayeredWorkspace<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     items: Vec<Item>,
     node_items: Vec<Option<usize>>,
     edge_paths: EdgeVec<Vec<usize>>,
+    edge_weights: EdgeVec<f64>,
     neighbors: Vec<Vec<(usize, f64)>>,
 }
 
@@ -448,6 +479,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             items: Vec::new(),
             node_items: vec![None; graph.n_nodes()],
             edge_paths: (0..graph.n_edges()).map(|_| Vec::new()).collect(),
+            edge_weights: (0..graph.n_edges()).map(|_| 0.0).collect(),
             neighbors: Vec::new(),
         };
 
@@ -488,7 +520,12 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                     let label_width = geometry.edge_label_widths[edge.edge];
                     let label_height = geometry.edge_label_heights[edge.edge];
                     let width = if is_middle {
-                        label_width.max(config.edge_gap)
+                        let width = label_width.max(config.edge_gap);
+                        if edge.rank_edge {
+                            width
+                        } else {
+                            width.min((config.node_gap * 2.0).max(config.edge_gap))
+                        }
                     } else {
                         config.edge_gap * 0.5
                     };
@@ -508,11 +545,16 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             }
             path.push(sink_item);
             layout.edge_paths[edge.edge] = path;
+            layout.edge_weights[edge.edge] = if edge.rank_edge {
+                geometry.edge_weights[edge.edge].max(0.0)
+            } else {
+                geometry.edge_weights[edge.edge].max(0.0) * 0.15
+            };
         }
 
         layout.neighbors = vec![Vec::new(); layout.items.len()];
         for (edge, path) in layout.edge_paths.iter() {
-            let weight = geometry.edge_weights[edge].max(0.0);
+            let weight = layout.edge_weights[edge];
             for segment in path.windows(2) {
                 let a = segment[0];
                 let b = segment[1];
@@ -570,8 +612,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                         Direction::Down => self.items[neighbor].rank > rank,
                     };
                     if use_neighbor {
-                        weighted_sum += positions[neighbor] as f64 * weight.max(1.0);
-                        total_weight += weight.max(1.0);
+                        weighted_sum += positions[neighbor] as f64 * weight.max(0.05);
+                        total_weight += weight.max(0.05);
                     }
                 }
                 let barycenter = if total_weight > 0.0 {
@@ -656,7 +698,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             let upper_position = positions[upper];
             for &(neighbor, weight) in &self.neighbors[upper] {
                 if self.items[neighbor].rank == lower_rank {
-                    segments.push((upper_position, positions[neighbor], weight.max(1.0)));
+                    segments.push((upper_position, positions[neighbor], weight.max(0.05)));
                 }
             }
         }
@@ -696,7 +738,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 source_order: positions[source] as f64,
                 sink_rank: self.items[sink].rank as f64,
                 sink_order: positions[sink] as f64,
-                weight: self.geometry.edge_weights[edge].max(1.0),
+                weight: self.edge_weights[edge].max(0.05),
             });
         }
 
@@ -767,8 +809,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                         Direction::Down => self.items[neighbor].rank > rank,
                     };
                     if use_neighbor {
-                        weighted_sum += self.items[neighbor].x * weight.max(1.0);
-                        total_weight += weight.max(1.0);
+                        weighted_sum += self.items[neighbor].x * weight.max(0.05);
+                        total_weight += weight.max(0.05);
                     }
                 }
                 if total_weight > 0.0 {
