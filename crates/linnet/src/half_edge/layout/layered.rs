@@ -791,19 +791,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
     }
 
     fn straighten(&mut self) {
-        let passes = match self.config.profile {
-            LayeredProfile::Dot => self.config.sweeps.max(1),
-            LayeredProfile::Stable => 4,
-        };
-
-        for _ in 0..passes {
-            for rank in 1..self.layers.len() {
-                self.align_layer_to_neighbors(rank, Direction::Up);
-            }
-            for rank in (0..self.layers.len().saturating_sub(1)).rev() {
-                self.align_layer_to_neighbors(rank, Direction::Down);
-            }
-        }
+        self.solve_horizontal_constraints();
 
         if self.config.profile == LayeredProfile::Stable {
             self.offset_stable_dummy_runs();
@@ -811,36 +799,49 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         self.center_all_layers();
     }
 
-    fn align_layer_to_neighbors(&mut self, rank: usize, direction: Direction) {
-        let targets = self.layers[rank]
-            .iter()
-            .map(|&item| {
-                let mut weighted_sum = 0.0;
-                let mut total_weight = 0.0;
-                for &(neighbor, weight) in &self.neighbors[item] {
-                    let use_neighbor = match direction {
-                        Direction::Up => self.items[neighbor].rank < rank,
-                        Direction::Down => self.items[neighbor].rank > rank,
-                    };
-                    if use_neighbor {
-                        weighted_sum += self.items[neighbor].x * weight.max(0.05);
-                        total_weight += weight.max(0.05);
-                    }
-                }
-                if total_weight > 0.0 {
-                    Some(weighted_sum / total_weight)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+    fn solve_horizontal_constraints(&mut self) {
+        let passes = match self.config.profile {
+            LayeredProfile::Dot => self.config.sweeps.max(1),
+            LayeredProfile::Stable => 4,
+        };
 
-        for (&item, target) in self.layers[rank].iter().zip(targets) {
-            if let Some(target) = target {
-                self.items[item].x = target;
+        for _ in 0..passes {
+            let mut targets = self
+                .items
+                .iter()
+                .map(|item| (item.x, 1.0))
+                .collect::<Vec<_>>();
+            for (edge, path) in self.edge_paths.iter() {
+                let weight = self.edge_weights[edge].max(0.05);
+                for segment in path.windows(2) {
+                    let a = segment[0];
+                    let b = segment[1];
+                    let ax = self.items[a].x;
+                    let bx = self.items[b].x;
+                    targets[a].0 += bx * weight;
+                    targets[a].1 += weight;
+                    targets[b].0 += ax * weight;
+                    targets[b].1 += weight;
+                }
+            }
+
+            for (item, (sum, weight)) in self.items.iter_mut().zip(targets) {
+                let target = sum / weight;
+                item.x = 0.5 * item.x + 0.5 * target;
+            }
+
+            for rank in 0..self.layers.len() {
+                self.project_layer_constraints(rank);
             }
         }
+    }
+
+    fn project_layer_constraints(&mut self, rank: usize) {
+        if self.layers[rank].is_empty() {
+            return;
+        }
         self.resolve_layer_overlaps(rank);
+        self.center_layer(rank);
     }
 
     fn offset_stable_dummy_runs(&mut self) {
