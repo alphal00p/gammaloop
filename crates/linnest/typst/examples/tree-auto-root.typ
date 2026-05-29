@@ -1,20 +1,89 @@
-#import "../src/lib.typ": draw, graph, layouts
+#import "../src/lib.typ": draw, graph, layouts, subgraph
 
 #set page(width: auto, height: auto)
 #set text(size: 7pt)
 
 #let diagram-unit = 2.0
 #let g = none
-#let S(_, value, ..rest) = $S_(#value)$
-#let label-scope = (
-  g: g,
-  S: S,
-)
 
 #let display-statement(value, fallback: "") = {
   let value = str(value).replace("\\\"", "\"").trim("\"")
   if value == "" { fallback } else { value }
 }
+
+#let basketball-src = ```dot
+digraph basketball {
+  node [num = "1"]
+  edge [particle=scalar_1]
+  e [style=invis]
+
+  e -> A:1 [id=5]
+  B:0 -> e [id=4]
+  A -> B [id=0 lmb_id=0]
+  A -> B [id=1 lmb_id=1]
+  A -> B [id=2 lmb_id=2]
+  A -> B [id=3]
+}
+```
+
+#let basketball-node-label(node) = node.at("name", default: none)
+
+#let basketball-node-style(node) = (
+  radius: 0.14,
+  fill: white,
+  stroke: rgb("#60656f") + 0.28pt,
+)
+
+#let basketball-edge-style(edge) = (
+  stroke: rgb("#9aa6b6") + 0.28pt,
+  route: "edge-pos",
+)
+
+#let basketball = graph.parse(basketball-src.text).first()
+#let basketball = layouts.layout(
+  basketball,
+  layout-algo: "force",
+  epochs: 28,
+  steps: 40,
+  seed: 7,
+  viewport-w: 3.2,
+  viewport-h: 2.2,
+  length-scale: 1.1,
+  beta: 120.0,
+  k-spring: 163.02,
+  gamma-dangling: 2.0,
+  gamma-ee: 1.35,
+  gamma-ev: 1.0,
+  g-center: 0,
+  directional-force: 2.5,
+  label-steps: 0,
+)
+
+#let basketball-subgraph(label) = {
+  let selected = subgraph.label(basketball, display-statement(label))
+  scale(42%)[
+    #draw(
+      basketball,
+      unit: 1.0,
+      subgraph: selected,
+      node-label: basketball-node-label,
+      node-style: basketball-node-style,
+      source-style: basketball-edge-style,
+      sink-style: basketball-edge-style,
+      edge-label: none,
+      node-min-radius: 0.12,
+      node-label-padding: 0.04,
+      padding: 0.12,debug: 2,
+      subgraph-edge-style: (stroke: rgb("#e4504f") + 1.45pt),
+    )
+  ]
+}
+
+#let S(_, value, ..rest) = basketball-subgraph(value)
+#let label-scope = (
+  g: g,
+  S: S,
+)
 
 #let label-expression(value) = {
   if value.starts-with("op(") {
