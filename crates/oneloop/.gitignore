@@ -1,0 +1,2 @@
+# Validation / oracle / benchmark code is local-only and never part of the PR.
+/benchmarks/
