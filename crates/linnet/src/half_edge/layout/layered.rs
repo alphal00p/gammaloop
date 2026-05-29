@@ -22,6 +22,7 @@ pub struct LayeredConfig {
     pub node_gap: f64,
     pub edge_gap: f64,
     pub route_edge_weight: f64,
+    pub route_exit_weight: f64,
     pub route_label_width_scale: f64,
     pub route_label_width_cap: f64,
     pub sweeps: usize,
@@ -38,6 +39,7 @@ impl Default for LayeredConfig {
             node_gap: 0.9,
             edge_gap: 0.35,
             route_edge_weight: 0.15,
+            route_exit_weight: 4.0,
             route_label_width_scale: 1.0,
             route_label_width_cap: 2.0,
             sweeps: 8,
@@ -56,7 +58,17 @@ pub struct LayeredGeometry {
     pub edge_label_heights: EdgeVec<f64>,
     pub edge_minlens: EdgeVec<usize>,
     pub edge_weights: EdgeVec<f64>,
+    pub edge_source_exits: EdgeVec<LayeredRouteExit>,
+    pub edge_sink_exits: EdgeVec<LayeredRouteExit>,
     pub edge_constrained: EdgeVec<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LayeredRouteExit {
+    #[default]
+    Auto,
+    Up,
+    Down,
 }
 
 #[derive(Debug, Clone)]
@@ -781,26 +793,52 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
 
     fn crossing_score_between_ranks(&self, upper_rank: usize, lower_rank: usize) -> f64 {
         let positions = self.item_positions();
-        let mut segments = Vec::<(usize, usize, f64)>::new();
-        for &upper in &self.layers[upper_rank] {
-            let upper_position = positions[upper];
-            for &(neighbor, weight) in &self.neighbors[upper] {
-                if self.items[neighbor].rank == lower_rank {
-                    segments.push((upper_position, positions[neighbor], weight.max(0.05)));
+        let mut segments = Vec::<VisibleSegment>::new();
+        for (edge, path) in self.edge_paths.iter() {
+            let last_segment = path.len().saturating_sub(2);
+            for (segment_index, segment) in path.windows(2).enumerate() {
+                let source = segment[0];
+                let sink = segment[1];
+                let source_rank = self.items[source].rank;
+                let sink_rank = self.items[sink].rank;
+                let between_ranks = (source_rank == upper_rank && sink_rank == lower_rank)
+                    || (source_rank == lower_rank && sink_rank == upper_rank);
+                if !between_ranks {
+                    continue;
                 }
+                segments.push(VisibleSegment {
+                    edge,
+                    source,
+                    sink,
+                    source_rank: self.segment_endpoint_rank(
+                        edge,
+                        source,
+                        segment_index,
+                        last_segment,
+                        true,
+                    ),
+                    source_order: positions[source] as f64,
+                    sink_rank: self.segment_endpoint_rank(
+                        edge,
+                        sink,
+                        segment_index,
+                        last_segment,
+                        false,
+                    ),
+                    sink_order: positions[sink] as f64,
+                    weight: self.edge_weights[edge].max(0.05),
+                });
             }
         }
 
         let mut score = 0.0;
-        for (left_index, &(left_upper, left_lower, left_weight)) in segments.iter().enumerate() {
-            for &(right_upper, right_lower, right_weight) in &segments[left_index + 1..] {
-                if left_upper == right_upper || left_lower == right_lower {
+        for (left_index, left) in segments.iter().enumerate() {
+            for right in &segments[left_index + 1..] {
+                if segments_share_endpoint(left, right) {
                     continue;
                 }
-                if (left_upper < right_upper && left_lower > right_lower)
-                    || (left_upper > right_upper && left_lower < right_lower)
-                {
-                    score += left_weight * right_weight;
+                if segments_cross(left, right) {
+                    score += left.weight * right.weight;
                 }
             }
         }
@@ -814,30 +852,42 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             if path.len() < 2 {
                 continue;
             }
-            let source = path[0];
-            let sink = *path.last().unwrap();
-            if self.items[source].rank == self.items[sink].rank {
-                continue;
+            let last_segment = path.len().saturating_sub(2);
+            for (segment_index, segment) in path.windows(2).enumerate() {
+                let source = segment[0];
+                let sink = segment[1];
+                if self.items[source].rank == self.items[sink].rank {
+                    continue;
+                }
+                segments.push(VisibleSegment {
+                    edge,
+                    source,
+                    sink,
+                    source_rank: self.segment_endpoint_rank(
+                        edge,
+                        source,
+                        segment_index,
+                        last_segment,
+                        true,
+                    ),
+                    source_order: positions[source] as f64,
+                    sink_rank: self.segment_endpoint_rank(
+                        edge,
+                        sink,
+                        segment_index,
+                        last_segment,
+                        false,
+                    ),
+                    sink_order: positions[sink] as f64,
+                    weight: self.edge_weights[edge].max(0.05),
+                });
             }
-            segments.push(VisibleSegment {
-                source,
-                sink,
-                source_rank: self.items[source].rank as f64,
-                source_order: positions[source] as f64,
-                sink_rank: self.items[sink].rank as f64,
-                sink_order: positions[sink] as f64,
-                weight: self.edge_weights[edge].max(0.05),
-            });
         }
 
         let mut score = 0.0;
         for (left_index, left) in segments.iter().enumerate() {
             for right in &segments[left_index + 1..] {
-                if left.source == right.source
-                    || left.source == right.sink
-                    || left.sink == right.source
-                    || left.sink == right.sink
-                {
+                if segments_share_endpoint(left, right) {
                     continue;
                 }
                 if segments_cross(left, right) {
@@ -846,6 +896,32 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             }
         }
         score
+    }
+
+    fn segment_endpoint_rank(
+        &self,
+        edge: EdgeIndex,
+        item: usize,
+        segment_index: usize,
+        last_segment: usize,
+        is_segment_source: bool,
+    ) -> f64 {
+        if segment_index == 0 && is_segment_source {
+            self.edge_endpoint_rank(item, self.geometry.edge_source_exits[edge])
+        } else if segment_index == last_segment && !is_segment_source {
+            self.edge_endpoint_rank(item, self.geometry.edge_sink_exits[edge])
+        } else {
+            self.items[item].rank as f64
+        }
+    }
+
+    fn edge_endpoint_rank(&self, item: usize, exit: LayeredRouteExit) -> f64 {
+        let rank = self.items[item].rank as f64;
+        match exit {
+            LayeredRouteExit::Auto => rank,
+            LayeredRouteExit::Up => rank - 0.35,
+            LayeredRouteExit::Down => rank + 0.35,
+        }
     }
 
     fn assign_initial_x(&mut self) {
@@ -888,15 +964,22 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 .collect::<Vec<_>>();
             for (edge, path) in self.edge_paths.iter() {
                 let weight = self.edge_weights[edge].max(0.05);
-                for segment in path.windows(2) {
+                let last_segment = path.len().saturating_sub(2);
+                for (segment_index, segment) in path.windows(2).enumerate() {
+                    let segment_weight = if self.is_exit_segment(edge, segment_index, last_segment)
+                    {
+                        weight * self.config.route_exit_weight.max(0.0)
+                    } else {
+                        weight
+                    };
                     let a = segment[0];
                     let b = segment[1];
                     let ax = self.items[a].x;
                     let bx = self.items[b].x;
-                    targets[a].0 += bx * weight;
-                    targets[a].1 += weight;
-                    targets[b].0 += ax * weight;
-                    targets[b].1 += weight;
+                    targets[a].0 += bx * segment_weight;
+                    targets[a].1 += segment_weight;
+                    targets[b].0 += ax * segment_weight;
+                    targets[b].1 += segment_weight;
                 }
             }
 
@@ -909,6 +992,12 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 self.project_layer_constraints(rank);
             }
         }
+    }
+
+    fn is_exit_segment(&self, edge: EdgeIndex, segment_index: usize, last_segment: usize) -> bool {
+        (segment_index == 0 && self.geometry.edge_source_exits[edge] != LayeredRouteExit::Auto)
+            || (segment_index == last_segment
+                && self.geometry.edge_sink_exits[edge] != LayeredRouteExit::Auto)
     }
 
     fn project_layer_constraints(&mut self, rank: usize) {
@@ -1245,7 +1334,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 )
             };
             edge_positions[edge.edge] = Some(point);
-            edge_routes[edge.edge] = self.edge_route(path, rank_y);
+            edge_routes[edge.edge] = self.edge_route(edge.edge, path, rank_y);
         }
 
         LayeredOutput {
@@ -1256,19 +1345,45 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         }
     }
 
-    fn edge_route(&self, path: &[usize], rank_y: &[f64]) -> LayeredEdgeRoute {
-        if path.len() <= 3 {
-            return LayeredEdgeRoute::default();
-        }
+    fn edge_route(&self, edge: EdgeIndex, path: &[usize], rank_y: &[f64]) -> LayeredEdgeRoute {
         let middle = path.len() / 2;
         let point = |item: usize| Point2::new(self.items[item].x, rank_y[self.items[item].rank]);
-        LayeredEdgeRoute {
-            source: path[1..middle].iter().map(|&item| point(item)).collect(),
-            sink: path[middle + 1..path.len() - 1]
-                .iter()
-                .rev()
-                .map(|&item| point(item))
-                .collect(),
+        let mut source = self
+            .exit_guide_point(path[0], self.geometry.edge_source_exits[edge], rank_y)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut sink = self
+            .exit_guide_point(
+                *path.last().unwrap(),
+                self.geometry.edge_sink_exits[edge],
+                rank_y,
+            )
+            .into_iter()
+            .collect::<Vec<_>>();
+        if path.len() > 3 {
+            source.extend(path[1..middle].iter().map(|&item| point(item)));
+            sink.extend(
+                path[middle + 1..path.len() - 1]
+                    .iter()
+                    .rev()
+                    .map(|&item| point(item)),
+            );
+        }
+        LayeredEdgeRoute { source, sink }
+    }
+
+    fn exit_guide_point(
+        &self,
+        item: usize,
+        exit: LayeredRouteExit,
+        rank_y: &[f64],
+    ) -> Option<Point2<f64>> {
+        let y = rank_y[self.items[item].rank];
+        let offset = 0.5 * self.items[item].height + self.config.edge_gap;
+        match exit {
+            LayeredRouteExit::Auto => None,
+            LayeredRouteExit::Up => Some(Point2::new(self.items[item].x, y + offset)),
+            LayeredRouteExit::Down => Some(Point2::new(self.items[item].x, y - offset)),
         }
     }
 }
@@ -1281,6 +1396,7 @@ enum Direction {
 
 #[derive(Debug, Clone, Copy)]
 struct VisibleSegment {
+    edge: EdgeIndex,
     source: usize,
     sink: usize,
     source_rank: f64,
@@ -1288,6 +1404,14 @@ struct VisibleSegment {
     sink_rank: f64,
     sink_order: f64,
     weight: f64,
+}
+
+fn segments_share_endpoint(left: &VisibleSegment, right: &VisibleSegment) -> bool {
+    left.edge == right.edge
+        || left.source == right.source
+        || left.source == right.sink
+        || left.sink == right.source
+        || left.sink == right.sink
 }
 
 fn segments_cross(left: &VisibleSegment, right: &VisibleSegment) -> bool {

@@ -165,6 +165,10 @@
   /// rank subgraph. Lower values make these edges guide routing without
   /// dominating the rank tree. -> float
   route-edge-weight: 0.15,
+  /// Extra horizontal straightening weight for the first or last segment of an
+  /// edge with `source-route-exit` or `sink-route-exit` set to a vertical side.
+  /// -> float
+  route-exit-weight: 4.0,
   /// Multiplier for measured edge-label width when sizing non-rank dummy
   /// routing vertices in dot/stable-layered layout. -> float
   route-label-width-scale: 1.0,
@@ -220,6 +224,7 @@
     layout-roots: layout-roots,
     rank-same: rank-same.map(subgraph-module.to-label),
     route-edge-weight: str(route-edge-weight),
+    route-exit-weight: str(route-exit-weight),
     route-label-width-scale: str(route-label-width-scale),
     route-label-width-cap: str(route-label-width-cap),
     z-spring: str(z-spring),

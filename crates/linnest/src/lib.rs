@@ -36,6 +36,7 @@ use linnet::{
             force::{force_directed_layout, ForceLayoutConfig},
             layered::{
                 LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
+                LayeredRouteExit,
             },
             simulatedanneale::{anneal, GeoSchedule, SAConfig},
             spring::{
@@ -1365,6 +1366,11 @@ struct LayoutConfig {
     )]
     route_edge_weight: f64,
     #[serde(
+        default = "default_route_exit_weight",
+        deserialize_with = "deserialize_f64"
+    )]
+    route_exit_weight: f64,
+    #[serde(
         default = "default_route_label_width_scale",
         deserialize_with = "deserialize_f64"
     )]
@@ -1408,6 +1414,7 @@ impl Default for LayoutConfig {
             layout_roots: Vec::new(),
             rank_same: Vec::new(),
             route_edge_weight: default_route_edge_weight(),
+            route_exit_weight: default_route_exit_weight(),
             route_label_width_scale: default_route_label_width_scale(),
             route_label_width_cap: default_route_label_width_cap(),
             spring: SpringConfig::default(),
@@ -1454,9 +1461,12 @@ impl LayoutConfig {
                 | "length-scale"
                 | "rank-same"
                 | "route-edge-weight"
+                | "route-exit-weight"
                 | "route-label-width-cap"
                 | "route-label-width-scale"
                 | "seed"
+                | "sink-route-exit"
+                | "source-route-exit"
                 | "step"
                 | "step-shrink"
                 | "steps"
@@ -1556,6 +1566,10 @@ fn default_incremental_energy() -> bool {
 
 fn default_route_edge_weight() -> f64 {
     0.15
+}
+
+fn default_route_exit_weight() -> f64 {
+    4.0
 }
 
 fn default_route_label_width_scale() -> f64 {
@@ -3051,6 +3065,7 @@ impl TypstGraph {
             node_gap: cfg.dx,
             edge_gap: cfg.dx * 0.35,
             route_edge_weight: self.layout_config.route_edge_weight,
+            route_exit_weight: self.layout_config.route_exit_weight,
             route_label_width_scale: self.layout_config.route_label_width_scale,
             route_label_width_cap: self.layout_config.route_label_width_cap,
             sweeps: self.layout_config.schedule.epochs.clamp(1, 24),
@@ -3081,10 +3096,36 @@ impl TypstGraph {
             edge_weights: self.new_edgevec(|edge, _, _| {
                 Self::positive_statement_f64(&edge.statements, "weight").unwrap_or(1.0)
             }),
+            edge_source_exits: self.new_edgevec(|edge, _, pair| {
+                Self::route_exit_statement(&edge.statements, "source-route-exit")
+                    .or_else(|| self.route_exit_from_compass(pair, true))
+                    .unwrap_or_default()
+            }),
+            edge_sink_exits: self.new_edgevec(|edge, _, pair| {
+                Self::route_exit_statement(&edge.statements, "sink-route-exit")
+                    .or_else(|| self.route_exit_from_compass(pair, false))
+                    .unwrap_or_default()
+            }),
             edge_constrained: self.new_edgevec(|edge, _, _| {
                 Self::statement_bool(&edge.statements, "constraint").unwrap_or(true)
             }),
         }
+    }
+
+    fn route_exit_from_compass(
+        &self,
+        pair: &HedgePair,
+        source_side: bool,
+    ) -> Option<LayeredRouteExit> {
+        let hedge = match (source_side, pair) {
+            (true, HedgePair::Paired { source, .. } | HedgePair::Split { source, .. }) => source,
+            (false, HedgePair::Paired { sink, .. } | HedgePair::Split { sink, .. }) => sink,
+            (_, HedgePair::Unpaired { .. }) => return None,
+        };
+        self.graph[*hedge]
+            .compasspt
+            .as_deref()
+            .and_then(Self::parse_route_exit)
     }
 
     fn rank_same_node_groups(&self) -> Vec<Vec<NodeIndex>> {
@@ -3383,6 +3424,24 @@ impl TypstGraph {
                 _ => None,
             }
         })
+    }
+
+    fn route_exit_statement(
+        statements: &BTreeMap<String, String>,
+        key: &str,
+    ) -> Option<LayeredRouteExit> {
+        dot_statement_value(statements, key)
+            .map(|value| value.trim().trim_matches('"'))
+            .and_then(Self::parse_route_exit)
+    }
+
+    fn parse_route_exit(value: &str) -> Option<LayeredRouteExit> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "auto" | "_" | "center" | "c" => Some(LayeredRouteExit::Auto),
+            "up" | "top" | "north" | "n" => Some(LayeredRouteExit::Up),
+            "down" | "bottom" | "south" | "s" => Some(LayeredRouteExit::Down),
+            _ => None,
+        }
     }
 
     fn center_targets_x_by_extents(
