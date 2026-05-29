@@ -1071,6 +1071,7 @@ mod tests_cff {
             let function_map = FunctionMap::new();
 
             let mut tree = expression_atom
+                .as_view()
                 .to_evaluation_tree(&function_map, &params)
                 .unwrap();
 

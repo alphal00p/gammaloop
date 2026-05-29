@@ -38,7 +38,7 @@ use to_param::ToAtom;
 
 use crate::{
     algebra::algebraic_traits::{IsZero, RefZero},
-    algebra::complex::{Complex, RealOrComplex},
+    algebra::complex::Complex,
     algebra::upgrading_arithmetic::{
         FallibleAddAssign, FallibleMul, FallibleSubAssign, TrySmallestUpgrade,
     },
@@ -62,16 +62,15 @@ use bincode::{Decode, Encode};
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
-    coefficient::Coefficient,
     domains::{
         InternalOrdering,
-        float::{FloatLike, Real, SingleFloat},
+        float::{FixedPrecision, FloatLike, Real, SingleFloat},
         rational::Rational,
     },
     evaluate::{
         CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, EvalTree,
-        EvaluationFn, ExportNumber, ExportSettings, ExportedCode, Expression, ExpressionEvaluator,
-        FunctionMap, OptimizationSettings,
+        EvaluationDomain, EvaluationError, ExportNumber, ExportSettings, ExportedCode, Expression,
+        ExpressionEvaluator, FunctionMap, OptimizationSettings,
     },
     id::Pattern,
     state::State,
@@ -137,17 +136,19 @@ pub trait TensorCoefficient: Display {
     fn to_atom(&self) -> Option<Atom>;
     fn to_atom_re(&self) -> Option<Atom>;
     fn to_atom_im(&self) -> Option<Atom>;
-    fn add_tagged_function<T>(
+    fn add_tagged_function(
         &self,
-        fn_map: &mut FunctionMap<T>,
+        fn_map: &mut FunctionMap,
         body: Atom,
-    ) -> Result<(), String> {
-        let (name, cooked_name) = self
-            .name()
-            .zip(self.cooked_name())
-            .ok_or(format!("unnamed {}", self))?;
+    ) -> Result<(), EvaluationError> {
+        let name =
+            self.name()
+                .ok_or_else(|| EvaluationError::EvaluationTreeConstructionFailed {
+                    expression: body.clone(),
+                    reason: format!("unnamed {self}"),
+                })?;
 
-        fn_map.add_tagged_function::<Symbol>(name, self.tags(), cooked_name, vec![], body)
+        fn_map.add_tagged_function::<Symbol>(name, self.tags(), vec![], body)
     }
 }
 
@@ -738,7 +739,7 @@ where
 {
 }
 
-impl<S: TensorStructure, Const> ShadowMapping<Const> for ParamTensor<S>
+impl<S: TensorStructure> ShadowMapping for ParamTensor<S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
@@ -747,7 +748,7 @@ where
 {
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,
@@ -972,10 +973,9 @@ where
 }
 
 impl<
-    U,
-    C: HasStructure<Structure = S> + Clone + ShadowMapping<U>,
+    C: HasStructure<Structure = S> + Clone + ShadowMapping,
     S: TensorStructure + Clone + HasName<Args: IntoArgs, Name: IntoSymbol>,
-> ShadowMapping<U> for ParamOrConcrete<C, S>
+> ShadowMapping for ParamOrConcrete<C, S>
 where
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
@@ -995,7 +995,7 @@ where
 
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<U>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,
@@ -1528,19 +1528,6 @@ impl<T: Into<Atom>> From<ConcreteOrParam<T>> for Atom {
     }
 }
 
-impl<T: Into<Coefficient>> From<RealOrComplex<T>> for Atom {
-    fn from(value: RealOrComplex<T>) -> Self {
-        match value {
-            RealOrComplex::Real(x) => Atom::num(x),
-            RealOrComplex::Complex(x) => {
-                let (re, im) = (Atom::num(x.re), Atom::num(x.im));
-                let i = Atom::i();
-                re + im * i
-            }
-        }
-    }
-}
-
 impl<C, S> ScalarTensor for ParamOrConcrete<C, S>
 where
     C: HasStructure<Structure = S> + Clone + ScalarTensor + TensorStructure,
@@ -1641,13 +1628,9 @@ pub type MixedTensor<T = f64, S = NamedStructure<Symbol, Vec<Atom>>> =
     ParamOrConcrete<RealOrComplexTensor<T, S>, S>;
 
 impl<I: TensorStructure + Clone, T: Clone> MixedTensor<T, I> {
-    pub fn evaluate_real<A: AtomCore + KeyLookup, F: Fn(&Rational) -> T + Copy>(
-        &mut self,
-        coeff_map: F,
-        const_map: &HashMap<A, T>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, T>>,
-    ) where
-        T: Real + for<'c> From<&'c Rational>,
+    pub fn evaluate_real<A: AtomCore + KeyLookup>(&mut self, const_map: &HashMap<A, T>)
+    where
+        T: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
     {
         let content = match self {
             MixedTensor::Param(x) => Some(x),
@@ -1655,20 +1638,17 @@ impl<I: TensorStructure + Clone, T: Clone> MixedTensor<T, I> {
         };
 
         if let Some(x) = content {
-            *self = MixedTensor::Concrete(RealOrComplexTensor::Real(
-                x.evaluate(coeff_map, const_map, function_map).unwrap(),
-            ));
+            *self =
+                MixedTensor::Concrete(RealOrComplexTensor::Real(x.evaluate(const_map).unwrap()));
         }
     }
 
-    pub fn evaluate_complex<A: AtomCore + KeyLookup, F: Fn(&Rational) -> SymComplex<T> + Copy>(
+    pub fn evaluate_complex<A: AtomCore + KeyLookup>(
         &mut self,
-        coeff_map: F,
         const_map: &HashMap<A, SymComplex<T>>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, SymComplex<T>>>,
     ) where
-        T: Real + for<'c> From<&'c Rational>,
-        SymComplex<T>: Real + for<'c> From<&'c Rational>,
+        T: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
+        SymComplex<T>: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
     {
         let content = match self {
             MixedTensor::Param(x) => Some(x),
@@ -1677,9 +1657,7 @@ impl<I: TensorStructure + Clone, T: Clone> MixedTensor<T, I> {
 
         if let Some(x) = content {
             *self = MixedTensor::Concrete(RealOrComplexTensor::Complex(
-                x.evaluate(coeff_map, const_map, function_map)
-                    .unwrap()
-                    .map_data(|c| c.into()),
+                x.evaluate(const_map).unwrap().map_data(|c| c.into()),
             ));
         }
     }
@@ -2478,7 +2456,10 @@ impl<S: TensorStructure> EvalTreeTensorSet<SymComplex<Rational>, S> {
 }
 
 impl<T, S: TensorStructure> EvalTreeTensorSet<T, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensorSet<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
+        &self,
+        f: &F,
+    ) -> EvalTreeTensorSet<T2, S>
     where
         T: Clone + PartialEq,
         S: Clone,
@@ -2548,7 +2529,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
         dense: &DenseTensor<Atom, S>,
         fn_map: &FunctionMap,
         params: &[Atom],
-    ) -> Result<Self, String> {
+    ) -> Result<Self, EvaluationError> {
         let atomviews: Vec<AtomView> = dense.data.iter().map(|a| a.as_view()).collect();
         let eval = AtomView::to_eval_tree_multiple(&atomviews, fn_map, params)?;
 
@@ -2563,7 +2544,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
         dense: &SparseTensor<Atom, S>,
         fn_map: &FunctionMap,
         params: &[Atom],
-    ) -> Result<Self, String> {
+    ) -> Result<Self, EvaluationError> {
         let atomviews: (Vec<FlatIndex>, Vec<AtomView>) = dense
             .elements
             .iter()
@@ -2582,7 +2563,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
         data: &DataTensor<Atom, S>,
         fn_map: &FunctionMap,
         params: &[Atom],
-    ) -> Result<Self, String>
+    ) -> Result<Self, EvaluationError>
     where
         S: TensorStructure,
     {
@@ -2607,7 +2588,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
 }
 
 impl<S: Clone, T> EvalTreeTensor<T, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensor<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensor<T2, S>
     where
         T: Clone + PartialEq,
     {
@@ -2871,7 +2852,10 @@ impl<S: TensorStructure + Clone>
 pub type LinearizedEvalTensor<T, S> = EvalTensor<ExpressionEvaluator<T>, S>;
 
 impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(self, f: &F) -> LinearizedEvalTensor<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
+        self,
+        f: &F,
+    ) -> LinearizedEvalTensor<T2, S>
     where
         T: Clone + PartialEq + Default,
         S: Clone,
@@ -2957,7 +2941,10 @@ pub type LinearizedEvalTensorSet<T, S> =
     EvalTensorSet<(ExpressionEvaluator<T>, Option<Vec<Expression<T>>>), S>;
 
 impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(self, f: &F) -> LinearizedEvalTensorSet<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
+        self,
+        f: &F,
+    ) -> LinearizedEvalTensorSet<T2, S>
     where
         T: Clone + PartialEq + Default,
         S: Clone,

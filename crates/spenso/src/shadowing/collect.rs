@@ -82,7 +82,7 @@ impl Collectable for AtomView<'_> {
         if !hit {
             return self.to_owned();
         }
-        let collected = wrapped.collect_symbol::<i16>(*COLLECT, None, None);
+        let collected = wrapped.collect_symbol::<i16>(*COLLECT);
         collected.unwrap_collect()
     }
 

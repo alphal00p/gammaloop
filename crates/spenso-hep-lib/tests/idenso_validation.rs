@@ -31,7 +31,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     coefficient::CoefficientView,
     domains::float::RealLike,
-    evaluate::EvaluationFn,
+    evaluate::EvaluationError,
     function,
 };
 use tabled::{Table, Tabled, settings::Style};
@@ -669,7 +669,6 @@ fn evaluate_term(expression: Atom, constants: &HashMap<Atom, Complex64>) -> Vali
     let validation_functions = ValidationFunctions::for_expression(expression.as_view());
     let rank_one_functions = validation_functions.rank_one_functions;
     let samples = validation_functions.samples.clone();
-    let function_map = validation_functions.into_map();
     let net = expression
         .parse_to_hep_net(&ParseSettings::default())
         .unwrap_or_else(|err| {
@@ -680,7 +679,9 @@ fn evaluate_term(expression: Atom, constants: &HashMap<Atom, Complex64>) -> Vali
         panic!("failed to execute validation expression `{expression}`: {err}")
     });
 
-    result.evaluate_complex(|c| c.into(), constants, &function_map);
+    let mut evaluation_constants = constants.clone();
+    validation_functions.insert_values_for_tensor(&result, &mut evaluation_constants);
+    result.evaluate_complex(&evaluation_constants);
     let tensor = result.to_dense();
     let rank_one_samples = {
         let mut samples = samples.lock().unwrap();
@@ -891,7 +892,7 @@ impl RankOneSymbolSummary {
 }
 
 struct ValidationFunctions {
-    functions: HashMap<Symbol, EvaluationFn<Atom, Complex64>>,
+    functions: HashMap<Symbol, Box<dyn Fn(&[Complex64]) -> Complex64 + Send + Sync>>,
     samples: Arc<Mutex<Vec<EvaluationSample>>>,
     rank_one_functions: usize,
 }
@@ -910,22 +911,14 @@ impl ValidationFunctions {
         validation
     }
 
-    fn into_map(self) -> HashMap<Symbol, EvaluationFn<Atom, Complex64>> {
-        self.functions
-    }
-
     fn insert_builtin_functions(&mut self) {
         self.functions.insert(
             AIND_SYMBOLS.cind,
-            EvaluationFn::new(Box::new(|args, _, _, _| {
-                Complex64::new(encode_cind(args) as f64, 0.)
-            })),
+            Box::new(|args| Complex64::new(encode_cind(args) as f64, 0.)),
         );
         self.functions.insert(
             *EPSILON_SYMBOL,
-            EvaluationFn::new(Box::new(|args, _, _, _| {
-                Complex64::new(0., -levi_civita(args))
-            })),
+            Box::new(|args| Complex64::new(0., -levi_civita(args))),
         );
     }
 
@@ -938,14 +931,14 @@ impl ValidationFunctions {
                     let samples = self.samples.clone();
                     self.functions.insert(
                         symbol,
-                        EvaluationFn::new(Box::new(move |args, _, _, _| {
+                        Box::new(move |args| {
                             let value = Self::seeded_tensor_component(symbol, args);
                             samples
                                 .lock()
                                 .unwrap()
                                 .push(EvaluationSample::new(symbol, args, value));
                             value
-                        })),
+                        }),
                     );
                 }
                 for arg in fun.iter() {
@@ -969,6 +962,61 @@ impl ValidationFunctions {
             }
             _ => {}
         }
+    }
+
+    fn insert_values_for_tensor(
+        &self,
+        tensor: &spenso_hep_lib::HepTensor<AbstractIndex>,
+        constants: &mut HashMap<Atom, Complex64>,
+    ) {
+        for (_, value) in tensor.iter_flat() {
+            if let AtomViewOrConcrete::Atom(atom) = value {
+                self.insert_function_values(atom, constants)
+                    .unwrap_or_else(|err| {
+                        panic!("failed to evaluate function applications in `{atom}`: {err}")
+                    });
+            }
+        }
+    }
+
+    fn insert_function_values<'a>(
+        &self,
+        expression: AtomView<'a>,
+        constants: &mut HashMap<Atom, Complex64>,
+    ) -> Result<(), EvaluationError> {
+        match expression {
+            AtomView::Fun(fun) => {
+                for arg in fun.iter() {
+                    self.insert_function_values(arg, constants)?;
+                }
+
+                if let Some(function) = self.functions.get(&fun.get_symbol()) {
+                    let args = fun
+                        .iter()
+                        .map(|arg| arg.evaluate(constants))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    constants.insert(expression.to_owned(), function(&args));
+                }
+            }
+            AtomView::Add(add) => {
+                for arg in add.iter() {
+                    self.insert_function_values(arg, constants)?;
+                }
+            }
+            AtomView::Mul(mul) => {
+                for arg in mul.iter() {
+                    self.insert_function_values(arg, constants)?;
+                }
+            }
+            AtomView::Pow(pow) => {
+                let (base, exponent) = pow.get_base_exp();
+                self.insert_function_values(base, constants)?;
+                self.insert_function_values(exponent, constants)?;
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 
     fn seeded_tensor_component(symbol: Symbol, args: &[Complex64]) -> Complex64 {

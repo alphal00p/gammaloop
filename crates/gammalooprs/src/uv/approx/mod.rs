@@ -17,7 +17,6 @@ use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, Symbol},
     function, parse_lit, symbol,
@@ -479,7 +478,7 @@ impl Approximation {
             .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
             .unwrap()
-            .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
+            .series(vakint_symbol!("ε"), Atom::Zero, 0)
             .unwrap()
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)
@@ -586,7 +585,7 @@ impl Approximation {
             .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
             .unwrap()
-            .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
+            .series(vakint_symbol!("ε"), Atom::Zero, 0)
             .unwrap()
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)

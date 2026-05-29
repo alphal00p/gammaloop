@@ -8,7 +8,7 @@ use spenso::{
     network::{
         ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
         library::{
-            DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError, TensorLibraryData,
+            DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError,
             function_lib::Wrap,
             symbolic::{ETS, ExplicitKey, TensorLibrary},
         },

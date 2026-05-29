@@ -21,12 +21,9 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
     tensors::parametric::AtomViewOrConcrete,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Indeterminate, Symbol},
-    domains::rational::Rational,
-    evaluate::FunctionMap,
-    id::Replacement,
-    parse_lit, symbol,
+use symbolica::prelude::{
+    Atom, AtomCore, AtomOrView, FunctionBuilder, FunctionMap, Indeterminate, Rational, Replacement,
+    Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
 use tracing::debug;
@@ -724,7 +721,6 @@ pub struct ParamBuilder<T: FloatLike = f64> {
 
     pub reps: Vec<FnMapEntry>,
     // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
-    // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
     // pub eager_fn_map:
     pub fn_map: FunctionMap,
 }
@@ -1118,7 +1114,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         &mut self,
         name: Symbol,
         tags: Vec<Atom>,
-        rename: String,
+        _rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1136,7 +1132,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         });
 
         self.fn_map
-            .add_tagged_function(name, tags, rename, args, body)
+            .add_tagged_function(name, tags, args, body)
+            .map_err(|e| e.to_string())
 
         // body.evaluate(coeff_map, const_map, function_map)
     }
@@ -1144,7 +1141,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub fn add_function<A: Into<Indeterminate> + Clone>(
         &mut self,
         name: Symbol,
-        rename: String,
+        _rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1157,7 +1154,9 @@ impl<T: FloatLike> ParamBuilder<T> {
             args: args.clone(),
         });
 
-        self.fn_map.add_function(name, rename, args, body)
+        self.fn_map
+            .add_function(name, args, body)
+            .map_err(|e| e.to_string())
     }
 
     pub fn initialize_duals(&mut self, max_dual_size: usize) {
@@ -1202,7 +1201,10 @@ impl<T: FloatLike> ParamBuilder<T> {
             args: vec![],
         });
 
-        self.fn_map.add_constant(key, value)
+        self.fn_map
+            .add_aliases([(key, Atom::num(value))])
+            .map_err(|e| e.to_string())
+            .expect("failed to add constant to function map");
     }
 
     pub(crate) fn new_empty() -> Self {
@@ -1654,15 +1656,15 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         for FnMapEntry { lhs, rhs, .. } in &self.reps {
             table.push_record(vec![
-                lhs.printer(LOGPRINTOPTS).to_string(),
-                rhs.printer(LOGPRINTOPTS).to_string(),
+                lhs.printer(LOGPRINTOPTS.clone()).to_string(),
+                rhs.printer(LOGPRINTOPTS.clone()).to_string(),
             ]);
         }
 
         for i in &self.pairs {
             for (p, v) in i.params.iter().zip(i.value_range.clone()) {
                 table.push_record(vec![
-                    p.printer(LOGPRINTOPTS).to_string().to_string(),
+                    p.printer(LOGPRINTOPTS.clone()).to_string().to_string(),
                     self.values[0][v].to_string(),
                     format!("{}", v),
                 ]);
@@ -1679,15 +1681,15 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         for FnMapEntry { lhs, rhs, .. } in &self.reps {
             table.push_record(vec![
-                lhs.printer(LOGPRINTOPTS).to_string(),
-                rhs.printer(LOGPRINTOPTS).to_string(),
+                lhs.printer(LOGPRINTOPTS.clone()).to_string(),
+                rhs.printer(LOGPRINTOPTS.clone()).to_string(),
             ]);
         }
 
         for i in &self.pairs {
             for (p, v) in i.params.iter().zip(i.value_range.clone()) {
                 table.push_record(vec![
-                    p.printer(LOGPRINTOPTS).to_string().to_string(),
+                    p.printer(LOGPRINTOPTS.clone()).to_string().to_string(),
                     format!(
                         "{:?}",
                         &self.values[value_index]

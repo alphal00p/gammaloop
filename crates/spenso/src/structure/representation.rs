@@ -31,7 +31,9 @@ use crate::{
 #[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{Atom, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    function, get_symbol, symbol,
+    function, get_symbol,
+    printer::PrintUserData,
+    symbol,
 };
 
 use thiserror::Error;
@@ -776,84 +778,86 @@ impl LibraryRep {
 
             symbol!(
                 &name,
-                print = move |a, opt| {
-                    match opt.custom_print_mode {
-                        Some(("typst", 1)) => Some(body.clone()),
-
-                        Some(("spenso", i)) => {
-                            let SpensoPrintSettings {
-                                with_dim,
-                                commas,
-                                parens,
-                                index_subscripts,
-                                ..
-                            } = SpensoPrintSettings::from(i);
-                            let AtomView::Fun(f) = a else {
-                                return None;
-                            };
-
-                            let mut out = if opt.color_builtin_symbols {
-                                nu_ansi_term::Color::DarkGray.paint(&rep_name).to_string()
-                            } else {
-                                rep_name.clone()
-                            };
-
-                            if index_subscripts {
-                                out.push('_');
-                            }
-                            if parens && index_subscripts {
-                                out.push('(');
-                            }
-
-                            if f.get_nargs() == 2 {
-                                let mut arg_iter = f.iter();
-                                let dim = arg_iter.next()?;
-
-                                if with_dim {
-                                    dim.format(&mut out, opt, PrintState::new()).unwrap();
-                                    if commas {
-                                        out.push(',');
-                                    } else {
-                                        out.push(' ');
-                                    }
-                                }
-                                let ind = arg_iter.next()?;
-
-                                ind.format(&mut out, opt, PrintState::new()).unwrap();
-                                if parens && index_subscripts {
-                                    out.push(')');
-                                }
-
-                                return Some(out);
-                            }
-
-                            None
-                        }
-                        _ => {
-                            let AtomView::Fun(f) = a else {
-                                return None;
-                            };
-
-                            let mut out = if opt.color_builtin_symbols {
-                                nu_ansi_term::Color::DarkGray.paint(&name).to_string()
-                            } else {
-                                return None;
-                            };
-
-                            out.push('(');
-                            let mut first = true;
-                            for arg in f.iter() {
-                                if !first {
-                                    out.push_str(", ");
-                                } else {
-                                    first = false;
-                                }
-                                out.push_str(&arg.to_string());
-                            }
-                            out.push(')');
-                            Some(out)
-                        }
+                print = move |a, opt, _state| {
+                    if matches!(
+                        opt.custom_print_mode.get("typst"),
+                        Some(PrintUserData::Integer(1))
+                    ) {
+                        return Some(body.clone());
                     }
+
+                    if let Some(PrintUserData::Integer(i)) = opt.custom_print_mode.get("spenso") {
+                        let SpensoPrintSettings {
+                            with_dim,
+                            commas,
+                            parens,
+                            index_subscripts,
+                            ..
+                        } = SpensoPrintSettings::from(*i as usize);
+                        let AtomView::Fun(f) = a else {
+                            return None;
+                        };
+
+                        let mut out = if opt.color_builtin_symbols {
+                            nu_ansi_term::Color::DarkGray.paint(&rep_name).to_string()
+                        } else {
+                            rep_name.clone()
+                        };
+
+                        if index_subscripts {
+                            out.push('_');
+                        }
+                        if parens && index_subscripts {
+                            out.push('(');
+                        }
+
+                        if f.get_nargs() == 2 {
+                            let mut arg_iter = f.iter();
+                            let dim = arg_iter.next()?;
+
+                            if with_dim {
+                                dim.format(&mut out, opt, PrintState::new()).unwrap();
+                                if commas {
+                                    out.push(',');
+                                } else {
+                                    out.push(' ');
+                                }
+                            }
+                            let ind = arg_iter.next()?;
+
+                            ind.format(&mut out, opt, PrintState::new()).unwrap();
+                            if parens && index_subscripts {
+                                out.push(')');
+                            }
+
+                            return Some(out);
+                        }
+
+                        return None;
+                    }
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+
+                    let mut out = if opt.color_builtin_symbols {
+                        nu_ansi_term::Color::DarkGray.paint(&name).to_string()
+                    } else {
+                        return None;
+                    };
+
+                    out.push('(');
+                    let mut first = true;
+                    for arg in f.iter() {
+                        if !first {
+                            out.push_str(", ");
+                        } else {
+                            first = false;
+                        }
+                        out.push_str(&arg.to_string());
+                    }
+                    out.push(')');
+                    Some(out)
                 },
                 tags = tags
             )

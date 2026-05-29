@@ -598,20 +598,20 @@ where
 //     }
 // }
 
-pub trait ShadowMapping<Const>: Shadowable
+pub trait ShadowMapping: Shadowable
 where
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
     fn expanded_shadow_with_map(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
     ) -> Result<ParamTensor<Self::Structure>> {
         self.shadow_with_map(fn_map, Self::Structure::expanded_coef)
     }
 
     fn shadow_with_map<T, F>(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
         index_to_atom: F,
     ) -> Result<ParamTensor<Self::Structure>>
     where
@@ -626,22 +626,22 @@ where
 
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient;
 
-    fn flat_append_map(&self, fn_map: &mut FunctionMap<Const>) {
+    fn flat_append_map(&self, fn_map: &mut FunctionMap) {
         self.append_map(fn_map, Self::Structure::flat_coef)
     }
 
-    fn expanded_append_map(&self, fn_map: &mut FunctionMap<Const>) {
+    fn expanded_append_map(&self, fn_map: &mut FunctionMap) {
         self.append_map(fn_map, Self::Structure::expanded_coef)
     }
 
     fn flat_shadow_with_map(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
     ) -> Result<ParamTensor<Self::Structure>> {
         self.shadow_with_map(fn_map, Self::Structure::flat_coef)
     }
@@ -655,7 +655,7 @@ where
 {
 }
 
-impl<S: TensorStructure + HasName + Clone, Const> ShadowMapping<Const> for TensorShell<S>
+impl<S: TensorStructure + HasName + Clone> ShadowMapping for TensorShell<S>
 where
     S::Name: IntoSymbol + Clone,
     S::Args: IntoArgs,
@@ -663,7 +663,7 @@ where
 {
     fn append_map<T>(
         &self,
-        _fn_map: &mut FunctionMap<Const>,
+        _fn_map: &mut FunctionMap,
         _index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,

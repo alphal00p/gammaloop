@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
-    network::{library::TensorLibraryData, tags::SPENSO_TAG},
+    network::tags::SPENSO_TAG,
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         abstract_index::AIND_SYMBOLS,
@@ -19,7 +19,7 @@ use symbolica::{
     domains::rational::Rational,
     function, get_symbol,
     id::Replacement,
-    printer::PrintState,
+    printer::{PrintState, PrintUserData},
     symbol,
 };
 
@@ -355,15 +355,15 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
 
 macro_rules! spenso_print_scripted_indexed {
     ($a:ident, $opt:ident, $symbol:expr) => {{
-        match $opt.custom_print_mode {
-            Some(("spenso", i)) => {
+        match $opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i)) => {
                 let SpensoPrintSettings {
                     parens,
                     symbol_scripts,
                     commas,
                     with_dim,
                     ..
-                } = SpensoPrintSettings::from(i);
+                } = SpensoPrintSettings::from(*i as usize);
 
                 let AtomView::Fun(f) = $a else {
                     return None;
@@ -420,8 +420,8 @@ macro_rules! spenso_print_scripted_indexed {
 
 macro_rules! spenso_print_simple_indexed {
     ($a:ident, $opt:ident, $symbol:expr) => {{
-        match $opt.custom_print_mode {
-            Some(("spenso", _)) => {
+        match $opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(_)) => {
                 let AtomView::Fun(f) = $a else {
                     return None;
                 };
@@ -475,9 +475,9 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     uvaind: symbol!(
         "uvind",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", _i)) => {
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -505,9 +505,9 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     edgeaind: symbol!(
         "edge",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", _i)) => {
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -535,9 +535,9 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     vertexaind: symbol!(
         "vertex",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", _i)) => {
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -566,9 +566,9 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     dummyaind: symbol!(
         "dummy",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", _i)) => {
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -596,15 +596,15 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     hedgeaind: symbol!(
         "hedge",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
                     let SpensoPrintSettings {
                         index_subscripts, ..
-                    } = SpensoPrintSettings::from(i);
+                    } = SpensoPrintSettings::from(*i as usize);
 
                     let mut out = "".to_string();
                     let mut first = true;
@@ -694,14 +694,14 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     theta: symbol!("θ"),
     m_uv: symbol!(
         "mUV",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
                 return None;
             };
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
-                    if SpensoPrintSettings::from(i).is_typst() {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
+                    if SpensoPrintSettings::from(*i as usize).is_typst() {
                         Some("m_\"UV\"".to_string())
                     } else {
                         None
@@ -713,14 +713,14 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     m_uv_int: symbol!(
         "mUVI",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
                 return None;
             };
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
-                    if SpensoPrintSettings::from(i).is_typst() {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
+                    if SpensoPrintSettings::from(*i as usize).is_typst() {
                         Some("m_\"UVI\"".to_string())
                     } else {
                         None
@@ -732,14 +732,14 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     mu_r_sq: symbol!(
         "μᵣ²",
-        print = |a, opt| {
+        print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
                 return None;
             };
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
-                    if SpensoPrintSettings::from(i).is_typst() {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
+                    if SpensoPrintSettings::from(*i as usize).is_typst() {
                         Some("mu_r^2".to_string())
                     } else {
                         None
@@ -784,29 +784,29 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     ubar: symbol!(
         "ubar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u̅") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     vbar: symbol!(
         "vbar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v̅") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v̅") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     dot: symbol!("dot"),
     dim: symbol!("dim"),
     v: symbol!(
         "v",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     u: symbol!(
         "u",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     emr_mom: symbol!(
         "Q",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     orientation_delta: symbol!("orientation_delta"),
@@ -831,37 +831,37 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 }
             }
         },
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     ose: symbol!(
         "OSE"; Scalar;
-        print = |a, opt| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
+        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
     ),
     energy: symbol!(
         "E",
-        print = |a, opt| { spenso_print_simple_indexed!(a, opt, "E") }
+        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "E") }
     ),
     external_mom: symbol!(
         "P",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "p") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "p") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     loop_mom: symbol!(
         "K",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "k") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "k") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     epsilon: symbol!(
         "ϵ",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),
     epsilonbar: symbol!(
         "ϵbar",
-        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     coeff: symbol!("coef"),

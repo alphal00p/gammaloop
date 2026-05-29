@@ -155,7 +155,7 @@ static _DOT_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
             function!(W_.g_, W_.b___, &self_dual_stripped),
         ),
     )
-    .with_conditions(not_slot(W_.a___) & not_slot(W_.b___))]
+    .when(not_slot(W_.a___) & not_slot(W_.b___))]
 });
 
 static VECTOR_DOT_PRODUCTS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {

@@ -42,7 +42,7 @@ use symbolica::{
     api::python::PythonTransformer,
     atom::{
         Atom, AtomView, DefaultNamespace, FunctionBuilder, NamespacedSymbol, Symbol,
-        SymbolAttribute,
+        SymbolAttribute, SymbolBuilder,
     },
     state::Workspace,
     symbol,
@@ -214,7 +214,7 @@ impl SpensoName {
             && custom_normalization.is_none()
         // && custom_print.is_none()
         {
-            let id = Symbol::new(namespace.attach_namespace(&name))
+            let id = SymbolBuilder::new(namespace.attach_namespace(&name))
                 .build()
                 .map_err(|e| exceptions::PyTypeError::new_err(e.to_string()))?;
 
@@ -254,7 +254,7 @@ impl SpensoName {
 
         let name = namespace.attach_namespace(&name);
 
-        let mut symbol = Symbol::new(name).with_attributes(opts);
+        let mut symbol = SymbolBuilder::new(name).with_attributes(opts);
 
         if let Some(f) = custom_normalization {
             symbol = symbol.with_normalization_function(Box::new(
@@ -1476,7 +1476,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToDimension {
             Dimension::from(id)
         } else if let Ok(s) = dimension.extract::<PyBackedStr>() {
             let ns = "spenso_python";
-            let id = Symbol::new(NamespacedSymbol {
+            let id = SymbolBuilder::new(NamespacedSymbol {
                 symbol: format!("{}::{}", ns, s).into(),
                 namespace: ns.into(),
                 file: file!().into(),

@@ -1719,9 +1719,8 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f32bec01b43c1a68289108ac4c3b71ed76296f871f3dbf3922d3f498cf6e7215"
+version = "2.0.0"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=f9f34e84b025f2e7f83c67c09d8c5a357e79545b#f9f34e84b025f2e7f83c67c09d8c5a357e79545b"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -1828,6 +1827,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hugepage-rs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da5c9051569a6ff2f501fb927a7d994af9232e4bff255352811d7b87afc50603"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "iai-callgrind"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1875,7 +1883,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core",
 ]
 
 [[package]]
@@ -2663,9 +2671,8 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "1.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adef2a6836e2a9b3b695858bbc1d0835c1bb3475b3dcf4d0131a6a3cd2877a72"
+version = "2.0.0"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=f9f34e84b025f2e7f83c67c09d8c5a357e79545b#f9f34e84b025f2e7f83c67c09d8c5a357e79545b"
 dependencies = [
  "ahash",
  "bincode 2.0.1",
@@ -4372,9 +4379,8 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce23e15d37e02117d7c009244c837b7cfbee407bc128cd5f0980aaf1c7a1a8ed"
+version = "1.5.2"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=f9f34e84b025f2e7f83c67c09d8c5a357e79545b#f9f34e84b025f2e7f83c67c09d8c5a357e79545b"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4385,6 +4391,7 @@ dependencies = [
  "bytes",
  "dyn-clone",
  "graphica",
+ "inventory",
  "libloading",
  "numerica",
  "numpy",
@@ -4408,13 +4415,15 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.14.9"
+version = "2.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5b34984a3f453e00a971da44b637482e935af9d8a3234b593608d46ca5890df"
+checksum = "7845712223287ac3f93b947ae073cd3ee14b4951242bea436969e910cd6ba247"
 dependencies = [
  "ahash",
  "anyhow",
  "hashbrown 0.16.1",
+ "hugepage-rs",
+ "lazy_static",
  "libc",
  "num-complex",
  "petgraph",
@@ -4424,6 +4433,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spec_math",
+ "toml 1.1.2+spec-1.1.0",
  "wasmtime-jit-icache-coherence",
  "wide 1.3.0",
  "windows-sys 0.61.2",
@@ -4780,6 +4790,21 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.2+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81f3d15e84cbcd896376e6730314d59fb5a87f31e4b038454184435cd57defee"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned 1.1.1",
+ "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.2",
 ]
 
 [[package]]
@@ -5580,7 +5605,7 @@ version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12342cb4d8e3b046f3d80effd474a7a02447231330ef77d71daa6fbc40681143"
 dependencies = [
- "windows-core 0.57.0",
+ "windows-core",
  "windows-targets",
 ]
 
@@ -5590,23 +5615,10 @@ version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2ed2439a290666cd67ecce2b0ffaad89c2a56b976b736e6ece670297897832d"
 dependencies = [
- "windows-implement 0.57.0",
- "windows-interface 0.57.0",
- "windows-result 0.1.2",
+ "windows-implement",
+ "windows-interface",
+ "windows-result",
  "windows-targets",
-]
-
-[[package]]
-name = "windows-core"
-version = "0.62.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
-dependencies = [
- "windows-implement 0.60.2",
- "windows-interface 0.59.3",
- "windows-link",
- "windows-result 0.4.1",
- "windows-strings",
 ]
 
 [[package]]
@@ -5621,32 +5633,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "windows-implement"
-version = "0.60.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "windows-interface"
 version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29bee4b38ea3cde66011baa44dba677c432a78593e202392d1e9070cf2a7fca7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "windows-interface"
-version = "0.59.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5666,24 +5656,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e383302e8ec8515204254685643de10811af0ed97ea37210dc26fb0032647f8"
 dependencies = [
  "windows-targets",
-]
-
-[[package]]
-name = "windows-result"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
-dependencies = [
- "windows-link",
-]
-
-[[package]]
-name = "windows-strings"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
-dependencies = [
- "windows-link",
 ]
 
 [[package]]

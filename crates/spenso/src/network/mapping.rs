@@ -46,7 +46,7 @@ use symbolica::{
         rational_polynomial::{FromNumeratorAndDenominator, RationalPolynomial},
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledEvaluator, EvalTree, EvaluationFn, ExportedCode,
+        CompileOptions, CompiledCode, CompiledEvaluator, EvalTree, ExportedCode,
         ExpressionEvaluator, FunctionMap, InlineASM,
     },
     id::Pattern,

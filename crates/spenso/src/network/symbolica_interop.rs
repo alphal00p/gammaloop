@@ -10,19 +10,24 @@ use symbolica::{
         factorized_rational_polynomial::{
             FactorizedRationalPolynomial, FromNumeratorAndFactorizedDenominator,
         },
-        float::{Complex as SymComplex, FloatLike, Real, SingleFloat},
+        float::{Complex as SymComplex, FixedPrecision, FloatLike, Real, SingleFloat},
         rational::Rational,
         rational_polynomial::{FromNumeratorAndDenominator, RationalPolynomial},
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledNumber, EvalTree, EvaluationFn, ExportNumber,
-        ExportSettings, ExportedCode, ExpressionEvaluator, FunctionMap, OptimizationSettings,
+        CompileOptions, CompiledCode, CompiledNumber, EvalTree, EvaluationDomain, EvaluationError,
+        ExportNumber, ExportSettings, ExportedCode, ExpressionEvaluator, FunctionMap,
+        OptimizationSettings,
     },
     id::{BorrowReplacement, Context, Pattern},
     poly::{
-        PolyVariable, PositiveExponent, factor::Factorize, gcd::PolynomialGCD,
+        PolyVariable, PositiveExponent,
+        factor::Factorize,
+        gcd::PolynomialGCD,
         polynomial::MultivariatePolynomial,
+        series::{Series, SeriesError},
     },
+    solve::SolveError,
     symbol,
     utils::{BorrowedOrOwned, Settable},
 };
@@ -97,7 +102,7 @@ where
     {
         // println!("Replacing");
         self.map_ref(
-            |a| a.replace_multiple(replacements),
+            |a| a.replace_multiple(replacements.iter().map(BorrowReplacement::borrow)),
             |a| a.replace_multiple(replacements),
         )
     }
@@ -162,9 +167,9 @@ where
     T: HasName<Name: IntoSymbol, Args: IntoArgs> + TensorStructure,
     T::Slot: IsAbstractSlot<Aind = Aind>,
 {
-    pub fn append_map<U>(&self, fn_map: &mut FunctionMap<U>)
+    pub fn append_map(&self, fn_map: &mut FunctionMap)
     where
-        T: ShadowMapping<U>,
+        T: ShadowMapping,
         T::Structure: Clone + ToSymbolic + TensorStructure,
         <T::Structure as TensorStructure>::Slot: IsAbstractSlot<Aind = Aind>,
         S: Clone,
@@ -278,7 +283,7 @@ where
 
     fn nsolve<
         'a,
-        N: SingleFloat + Real + PartialOrd,
+        N: SingleFloat + EvaluationDomain + Real + PartialOrd,
         V: Into<BorrowedOrOwned<'a, Indeterminate>>,
     >(
         &self,
@@ -286,7 +291,7 @@ where
         init: N,
         prec: N,
         max_iterations: usize,
-    ) -> std::result::Result<Self::ContainerData<N>, std::string::String> {
+    ) -> std::result::Result<Self::ContainerData<N>, SolveError> {
         let binding = x.into();
         let x = binding.borrow();
         self.map_ref_result(
@@ -300,41 +305,32 @@ where
         x: Symbol,
         expansion_point: T,
         depth: Rational,
-        depth_is_absolute: bool,
+        _depth_is_absolute: bool,
     ) -> std::result::Result<
-        Self::ContainerData<symbolica::poly::series::Series<symbolica::domains::atom::AtomField>>,
-        String,
+        Self::ContainerData<Series<symbolica::domains::atom::AtomField>>,
+        SeriesError,
     > {
         self.map_ref_result(
+            |a| a.series(x, expansion_point.as_atom_view(), depth.clone()),
             |a| {
                 a.series(
                     x,
                     expansion_point.as_atom_view(),
                     depth.clone(),
-                    depth_is_absolute,
-                )
-            },
-            |a| {
-                a.series(
-                    x,
-                    expansion_point.as_atom_view(),
-                    depth.clone(),
-                    depth_is_absolute,
+                    _depth_is_absolute,
                 )
             },
         )
     }
 
-    fn evaluate<A: AtomCore + KeyLookup, T: Real, F: Fn(&Rational) -> T + Copy>(
+    fn evaluate<A: AtomCore + KeyLookup, T: Real + EvaluationDomain + FixedPrecision>(
         &self,
-        coeff_map: F,
         const_map: &HashMap<A, T>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, T>>,
         // cache: &mut HashMap<AtomView<'b>, T>,
-    ) -> std::result::Result<Self::ContainerData<T>, std::string::String> {
+    ) -> std::result::Result<Self::ContainerData<T>, EvaluationError> {
         self.map_ref_result(
-            |a| a.evaluate(coeff_map, const_map, function_map),
-            |a| a.evaluate(coeff_map, const_map, function_map),
+            |a| a.as_atom_view().evaluate(const_map),
+            |a| a.evaluate(const_map),
         )
     }
 
@@ -447,7 +443,7 @@ where
 
     fn replace_multiple<T: BorrowReplacement>(&self, replacements: &[T]) -> Self::AtomContainer {
         self.map_ref(
-            |a| a.replace_multiple(replacements),
+            |a| a.replace_multiple(replacements.iter().map(BorrowReplacement::borrow)),
             |a| a.replace_multiple(replacements),
         )
     }
@@ -593,32 +589,30 @@ impl<
             FK,
             Aind,
         >,
-        String,
+        EvaluationError,
     >
     where
         S: TensorStructure,
     {
         self.map_ref_result(
-            |a| a.to_evaluation_tree(fn_map, params),
+            |a| a.as_atom_view().to_evaluation_tree(fn_map, params),
             |a| a.to_evaluation_tree(fn_map, params),
         )
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    pub fn evaluate_direct<A: AtomCore + KeyLookup, D, F: Fn(&Rational) -> D + Copy>(
+    pub fn evaluate_direct<A: AtomCore + KeyLookup, D: EvaluationDomain + FixedPrecision>(
         &self,
-        coeff_map: F,
         const_map: &AHashMap<A, D>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, D>>,
-    ) -> Result<Network<Store::Store<DataTensor<D, S>, D>, K, FK, Aind>, String>
+    ) -> Result<Network<Store::Store<DataTensor<D, S>, D>, K, FK, Aind>, EvaluationError>
     where
         D: Clone
             + symbolica::domains::float::Real
             + for<'c> std::convert::From<&'c symbolica::domains::rational::Rational>,
     {
         self.map_ref_result(
-            |a| a.evaluate(coeff_map, const_map, function_map),
-            |a| a.evaluate(coeff_map, const_map, function_map),
+            |a| a.as_atom_view().evaluate(const_map),
+            |a| a.evaluate(const_map),
         )
     }
 }
@@ -684,7 +678,7 @@ impl<
 > Network<Store, K, FK, Aind>
 {
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
         &self,
         f: &F,
     ) -> Network<Store::Store<EvalTreeTensor<T2, S>, EvalTree<T2>>, K, FK, Aind>
@@ -907,30 +901,24 @@ where
     K: Clone,
     FK: Clone,
 {
-    pub fn evaluate_real<A: AtomCore + KeyLookup, F: Fn(&Rational) -> T + Copy>(
-        &mut self,
-        coeff_map: F,
-        const_map: &AHashMap<A, T>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, T>>,
-    ) where
-        T: Real + for<'c> From<&'c Rational>,
+    pub fn evaluate_real<A: AtomCore + KeyLookup>(&mut self, const_map: &AHashMap<A, T>)
+    where
+        T: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
     {
         for t in self.iter_tensors_mut() {
-            t.evaluate_real(coeff_map, const_map, function_map);
+            t.evaluate_real(const_map);
         }
     }
 
-    pub fn evaluate_complex<A: AtomCore + KeyLookup, F: Fn(&Rational) -> SymComplex<T> + Copy>(
+    pub fn evaluate_complex<A: AtomCore + KeyLookup>(
         &mut self,
-        coeff_map: F,
         const_map: &AHashMap<A, SymComplex<T>>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, SymComplex<T>>>,
     ) where
-        T: Real + for<'c> From<&'c Rational>,
-        SymComplex<T>: Real + for<'c> From<&'c Rational>,
+        T: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
+        SymComplex<T>: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
     {
         for t in self.iter_tensors_mut() {
-            t.evaluate_complex(coeff_map, const_map, function_map);
+            t.evaluate_complex(const_map);
         }
     }
 

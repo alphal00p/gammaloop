@@ -106,7 +106,7 @@ impl<'a> Chain for AtomView<'a> {
         // println!("{}", collected);
 
         self.to_owned()
-            .collect_symbol::<i16>(T.chain, None, None)
+            .collect_symbol::<i16>(T.chain)
             .replace(product)
             .repeat()
             .with(collected)

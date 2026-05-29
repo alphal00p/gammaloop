@@ -29,17 +29,9 @@ use spenso::{
 use std::ops::Deref;
 use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
-    domains::{
-        dual::HyperDual,
-        float::Complex as SymComplex,
-        integer::IntegerRing,
-        rational::{Fraction, Rational},
-    },
-    evaluate::{
-        CompiledCode, Dualizer, ExpressionEvaluator, FunctionMap, JITCompiledEvaluator,
-        OptimizationSettings,
-    },
+    domains::{dual::HyperDual, float::Complex as SymComplex, rational::Fraction},
+    evaluate::JITCompiledEvaluator,
+    prelude::*,
 };
 use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
@@ -433,7 +425,6 @@ impl EvaluatorStack {
                     .add_tagged_function(
                         GS.integrand,
                         vec![Atom::num(i)],
-                        "integrand".into(),
                         args.clone(),
                         param_integrand.clone(),
                     )
@@ -1121,7 +1112,7 @@ impl GenericEvaluator {
             .as_ref()
             .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
         let evaluator = rational
-            .jit_compile::<SymComplex<f64>>()
+            .jit_compile::<SymComplex<f64>>(JITCompilationSettings::default())
             .map_err(|err| eyre!(err))?;
         self.loaded_f64_compiled.invalidate();
         self.symjit_f64.set(SymjitComplexEvaluatorGL(evaluator));
@@ -1217,9 +1208,12 @@ impl GenericEvaluator {
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for n in exprs.iter() {
             let eval = n
-                .evaluator(fn_map, params, optimization_settings.clone())
+                .evaluator(params)
+                .function_map(fn_map.clone())
+                .optimization_settings(optimization_settings.clone())
+                .build()
                 .map_err(|e| {
-                    let mut settings =SpensoPrintSettings::compact().nice_symbolica();
+                    let mut settings = SpensoPrintSettings::compact().nice_symbolica();
                     settings.max_line_length = Some(120);
                     settings.hide_all_namespaces = false;
                     eyre!(
@@ -1240,7 +1234,7 @@ impl GenericEvaluator {
                 })?;
 
             tree = Some(if let Some(mut tree) = tree {
-                tree.merge(eval, optimization_settings.cpe_iterations)
+                tree.merge(eval, settings.cpe_iterations)
                     .map_err(|e| eyre!("Failed to merge evaluators: {}", e))?;
                 tree
             } else {
@@ -1253,9 +1247,7 @@ impl GenericEvaluator {
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
             let dualizer = Dualizer::new(dual, vec![]);
-            tree = tree
-                .vectorize(&dualizer, ahash::HashMap::default())
-                .unwrap();
+            tree = tree.vectorize(&dualizer).unwrap();
         }
 
         let rational = tree.clone();

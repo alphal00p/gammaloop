@@ -15,7 +15,7 @@ use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
+use spenso::algebra::algebraic_traits::IsZero;
 use tracing::info;
 use vakint::Vakint;
 
@@ -59,15 +59,7 @@ use linnet::half_edge::{
     },
 };
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    domains::dual::HyperDual,
-    domains::rational::Rational,
-    evaluate::{FunctionMap, OptimizationSettings},
-    function,
-    id::Replacement,
-    parse, symbol,
-};
+use symbolica::{domains::dual::HyperDual, prelude::*};
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -1219,10 +1211,12 @@ impl CrossSectionGraph {
             self.single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
 
         let mut fn_map = FunctionMap::new();
-        fn_map.add_constant(
-            GS.pi.into(),
-            Rational::try_from(std::f64::consts::PI).unwrap().into(),
-        );
+        fn_map
+            .add_aliases([(
+                GS.pi.into(),
+                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+            )])
+            .unwrap();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -1261,10 +1255,12 @@ impl CrossSectionGraph {
         let params = self.iterated_th_prefactor_helper_params(left_order, right_order);
 
         let mut fn_map = FunctionMap::new();
-        fn_map.add_constant(
-            GS.pi.into(),
-            Rational::try_from(std::f64::consts::PI).unwrap().into(),
-        );
+        fn_map
+            .add_aliases([(
+                GS.pi.into(),
+                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+            )])
+            .unwrap();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -1291,49 +1287,41 @@ impl CrossSectionGraph {
             ),
             Replacement::new(
                 (function!(f, GS.radius_star_left)
-                    * function!(
-                        symbolica::atom::Symbol::DERIVATIVE,
-                        W_.x_,
-                        function!(f, GS.radius_star_right)
-                    ))
+                    * function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_right))
                 .to_pattern(),
                 function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
+                    Symbol::DERIVATIVE,
                     0,
                     W_.x_,
-                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                    f,
+                    GS.radius_star_left,
+                    GS.radius_star_right
                 ),
             ),
             Replacement::new(
-                (function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
-                    W_.x_,
-                    function!(f, GS.radius_star_left)
-                ) * function!(f, GS.radius_star_right))
+                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
+                    * function!(f, GS.radius_star_right))
                 .to_pattern(),
                 function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
+                    Symbol::DERIVATIVE,
                     W_.x_,
                     0,
-                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                    f,
+                    GS.radius_star_left,
+                    GS.radius_star_right
                 ),
             ),
             Replacement::new(
-                (function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
-                    W_.x_,
-                    function!(f, GS.radius_star_left)
-                ) * function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
-                    W_.y_,
-                    function!(f, GS.radius_star_right)
-                ))
+                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
+                    * function!(Symbol::DERIVATIVE, W_.y_, f, GS.radius_star_right))
                 .to_pattern(),
                 function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
+                    Symbol::DERIVATIVE,
                     W_.x_,
                     W_.y_,
-                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                    f,
+                    GS.radius_star_left,
+                    GS.radius_star_right
                 ),
             ),
         ]
@@ -2172,12 +2160,7 @@ pub(crate) fn build_derivative_structure_atom(
     let f = symbol!("f");
 
     let expansion = parse!("η(t)")
-        .series(
-            GS.rescale,
-            Atom::var(GS.rescale_star),
-            (order, 1).into(),
-            true,
-        )
+        .series(GS.rescale, Atom::var(GS.rescale_star), (order, 1))
         .unwrap()
         .to_atom()
         .replace(function!(symbol!("η"), GS.rescale_star))
@@ -2197,7 +2180,7 @@ pub(crate) fn build_derivative_structure_atom(
         .with(parse!("delta_t"));
 
     let polynomial_in_delta_t = expression_to_derive
-        .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
+        .series(symbol!("delta_t"), Atom::num(0), (0, 1))
         .unwrap();
 
     let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();

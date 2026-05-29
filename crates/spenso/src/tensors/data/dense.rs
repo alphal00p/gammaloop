@@ -190,12 +190,12 @@ where
 }
 
 #[cfg(feature = "shadowing")]
-impl<T: Clone, S: TensorStructure, R> ShadowMapping<R> for DenseTensor<T, S>
+impl<T: Clone, S: TensorStructure> ShadowMapping for DenseTensor<T, S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
     S::Args: IntoArgs,
-    R: From<T>,
+    symbolica::atom::Atom: From<T>,
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
     // fn shadow_with_map<'a, U>(
@@ -224,14 +224,16 @@ where
 
     fn append_map<U>(
         &self,
-        fn_map: &mut symbolica::evaluate::FunctionMap<R>,
+        fn_map: &mut symbolica::evaluate::FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> U,
     ) where
         U: TensorCoefficient,
     {
         for (i, d) in self.flat_iter() {
             let labeled_coef = index_to_atom(self.structure(), i).to_atom().unwrap();
-            fn_map.add_constant(labeled_coef.clone(), d.clone().into());
+            fn_map
+                .add_aliases([(labeled_coef.clone(), symbolica::atom::Atom::from(d.clone()))])
+                .unwrap();
         }
     }
 }

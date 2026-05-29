@@ -2972,11 +2972,11 @@ where
             );
         }
 
-        let mut stream = TermStreamer::<BufWriter<File>>::new(TermStreamerConfig {
-            path: std::env::temp_dir().to_string_lossy().into_owned(),
-            max_mem_bytes: 4 * 1024 * 1024 * 1024,
-            ..Default::default()
-        });
+        let mut stream = TermStreamer::<BufWriter<File>>::new(
+            TermStreamerConfig::new()
+                .path(std::env::temp_dir().to_string_lossy().into_owned())
+                .max_mem_bytes(4 * 1024 * 1024 * 1024),
+        );
 
         for atom in atoms {
             stream.push(atom);

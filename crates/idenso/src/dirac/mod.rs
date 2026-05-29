@@ -17,7 +17,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
-    printer::PrintState,
+    printer::{PrintState, PrintUserData},
     symbol,
 };
 
@@ -40,15 +40,15 @@ pub struct GammaLibrary {
 pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     gamma: spenso::tensor_symbol!(
         "spenso::gamma"; Linear;
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
                     let SpensoPrintSettings {
                         parens,
                         symbol_scripts,
                         commas,
                         ..
-                    } = SpensoPrintSettings::from(i);
+                    } = SpensoPrintSettings::from(*i as usize);
 
                     let AtomView::Fun(f) = a else {
                         return None;
@@ -111,10 +111,10 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     gammaadj: spenso::tensor_symbol!("spenso::gammaadj"),
     projp: spenso::tensor_symbol!(
         "spenso::projp",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
-                    let settings = SpensoPrintSettings::from(i);
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let settings = SpensoPrintSettings::from(*i as usize);
                     let is_typst = settings.is_typst();
                     let SpensoPrintSettings {
                         parens,
@@ -164,10 +164,10 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     ),
     projm: spenso::tensor_symbol!(
         "spenso::projm",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
-                    let settings = SpensoPrintSettings::from(i);
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let settings = SpensoPrintSettings::from(*i as usize);
                     let is_typst = settings.is_typst();
                     let SpensoPrintSettings {
                         parens,
@@ -216,10 +216,10 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
     ),
     gamma5: spenso::tensor_symbol!(
         "spenso::gamma5",
-        print = |a, opt| {
-            match opt.custom_print_mode {
-                Some(("spenso", i)) => {
-                    let settings = SpensoPrintSettings::from(i);
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let settings = SpensoPrintSettings::from(*i as usize);
                     let is_typst = settings.is_typst();
                     let SpensoPrintSettings {
                         parens,
@@ -272,10 +272,10 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
         }
     ),
     sigma: spenso::tensor_symbol!("spenso::sigma"),
-    gamma0: spenso::tensor_symbol!("spenso::gamma0"; Real, Symmetric; print = |a, opt| {
-        match opt.custom_print_mode {
-            Some(("spenso", i)) => {
-                let settings = SpensoPrintSettings::from(i);
+    gamma0: spenso::tensor_symbol!("spenso::gamma0"; Real, Symmetric; print = |a, opt, _state| {
+        match opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i)) => {
+                let settings = SpensoPrintSettings::from(*i as usize);
                 let is_typst = settings.is_typst();
                 let SpensoPrintSettings {
                     parens,

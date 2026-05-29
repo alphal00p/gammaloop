@@ -15,8 +15,9 @@ use spenso::{
         representation::{Euclidean, LibraryRep, Minkowski, RepName},
     },
     tensors::{
-        data::{DataTensor, DenseTensor, SparseOrDense},
-        parametric::MixedTensor,
+        complex::RealOrComplexTensor,
+        data::{DataTensor, DenseTensor, SparseOrDense, StorageTensor},
+        parametric::{MixedTensor, ParamOrConcrete, atomcore::TensorAtomMaps},
     },
     vector, vector_symbol,
 };
@@ -40,6 +41,7 @@ use super::{ParameterName, Particle, UFOSymbol};
 
 type ComplexF64 = Complex<F<f64>>;
 type SymComplexF64 = symbolica::domains::float::Complex<F<f64>>;
+type SymComplexPlainF64 = symbolica::domains::float::Complex<f64>;
 type TestTensorLibrary = TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>;
 
 static TEST_INITIALIZED: OnceLock<()> = OnceLock::new();
@@ -293,12 +295,25 @@ fn evaluate_tensor_network_with_constants(
         panic!("polarization-sum test network did not evaluate to a tensor");
     };
 
-    let mut result = result.into_owned();
-    let empty_functions: HashMap<
-        symbolica::atom::Symbol,
-        symbolica::evaluate::EvaluationFn<Atom, SymComplexF64>,
-    > = HashMap::default();
-    result.evaluate_complex(|r| r.into(), constants, &empty_functions);
+    let constants_f64: HashMap<Atom, SymComplexPlainF64> = constants
+        .iter()
+        .map(|(atom, value)| {
+            (
+                atom.clone(),
+                SymComplexPlainF64::new(value.re.0, value.im.0),
+            )
+        })
+        .collect();
+    let result = match result.into_owned() {
+        ParamOrConcrete::Param(tensor) => {
+            let evaluated = tensor
+                .evaluate(&constants_f64)
+                .unwrap()
+                .map_data(|c| Complex::new(F(c.re), F(c.im)));
+            ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(evaluated))
+        }
+        ParamOrConcrete::Concrete(tensor) => ParamOrConcrete::Concrete(tensor),
+    };
 
     let dense = result
         .try_into_concrete()

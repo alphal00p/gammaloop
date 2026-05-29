@@ -110,10 +110,6 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
     let mut expr = view.collect_tensors();
     let dim = RS.d_;
     let dima = Atom::var(dim);
-    let settings = MatchSettings {
-        level_range: (0, Some(1)),
-        ..Default::default()
-    };
 
     let mut reps = vec![];
     for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
@@ -122,8 +118,8 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 i.to_symbolic([dim, RS.a_]).to_pattern(),
                 i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
-            .with_conditions(RS.a_.filter_match(not_wraped_aind(header)))
-            .with_settings(settings.clone()),
+            .when(RS.a_.filter_match(not_wraped_aind(header)))
+            .level_range((0, Some(1))),
         );
     }
 
@@ -134,16 +130,16 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 i.to_symbolic([dim, RS.a_]).to_pattern(),
                 i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
-            .with_conditions(RS.a_.filter_match(not_wraped_aind(header)))
-            .with_settings(settings.clone()),
+            .when(RS.a_.filter_match(not_wraped_aind(header)))
+            .level_range((0, Some(1))),
         );
         reps.push(
             Replacement::new(
                 di.to_symbolic([dim, RS.a_]).to_pattern(),
                 di.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
-            .with_conditions(RS.a_.filter_match(not_wraped_aind(header)))
-            .with_settings(settings.clone()),
+            .when(RS.a_.filter_match(not_wraped_aind(header)))
+            .level_range((0, Some(1))),
         );
     }
     let mut atom = Atom::new();
@@ -175,10 +171,7 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
     let externals: HashSet<_> = list_dangling_impl::<Aind>(view).into_iter().collect();
 
     let mut expr = view.to_owned();
-    let settings = MatchSettings {
-        level_range: (0, Some(0)),
-        ..Default::default()
-    };
+    let settings = MatchSettings::new().level_range((0, Some(0)));
 
     for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
         let ipat = i.to_symbolic([RS.d_, RS.a_]).to_pattern();
@@ -187,7 +180,7 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
                 && ctx.function_level > 0
                 && let Some(c) = term.pattern_match(&ipat, None, &settings).next()
             {
-                let atom = ipat.replace_wildcards(&c);
+                let atom = ipat.replace_wildcards(&c).unwrap();
                 if !externals.contains(&atom) {
                     **out =
                         i.to_symbolic([c[&RS.d_].clone(), function!(header, c[&RS.a_].clone())]);
@@ -202,13 +195,13 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
         expr = expr.replace_map(|term, ctx, out| {
             if ctx.function_level < 2 && ctx.function_level > 0 {
                 if let Some(c) = term.pattern_match(&ipat, None, &settings).next() {
-                    let atom = ipat.replace_wildcards(&c);
+                    let atom = ipat.replace_wildcards(&c).unwrap();
                     if !externals.contains(&atom) {
                         **out = i
                             .to_symbolic([c[&RS.d_].clone(), function!(header, c[&RS.a_].clone())]);
                     }
                 } else if let Some(c) = term.pattern_match(&ipat_dual, None, &settings).next() {
-                    let atom = ipat_dual.replace_wildcards(&c);
+                    let atom = ipat_dual.replace_wildcards(&c).unwrap();
                     if !externals.contains(&atom) {
                         **out = i
                             .dual()

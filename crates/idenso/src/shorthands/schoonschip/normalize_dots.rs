@@ -110,13 +110,13 @@ static VECTOR_POWER_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
             self_dual_vector.clone().pow(Atom::var(W_.n_)).to_pattern(),
             self_dual_square.pow(Atom::var(W_.n_) / 2),
         )
-        .with_conditions(W_.n_.filter_single(DotNormalizer::even_power)),
+        .when(W_.n_.filter(DotNormalizer::even_power)),
         // Normalize odd powers of a vector p(...,mu)^(2n+1) -> p(...,mu) * g(p(...,rep),p(...,rep))^(n/2)
         Replacement::new(
             self_dual_vector.clone().pow(Atom::var(W_.n_)).to_pattern(),
             self_dual_square.pow((Atom::var(W_.n_) - 1) / 2) * self_dual_vector,
         )
-        .with_conditions(W_.n_.filter_single(DotNormalizer::odd_power)),
+        .when(W_.n_.filter(DotNormalizer::odd_power)),
     ]
 });
 
@@ -131,13 +131,13 @@ static METRIC_POWER_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|
             self_dual_metric.pow(Atom::var(W_.n_)).to_pattern(),
             Atom::var(W_.d_).pow(Atom::var(W_.n_) / 2),
         )
-        .with_conditions(W_.n_.filter_single(DotNormalizer::even_power)),
+        .when(W_.n_.filter(DotNormalizer::even_power)),
         // Normalize odd powers of a metric g(rep(dim,i),rep(dim,j))^(2n+1) -> dim^(n/2) * g(rep(dim,i),rep(dim,j))
         Replacement::new(
             self_dual_metric.pow(Atom::var(W_.n_)).to_pattern(),
             Atom::var(W_.d_).pow((Atom::var(W_.n_) - 1) / 2) * &self_dual_metric,
         )
-        .with_conditions(W_.n_.filter_single(DotNormalizer::odd_power)),
+        .when(W_.n_.filter(DotNormalizer::odd_power)),
     ]
 });
 

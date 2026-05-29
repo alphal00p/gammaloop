@@ -29,8 +29,8 @@ use symbolica::{
         rational::Rational,
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledNumber, EvalTree, ExportNumber, ExportSettings,
-        ExportedCode, ExpressionEvaluator, FunctionMap, OptimizationSettings,
+        CompileOptions, CompiledCode, CompiledNumber, EvalTree, EvaluationDomain, ExportNumber,
+        ExportSettings, ExportedCode, ExpressionEvaluator, FunctionMap, OptimizationSettings,
     },
 };
 
@@ -337,7 +337,7 @@ impl<
     Store: TensorScalarStore<Tensor = DataTensor<usize, S>, Scalar = usize> + Clone,
 > EvalTreeTensorNetworkSet<T, S, K, FK, Aind, Store>
 {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
         &self,
         f: &F,
     ) -> EvalTreeTensorNetworkSet<T2, S, K, FK, Aind, Store>

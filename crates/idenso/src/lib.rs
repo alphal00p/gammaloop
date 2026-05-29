@@ -479,10 +479,11 @@ pub mod test {
             ubgu.dirac_adjoint::<AbstractIndex>()
                 .unwrap()
                 .canonize(AbstractIndex::Dummy)
-                .to_canonically_ordered_string(CanonicalOrderingSettings {
-                    include_attributes: false,
-                    include_namespace: false,hide_namespace:None,
-                }),@"(conj(p(1,mink(4,d_0)))*gamma(bis(4,d_1),bis(4,d_2),mink(4,d_0))+g(bis(4,d_1),bis(4,d_2)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
+                .to_canonically_ordered_string(
+                    CanonicalOrderingSettings::new()
+                        .include_attributes(false)
+                        .include_namespace(false)
+                ),@"(conj(p(1,mink(4,d_0)))*gamma(bis(4,d_1),bis(4,d_2),mink(4,d_0))+g(bis(4,d_1),bis(4,d_2)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
         );
     }
 

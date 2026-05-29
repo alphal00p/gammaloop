@@ -18,7 +18,7 @@ use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{algebra::complex::Complex, network::library::TensorLibraryData};
+use spenso::algebra::complex::Complex;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -67,12 +67,7 @@ use linnet::{
     num_traits::SignOrZero,
     parser::DotGraph,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, Var},
-    domains::rational::Rational,
-    evaluate::FunctionMap,
-    function,
-};
+use symbolica::{atom::Var, prelude::*};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -1469,10 +1464,12 @@ pub(crate) fn threshold_counterterm_helper(
 ) -> GenericEvaluator {
     let atom = threshold_counterterm_helper_atom(order, loop_number);
     let mut fn_map = FunctionMap::default();
-    fn_map.add_constant(
-        GS.pi.into(),
-        Rational::try_from(std::f64::consts::PI).unwrap().into(),
-    );
+    fn_map
+        .add_aliases([(
+            GS.pi.into(),
+            Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+        )])
+        .unwrap();
 
     let mut params = params_for_derivative_order(order)
         .into_iter()

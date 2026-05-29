@@ -159,19 +159,19 @@ impl Default for EvaluatorSettings {
 
 impl EvaluatorSettings {
     pub fn optimization_settings(&self) -> OptimizationSettings {
-        OptimizationSettings {
-            horner_iterations: self.horner_iterations,
-            n_cores: self.n_cores,
-            cpe_iterations: self.cpe_iterations,
-            hot_start: None,
-            abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
-            abort_level: self.abort_level,
-            max_horner_scheme_variables: self.max_horner_scheme_variables,
-            max_common_pair_cache_entries: self.max_common_pair_cache_entries,
-            max_common_pair_distance: self.max_common_pair_distance,
-            verbose: self.verbose,
-            direct_translation: false,
-        }
+        OptimizationSettings::new()
+            .horner_iterations(self.horner_iterations)
+            .cores(self.n_cores)
+            .cpe_iterations(self.cpe_iterations)
+            .abort_check(Some(Box::new(
+                crate::is_interrupt_requested as fn() -> bool,
+            )))
+            .abort_level(self.abort_level)
+            .max_horner_scheme_variables(self.max_horner_scheme_variables)
+            .max_common_pair_cache_entries(self.max_common_pair_cache_entries)
+            .max_common_pair_distance(self.max_common_pair_distance)
+            .verbose(self.verbose)
+            .direct_translation(false)
     }
 }
 

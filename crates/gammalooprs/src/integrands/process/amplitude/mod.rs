@@ -163,7 +163,7 @@ impl AmplitudeGraphTerm {
             .collect::<HashSet<_>>();
 
         crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
-            orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS),
+            orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS.clone()),
             "Building evaluator for all orientations \n{}",
             graph.graph.param_builder.table()
         );

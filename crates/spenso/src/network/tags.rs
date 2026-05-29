@@ -1,6 +1,6 @@
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    printer::PrintState,
+    printer::{PrintState, PrintUserData},
     symbol, tag,
 };
 
@@ -325,10 +325,11 @@ impl SpensoTags {
             chain_out: symbol!("out"),
             chain: symbol!(
                 "chain";Linear;
-                print = |a, opt| {
-                    match opt.custom_print_mode {
-                        Some(("spenso", i)) => {
-                            let SpensoPrintSettings { parens, .. } = SpensoPrintSettings::from(i);
+                print = |a, opt, _state| {
+                    match opt.custom_print_mode.get("spenso") {
+                        Some(PrintUserData::Integer(i)) => {
+                            let SpensoPrintSettings { parens, .. } =
+                                SpensoPrintSettings::from(*i as usize);
 
                             let AtomView::Fun(f) = a else {
                                 return None;
@@ -359,12 +360,12 @@ impl SpensoTags {
             ),
             trace: symbol!(
                 "trace";Linear;
-                print = |a, opt| {
-                    match opt.custom_print_mode {
-                        Some(("spenso", i)) => {
+                print = |a, opt, _state| {
+                    match opt.custom_print_mode.get("spenso") {
+                        Some(PrintUserData::Integer(i)) => {
                             let SpensoPrintSettings {
                                 parens, with_dim, ..
-                            } = SpensoPrintSettings::from(i);
+                            } = SpensoPrintSettings::from(*i as usize);
 
                             let AtomView::Fun(f) = a else {
                                 return None;
@@ -402,13 +403,13 @@ impl SpensoTags {
             rank1_: symbol!("rank1_", tags = [&tensor, &rank1]),
             bracket: symbol!("bracket"),
             pure_scalar: symbol!("pure_scalar"),
-            dot: symbol!("dot";Symmetric,Linear; print = |a,opt|{
-                    match opt.custom_print_mode {
-                        Some(("spenso",i))=>{
+            dot: symbol!("dot";Symmetric,Linear; print = |a, opt, _state|{
+                    match opt.custom_print_mode.get("spenso") {
+                        Some(PrintUserData::Integer(i))=>{
                             let SpensoPrintSettings{
                                 parens,
                                 with_dim,..
-                            } = SpensoPrintSettings::from(i);
+                            } = SpensoPrintSettings::from(*i as usize);
 
 
                     let AtomView::Fun(f) = a else {

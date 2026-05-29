@@ -16,7 +16,6 @@ use linnet::half_edge::{
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function, symbol,

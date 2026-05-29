@@ -16,13 +16,7 @@ use spenso::{
     shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    function,
-    id::{MatchSettings, Replacement},
-    parse, parse_lit,
-    solve::SolveError,
-};
+use symbolica::prelude::*;
 use tracing::instrument;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
@@ -163,9 +157,7 @@ impl Integrated<'_> {
         let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
 
         debug_tags!(#uv,#integrated;res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, 1.into(), true)
-            .unwrap();
+        let a = atomarg.series(GS.rescale, Atom::Zero, 1).unwrap();
 
         let mut a = a.to_atom();
 
@@ -301,7 +293,7 @@ impl Integrated<'_> {
         // apply metric
         res = res
             .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
-            .when(W_.j_.filter_single(|r| r.is_integer()))
+            .when(W_.j_.filter(|r| r.is_integer()))
             .with(
                 vakint::symbols::S.p.f(&[
                     Atom::var(W_.i_),
@@ -315,7 +307,7 @@ impl Integrated<'_> {
                     .p
                     .f(&[Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
             )
-            .when(W_.j_.filter_single(|r| r.is_integer()))
+            .when(W_.j_.filter(|r| r.is_integer()))
             .with(
                 vakint::symbols::S.p.f(&[
                     Atom::var(W_.i_),
@@ -334,7 +326,7 @@ impl Integrated<'_> {
                 vakint::symbols::S.dot_dummy_ind(W_.x_),
                 W_.y_
             ))
-            .when(W_.x_.filter_single(|r| r.is_integer()))
+            .when(W_.x_.filter(|r| r.is_integer()))
             .with(function!(
                 vk_metric,
                 mink.to_symbolic([GS
@@ -347,7 +339,7 @@ impl Integrated<'_> {
                 W_.x_,
                 vakint::symbols::S.dot_dummy_ind(W_.y_)
             ))
-            .when(W_.y_.filter_single(|r| r.is_integer()))
+            .when(W_.y_.filter(|r| r.is_integer()))
             .with(function!(
                 vk_metric,
                 mink.to_symbolic([GS
@@ -378,12 +370,7 @@ impl Integrated<'_> {
 
         let n_loops = graph.n_loops(&graph.full_filter());
         let series = res
-            .series(
-                GS.dim_epsilon,
-                Atom::Zero,
-                (n_loops as i64 + 1).into(),
-                true,
-            )
+            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
             .unwrap();
 
         debug_tags!(#uv, #integrated, #inspect;
@@ -920,7 +907,7 @@ pub(crate) fn to_vakint_integrand<
                     .mom
                     .pattern_match(&mom_pat, None, None)
                     .for_each(|m| {
-                        let var = mom_pat.replace_wildcards(&m);
+                        let var = mom_pat.replace_wildcards(&m).unwrap();
                         vars.insert(var);
                     });
 
@@ -939,18 +926,12 @@ pub(crate) fn to_vakint_integrand<
                 function!(GS.emr_mom, W_.i_).to_pattern(),
                 function!(GS.emr_mom, W_.i_, W_.a___),
             )
-            .with_settings(MatchSettings {
-                allow_new_wildcards_on_rhs: true,
-                ..Default::default()
-            }),
+            .allow_new_wildcards_on_rhs(true),
             Replacement::new(
                 function!(GS.loop_mom, W_.i_).to_pattern(),
                 function!(GS.loop_mom, W_.i_, W_.a___),
             )
-            .with_settings(MatchSettings {
-                allow_new_wildcards_on_rhs: true,
-                ..Default::default()
-            }),
+            .allow_new_wildcards_on_rhs(true),
         ];
         let a = Atom::solve_linear_system::<u8, _, _>(&system, &vars);
         match a {

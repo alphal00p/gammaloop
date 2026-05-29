@@ -14,7 +14,7 @@ use symbolica::atom::AtomOrView;
 use symbolica::{
     atom::Symbol,
     atom::{Atom, AtomCore, AtomView},
-    printer::PrintState,
+    printer::{PrintState, PrintUserData},
     symbol, try_parse,
 };
 
@@ -123,9 +123,9 @@ pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
     std::sync::LazyLock::new(|| AindSymbols {
         cind: symbol!(
             super::concrete_index::CONCRETEIND,
-            print = |a, opt| {
-                match opt.custom_print_mode {
-                    Some(("spenso", _)) => {
+            print = |a, opt, _state| {
+                match opt.custom_print_mode.get("spenso") {
+                    Some(PrintUserData::Integer(_)) => {
                         let AtomView::Fun(f) = a else {
                             return None;
                         };
@@ -159,9 +159,9 @@ pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
         ),
         find: symbol!(
             super::concrete_index::FLATIND,
-            print = |a, opt| {
-                match opt.custom_print_mode {
-                    Some(("spenso", _)) => {
+            print = |a, opt, _state| {
+                match opt.custom_print_mode.get("spenso") {
+                    Some(PrintUserData::Integer(_)) => {
                         let AtomView::Fun(f) = a else {
                             return None;
                         };
@@ -203,9 +203,9 @@ pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
                 }
             },
             tag = SPENSO_TAG.upper,
-            print = |_, opt| {
-                match opt.custom_print_mode {
-                    Some(("typst", 1)) => {
+            print = |_, opt, _state| {
+                match opt.custom_print_mode.get("typst") {
+                    Some(PrintUserData::Integer(1)) => {
                         let body = r#"(..arg)={
 let args = arg.pos().map(to-eq).join("")
 (content: args,upper:true)
@@ -233,33 +233,37 @@ let args = arg.pos().map(to-eq).join("")
                 }
             },
             tag = SPENSO_TAG.lower,
-            print = |a, opt| {
-                match opt.custom_print_mode {
-                    Some(("typst", 1)) => {
-                        let body = r#"(..arg)={
+            print = |a, opt, _state| {
+                if matches!(
+                    opt.custom_print_mode.get("typst"),
+                    Some(PrintUserData::Integer(1))
+                ) {
+                    let body = r#"(..arg)={
 let args = arg.pos().map(to-eq).join("")
 (content: args,lower:true)
 }"#;
-                        Some(body.into())
-                    }
-                    Some(("spenso", _)) => {
-                        let AtomView::Fun(f) = a else {
-                            return None;
-                        };
+                    Some(body.into())
+                } else if matches!(
+                    opt.custom_print_mode.get("spenso"),
+                    Some(PrintUserData::Integer(_))
+                ) {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
 
-                        let mut out = if opt.color_builtin_symbols {
-                            DarkGray.paint("_").to_string()
-                        } else {
-                            "_".to_string()
-                        };
-                        if f.get_nargs() != 1 {
-                            return None;
-                        }
-                        let arg = f.iter().next().unwrap();
-                        arg.format(&mut out, opt, PrintState::new()).unwrap();
-                        Some(out)
+                    let mut out = if opt.color_builtin_symbols {
+                        DarkGray.paint("_").to_string()
+                    } else {
+                        "_".to_string()
+                    };
+                    if f.get_nargs() != 1 {
+                        return None;
                     }
-                    _ => None,
+                    let arg = f.iter().next().unwrap();
+                    arg.format(&mut out, opt, PrintState::new()).unwrap();
+                    Some(out)
+                } else {
+                    None
                 }
             }
         ),

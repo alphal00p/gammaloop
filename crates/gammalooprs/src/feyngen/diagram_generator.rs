@@ -5101,7 +5101,7 @@ impl ProcessedNumeratorForComparison {
                                     (canonized_color * scalar).as_view(),
                                 );
 
-                                debug!(evaluated=%a.printer(LOGPRINTOPTS),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS));
+                                debug!(evaluated=%a.printer(LOGPRINTOPTS.clone()),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS.clone()));
                                 a
                             })
                             .fold(Atom::Zero, |acc, l| acc + l);

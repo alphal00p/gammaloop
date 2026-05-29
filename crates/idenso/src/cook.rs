@@ -2,8 +2,8 @@ use spenso::network::tags::SPENSO_TAG;
 use std::sync::{Arc, Mutex};
 use symbolica::{
     atom::{
-        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, UserData,
-        representation::FunView,
+        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
+        UserData, representation::FunView,
     },
     coefficient::CoefficientView,
 };
@@ -265,7 +265,7 @@ impl CookOutputTags {
 
 /// Settings for cooking functions and representation-slot indices.
 ///
-/// Tags are attached through `Symbol::new(...).with_tags(...)`, so they must be
+/// Tags are attached through `SymbolBuilder::new(...).with_tags(...)`, so they must be
 /// fully namespaced Symbolica tags such as `idenso::cooked`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CookSettings {
@@ -514,7 +514,7 @@ impl CookSettings {
         tags: &[String],
     ) -> Result<Symbol, CookingError> {
         let name = Self::namespaced_name(name);
-        let mut builder = Symbol::new(NamespacedSymbol::parse(&name));
+        let mut builder = SymbolBuilder::new(NamespacedSymbol::parse(&name));
         if !tags.is_empty() {
             builder = builder.with_tags(tags);
         }
@@ -735,7 +735,9 @@ impl CookFunctionName {
 mod tests {
     use spenso::network::tags::SPENSO_TAG;
     use symbolica::{
-        atom::{Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, UserData},
+        atom::{
+            Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder, UserData,
+        },
         parse_lit, symbol,
     };
 
@@ -770,7 +772,7 @@ mod tests {
 
     impl CookedFunction {
         fn tagged_symbol(name: &str, tags: &[&str]) -> Symbol {
-            Symbol::new(NamespacedSymbol::parse(name))
+            SymbolBuilder::new(NamespacedSymbol::parse(name))
                 .with_tags(tags)
                 .build()
                 .unwrap()

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::LazyLock};
 
 use eyre::eyre;
 use linnet::half_edge::{
@@ -6,10 +6,10 @@ use linnet::half_edge::{
     subgraph::{SuBitGraph, SubSetOps},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
+    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
     id::Replacement,
-    parse,
+    symbol,
 };
 use tracing::instrument;
 
@@ -31,6 +31,19 @@ use crate::{
 use color_eyre::Result;
 
 pub struct Local3DApproximation;
+
+static OSE_FOR_LOCAL_3D_SERIES: LazyLock<Symbol> = LazyLock::new(|| {
+    symbol!(
+        "gammalooprs::OSE_for_local_3d_series",
+        der = |_, arg, out| {
+            if arg == 3 {
+                **out = Atom::num(1);
+            } else {
+                **out = Atom::Zero;
+            }
+        }
+    )
+});
 
 impl Local3DApproximation {
     pub(crate) fn dependent(
@@ -158,16 +171,34 @@ impl Local3DApproximation {
         );
 
         atomarg = atomarg.replace_multiple(&mom_reps);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, (-1).into(), true)
-            .unwrap();
+        atomarg = atomarg
+            .replace(function!(GS.ose, W_.a___))
+            .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
+
+        let a = atomarg.series(GS.rescale, Atom::Zero, -1).unwrap();
 
         let mut a = a
             .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                0,
+                0,
+                0,
+                1,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
             .with(Atom::num(1))
-            .replace(parse!("der(x__, OSE(y__))"))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                W_.x___,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
             .with(Atom::num(0));
+        a = a
+            .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
+            .with(function!(GS.ose, W_.a___));
         a = a.replace(GS.rescale).with(Atom::num(1));
         Ok(a)
     }
@@ -239,16 +270,34 @@ impl Local3DApproximation {
             * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, 0.into(), true)
-            .unwrap();
+        atomarg = atomarg
+            .replace(function!(GS.ose, W_.a___))
+            .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
+
+        let a = atomarg.series(GS.rescale, Atom::Zero, 0).unwrap();
 
         let mut a = a
             .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                0,
+                0,
+                0,
+                1,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
             .with(Atom::num(1))
-            .replace(parse!("der(x__, OSE(y__))"))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                W_.x___,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
             .with(Atom::num(0));
+        a = a
+            .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
+            .with(function!(GS.ose, W_.a___));
         a = a.replace(GS.rescale).with(Atom::num(1));
         debug_tags!(#uv,#local; expr=%a.log_print(Some(80)), "Local 3D approximation");
         Ok(a)

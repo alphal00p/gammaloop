@@ -86,7 +86,7 @@ fn spenso_bare_symb_vertex_substitution() {
     assert!(result.contains("mink"), "{result}");
     let mut settings = SpensoPrintSettings::compact().nice_symbolica();
     settings.max_line_length = Some(80);
-    println!("in:{}", r.printer(settings));
+    println!("in:{}", r.printer(settings.clone()));
 
     let out = r.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial()
@@ -94,13 +94,13 @@ fn spenso_bare_symb_vertex_substitution() {
             .with_expanded_contracted_sums(),
     );
 
-    println!("out:{}", out.printer(settings));
+    println!("out:{}", out.printer(settings.clone()));
 
     for mu in [TS.mu1, TS.mu2, TS.mu3, TS.mu4] {
         assert!(
             out.replace(mu).match_iter().next().is_none(),
             "{}",
-            out.printer(settings)
+            out.printer(settings.clone())
         );
     }
 }

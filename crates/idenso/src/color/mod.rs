@@ -15,7 +15,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,
-    printer::PrintState,
+    printer::{PrintState, PrintUserData},
     symbol,
 };
 
@@ -203,15 +203,15 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| {
     }
 
     ColorSymbols {
-        t: tensor_symbol!("spenso::t"; Real; print = |a, opt| {
+        t: tensor_symbol!("spenso::t"; Real; print = |a, opt, _state| {
 
-            match opt.custom_print_mode {
-                Some(("spenso",i))=>{
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i))=>{
                     let SpensoPrintSettings{
                         parens,
                         symbol_scripts,
                         commas,..
-                    } = SpensoPrintSettings::from(i);
+                    } = SpensoPrintSettings::from(*i as usize);
 
 
                     let AtomView::Fun(f)=a else {
@@ -276,15 +276,15 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| {
                 _=>None}
 
         }),
-        f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt| {
+        f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt, _state| {
 
-            match opt.custom_print_mode {
-                Some(("spenso",i))=>{
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i))=>{
                     let SpensoPrintSettings{
                         parens,
                         symbol_scripts,
                         commas,..
-                    } = SpensoPrintSettings::from(i);
+                    } = SpensoPrintSettings::from(*i as usize);
 
 
                     let AtomView::Fun(f)=a else {

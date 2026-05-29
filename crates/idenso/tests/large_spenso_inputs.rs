@@ -92,7 +92,8 @@ fn report_first_tensor_parse(input: &str, name: &str) {
     };
 
     let parsed =
-        Atom::parse(wrap_input!(call), SymbolicaParseSettings::default()).expect("sample parses");
+        Atom::parse_with_default_namespace(wrap_input!(call), SymbolicaParseSettings::default())
+            .expect("sample parses");
     let symbol = match parsed.as_view() {
         AtomView::Fun(fun) => fun.get_symbol().to_string(),
         other => other.to_string(),
@@ -115,7 +116,8 @@ fn report_first_slot_parse(input: &str, name: &str) {
     };
 
     let parsed =
-        Atom::parse(wrap_input!(call), SymbolicaParseSettings::default()).expect("sample parses");
+        Atom::parse_with_default_namespace(wrap_input!(call), SymbolicaParseSettings::default())
+            .expect("sample parses");
     match Slot::<LibraryRep, Parsind>::try_from(parsed.as_view()) {
         Ok(slot) => eprintln!(
             "sample_slot_parse {name}: ok rep={} atom={}",
@@ -152,8 +154,9 @@ fn parse_root_input(filename: &str) -> Atom {
     report_first_tensor_parse(&input, "spenso::g");
 
     let start = Instant::now();
-    let expr = Atom::parse(wrap_input!(&input), SymbolicaParseSettings::default())
-        .expect("failed to parse Symbolica expression");
+    let expr =
+        Atom::parse_with_default_namespace(wrap_input!(&input), SymbolicaParseSettings::default())
+            .expect("failed to parse Symbolica expression");
     eprintln!(
         "atom stats: terms={} bytes={}",
         expr.nterms(),

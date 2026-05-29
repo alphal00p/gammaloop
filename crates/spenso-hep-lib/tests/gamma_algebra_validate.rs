@@ -175,15 +175,13 @@ fn validate_gamma(expr: Atom, const_map: HashMap<Atom, symbolica::domains::float
         .execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &*FUN_LIB)
         .unwrap();
 
-    let function_map = HashMap::new();
-
     if let ExecutionResult::Val(v) = net.result_tensor(&*HEP_LIB).unwrap() {
         if let ExecutionResult::Val(v2) = net_simplified.result_tensor(&*HEP_LIB).unwrap() {
             let mut res = v.into_owned();
             println!("{res}");
             let mut res_simplified = v2.into_owned();
-            res.evaluate_complex(|c| c.into(), &const_map, &function_map);
-            res_simplified.evaluate_complex(|c| c.into(), &const_map, &function_map);
+            res.evaluate_complex(&const_map);
+            res_simplified.evaluate_complex(&const_map);
             res = res.to_dense();
             res_simplified = res_simplified.to_dense();
 

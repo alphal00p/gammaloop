@@ -322,11 +322,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     /// tensor's compact slot.
     fn compact_rep_pattern_match(arg: AtomView<'_>) -> Option<Representation<LibraryRep>> {
         let rep_pattern = Atom::var(SPENSO_TAG.rep_).to_pattern();
-        let settings = MatchSettings {
-            level_range: (0, Some(0)),
-            partial: false,
-            ..Default::default()
-        };
+        let settings = MatchSettings::new()
+            .level_range((0, Some(0)))
+            .partial(false);
         let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
         let matched = matches.next_detailed()?;
         let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);

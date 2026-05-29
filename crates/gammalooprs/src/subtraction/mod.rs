@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, Symbol},
     domains::{dual::HyperDual, float::Real},
     evaluate::{FunctionMap, OptimizationSettings},
     function, parse, symbol,
@@ -356,10 +356,12 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
                 current_t_derivative_counter,
             ]);
             let eta_derivative = function!(
-                symbolica::atom::Symbol::DERIVATIVE,
+                Symbol::DERIVATIVE,
                 current_r_derivative_counter,
                 current_t_derivative_counter,
-                e_surface.clone()
+                symbol!("η"),
+                rstar.clone(),
+                Atom::var(t)
             );
 
             eta_derivatives_at_this_order.push(eta_derivative);

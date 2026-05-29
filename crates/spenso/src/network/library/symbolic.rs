@@ -6,7 +6,7 @@ use eyre::eyre;
 use linnet::permutation::Permutation;
 
 use symbolica::atom::{AtomOrView, FunctionBuilder};
-use symbolica::printer::PrintState;
+use symbolica::printer::{PrintState, PrintUserData};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     symbol,
@@ -236,14 +236,14 @@ impl ExplicitTensorSymbols {
 }
 
 pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
-    flat: symbol!("♭";Symmetric;print = |a, opt| {
+    flat: symbol!("♭";Symmetric;print = |a, opt, _state| {
 
-        match opt.custom_print_mode {
-            Some(("spenso",i))=>{
+        match opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i))=>{
                 let SpensoPrintSettings{
                     parens,
                     commas,..
-                } = SpensoPrintSettings::from(i);
+                } = SpensoPrintSettings::from(*i as usize);
 
 
                 let AtomView::Fun(f)=a else {
@@ -281,11 +281,13 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
 
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt| {
+    metric: symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt, _state| {
 
 
-        match opt.custom_print_mode {
-             Some(("typst", 1)) =>{
+        if matches!(
+            opt.custom_print_mode.get("typst"),
+            Some(PrintUserData::Integer(1))
+        ) {
                  if let AtomView::Fun(_)=a {
                      let body = r#"(a,b) = {
 if a.at("lower",default:false) and b.at("lower",default:false){
@@ -302,13 +304,15 @@ $g(#to-eq(a),#to-eq(b))$
 }"#;
                      return Some(body.into())
                  }
-             }
-             Some(("spenso",i))=>{
+        }
+
+        match opt.custom_print_mode.get("spenso") {
+             Some(PrintUserData::Integer(i))=>{
                  let SpensoPrintSettings{
                      parens,
                      commas,
                      with_dim,..
-                 } = SpensoPrintSettings::from(i);
+                 } = SpensoPrintSettings::from(*i as usize);
                 let AtomView::Fun(f)=a else {
                     return None;
                 };

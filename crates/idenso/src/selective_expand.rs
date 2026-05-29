@@ -59,7 +59,7 @@ impl SelectiveExpand for AtomView<'_> {
         // A (x+y)(z*B+x*C) => A(x*x*C+y*x*C+y*z*B+y*z*B)
         for p in pats {
             for m in self.pattern_match(p, None, None) {
-                let matched = p.replace_wildcards(&m);
+                let matched = p.replace_wildcards(&m).unwrap();
                 let coef = match matched.as_view() {
                     AtomView::Mul(mul) if mul.has_coefficient() => {
                         let mut coef = Atom::num(1);

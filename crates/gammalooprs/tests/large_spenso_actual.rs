@@ -141,8 +141,9 @@ fn parse_root_input(filename: &str) -> Atom {
     report(&format!("strip_symbol_tags bytes={}", input.len()), start);
 
     let start = Instant::now();
-    let expr = Atom::parse(wrap_input!(&input), SymbolicaParseSettings::default())
-        .expect("failed to parse Symbolica expression");
+    let expr =
+        Atom::parse_with_default_namespace(wrap_input!(&input), SymbolicaParseSettings::default())
+            .expect("failed to parse Symbolica expression");
     eprintln!(
         "atom stats: terms={} bytes={}",
         expr.nterms(),
@@ -1106,7 +1107,7 @@ fn execute_concrete_hep_net(label: &str, mut net: ConcreteParsingNet) {
 }
 
 fn parse_inline_expression(input: &str) -> Atom {
-    Atom::parse(wrap_input!(input), SymbolicaParseSettings::default())
+    Atom::parse_with_default_namespace(wrap_input!(input), SymbolicaParseSettings::default())
         .expect("inline diagnostic expression should parse")
 }
 

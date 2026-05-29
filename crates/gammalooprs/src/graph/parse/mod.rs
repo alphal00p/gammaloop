@@ -50,7 +50,7 @@ use linnet::{
 };
 use spenso::{
     contraction::Contract,
-    network::{library::TensorLibraryData, parsing::ParseSettings},
+    network::parsing::ParseSettings,
     structure::{HasStructure, OrderedStructure, representation::Euclidean, slot::IsAbstractSlot},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
