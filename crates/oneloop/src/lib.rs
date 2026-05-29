@@ -1,5 +1,6 @@
 //! `oneloop`: one-loop IBP reduction
 
+pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
