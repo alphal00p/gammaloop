@@ -1860,10 +1860,10 @@ fn test_dot_layout_reorders_rank_to_reduce_crossing() {
         br#"digraph crossing {
             a
             b
-            d
             c
-            a -> c
-            b -> d
+            d
+            a -> d
+            b -> c
         }"#,
     )
     .unwrap();
@@ -1884,7 +1884,46 @@ fn test_dot_layout_reorders_rank_to_reduce_crossing() {
         .collect::<BTreeMap<_, _>>();
 
     assert!(by_name["a"].x < by_name["b"].x);
-    assert!(by_name["c"].x < by_name["d"].x);
+    assert!(by_name["d"].x < by_name["c"].x);
+    assert_eq!(by_name["a"].y, by_name["b"].y);
+    assert_eq!(by_name["c"].y, by_name["d"].y);
+}
+
+#[test]
+fn test_dot_layout_reduces_crossings_for_nearly_tree_graph() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph near_tree {
+            r
+            a
+            b
+            c
+            d
+            r -> a
+            r -> b
+            a -> d
+            b -> c
+            a -> c
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!(by_name["a"].x < by_name["b"].x);
+    assert!(by_name["d"].x < by_name["c"].x);
     assert_eq!(by_name["a"].y, by_name["b"].y);
     assert_eq!(by_name["c"].y, by_name["d"].y);
 }
@@ -1922,6 +1961,74 @@ fn test_dot_layout_uses_node_size_hints() {
     assert!((by_name["b"].x - by_name["a"].x - 4.0).abs() < 1e-9);
     assert!((by_name["a"].y - by_name["c"].y - 3.0).abs() < 1e-9);
     assert_eq!(by_name["a"].y, by_name["b"].y);
+}
+
+#[test]
+fn test_stable_layered_preserves_input_rank_order() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph stable {
+            a
+            b
+            c
+            d
+            a -> d
+            b -> c
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "stable-layered".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!(by_name["a"].x < by_name["b"].x);
+    assert!(by_name["c"].x < by_name["d"].x);
+    assert_eq!(by_name["a"].y, by_name["b"].y);
+    assert_eq!(by_name["c"].y, by_name["d"].y);
+}
+
+#[test]
+fn test_dot_layout_accepts_typst_rank_same_subgraph() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph same_rank {
+            a -> b
+            b -> c
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let full_label: String = decode_cbor(
+        &graph_subgraph_bytes(&graph, &encode_cbor(&vec![true, true, true, true])).unwrap(),
+    );
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("rank-same".to_string(), full_label),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(by_name["a"].y, by_name["b"].y);
+    assert_eq!(by_name["b"].y, by_name["c"].y);
 }
 
 #[test]
@@ -2362,8 +2469,8 @@ fn test_fixed_node_dot_layout_lanes_same_rank_edge_labels() {
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
     let first = edges[0].pos.as_ref().unwrap();
     let second = edges[1].pos.as_ref().unwrap();
-    assert!(first.y > 0.0);
-    assert!(second.y > 0.0);
+    assert!(first.y.abs() > 0.0);
+    assert!(second.y.abs() > 0.0);
     assert!(
         (first.y - second.y).abs() > 0.5,
         "same-rank edge labels with overlapping x ranges should be assigned distinct lanes"

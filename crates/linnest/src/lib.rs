@@ -34,6 +34,7 @@ use linnet::{
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Involution},
         layout::{
             force::{force_directed_layout, ForceLayoutConfig},
+            layered::{LayeredConfig, LayeredGeometry, LayeredOutput, LayeredProfile},
             simulatedanneale::{anneal, GeoSchedule, SAConfig},
             spring::{
                 Constraint, HasPointConstraint, LayoutState, ParamTuning, PinnedLayoutNeighbor,
@@ -673,6 +674,38 @@ struct DotResolvedPlacement {
     pin: Option<PinConstraint>,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct LayoutRect {
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+}
+
+impl LayoutRect {
+    fn centered(center: Point2<f64>, half_width: f64, half_height: f64) -> Self {
+        Self {
+            min_x: center.x - half_width,
+            max_x: center.x + half_width,
+            min_y: center.y - half_height,
+            max_y: center.y + half_height,
+        }
+    }
+
+    fn overlaps(&self, other: &Self) -> bool {
+        self.max_x > other.min_x
+            && other.max_x > self.min_x
+            && self.max_y > other.min_y
+            && other.max_y > self.min_y
+    }
+
+    fn overlap_area(&self, other: &Self) -> f64 {
+        let width = (self.max_x.min(other.max_x) - self.min_x.max(other.min_x)).max(0.0);
+        let height = (self.max_y.min(other.max_y) - self.min_y.max(other.min_y)).max(0.0);
+        width * height
+    }
+}
+
 struct DotPlacementContext {
     node_exprs: HashMap<usize, DotPlacementExpr>,
     edge_exprs: HashMap<usize, DotPlacementExpr>,
@@ -1201,11 +1234,13 @@ pub struct TreeInitCfg {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 enum LayoutAlgo {
     Anneal,
     Dot,
     Force,
+    #[serde(alias = "railroad")]
+    StableLayered,
     Tree,
 }
 
@@ -1318,6 +1353,8 @@ struct LayoutConfig {
     layout_nodes: LayoutNodeMode,
     #[serde(default, deserialize_with = "deserialize_usize_vec")]
     layout_roots: Vec<usize>,
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
+    rank_same: Vec<String>,
     #[serde(default, flatten)]
     spring: SpringConfig,
     #[serde(default, flatten)]
@@ -1350,6 +1387,7 @@ impl Default for LayoutConfig {
             layout_algo: default_layout_algo(),
             layout_nodes: default_layout_node_mode(),
             layout_roots: Vec::new(),
+            rank_same: Vec::new(),
             spring: SpringConfig::default(),
             schedule: ScheduleConfig::default(),
         }
@@ -1392,6 +1430,7 @@ impl LayoutConfig {
                 | "layout-nodes"
                 | "layout-roots"
                 | "length-scale"
+                | "rank-same"
                 | "seed"
                 | "step"
                 | "step-shrink"
@@ -1916,6 +1955,57 @@ where
     deserializer.deserialize_any(UsizeVecVisitor)
 }
 
+fn deserialize_string_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    struct StringVecVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for StringVecVisitor {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an array of strings or a comma-separated string")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Vec<String>, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut values = Vec::new();
+            while let Some(value) = seq.next_element::<String>()? {
+                values.push(value);
+            }
+            Ok(values)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Vec<String>, E>
+        where
+            E: serde::de::Error,
+        {
+            if value.trim().is_empty() {
+                return Ok(Vec::new());
+            }
+            Ok(value
+                .split([',', ' '])
+                .filter_map(|part| {
+                    let part = part.trim();
+                    (!part.is_empty()).then(|| part.to_string())
+                })
+                .collect())
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Vec<String>, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&value)
+        }
+    }
+
+    deserializer.deserialize_any(StringVecVisitor)
+}
+
 impl TypstGraph {
     pub fn layout(&mut self) {
         self.layout_with_subgraph(None)
@@ -1929,7 +2019,7 @@ impl TypstGraph {
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
         if let Some(subgraph) = subgraph {
             let (mut vertex_points, mut edge_points) = match self.layout_config.layout_algo {
-                LayoutAlgo::Tree | LayoutAlgo::Dot => {
+                LayoutAlgo::Tree | LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
                     if fixed_nodes {
                         let (_, selected_edges) = self.selected_layout_items(subgraph);
                         self.fixed_node_partial_layout_positions(
@@ -1957,7 +2047,7 @@ impl TypstGraph {
 
         if matches!(
             self.layout_config.layout_algo,
-            LayoutAlgo::Tree | LayoutAlgo::Dot
+            LayoutAlgo::Tree | LayoutAlgo::Dot | LayoutAlgo::StableLayered
         ) {
             let (mut vertex_points, mut edge_points) = if fixed_nodes {
                 self.fixed_node_direct_layout_positions(tree_cfg, self.layout_config.layout_algo)
@@ -2168,7 +2258,7 @@ impl TypstGraph {
                 );
                 (state.vertex_points, state.edge_points)
             }
-            LayoutAlgo::Dot | LayoutAlgo::Tree => unreachable!(),
+            LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree => unreachable!(),
         }
     }
 
@@ -2231,10 +2321,11 @@ impl TypstGraph {
         let label_radii = self.edge_label_radii();
         let node_radii = self.node_layout_radii();
 
-        let mut labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
+        let base_labels: EdgeVec<Point2<f64>> = self.new_edgevec(|_e, idx, _pair| {
             let edge_pos = self.graph[idx].pos;
             edge_pos + axes[idx] * label_length
         });
+        let mut labels = base_labels.clone();
 
         for _ in 0..cfg.label_steps {
             let mut max_move: f64 = 0.0;
@@ -2344,11 +2435,159 @@ impl TypstGraph {
             }
         }
 
+        let label_gap = (spring_length * 0.08).max(0.04);
+        let mut measured_labels = base_labels;
+        self.separate_edge_label_positions_from_boxes(
+            &mut measured_labels,
+            &axes,
+            label_length,
+            label_gap,
+            spring_length,
+        );
+        for i in 0..labels.len().0 {
+            let idx = EdgeIndex(i);
+            let (half_width, half_height) = self.edge_label_route_half_extents(idx, label_gap);
+            if half_width > label_gap || half_height > label_gap {
+                labels[idx] = measured_labels[idx];
+            }
+        }
+
         for i in 0..labels.len().0 {
             let idx = EdgeIndex(i);
             self.graph[idx].label_pos = Some(labels[idx]);
             let angle = self.edge_label_angle(idx);
             self.graph[idx].label_angle = Some(angle);
+        }
+    }
+
+    fn separate_edge_label_positions_from_boxes(
+        &self,
+        labels: &mut EdgeVec<Point2<f64>>,
+        axes: &EdgeVec<Vector2<f64>>,
+        label_length: f64,
+        label_gap: f64,
+        spring_length: f64,
+    ) {
+        let pos_v = self.new_nodevec(|_, _, node| node.pos);
+        let node_boxes = self.layout_node_boxes(&pos_v, label_gap);
+        let mut ordered_labels = labels
+            .iter()
+            .filter_map(|(edge, &target)| {
+                let (half_width, half_height) = self.edge_label_route_half_extents(edge, label_gap);
+                (half_width > label_gap && half_height > label_gap).then_some((
+                    edge,
+                    target,
+                    half_width,
+                    half_height,
+                    half_width * half_height,
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        ordered_labels.sort_by(|left, right| {
+            right
+                .4
+                .partial_cmp(&left.4)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    right
+                        .1
+                        .y
+                        .partial_cmp(&left.1.y)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .then_with(|| {
+                    left.1
+                        .x
+                        .partial_cmp(&right.1.x)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .then_with(|| left.0 .0.cmp(&right.0 .0))
+        });
+
+        let mut placed = Vec::<LayoutRect>::new();
+        for (edge, base_target, half_width, half_height, _) in ordered_labels {
+            let axis = Self::normalized_or(axes[edge], Vector2::unit_y());
+            let tangent = Vector2::new(-axis.y, axis.x);
+            let edge_pos = self.graph[edge].pos;
+            let normal_step = (2.0 * half_height + label_gap).max(spring_length * 0.10);
+            let tangent_step = (2.0 * half_width + label_gap).max(spring_length * 0.10);
+            let min_axis_distance = (label_length.abs() * 0.20).min(label_length.abs());
+            let candidates = Self::edge_label_collision_candidates(
+                base_target,
+                edge_pos,
+                axis,
+                tangent,
+                normal_step,
+                tangent_step,
+                min_axis_distance,
+            );
+
+            let mut best_target = base_target;
+            let mut best_score = f64::INFINITY;
+            for candidate in candidates {
+                let candidate_box = LayoutRect::centered(candidate, half_width, half_height);
+                let overlap_score = node_boxes
+                    .iter()
+                    .chain(placed.iter())
+                    .map(|other| candidate_box.overlap_area(other))
+                    .sum::<f64>();
+                if overlap_score == 0.0 {
+                    best_target = candidate;
+                    break;
+                }
+
+                let distance_score = (candidate - base_target).magnitude2() * 1e-3;
+                let score = overlap_score + distance_score;
+                if score < best_score {
+                    best_score = score;
+                    best_target = candidate;
+                }
+            }
+
+            labels[edge] = best_target;
+            placed.push(LayoutRect::centered(best_target, half_width, half_height));
+        }
+    }
+
+    fn edge_label_collision_candidates(
+        base_target: Point2<f64>,
+        edge_pos: Point2<f64>,
+        axis: Vector2<f64>,
+        tangent: Vector2<f64>,
+        normal_step: f64,
+        tangent_step: f64,
+        min_axis_distance: f64,
+    ) -> Vec<Point2<f64>> {
+        let mut candidates = vec![base_target];
+        for normal_lane in 0..=12 {
+            let normal_offset = normal_lane as f64 * normal_step;
+            for tangent_lane in -12i32..=12 {
+                if normal_lane == 0 && tangent_lane == 0 {
+                    continue;
+                }
+                let tangent_offset = f64::from(tangent_lane) * tangent_step;
+                let candidate = base_target + axis * normal_offset + tangent * tangent_offset;
+                if (candidate - edge_pos).dot(axis) + 1e-9 >= min_axis_distance {
+                    candidates.push(candidate);
+                }
+            }
+        }
+        candidates.sort_by(|left, right| {
+            let left_dist = (*left - base_target).magnitude2();
+            let right_dist = (*right - base_target).magnitude2();
+            left_dist
+                .partial_cmp(&right_dist)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        candidates
+    }
+
+    fn normalized_or(value: Vector2<f64>, fallback: Vector2<f64>) -> Vector2<f64> {
+        if value.magnitude2() > 1e-12 {
+            value.normalize()
+        } else {
+            fallback
         }
     }
 
@@ -2538,7 +2777,7 @@ impl TypstGraph {
         let full = self.full_filter();
         let layout_subgraph = match algo {
             LayoutAlgo::Tree => self.spanning_forest_of(&full),
-            LayoutAlgo::Dot => full.clone(),
+            LayoutAlgo::Dot | LayoutAlgo::StableLayered => full.clone(),
             LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
         };
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, &full, true)
@@ -2552,7 +2791,7 @@ impl TypstGraph {
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let layout_subgraph = match algo {
             LayoutAlgo::Tree => self.spanning_forest_of(subgraph),
-            LayoutAlgo::Dot => subgraph.clone(),
+            LayoutAlgo::Dot | LayoutAlgo::StableLayered => subgraph.clone(),
             LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
         };
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, subgraph, false)
@@ -2576,7 +2815,7 @@ impl TypstGraph {
             LayoutAlgo::Tree => {
                 self.edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
             }
-            LayoutAlgo::Dot => {
+            LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
                 self.dot_edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
             }
             LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
@@ -2670,14 +2909,171 @@ impl TypstGraph {
         node_subgraph: &SuBitGraph,
         include_all_nodes: bool,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
-        let targets = match algo {
+        match algo {
             LayoutAlgo::Tree => {
-                self.tree_layout_targets(cfg, subgraph, node_subgraph, include_all_nodes)
+                let targets =
+                    self.tree_layout_targets(cfg, subgraph, node_subgraph, include_all_nodes);
+                self.positions_from_node_targets(cfg, targets)
             }
-            LayoutAlgo::Dot => self.dot_layout_targets(cfg, subgraph, include_all_nodes),
+            LayoutAlgo::Dot => self.layered_layout_positions(
+                cfg,
+                subgraph,
+                include_all_nodes,
+                LayeredProfile::Dot,
+                true,
+            ),
+            LayoutAlgo::StableLayered => self.layered_layout_positions(
+                cfg,
+                subgraph,
+                include_all_nodes,
+                LayeredProfile::Stable,
+                true,
+            ),
             LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+        }
+    }
+
+    fn layered_layout_positions(
+        &self,
+        cfg: TreeInitCfg,
+        subgraph: &SuBitGraph,
+        include_all_nodes: bool,
+        profile: LayeredProfile,
+        route_unselected_edges: bool,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let output = self.layered_layout_output(cfg, subgraph, include_all_nodes, profile);
+        self.positions_from_layered_output(cfg, output, true, route_unselected_edges)
+    }
+
+    fn layered_layout_output(
+        &self,
+        cfg: TreeInitCfg,
+        subgraph: &SuBitGraph,
+        include_all_nodes: bool,
+        profile: LayeredProfile,
+    ) -> LayeredOutput {
+        let config = LayeredConfig {
+            profile,
+            layer_gap: cfg.dy,
+            node_gap: cfg.dx,
+            edge_gap: cfg.dx * 0.35,
+            sweeps: self.layout_config.schedule.epochs.clamp(1, 24),
+            roots: self
+                .layout_config
+                .layout_roots
+                .iter()
+                .copied()
+                .filter(|&root| root < self.n_nodes())
+                .map(NodeIndex)
+                .collect(),
+            rank_same: self.rank_same_node_groups(),
+            include_all_nodes,
         };
-        self.positions_from_node_targets(cfg, targets)
+        let geometry = self.layered_geometry();
+        self.graph.layered_layout(subgraph, &config, &geometry)
+    }
+
+    fn layered_geometry(&self) -> LayeredGeometry {
+        LayeredGeometry {
+            node_widths: self.node_layout_extents("layout-width"),
+            node_heights: self.node_layout_extents("layout-height"),
+            edge_label_widths: self.edge_layout_extents("label-width"),
+            edge_label_heights: self.edge_layout_extents("label-height"),
+            edge_minlens: self.new_edgevec(|edge, _, _| {
+                Self::positive_statement_usize(&edge.statements, "minlen").unwrap_or(1)
+            }),
+            edge_weights: self.new_edgevec(|edge, _, _| {
+                Self::positive_statement_f64(&edge.statements, "weight").unwrap_or(1.0)
+            }),
+            edge_constrained: self.new_edgevec(|edge, _, _| {
+                Self::statement_bool(&edge.statements, "constraint").unwrap_or(true)
+            }),
+        }
+    }
+
+    fn rank_same_node_groups(&self) -> Vec<Vec<NodeIndex>> {
+        self.layout_config
+            .rank_same
+            .iter()
+            .filter_map(|label| SuBitGraph::from_base62(label, self.n_hedges()))
+            .map(|subgraph| {
+                let mut seen = vec![false; self.n_nodes()];
+                let mut nodes = Vec::new();
+                for hedge in subgraph.included_iter() {
+                    let node = self.node_id(hedge);
+                    if !seen[node.0] {
+                        seen[node.0] = true;
+                        nodes.push(node);
+                    }
+                }
+                nodes
+            })
+            .filter(|nodes| !nodes.is_empty())
+            .collect()
+    }
+
+    fn positions_from_layered_output(
+        &self,
+        cfg: TreeInitCfg,
+        output: LayeredOutput,
+        respect_edge_start: bool,
+        route_unselected_edges: bool,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        let mut pos_v = self.new_nodevec(|_, _, n| n.pos);
+        let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
+
+        for (node, target) in output.node_positions.iter() {
+            let Some(target) = *target else {
+                continue;
+            };
+            Self::apply_target_point(
+                &self[node].constraints,
+                self[node].start_x,
+                self[node].start_y,
+                target,
+                Vector2::new(cfg.dx, cfg.dy),
+                node,
+                &mut pos_v,
+            );
+        }
+
+        for (edge, target) in output.edge_positions.iter() {
+            let Some(target) = *target else {
+                continue;
+            };
+            let (start_x, start_y) = if respect_edge_start {
+                (self[edge].start_x, self[edge].start_y)
+            } else {
+                (false, false)
+            };
+            Self::apply_target_point(
+                &self[edge].constraints,
+                start_x,
+                start_y,
+                target,
+                Vector2::new(cfg.dx * 0.5, cfg.dy * 0.5),
+                edge,
+                &mut pos_e,
+            );
+        }
+
+        if route_unselected_edges {
+            let route_edges = self.new_edgevec(|_, edge, _| output.edge_positions[edge].is_none());
+            let (_, routed_edges) = self.dot_edge_layout_positions_from_nodes(
+                cfg,
+                Some(&route_edges),
+                true,
+                pos_v.clone(),
+            );
+            for (edge, route_edge) in route_edges.iter() {
+                if *route_edge {
+                    pos_e[edge] = routed_edges[edge];
+                }
+            }
+        }
+
+        self.apply_grouped_constraints(&mut pos_v, &mut pos_e);
+        (pos_v, pos_e)
     }
 
     fn tree_layout_targets(
@@ -2773,143 +3169,6 @@ impl TypstGraph {
         targets
     }
 
-    fn dot_layout_targets(
-        &self,
-        cfg: TreeInitCfg,
-        subgraph: &SuBitGraph,
-        include_all_nodes: bool,
-    ) -> NodeVec<Option<Point2<f64>>> {
-        let included = self.selected_layout_nodes(subgraph, include_all_nodes);
-        let mut outgoing = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
-        let mut incoming = self.new_nodevec(|_, _, _| Vec::<NodeIndex>::new());
-        let mut indegree = self.new_nodevec(|_, _, _| 0usize);
-        let mut included_count = 0usize;
-
-        for (_, &is_included) in included.iter() {
-            if is_included {
-                included_count += 1;
-            }
-        }
-
-        for (pair, _, _) in self.iter_edges_of(subgraph) {
-            match pair {
-                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
-                    let source_node = self.node_id(source);
-                    let sink_node = self.node_id(sink);
-                    if source_node != sink_node && included[source_node] && included[sink_node] {
-                        outgoing[source_node].push(sink_node);
-                        incoming[sink_node].push(source_node);
-                        indegree[sink_node] += 1;
-                    }
-                }
-                HedgePair::Unpaired { .. } => {}
-            }
-        }
-
-        if included_count == 0 {
-            return self.new_nodevec(|_, _, _| None);
-        }
-
-        let mut rank: NodeVec<usize> = self.new_nodevec(|_, _, _| 0);
-        let mut queue = std::collections::VecDeque::new();
-        let mut enqueued = self.new_nodevec(|_, _, _| false);
-        for &root in &self.layout_config.layout_roots {
-            if root < included.len().0 {
-                let node = NodeIndex(root);
-                if included[node] && !enqueued[node] {
-                    enqueued[node] = true;
-                    queue.push_back(node);
-                }
-            }
-        }
-        for node in self.ordered_layout_nodes(&included) {
-            if included[node] && indegree[node] == 0 && !enqueued[node] {
-                enqueued[node] = true;
-                queue.push_back(node);
-            }
-        }
-
-        let ordered_nodes = self.ordered_layout_nodes(&included);
-        let mut indegree_work = indegree.clone();
-        let mut visited = 0usize;
-        let mut processed = self.new_nodevec(|_, _, _| false);
-        while visited < included_count {
-            while let Some(node) = queue.pop_front() {
-                if processed[node] {
-                    continue;
-                }
-                processed[node] = true;
-                visited += 1;
-                let next_rank = rank[node] + 1;
-                for child in outgoing[node].clone() {
-                    if processed[child] {
-                        continue;
-                    }
-                    if rank[child] < next_rank {
-                        rank[child] = next_rank;
-                    }
-                    if indegree_work[child] > 0 {
-                        indegree_work[child] -= 1;
-                    }
-                    if indegree_work[child] == 0 && !enqueued[child] {
-                        enqueued[child] = true;
-                        queue.push_back(child);
-                    }
-                }
-            }
-
-            if visited < included_count {
-                if let Some(&node) = ordered_nodes.iter().find(|&&node| !processed[node]) {
-                    enqueued[node] = true;
-                    queue.push_back(node);
-                } else {
-                    break;
-                }
-            }
-        }
-
-        self.compact_ranks(&included, &mut rank);
-
-        let max_rank = rank
-            .iter()
-            .filter_map(|(node, rank)| included[node].then_some(*rank))
-            .max()
-            .unwrap_or(0);
-        let mut ranks = vec![Vec::<NodeIndex>::new(); max_rank + 1];
-        for &node in &ordered_nodes {
-            if included[node] {
-                ranks[rank[node]].push(node);
-            }
-        }
-
-        for _ in 0..8 {
-            let mut positions = self.dot_rank_positions(&ranks);
-            for nodes in ranks.iter_mut().skip(1) {
-                Self::sort_dot_rank_by_barycenter(nodes, &incoming, &positions);
-            }
-
-            positions = self.dot_rank_positions(&ranks);
-            for nodes in ranks.iter_mut().rev().skip(1) {
-                Self::sort_dot_rank_by_barycenter(nodes, &outgoing, &positions);
-            }
-        }
-
-        let widths = self.node_layout_extents("layout-width");
-        let heights = self.node_layout_extents("layout-height");
-        let rank_y = self.rank_y_positions(&ranks, &heights, cfg.dy);
-        let mut targets = self.new_nodevec(|_, _, _| None);
-        for (rank_index, nodes) in ranks.iter().enumerate() {
-            for (&node, x) in nodes
-                .iter()
-                .zip(Self::rank_x_positions(nodes, &widths, cfg.dx))
-            {
-                targets[node] = Some(Point2::new(x, rank_y[rank_index]));
-            }
-        }
-        Self::center_targets_x_by_extents(&mut targets, &widths);
-        targets
-    }
-
     fn compute_tidy_tree_width(
         node: NodeIndex,
         children: &NodeVec<Vec<NodeIndex>>,
@@ -2960,88 +3219,6 @@ impl TypstGraph {
         x
     }
 
-    fn compact_ranks(&self, included: &NodeVec<bool>, rank: &mut NodeVec<usize>) {
-        let mut used = BTreeMap::new();
-        for (node, &is_included) in included.iter() {
-            if is_included {
-                used.entry(rank[node]).or_insert(0usize);
-            }
-        }
-        for (new_rank, (_, mapped)) in used.iter_mut().enumerate() {
-            *mapped = new_rank;
-        }
-        for (node, is_included) in included.iter() {
-            if *is_included {
-                rank[node] = used[&rank[node]];
-            }
-        }
-    }
-
-    fn dot_rank_positions(&self, ranks: &[Vec<NodeIndex>]) -> NodeVec<Option<usize>> {
-        let mut positions = self.new_nodevec(|_, _, _| None);
-        for nodes in ranks {
-            for (position, &node) in nodes.iter().enumerate() {
-                positions[node] = Some(position);
-            }
-        }
-        positions
-    }
-
-    fn sort_dot_rank_by_barycenter(
-        nodes: &mut Vec<NodeIndex>,
-        neighbors: &NodeVec<Vec<NodeIndex>>,
-        positions: &NodeVec<Option<usize>>,
-    ) {
-        let mut keyed = nodes
-            .iter()
-            .enumerate()
-            .map(|(old_position, &node)| {
-                let mut sum = 0.0;
-                let mut count = 0usize;
-                for &neighbor in &neighbors[node] {
-                    if let Some(position) = positions[neighbor] {
-                        sum += position as f64;
-                        count += 1;
-                    }
-                }
-                let barycenter = if count == 0 {
-                    old_position as f64
-                } else {
-                    sum / count as f64
-                };
-                (barycenter, old_position, node)
-            })
-            .collect::<Vec<_>>();
-        keyed.sort_by(|a, b| {
-            a.0.partial_cmp(&b.0)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.1.cmp(&b.1))
-        });
-        *nodes = keyed.into_iter().map(|(_, _, node)| node).collect();
-    }
-
-    fn rank_x_positions(nodes: &[NodeIndex], widths: &NodeVec<f64>, gap: f64) -> Vec<f64> {
-        let mut positions = Vec::with_capacity(nodes.len());
-        let mut x = 0.0;
-        for (index, &node) in nodes.iter().enumerate() {
-            if index > 0 {
-                let previous = nodes[index - 1];
-                x += 0.5 * widths[previous] + gap + 0.5 * widths[node];
-            }
-            positions.push(x);
-        }
-
-        if let (Some(&first), Some(&last)) = (nodes.first(), nodes.last()) {
-            let min_x = positions.first().copied().unwrap_or(0.0) - 0.5 * widths[first];
-            let max_x = positions.last().copied().unwrap_or(0.0) + 0.5 * widths[last];
-            let center = 0.5 * (min_x + max_x);
-            for x in &mut positions {
-                *x -= center;
-            }
-        }
-        positions
-    }
-
     fn layer_y_positions(
         &self,
         included: &NodeVec<bool>,
@@ -3063,19 +3240,6 @@ impl TypstGraph {
         Self::layer_positions_from_heights(&rank_heights, gap)
     }
 
-    fn rank_y_positions(
-        &self,
-        ranks: &[Vec<NodeIndex>],
-        heights: &NodeVec<f64>,
-        gap: f64,
-    ) -> Vec<f64> {
-        let rank_heights = ranks
-            .iter()
-            .map(|nodes| nodes.iter().map(|&node| heights[node]).fold(0.0, f64::max))
-            .collect::<Vec<_>>();
-        Self::layer_positions_from_heights(&rank_heights, gap)
-    }
-
     fn layer_positions_from_heights(heights: &[f64], gap: f64) -> Vec<f64> {
         let mut positions = vec![0.0; heights.len()];
         for index in 1..heights.len() {
@@ -3091,6 +3255,12 @@ impl TypstGraph {
         })
     }
 
+    fn edge_layout_extents(&self, key: &str) -> EdgeVec<f64> {
+        self.new_edgevec(|edge, _, _| {
+            Self::positive_statement_f64(&edge.statements, key).unwrap_or(0.0)
+        })
+    }
+
     fn positive_statement_f64(statements: &BTreeMap<String, String>, key: &str) -> Option<f64> {
         let value = dot_statement_value(statements, key)?
             .trim()
@@ -3098,6 +3268,25 @@ impl TypstGraph {
             .parse::<f64>()
             .ok()?;
         value.is_finite().then_some(value.max(0.0))
+    }
+
+    fn positive_statement_usize(statements: &BTreeMap<String, String>, key: &str) -> Option<usize> {
+        let value = dot_statement_value(statements, key)?
+            .trim()
+            .trim_matches('"')
+            .parse::<usize>()
+            .ok()?;
+        Some(value)
+    }
+
+    fn statement_bool(statements: &BTreeMap<String, String>, key: &str) -> Option<bool> {
+        dot_statement_value(statements, key).and_then(|value| {
+            match value.trim().trim_matches('"').to_ascii_lowercase().as_str() {
+                "true" | "on" | "yes" | "1" => Some(true),
+                "false" | "off" | "no" | "0" => Some(false),
+                _ => None,
+            }
+        })
     }
 
     fn center_targets_x_by_extents(
@@ -3261,6 +3450,16 @@ impl TypstGraph {
         respect_start: bool,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let pos_v = self.new_nodevec(|_, _, n| n.pos);
+        self.dot_edge_layout_positions_from_nodes(cfg, selected_edges, respect_start, pos_v)
+    }
+
+    fn dot_edge_layout_positions_from_nodes(
+        &self,
+        cfg: TreeInitCfg,
+        selected_edges: Option<&EdgeVec<bool>>,
+        respect_start: bool,
+        pos_v: NodeVec<Point2<f64>>,
+    ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let mut pos_e = self.new_edgevec(|e, _, _| e.pos);
         let mut targets = self.new_edgevec(|_, _, _| None::<Point2<f64>>);
         let mut paired_groups = BTreeMap::<(usize, usize), Vec<EdgeIndex>>::new();
@@ -3357,6 +3556,8 @@ impl TypstGraph {
             }
         }
 
+        self.separate_edge_label_targets_from_boxes(&mut targets, &pos_v, cfg);
+
         for (eid, target) in targets.iter() {
             let Some(target) = *target else {
                 continue;
@@ -3380,6 +3581,93 @@ impl TypstGraph {
         (pos_v, pos_e)
     }
 
+    fn separate_edge_label_targets_from_boxes(
+        &self,
+        targets: &mut EdgeVec<Option<Point2<f64>>>,
+        pos_v: &NodeVec<Point2<f64>>,
+        cfg: TreeInitCfg,
+    ) {
+        let label_gap = (cfg.dx * 0.12).max(0.05);
+        let node_boxes = self.layout_node_boxes(pos_v, label_gap);
+        let mut placed_labels = Vec::<LayoutRect>::new();
+        let mut ordered_targets = targets
+            .iter()
+            .filter_map(|(edge, target)| target.map(|target| (edge, target)))
+            .collect::<Vec<_>>();
+        ordered_targets.sort_by(|(left_edge, left), (right_edge, right)| {
+            right
+                .y
+                .partial_cmp(&left.y)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    left.x
+                        .partial_cmp(&right.x)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .then_with(|| left_edge.0.cmp(&right_edge.0))
+        });
+
+        for (edge, base_target) in ordered_targets {
+            let (half_width, half_height) = self.edge_label_route_half_extents(edge, label_gap);
+            if half_width <= label_gap && half_height <= label_gap {
+                continue;
+            }
+
+            let normal = self.edge_route_normal_for_edge(edge, pos_v);
+            let midpoint = self.edge_midpoint(edge, pos_v);
+            let side = if (base_target - midpoint).dot(normal) < 0.0 {
+                -1.0
+            } else {
+                1.0
+            };
+            let step = (2.0 * half_height + label_gap).max(cfg.dx * 0.35).max(0.1);
+            let mut best_target = base_target;
+
+            'candidates: for lane in 0..24 {
+                let lane_offset = lane as f64 * step;
+                let offsets = if lane == 0 {
+                    vec![0.0]
+                } else if side < 0.0 {
+                    vec![-lane_offset, lane_offset]
+                } else {
+                    vec![lane_offset, -lane_offset]
+                };
+
+                for offset in offsets {
+                    let candidate = base_target + normal * offset;
+                    let candidate_box = LayoutRect::centered(candidate, half_width, half_height);
+                    let overlaps_node = node_boxes
+                        .iter()
+                        .any(|node_box| candidate_box.overlaps(node_box));
+                    let overlaps_label = placed_labels
+                        .iter()
+                        .any(|label_box| candidate_box.overlaps(label_box));
+                    if !overlaps_node && !overlaps_label {
+                        best_target = candidate;
+                        break 'candidates;
+                    }
+                }
+            }
+
+            targets[edge] = Some(best_target);
+            placed_labels.push(LayoutRect::centered(best_target, half_width, half_height));
+        }
+    }
+
+    fn layout_node_boxes(&self, pos_v: &NodeVec<Point2<f64>>, padding: f64) -> Vec<LayoutRect> {
+        let widths = self.node_layout_extents("layout-width");
+        let heights = self.node_layout_extents("layout-height");
+        widths
+            .iter()
+            .filter_map(|(node, &width)| {
+                let height = heights[node];
+                (width > 0.0 || height > 0.0).then(|| {
+                    LayoutRect::centered(pos_v[node], 0.5 * width + padding, 0.5 * height + padding)
+                })
+            })
+            .collect()
+    }
+
     fn same_rank_key(a: Point2<f64>, b: Point2<f64>) -> Option<i64> {
         if (a.y - b.y).abs() <= 1e-6 {
             Some(((a.y + b.y) * 500_000.0).round() as i64)
@@ -3397,6 +3685,22 @@ impl TypstGraph {
                 a.midpoint(b)
             }
             HedgePair::Unpaired { .. } => self.graph[edge].pos,
+        }
+    }
+
+    fn edge_route_normal_for_edge(
+        &self,
+        edge: EdgeIndex,
+        pos_v: &NodeVec<Point2<f64>>,
+    ) -> Vector2<f64> {
+        let (_, pair) = &self.graph[&edge];
+        match pair {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                let a = pos_v[self.node_id(*source)];
+                let b = pos_v[self.node_id(*sink)];
+                Self::edge_route_normal(a, b)
+            }
+            HedgePair::Unpaired { .. } => Vector2::unit_x(),
         }
     }
 
@@ -3458,6 +3762,13 @@ impl TypstGraph {
         } else {
             0.5 * width
         }
+    }
+
+    fn edge_label_route_half_extents(&self, edge: EdgeIndex, padding: f64) -> (f64, f64) {
+        let edge = &self.graph[edge];
+        let width = Self::positive_statement_f64(&edge.statements, "label-width").unwrap_or(0.0);
+        let height = Self::positive_statement_f64(&edge.statements, "label-height").unwrap_or(0.0);
+        (0.5 * width + padding, 0.5 * height + padding)
     }
 
     fn edge_route_normal(a: Point2<f64>, b: Point2<f64>) -> Vector2<f64> {

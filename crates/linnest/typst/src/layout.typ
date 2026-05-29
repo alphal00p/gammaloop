@@ -8,7 +8,8 @@
 /// This is intentionally a second step: construct or parse a graph first, then
 /// call `layout`. Set `layout-algo` to `"force"` for deterministic force
 /// integration, `"anneal"` for simulated annealing, `"tree"` for a traversal
-/// tree placement, or `"dot"` for a layered directed placement.
+/// tree placement, `"dot"` for a Graphviz-like layered placement, or
+/// `"stable-layered"` for a stable railroad-inspired layered placement.
 ///
 /// ```example
 /// #let g = graph.parse("digraph partial { a -> b;a -> b;a:s -> b:s; b:s -> c:s; c:s -> d:s; d:s -> a:s }").at(0)
@@ -31,10 +32,10 @@
   /// Graph object returned by `graph.build` or `graph.parse`.
   /// -> dictionary
   graph,
-  /// Optional subgraph object to lay out. With `"tree"` and `"dot"`, other
-  /// edges are drawn from the resulting node positions as straight lines. With
-  /// `"force"` and `"anneal"`, nodes and edges outside the subgraph are fixed
-  /// boundary points during optimization.
+  /// Optional subgraph object to lay out. With `"tree"`, `"dot"`, and
+  /// `"stable-layered"`, other edges are drawn from the resulting node
+  /// positions. With `"force"` and `"anneal"`, nodes and edges outside the
+  /// subgraph are fixed boundary points during optimization.
   /// -> none | bytes
   subgraph: none,
   /// Width of the layout viewport used to derive the natural spring length.
@@ -43,11 +44,11 @@
   /// Height of the layout viewport used to derive the natural spring length.
   /// Applies to both `"force"` and `"anneal"`. -> float
   viewport-h: 10.0,
-  /// Horizontal spacing multiplier for the initial traversal-tree placement.
-  /// Applies before both `"force"` and `"anneal"`. -> float
+  /// Horizontal spacing multiplier for traversal-tree and layered placement.
+  /// For `"force"` and `"anneal"`, this scales the initial placement. -> float
   tree-dx: 0.9,
-  /// Vertical spacing multiplier for the initial traversal-tree placement.
-  /// Applies before both `"force"` and `"anneal"`. -> float
+  /// Vertical spacing multiplier for traversal-tree and layered placement.
+  /// For `"force"` and `"anneal"`, this scales the initial placement. -> float
   tree-dy: 1.2,
   /// Iterations per epoch. In `"force"` mode this is the number of force
   /// integration steps; in `"anneal"` mode this is the number of proposals per
@@ -140,7 +141,8 @@
   incremental-energy: true,
   /// Layout algorithm. Use `"force"` for direct force integration, `"anneal"`
   /// for simulated annealing against the spring energy, `"tree"` for a
-  /// traversal-tree placement, or `"dot"` for a layered directed placement.
+  /// traversal-tree placement, `"dot"` for a Graphviz-like layered placement,
+  /// or `"stable-layered"` for a stable railroad-inspired layered placement.
   /// -> string
   layout-algo: "force",
   /// Node movement policy. `"layout"` lets the layout algorithm move nodes.
@@ -149,10 +151,14 @@
   /// subgraph are moved; other edge control points stay at their current
   /// positions. -> string
   layout-nodes: "layout",
-  /// Ordered node indices used as preferred roots for `"tree"` and `"dot"`.
-  /// Roots outside the selected node set are ignored. Remaining components are
-  /// laid out afterward in graph order. -> array
+  /// Ordered node indices used as preferred roots for `"tree"`, `"dot"`, and
+  /// `"stable-layered"`. Roots outside the selected node set are ignored.
+  /// Remaining components are laid out afterward in graph order. -> array
   layout-roots: (),
+  /// Subgraphs whose incident nodes should share a dot/stable-layered rank.
+  /// These are layout hints supplied by Typst rather than parsed graph
+  /// structure. -> array
+  rank-same: (),
   /// Force-only spring pulling temporary z coordinates back toward the layout
   /// plane. Use with `z-spring-growth` to help separate overlapping
   /// points during integration. -> float
@@ -200,6 +206,7 @@
     layout-algo: layout-algo,
     layout-nodes: layout-nodes,
     layout-roots: layout-roots,
+    rank-same: rank-same.map(subgraph-module.to-label),
     z-spring: str(z-spring),
     z-spring-growth: str(z-spring-growth),
     length-scale: str(length-scale),
