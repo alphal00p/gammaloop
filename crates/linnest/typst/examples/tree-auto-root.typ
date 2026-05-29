@@ -4,7 +4,7 @@
 #set text(size: 7pt)
 
 #let diagram-unit = 2.0
-#let g = none
+
 
 #let display-statement(value, fallback: "") = {
   let value = str(value).replace("\\\"", "\"").trim("\"")
@@ -40,46 +40,44 @@ digraph basketball {
 )
 
 #let basketball = graph.parse(basketball-src.text).first()
+#let g = basketball
 #let basketball = layouts.layout(
   basketball,
   layout-algo: "force",
-  epochs: 28,
-  steps: 40,
+  epochs: 52,
+  steps: 60,
   seed: 7,
-  viewport-w: 3.2,
-  viewport-h: 2.2,
-  length-scale: 1.1,
-  beta: 120.0,
-  k-spring: 163.02,
-  gamma-dangling: 2.0,
-  gamma-ee: 1.35,
-  gamma-ev: 1.0,
+  viewport-w: 4.0,
+  viewport-h: 2.8,
+  length-scale: 0.38,
+  beta: 80.0,
+  k-spring: 12.0,
+  gamma-dangling: .1,
+  gamma-ee: 0.25,
+  gamma-ev: 0.1,
   g-center: 0,
-  directional-force: 2.5,
   label-steps: 0,
 )
 
-#let basketball-subgraph(label) = {
-  let selected = subgraph.label(basketball, display-statement(label))
-  scale(42%)[
-    #draw(
-      basketball,
-      unit: 1.0,
-      subgraph: selected,
-      node-label: basketball-node-label,
-      node-style: basketball-node-style,
-      source-style: basketball-edge-style,
-      sink-style: basketball-edge-style,
-      edge-label: none,
-      node-min-radius: 0.12,
-      node-label-padding: 0.04,
-      padding: 0.12,debug: 2,
-      subgraph-edge-style: (stroke: rgb("#e4504f") + 1.45pt),
-    )
-  ]
+#let basketball-subgraph(g, label) = {
+  let selected = subgraph.label(g, display-statement(label))
+  scale(42%, draw(
+    g,
+    unit: 1.0,
+    subgraph: selected,
+    node-label: basketball-node-label,
+    node-style: basketball-node-style,
+    source-style: basketball-edge-style,
+    sink-style: basketball-edge-style,
+    edge-label: none,
+    node-min-radius: 0.12,
+    node-label-padding: 0.04,
+    padding: 0.12,
+    subgraph-edge-style: (stroke: rgb("#e4504f") + 1.45pt),
+  ))
 }
 
-#let S(_, value, ..rest) = basketball-subgraph(value)
+#let S(g, value, ..rest) = basketball-subgraph(g, value)
 #let label-scope = (
   g: g,
   S: S,

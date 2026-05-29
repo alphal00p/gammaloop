@@ -60,7 +60,8 @@
   /// proposals. Applies to both modes. -> int
   seed: int(sys.inputs.at("seed", default: "2")),
   /// Initial movement scale. `"force"` multiplies computed forces by this
-  /// value; `"anneal"` uses it as the proposal step size. -> float
+  /// value; `"anneal"` uses it as a proposal step size in natural spring-length
+  /// units. -> float
   step: 0.81,
   /// Anneal-only step shrink factor, applied when an epoch's acceptance ratio
   /// falls below `accept-floor`. -> float
@@ -71,14 +72,15 @@
   /// Anneal-only acceptance-ratio threshold below which `step` is shrunk by
   /// `step-shrink`. -> float
   accept-floor: 0.15,
-  /// Force-only early stop threshold for maximum movement in one step. The
-  /// annealing schedule stores this value but does not currently use it for
-  /// stopping. -> float
+  /// Force-only early stop threshold for maximum movement in one step, as a
+  /// multiple of the natural spring length. The annealing schedule stores this
+  /// value but does not currently use it for stopping. -> float
   early-tol: 1e-6,
-  /// Anneal-only initial temperature used in the Metropolis acceptance test.
-  /// -> float
+  /// Anneal-only initial temperature used in the Metropolis acceptance test,
+  /// scaled by natural spring length squared. -> float
   temp: 0.3,
-  /// Force-mode maximum movement clamp per point and per step. -> float
+  /// Force-mode maximum movement clamp per point and per step, as a multiple
+  /// of the natural spring length. -> float
   delta: 0.4,
   /// Base repulsion strength for vertex-vertex interactions. Also scales
   /// `gamma-ev`, `gamma-ee`, `gamma-dangling`, and `g-center`. Applies to both
@@ -104,6 +106,8 @@
   /// modes. -> float
   gamma-ee: 0.1,
   /// Bias that pushes points in directions implied by pin/port constraints.
+  /// Force mode treats this as a force and scales it by natural spring length;
+  /// anneal mode treats it as a dimensionless multiplier on proposal steps.
   /// Applies to both modes. -> float
   directional-force: 5.0,
   /// Edge-label target offset as a multiple of the graph spring length. Label
@@ -176,14 +180,15 @@
   /// `0` or a negative value to disable the cap. -> float
   route-label-width-cap: 2.0,
   /// Force-only spring pulling temporary z coordinates back toward the layout
-  /// plane. Use with `z-spring-growth` to help separate overlapping
-  /// points during integration. -> float
-  z-spring: 0.05,
+  /// plane. Higher values keep the visible 2D forces from being hidden by the
+  /// temporary 3D symmetry-breaking offsets. -> float
+  z-spring: 2.0,
   /// Force-only per-epoch multiplier for `z-spring`. -> float
-  z-spring-growth: 1.3,
+  z-spring-growth: 1.0,
   /// Natural spring-length multiplier. This scales the graph's preferred edge
-  /// length and the repulsive coefficients derived from it. Applies to both
-  /// modes. -> float
+  /// length and dimensional force/energy terms so changing only this value
+  /// mostly zooms the result instead of retuning the force ratios. Applies to
+  /// both modes. -> float
   length-scale: 0.35,
 ) = {
   let settings = (

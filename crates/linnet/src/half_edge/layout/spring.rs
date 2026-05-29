@@ -799,9 +799,9 @@ pub struct SpringChargeEnergy {
     pub dangling_charge: f64,  // dangling edge charge (≈ 0.14*L^3)
     pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
     pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,         // central pull (≈ 0.007*L^2)
-    pub crossing_penalty: f64, // fixed penalty per crossing
-    pub eps: f64,              // 1e-4
+    pub c_center: f64,         // central pull (dimensionless relative strength)
+    pub crossing_penalty: f64, // crossing energy penalty (≈ penalty*L^2)
+    pub eps: f64,              // softened distance (≈ eps*L)
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
@@ -1493,17 +1493,19 @@ impl SpringChargeEnergy {
     pub fn from_graph(n_nodes: usize, viewport_w: f64, viewport_h: f64, tune: ParamTuning) -> Self {
         let area = (viewport_w * viewport_h).max(1e-9);
         let spring_length = tune.length_scale * (area / (n_nodes.max(1) as f64)).sqrt();
+        let spring_length_sq = spring_length.powi(2);
+        let repulsion_scale = spring_length.powi(3);
 
         SpringChargeEnergy {
             spring_length,
             k_spring: tune.k_spring,
-            c_vv: tune.beta * spring_length.powi(2),
-            c_ev: tune.beta * tune.gamma_ev * spring_length.powi(2),
-            c_ee_local: tune.beta * tune.gamma_ee * spring_length.powi(2),
-            c_center: tune.beta * tune.g_center * spring_length.powi(2),
-            dangling_charge: tune.gamma_dangling * tune.beta * spring_length.powi(2),
-            crossing_penalty: tune.crossing_penalty,
-            eps: tune.eps,
+            c_vv: tune.beta * repulsion_scale,
+            c_ev: tune.beta * tune.gamma_ev * repulsion_scale,
+            c_ee_local: tune.beta * tune.gamma_ee * repulsion_scale,
+            c_center: tune.beta * tune.g_center,
+            dangling_charge: tune.gamma_dangling * tune.beta * repulsion_scale,
+            crossing_penalty: tune.crossing_penalty * spring_length_sq,
+            eps: tune.eps * spring_length,
         }
     }
 }
@@ -1532,5 +1534,40 @@ mod tests {
 
         assert_eq!(energy.center_term(0.0), 0.0);
         assert!(energy.center_term(2.0) > energy.center_term(1.0));
+    }
+
+    #[test]
+    fn length_scale_rescales_dimensional_coefficients() {
+        let tune = ParamTuning {
+            length_scale: 0.5,
+            k_spring: 11.0,
+            beta: 3.0,
+            gamma_dangling: 0.7,
+            gamma_ev: 0.2,
+            gamma_ee: 0.4,
+            g_center: 0.05,
+            crossing_penalty: 13.0,
+            eps: 1e-4,
+        };
+        let small = SpringChargeEnergy::from_graph(4, 4.0, 4.0, tune);
+        let large = SpringChargeEnergy::from_graph(
+            4,
+            4.0,
+            4.0,
+            ParamTuning {
+                length_scale: 1.0,
+                ..tune
+            },
+        );
+
+        assert_eq!(small.spring_length, 1.0);
+        assert_eq!(large.spring_length, 2.0);
+        assert_eq!(large.c_vv / small.c_vv, 8.0);
+        assert_eq!(large.c_ev / small.c_ev, 8.0);
+        assert_eq!(large.c_ee_local / small.c_ee_local, 8.0);
+        assert_eq!(large.dangling_charge / small.dangling_charge, 8.0);
+        assert_eq!(large.crossing_penalty / small.crossing_penalty, 4.0);
+        assert_eq!(large.eps / small.eps, 2.0);
+        assert_eq!(large.c_center, small.c_center);
     }
 }
