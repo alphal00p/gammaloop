@@ -116,6 +116,27 @@
 
 #let is-leaf-node(record) = node-kind(record) in ("leaf", ..typed-leaf-kinds)
 
+#let tree-hedge-set(tree) = {
+  let hedges = (:)
+  for hedge in subgraph.hedges(tree) {
+    hedges.insert(str(hedge), true)
+  }
+  hedges
+}
+
+#let edge-endpoint(edge, key) = {
+  let half = edge.at(key + "-half-edge", default: none)
+  if half == none { edge.at(key, default: none) } else { half }
+}
+
+#let tree-edge-selected(hedges, edge) = {
+  let source = edge-endpoint(edge, "source")
+  let sink = edge-endpoint(edge, "sink")
+  let source-selected = source != none and hedges.at(str(source.hedge), default: false)
+  let sink-selected = sink != none and hedges.at(str(sink.hedge), default: false)
+  source-selected or sink-selected
+}
+
 #let node-label(node) = {
   let value = node-label-value(node)
   if value == none {
@@ -220,8 +241,8 @@
   }
 }
 
-#let edge-stroke(edge, tree, depths) = {
-  if subgraph.contains-edge(tree, edge.edge) {
+#let edge-stroke(edge, tree-hedges, depths) = {
+  if tree-edge-selected(tree-hedges, edge.edge) {
     let depth = edge-depth(edge, depths)
     tree-edge-stroke + 1pt / (1 + depth / 4)
   } else {
@@ -229,57 +250,53 @@
   }
 }
 
-#let source-half-edge-stroke(edge, tree, depths) = {
-  if subgraph.contains-edge(tree, edge.edge) {
-    edge-stroke(edge, tree, depths)
+#let source-half-edge-stroke(edge, tree-hedges, depths) = {
+  if tree-edge-selected(tree-hedges, edge.edge) {
+    edge-stroke(edge, tree-hedges, depths)
   } else {
     non-tree-source-edge-stroke + 0.72pt
   }
 }
 
-#let sink-half-edge-stroke(edge, tree, depths) = {
-  edge-stroke(edge, tree, depths)
+#let sink-half-edge-stroke(edge, tree-hedges, depths) = {
+  edge-stroke(edge, tree-hedges, depths)
 }
 
 #let tree-endpoint-anchor(edge, role, depths) = {
-  let source = edge.source-node
-  let sink = edge.sink-node
-  if source == none or sink == none {
-    let node = if role == "source" { source } else { sink }
-    if node == none {
-      auto
-    } else if edge.edge.pos.y >= node.pos.y {
-      "north"
-    } else {
-      "south"
-    }
-  } else {
-    let source-depth = depths.at(str(source.node), default: 0)
-    let sink-depth = depths.at(str(sink.node), default: 0)
-    if role == "source" {
-      if source-depth <= sink-depth { "south" } else { "north" }
-    } else {
-      if sink-depth <= source-depth { "south" } else { "north" }
-    }
-  }
+  if role == "source" { "north" } else { "south" }
 }
 
 #let non-tree-endpoint-anchor(node, role) = {
-  if node == none {
-    auto
-  } else if node-kind(node) == "sum" {
-    if role == "source" { "north" } else { "south" }
-  } else if is-leaf-node(node) {
+  if node != none and is-leaf-node(node) {
     "south"
   } else {
     auto
   }
 }
 
-#let source-edge-style(tree, depths) = edge => {
-  let is-tree = subgraph.contains-edge(tree, edge.edge)
+#let non-tree-route-exit-statements(nodes, edge) = {
+  let statements = (:)
+  let source = edge.at("source", default: none)
+  let source-node = if source == none { none } else { nodes.at(source.node) }
+  let source-anchor = non-tree-endpoint-anchor(source-node, "source")
+  if source-anchor != auto {
+    statements.insert("source-route-exit", source-anchor)
+  }
+
+  let sink = edge.at("sink", default: none)
+  let sink-node = if sink == none { none } else { nodes.at(sink.node) }
+  let sink-anchor = non-tree-endpoint-anchor(sink-node, "sink")
+  if sink-anchor != auto {
+    statements.insert("sink-route-exit", sink-anchor)
+  }
+
+  if statements.len() == 0 { none } else { (statements: statements) }
+}
+
+#let source-edge-style(tree-hedges, depths) = edge => {
+  let is-tree = tree-edge-selected(tree-hedges, edge.edge)
   (
-    stroke: source-half-edge-stroke(edge, tree, depths),
+    stroke: source-half-edge-stroke(edge, tree-hedges, depths),
     route: if is-tree { "direct" } else { "hobby-through" },
     source-anchor: if is-tree {
       tree-endpoint-anchor(edge, "source", depths)
@@ -290,10 +307,10 @@
   )
 }
 
-#let sink-edge-style(tree, depths) = edge => {
-  let is-tree = subgraph.contains-edge(tree, edge.edge)
+#let sink-edge-style(tree-hedges, depths) = edge => {
+  let is-tree = tree-edge-selected(tree-hedges, edge.edge)
   (
-    stroke: sink-half-edge-stroke(edge, tree, depths),
+    stroke: sink-half-edge-stroke(edge, tree-hedges, depths),
     route: if is-tree { "direct" } else { "hobby-through" },
     sink-anchor: if is-tree {
       tree-endpoint-anchor(edge, "sink", depths)
@@ -304,8 +321,8 @@
   )
 }
 
-#let non-tree-edge-label(tree) = edge => {
-  if subgraph.contains-edge(tree, edge.edge) {
+#let non-tree-edge-label(tree-hedges) = edge => {
+  if tree-edge-selected(tree-hedges, edge.edge) {
     none
   } else {
     tree-edge-label(edge)
@@ -316,15 +333,24 @@
   show raw: it => if it.at("lang") == "dot" {
     for g in graph.parse(it.text) {
       let tree = subgraph.label(g, tree-label(g))
+      let tree-hedges = tree-hedge-set(tree)
       let g = graph.style(
         g,
         node-label: node-label,
         node-label-style: tree-node-label-style,
         node-style: tree-node-shape-style,
-        edge-label: non-tree-edge-label(tree),
+        edge-label: non-tree-edge-label(tree-hedges),
         edge-label-style: tree-edge-label-style,
         unit: diagram-unit,
       )
+      let styled-nodes = graph.nodes(g)
+      let g = graph.map(g, edge: edge => {
+        if tree-edge-selected(tree-hedges, edge) {
+          (statements: ("source-route-exit": "north", "sink-route-exit": "south"))
+        } else {
+          non-tree-route-exit-statements(styled-nodes, edge)
+        }
+      })
       let g = layouts.layout(
         g,
         layout-algo: "dot",
@@ -343,8 +369,8 @@
         g,
         unit: diagram-unit,
         draw-node: draw-tree-node,
-        source-style: source-edge-style(tree, depths),
-        sink-style: sink-edge-style(tree, depths),
+        source-style: source-edge-style(tree-hedges, depths),
+        sink-style: sink-edge-style(tree-hedges, depths),
         edge-omega: 0.35,
         padding: 0.4,
       )

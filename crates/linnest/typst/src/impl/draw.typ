@@ -73,6 +73,7 @@
   sink-anchor: auto,
   anchor-control-distance: auto,
   route: "edge-pos",
+  route-points: "ignore",
 )
 
 #let _mark-defaults = (
@@ -696,7 +697,11 @@
   let sink-route = _route-points(edge.sink)
   let source-start-outset = if source-anchor == auto { source-outset } else { 0 }
   let sink-end-outset = if sink-anchor == auto { sink-outset } else { 0 }
-  if source-route.len() > 0 or sink-route.len() > 0 {
+  let route-points-mode = _style-value(source-style, "route-points")
+  if route-points-mode != "through" {
+    route-points-mode = _style-value(sink-style, "route-points")
+  }
+  if route-mode != "direct" and route-points-mode == "through" and (source-route.len() > 0 or sink-route.len() > 0) {
     let source-points = (start, ..source-route, route)
     let sink-points = (..sink-route.rev(), end)
     let split = curve-api.split-through(

@@ -2186,6 +2186,41 @@ fn test_dot_layout_exports_long_edge_route_points_on_half_edges() {
 }
 
 #[test]
+fn test_dot_layout_route_exit_statements_export_endpoint_guides() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph route_exits {
+            a -> b ["source-route-exit"=south, "sink-route-exit"=north]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let node_positions = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let edge = &edges[0];
+    let source_route = &edge.source.as_ref().unwrap().route_points;
+    let sink_route = &edge.sink.as_ref().unwrap().route_points;
+
+    assert_eq!(source_route.len(), 1);
+    assert_eq!(sink_route.len(), 1);
+    assert!(source_route[0].y < node_positions["a"].y);
+    assert!(sink_route[0].y > node_positions["b"].y);
+}
+
+#[test]
 fn test_partial_tree_layout_keeps_non_tree_edges_straight() {
     let parsed =
         parse_dot_graphs_bytes(br#"digraph partial { a -> b; b -> c; c -> d; d -> a; a -> c }"#)
