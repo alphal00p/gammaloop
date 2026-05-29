@@ -1,5 +1,9 @@
 //! `oneloop`: one-loop IBP reduction
 
+pub mod error;
+
+pub use error::OneLoopError;
+
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
