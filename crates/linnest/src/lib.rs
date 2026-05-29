@@ -34,7 +34,9 @@ use linnet::{
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Involution},
         layout::{
             force::{force_directed_layout, ForceLayoutConfig},
-            layered::{LayeredConfig, LayeredGeometry, LayeredOutput, LayeredProfile},
+            layered::{
+                LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
+            },
             simulatedanneale::{anneal, GeoSchedule, SAConfig},
             spring::{
                 Constraint, HasPointConstraint, LayoutState, ParamTuning, PinnedLayoutNeighbor,
@@ -530,6 +532,8 @@ pub struct TypstHedge {
     from: usize,
     to: usize,
     weight: f64,
+    #[with(rkyv::with::Map<Point2Rkyv>)]
+    route_points: Vec<Point2<f64>>,
     statement: Option<String>,
     id: Option<usize>,
     data: Option<Vec<u8>>,
@@ -2047,6 +2051,7 @@ impl TypstGraph {
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
+        self.clear_hedge_route_points();
 
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
         let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
@@ -2513,6 +2518,40 @@ impl TypstGraph {
         }
     }
 
+    fn clear_hedge_route_points(&mut self) {
+        for hedge in 0..self.graph.n_hedges() {
+            self.graph[Hedge(hedge)].route_points.clear();
+        }
+    }
+
+    fn apply_layered_edge_routes(&mut self, output: &LayeredOutput) {
+        for (edge, route) in output.edge_routes.iter() {
+            self.apply_layered_edge_route(edge, route);
+        }
+    }
+
+    fn apply_layered_edge_route(&mut self, edge: EdgeIndex, route: &LayeredEdgeRoute) {
+        let (_, pair) = self.graph[&edge];
+        match pair {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                self.graph[source].route_points = route.source.clone();
+                self.graph[sink].route_points = route.sink.clone();
+            }
+            HedgePair::Unpaired {
+                hedge,
+                flow: Flow::Source,
+            } => {
+                self.graph[hedge].route_points = route.source.clone();
+            }
+            HedgePair::Unpaired {
+                hedge,
+                flow: Flow::Sink,
+            } => {
+                self.graph[hedge].route_points = route.sink.clone();
+            }
+        }
+    }
+
     fn separate_edge_label_positions_from_boxes(
         &self,
         labels: &mut EdgeVec<Point2<f64>>,
@@ -2823,7 +2862,7 @@ impl TypstGraph {
     }
 
     fn direct_layout_positions(
-        &self,
+        &mut self,
         cfg: TreeInitCfg,
         algo: LayoutAlgo,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
@@ -2837,7 +2876,7 @@ impl TypstGraph {
     }
 
     fn partial_layout_positions(
-        &self,
+        &mut self,
         cfg: TreeInitCfg,
         algo: LayoutAlgo,
         subgraph: &SuBitGraph,
@@ -2851,7 +2890,7 @@ impl TypstGraph {
     }
 
     fn fixed_node_direct_layout_positions(
-        &self,
+        &mut self,
         cfg: TreeInitCfg,
         algo: LayoutAlgo,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
@@ -2859,7 +2898,7 @@ impl TypstGraph {
     }
 
     fn fixed_node_partial_layout_positions(
-        &self,
+        &mut self,
         cfg: TreeInitCfg,
         algo: LayoutAlgo,
         selected_edges: Option<&EdgeVec<bool>>,
@@ -2955,7 +2994,7 @@ impl TypstGraph {
     }
 
     fn layout_positions_for_subgraph(
-        &self,
+        &mut self,
         cfg: TreeInitCfg,
         algo: LayoutAlgo,
         subgraph: &SuBitGraph,
@@ -2987,7 +3026,7 @@ impl TypstGraph {
     }
 
     fn layered_layout_positions(
-        &self,
+        &mut self,
         cfg: TreeInitCfg,
         subgraph: &SuBitGraph,
         include_all_nodes: bool,
@@ -2995,6 +3034,7 @@ impl TypstGraph {
         route_unselected_edges: bool,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let output = self.layered_layout_output(cfg, subgraph, include_all_nodes, profile);
+        self.apply_layered_edge_routes(&output);
         self.positions_from_layered_output(cfg, output, true, route_unselected_edges)
     }
 
@@ -3841,7 +3881,8 @@ impl TypstGraph {
     pub fn new_positions(&self, cfg: TreeInitCfg) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         let full = self.full_filter();
         let forest = self.spanning_forest_of(&full);
-        self.layout_positions_for_subgraph(cfg, LayoutAlgo::Tree, &forest, &full, true)
+        let targets = self.tree_layout_targets(cfg, &forest, &full, true);
+        self.positions_from_node_targets(cfg, targets)
     }
 
     pub fn parse<'a>(dot_str: &str) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {

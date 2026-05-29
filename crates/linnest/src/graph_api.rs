@@ -152,6 +152,7 @@ pub struct TypstDotEndpoint {
     pub statement: Option<String>,
     pub port_label: Option<String>,
     pub compass: Option<String>,
+    pub route_points: Vec<TypstPoint>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -812,7 +813,7 @@ pub fn graph_edges_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
             .map(|edge| edge_view_to_output(graph, edge))
             .collect::<Vec<_>>())
     })?;
-    encode_cbor(&edges)
+    encode_cbor(&edges_with_route_points(&graph, edges))
 }
 
 pub fn graph_edges_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -824,7 +825,7 @@ pub fn graph_edges_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> 
             .map(|edge| edge_view_to_output(graph, edge))
             .collect::<Vec<_>>())
     })?;
-    encode_cbor(&edges)
+    encode_cbor(&edges_with_route_points(&graph, edges))
 }
 
 pub fn graph_nodes_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -848,7 +849,7 @@ pub fn graph_edges_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result
             .map(|edge| edge_view_to_output(graph, edge))
             .collect::<Vec<_>>())
     })?;
-    encode_cbor(&edges)
+    encode_cbor(&edges_with_route_points(&graph, edges))
 }
 
 pub fn graph_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -1579,7 +1580,31 @@ fn endpoint_to_output(endpoint: ArchivedDotEndpointView<'_>) -> TypstDotEndpoint
             .as_ref()
             .copied()
             .map(compass_to_string),
+        route_points: Vec::new(),
     }
+}
+
+fn edges_with_route_points(graph: &TypstGraph, mut edges: Vec<TypstDotEdge>) -> Vec<TypstDotEdge> {
+    for edge in &mut edges {
+        if let Some(source) = &mut edge.source {
+            source.route_points = route_points_for_hedge(graph, source.hedge);
+        }
+        if let Some(sink) = &mut edge.sink {
+            sink.route_points = route_points_for_hedge(graph, sink.hedge);
+        }
+    }
+    edges
+}
+
+fn route_points_for_hedge(graph: &TypstGraph, hedge: usize) -> Vec<TypstPoint> {
+    graph.graph[Hedge(hedge)]
+        .route_points
+        .iter()
+        .map(|point| TypstPoint {
+            x: point.x,
+            y: point.y,
+        })
+        .collect()
 }
 
 fn decode_subgraph_spec(

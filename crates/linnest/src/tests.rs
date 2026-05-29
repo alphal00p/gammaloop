@@ -2154,6 +2154,38 @@ fn test_dot_layout_uses_explicit_roots_as_first_rank() {
 }
 
 #[test]
+fn test_dot_layout_exports_long_edge_route_points_on_half_edges() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph long_edge {
+            a -> b [minlen=4]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    assert_eq!(edges.len(), 1);
+    let edge = &edges[0];
+    let source_route = &edge.source.as_ref().unwrap().route_points;
+    let sink_route = &edge.sink.as_ref().unwrap().route_points;
+    assert_eq!(source_route.len(), 1);
+    assert_eq!(sink_route.len(), 1);
+
+    let edge_pos = edge.pos.as_ref().unwrap();
+    assert!(source_route[0].y > edge_pos.y);
+    assert!(sink_route[0].y < edge_pos.y);
+}
+
+#[test]
 fn test_partial_tree_layout_keeps_non_tree_edges_straight() {
     let parsed =
         parse_dot_graphs_bytes(br#"digraph partial { a -> b; b -> c; c -> d; d -> a; a -> c }"#)

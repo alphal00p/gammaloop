@@ -63,7 +63,14 @@ pub struct LayeredGeometry {
 pub struct LayeredOutput {
     pub node_positions: NodeVec<Option<Point2<f64>>>,
     pub edge_positions: EdgeVec<Option<Point2<f64>>>,
+    pub edge_routes: EdgeVec<LayeredEdgeRoute>,
     pub ranks: NodeVec<Option<usize>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct LayeredEdgeRoute {
+    pub source: Vec<Point2<f64>>,
+    pub sink: Vec<Point2<f64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +137,9 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             return LayeredOutput {
                 node_positions: self.new_nodevec(|_, _, _| None),
                 edge_positions: self.new_edgevec(|_, _, _| None),
+                edge_routes: (0..self.n_edges())
+                    .map(|_| LayeredEdgeRoute::default())
+                    .collect(),
                 ranks: self.new_nodevec(|_, _, _| None),
             };
         }
@@ -1060,6 +1070,9 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
 
         let mut edge_positions: EdgeVec<Option<Point2<f64>>> =
             (0..self.graph.n_edges()).map(|_| None).collect();
+        let mut edge_routes: EdgeVec<LayeredEdgeRoute> = (0..self.graph.n_edges())
+            .map(|_| LayeredEdgeRoute::default())
+            .collect();
         for edge in selected_edges {
             let path = &self.edge_paths[edge.edge];
             if path.len() < 2 {
@@ -1083,12 +1096,30 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 )
             };
             edge_positions[edge.edge] = Some(point);
+            edge_routes[edge.edge] = self.edge_route(path, rank_y);
         }
 
         LayeredOutput {
             node_positions,
             edge_positions,
+            edge_routes,
             ranks: rank_output,
+        }
+    }
+
+    fn edge_route(&self, path: &[usize], rank_y: &[f64]) -> LayeredEdgeRoute {
+        if path.len() <= 3 {
+            return LayeredEdgeRoute::default();
+        }
+        let middle = path.len() / 2;
+        let point = |item: usize| Point2::new(self.items[item].x, rank_y[self.items[item].rank]);
+        LayeredEdgeRoute {
+            source: path[1..middle].iter().map(|&item| point(item)).collect(),
+            sink: path[middle + 1..path.len() - 1]
+                .iter()
+                .rev()
+                .map(|&item| point(item))
+                .collect(),
         }
     }
 }
