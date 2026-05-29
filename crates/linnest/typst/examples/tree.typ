@@ -11,6 +11,9 @@
 #let operator-node-radius = 0.82
 #let operator-node-stroke = 0.25pt + rgb("#666666")
 #let leaf-node-stroke = 0.22pt + rgb("#aeb4bd")
+#let tree-edge-stroke = rgb("#555555")
+#let non-tree-source-edge-stroke = rgb("#7f95b8")
+#let non-tree-sink-edge-stroke = rgb("#d8dce3")
 #let tree-edge-label-style = (
   padding: 0.8,
   frame: "rect",
@@ -210,10 +213,22 @@
 #let edge-stroke(edge, tree, depths) = {
   if subgraph.contains-edge(tree, edge.edge) {
     let depth = edge-depth(edge, depths)
-    rgb("#555555") + 1pt / (1 + depth / 4)
+    tree-edge-stroke + 1pt / (1 + depth / 4)
   } else {
-    rgb("#d8dce3") + 0.38pt
+    non-tree-sink-edge-stroke + 0.38pt
   }
+}
+
+#let source-half-edge-stroke(edge, tree, depths) = {
+  if subgraph.contains-edge(tree, edge.edge) {
+    edge-stroke(edge, tree, depths)
+  } else {
+    non-tree-source-edge-stroke + 0.72pt
+  }
+}
+
+#let sink-half-edge-stroke(edge, tree, depths) = {
+  edge-stroke(edge, tree, depths)
 }
 
 #let tree-endpoint-anchor(edge, role, depths) = {
@@ -254,7 +269,7 @@
 #let source-edge-style(tree, depths) = edge => {
   let is-tree = subgraph.contains-edge(tree, edge.edge)
   (
-    stroke: edge-stroke(edge, tree, depths),
+    stroke: source-half-edge-stroke(edge, tree, depths),
     route: if is-tree { "direct" } else { "edge-pos" },
     source-anchor: if is-tree {
       tree-endpoint-anchor(edge, "source", depths)
@@ -267,7 +282,7 @@
 #let sink-edge-style(tree, depths) = edge => {
   let is-tree = subgraph.contains-edge(tree, edge.edge)
   (
-    stroke: edge-stroke(edge, tree, depths),
+    stroke: sink-half-edge-stroke(edge, tree, depths),
     route: if is-tree { "direct" } else { "edge-pos" },
     sink-anchor: if is-tree {
       tree-endpoint-anchor(edge, "sink", depths)
