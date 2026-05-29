@@ -116,7 +116,7 @@ impl SimpleApprox {
     }
 
     pub(crate) fn t_op(&self, bigger_graph: &SuBitGraph) -> Atom {
-        function!(GS.top, self.expr(bigger_graph))
+        function!(GS.uv_approx, self.expr(bigger_graph))
     }
 
     pub(crate) fn root(subgraph: InternalSubGraph) -> Self {

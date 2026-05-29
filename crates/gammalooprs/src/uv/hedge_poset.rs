@@ -20,7 +20,9 @@ use linnet::half_edge::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
-    function, symbol,
+    function,
+    printer::PrintOptions,
+    symbol,
 };
 use tracing::debug;
 use vakint::Vakint;
@@ -464,6 +466,18 @@ impl Display for OperationNode {
 }
 
 impl OperationNode {
+    fn foata_level_labels(&self) -> String {
+        self.key
+            .iter_levels_top_down()
+            .map(|level| {
+                level
+                    .iter_leaf_ops()
+                    .map(|op| op.order.string_label())
+                    .join(",")
+            })
+            .join(";")
+    }
+
     pub fn covers(&self) -> Option<SuBitGraph> {
         let mut acc: Option<SuBitGraph> = None;
 
@@ -499,7 +513,7 @@ impl OperationNode {
     pub fn to_atom(&self) -> Atom {
         let mut acc = Atom::one();
 
-        let approx = FunctionBuilder::new(symbol!("T"));
+        let approx = FunctionBuilder::new(GS.uv_approx);
         let mut levels = self.key.iter_levels_top_down();
         let Some(first_level) = levels.next() else {
             return acc;
@@ -514,16 +528,13 @@ impl OperationNode {
             let last_sym = if last.is_empty() {
                 Atom::Zero
             } else {
-                Atom::var(symbol!(format!("S_{}", last.string_label())))
+                last.symbol().to_atom()
             };
 
             let mut mul = Atom::one();
 
             for op in l.iter_leaf_ops() {
-                let new = function!(
-                    symbol!(format!("S_{}", op.order.string_label())),
-                    usize::from(op.data)
-                );
+                let new = function!(op.order.symbol(), usize::from(op.data));
                 mul *= approx.clone().add_arg((new - &last_sym) * &acc).finish();
                 last.union_with(&op.order);
             }
@@ -599,23 +610,17 @@ impl Forests {
         frontier: NodeIndex,
         op: &HiddenData<SuBitGraph, EdgeIndex>,
     ) -> Atom {
-        let approx = FunctionBuilder::new(symbol!("T"));
+        let approx = FunctionBuilder::new(GS.uv_approx);
         let frontier_atom = self.node_label_atom(frontier);
 
-        let current = function!(
-            symbol!(format!("S_{}", op.order.string_label())),
-            usize::from(op.data)
-        );
+        let current = function!(op.order.symbol(), usize::from(op.data));
         let argument = if self.graph[frontier].covers().is_none() {
             current
         } else {
-            let previous = Atom::var(symbol!(format!(
-                "S_{}",
-                self.graph[frontier]
-                    .covers()
-                    .expect("non-empty frontier cover must exist")
-                    .string_label()
-            )));
+            let previous = self.graph[frontier]
+                .covers()
+                .expect("non-empty frontier cover must exist")
+                .symbol();
             (current - previous) * frontier_atom
         };
         approx.add_arg(argument).finish()
@@ -665,6 +670,97 @@ impl Forests {
             .expect("writing a trace key into a string must succeed");
         let atom = self.node_label_atom(node);
         format!("{foata}: {}", atom.to_ordered_simple())
+    }
+
+    fn dot_serialize_expr_atom() -> Atom {
+        Atom::var(symbol!("expr"))
+    }
+
+    fn dot_serialize_node_atom_factor(
+        &self,
+        frontier: NodeIndex,
+        op: &HiddenData<SuBitGraph, EdgeIndex>,
+    ) -> Atom {
+        function!(
+            GS.t_op,
+            function!(op.order.symbol(), usize::from(op.data)),
+            self.graph[frontier]
+                .covers()
+                .map_or(Atom::Zero, |cover| cover.symbol().to_atom()),
+            self.dot_serialize_node_atom(frontier)
+        )
+    }
+
+    fn dot_serialize_node_atom(&self, node: NodeIndex) -> Atom {
+        if self.graph[node].key.is_empty() {
+            return Self::dot_serialize_expr_atom();
+        }
+
+        self.graph
+            .leaf_op_dependency_frontiers(node, &self.wood)
+            .fold(Atom::one(), |acc, (op, frontier)| {
+                acc * self.dot_serialize_node_atom_factor(frontier, op)
+            })
+    }
+
+    fn dot_serialize_node_attrs(&self, node: NodeIndex) -> String {
+        let key = &self.graph[node];
+        let label = self
+            .dot_serialize_node_atom(node)
+            .printer(PrintOptions::typst())
+            .to_string();
+        let cover = key
+            .covers()
+            .unwrap_or_else(|| self.graph.empty_subgraph())
+            .string_label();
+
+        format!(
+            "label={} foata={} cover={}",
+            Self::dot_attr_value(&label),
+            Self::dot_attr_value(&key.foata_level_labels()),
+            Self::dot_attr_value(&cover),
+        )
+    }
+
+    fn dot_attr_value(value: &str) -> String {
+        let mut escaped = String::with_capacity(value.len() + 2);
+        escaped.push('"');
+        for c in value.chars() {
+            match c {
+                '\\' => escaped.push_str("\\\\"),
+                '"' => escaped.push_str("\\\""),
+                '\n' => escaped.push_str("\\n"),
+                '\r' => escaped.push_str("\\r"),
+                '\t' => escaped.push_str("\\t"),
+                _ => escaped.push(c),
+            }
+        }
+        escaped.push('"');
+        escaped
+    }
+
+    pub fn dot_serialize(&self) -> String {
+        let mut output = String::new();
+        self.dot_serialize_fmt(&mut output)
+            .expect("writing hedge-poset forest DOT into a string must succeed");
+        output
+    }
+
+    pub fn dot_serialize_fmt(&self, writer: &mut impl std::fmt::Write) -> std::fmt::Result {
+        let attrs: AHashMap<_, _> = self
+            .graph
+            .iter_nodes()
+            .map(|(node, _, key)| (key.clone(), self.dot_serialize_node_attrs(node)))
+            .collect();
+
+        self.graph.dot_impl_fmt(
+            writer,
+            &self.graph.full_filter(),
+            "start=2;\n",
+            &|_| None,
+            &|_| None,
+            &|v| Some(attrs[v].clone()),
+        )
     }
 
     fn compatible_topological_order(&self, subset: &SuBitGraph) -> Result<Vec<NodeIndex>> {
@@ -1484,7 +1580,7 @@ mod tests {
         @"12",
               );
         let f = f.unfold();
-        println!("{}", f);
+        println!("{}", f.dot_serialize());
         insta::assert_snapshot!(
         f.graph.n_nodes(),
         @"46");
