@@ -297,15 +297,16 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                     return None;
                 }
                 let minlen = geometry.edge_minlens[edge.edge].max(1);
+                let weight = geometry.edge_weights[edge.edge].max(0.05);
                 if order[edge.source.0] <= order[edge.sink.0] {
-                    Some((edge.source, edge.sink, minlen))
+                    Some((edge.source, edge.sink, minlen, weight))
                 } else {
-                    Some((edge.sink, edge.source, minlen))
+                    Some((edge.sink, edge.source, minlen, weight))
                 }
             })
             .collect::<Vec<_>>();
 
-        dag_edges.sort_by_key(|(source, sink, _)| (order[source.0], order[sink.0]));
+        dag_edges.sort_by_key(|(source, sink, _, _)| (order[source.0], order[sink.0]));
 
         let max_iterations = ordered_nodes
             .len()
@@ -313,7 +314,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             .max(1);
         for _ in 0..max_iterations {
             let mut changed = false;
-            for &(source, sink, minlen) in &dag_edges {
+            for &(source, sink, minlen, _) in &dag_edges {
                 let target = ranks[source].saturating_add(minlen);
                 if ranks[sink] < target {
                     ranks[sink] = target;
@@ -336,7 +337,54 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             }
         }
 
+        self.refine_weighted_ranks(&mut ranks, ordered_nodes, &dag_edges, same_rank_group);
         ranks
+    }
+
+    fn refine_weighted_ranks(
+        &self,
+        ranks: &mut NodeVec<usize>,
+        ordered_nodes: &[NodeIndex],
+        dag_edges: &[(NodeIndex, NodeIndex, usize, f64)],
+        same_rank_group: &NodeVec<Option<usize>>,
+    ) {
+        for _ in 0..ordered_nodes.len().max(1) {
+            let mut changed = false;
+            for &node in ordered_nodes {
+                if same_rank_group[node].is_some() {
+                    continue;
+                }
+                let mut lower = 0usize;
+                let mut upper = usize::MAX;
+                let mut weighted_sum = 0.0;
+                let mut total_weight = 0.0;
+                for &(source, sink, minlen, weight) in dag_edges {
+                    if sink == node {
+                        let target = ranks[source].saturating_add(minlen);
+                        lower = lower.max(target);
+                        weighted_sum += target as f64 * weight;
+                        total_weight += weight;
+                    } else if source == node && ranks[sink] >= minlen {
+                        let target = ranks[sink] - minlen;
+                        upper = upper.min(target);
+                        weighted_sum += target as f64 * weight;
+                        total_weight += weight;
+                    }
+                }
+                if total_weight == 0.0 || lower > upper {
+                    continue;
+                }
+                let target = (weighted_sum / total_weight).round().max(0.0) as usize;
+                let target = target.clamp(lower, upper);
+                if target != ranks[node] {
+                    ranks[node] = target;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
     }
 
     fn valid_rank_same_groups(
