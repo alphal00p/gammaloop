@@ -950,14 +950,47 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         let Some((&first, rest)) = self.layers[rank].split_first() else {
             return;
         };
+        let extra_gaps = self.same_rank_label_extra_gaps(rank);
         let mut right = self.items[first].x + 0.5 * self.items[first].width;
-        for &item in rest {
-            let min_x = right + self.config.node_gap + 0.5 * self.items[item].width;
+        for (gap_index, &item) in rest.iter().enumerate() {
+            let min_x = right
+                + self.config.node_gap
+                + extra_gaps.get(gap_index).copied().unwrap_or(0.0)
+                + 0.5 * self.items[item].width;
             if self.items[item].x < min_x {
                 self.items[item].x = min_x;
             }
             right = self.items[item].x + 0.5 * self.items[item].width;
         }
+    }
+
+    fn same_rank_label_extra_gaps(&self, rank: usize) -> Vec<f64> {
+        let layer = &self.layers[rank];
+        if layer.len() < 2 {
+            return Vec::new();
+        }
+        let positions = self.item_positions();
+        let mut gaps = vec![0.0_f64; layer.len() - 1];
+        for (edge, path) in self.edge_paths.iter() {
+            if path.len() != 2 {
+                continue;
+            }
+            let source = path[0];
+            let sink = path[1];
+            if self.items[source].rank != rank || self.items[sink].rank != rank {
+                continue;
+            }
+            let start = positions[source].min(positions[sink]);
+            let end = positions[source].max(positions[sink]);
+            if start == end {
+                continue;
+            }
+            let extra = self.geometry.edge_label_widths[edge] / (end - start) as f64;
+            for gap in &mut gaps[start..end] {
+                *gap = gap.max(extra);
+            }
+        }
+        gaps
     }
 
     fn center_layer(&mut self, rank: usize) {
