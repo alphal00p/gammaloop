@@ -195,9 +195,10 @@ pub struct GammaloopSymbols {
     pub uv_truncate: Symbol,
     /// Marker for the ct term in the UV integrand
     pub ct_marker: Symbol,
+    /// Structured forest-DOT approximation record.
+    pub t_op: Symbol,
 
     pub nc2_1: Symbol,
-    pub top: Symbol,
     pub num: Symbol,
     ///denominator wrapper, den(<edge_id>,<momentum>,<mass>,<full_expr>) (no power and should not be multiplied in but divided!)
     pub den: Symbol,
@@ -745,6 +746,31 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             })
         }
     ),
+    t_op: symbol!(
+        "T",
+        print = |a, opt, _state| {
+            if !opt.mode.is_typst() {
+                return None;
+            }
+
+            let mut out = "#T".to_string();
+            if let AtomView::Fun(f) = a {
+                out.push('(');
+                let mut first = true;
+                for arg in f.iter() {
+                    if first {
+                        first = false;
+                    } else {
+                        out.push(',');
+                    }
+                    arg.format(&mut out, opt, PrintState::new()).ok()?;
+                }
+                out.push(')');
+            }
+
+            Some(out)
+        }
+    ),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
@@ -864,7 +890,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         }
     ),
     delta_vec: ETS.delta,
-    top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!(
         "denom",
