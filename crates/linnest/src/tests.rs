@@ -2900,6 +2900,68 @@ fn typst_graph_rkyv_roundtrip() {
 }
 
 #[test]
+fn test_force_default_z_spring_keeps_parallel_edge_controls_planar() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph basketball {
+            node [num = "1"]
+            edge [particle=scalar_1]
+            e [style=invis]
+
+            e -> A:1 [id=5]
+            B:0 -> e [id=4]
+            A -> B [id=0 lmb_id=0]
+            A -> B [id=1 lmb_id=1]
+            A -> B [id=2 lmb_id=2]
+            A -> B [id=3]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let config = BTreeMap::from([
+        ("layout-algo".to_string(), "force".to_string()),
+        ("seed".to_string(), "7".to_string()),
+        ("steps".to_string(), "90".to_string()),
+        ("epochs".to_string(), "80".to_string()),
+        ("viewport-w".to_string(), "4.0".to_string()),
+        ("viewport-h".to_string(), "2.8".to_string()),
+        ("label-steps".to_string(), "0".to_string()),
+        ("g-center".to_string(), "0.0".to_string()),
+    ]);
+    let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let a = nodes
+        .iter()
+        .find(|node| node.name.as_deref() == Some("A"))
+        .unwrap()
+        .pos
+        .as_ref()
+        .unwrap();
+    let b = nodes
+        .iter()
+        .find(|node| node.name.as_deref() == Some("B"))
+        .unwrap()
+        .pos
+        .as_ref()
+        .unwrap();
+    let ab_x = b.x - a.x;
+    let ab_y = b.y - a.y;
+    let ab_len_sq = ab_x * ab_x + ab_y * ab_y;
+
+    for edge in edges.iter().filter(|edge| edge.edge < 4) {
+        let pos = edge.pos.as_ref().unwrap();
+        let ap_x = pos.x - a.x;
+        let ap_y = pos.y - a.y;
+        let t = (ap_x * ab_x + ap_y * ab_y) / ab_len_sq;
+        assert!(
+            (t - 0.5).abs() < 1e-3,
+            "edge {} control should stay near the A-B midpoint, got t={t}",
+            edge.edge
+        );
+    }
+}
+
+#[test]
 fn test_pin_parsing() {
     let figment = test_figment();
     let mut g = TypstGraph::from_dot(

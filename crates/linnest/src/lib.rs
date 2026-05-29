@@ -1525,11 +1525,11 @@ fn default_directional_force() -> f64 {
 }
 
 fn default_z_spring() -> f64 {
-    0.05
+    2.0
 }
 
 fn default_z_spring_growth() -> f64 {
-    1.3
+    1.0
 }
 
 fn default_label_steps() -> usize {
@@ -2282,22 +2282,23 @@ impl TypstGraph {
         pos_e: EdgeVec<Point2<f64>>,
         energy: &SpringChargeEnergy,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
-        let mut state = self.graph.new_layout_state(
-            pos_n,
-            pos_e,
-            self.layout_config.delta,
-            self.layout_config.directional_force,
-            self.layout_config.incremental_energy,
-        );
+        let spring_length = energy.spring_length;
 
         match self.layout_config.layout_algo {
             LayoutAlgo::Anneal => {
+                let state = self.graph.new_layout_state(
+                    pos_n,
+                    pos_e,
+                    self.layout_config.delta * spring_length,
+                    self.layout_config.directional_force,
+                    self.layout_config.incremental_energy,
+                );
                 let mut schedule = GeoSchedule::from(&self.layout_config.schedule);
                 let (out, _stats) = anneal::<_, _, _, _, SmallRng>(
                     state,
                     SAConfig {
-                        temp: self.layout_config.temp,
-                        step: self.layout_config.step,
+                        temp: self.layout_config.temp * spring_length.powi(2),
+                        step: self.layout_config.step * spring_length,
                         seed: self.layout_config.seed,
                     },
                     &PinnedLayoutNeighbor,
@@ -2307,6 +2308,13 @@ impl TypstGraph {
                 (out.vertex_points, out.edge_points)
             }
             LayoutAlgo::Force => {
+                let mut state = self.graph.new_layout_state(
+                    pos_n,
+                    pos_e,
+                    self.layout_config.delta * spring_length,
+                    self.layout_config.directional_force * spring_length,
+                    self.layout_config.incremental_energy,
+                );
                 force_directed_layout(
                     &mut state,
                     energy,
@@ -2315,8 +2323,8 @@ impl TypstGraph {
                         epochs: self.layout_config.schedule.epochs,
                         step: self.layout_config.step,
                         cool: self.layout_config.schedule.cool,
-                        max_delta: self.layout_config.delta,
-                        early_tol: self.layout_config.schedule.early_tol,
+                        max_delta: self.layout_config.delta * spring_length,
+                        early_tol: self.layout_config.schedule.early_tol * spring_length,
                         seed: self.layout_config.seed,
                         z_spring: self.layout_config.z_spring,
                         z_spring_growth: self.layout_config.z_spring_growth,

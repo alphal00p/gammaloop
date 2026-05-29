@@ -615,6 +615,12 @@
   )
 }
 
+#let _straight-through-route-split(start, route, end) = (
+  source: curve-api.line(start, route),
+  sink: curve-api.line(route, end),
+  curve: curve-api.path(curve-api.line(start, route), curve-api.line(route, end)),
+)
+
 #let _split-edge-geometry(
   source-path,
   sink-path,
@@ -700,6 +706,20 @@
   let route-points-mode = _style-value(source-style, "route-points")
   if route-points-mode != "through" {
     route-points-mode = _style-value(sink-style, "route-points")
+  }
+  if route-mode == "straight-through" {
+    let split = _straight-through-route-split(start, route, end)
+    return _split-edge-geometry(
+      split.source,
+      split.sink,
+      split.curve,
+      source-style,
+      sink-style,
+      source-start-outset,
+      sink-end-outset,
+      label-pos,
+      accuracy,
+    )
   }
   if route-mode != "direct" and route-points-mode == "through" and (source-route.len() > 0 or sink-route.len() > 0) {
     let source-points = (start, ..source-route, route)
@@ -847,6 +867,24 @@
   let sink-outset = options.sink-outset
   let accuracy = options.accuracy
   let label-pos = options.label-pos
+  let route-mode = _style-value(source-style, "route")
+  if route-mode == "straight-through" {
+    let start = _point(nodes.at(edge.source.node).pos)
+    let route = _point(edge.pos)
+    let end = _point(nodes.at(edge.sink.node).pos)
+    let split = _straight-through-route-split(start, route, end)
+    return _split-edge-geometry(
+      split.source,
+      split.sink,
+      split.curve,
+      source-style,
+      sink-style,
+      source-outset,
+      sink-outset,
+      label-pos,
+      accuracy,
+    )
+  }
   let base = edge-halves(edge, nodes, (
     omega: omega,
     source-outset: 0,

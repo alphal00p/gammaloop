@@ -316,6 +316,8 @@
   /// guide, and sink anchor, then split source/sink styling at the edge point.
   /// `route: "direct"` keeps the same cubic routing but suppresses the default
   /// edge-position Hobby route.
+  /// `route: "straight-through"` draws the two straight force springs from
+  /// source to edge position and from edge position to sink.
   /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
