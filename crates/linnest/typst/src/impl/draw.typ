@@ -10,6 +10,10 @@
 #let _point-x(p) = if type(p) == array { p.at(0) } else { p.x }
 #let _point-y(p) = if type(p) == array { p.at(1) } else { p.y }
 #let _point(p) = (_point-x(p), _point-y(p))
+#let _point-add(a, b) = (_point-x(a) + _point-x(b), _point-y(a) + _point-y(b))
+#let _point-sub(a, b) = (_point-x(a) - _point-x(b), _point-y(a) - _point-y(b))
+#let _point-scale(p, factor) = (_point-x(p) * factor, _point-y(p) * factor)
+#let _point-lerp(a, b, t) = _point-add(a, _point-scale(_point-sub(b, a), t))
 
 #let _statement-number(record, key, default: none) = {
   let value = record.statements.at(key, default: none)
@@ -332,6 +336,15 @@
   same
 }
 
+#let _same-draw-path-style(source-style, sink-style) = {
+  let same-path-geometry = if _has-pattern(source-style) or _has-pattern(sink-style) {
+    _same-pattern-geometry(source-style, sink-style)
+  } else {
+    _same-layer-geometry(source-style, sink-style)
+  }
+  same-path-geometry and _draw-style(source-style) == _draw-style(sink-style)
+}
+
 #let _center-outset(base-length, style, source-outset, sink-outset) = {
   let geometry = _edge-geometry(style)
   curve-api.center-outset(
@@ -518,10 +531,25 @@
   }
 }
 
+#let _half-path-geometry(path, style, outsets, label-pos) = {
+  if outsets == none {
+    ()
+  } else {
+    _geometry-path-segments(
+      path,
+      style,
+      outsets.start,
+      outsets.end,
+      label-pos,
+      0,
+    )
+  }
+}
+
 #let _auto-anchor-control-distance(start, route, end) = {
   let dx = calc.abs(_point-x(end) - _point-x(start))
   let dy = calc.abs(_point-y(end) - _point-y(start))
-  calc.max(0.35, calc.min(2.0, 0.16 * dx + 0.22 * dy))
+  calc.max(0.45, calc.min(4.0, 0.18 * dx + 0.3 * dy))
 }
 
 #let _anchor-control-distance(source-style, sink-style, start, route, end) = {
@@ -546,6 +574,39 @@
   }
 }
 
+#let _anchor-control-guide(anchor, point, fallback, amount) = {
+  if anchor == auto or anchor == none or anchor == "center" {
+    fallback
+  } else {
+    _anchor-control-point(anchor, point, amount)
+  }
+}
+
+#let _anchored-cubic-route-split(start, source-anchor, route, sink-anchor, end, amount) = {
+  let source-guide = _anchor-control-guide(source-anchor, start, _point-lerp(start, end, 1 / 3), amount)
+  let sink-guide = _anchor-control-guide(sink-anchor, end, _point-lerp(end, start, 1 / 3), amount)
+  let control-sum = _point-scale(
+    _point-sub(_point-scale(route, 8), _point-add(start, end)),
+    1 / 3,
+  )
+  let delta = _point-scale(
+    _point-sub(control-sum, _point-add(source-guide, sink-guide)),
+    1 / 2,
+  )
+  let control-start = _point-add(source-guide, delta)
+  let control-end = _point-add(sink-guide, delta)
+  let start-control = _point-lerp(start, control-start, 1 / 2)
+  let control-control = _point-lerp(control-start, control-end, 1 / 2)
+  let control-end-mid = _point-lerp(control-end, end, 1 / 2)
+  let source-control-end = _point-lerp(start-control, control-control, 1 / 2)
+  let sink-control-start = _point-lerp(control-control, control-end-mid, 1 / 2)
+  (
+    source: curve-api.cubic(start, start-control, source-control-end, route),
+    sink: curve-api.cubic(route, sink-control-start, control-end-mid, end),
+    curve: curve-api.cubic(start, control-start, control-end, end),
+  )
+}
+
 #let _anchored-edge-geometry-halves(
   edge,
   node-boxes,
@@ -565,36 +626,75 @@
   let start = _node-anchor-point(source-box, source-anchor)
   let end = _node-anchor-point(sink-box, sink-anchor)
   let route-mode = _style-value(source-style, "route")
-  let route = if route-mode == "direct" {
-    ((_point-x(start) + _point-x(end)) / 2, (_point-y(start) + _point-y(end)) / 2)
-  } else {
-    _point(edge.pos)
-  }
+  let route = _point(edge.pos)
   let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
-  let source-path = if route-mode == "direct" and source-anchor != auto and source-anchor != none {
-    curve-api.quad(start, _anchor-control-point(source-anchor, start, amount), route)
-  } else {
-    curve-api.hobby-spline(
-      _anchor-points(start, source-anchor, route, amount),
-      omega: omega,
-      accuracy: accuracy,
-    )
-  }
-  let sink-path = if route-mode == "direct" and sink-anchor != auto and sink-anchor != none {
-    curve-api.quad(route, _anchor-control-point(sink-anchor, end, amount), end)
-  } else {
-    curve-api.hobby-spline(
-      _anchor-points(end, sink-anchor, route, amount, reverse: true),
-      omega: omega,
-      accuracy: accuracy,
-    )
-  }
   let source-start-outset = if source-anchor == auto { source-outset } else { 0 }
   let sink-end-outset = if sink-anchor == auto { sink-outset } else { 0 }
+  if route-mode in ("direct", "edge-pos") {
+    let split = _anchored-cubic-route-split(start, source-anchor, route, sink-anchor, end, amount)
+    let source-path = split.source
+    let sink-path = split.sink
+    let source-length = curve-api.length(source-path, accuracy: accuracy)
+    let sink-length = curve-api.length(sink-path, accuracy: accuracy)
+    let base-length = source-length + sink-length
+    let source-outsets = _visible-half-outsets(
+      base-length,
+      0,
+      source-length,
+      source-style,
+      source-start-outset,
+      sink-end-outset,
+    )
+    let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
+    let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
+      let sink-outsets = _visible-half-outsets(
+        base-length,
+        source-length,
+        sink-length,
+        source-style,
+        source-start-outset,
+        sink-end-outset,
+      )
+      _half-path-geometry(sink-path, source-style, sink-outsets, label-pos)
+    } else {
+      let sink-outsets = _visible-half-outsets(
+        base-length,
+        source-length,
+        sink-length,
+        sink-style,
+        source-start-outset,
+        sink-end-outset,
+      )
+      _half-path-geometry(sink-path, sink-style, sink-outsets, label-pos)
+    }
+    let whole-geometry = if _same-layer-geometry(source-style, sink-style) {
+      let center-outset = _center-outset(base-length, source-style, source-start-outset, sink-end-outset)
+      _geometry-path-segments(split.curve, source-style, source-start-outset, sink-end-outset, label-pos, center-outset)
+    } else {
+      none
+    }
+    return (
+      source: source-geometry,
+      sink: sink-geometry,
+      curve: split.curve,
+      whole: whole-geometry,
+    )
+  }
+  let source-path = curve-api.hobby-spline(
+    _anchor-points(start, source-anchor, route, amount),
+    omega: omega,
+    accuracy: accuracy,
+  )
+  let sink-path = curve-api.hobby-spline(
+    _anchor-points(end, sink-anchor, route, amount, reverse: true),
+    omega: omega,
+    accuracy: accuracy,
+  )
   (
     source: _geometry-path-segments(source-path, source-style, source-start-outset, 0, label-pos, 0),
     sink: _geometry-path-segments(sink-path, sink-style, 0, sink-end-outset, label-pos, 0),
     curve: curve-api.hobby-spline((start, route, end), omega: omega, accuracy: accuracy),
+    whole: none,
   )
 }
 
@@ -671,11 +771,10 @@
     sink-outset: 0,
     accuracy: accuracy,
   ))
-  let base-segments = curve-api.segments(base.curve)
-  let source-segment = base-segments.at(0)
-  let sink-segment = base-segments.at(1)
-  let source-length = _segment-length(source-segment, accuracy)
-  let sink-length = _segment-length(sink-segment, accuracy)
+  let source-path = base.source
+  let sink-path = base.sink
+  let source-length = curve-api.length(source-path, accuracy: accuracy)
+  let sink-length = curve-api.length(sink-path, accuracy: accuracy)
   let base-length = source-length + sink-length
   let source-outsets = _visible-half-outsets(
     base-length,
@@ -685,7 +784,7 @@
     source-outset,
     sink-outset,
   )
-  let source-geometry = _half-geometry(source-segment, source-style, source-outsets, label-pos)
+  let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
   let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
     let sink-outsets = _visible-half-outsets(
       base-length,
@@ -695,7 +794,7 @@
       source-outset,
       sink-outset,
     )
-    _half-geometry(sink-segment, source-style, sink-outsets, label-pos)
+    _half-path-geometry(sink-path, source-style, sink-outsets, label-pos)
   } else {
     let sink-outsets = _visible-half-outsets(
       base-length,
@@ -705,12 +804,19 @@
       source-outset,
       sink-outset,
     )
-    _half-geometry(sink-segment, sink-style, sink-outsets, label-pos)
+    _half-path-geometry(sink-path, sink-style, sink-outsets, label-pos)
+  }
+  let whole-geometry = if _same-layer-geometry(source-style, sink-style) {
+    let center-outset = _center-outset(base-length, source-style, source-outset, sink-outset)
+    _geometry-path-segments(base.curve, source-style, source-outset, sink-outset, label-pos, center-outset)
+  } else {
+    none
   }
   (
     source: source-geometry,
     sink: sink-geometry,
     curve: base.curve,
+    whole: whole-geometry,
   )
 }
 
@@ -827,6 +933,10 @@
 
 #let _pattern-edge-halves(halves, source-style, sink-style) = {
   let elements = ()
+  let whole = halves.at("whole", default: none)
+  if whole != none and _same-draw-path-style(source-style, sink-style) {
+    return _segments-elements(whole, source-style, auto, true, true).elements
+  }
   if _same-pattern-geometry(source-style, sink-style) {
     let source = _segments-elements(halves.source, source-style, auto, true, false)
     let wavelength = _style-value(source-style, "pattern-wavelength")

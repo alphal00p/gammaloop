@@ -298,25 +298,16 @@
         edge-label-style: tree-edge-label-style,
         unit: diagram-unit,
       )
-      let rest = subgraph.complement(g, tree)
-      let g = layouts.sequence(g, (
-        (
-          layout-algo: "tree",
-          subgraph: tree,
-          layout-roots: (0,),
-          tree-dx: 0.5,
-          tree-dy: 24.,
-          label-steps: 0,
-        ),
-        (
-          layout-algo: "dot",
-          subgraph: rest,
-          layout-nodes: "fixed",
-          tree-dx: 0.9,
-          tree-dy: 40.2,
-          label-steps: 0,
-        ),
-      ))
+      let g = layouts.layout(
+        g,
+        layout-algo: "dot",
+        subgraph: tree,
+        layout-roots: (0,),
+        tree-dx: 0.35,
+        tree-dy: 14.,
+        label-steps: 40,
+        label-length-scale: 0.35,
+      )
       let depths = subgraph.node-depths(g, tree)
       [#metadata(graph.nodes(g)) <linnest-tree-nodes>]
       [#metadata(graph.edges(g)) <linnest-tree-edges>]
