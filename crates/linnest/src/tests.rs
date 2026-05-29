@@ -2177,12 +2177,12 @@ fn test_dot_layout_exports_long_edge_route_points_on_half_edges() {
     let edge = &edges[0];
     let source_route = &edge.source.as_ref().unwrap().route_points;
     let sink_route = &edge.sink.as_ref().unwrap().route_points;
-    assert_eq!(source_route.len(), 1);
-    assert_eq!(sink_route.len(), 1);
+    assert!(!source_route.is_empty());
+    assert!(!sink_route.is_empty());
 
     let edge_pos = edge.pos.as_ref().unwrap();
-    assert!(source_route[0].y > edge_pos.y);
-    assert!(sink_route[0].y < edge_pos.y);
+    assert!(source_route.iter().all(|point| point.y > edge_pos.y));
+    assert!(sink_route.iter().all(|point| point.y < edge_pos.y));
 }
 
 #[test]

@@ -298,6 +298,7 @@
   (
     stroke: source-half-edge-stroke(edge, tree-hedges, depths),
     route: if is-tree { "direct" } else { "hobby-through" },
+    route-points: if is-tree { "ignore" } else { "through" },
     source-anchor: if is-tree {
       tree-endpoint-anchor(edge, "source", depths)
     } else {
@@ -312,6 +313,7 @@
   (
     stroke: sink-half-edge-stroke(edge, tree-hedges, depths),
     route: if is-tree { "direct" } else { "hobby-through" },
+    route-points: if is-tree { "ignore" } else { "through" },
     sink-anchor: if is-tree {
       tree-endpoint-anchor(edge, "sink", depths)
     } else {

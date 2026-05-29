@@ -551,7 +551,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             graph,
             config,
             geometry,
-            layers: vec![Vec::new(); max_rank + 1],
+            layers: vec![Vec::new(); Self::real_layer(max_rank) + 2],
             items: Vec::new(),
             node_items: vec![None; graph.n_nodes()],
             edge_paths: (0..graph.n_edges()).map(|_| Vec::new()).collect(),
@@ -565,7 +565,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             }
             let item = layout.push_item(Item {
                 kind: ItemKind::Real(node),
-                rank: ranks[node],
+                rank: Self::real_layer(ranks[node]),
                 width: geometry.node_widths[node],
                 height: geometry.node_heights[node],
                 order_key: order[node.0],
@@ -591,7 +591,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 let direction = rank_delta.signum();
                 let middle_step = steps / 2;
                 for step in 1..steps {
-                    let rank = (source_rank as isize + direction * step as isize) as usize;
+                    let rank = Self::crossed_rank_layer(source_rank, step, direction);
                     let is_middle = step == middle_step;
                     let label_width = geometry.edge_label_widths[edge.edge];
                     let label_height = geometry.edge_label_heights[edge.edge];
@@ -626,6 +626,18 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                     });
                     path.push(dummy);
                 }
+            } else if steps == 0 {
+                let label_width = geometry.edge_label_widths[edge.edge];
+                let label_height = geometry.edge_label_heights[edge.edge];
+                let dummy = layout.push_item(Item {
+                    kind: ItemKind::Dummy,
+                    rank: Self::same_rank_route_layer(source_rank),
+                    width: label_width.max(config.edge_gap),
+                    height: label_height,
+                    order_key: 0.5 * (order[edge.source.0] + order[edge.sink.0]),
+                    x: 0.0,
+                });
+                path.push(dummy);
             }
             path.push(sink_item);
             layout.edge_paths[edge.edge] = path;
@@ -648,6 +660,18 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         }
 
         layout
+    }
+
+    fn real_layer(rank: usize) -> usize {
+        2 * rank
+    }
+
+    fn crossed_rank_layer(source_rank: usize, step: usize, direction: isize) -> usize {
+        Self::real_layer((source_rank as isize + direction * step as isize) as usize)
+    }
+
+    fn same_rank_route_layer(rank: usize) -> usize {
+        Self::real_layer(rank) + 1
     }
 
     fn push_item(&mut self, item: Item) -> usize {
@@ -760,9 +784,9 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         }
 
         for position in 0..self.layers[rank].len() - 1 {
-            let before = self.crossing_score_around_rank(rank) + self.visible_edge_crossing_score();
+            let before = self.crossing_score_around_rank(rank);
             self.layers[rank].swap(position, position + 1);
-            let after = self.crossing_score_around_rank(rank) + self.visible_edge_crossing_score();
+            let after = self.crossing_score_around_rank(rank);
             if after + 1e-9 < before {
                 changed = true;
             } else {
@@ -774,21 +798,42 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
 
     fn crossing_score_around_rank(&self, rank: usize) -> f64 {
         let mut score = 0.0;
-        if rank > 0 {
-            score += self.crossing_score_between_ranks(rank - 1, rank);
+        if let Some(previous_rank) = self.previous_active_rank(rank) {
+            score += self.crossing_score_between_ranks(previous_rank, rank);
         }
-        if rank + 1 < self.layers.len() {
-            score += self.crossing_score_between_ranks(rank, rank + 1);
+        if let Some(next_rank) = self.next_active_rank(rank) {
+            score += self.crossing_score_between_ranks(rank, next_rank);
         }
         score
     }
 
     fn crossing_score(&self) -> f64 {
-        let mut score = self.visible_edge_crossing_score();
-        for rank in 1..self.layers.len() {
-            score += self.crossing_score_between_ranks(rank - 1, rank);
+        let mut score = 0.0;
+        for ranks in self.active_ranks().windows(2) {
+            score += self.crossing_score_between_ranks(ranks[0], ranks[1]);
         }
         score
+    }
+
+    fn active_ranks(&self) -> Vec<usize> {
+        self.layers
+            .iter()
+            .enumerate()
+            .filter_map(|(rank, layer)| (!layer.is_empty()).then_some(rank))
+            .collect()
+    }
+
+    fn previous_active_rank(&self, rank: usize) -> Option<usize> {
+        self.layers[..rank]
+            .iter()
+            .rposition(|layer| !layer.is_empty())
+    }
+
+    fn next_active_rank(&self, rank: usize) -> Option<usize> {
+        self.layers[rank + 1..]
+            .iter()
+            .position(|layer| !layer.is_empty())
+            .map(|offset| rank + 1 + offset)
     }
 
     fn crossing_score_between_ranks(&self, upper_rank: usize, lower_rank: usize) -> f64 {
@@ -799,85 +844,20 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             for (segment_index, segment) in path.windows(2).enumerate() {
                 let source = segment[0];
                 let sink = segment[1];
-                let source_rank = self.items[source].rank;
-                let sink_rank = self.items[sink].rank;
-                let between_ranks = (source_rank == upper_rank && sink_rank == lower_rank)
-                    || (source_rank == lower_rank && sink_rank == upper_rank);
-                if !between_ranks {
+                let source_rank =
+                    self.segment_endpoint_rank(edge, source, segment_index, last_segment, true);
+                let sink_rank =
+                    self.segment_endpoint_rank(edge, sink, segment_index, last_segment, false);
+                if !segment_spans_layer_gap(source_rank, sink_rank, upper_rank, lower_rank) {
                     continue;
                 }
                 segments.push(VisibleSegment {
                     edge,
                     source,
                     sink,
-                    source_rank: self.segment_endpoint_rank(
-                        edge,
-                        source,
-                        segment_index,
-                        last_segment,
-                        true,
-                    ),
+                    source_rank,
                     source_order: positions[source] as f64,
-                    sink_rank: self.segment_endpoint_rank(
-                        edge,
-                        sink,
-                        segment_index,
-                        last_segment,
-                        false,
-                    ),
-                    sink_order: positions[sink] as f64,
-                    weight: self.edge_weights[edge].max(0.05),
-                });
-            }
-        }
-
-        let mut score = 0.0;
-        for (left_index, left) in segments.iter().enumerate() {
-            for right in &segments[left_index + 1..] {
-                if segments_share_endpoint(left, right) {
-                    continue;
-                }
-                if segments_cross(left, right) {
-                    score += left.weight * right.weight;
-                }
-            }
-        }
-        score
-    }
-
-    fn visible_edge_crossing_score(&self) -> f64 {
-        let positions = self.item_positions();
-        let mut segments = Vec::<VisibleSegment>::new();
-        for (edge, path) in self.edge_paths.iter() {
-            if path.len() < 2 {
-                continue;
-            }
-            let last_segment = path.len().saturating_sub(2);
-            for (segment_index, segment) in path.windows(2).enumerate() {
-                let source = segment[0];
-                let sink = segment[1];
-                if self.items[source].rank == self.items[sink].rank {
-                    continue;
-                }
-                segments.push(VisibleSegment {
-                    edge,
-                    source,
-                    sink,
-                    source_rank: self.segment_endpoint_rank(
-                        edge,
-                        source,
-                        segment_index,
-                        last_segment,
-                        true,
-                    ),
-                    source_order: positions[source] as f64,
-                    sink_rank: self.segment_endpoint_rank(
-                        edge,
-                        sink,
-                        segment_index,
-                        last_segment,
-                        false,
-                    ),
+                    sink_rank,
                     sink_order: positions[sink] as f64,
                     weight: self.edge_weights[edge].max(0.05),
                 });
@@ -1005,7 +985,6 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             return;
         }
         self.resolve_layer_overlaps(rank);
-        self.center_layer(rank);
     }
 
     fn expand_leaf_slots(&mut self) {
@@ -1281,7 +1260,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         for rank in 1..self.layers.len() {
             y[rank] = y[rank - 1]
                 - (0.5 * rank_heights[rank - 1]
-                    + self.config.layer_gap
+                    + 0.5 * self.config.layer_gap
                     + rank_track_heights[rank - 1]
                     + 0.5 * rank_heights[rank]);
         }
@@ -1302,7 +1281,10 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 continue;
             };
             let node = NodeIndex(node_index);
-            node_positions[node] = Some(Point2::new(self.items[*item].x, rank_y[ranks[node]]));
+            node_positions[node] = Some(Point2::new(
+                self.items[*item].x,
+                rank_y[self.items[*item].rank],
+            ));
             rank_output[node] = Some(ranks[node]);
         }
 
@@ -1320,13 +1302,13 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             let sink = *path.last().unwrap();
             let source_rank = self.items[source].rank;
             let sink_rank = self.items[sink].rank;
-            let point = if source_rank == sink_rank {
+            let point = if path.len() > 2 {
+                let middle = path[path.len() / 2];
+                Point2::new(self.items[middle].x, rank_y[self.items[middle].rank])
+            } else if source_rank == sink_rank {
                 let y =
                     rank_y[source_rank] + lane_offsets[edge.edge].unwrap_or(self.config.edge_gap);
                 Point2::new(0.5 * (self.items[source].x + self.items[sink].x), y)
-            } else if path.len() > 2 {
-                let middle = path[path.len() / 2];
-                Point2::new(self.items[middle].x, rank_y[self.items[middle].rank])
             } else {
                 Point2::new(
                     0.5 * (self.items[source].x + self.items[sink].x),
@@ -1424,6 +1406,17 @@ fn segments_cross(left: &VisibleSegment, right: &VisibleSegment) -> bool {
     let right_side_start = orient(right_start, right_end, left_start);
     let right_side_end = orient(right_start, right_end, left_end);
     left_side_start * left_side_end < 0.0 && right_side_start * right_side_end < 0.0
+}
+
+fn segment_spans_layer_gap(
+    source_rank: f64,
+    sink_rank: f64,
+    upper_rank: usize,
+    lower_rank: usize,
+) -> bool {
+    let min_rank = source_rank.min(sink_rank);
+    let max_rank = source_rank.max(sink_rank);
+    min_rank < lower_rank as f64 && max_rank > upper_rank as f64
 }
 
 fn orient(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> f64 {
