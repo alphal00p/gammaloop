@@ -610,6 +610,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         }
 
         if self.config.profile == LayeredProfile::Dot {
+            let mut best_score = self.crossing_score();
+            let mut best_layers = self.layers.clone();
             for _ in 0..self.config.sweeps {
                 for rank in 1..self.layers.len() {
                     self.sort_layer_by_barycenter(rank, Direction::Up);
@@ -618,7 +620,13 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                     self.sort_layer_by_barycenter(rank, Direction::Down);
                 }
                 self.transpose_to_reduce_crossings();
+                let score = self.crossing_score();
+                if score + 1e-9 < best_score {
+                    best_score = score;
+                    best_layers.clone_from(&self.layers);
+                }
             }
+            self.layers = best_layers;
         }
     }
 
@@ -711,6 +719,14 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         }
         if rank + 1 < self.layers.len() {
             score += self.crossing_score_between_ranks(rank, rank + 1);
+        }
+        score
+    }
+
+    fn crossing_score(&self) -> f64 {
+        let mut score = self.visible_edge_crossing_score();
+        for rank in 1..self.layers.len() {
+            score += self.crossing_score_between_ranks(rank - 1, rank);
         }
         score
     }
