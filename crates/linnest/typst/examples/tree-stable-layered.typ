@@ -14,13 +14,10 @@
 #let tree-edge-stroke = rgb("#555555")
 #let non-tree-source-edge-stroke = rgb("#7f95b8")
 #let non-tree-sink-edge-stroke = rgb("#d8dce3")
-#let non-tree-anchor-control-distance = 0.01
-#let edge-label-fill = white.transparentize(50%)
-#let edge-label-radius = 0.08em
-#let edge-label-inset = (x: 0.18em, y: 0.06em)
+#let non-tree-anchor-control-distance = 0.06
 #let tree-edge-label-style = (
   padding: 0.8,
-  frame: none,
+  frame: "rect",
   fill: none,
   stroke: none,
 )
@@ -152,13 +149,7 @@
   if value == none or value == "" {
     none
   } else {
-    box(
-      inset: edge-label-inset,
-      radius: edge-label-radius,
-      fill: edge-label-fill,
-      stroke: none,
-      text(size: 0.72em, fill: rgb("#737985"))[#value],
-    )
+    text(size: 0.72em, fill: rgb("#737985"))[#value]
   }
 }
 
@@ -191,7 +182,7 @@
     cetz.draw.polygon(
       center,
       4,
-      angle: 0deg,
+      angle: 45deg,
       radius: calc.max(box.width, box.height) / 2,
       name: box.name,
       fill: white,
@@ -312,7 +303,7 @@
   }
 }
 
-#let draw_tree_dot(doc) = {
+#let draw_tree_stable_layered(doc) = {
   show raw: it => if it.at("lang") == "dot" {
     for g in graph.parse(it.text) {
       let tree = subgraph.label(g, tree-label(g))
@@ -327,7 +318,7 @@
       )
       let g = layouts.layout(
         g,
-        layout-algo: "dot",
+        layout-algo: "stable-layered",
         subgraph: tree,
         layout-roots: (0,),
         tree-dx: 0.35,
@@ -352,7 +343,7 @@
   doc
 }
 
-#show: draw_tree_dot
+#show: draw_tree_stable_layered
 
 ```dot
 digraph {

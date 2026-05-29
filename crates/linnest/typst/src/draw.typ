@@ -309,8 +309,11 @@
   /// of raw path direction; reversed edges move the mark to the sink half and
   /// flip it, while undirected edges suppress it.
   /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
-  /// to route this endpoint from a measured node-box anchor. Anchored paired
-  /// edges use a single cubic curve split through the edge layout point.
+  /// to route this endpoint from a measured node-box anchor. By default,
+  /// anchored paired edges use a single cubic curve split through the edge
+  /// layout point. Set `route: "hobby-through"` to instead build a single
+  /// Hobby spline through the source anchor, source guide, edge point, sink
+  /// guide, and sink anchor, then split source/sink styling at the edge point.
   /// `route: "direct"` keeps the same cubic routing but suppresses the default
   /// edge-position Hobby route.
   /// -> dictionary | array | function | none
@@ -337,8 +340,7 @@
   edge-omega: 1.0,
   /// Optional style key for anchored source/sink routes. Set
   /// `anchor-control-distance` in `source-style` or `sink-style` to override
-  /// the automatic cubic control distance used to steer curves away from node
-  /// anchors.
+  /// the automatic guide distance used by cubic anchored routes.
   /// -> auto | int | float
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
   edge-trim-accuracy: 0.001,
