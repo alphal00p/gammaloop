@@ -14,6 +14,13 @@
 #let _point-sub(a, b) = (_point-x(a) - _point-x(b), _point-y(a) - _point-y(b))
 #let _point-scale(p, factor) = (_point-x(p) * factor, _point-y(p) * factor)
 #let _point-lerp(a, b, t) = _point-add(a, _point-scale(_point-sub(b, a), t))
+#let _route-points(endpoint) = {
+  if endpoint == none {
+    ()
+  } else {
+    endpoint.at("route-points", default: ()).map(_point)
+  }
+}
 
 #let _statement-number(record, key, default: none) = {
   let value = record.statements.at(key, default: none)
@@ -685,8 +692,33 @@
   let end = _node-anchor-point(sink-box, sink-anchor)
   let route-mode = _style-value(source-style, "route")
   let route = _point(edge.pos)
+  let source-route = _route-points(edge.source)
+  let sink-route = _route-points(edge.sink)
   let source-start-outset = if source-anchor == auto { source-outset } else { 0 }
   let sink-end-outset = if sink-anchor == auto { sink-outset } else { 0 }
+  if source-route.len() > 0 or sink-route.len() > 0 {
+    let source-points = (start, ..source-route, route)
+    let sink-points = (..sink-route.rev(), end)
+    let split = curve-api.split-through(
+      (..source-points, ..sink-points),
+      omega: omega,
+      accuracy: accuracy,
+    )
+    let source-span-count = source-points.len() - 1
+    let source-path = curve-api.path(..split.parts.slice(0, source-span-count))
+    let sink-path = curve-api.path(..split.parts.slice(source-span-count))
+    return _split-edge-geometry(
+      source-path,
+      sink-path,
+      split.curve,
+      source-style,
+      sink-style,
+      source-start-outset,
+      sink-end-outset,
+      label-pos,
+      accuracy,
+    )
+  }
   if route-mode in ("direct", "edge-pos") {
     let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
     let split = _anchored-cubic-route-split(start, source-anchor, route, sink-anchor, end, amount)
