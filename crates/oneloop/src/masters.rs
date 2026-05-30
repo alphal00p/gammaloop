@@ -1,9 +1,10 @@
 //! One-loop scalar master integrals and their analytic closed forms.
 
 use symbolica::atom::Atom;
-use symbolica::parse;
+use symbolica::function;
 
 use crate::error::OneLoopError;
+use crate::symbols::S;
 
 /// A one-loop scalar master integral, keyed by its propagator masses².
 #[derive(Debug, Clone)]
@@ -56,7 +57,11 @@ impl MasterBasis for OneLoopMasters {
             MasterIntegral::Bubble { m1_sq, m2_sq }
                 if *m1_sq == Atom::Zero && *m2_sq == Atom::Zero =>
             {
-                Ok(parse!("1/ep - log(-psq/musq) + 2"))
+                let ep = Atom::var(S.ep);
+                let psq = Atom::var(S.psq);
+                let musq = Atom::var(S.musq);
+                let log_term = function!(S.log, -&psq / &musq);
+                Ok(Atom::num(1) / &ep - log_term + Atom::num(2))
             }
 
             other => Err(OneLoopError::MasterNotInLibrary {
@@ -70,7 +75,7 @@ impl MasterBasis for OneLoopMasters {
 mod tests {
     use super::{MasterBasis, MasterIntegral, OneLoopMasters};
     use crate::error::OneLoopError;
-    use symbolica::{atom::Atom, parse};
+    use symbolica::atom::Atom;
 
     #[test]
     fn massless_bubble_is_a_master() {
@@ -104,9 +109,9 @@ mod tests {
         crate::ensure_symbolica_license();
         let basis = OneLoopMasters;
         let m = MasterIntegral::Triangle {
-            m1_sq: parse!("msq"),
-            m2_sq: parse!("msq"),
-            m3_sq: parse!("msq"),
+            m1_sq: Atom::num(1),
+            m2_sq: Atom::num(1),
+            m3_sq: Atom::num(1),
         };
         let err = basis.closed_form(&m).unwrap_err();
         assert!(matches!(err, OneLoopError::MasterNotInLibrary { .. }));

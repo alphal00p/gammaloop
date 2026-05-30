@@ -3,6 +3,7 @@
 pub mod error;
 pub mod family;
 pub mod masters;
+pub mod symbols;
 
 pub use error::OneLoopError;
 pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
