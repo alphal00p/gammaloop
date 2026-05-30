@@ -1,5 +1,6 @@
 //! `oneloop`: one-loop IBP reduction
 
+pub mod amplitude;
 pub mod error;
 pub mod family;
 pub mod masters;
@@ -7,6 +8,7 @@ pub mod reduce;
 pub mod solver;
 pub mod symbols;
 
+pub use amplitude::amplitude;
 pub use error::OneLoopError;
 pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
 pub use masters::{MasterBasis, MasterIntegral, OneLoopMasters};
