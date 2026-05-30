@@ -1,18 +1,15 @@
-//! One-loop scalar master integrals and their analytic closed forms.
-
 use symbolica::atom::Atom;
 use symbolica::function;
 
-use crate::error::OneLoopError;
 use crate::symbols::S;
 
-/// A one-loop scalar master integral, keyed by its propagator masses².
 #[derive(Debug, Clone)]
 pub enum MasterIntegral {
     Tadpole {
         m_sq: Atom,
     },
     Bubble {
+        p_sq: Atom,
         m1_sq: Atom,
         m2_sq: Atom,
     },
@@ -30,14 +27,10 @@ pub enum MasterIntegral {
 }
 
 pub trait MasterBasis {
-    /// Is `integral` an irreducible master in this basis
     fn is_master(&self, integral: &MasterIntegral) -> bool;
-
-    /// The ε-dependent analytic closed form as a Symbolica `Atom`
-    fn closed_form(&self, integral: &MasterIntegral) -> Result<Atom, OneLoopError>;
+    fn symbol(&self, integral: &MasterIntegral) -> Atom;
 }
 
-/// The one-loop master basis: tadpole, bubble, triangle, box.
 pub struct OneLoopMasters;
 
 impl MasterBasis for OneLoopMasters {
@@ -51,22 +44,10 @@ impl MasterBasis for OneLoopMasters {
         )
     }
 
-    fn closed_form(&self, integral: &MasterIntegral) -> Result<Atom, OneLoopError> {
+    fn symbol(&self, integral: &MasterIntegral) -> Atom {
         match integral {
-            // Massless bubble  B₀(p²; 0, 0) = 1/ε − ln(−p²/μ²) + 2
-            MasterIntegral::Bubble { m1_sq, m2_sq }
-                if *m1_sq == Atom::Zero && *m2_sq == Atom::Zero =>
-            {
-                let ep = Atom::var(S.ep);
-                let psq = Atom::var(S.psq);
-                let musq = Atom::var(S.musq);
-                let log_term = function!(S.log, -&psq / &musq);
-                Ok(Atom::num(1) / &ep - log_term + Atom::num(2))
-            }
-
-            other => Err(OneLoopError::MasterNotInLibrary {
-                which: format!("{other:?}"),
-            }),
+            MasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => function!(S.b0, p_sq, m1_sq, m2_sq),
+            _ => todo!("A0/C0/D0 symbolic forms land with their masters (M4)"),
         }
     }
 }
@@ -74,46 +55,29 @@ impl MasterBasis for OneLoopMasters {
 #[cfg(test)]
 mod tests {
     use super::{MasterBasis, MasterIntegral, OneLoopMasters};
-    use crate::error::OneLoopError;
+    use crate::symbols::S;
     use symbolica::atom::Atom;
+    use symbolica::function;
+
+    fn massless_bubble() -> MasterIntegral {
+        MasterIntegral::Bubble {
+            p_sq: Atom::var(S.psq),
+            m1_sq: Atom::Zero,
+            m2_sq: Atom::Zero,
+        }
+    }
 
     #[test]
     fn massless_bubble_is_a_master() {
         crate::ensure_symbolica_license();
-        let basis = OneLoopMasters;
-        let m = MasterIntegral::Bubble {
-            m1_sq: Atom::Zero,
-            m2_sq: Atom::Zero,
-        };
-        assert!(basis.is_master(&m));
+        assert!(OneLoopMasters.is_master(&massless_bubble()));
     }
 
     #[test]
-    fn massless_bubble_closed_form_has_pole_and_log() {
+    fn bubble_maps_to_symbolic_b0() {
         crate::ensure_symbolica_license();
-        let basis = OneLoopMasters;
-        let m = MasterIntegral::Bubble {
-            m1_sq: Atom::Zero,
-            m2_sq: Atom::Zero,
-        };
-        let cf = basis
-            .closed_form(&m)
-            .expect("massless bubble is in the library");
-        let s = cf.to_string();
-        assert!(s.contains("ep"), "must carry the 1/ε UV pole, got: {s}");
-        assert!(s.contains("log"), "must carry the log, got: {s}");
-    }
-
-    #[test]
-    fn missing_master_reports_which() {
-        crate::ensure_symbolica_license();
-        let basis = OneLoopMasters;
-        let m = MasterIntegral::Triangle {
-            m1_sq: Atom::num(1),
-            m2_sq: Atom::num(1),
-            m3_sq: Atom::num(1),
-        };
-        let err = basis.closed_form(&m).unwrap_err();
-        assert!(matches!(err, OneLoopError::MasterNotInLibrary { .. }));
+        let got = OneLoopMasters.symbol(&massless_bubble());
+        let want = function!(S.b0, Atom::var(S.psq), Atom::Zero, Atom::Zero);
+        assert_eq!(got, want);
     }
 }

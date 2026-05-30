@@ -17,10 +17,6 @@ pub enum OneLoopError {
     #[error("IBP reduction did not close onto masters: {0}")]
     SolverFailed(String),
 
-    /// A required master configuration has no analytic closed form yet
-    #[error("no analytic closed form registered for master: {which}")]
-    MasterNotInLibrary { which: String },
-
     /// Wraps an underlying Symbolica error.
     #[error("symbolica error: {0}")]
     Symbolica(String),
@@ -36,13 +32,5 @@ mod tests {
         let msg = e.to_string();
         assert!(msg.contains("2"));
         assert!(msg.to_lowercase().contains("loop"));
-    }
-
-    #[test]
-    fn master_not_in_library_names_the_config() {
-        let e = OneLoopError::MasterNotInLibrary {
-            which: "C0(massive triangle)".to_string(),
-        };
-        assert!(e.to_string().contains("C0(massive triangle)"));
     }
 }
