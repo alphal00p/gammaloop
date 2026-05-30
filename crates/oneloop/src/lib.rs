@@ -3,12 +3,14 @@
 pub mod error;
 pub mod family;
 pub mod masters;
+pub mod reduce;
 pub mod solver;
 pub mod symbols;
 
 pub use error::OneLoopError;
 pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
 pub use masters::{MasterBasis, MasterIntegral, OneLoopMasters};
+pub use reduce::{Reduction, reduce};
 pub use solver::RationalSolver;
 
 pub fn version() -> &'static str {
