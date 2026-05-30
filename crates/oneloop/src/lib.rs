@@ -1,9 +1,11 @@
 //! `oneloop`: one-loop IBP reduction
 
 pub mod error;
+pub mod family;
 pub mod masters;
 
 pub use error::OneLoopError;
+pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
 pub use masters::{MasterBasis, MasterIntegral, OneLoopMasters};
 
 pub fn version() -> &'static str {
