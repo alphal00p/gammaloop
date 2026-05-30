@@ -3,21 +3,18 @@
 pub mod error;
 pub mod family;
 pub mod masters;
+pub mod solver;
 pub mod symbols;
 
 pub use error::OneLoopError;
 pub use family::{Integral, IntegralFamily, Isp, Kinematics, Propagator};
 pub use masters::{MasterBasis, MasterIntegral, OneLoopMasters};
+pub use solver::RationalSolver;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
-/// Initialise gammaloop once per test process. This activates the workspace's
-/// Symbolica license (from within `gammalooprs`, where the OEM key validates),
-/// so multiple Symbolica-using tests can share a single process. Test-only —
-/// the library itself never initialises a license; that is the consuming
-/// binary's responsibility.
 #[cfg(test)]
 pub(crate) fn ensure_symbolica_license() {
     use std::sync::Once;
