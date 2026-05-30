@@ -5,7 +5,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum OneLoopError {
-    /// The input graph is not one loop. 
+    /// The input graph is not one loop.
     #[error("unsupported loop order: graph has {found} loops, only one-loop is supported")]
     UnsupportedLoopOrder { found: usize },
 
