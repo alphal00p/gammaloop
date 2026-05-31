@@ -3,6 +3,7 @@ use symbolica::{atom::Symbol, symbol};
 
 pub struct OneLoopSymbols {
     pub ep: Symbol,
+    pub d: Symbol,
     pub psq: Symbol,
     pub a0: Symbol,
     pub b0: Symbol,
@@ -12,6 +13,7 @@ pub struct OneLoopSymbols {
 
 pub static S: LazyLock<OneLoopSymbols> = LazyLock::new(|| OneLoopSymbols {
     ep: symbol!("oneloop::ep"),
+    d: symbol!("oneloop::d"),
     psq: symbol!("oneloop::psq"),
     a0: symbol!("oneloop::A0"),
     b0: symbol!("oneloop::B0"),

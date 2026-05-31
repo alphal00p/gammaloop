@@ -2,6 +2,7 @@ use symbolica::atom::Atom;
 
 use crate::family::IntegralFamily;
 use crate::masters::MasterIntegral;
+use crate::symbols::S;
 
 pub struct Reduction {
     pub terms: Vec<(Atom, MasterIntegral)>,
@@ -18,39 +19,59 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
     };
     let mass = |i: usize| family.propagators[i].mass_sq.clone();
 
-    let master = match family.propagators.len() {
-        1 => MasterIntegral::Tadpole { m_sq: mass(0) },
-        2 => MasterIntegral::Bubble {
-            p_sq: inv(0),
-            m1_sq: mass(0),
-            m2_sq: mass(1),
-        },
-        3 => MasterIntegral::Triangle {
-            p1_sq: inv(0),
-            p2_sq: inv(1),
-            p12_sq: inv(2),
-            m1_sq: mass(0),
-            m2_sq: mass(1),
-            m3_sq: mass(2),
-        },
-        4 => MasterIntegral::Box {
-            p1_sq: inv(0),
-            p2_sq: inv(1),
-            p3_sq: inv(2),
-            p4_sq: inv(3),
-            s: inv(4),
-            t: inv(5),
-            m1_sq: mass(0),
-            m2_sq: mass(1),
-            m3_sq: mass(2),
-            m4_sq: mass(3),
-        },
+    let term = match family.propagators.len() {
+        1 => {
+            let m_sq = mass(0);
+            let coeff = tadpole_coefficient(family.targets[0].propagator_exponents[0], &m_sq);
+            (coeff, MasterIntegral::Tadpole { m_sq })
+        }
+        2 => (
+            Atom::num(1),
+            MasterIntegral::Bubble {
+                p_sq: inv(0),
+                m1_sq: mass(0),
+                m2_sq: mass(1),
+            },
+        ),
+        3 => (
+            Atom::num(1),
+            MasterIntegral::Triangle {
+                p1_sq: inv(0),
+                p2_sq: inv(1),
+                p12_sq: inv(2),
+                m1_sq: mass(0),
+                m2_sq: mass(1),
+                m3_sq: mass(2),
+            },
+        ),
+        4 => (
+            Atom::num(1),
+            MasterIntegral::Box {
+                p1_sq: inv(0),
+                p2_sq: inv(1),
+                p3_sq: inv(2),
+                p4_sq: inv(3),
+                s: inv(4),
+                t: inv(5),
+                m1_sq: mass(0),
+                m2_sq: mass(1),
+                m3_sq: mass(2),
+                m4_sq: mass(3),
+            },
+        ),
         n => todo!("scalar reduction for {n}-propagator families"),
     };
 
-    Reduction {
-        terms: vec![(Atom::num(1), master)],
+    Reduction { terms: vec![term] }
+}
+
+fn tadpole_coefficient(exponent: i32, m_sq: &Atom) -> Atom {
+    let d = Atom::var(S.d);
+    let mut coeff = Atom::num(1);
+    for k in 1..i64::from(exponent) {
+        coeff = coeff * (&d - Atom::num(2 * k)) / (Atom::num(2 * k) * m_sq);
     }
+    coeff
 }
 
 #[cfg(test)]
@@ -60,9 +81,9 @@ mod tests {
     use crate::masters::MasterIntegral;
     use crate::symbols::S;
     use symbolica::atom::Atom;
+    use symbolica::symbol;
 
-    fn scalar_family(masses: Vec<Atom>, invariants: Vec<Atom>) -> IntegralFamily {
-        let n = masses.len();
+    fn family(masses: Vec<Atom>, invariants: Vec<Atom>, exponents: Vec<i32>) -> IntegralFamily {
         IntegralFamily {
             propagators: masses
                 .into_iter()
@@ -77,10 +98,15 @@ mod tests {
                 masses_sq: vec![],
             },
             targets: vec![Integral {
-                propagator_exponents: vec![1; n],
+                propagator_exponents: exponents,
                 isp_exponents: vec![],
             }],
         }
+    }
+
+    fn scalar_family(masses: Vec<Atom>, invariants: Vec<Atom>) -> IntegralFamily {
+        let n = masses.len();
+        family(masses, invariants, vec![1; n])
     }
 
     #[test]
@@ -92,6 +118,22 @@ mod tests {
         assert_eq!(*coeff, Atom::num(1));
         match master {
             MasterIntegral::Tadpole { m_sq } => assert_eq!(*m_sq, Atom::num(1)),
+            other => panic!("expected a tadpole master, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dotted_tadpole_reduces_with_recursion_coefficient() {
+        crate::ensure_symbolica_license();
+        let msq = Atom::var(symbol!("oneloop::msq"));
+        let r = reduce(&family(vec![msq.clone()], vec![], vec![2]));
+        assert_eq!(r.terms.len(), 1);
+        let (coeff, master) = &r.terms[0];
+        let d = Atom::var(S.d);
+        let want = (&d - Atom::num(2)) / (Atom::num(2) * &msq);
+        assert_eq!(*coeff, want);
+        match master {
+            MasterIntegral::Tadpole { m_sq } => assert_eq!(*m_sq, msq),
             other => panic!("expected a tadpole master, got {other:?}"),
         }
     }
