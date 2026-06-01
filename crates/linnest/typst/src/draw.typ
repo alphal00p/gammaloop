@@ -250,7 +250,10 @@
   /// Optional title displayed above the diagram. Use `auto` for the graph name.
   /// -> none | auto | content | string
   title: none,
-  /// Optional subgraph whose half-edges are shaded. -> none | bytes
+  /// Optional subgraph or array of subgraphs whose half-edges are shaded.
+  /// Array entries may be raw subgraphs or records like
+  /// `(subgraph: sg, edge-style: (stroke: red + 2pt))`.
+  /// -> none | bytes | array
   subgraph: none,
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
@@ -356,7 +359,9 @@
   debug-edge-stroke: rgb("#d72638") + 0.35pt,
   /// Label fill for edge-position markers shown at `debug >= 2`. -> any
   debug-edge-label-fill: rgb("#7a1020"),
-  /// CeTZ style used to shade half-edges included in `subgraph`. -> dictionary
+  /// Default CeTZ style used to shade half-edges included in `subgraph`.
+  /// Individual subgraph records may override this with `edge-style`.
+  /// -> dictionary
   subgraph-edge-style: (stroke: rgb("#ffd166") + 4.5pt),
   /// Draw subgraph shading below the normal half-edge style. -> bool
   subgraph-edge-underlay: true,

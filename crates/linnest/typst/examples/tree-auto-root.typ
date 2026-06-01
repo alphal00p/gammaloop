@@ -1,9 +1,12 @@
 #import "../src/lib.typ": draw, graph, layouts, subgraph
+#import "@preview/cetz:0.5.1" as cetz
 
 #set page(width: auto, height: auto)
 #set text(size: 7pt)
 
 #let diagram-unit = 2.0
+#let auto-root-node-label-style = (padding: 0.62)
+#let auto-root-node-corner-radius = 0.08
 
 
 #let display-statement(value, fallback: "") = {
@@ -26,8 +29,6 @@ digraph basketball {
 }
 ```
 
-#let basketball-node-label(node) = node.at("name", default: none)
-
 #let basketball-node-style(node) = (
   radius: 0.14,
   fill: white,
@@ -40,7 +41,6 @@ digraph basketball {
 )
 
 #let basketball = graph.parse(basketball-src.text).first()
-#let g = basketball
 #let basketball = layouts.layout(
   basketball,
   layout-algo: "force",
@@ -55,17 +55,29 @@ digraph basketball {
   gamma-dangling: .1,
   gamma-ee: 0.25,
   gamma-ev: 0.1,
-  g-center: 0,
+  g-center: 0.01,
   label-steps: 0,
 )
+#let g = basketball
 
-#let basketball-subgraph(g, label) = {
-  let selected = subgraph.label(g, display-statement(label))
-  scale(42%, draw(
+
+#let S(g, value, ..rest) = subgraph.label(g, display-statement(value))
+#let basketball-highlight-subgraphs(approx, given) = {
+  let highlights = ()
+  if approx != none and approx != 0 {
+    highlights.push((subgraph: approx, edge-style: (stroke: rgb("#3b82f6").transparentize(50%) + 1.45pt)))
+  }
+  if given != none and given != 0 {
+    highlights.push((subgraph: given, edge-style: (stroke: rgb("#e4504f").transparentize(0%) + 1.65pt)))
+  }
+  highlights
+}
+#let T(approx, given, expr) = {
+  let mini = box(inset: -2mm, scale(42%, draw(
     g,
     unit: 1.0,
-    subgraph: selected,
-    node-label: basketball-node-label,
+    subgraph: basketball-highlight-subgraphs(approx, given),
+    node-label: none,
     node-style: basketball-node-style,
     source-style: basketball-edge-style,
     sink-style: basketball-edge-style,
@@ -74,26 +86,20 @@ digraph basketball {
     node-label-padding: 0.04,
     padding: 0.12,
     subgraph-edge-style: (stroke: rgb("#e4504f") + 1.45pt),
-  ))
+  )))
+  $op("T")_(#mini)(#expr)$
 }
 
-#let S(g, value, ..rest) = basketball-subgraph(g, value)
 #let label-scope = (
   g: g,
   S: S,
+  T: T,
+  expr: "expr",
 )
-
-#let label-expression(value) = {
-  if value.starts-with("op(") {
-    value
-  } else {
-    "\"" + value + "\""
-  }
-}
 
 #let auto-root-node-label(node) = {
   let label = display-statement(node.at("label", default: str(node.at("vid", default: ""))), fallback: "")
-  text(size: 0.82em)[#eval(label-expression(label), mode: "math", scope: label-scope)]
+  text(size: 0.82em)[#eval(label, mode: "code", scope: label-scope)]
 }
 
 #let auto-root-node-style(node) = {
@@ -110,9 +116,33 @@ digraph basketball {
   )
 }
 
-#let auto-root-edge-style(edge) = (
+#let draw-auto-root-node(node, box) = {
+  let center = box.center
+  let half-width = box.width / 2
+  let half-height = box.height / 2
+  cetz.draw.rect(
+    (center.at(0) - half-width, center.at(1) - half-height),
+    (center.at(0) + half-width, center.at(1) + half-height),
+    radius: auto-root-node-corner-radius,
+    name: box.name,
+    fill: box.style.fill,
+    stroke: box.style.stroke,
+  )
+  if box.label != none {
+    cetz.draw.content(center, box.label, padding: 0, ..box.label-style)
+  }
+}
+
+#let auto-root-source-edge-style(edge) = (
   stroke: rgb("#7890b4") + 0.45pt,
-  route: "edge-pos",
+  route: "direct",
+  source-anchor: "south",
+)
+
+#let auto-root-sink-edge-style(edge) = (
+  stroke: rgb("#7890b4") + 0.45pt,
+  route: "direct",
+  sink-anchor: "north",
 )
 
 #let draw_auto_root_dot(doc) = {
@@ -125,7 +155,7 @@ digraph basketball {
         g,
         node-label: auto-root-node-label,
         node-style: auto-root-node-style,
-        node-label-style: (padding: 0.45),
+        node-label-style: auto-root-node-label-style,
         unit: diagram-unit,
       )
       let g = layouts.layout(
@@ -140,11 +170,12 @@ digraph basketball {
       draw(
         g,
         unit: diagram-unit,
+        draw-node: draw-auto-root-node,
         node-label: auto-root-node-label,
         node-style: auto-root-node-style,
-        node-label-style: (padding: 0.45),
-        source-style: auto-root-edge-style,
-        sink-style: auto-root-edge-style,
+        node-label-style: auto-root-node-label-style,
+        source-style: auto-root-source-edge-style,
+        sink-style: auto-root-sink-edge-style,
         edge-label: none,
         edge-omega: 0.35,
         node-min-radius: 0.2,
@@ -165,51 +196,51 @@ digraph {
   layout = "neato";
   start=2;
   0   [label="\"expr\"" foata="" cover="0"];
-  1   [label="op(\"T\")(#S(g,\"3I\",0),0,\"expr\")" foata="3I" cover="3I"];
-  2   [label="op(\"T\")(#S(g,\"3s\",1),0,\"expr\")" foata="3s" cover="3s"];
-  3   [label="op(\"T\")(#S(g,\"Ca\",2),0,\"expr\")" foata="Ca" cover="Ca"];
-  4   [label="op(\"T\")(#S(g,\"Fg\",3),0,\"expr\")" foata="Fg" cover="Fg"];
-  5   [label="op(\"T\")(#S(g,\"44\",4),0,\"expr\")" foata="44" cover="44"];
-  6   [label="op(\"T\")(#S(g,\"DA\",5),0,\"expr\")" foata="DA" cover="DA"];
-  7   [label="op(\"T\")(#S(g,\"GG\",6),0,\"expr\")" foata="GG" cover="GG"];
-  8   [label="op(\"T\")(#S(g,\"y\",7),0,\"expr\")" foata="y" cover="y"];
-  9   [label="op(\"T\")(#S(g,\"DM\",8),0,\"expr\")" foata="DM" cover="DM"];
-  10  [label="op(\"T\")(#S(g,\"FU\",9),0,\"expr\")" foata="FU" cover="FU"];
-  11  [label="op(\"T\")(#S(g,\"GS\",10),0,\"expr\")" foata="GS" cover="GS"];
-  12  [label="op(\"T\")(#S(g,\"Fg\",11),#S(g,\"3I\"),op(\"T\")(#S(g,\"3I\",0),0,\"expr\"))" foata="3I;Fg" cover="Fg"];
-  13  [label="op(\"T\")(#S(g,\"44\",12),#S(g,\"3I\"),op(\"T\")(#S(g,\"3I\",0),0,\"expr\"))" foata="3I;44" cover="44"];
-  14  [label="op(\"T\")(#S(g,\"GS\",13),#S(g,\"3I\"),op(\"T\")(#S(g,\"3I\",0),0,\"expr\"))" foata="3I;GS" cover="GS"];
-  15  [label="op(\"T\")(#S(g,\"44\",14),#S(g,\"3s\"),op(\"T\")(#S(g,\"3s\",1),0,\"expr\"))" foata="3s;44" cover="44"];
-  16  [label="op(\"T\")(#S(g,\"GG\",15),#S(g,\"3s\"),op(\"T\")(#S(g,\"3s\",1),0,\"expr\"))" foata="3s;GG" cover="GG"];
-  17  [label="op(\"T\")(#S(g,\"GS\",16),#S(g,\"3s\"),op(\"T\")(#S(g,\"3s\",1),0,\"expr\"))" foata="3s;GS" cover="GS"];
-  18  [label="op(\"T\")(#S(g,\"Fg\",17),#S(g,\"Ca\"),op(\"T\")(#S(g,\"Ca\",2),0,\"expr\"))" foata="Ca;Fg" cover="Fg"];
-  19  [label="op(\"T\")(#S(g,\"DM\",18),#S(g,\"Ca\"),op(\"T\")(#S(g,\"Ca\",2),0,\"expr\"))" foata="Ca;DM" cover="DM"];
-  20  [label="op(\"T\")(#S(g,\"GS\",19),#S(g,\"Ca\"),op(\"T\")(#S(g,\"Ca\",2),0,\"expr\"))" foata="Ca;GS" cover="GS"];
-  21  [label="op(\"T\")(#S(g,\"GS\",20),#S(g,\"Fg\"),op(\"T\")(#S(g,\"Fg\",3),0,\"expr\"))" foata="Fg;GS" cover="GS"];
-  22  [label="op(\"T\")(#S(g,\"GS\",21),#S(g,\"44\"),op(\"T\")(#S(g,\"44\",4),0,\"expr\"))" foata="44;GS" cover="GS"];
-  23  [label="op(\"T\")(#S(g,\"GG\",22),#S(g,\"DA\"),op(\"T\")(#S(g,\"DA\",5),0,\"expr\"))" foata="DA;GG" cover="GG"];
-  24  [label="op(\"T\")(#S(g,\"DM\",23),#S(g,\"DA\"),op(\"T\")(#S(g,\"DA\",5),0,\"expr\"))" foata="DA;DM" cover="DM"];
-  25  [label="op(\"T\")(#S(g,\"GS\",24),#S(g,\"DA\"),op(\"T\")(#S(g,\"DA\",5),0,\"expr\"))" foata="DA;GS" cover="GS"];
-  26  [label="op(\"T\")(#S(g,\"GS\",25),#S(g,\"GG\"),op(\"T\")(#S(g,\"GG\",6),0,\"expr\"))" foata="GG;GS" cover="GS"];
-  27  [label="op(\"T\")(#S(g,\"44\",26),#S(g,\"y\"),op(\"T\")(#S(g,\"y\",7),0,\"expr\"))" foata="y;44" cover="44"];
-  28  [label="op(\"T\")(#S(g,\"DM\",27),#S(g,\"y\"),op(\"T\")(#S(g,\"y\",7),0,\"expr\"))" foata="y;DM" cover="DM"];
-  29  [label="op(\"T\")(#S(g,\"GS\",28),#S(g,\"y\"),op(\"T\")(#S(g,\"y\",7),0,\"expr\"))" foata="y;GS" cover="GS"];
-  30  [label="op(\"T\")(#S(g,\"GS\",29),#S(g,\"DM\"),op(\"T\")(#S(g,\"DM\",8),0,\"expr\"))" foata="DM;GS" cover="GS"];
-  31  [label="op(\"T\")(#S(g,\"Fg\",30),#S(g,\"FU\"),op(\"T\")(#S(g,\"FU\",9),0,\"expr\"))" foata="FU;Fg" cover="Fg"];
-  32  [label="op(\"T\")(#S(g,\"GG\",31),#S(g,\"FU\"),op(\"T\")(#S(g,\"FU\",9),0,\"expr\"))" foata="FU;GG" cover="GG"];
-  33  [label="op(\"T\")(#S(g,\"GS\",32),#S(g,\"FU\"),op(\"T\")(#S(g,\"FU\",9),0,\"expr\"))" foata="FU;GS" cover="GS"];
-  34  [label="op(\"T\")(#S(g,\"GS\",20),#S(g,\"Fg\"),op(\"T\")(#S(g,\"Fg\",11),#S(g,\"3I\"),op(\"T\")(#S(g,\"3I\",0),0,\"expr\")))" foata="3I;Fg;GS" cover="GS"];
-  35  [label="op(\"T\")(#S(g,\"GS\",21),#S(g,\"44\"),op(\"T\")(#S(g,\"44\",12),#S(g,\"3I\"),op(\"T\")(#S(g,\"3I\",0),0,\"expr\")))" foata="3I;44;GS" cover="GS"];
-  36  [label="op(\"T\")(#S(g,\"GS\",21),#S(g,\"44\"),op(\"T\")(#S(g,\"44\",14),#S(g,\"3s\"),op(\"T\")(#S(g,\"3s\",1),0,\"expr\")))" foata="3s;44;GS" cover="GS"];
-  37  [label="op(\"T\")(#S(g,\"GS\",25),#S(g,\"GG\"),op(\"T\")(#S(g,\"GG\",15),#S(g,\"3s\"),op(\"T\")(#S(g,\"3s\",1),0,\"expr\")))" foata="3s;GG;GS" cover="GS"];
-  38  [label="op(\"T\")(#S(g,\"GS\",20),#S(g,\"Fg\"),op(\"T\")(#S(g,\"Fg\",17),#S(g,\"Ca\"),op(\"T\")(#S(g,\"Ca\",2),0,\"expr\")))" foata="Ca;Fg;GS" cover="GS"];
-  39  [label="op(\"T\")(#S(g,\"GS\",29),#S(g,\"DM\"),op(\"T\")(#S(g,\"DM\",18),#S(g,\"Ca\"),op(\"T\")(#S(g,\"Ca\",2),0,\"expr\")))" foata="Ca;DM;GS" cover="GS"];
-  40  [label="op(\"T\")(#S(g,\"GS\",25),#S(g,\"GG\"),op(\"T\")(#S(g,\"GG\",22),#S(g,\"DA\"),op(\"T\")(#S(g,\"DA\",5),0,\"expr\")))" foata="DA;GG;GS" cover="GS"];
-  41  [label="op(\"T\")(#S(g,\"GS\",29),#S(g,\"DM\"),op(\"T\")(#S(g,\"DM\",23),#S(g,\"DA\"),op(\"T\")(#S(g,\"DA\",5),0,\"expr\")))" foata="DA;DM;GS" cover="GS"];
-  42  [label="op(\"T\")(#S(g,\"GS\",21),#S(g,\"44\"),op(\"T\")(#S(g,\"44\",26),#S(g,\"y\"),op(\"T\")(#S(g,\"y\",7),0,\"expr\")))" foata="y;44;GS" cover="GS"];
-  43  [label="op(\"T\")(#S(g,\"GS\",29),#S(g,\"DM\"),op(\"T\")(#S(g,\"DM\",27),#S(g,\"y\"),op(\"T\")(#S(g,\"y\",7),0,\"expr\")))" foata="y;DM;GS" cover="GS"];
-  44  [label="op(\"T\")(#S(g,\"GS\",20),#S(g,\"Fg\"),op(\"T\")(#S(g,\"Fg\",30),#S(g,\"FU\"),op(\"T\")(#S(g,\"FU\",9),0,\"expr\")))" foata="FU;Fg;GS" cover="GS"];
-  45  [label="op(\"T\")(#S(g,\"GS\",25),#S(g,\"GG\"),op(\"T\")(#S(g,\"GG\",31),#S(g,\"FU\"),op(\"T\")(#S(g,\"FU\",9),0,\"expr\")))" foata="FU;GG;GS" cover="GS"];
+  1   [label="T(S(g,\"3I\",0),0,\"expr\")" foata="3I" cover="3I"];
+  2   [label="T(S(g,\"3s\",1),0,\"expr\")" foata="3s" cover="3s"];
+  3   [label="T(S(g,\"Ca\",2),0,\"expr\")" foata="Ca" cover="Ca"];
+  4   [label="T(S(g,\"Fg\",3),0,\"expr\")" foata="Fg" cover="Fg"];
+  5   [label="T(S(g,\"44\",4),0,\"expr\")" foata="44" cover="44"];
+  6   [label="T(S(g,\"DA\",5),0,\"expr\")" foata="DA" cover="DA"];
+  7   [label="T(S(g,\"GG\",6),0,\"expr\")" foata="GG" cover="GG"];
+  8   [label="T(S(g,\"y\",7),0,\"expr\")" foata="y" cover="y"];
+  9   [label="T(S(g,\"DM\",8),0,\"expr\")" foata="DM" cover="DM"];
+  10  [label="T(S(g,\"FU\",9),0,\"expr\")" foata="FU" cover="FU"];
+  11  [label="T(S(g,\"GS\",10),0,\"expr\")" foata="GS" cover="GS"];
+  12  [label="T(S(g,\"Fg\",11),S(g,\"3I\"),T(S(g,\"3I\",0),0,\"expr\"))" foata="3I;Fg" cover="Fg"];
+  13  [label="T(S(g,\"44\",12),S(g,\"3I\"),T(S(g,\"3I\",0),0,\"expr\"))" foata="3I;44" cover="44"];
+  14  [label="T(S(g,\"GS\",13),S(g,\"3I\"),T(S(g,\"3I\",0),0,\"expr\"))" foata="3I;GS" cover="GS"];
+  15  [label="T(S(g,\"44\",14),S(g,\"3s\"),T(S(g,\"3s\",1),0,\"expr\"))" foata="3s;44" cover="44"];
+  16  [label="T(S(g,\"GG\",15),S(g,\"3s\"),T(S(g,\"3s\",1),0,\"expr\"))" foata="3s;GG" cover="GG"];
+  17  [label="T(S(g,\"GS\",16),S(g,\"3s\"),T(S(g,\"3s\",1),0,\"expr\"))" foata="3s;GS" cover="GS"];
+  18  [label="T(S(g,\"Fg\",17),S(g,\"Ca\"),T(S(g,\"Ca\",2),0,\"expr\"))" foata="Ca;Fg" cover="Fg"];
+  19  [label="T(S(g,\"DM\",18),S(g,\"Ca\"),T(S(g,\"Ca\",2),0,\"expr\"))" foata="Ca;DM" cover="DM"];
+  20  [label="T(S(g,\"GS\",19),S(g,\"Ca\"),T(S(g,\"Ca\",2),0,\"expr\"))" foata="Ca;GS" cover="GS"];
+  21  [label="T(S(g,\"GS\",20),S(g,\"Fg\"),T(S(g,\"Fg\",3),0,\"expr\"))" foata="Fg;GS" cover="GS"];
+  22  [label="T(S(g,\"GS\",21),S(g,\"44\"),T(S(g,\"44\",4),0,\"expr\"))" foata="44;GS" cover="GS"];
+  23  [label="T(S(g,\"GG\",22),S(g,\"DA\"),T(S(g,\"DA\",5),0,\"expr\"))" foata="DA;GG" cover="GG"];
+  24  [label="T(S(g,\"DM\",23),S(g,\"DA\"),T(S(g,\"DA\",5),0,\"expr\"))" foata="DA;DM" cover="DM"];
+  25  [label="T(S(g,\"GS\",24),S(g,\"DA\"),T(S(g,\"DA\",5),0,\"expr\"))" foata="DA;GS" cover="GS"];
+  26  [label="T(S(g,\"GS\",25),S(g,\"GG\"),T(S(g,\"GG\",6),0,\"expr\"))" foata="GG;GS" cover="GS"];
+  27  [label="T(S(g,\"44\",26),S(g,\"y\"),T(S(g,\"y\",7),0,\"expr\"))" foata="y;44" cover="44"];
+  28  [label="T(S(g,\"DM\",27),S(g,\"y\"),T(S(g,\"y\",7),0,\"expr\"))" foata="y;DM" cover="DM"];
+  29  [label="T(S(g,\"GS\",28),S(g,\"y\"),T(S(g,\"y\",7),0,\"expr\"))" foata="y;GS" cover="GS"];
+  30  [label="T(S(g,\"GS\",29),S(g,\"DM\"),T(S(g,\"DM\",8),0,\"expr\"))" foata="DM;GS" cover="GS"];
+  31  [label="T(S(g,\"Fg\",30),S(g,\"FU\"),T(S(g,\"FU\",9),0,\"expr\"))" foata="FU;Fg" cover="Fg"];
+  32  [label="T(S(g,\"GG\",31),S(g,\"FU\"),T(S(g,\"FU\",9),0,\"expr\"))" foata="FU;GG" cover="GG"];
+  33  [label="T(S(g,\"GS\",32),S(g,\"FU\"),T(S(g,\"FU\",9),0,\"expr\"))" foata="FU;GS" cover="GS"];
+  34  [label="T(S(g,\"GS\",20),S(g,\"Fg\"),T(S(g,\"Fg\",11),S(g,\"3I\"),T(S(g,\"3I\",0),0,\"expr\")))" foata="3I;Fg;GS" cover="GS"];
+  35  [label="T(S(g,\"GS\",21),S(g,\"44\"),T(S(g,\"44\",12),S(g,\"3I\"),T(S(g,\"3I\",0),0,\"expr\")))" foata="3I;44;GS" cover="GS"];
+  36  [label="T(S(g,\"GS\",21),S(g,\"44\"),T(S(g,\"44\",14),S(g,\"3s\"),T(S(g,\"3s\",1),0,\"expr\")))" foata="3s;44;GS" cover="GS"];
+  37  [label="T(S(g,\"GS\",25),S(g,\"GG\"),T(S(g,\"GG\",15),S(g,\"3s\"),T(S(g,\"3s\",1),0,\"expr\")))" foata="3s;GG;GS" cover="GS"];
+  38  [label="T(S(g,\"GS\",20),S(g,\"Fg\"),T(S(g,\"Fg\",17),S(g,\"Ca\"),T(S(g,\"Ca\",2),0,\"expr\")))" foata="Ca;Fg;GS" cover="GS"];
+  39  [label="T(S(g,\"GS\",29),S(g,\"DM\"),T(S(g,\"DM\",18),S(g,\"Ca\"),T(S(g,\"Ca\",2),0,\"expr\")))" foata="Ca;DM;GS" cover="GS"];
+  40  [label="T(S(g,\"GS\",25),S(g,\"GG\"),T(S(g,\"GG\",22),S(g,\"DA\"),T(S(g,\"DA\",5),0,\"expr\")))" foata="DA;GG;GS" cover="GS"];
+  41  [label="T(S(g,\"GS\",29),S(g,\"DM\"),T(S(g,\"DM\",23),S(g,\"DA\"),T(S(g,\"DA\",5),0,\"expr\")))" foata="DA;DM;GS" cover="GS"];
+  42  [label="T(S(g,\"GS\",21),S(g,\"44\"),T(S(g,\"44\",26),S(g,\"y\"),T(S(g,\"y\",7),0,\"expr\")))" foata="y;44;GS" cover="GS"];
+  43  [label="T(S(g,\"GS\",29),S(g,\"DM\"),T(S(g,\"DM\",27),S(g,\"y\"),T(S(g,\"y\",7),0,\"expr\")))" foata="y;DM;GS" cover="GS"];
+  44  [label="T(S(g,\"GS\",20),S(g,\"Fg\"),T(S(g,\"Fg\",30),S(g,\"FU\"),T(S(g,\"FU\",9),0,\"expr\")))" foata="FU;Fg;GS" cover="GS"];
+  45  [label="T(S(g,\"GS\",25),S(g,\"GG\"),T(S(g,\"GG\",31),S(g,\"FU\"),T(S(g,\"FU\",9),0,\"expr\")))" foata="FU;GG;GS" cover="GS"];
   0:0:s  -> 1:1:s  [id=0  color="red:blue;0.5"];
   0:2:s  -> 2:3:s  [id=1  color="red:blue;0.5"];
   0:4:s  -> 3:5:s  [id=2  color="red:blue;0.5"];
