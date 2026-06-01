@@ -18,22 +18,28 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             .unwrap_or(Atom::Zero)
     };
     let mass = |i: usize| family.propagators[i].mass_sq.clone();
+    let exponents = &family.targets[0].propagator_exponents;
 
-    let term = match family.propagators.len() {
+    let terms = match family.propagators.len() {
         1 => {
             let m_sq = mass(0);
-            let coeff = tadpole_coefficient(family.targets[0].propagator_exponents[0], &m_sq);
-            (coeff, MasterIntegral::Tadpole { m_sq })
+            vec![(
+                tadpole_coefficient(exponents[0], &m_sq),
+                MasterIntegral::Tadpole { m_sq },
+            )]
         }
-        2 => (
-            Atom::num(1),
-            MasterIntegral::Bubble {
-                p_sq: inv(0),
-                m1_sq: mass(0),
-                m2_sq: mass(1),
-            },
-        ),
-        3 => (
+        2 => {
+            let p_sq = inv(0);
+            let m1_sq = mass(0);
+            let m2_sq = mass(1);
+            match (exponents[0], exponents[1]) {
+                (1, 1) => vec![(Atom::num(1), MasterIntegral::Bubble { p_sq, m1_sq, m2_sq })],
+                (2, 1) => dotted_bubble(&p_sq, &m1_sq, &m2_sq, true),
+                (1, 2) => dotted_bubble(&p_sq, &m1_sq, &m2_sq, false),
+                _ => todo!("bubble with more than one dot"),
+            }
+        }
+        3 => vec![(
             Atom::num(1),
             MasterIntegral::Triangle {
                 p1_sq: inv(0),
@@ -43,8 +49,8 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
                 m2_sq: mass(1),
                 m3_sq: mass(2),
             },
-        ),
-        4 => (
+        )],
+        4 => vec![(
             Atom::num(1),
             MasterIntegral::Box {
                 p1_sq: inv(0),
@@ -58,11 +64,11 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
                 m3_sq: mass(2),
                 m4_sq: mass(3),
             },
-        ),
+        )],
         n => todo!("scalar reduction for {n}-propagator families"),
     };
 
-    Reduction { terms: vec![term] }
+    Reduction { terms }
 }
 
 fn tadpole_coefficient(exponent: i32, m_sq: &Atom) -> Atom {
@@ -72,6 +78,58 @@ fn tadpole_coefficient(exponent: i32, m_sq: &Atom) -> Atom {
         coeff = coeff * (&d - Atom::num(2 * k)) / (Atom::num(2 * k) * m_sq);
     }
     coeff
+}
+
+fn dotted_bubble(
+    p_sq: &Atom,
+    m1_sq: &Atom,
+    m2_sq: &Atom,
+    dotted_first: bool,
+) -> Vec<(Atom, MasterIntegral)> {
+    let d = Atom::var(S.d);
+    let lam = kallen(p_sq, m1_sq, m2_sq);
+    let (c0, c1, c2) = if dotted_first {
+        (
+            (&d - Atom::num(3)) * (m1_sq - m2_sq - p_sq) / &lam,
+            (&d - Atom::num(2)) * (p_sq - m1_sq - m2_sq) / (Atom::num(2) * m1_sq * &lam),
+            (&d - Atom::num(2)) / &lam,
+        )
+    } else {
+        (
+            (&d - Atom::num(3)) * (m2_sq - m1_sq - p_sq) / &lam,
+            (&d - Atom::num(2)) / &lam,
+            (&d - Atom::num(2)) * (p_sq - m1_sq - m2_sq) / (Atom::num(2) * m2_sq * &lam),
+        )
+    };
+    vec![
+        (
+            c0,
+            MasterIntegral::Bubble {
+                p_sq: p_sq.clone(),
+                m1_sq: m1_sq.clone(),
+                m2_sq: m2_sq.clone(),
+            },
+        ),
+        (
+            c1,
+            MasterIntegral::Tadpole {
+                m_sq: m1_sq.clone(),
+            },
+        ),
+        (
+            c2,
+            MasterIntegral::Tadpole {
+                m_sq: m2_sq.clone(),
+            },
+        ),
+    ]
+}
+
+fn kallen(p_sq: &Atom, m1_sq: &Atom, m2_sq: &Atom) -> Atom {
+    p_sq * p_sq + m1_sq * m1_sq + m2_sq * m2_sq
+        - Atom::num(2) * p_sq * m1_sq
+        - Atom::num(2) * p_sq * m2_sq
+        - Atom::num(2) * m1_sq * m2_sq
 }
 
 #[cfg(test)]
@@ -136,6 +194,19 @@ mod tests {
             MasterIntegral::Tadpole { m_sq } => assert_eq!(*m_sq, msq),
             other => panic!("expected a tadpole master, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn dotted_bubble_reduces_to_a_bubble_and_two_tadpoles() {
+        crate::ensure_symbolica_license();
+        let psq = Atom::var(S.psq);
+        let m1 = Atom::var(symbol!("oneloop::m1sq"));
+        let m2 = Atom::var(symbol!("oneloop::m2sq"));
+        let r = reduce(&family(vec![m1, m2], vec![psq], vec![2, 1]));
+        assert_eq!(r.terms.len(), 3);
+        assert!(matches!(r.terms[0].1, MasterIntegral::Bubble { .. }));
+        assert!(matches!(r.terms[1].1, MasterIntegral::Tadpole { .. }));
+        assert!(matches!(r.terms[2].1, MasterIntegral::Tadpole { .. }));
     }
 
     #[test]
