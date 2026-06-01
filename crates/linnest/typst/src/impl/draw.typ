@@ -14,6 +14,8 @@
 #let _point-sub(a, b) = (_point-x(a) - _point-x(b), _point-y(a) - _point-y(b))
 #let _point-scale(p, factor) = (_point-x(p) * factor, _point-y(p) * factor)
 #let _point-lerp(a, b, t) = _point-add(a, _point-scale(_point-sub(b, a), t))
+#let _point-length(p) = calc.sqrt(_point-x(p) * _point-x(p) + _point-y(p) * _point-y(p))
+#let _point-distance(a, b) = _point-length(_point-sub(b, a))
 #let _route-points(endpoint) = {
   if endpoint == none {
     ()
@@ -590,28 +592,35 @@
   }
 }
 
+#let _route-aware-anchor-amount(point, amount, route-points, fallback) = {
+  let target = if route-points.len() > 0 { route-points.first() } else { fallback }
+  let distance = _point-distance(point, target)
+  if distance == 0 {
+    amount
+  } else {
+    calc.min(amount, 0.55 * distance)
+  }
+}
+
 #let _anchored-cubic-route-split(start, source-anchor, route, sink-anchor, end, amount) = {
-  let source-guide = _anchor-control-guide(source-anchor, start, _point-lerp(start, end, 1 / 3), amount)
-  let sink-guide = _anchor-control-guide(sink-anchor, end, _point-lerp(end, start, 1 / 3), amount)
-  let control-sum = _point-scale(
-    _point-sub(_point-scale(route, 8), _point-add(start, end)),
-    1 / 3,
-  )
-  let delta = _point-scale(
-    _point-sub(control-sum, _point-add(source-guide, sink-guide)),
-    1 / 2,
-  )
-  let control-start = _point-add(source-guide, delta)
-  let control-end = _point-add(sink-guide, delta)
-  let start-control = _point-lerp(start, control-start, 1 / 2)
-  let control-control = _point-lerp(control-start, control-end, 1 / 2)
-  let control-end-mid = _point-lerp(control-end, end, 1 / 2)
-  let source-control-end = _point-lerp(start-control, control-control, 1 / 2)
-  let sink-control-start = _point-lerp(control-control, control-end-mid, 1 / 2)
+  let source-guide = _anchor-control-guide(source-anchor, start, _point-lerp(start, route, 1 / 3), amount)
+  let sink-guide = _anchor-control-guide(sink-anchor, end, _point-lerp(end, route, 1 / 3), amount)
+  let route-direction = _point-sub(end, start)
+  let route-direction-length = _point-length(route-direction)
+  let route-handle = if route-direction-length == 0 {
+    (0, 0)
+  } else {
+    let max-handle = calc.min(_point-distance(start, route), _point-distance(route, end)) / 3
+    _point-scale(route-direction, calc.min(amount, max-handle) / route-direction-length)
+  }
+  let source-route-guide = _point-sub(route, route-handle)
+  let sink-route-guide = _point-add(route, route-handle)
+  let source = curve-api.cubic(start, source-guide, source-route-guide, route)
+  let sink = curve-api.cubic(route, sink-route-guide, sink-guide, end)
   (
-    source: curve-api.cubic(start, start-control, source-control-end, route),
-    sink: curve-api.cubic(route, sink-control-start, control-end-mid, end),
-    curve: curve-api.cubic(start, control-start, control-end, end),
+    source: source,
+    sink: sink,
+    curve: curve-api.path(source, sink),
   )
 }
 
@@ -722,8 +731,13 @@
     )
   }
   if route-mode != "direct" and route-points-mode == "through" and (source-route.len() > 0 or sink-route.len() > 0) {
-    let source-points = (start, ..source-route, route)
-    let sink-points = (..sink-route.rev(), end)
+    let amount = _anchor-control-distance(source-style, sink-style, start, route, end)
+    let source-amount = _route-aware-anchor-amount(start, amount, source-route, route)
+    let sink-amount = _route-aware-anchor-amount(end, amount, sink-route, route)
+    let source-guide = _anchor-control-guide(source-anchor, start, _point-lerp(start, route, 1 / 3), source-amount)
+    let sink-guide = _anchor-control-guide(sink-anchor, end, _point-lerp(end, route, 1 / 3), sink-amount)
+    let source-points = (start, source-guide, ..source-route, route)
+    let sink-points = (..sink-route.rev(), sink-guide, end)
     let split = curve-api.split-through(
       (..source-points, ..sink-points),
       omega: omega,

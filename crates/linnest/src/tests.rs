@@ -2032,6 +2032,41 @@ fn test_dot_layout_accepts_typst_rank_same_subgraph() {
 }
 
 #[test]
+fn test_dot_layout_accepts_explicit_node_layout_rank() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph explicit_rank {
+            a ["layout-rank"=2]
+            b ["layout-rank"=0]
+            c ["layout-rank"=2]
+            a -> b
+            b -> c
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(by_name["a"].y, by_name["c"].y);
+    assert!(
+        by_name["b"].y > by_name["a"].y,
+        "rank 0 should be above rank 2: {by_name:?}"
+    );
+}
+
+#[test]
 fn test_dot_layout_handles_cycles_deterministically() {
     let parsed = parse_dot_graphs_bytes(
         br#"digraph cycle {
@@ -2218,6 +2253,112 @@ fn test_dot_layout_route_exit_statements_export_endpoint_guides() {
     assert_eq!(sink_route.len(), 1);
     assert!(source_route[0].y < node_positions["a"].y);
     assert!(sink_route[0].y > node_positions["b"].y);
+}
+
+#[test]
+fn test_dot_layout_direction_right_rotates_ranks_and_node_extents() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph rightward {
+            a ["layout-rank"=0, "layout-width"=100, "layout-height"=1]
+            b ["layout-rank"=0, "layout-width"=100, "layout-height"=1]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("layout-direction".to_string(), "right".to_string()),
+            ("tree-dy".to_string(), "0.5".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert!((by_name["a"].x - by_name["b"].x).abs() < 1e-9);
+    assert!(
+        (by_name["a"].y - by_name["b"].y).abs() < 10.0,
+        "left-to-right same-rank spacing should use node height, not node width"
+    );
+}
+
+#[test]
+fn test_dot_layout_direction_right_route_exits_use_east_west() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph route_exits {
+            a -> b ["source-route-exit"=east, "sink-route-exit"=west]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("layout-direction".to_string(), "right".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let node_positions = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    let edge = &edges[0];
+    let source_route = &edge.source.as_ref().unwrap().route_points;
+    let sink_route = &edge.sink.as_ref().unwrap().route_points;
+
+    assert_eq!(source_route.len(), 1);
+    assert_eq!(sink_route.len(), 1);
+    assert!(node_positions["a"].x < node_positions["b"].x);
+    assert!(source_route[0].x > node_positions["a"].x);
+    assert!(sink_route[0].x < node_positions["b"].x);
+}
+
+#[test]
+fn test_dot_layout_direction_right_can_left_align_rank_nodes() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph rightward_align {
+            a ["layout-rank"=0, "layout-width"=8, "layout-height"=1]
+            b ["layout-rank"=0, "layout-width"=2, "layout-height"=1]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "dot".to_string()),
+            ("layout-direction".to_string(), "right".to_string()),
+            ("rank-align".to_string(), "left".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+    let by_name = nodes
+        .iter()
+        .map(|node| (node.name.as_deref().unwrap(), node.pos.as_ref().unwrap()))
+        .collect::<BTreeMap<_, _>>();
+
+    let a_left = by_name["a"].x - 4.0;
+    let b_left = by_name["b"].x - 1.0;
+    assert!((a_left - b_left).abs() < 1e-9);
+    assert!(by_name["a"].x > by_name["b"].x);
 }
 
 #[test]

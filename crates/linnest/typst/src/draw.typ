@@ -313,12 +313,15 @@
   /// flip it, while undirected edges suppress it.
   /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
   /// to route this endpoint from a measured node-box anchor. By default,
-  /// anchored paired edges use a single cubic curve split through the edge
-  /// layout point. Set `route: "hobby-through"` to instead build a single
-  /// Hobby spline through the source anchor, source guide, edge point, sink
-  /// guide, and sink anchor, then split source/sink styling at the edge point.
-  /// `route: "direct"` keeps the same cubic routing but suppresses the default
-  /// edge-position Hobby route.
+  /// anchored paired edges use two smooth cubic halves through the edge layout
+  /// point while preserving the endpoint anchor tangents. Set
+  /// `route: "hobby-through"` to instead build a single Hobby spline through
+  /// the source anchor, source guide, edge point, sink guide, and sink anchor,
+  /// then split source/sink styling at the edge point. `route: "direct"` keeps
+  /// the same anchored cubic routing but suppresses the default edge-position
+  /// Hobby route.
+  /// `route-points: "through"` also threads any layout-provided half-edge route
+  /// points through that same Hobby path.
   /// `route: "straight-through"` draws the two straight force springs from
   /// source to edge position and from edge position to sink.
   /// -> dictionary | array | function | none

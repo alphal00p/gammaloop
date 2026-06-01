@@ -15,6 +15,14 @@ pub enum LayeredProfile {
     Stable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LayeredRankAlign {
+    #[default]
+    Center,
+    Start,
+    End,
+}
+
 #[derive(Debug, Clone)]
 pub struct LayeredConfig {
     pub profile: LayeredProfile,
@@ -29,6 +37,7 @@ pub struct LayeredConfig {
     pub roots: Vec<NodeIndex>,
     pub rank_same: Vec<Vec<NodeIndex>>,
     pub include_all_nodes: bool,
+    pub rank_align: LayeredRankAlign,
 }
 
 impl Default for LayeredConfig {
@@ -46,12 +55,14 @@ impl Default for LayeredConfig {
             roots: Vec::new(),
             rank_same: Vec::new(),
             include_all_nodes: true,
+            rank_align: LayeredRankAlign::Center,
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct LayeredGeometry {
+    pub node_ranks: NodeVec<Option<usize>>,
     pub node_widths: NodeVec<f64>,
     pub node_heights: NodeVec<f64>,
     pub edge_label_widths: EdgeVec<f64>,
@@ -171,8 +182,9 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         layout.straighten();
         let lane_offsets = layout.same_rank_lane_offsets();
         let rank_track_heights = layout.rank_track_heights(&lane_offsets);
-        let rank_y = layout.rank_y_positions(&rank_track_heights);
-        layout.into_output(&ranks, &route_edges, &lane_offsets, &rank_y)
+        let rank_heights = layout.rank_heights();
+        let rank_y = layout.rank_y_positions(&rank_track_heights, &rank_heights);
+        layout.into_output(&ranks, &route_edges, &lane_offsets, &rank_y, &rank_heights)
     }
 
     fn layered_included_nodes<S: SubSetLike>(
@@ -296,7 +308,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         same_rank_group: &NodeVec<Option<usize>>,
         geometry: &LayeredGeometry,
     ) -> NodeVec<usize> {
-        let mut ranks = self.new_nodevec(|_, _, _| 0usize);
+        let mut ranks = self.new_nodevec(|node, _, _| geometry.node_ranks[node].unwrap_or(0));
+        let same_rank_groups = self.valid_rank_same_groups(included, same_rank_group);
         let mut dag_edges = selected_edges
             .iter()
             .filter_map(|edge| {
@@ -310,10 +323,15 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                 }
                 let minlen = geometry.edge_minlens[edge.edge].max(1);
                 let weight = geometry.edge_weights[edge.edge].max(0.05);
-                if order[edge.source.0] <= order[edge.sink.0] {
-                    Some((edge.source, edge.sink, minlen, weight))
+                let (source, sink) = if order[edge.source.0] <= order[edge.sink.0] {
+                    (edge.source, edge.sink)
                 } else {
-                    Some((edge.sink, edge.source, minlen, weight))
+                    (edge.sink, edge.source)
+                };
+                if geometry.node_ranks[sink].is_some() {
+                    None
+                } else {
+                    Some((source, sink, minlen, weight))
                 }
             })
             .collect::<Vec<_>>();
@@ -334,11 +352,15 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                 }
             }
 
-            for (group_index, group) in self.valid_rank_same_groups(included, same_rank_group) {
-                let group_rank = group.iter().map(|&node| ranks[node]).max().unwrap_or(0);
+            for (&group_index, group) in &same_rank_groups {
+                let group_rank = group
+                    .iter()
+                    .filter_map(|&node| geometry.node_ranks[node])
+                    .max()
+                    .unwrap_or_else(|| group.iter().map(|&node| ranks[node]).max().unwrap_or(0));
                 for node in group {
-                    if same_rank_group[node] == Some(group_index) && ranks[node] != group_rank {
-                        ranks[node] = group_rank;
+                    if same_rank_group[*node] == Some(group_index) && ranks[*node] != group_rank {
+                        ranks[*node] = group_rank;
                         changed = true;
                     }
                 }
@@ -349,7 +371,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             }
         }
 
-        self.refine_weighted_ranks(&mut ranks, ordered_nodes, &dag_edges, same_rank_group);
+        self.refine_weighted_ranks(
+            &mut ranks,
+            ordered_nodes,
+            &dag_edges,
+            same_rank_group,
+            &geometry.node_ranks,
+        );
         ranks
     }
 
@@ -359,11 +387,12 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         ordered_nodes: &[NodeIndex],
         dag_edges: &[(NodeIndex, NodeIndex, usize, f64)],
         same_rank_group: &NodeVec<Option<usize>>,
+        explicit_ranks: &NodeVec<Option<usize>>,
     ) {
         for _ in 0..ordered_nodes.len().max(1) {
             let mut changed = false;
             for &node in ordered_nodes {
-                if same_rank_group[node].is_some() {
+                if same_rank_group[node].is_some() || explicit_ranks[node].is_some() {
                     continue;
                 }
                 let mut lower = 0usize;
@@ -1245,9 +1274,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         heights
     }
 
-    fn rank_y_positions(&self, rank_track_heights: &[f64]) -> Vec<f64> {
-        let rank_heights = self
-            .layers
+    fn rank_heights(&self) -> Vec<f64> {
+        self.layers
             .iter()
             .map(|layer| {
                 layer
@@ -1255,7 +1283,10 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                     .map(|&item| self.items[item].height)
                     .fold(0.0, f64::max)
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    }
+
+    fn rank_y_positions(&self, rank_track_heights: &[f64], rank_heights: &[f64]) -> Vec<f64> {
         let mut y = vec![0.0; self.layers.len()];
         for rank in 1..self.layers.len() {
             y[rank] = y[rank - 1]
@@ -1267,12 +1298,35 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         y
     }
 
+    fn item_rank_y(&self, item: usize, rank_y: &[f64], rank_heights: &[f64]) -> f64 {
+        let rank = self.items[item].rank;
+        let y = rank_y[rank];
+        if !matches!(self.items[item].kind, ItemKind::Real(_)) {
+            return y;
+        }
+
+        let delta = 0.5 * (rank_heights[rank] - self.items[item].height).max(0.0);
+        match self.config.rank_align {
+            LayeredRankAlign::Center => y,
+            LayeredRankAlign::Start => y + delta,
+            LayeredRankAlign::End => y - delta,
+        }
+    }
+
+    fn item_point(&self, item: usize, rank_y: &[f64], rank_heights: &[f64]) -> Point2<f64> {
+        Point2::new(
+            self.items[item].x,
+            self.item_rank_y(item, rank_y, rank_heights),
+        )
+    }
+
     fn into_output(
         self,
         ranks: &NodeVec<usize>,
         selected_edges: &[LayoutEdge],
         lane_offsets: &EdgeVec<Option<f64>>,
         rank_y: &[f64],
+        rank_heights: &[f64],
     ) -> LayeredOutput {
         let mut node_positions = self.graph.new_nodevec(|_, _, _| None);
         let mut rank_output = self.graph.new_nodevec(|_, _, _| None);
@@ -1281,10 +1335,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 continue;
             };
             let node = NodeIndex(node_index);
-            node_positions[node] = Some(Point2::new(
-                self.items[*item].x,
-                rank_y[self.items[*item].rank],
-            ));
+            node_positions[node] = Some(self.item_point(*item, rank_y, rank_heights));
             rank_output[node] = Some(ranks[node]);
         }
 
@@ -1304,19 +1355,21 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             let sink_rank = self.items[sink].rank;
             let point = if path.len() > 2 {
                 let middle = path[path.len() / 2];
-                Point2::new(self.items[middle].x, rank_y[self.items[middle].rank])
+                self.item_point(middle, rank_y, rank_heights)
             } else if source_rank == sink_rank {
                 let y =
                     rank_y[source_rank] + lane_offsets[edge.edge].unwrap_or(self.config.edge_gap);
                 Point2::new(0.5 * (self.items[source].x + self.items[sink].x), y)
             } else {
+                let source_y = self.item_rank_y(source, rank_y, rank_heights);
+                let sink_y = self.item_rank_y(sink, rank_y, rank_heights);
                 Point2::new(
                     0.5 * (self.items[source].x + self.items[sink].x),
-                    0.5 * (rank_y[source_rank] + rank_y[sink_rank]),
+                    0.5 * (source_y + sink_y),
                 )
             };
             edge_positions[edge.edge] = Some(point);
-            edge_routes[edge.edge] = self.edge_route(edge.edge, path, rank_y);
+            edge_routes[edge.edge] = self.edge_route(edge.edge, path, rank_y, rank_heights);
         }
 
         LayeredOutput {
@@ -1327,11 +1380,21 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         }
     }
 
-    fn edge_route(&self, edge: EdgeIndex, path: &[usize], rank_y: &[f64]) -> LayeredEdgeRoute {
+    fn edge_route(
+        &self,
+        edge: EdgeIndex,
+        path: &[usize],
+        rank_y: &[f64],
+        rank_heights: &[f64],
+    ) -> LayeredEdgeRoute {
         let middle = path.len() / 2;
-        let point = |item: usize| Point2::new(self.items[item].x, rank_y[self.items[item].rank]);
         let mut source = self
-            .exit_guide_point(path[0], self.geometry.edge_source_exits[edge], rank_y)
+            .exit_guide_point(
+                path[0],
+                self.geometry.edge_source_exits[edge],
+                rank_y,
+                rank_heights,
+            )
             .into_iter()
             .collect::<Vec<_>>();
         let mut sink = self
@@ -1339,16 +1402,21 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
                 *path.last().unwrap(),
                 self.geometry.edge_sink_exits[edge],
                 rank_y,
+                rank_heights,
             )
             .into_iter()
             .collect::<Vec<_>>();
         if path.len() > 3 {
-            source.extend(path[1..middle].iter().map(|&item| point(item)));
+            source.extend(
+                path[1..middle]
+                    .iter()
+                    .map(|&item| self.item_point(item, rank_y, rank_heights)),
+            );
             sink.extend(
                 path[middle + 1..path.len() - 1]
                     .iter()
                     .rev()
-                    .map(|&item| point(item)),
+                    .map(|&item| self.item_point(item, rank_y, rank_heights)),
             );
         }
         LayeredEdgeRoute { source, sink }
@@ -1359,8 +1427,9 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
         item: usize,
         exit: LayeredRouteExit,
         rank_y: &[f64],
+        rank_heights: &[f64],
     ) -> Option<Point2<f64>> {
-        let y = rank_y[self.items[item].rank];
+        let y = self.item_rank_y(item, rank_y, rank_heights);
         let offset = 0.5 * self.items[item].height + self.config.edge_gap;
         match exit {
             LayeredRouteExit::Auto => None,
