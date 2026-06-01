@@ -164,8 +164,8 @@ impl RstarTDependenceEvaluator {
         debug!("r-star: {}", radius_star);
 
         let dual = HyperDual::new(self.dual_shape_for_esurface_evaluation.clone());
-        let dual_rstar = dual.variable(1, radius_star.clone());
-        let dual_t = dual.variable(0, t_star.clone());
+        let dual_rstar = dual.variable(0, radius_star.clone());
+        let dual_t = dual.variable(1, t_star.clone());
 
         let rescale_tstar = unrescaled_momentum_sample
             .loop_moms()
