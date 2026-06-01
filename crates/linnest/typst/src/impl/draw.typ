@@ -1166,8 +1166,56 @@
   }
 }
 
-#let _in-subgraph(hedges, half-edge) = {
-  hedges != none and half-edge != none and hedges.contains(half-edge.hedge)
+#let _subgraph-record(entry, default-style) = {
+  if type(entry) == dictionary {
+    let graph = entry.at("subgraph", default: entry.at("graph", default: none))
+    if graph == none {
+      panic("draw: subgraph dictionary entries need a `subgraph` field")
+    }
+    (
+      hedges: subgraph-api.hedges(graph),
+      edge-style: entry.at(
+        "edge-style",
+        default: entry.at(
+          "style",
+          default: entry.at("subgraph-edge-style", default: default-style),
+        ),
+      ),
+    )
+  } else {
+    (
+      hedges: subgraph-api.hedges(entry),
+      edge-style: default-style,
+    )
+  }
+}
+
+#let _subgraph-records(subgraph, default-style) = {
+  if subgraph == none {
+    ()
+  } else if type(subgraph) == array {
+    subgraph.filter(entry => entry != none).map(entry => _subgraph-record(entry, default-style))
+  } else {
+    (_subgraph-record(subgraph, default-style),)
+  }
+}
+
+#let _subgraph-edge-styles(records, half-edge, edge-data) = {
+  if half-edge == none {
+    ()
+  } else {
+    let styles = ()
+    for record in records {
+      if record.hedges.contains(half-edge.hedge) {
+        styles.push(_style(record.edge-style, edge-data))
+      }
+    }
+    styles
+  }
+}
+
+#let _last-style(styles) = {
+  if styles.len() == 0 { none } else { styles.last() }
 }
 
 #let _node-pos(node) = {
@@ -1252,7 +1300,7 @@
         let node-outsets = ()
         let node-boxes = ()
         let debug-level = _debug-level(debug)
-        let subgraph-hedges = if subgraph == none { none } else { subgraph-api.hedges(subgraph) }
+        let subgraph-records = _subgraph-records(subgraph, subgraph-edge-style)
 
         for (i, v) in nodes.enumerate() {
           let pos = _node-pos(v)
@@ -1370,8 +1418,10 @@
                 ext: ext,
               )
           )
-          let source-in-subgraph = _in-subgraph(subgraph-hedges, source-half-edge)
-          let sink-in-subgraph = _in-subgraph(subgraph-hedges, sink-half-edge)
+          let source-subgraph-styles = _subgraph-edge-styles(subgraph-records, source-half-edge, edge-data)
+          let sink-subgraph-styles = _subgraph-edge-styles(subgraph-records, sink-half-edge, edge-data)
+          let source-in-subgraph = source-subgraph-styles.len() > 0
+          let sink-in-subgraph = sink-subgraph-styles.len() > 0
 
           let geometry-style = _edge-geometry-defaults + (
             offset: edge-offset,
@@ -1403,7 +1453,7 @@
             let source-draw-style = if source-style-value == none {
               none
             } else if source-in-subgraph and not subgraph-edge-underlay {
-              source-style-value + subgraph-edge-style
+              source-style-value + _last-style(source-subgraph-styles)
             } else {
               source-style-value
             }
@@ -1411,7 +1461,7 @@
             let sink-draw-style = if sink-style-value == none {
               none
             } else if sink-in-subgraph and not subgraph-edge-underlay {
-              sink-style-value + subgraph-edge-style
+              sink-style-value + _last-style(sink-subgraph-styles)
             } else {
               sink-style-value
             }
@@ -1437,29 +1487,33 @@
                 ),
               )
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
-                for element in (
-                  _segments-elements(
-                    halves.source,
-                    _without-mark-style(_without-pattern-style(source-style-value)) + subgraph-edge-style,
-                    auto,
-                    true,
-                    true,
-                  ).elements
-                ) {
-                  elements.push(element)
+                for subgraph-style in source-subgraph-styles {
+                  for element in (
+                    _segments-elements(
+                      halves.source,
+                      _without-mark-style(_without-pattern-style(source-style-value)) + subgraph-style,
+                      auto,
+                      true,
+                      true,
+                    ).elements
+                  ) {
+                    elements.push(element)
+                  }
                 }
               }
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
-                for element in (
-                  _segments-elements(
-                    halves.sink,
-                    _without-mark-style(_without-pattern-style(sink-style-value)) + subgraph-edge-style,
-                    auto,
-                    true,
-                    true,
-                  ).elements
-                ) {
-                  elements.push(element)
+                for subgraph-style in sink-subgraph-styles {
+                  for element in (
+                    _segments-elements(
+                      halves.sink,
+                      _without-mark-style(_without-pattern-style(sink-style-value)) + subgraph-style,
+                      auto,
+                      true,
+                      true,
+                    ).elements
+                  ) {
+                    elements.push(element)
+                  }
                 }
               }
               if source-style-value != none and sink-style-value != none {
@@ -1489,14 +1543,16 @@
               }
               let bend = edge.at("bend", default: none)
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
-                for element in _pattern-dangling(
-                  line-start,
-                  edge.pos,
-                  bend,
-                  _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-edge-style,
-                  label-pos,
-                ) {
-                  elements.push(element)
+                for subgraph-style in source-subgraph-styles {
+                  for element in _pattern-dangling(
+                    line-start,
+                    edge.pos,
+                    bend,
+                    _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-style,
+                    label-pos,
+                  ) {
+                    elements.push(element)
+                  }
                 }
               }
               if source-style-value != none {
@@ -1518,14 +1574,16 @@
               }
               let bend = edge.at("bend", default: none)
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
-                for element in _pattern-dangling(
-                  edge.pos,
-                  line-end,
-                  bend,
-                  _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-edge-style,
-                  label-pos,
-                ) {
-                  elements.push(element)
+                for subgraph-style in sink-subgraph-styles {
+                  for element in _pattern-dangling(
+                    edge.pos,
+                    line-end,
+                    bend,
+                    _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-style,
+                    label-pos,
+                  ) {
+                    elements.push(element)
+                  }
                 }
               }
               if sink-style-value != none {
