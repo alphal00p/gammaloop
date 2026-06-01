@@ -36,7 +36,7 @@ use linnet::{
             force::{force_directed_layout, ForceLayoutConfig},
             layered::{
                 LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
-                LayeredRouteExit,
+                LayeredRankAlign, LayeredRouteExit,
             },
             simulatedanneale::{anneal, GeoSchedule, SAConfig},
             spring::{
@@ -1273,6 +1273,122 @@ impl LayoutNodeMode {
 }
 
 #[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+enum LayoutDirection {
+    Down,
+    #[serde(alias = "left-to-right", alias = "left-right", alias = "lr")]
+    Right,
+}
+
+fn default_layout_direction() -> LayoutDirection {
+    LayoutDirection::Down
+}
+
+impl LayoutDirection {
+    fn transform_layered_point(self, point: Point2<f64>) -> Point2<f64> {
+        match self {
+            LayoutDirection::Down => point,
+            LayoutDirection::Right => Point2::new(-point.y, point.x),
+        }
+    }
+
+    fn transform_layered_output(self, output: &mut LayeredOutput) {
+        if self == LayoutDirection::Down {
+            return;
+        }
+
+        for (_, position) in output.node_positions.iter_mut() {
+            if let Some(position) = position {
+                *position = self.transform_layered_point(*position);
+            }
+        }
+        for (_, position) in output.edge_positions.iter_mut() {
+            if let Some(position) = position {
+                *position = self.transform_layered_point(*position);
+            }
+        }
+        for (_, route) in output.edge_routes.iter_mut() {
+            for point in &mut route.source {
+                *point = self.transform_layered_point(*point);
+            }
+            for point in &mut route.sink {
+                *point = self.transform_layered_point(*point);
+            }
+        }
+    }
+
+    fn parse_route_exit(self, value: &str) -> Option<LayeredRouteExit> {
+        let value = value.trim().to_ascii_lowercase();
+        match value.as_str() {
+            "auto" | "_" | "center" | "c" => Some(LayeredRouteExit::Auto),
+            "up" | "top" | "north" | "n" => match self {
+                LayoutDirection::Down => Some(LayeredRouteExit::Up),
+                LayoutDirection::Right => None,
+            },
+            "down" | "bottom" | "south" | "s" => match self {
+                LayoutDirection::Down => Some(LayeredRouteExit::Down),
+                LayoutDirection::Right => None,
+            },
+            "left" | "west" | "w" => match self {
+                LayoutDirection::Down => None,
+                LayoutDirection::Right => Some(LayeredRouteExit::Up),
+            },
+            "right" | "east" | "e" => match self {
+                LayoutDirection::Down => None,
+                LayoutDirection::Right => Some(LayeredRouteExit::Down),
+            },
+            _ => None,
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+enum LayoutRankAlign {
+    Center,
+    #[serde(alias = "top", alias = "north", alias = "left", alias = "west")]
+    Start,
+    #[serde(alias = "bottom", alias = "south", alias = "right", alias = "east")]
+    End,
+}
+
+fn default_rank_align() -> LayoutRankAlign {
+    LayoutRankAlign::Center
+}
+
+impl LayoutRankAlign {
+    fn to_layered(self) -> LayeredRankAlign {
+        match self {
+            LayoutRankAlign::Center => LayeredRankAlign::Center,
+            LayoutRankAlign::Start => LayeredRankAlign::Start,
+            LayoutRankAlign::End => LayeredRankAlign::End,
+        }
+    }
+}
+
+#[derive(
     Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
 #[serde(rename_all = "kebab-case")]
@@ -1356,6 +1472,10 @@ struct LayoutConfig {
     layout_algo: LayoutAlgo,
     #[serde(default = "default_layout_node_mode")]
     layout_nodes: LayoutNodeMode,
+    #[serde(default = "default_layout_direction")]
+    layout_direction: LayoutDirection,
+    #[serde(default = "default_rank_align")]
+    rank_align: LayoutRankAlign,
     #[serde(default, deserialize_with = "deserialize_usize_vec")]
     layout_roots: Vec<usize>,
     #[serde(default, deserialize_with = "deserialize_string_vec")]
@@ -1411,6 +1531,8 @@ impl Default for LayoutConfig {
             incremental_energy: default_incremental_energy(),
             layout_algo: default_layout_algo(),
             layout_nodes: default_layout_node_mode(),
+            layout_direction: default_layout_direction(),
+            rank_align: default_rank_align(),
             layout_roots: Vec::new(),
             rank_same: Vec::new(),
             route_edge_weight: default_route_edge_weight(),
@@ -1456,9 +1578,11 @@ impl LayoutConfig {
                 | "label-step"
                 | "label-steps"
                 | "layout-algo"
+                | "layout-direction"
                 | "layout-nodes"
                 | "layout-roots"
                 | "length-scale"
+                | "rank-align"
                 | "rank-same"
                 | "route-edge-weight"
                 | "route-exit-weight"
@@ -3067,11 +3191,15 @@ impl TypstGraph {
         include_all_nodes: bool,
         profile: LayeredProfile,
     ) -> LayeredOutput {
+        let (layer_gap, node_gap) = match self.layout_config.layout_direction {
+            LayoutDirection::Down => (cfg.dy, cfg.dx),
+            LayoutDirection::Right => (cfg.dx, cfg.dy),
+        };
         let config = LayeredConfig {
             profile,
-            layer_gap: cfg.dy,
-            node_gap: cfg.dx,
-            edge_gap: cfg.dx * 0.35,
+            layer_gap,
+            node_gap,
+            edge_gap: node_gap * 0.35,
             route_edge_weight: self.layout_config.route_edge_weight,
             route_exit_weight: self.layout_config.route_exit_weight,
             route_label_width_scale: self.layout_config.route_label_width_scale,
@@ -3087,17 +3215,44 @@ impl TypstGraph {
                 .collect(),
             rank_same: self.rank_same_node_groups(),
             include_all_nodes,
+            rank_align: self.layout_config.rank_align.to_layered(),
         };
         let geometry = self.layered_geometry();
-        self.graph.layered_layout(subgraph, &config, &geometry)
+        let mut output = self.graph.layered_layout(subgraph, &config, &geometry);
+        self.layout_config
+            .layout_direction
+            .transform_layered_output(&mut output);
+        output
     }
 
     fn layered_geometry(&self) -> LayeredGeometry {
+        let node_widths = self.node_layout_extents("layout-width");
+        let node_heights = self.node_layout_extents("layout-height");
+        let edge_label_widths = self.edge_layout_extents("label-width");
+        let edge_label_heights = self.edge_layout_extents("label-height");
+        let (node_widths, node_heights, edge_label_widths, edge_label_heights) =
+            match self.layout_config.layout_direction {
+                LayoutDirection::Down => (
+                    node_widths,
+                    node_heights,
+                    edge_label_widths,
+                    edge_label_heights,
+                ),
+                LayoutDirection::Right => (
+                    node_heights,
+                    node_widths,
+                    edge_label_heights,
+                    edge_label_widths,
+                ),
+            };
         LayeredGeometry {
-            node_widths: self.node_layout_extents("layout-width"),
-            node_heights: self.node_layout_extents("layout-height"),
-            edge_label_widths: self.edge_layout_extents("label-width"),
-            edge_label_heights: self.edge_layout_extents("label-height"),
+            node_ranks: self.new_nodevec(|_, _, node| {
+                Self::positive_statement_usize(&node.statements, "layout-rank")
+            }),
+            node_widths,
+            node_heights,
+            edge_label_widths,
+            edge_label_heights,
             edge_minlens: self.new_edgevec(|edge, _, _| {
                 Self::positive_statement_usize(&edge.statements, "minlen").unwrap_or(1)
             }),
@@ -3105,12 +3260,12 @@ impl TypstGraph {
                 Self::positive_statement_f64(&edge.statements, "weight").unwrap_or(1.0)
             }),
             edge_source_exits: self.new_edgevec(|edge, _, pair| {
-                Self::route_exit_statement(&edge.statements, "source-route-exit")
+                self.route_exit_statement(&edge.statements, "source-route-exit")
                     .or_else(|| self.route_exit_from_compass(pair, true))
                     .unwrap_or_default()
             }),
             edge_sink_exits: self.new_edgevec(|edge, _, pair| {
-                Self::route_exit_statement(&edge.statements, "sink-route-exit")
+                self.route_exit_statement(&edge.statements, "sink-route-exit")
                     .or_else(|| self.route_exit_from_compass(pair, false))
                     .unwrap_or_default()
             }),
@@ -3133,7 +3288,7 @@ impl TypstGraph {
         self.graph[*hedge]
             .compasspt
             .as_deref()
-            .and_then(Self::parse_route_exit)
+            .and_then(|value| self.layout_config.layout_direction.parse_route_exit(value))
     }
 
     fn rank_same_node_groups(&self) -> Vec<Vec<NodeIndex>> {
@@ -3435,21 +3590,13 @@ impl TypstGraph {
     }
 
     fn route_exit_statement(
+        &self,
         statements: &BTreeMap<String, String>,
         key: &str,
     ) -> Option<LayeredRouteExit> {
         dot_statement_value(statements, key)
             .map(|value| value.trim().trim_matches('"'))
-            .and_then(Self::parse_route_exit)
-    }
-
-    fn parse_route_exit(value: &str) -> Option<LayeredRouteExit> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "auto" | "_" | "center" | "c" => Some(LayeredRouteExit::Auto),
-            "up" | "top" | "north" | "n" => Some(LayeredRouteExit::Up),
-            "down" | "bottom" | "south" | "s" => Some(LayeredRouteExit::Down),
-            _ => None,
-        }
+            .and_then(|value| self.layout_config.layout_direction.parse_route_exit(value))
     }
 
     fn center_targets_x_by_extents(

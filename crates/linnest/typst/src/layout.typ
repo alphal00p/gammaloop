@@ -157,6 +157,15 @@
   /// subgraph are moved; other edge control points stay at their current
   /// positions. -> string
   layout-nodes: "layout",
+  /// Direction for traversal-tree and layered rank placement. `"down"` places
+  /// increasing ranks downward; `"right"` swaps the layout axes so increasing
+  /// ranks go left-to-right and measured node/label widths reserve rank-axis
+  /// space. -> string
+  layout-direction: "down",
+  /// Alignment of real nodes inside a rank along the rank axis. `"center"` keeps
+  /// node centers aligned, while `"start"` / `"left"` and `"end"` / `"right"`
+  /// align the corresponding measured node-box side. -> string
+  rank-align: "center",
   /// Ordered node indices used as preferred roots for `"tree"`, `"dot"`, and
   /// `"stable-layered"`. Roots outside the selected node set are ignored.
   /// Remaining components are laid out afterward in graph order. -> array
@@ -165,6 +174,9 @@
   /// These are layout hints supplied by Typst rather than parsed graph
   /// structure. -> array
   rank-same: (),
+  /// Dot/stable-layered also honors a node statement `layout-rank` as an exact
+  /// non-negative integer rank. Nodes with the same `layout-rank` are placed on
+  /// the same horizontal layer, and larger ranks are placed lower.
   /// Relative layout weight for paired edges outside the dot/stable-layered
   /// rank subgraph. Lower values make these edges guide routing without
   /// dominating the rank tree. -> float
@@ -226,6 +238,8 @@
     incremental-energy: incremental-energy,
     layout-algo: layout-algo,
     layout-nodes: layout-nodes,
+    layout-direction: layout-direction,
+    rank-align: rank-align,
     layout-roots: layout-roots,
     rank-same: rank-same.map(subgraph-module.to-label),
     route-edge-weight: str(route-edge-weight),
