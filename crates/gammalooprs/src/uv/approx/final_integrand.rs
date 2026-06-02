@@ -8,7 +8,7 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
-        IntegrandExpr, UltravioletGraph,
+        UltravioletGraph,
         approx::{ApproxOp, ForestNodeLike, ResidueProjection},
     },
 };
@@ -41,21 +41,6 @@ pub(crate) struct FinalIntegrand<'a> {
 pub(crate) struct LocalizedIntegratedCt {
     pub active: ResidueSelectedTerms,
     pub frozen_integrands: ResidueSelectedTerms,
-}
-
-impl TryFrom<LocalizedIntegratedCt> for IntegrandExpr {
-    type Error = eyre::Report;
-
-    fn try_from(value: LocalizedIntegratedCt) -> Result<Self, Self::Error> {
-        let integrands = value
-            .active
-            .try_zip_with(&value.frozen_integrands, |_, active, frozen| {
-                Ok(active * frozen)
-            })
-            .wrap_err("while combining localized integrated CT active/frozen factors")?;
-
-        Ok(IntegrandExpr { integrands })
-    }
 }
 
 impl<'a> FinalIntegrand<'a> {
@@ -465,9 +450,14 @@ impl<'a> FinalIntegrand<'a> {
             "Computed global numerator"
         );
 
-        let integrated_t: IntegrandExpr = self
-            .localized_integrated_ct_from_terms(graph, current, integrated_4d)?
-            .try_into()?;
+        let integrated_t =
+            self.localized_integrated_ct_from_terms(graph, current, integrated_4d)?;
+        let integrated_terms = integrated_t
+            .active
+            .try_zip_with(&integrated_t.frozen_integrands, |_, active, frozen| {
+                Ok(active * frozen)
+            })
+            .wrap_err("while combining localized integrated CT active/frozen factors")?;
 
         let reduced = graph
             .full_filter()
@@ -476,7 +466,7 @@ impl<'a> FinalIntegrand<'a> {
 
         let mut term_index = 0;
         local_terms
-            .try_zip_with(&integrated_t.integrands, |index, local, integ| {
+            .try_zip_with(&integrated_terms, |index, local, integ| {
                 let mut term_started = std::time::Instant::now();
                 let mut cff;
                 if let Some(marker) = self.uv_marker {

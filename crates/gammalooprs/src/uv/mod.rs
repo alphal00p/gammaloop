@@ -1,6 +1,4 @@
-use std::hash::Hash;
-
-use crate::{cff::ResidueSelectedTerms, numerator::aind::Aind, utils::GS};
+use crate::{numerator::aind::Aind, utils::GS};
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
@@ -26,12 +24,6 @@ pub(crate) fn spenso_lor(
 
 pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegrandExpr {
-    integrands: ResidueSelectedTerms,
-    // add_arg: Option<Atom>,
 }
 
 #[allow(dead_code)]

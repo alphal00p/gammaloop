@@ -91,7 +91,8 @@ impl Local3DApproximation {
         graph: &mut Graph,
         projection: ResidueProjection<'_>,
     ) -> Result<ResidueSelectedTerms> {
-        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), projection)
+        let empty = graph.empty_subgraph::<SuBitGraph>();
+        Self::dependent(graph, &empty, projection)
     }
 
     #[debug_instrument(

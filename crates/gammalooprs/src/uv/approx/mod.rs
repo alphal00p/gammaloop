@@ -28,7 +28,7 @@ use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubS
 
 use vakint::Vakint;
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
-use super::{IntegrandExpr, UltravioletGraph};
+use super::UltravioletGraph;
 
 pub mod final_integrand;
 pub mod integrated;
@@ -71,12 +71,12 @@ pub enum ApproxOp {
     NotComputed,
     Union {
         sign: Sign,
-        t_args: Vec<IntegrandExpr>,
+        t_args: Vec<ResidueSelectedTerms>,
         subgraphs: Vec<InternalSubGraph>,
     },
     Dependent {
         sign: Sign,
-        t_arg: IntegrandExpr,
+        integrands: ResidueSelectedTerms,
         subgraph: InternalSubGraph,
     },
     Root,
@@ -194,7 +194,10 @@ impl ForestNodeLike for Approximation {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CFFapprox {
     NotComputed,
-    Dependent { sign: Sign, t_arg: IntegrandExpr },
+    Dependent {
+        sign: Sign,
+        integrands: ResidueSelectedTerms,
+    },
 }
 
 #[derive(Clone)]
@@ -245,7 +248,7 @@ impl CFFapprox {
     pub(crate) fn expr(&self) -> Option<(ResidueSelectedTerms, Sign)> {
         match self {
             CFFapprox::NotComputed => None,
-            CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrands.clone(), *sign)),
+            CFFapprox::Dependent { sign, integrands } => Some((integrands.clone(), *sign)),
         }
     }
 
@@ -253,7 +256,6 @@ impl CFFapprox {
         graph: &mut Graph,
         to_contract: &SuBitGraph,
         projection: ResidueProjection<'_>,
-        _settings: &UVgenerationSettings,
     ) -> Result<CFFapprox> {
         let cff = graph
             .cff(
@@ -271,23 +273,13 @@ impl CFFapprox {
 
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
-            t_arg: IntegrandExpr {
-                integrands: cff.map(|a| a * &fourddenoms),
-            },
+            integrands: cff.map(|a| a * &fourddenoms),
         })
     }
 
-    pub(crate) fn root(
-        graph: &mut Graph,
-        projection: ResidueProjection<'_>,
-        settings: &UVgenerationSettings,
-    ) -> Result<CFFapprox> {
-        Self::dependent(
-            graph,
-            &graph.empty_subgraph::<SuBitGraph>(),
-            projection,
-            settings,
-        )
+    pub(crate) fn root(graph: &mut Graph, projection: ResidueProjection<'_>) -> Result<CFFapprox> {
+        let empty = graph.empty_subgraph::<SuBitGraph>();
+        Self::dependent(graph, &empty, projection)
     }
 }
 
@@ -318,9 +310,7 @@ impl Approximation {
     fn set_zero_local_3d(&mut self, sign: Sign, allowed_keys: &[CutCFFIndex]) {
         self.local_3d = CFFapprox::Dependent {
             sign,
-            t_arg: IntegrandExpr {
-                integrands: Self::zero_terms(allowed_keys),
-            },
+            integrands: Self::zero_terms(allowed_keys),
         };
     }
 
@@ -342,7 +332,7 @@ impl Approximation {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
-            self.local_3d = CFFapprox::root(graph, projection, settings)?;
+            self.local_3d = CFFapprox::root(graph, projection)?;
             if Self::filtered_integrated_uv_mode_is_active(settings) {
                 self.final_integrand = Some(Self::zero_terms(
                     &cuts.residue_selector.generate_allowed_keys(),
@@ -405,9 +395,7 @@ impl Approximation {
                 "Skipped integrated UV computation for filtered mode"
             );
             self.integrated_4d = ApproxOp::Dependent {
-                t_arg: IntegrandExpr {
-                    integrands: ResidueSelectedTerms::all_none(Atom::Zero),
-                },
+                integrands: ResidueSelectedTerms::all_none(Atom::Zero),
                 sign: Sign::Positive,
                 subgraph: unsafe {
                     InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent))
@@ -453,7 +441,7 @@ impl Approximation {
             .collect::<Result<ResidueSelectedTerms>>()?;
 
         self.integrated_4d = ApproxOp::Dependent {
-            t_arg: IntegrandExpr { integrands },
+            integrands,
             sign: -*sign,
             subgraph: unsafe { InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent)) },
         };
@@ -524,7 +512,7 @@ impl Approximation {
                 cuts.residue_selector.generate_allowed_keys().as_slice(),
             );
             self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
-                self.final_integrand(graph, projection, settings)?
+                self.final_integrand(graph, projection)?
             } else {
                 Self::zero_terms(&cuts.residue_selector.generate_allowed_keys())
             });
@@ -605,7 +593,7 @@ impl Approximation {
             .wrap_err("while combining legacy local and integrated approximations")?;
         self.local_3d = CFFapprox::Dependent {
             sign: output_sign,
-            t_arg: IntegrandExpr { integrands },
+            integrands,
         };
 
         let final_started = std::time::Instant::now();
@@ -641,7 +629,6 @@ impl Approximation {
         &self,
         graph: &mut Graph,
         projection: ResidueProjection<'_>,
-        _settings: &UVgenerationSettings,
     ) -> Result<ResidueSelectedTerms> {
         let (local_terms, local_sign) = self
             .local_3d
@@ -678,7 +665,9 @@ impl ApproxOp {
                     "Should not call expr on a union approximation, need to compute the union first"
                 );
             }
-            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrands.clone(), *sign)),
+            ApproxOp::Dependent {
+                integrands, sign, ..
+            } => Some((integrands.clone(), *sign)),
             ApproxOp::Root => Some((ResidueSelectedTerms::all_none(Atom::num(1)), Sign::Positive)),
         }
     }

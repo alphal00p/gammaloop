@@ -1,4 +1,5 @@
 use std::{
+    cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
 };
@@ -35,9 +36,7 @@ use crate::{
         RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
             ApproximationKernel, CutStructure, ForestNodeLike, OrientationProjection,
-            ResidueProjection, UVCtx,
-            final_integrand::{FinalIntegrand, LocalizedIntegratedCt},
-            integrated::Integrated,
+            ResidueProjection, UVCtx, final_integrand::FinalIntegrand, integrated::Integrated,
             local_3d::Local3DApproximation,
         },
         forest::ParametricIntegrands,
@@ -299,6 +298,18 @@ impl ComputeStore {
             .ok_or_else(|| eyre!("{} not yet added to store", key))
     }
 
+    fn local_terms(&self, key: &OperationNode, cutset: &CutSet) -> Result<&ResidueSelectedTerms> {
+        let computed = self.require(key)?;
+        let integrands = computed
+            .local_3d
+            .get(cutset)
+            .ok_or_else(|| eyre!("{} local_3d not computed for current cutset", key))?;
+        let Integrands::Multiple(terms) = integrands else {
+            return Err(eyre!("{} local_3d not computed yet", key));
+        };
+        Ok(terms)
+    }
+
     fn entry(
         &mut self,
         key: OperationNode,
@@ -334,6 +345,24 @@ pub struct ForestNode<'a> {
 pub struct OwnedForestNode {
     pub spinney: Spinney,
     pub topo_order: usize,
+}
+
+struct LocalLeafOperation {
+    op: HiddenData<SuBitGraph, EdgeIndex>,
+    frontier: OperationNode,
+}
+
+impl LocalLeafOperation {
+    fn new(op: &HiddenData<SuBitGraph, EdgeIndex>, frontier: &OperationNode) -> Self {
+        Self {
+            op: op.clone(),
+            frontier: frontier.clone(),
+        }
+    }
+
+    fn frontier_depth(&self) -> usize {
+        self.frontier.key.op_count()
+    }
 }
 
 impl OperationNode {
@@ -607,70 +636,6 @@ impl OperationNode {
 
         Ok(acc)
     }
-
-    fn local(&self, ctx: &mut LocalOperationContext<'_>) -> Result<ResidueSelectedTerms> {
-        if self.key.is_empty() {
-            return Ok(ctx.root.clone());
-        }
-
-        let mut acc = ctx.root.clone();
-        let local = Local3DApproximation::full();
-        let mut order = 0;
-        let mut levels = self.key.view();
-        let mut completed_levels: Vec<Vec<HiddenData<SuBitGraph, EdgeIndex>>> = Vec::new();
-        if ctx.settings.cached
-            && let Some((prefix, leaf_level)) = self.key.split_last_level()
-        {
-            let prefix_key = OperationNode {
-                key: prefix.to_owned(),
-            };
-            if let Some(computed) = ctx.compute_store.get(&prefix_key) {
-                let Integrands::Multiple(cached) = &computed.local_3d[ctx.projection.cutset] else {
-                    return Err(eyre!("{} local_3d not computed yet", prefix_key));
-                };
-                acc = cached.clone();
-                order = prefix.op_count();
-                levels = leaf_level;
-                completed_levels = prefix
-                    .iter_levels_top_down()
-                    .map(|level| level.iter_leaf_ops().cloned().collect())
-                    .collect();
-            }
-        }
-
-        for l in levels.iter_levels_top_down() {
-            let mut level_product: Option<ResidueSelectedTerms> = None;
-            let dependent_integrated_finite = ctx.dependent_integrated_finite(&completed_levels)?;
-
-            for op in l.iter_leaf_ops() {
-                let (current, given) = ctx.wood.current_given_pair(op.data, order);
-                order += 1;
-                ctx.compute_store.record_kernel_hit();
-                let stepped = ctx.local_step(
-                    &acc,
-                    &current,
-                    &given,
-                    &local,
-                    dependent_integrated_finite.as_ref(),
-                )?;
-
-                if let Some(product) = &mut level_product {
-                    product
-                        .multiply_assign_aligned(stepped)
-                        .wrap_err("while multiplying hedge-poset level product")?;
-                } else {
-                    level_product = Some(stepped);
-                }
-            }
-
-            if let Some(product) = level_product {
-                acc = product;
-            }
-            completed_levels.push(l.iter_leaf_ops().cloned().collect());
-        }
-
-        Ok(acc)
-    }
 }
 
 pub enum Integrand {
@@ -702,43 +667,46 @@ impl Default for ComputeNode {
     }
 }
 
-struct LocalOperationContext<'a> {
-    graph: &'a mut Graph,
-    projection: ResidueProjection<'a>,
-    root: &'a ResidueSelectedTerms,
-    compute_store: &'a mut ComputeStore,
-    wood: &'a Wood,
-    settings: &'a UVgenerationSettings,
-}
-
-impl LocalOperationContext<'_> {
-    fn dependent_integrated_finite(
+impl ResidueProjection<'_> {
+    fn initial_accumulator(
         &self,
-        completed_levels: &[Vec<HiddenData<SuBitGraph, EdgeIndex>>],
-    ) -> Result<Option<Atom>> {
-        OperationNode {
-            key: TraceKey::from_levels(completed_levels.to_vec()),
+        compute_store: &ComputeStore,
+        frontier: &OperationNode,
+        operation: &OperationNode,
+        root_terms: &ResidueSelectedTerms,
+    ) -> Result<ResidueSelectedTerms> {
+        if frontier.key.is_empty() {
+            return Ok(root_terms.clone());
         }
-        .integrated_4d_from_store(self.compute_store, self.settings)?
-        .map(|integrated_4d| FinalIntegrand::finite_integrated_ct_terms(Some(integrated_4d)))
-        .transpose()
+
+        compute_store
+            .local_terms(frontier, self.cutset)
+            .cloned()
+            .wrap_err_with(|| {
+                format!(
+                    "while loading local frontier {} for {}",
+                    frontier, operation
+                )
+            })
     }
 
-    fn local_step(
-        &mut self,
+    fn apply_local_step(
+        &self,
+        graph: &mut Graph,
+        settings: &UVgenerationSettings,
         terms: &ResidueSelectedTerms,
         current: &ForestNode<'_>,
         given: &ForestNode<'_>,
-        local: &Local3DApproximation,
         integrated_finite: Option<&Atom>,
     ) -> Result<ResidueSelectedTerms> {
         let integrated_terms = integrated_finite
-            .map(|finite| self.localized_integrated_terms(given, finite))
+            .map(|finite| {
+                FinalIntegrand::new(*self, None, false)
+                    .localized_finite_integrated_ct(graph, given, finite)
+            })
             .transpose()?;
-        let uvctx = UVCtx {
-            graph: self.graph,
-            settings: self.settings,
-        };
+        let uvctx = UVCtx { graph, settings };
+        let local = Local3DApproximation::full();
 
         terms.try_map(|index, atom| {
             let mut stepped = -local.kernel(&uvctx, current, given, atom)?;
@@ -758,15 +726,6 @@ impl LocalOperationContext<'_> {
             Ok(stepped)
         })
     }
-
-    fn localized_integrated_terms(
-        &mut self,
-        given: &ForestNode<'_>,
-        finite: &Atom,
-    ) -> Result<LocalizedIntegratedCt> {
-        FinalIntegrand::new(self.projection, None, false)
-            .localized_finite_integrated_ct(self.graph, given, finite)
-    }
 }
 
 impl Forests {
@@ -783,6 +742,75 @@ impl Forests {
         }
 
         Ok(order)
+    }
+
+    fn local_leaf_operations(&self, node: NodeIndex) -> Vec<LocalLeafOperation> {
+        let mut leaves = self
+            .graph
+            .leaf_op_dependency_frontiers(node, &self.wood)
+            .map(|(op, frontier)| LocalLeafOperation::new(op, &self.graph[frontier]))
+            .collect::<Vec<_>>();
+
+        leaves.sort_by_key(|leaf| {
+            (
+                Reverse(leaf.frontier_depth()),
+                leaf.op.order.clone(),
+                usize::from(leaf.op.data),
+            )
+        });
+        leaves
+    }
+
+    fn dependent_integrated_finite(
+        &self,
+        frontier: &OperationNode,
+        settings: &UVgenerationSettings,
+    ) -> Result<Option<Atom>> {
+        frontier
+            .integrated_4d_from_store(&self.compute_store, settings)?
+            .map(|integrated_4d| FinalIntegrand::finite_integrated_ct_terms(Some(integrated_4d)))
+            .transpose()
+    }
+
+    fn local_3d_for_node(
+        &mut self,
+        node: NodeIndex,
+        graph: &mut Graph,
+        projection: ResidueProjection<'_>,
+        root_terms: &ResidueSelectedTerms,
+        settings: &UVgenerationSettings,
+    ) -> Result<ResidueSelectedTerms> {
+        let operation = self.graph[node].clone();
+        let leaves = self.local_leaf_operations(node);
+        let Some(first_leaf) = leaves.first() else {
+            if operation.key.is_empty() {
+                return Ok(root_terms.clone());
+            }
+            return Err(eyre!("{} has no local leaf operations", operation));
+        };
+
+        let mut acc = projection.initial_accumulator(
+            &self.compute_store,
+            &first_leaf.frontier,
+            &operation,
+            root_terms,
+        )?;
+
+        for (order, leaf) in leaves.iter().enumerate() {
+            let integrated_finite = self.dependent_integrated_finite(&leaf.frontier, settings)?;
+            let (current, given) = self.wood.current_given_pair(leaf.op.data, order);
+            self.compute_store.record_kernel_hit();
+            acc = projection.apply_local_step(
+                graph,
+                settings,
+                &acc,
+                &current,
+                &given,
+                integrated_finite.as_ref(),
+            )?;
+        }
+
+        Ok(acc)
     }
 
     fn cached_node_label_atom(&self, node: NodeIndex) -> Option<Atom> {
@@ -987,28 +1015,19 @@ impl Forests {
             self.integrate(graph, vakint, settings)?;
         }
 
-        for (cut_compatible_forest_subset, cuts) in &self.cuts {
-            let projection = orientation.for_cut(cuts);
+        for (cut_compatible_forest_subset, cuts) in self.cuts.clone() {
+            let projection = orientation.for_cut(&cuts);
             let root = Local3DApproximation::root(graph, projection)?;
 
             for (order, nidx) in self
-                .compatible_topological_order(cut_compatible_forest_subset)?
+                .compatible_topological_order(&cut_compatible_forest_subset)?
                 .into_iter()
                 .enumerate()
             {
                 debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[nidx],"One integrated step");
                 let operation = self.graph[nidx].clone();
-                let integrands = {
-                    let mut local_context = LocalOperationContext {
-                        graph,
-                        projection,
-                        root: &root,
-                        compute_store: &mut self.compute_store,
-                        wood: &self.wood,
-                        settings,
-                    };
-                    operation.local(&mut local_context)?
-                };
+                let integrands =
+                    self.local_3d_for_node(nidx, graph, projection, &root, settings)?;
                 let forest_node = operation.forest_node(graph, order);
                 let integrated_4d =
                     operation.integrated_4d_from_store(&self.compute_store, settings)?;
@@ -1264,14 +1283,211 @@ impl Display for Forests {
 #[cfg(test)]
 mod tests {
     use crate::{
+        cff::CutCFFIndex,
         dot,
         graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
+        settings::global::OrientationPattern,
         uv::{UltravioletGraph, Wood as OldWood},
     };
 
     use super::*;
     use color_eyre::Result;
+    use linnet::half_edge::involution::Hedge;
+    use symbolica::symbol;
+
+    fn test_subgraph(n_edges: usize, edges: &[usize]) -> SuBitGraph {
+        let mut subgraph = SuBitGraph::empty(2 * n_edges);
+        for edge in edges {
+            subgraph.add(Hedge(2 * *edge));
+            subgraph.add(Hedge(2 * *edge + 1));
+        }
+        subgraph
+    }
+
+    fn test_op(order: SuBitGraph, data: usize) -> HiddenData<SuBitGraph, EdgeIndex> {
+        HiddenData {
+            order,
+            data: EdgeIndex(data),
+        }
+    }
+
+    impl Forests {
+        fn normalized_node_label(&self, node: NodeIndex) -> String {
+            let label = self.node_label(node);
+            let mut normalized = String::with_capacity(label.len());
+            let mut chars = label.chars().peekable();
+
+            while let Some(ch) = chars.next() {
+                normalized.push(ch);
+                if ch != '(' {
+                    continue;
+                }
+
+                let mut digits = String::new();
+                while chars.peek().is_some_and(|next| next.is_ascii_digit()) {
+                    digits.push(chars.next().expect("peeked digit must exist"));
+                }
+
+                if digits.is_empty() || !matches!(chars.peek(), Some(')')) {
+                    normalized.push_str(&digits);
+                } else {
+                    normalized.push('_');
+                }
+            }
+
+            normalized
+        }
+
+        fn normalized_node_labels_with_cover(&self, cover_label: &str) -> Vec<String> {
+            let mut labels = self
+                .graph
+                .iter_nodes()
+                .filter(|(_, _, operation)| {
+                    operation
+                        .covers()
+                        .is_some_and(|cover| cover.string_label() == cover_label)
+                })
+                .map(|(node, _, _)| self.normalized_node_label(node))
+                .collect::<Vec<_>>();
+            labels.sort();
+            labels
+        }
+    }
+
+    #[test]
+    fn local_leaf_operations_follow_dependency_frontiers() -> Result<()> {
+        test_initialise().unwrap();
+        let dumbell: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+
+        let forests = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &UVgenerationSettings::default(),
+        )
+        .unfold();
+
+        let frontier_label = |operation: &OperationNode| {
+            operation
+                .covers()
+                .map_or_else(|| "∅".to_string(), |cover| cover.string_label())
+        };
+        let leaf_labels = |node| {
+            forests
+                .local_leaf_operations(node)
+                .iter()
+                .map(|leaf| (leaf.op.order.string_label(), frontier_label(&leaf.frontier)))
+                .collect::<Vec<_>>()
+        };
+
+        let root_disconnected = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                forests
+                    .normalized_node_label(node)
+                    .starts_with("{36,F}:")
+                    .then_some(node)
+            })
+            .expect("lopsided dumbbell should contain a root disconnected frontier");
+        assert_eq!(
+            leaf_labels(root_disconnected),
+            vec![
+                ("36".to_string(), "∅".to_string()),
+                ("F".to_string(), "∅".to_string())
+            ]
+        );
+
+        let dependent_disconnected = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                forests
+                    .normalized_node_label(node)
+                    .starts_with("{C} · {36,F}:")
+                    .then_some(node)
+            })
+            .expect("lopsided dumbbell should contain a C-dependent disconnected frontier");
+        assert_eq!(
+            leaf_labels(dependent_disconnected),
+            vec![
+                ("F".to_string(), "C".to_string()),
+                ("36".to_string(), "∅".to_string())
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn local_frontier_terms_read_non_root_compute_store() -> Result<()> {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2;
+                v1 -> v1;
+            },"scalars"
+        )?;
+        let cut_structure = CutStructure::empty(&graph);
+        let cutset = cut_structure
+            .cuts
+            .first()
+            .expect("empty cut structure has one cut")
+            .clone();
+        let root = ResidueSelectedTerms::all_none(Atom::var(symbol!("root")));
+        let cached = ResidueSelectedTerms::all_none(Atom::var(symbol!("cached")));
+        let frontier = OperationNode {
+            key: TraceKey::from_levels(vec![vec![test_op(test_subgraph(4, &[1]), 0)]]),
+        };
+        let operation = OperationNode {
+            key: TraceKey::from_levels(vec![
+                vec![test_op(test_subgraph(4, &[1]), 0)],
+                vec![test_op(test_subgraph(4, &[0, 1]), 1)],
+            ]),
+        };
+        let mut compute_store = ComputeStore::default();
+        compute_store
+            .entry(frontier.clone())
+            .or_default()
+            .local_3d
+            .insert(cutset.clone(), Integrands::Multiple(cached.clone()));
+        let orientation_pattern = OrientationPattern::default();
+        let orientation = OrientationProjection::new(&[], &orientation_pattern);
+        let projection = orientation.for_cut(&cutset);
+
+        assert_eq!(
+            projection
+                .initial_accumulator(&compute_store, &frontier, &operation, &root)?
+                .get(CutCFFIndex::new_all_none())?
+                .to_canonical_string(),
+            cached
+                .get(CutCFFIndex::new_all_none())?
+                .to_canonical_string()
+        );
+        assert_eq!(
+            projection
+                .initial_accumulator(
+                    &compute_store,
+                    &OperationNode {
+                        key: TraceKey::empty(),
+                    },
+                    &operation,
+                    &root,
+                )?
+                .get(CutCFFIndex::new_all_none())?
+                .to_canonical_string(),
+            root.get(CutCFFIndex::new_all_none())?.to_canonical_string()
+        );
+        Ok(())
+    }
 
     #[test]
     fn triple_tadpole() -> Result<()> {
@@ -1753,6 +1969,8 @@ mod tests {
     }
 
     mod failing {
+        use crate::processes::DotExportSettings;
+
         use super::*;
 
         #[test]
@@ -1855,12 +2073,12 @@ mod tests {
             f.debug_walk();
             println!("{}", f);
             insta::assert_snapshot!(
-                f.node_label(NodeIndex(10)),
-                @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
-            );
-            insta::assert_snapshot!(
-                f.node_label(NodeIndex(11)),
-                @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+                f.normalized_node_labels_with_cover("3L").join("\n"),
+                @r###"
+{36,F}: T(S_36(_))*T(S_F(_))
+{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
+{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+"###
             );
             insta::assert_snapshot!(
                 f.graph.n_nodes(),
@@ -1874,13 +2092,76 @@ mod tests {
             .unfold_uncached();
             assert!(f.compute_store.entries.is_empty());
             insta::assert_snapshot!(
-                f.node_label(NodeIndex(10)),
-                @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
+                f.normalized_node_labels_with_cover("3L").join("\n"),
+                @r###"
+{36,F}: T(S_36(_))*T(S_F(_))
+{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
+{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+"###
             );
+
+            println!(
+                "{}",
+                dumbell.dot_serialize(&DotExportSettings {
+                    ..Default::default()
+                })
+            );
+            println!("{}", f.dot_serialize());
+
+            Ok(())
+        }
+
+        #[test]
+        fn double_double_dumbell() -> Result<()> {
+            test_initialise().unwrap();
+            let dumbell: Graph = dot!(
+                digraph G{
+                    edge [particle="scalar_1"];
+                    v1 -> v2;
+                    v2 -> v2;v2 -> v2; //v2 -> v2;
+                    v1 -> v1;v1 -> v1;
+                },"scalars"
+            )?;
+
+            let _spinneys: Vec<_> = dumbell
+                .spinneys(&dumbell.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .collect();
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            );
+
+            println!("{}", f);
+
             insta::assert_snapshot!(
-                f.node_label(NodeIndex(11)),
-                @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+                f.graph.n_nodes(),
+                @"16",
+                // format!("Wood does not have correct number of spinneys: \n{}",f)
             );
+
+            let f = f.unfold();
+
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"32");
+
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            )
+            .unfold_uncached();
+
+            println!(
+                "{}",
+                dumbell.dot_serialize(&DotExportSettings {
+                    ..Default::default()
+                })
+            );
+            println!("{}", f.dot_serialize());
 
             Ok(())
         }
