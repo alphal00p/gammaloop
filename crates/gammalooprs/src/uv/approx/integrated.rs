@@ -1,6 +1,5 @@
-use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
     color::ColorSimplifier,
@@ -22,10 +21,16 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::TensorCollectExt,
+    shadowing::{TensorCollectExt, symbolica_utils::ReplaceBuilderExt},
     structure::representation::{Minkowski, RepName},
 };
-use symbolica::{atom::AtomCore, prelude::*};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function,
+    id::Replacement,
+    parse, parse_lit,
+    solve::SolveError,
+};
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
@@ -306,7 +311,7 @@ impl Integrated<'_> {
             given.subgraph(),
             &settings.vakint,
             true,
-        );
+        )?;
 
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
             debug_tags!(#uv,#integrated,#vakint,#trace,#to_vakint;
@@ -543,7 +548,7 @@ pub(crate) fn to_vakint_integrand<
     dependent_subgraph: &SS,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
-) -> VakintExpression {
+) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let mut integrand_vakint = integrand
@@ -786,7 +791,8 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace before split terms"
     );
 
-    let mut a = VakintExpression::try_from(vakint_input_atom).unwrap();
+    let mut a = VakintExpression::try_from(vakint_input_atom)
+        .wrap_err("could not split integrand into Vakint terms")?;
 
     for (term_index, t) in a.0.iter_mut().enumerate() {
         debug_tags!(#uv, #integrated, #vakint, #inspect, #trace;
@@ -837,7 +843,7 @@ pub(crate) fn to_vakint_integrand<
         }
 
         let mut system = vec![];
-        let mut vars = HashSet::new();
+        let mut momentum_variables = vec![];
 
         let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
         let uncontracted_propagator_count =
@@ -952,7 +958,9 @@ pub(crate) fn to_vakint_integrand<
                     .pattern_match(&mom_pat, None, None)
                     .for_each(|m| {
                         let var = mom_pat.replace_wildcards(&m).unwrap();
-                        vars.insert(var);
+                        if !momentum_variables.iter().any(|existing| existing == &var) {
+                            momentum_variables.push(var);
+                        }
                     });
 
                 // println!("{loop_expr}");
@@ -964,7 +972,6 @@ pub(crate) fn to_vakint_integrand<
             }
         }
 
-        let vars = vars.into_iter().collect::<Vec<_>>();
         let add_additional_args = [
             Replacement::new(
                 function!(GS.emr_mom, W_.i_).to_pattern(),
@@ -977,52 +984,17 @@ pub(crate) fn to_vakint_integrand<
             )
             .allow_new_wildcards_on_rhs(true),
         ];
-        let a = Atom::solve_linear_system::<u8, _, _>(&system, &vars);
-        match a {
-            Ok(a) => {
-                for (v, k) in a.iter().zip(vars.iter()) {
-                    let lhs = k.replace_multiple(&add_additional_args);
-                    let rhs = v.replace_multiple(&add_additional_args);
-                    // println!("Momentum solution: {} -> {}", lhs, rhs);
-                    t.integral = t.integral.replace(lhs.to_pattern()).with(rhs.to_pattern());
-                    t.numerator = t.numerator.replace(lhs.to_pattern()).with(rhs.to_pattern());
-                }
-            }
-            Err(SolveError::Underdetermined {
-                partial_solution, ..
-            }) => {
-                let mut reps = vec![];
-                for (p, v) in partial_solution.iter().zip(vars.iter()).rev() {
-                    let p = p.replace_multiple(&reps);
-
-                    if &p == v {
-                        reps.push(Replacement::new(
-                            p.replace_multiple(&add_additional_args).to_pattern(),
-                            Atom::Zero,
-                        ))
-                    } else {
-                        reps.push(Replacement::new(
-                            v.replace_multiple(&add_additional_args).to_pattern(),
-                            p.replace_multiple(&add_additional_args).to_pattern(),
-                        ))
-                    }
-
-                    // println!("Partial solution: {}->{}", v, p);
-                }
-                // for r in &reps {
-                //     println!("Rep: {:#}", r);
-                // }
-
-                t.integral = t.integral.replace_multiple(&reps);
-                t.numerator = t.numerator.replace_multiple(&reps);
-            }
-            Err(a) => {
-                panic!(
-                    "Could not solve momentum system for vakint integrand: {}",
-                    a
-                );
-            }
-        }
+        let momentum_solution =
+            VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
+                .wrap_err("could not solve momentum system for Vakint integrand")?;
+        t.numerator = momentum_solution.rewrite_numerator(&t.numerator);
+        t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
+        momentum_solution.ensure_free_variables_eliminated(
+            term_index,
+            "integral",
+            &t.integral,
+            &add_additional_args,
+        )?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_momentum_solve",
             term_index = %term_index,
@@ -1103,7 +1075,187 @@ pub(crate) fn to_vakint_integrand<
         );
     }
 
-    a
+    Ok(a)
+}
+
+struct VakintMomentumSolution {
+    replacements: Vec<Replacement>,
+    free_variables: Vec<Atom>,
+}
+
+impl VakintMomentumSolution {
+    fn solve(
+        system: &[Atom],
+        variables: &[Atom],
+        add_additional_args: &[Replacement],
+    ) -> Result<Self> {
+        if variables.is_empty() {
+            return Ok(Self {
+                replacements: vec![],
+                free_variables: vec![],
+            });
+        }
+        if system.is_empty() {
+            return Ok(Self {
+                replacements: vec![],
+                free_variables: variables.to_vec(),
+            });
+        }
+
+        match Atom::solve_linear_system::<u8, _, _>(system, variables) {
+            Ok(solution) => Ok(Self::from_solution(
+                &solution,
+                variables,
+                add_additional_args,
+            )),
+            Err(SolveError::Underdetermined {
+                partial_solution, ..
+            }) => Ok(Self::from_solution(
+                &partial_solution,
+                variables,
+                add_additional_args,
+            )),
+            Err(source) => Err(eyre!("{source}")),
+        }
+    }
+
+    fn from_solution(
+        solution: &[Atom],
+        variables: &[Atom],
+        add_additional_args: &[Replacement],
+    ) -> Self {
+        debug_assert_eq!(solution.len(), variables.len());
+        let mut replacements = vec![];
+        let mut free_variables = vec![];
+
+        for index in (0..variables.len()).rev() {
+            let replacement = &solution[index];
+            let variable = &variables[index];
+            let replacement = replacement.replace_multiple(&replacements);
+            if &replacement == variable {
+                free_variables.push(variable.clone());
+            } else {
+                replacements.push(Replacement::new(
+                    variable.replace_multiple(add_additional_args).to_pattern(),
+                    replacement
+                        .replace_multiple(add_additional_args)
+                        .to_pattern(),
+                ));
+            }
+        }
+
+        Self {
+            replacements,
+            free_variables,
+        }
+    }
+
+    fn ensure_free_variables_eliminated(
+        &self,
+        term_index: usize,
+        expression_kind: &str,
+        expression: &Atom,
+        add_additional_args: &[Replacement],
+    ) -> Result<()> {
+        self.ensure_variables_eliminated(
+            term_index,
+            expression_kind,
+            expression,
+            self.free_variables.iter(),
+            add_additional_args,
+        )
+    }
+
+    fn ensure_variables_eliminated<'a>(
+        &self,
+        term_index: usize,
+        expression_kind: &str,
+        expression: &Atom,
+        variables: impl IntoIterator<Item = &'a Atom>,
+        add_additional_args: &[Replacement],
+    ) -> Result<()> {
+        for variable in variables {
+            let bare_pattern = variable.to_pattern();
+            let indexed_pattern = variable.replace_multiple(add_additional_args).to_pattern();
+            if expression
+                .pattern_match(&bare_pattern, None, None)
+                .next()
+                .is_some()
+                || expression
+                    .pattern_match(&indexed_pattern, None, None)
+                    .next()
+                    .is_some()
+            {
+                return Err(eyre!(
+                    "Underdetermined Vakint momentum solve left free variable {} in {} of term {}",
+                    variable,
+                    expression_kind,
+                    term_index
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn rewrite_numerator(&self, numerator: &Atom) -> Atom {
+        numerator
+            .replace_multiple(&self.replacements)
+            .normalize_dots()
+    }
+
+    fn rewrite_integral(&self, integral: &Atom, add_additional_args: &[Replacement]) -> Atom {
+        let free_variable_zero_replacements =
+            self.free_variable_zero_replacements(add_additional_args);
+        Self::normalize_topology_momenta(
+            integral
+                .replace_multiple(&self.replacements)
+                .replace_multiple(&free_variable_zero_replacements),
+        )
+    }
+
+    fn free_variable_zero_replacements(
+        &self,
+        add_additional_args: &[Replacement],
+    ) -> Vec<Replacement> {
+        let mut replacements = Vec::with_capacity(2 * self.free_variables.len());
+        for variable in &self.free_variables {
+            replacements.push(Replacement::new(variable.to_pattern(), Atom::Zero));
+            let indexed_variable = variable.replace_multiple(add_additional_args);
+            if indexed_variable != *variable {
+                replacements.push(Replacement::new(indexed_variable.to_pattern(), Atom::Zero));
+            }
+        }
+        replacements
+    }
+
+    fn normalize_topology_momenta(expression: Atom) -> Atom {
+        if !expression
+            .replace(function!(vakint::symbols::S.topo, W_.x_))
+            .matches()
+        {
+            return expression;
+        }
+
+        expression
+            .replace(function!(
+                vakint::symbols::S.prop,
+                W_.edgeid_,
+                W_.x_,
+                W_.mom_,
+                W_.mass_,
+                W_.prop_
+            ))
+            .with_map(|matches| {
+                function!(
+                    vakint::symbols::S.prop,
+                    matches.get(W_.edgeid_).unwrap().to_atom(),
+                    matches.get(W_.x_).unwrap().to_atom(),
+                    matches.get(W_.mom_).unwrap().to_atom().expand(),
+                    matches.get(W_.mass_).unwrap().to_atom(),
+                    matches.get(W_.prop_).unwrap().to_atom()
+                )
+            })
+    }
 }
 
 #[cfg(test)]
@@ -1117,7 +1269,9 @@ mod tests {
     //     test_initialise().unwrap();
 
     //     let edge = EdgeIndex(7);
-    //     let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
+    //     let euclidean_norm = GS.emr_mom(edge, GS.cind(1)).pow(2)
+    //         + GS.emr_mom(edge, GS.cind(2)).pow(2)
+    //         + GS.emr_mom(edge, GS.cind(3)).pow(2);
     //     let minkowski_norm = Minkowski {}
     //         .new_rep(4)
     //         .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
@@ -1163,5 +1317,83 @@ mod tests {
                 function!(vakint::symbols::S.k, 1)
             )
         );
+    }
+
+    #[test]
+    fn underdetermined_vakint_momentum_solve_tracks_free_variables() {
+        test_initialise().unwrap();
+
+        let q0 = function!(GS.emr_mom, 0);
+        let q1 = function!(GS.emr_mom, 1);
+        let q2 = function!(GS.emr_mom, 2);
+        let k0 = function!(GS.loop_mom, 0);
+        let k1 = function!(GS.loop_mom, 1);
+        let edge_3 = -&q0 - &q1 - &q2;
+        let system = vec![&q0 - &k0, &edge_3 - &k1];
+        let variables = vec![q0.clone(), q1.clone(), q2.clone()];
+
+        let solution = VakintMomentumSolution::solve(&system, &variables, &[]).unwrap();
+
+        assert_eq!(solution.free_variables, vec![q2]);
+        assert!(
+            solution
+                .ensure_free_variables_eliminated(0, "numerator", &solution.free_variables[0], &[])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn underdetermined_vakint_momentum_solve_projects_topology() {
+        test_initialise().unwrap();
+
+        let q1 = function!(GS.emr_mom, 1);
+        let q2 = function!(GS.emr_mom, 2);
+        let k0 = function!(GS.loop_mom, 0);
+        let system = vec![-&q1 - &q2 - &k0];
+        let variables = vec![q1.clone(), q2.clone()];
+        let topology = function!(
+            vakint::symbols::S.topo,
+            function!(
+                vakint::symbols::S.prop,
+                1,
+                function!(vakint::symbols::S.edge, 0, 0),
+                -&q1 - &q2,
+                GS.m_uv,
+                1
+            )
+        );
+
+        let solution = VakintMomentumSolution::solve(&system, &variables, &[]).unwrap();
+
+        solution
+            .ensure_free_variables_eliminated(0, "numerator", &Atom::from(1), &[])
+            .unwrap();
+        assert_eq!(
+            solution.rewrite_integral(&topology, &[]),
+            function!(
+                vakint::symbols::S.topo,
+                function!(
+                    vakint::symbols::S.prop,
+                    1,
+                    function!(vakint::symbols::S.edge, 0, 0),
+                    k0,
+                    GS.m_uv,
+                    1
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn empty_vakint_momentum_solve_treats_variables_as_free() {
+        test_initialise().unwrap();
+
+        let q0 = function!(GS.emr_mom, 0);
+        let no_variables = VakintMomentumSolution::solve(&[], &[], &[]).unwrap();
+        let free_variable =
+            VakintMomentumSolution::solve(&[], std::slice::from_ref(&q0), &[]).unwrap();
+
+        assert!(no_variables.free_variables.is_empty());
+        assert_eq!(free_variable.free_variables, vec![q0]);
     }
 }

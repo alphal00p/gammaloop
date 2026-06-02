@@ -915,9 +915,10 @@ impl AmplitudeGraph {
 
         // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
 
+        let component_lmb = self.graph.lmb_of(component);
         let mom_reps = self.graph.uv_wrapped_replacement(
             &self.graph.full_filter(),
-            &self.graph.lmb_of(component),
+            &component_lmb,
             &[W_.x___],
         );
 
@@ -950,7 +951,7 @@ impl AmplitudeGraph {
             &self.graph.empty_subgraph::<SuBitGraph>(),
             config.settings,
             false,
-        );
+        )?;
 
         vakint_integrand.canonicalize(&true_settings, &config.vakint.topologies, false)?;
         // println!("Canonized: {}", vakint_integrand);
