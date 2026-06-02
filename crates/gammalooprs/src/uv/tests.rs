@@ -370,6 +370,52 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
         .unwrap();
 }
 
+#[test]
+#[ignore = "expensive nested integrated banana Vakint regression"]
+fn scalars_integrated_banana_hedge_poset() {
+    test_initialise().unwrap();
+    let mut amp: AmplitudeGraph = dot!(
+        digraph banana {
+            edge [particle=scalar_1]
+            node [num=1]
+            e        [style=invis]
+            e -> A:0   [ id=5]
+            B:1 -> e   [ id=4]
+            A -> B    [ id=1]
+            A -> B    [ id=2]
+            A -> B    [ id=3]
+            A -> B    [ id=0]
+        },
+        "scalars"
+    )
+    .unwrap();
+
+    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    let orientation_pattern = OrientationPattern::from_orientation(
+        &amp.derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations[OrientationID(0)],
+    );
+    let settings = GenerationSettings {
+        orientation_pattern,
+        uv: UVgenerationSettings {
+            generate_integrated: true,
+            softct: false,
+            add_marker: true,
+            keep_marker: false,
+            subtract_uv: true,
+            orchestrator: UVOrchestrator::HedgePoset,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
+        .unwrap();
+}
+
 /*
 
 #[test]
