@@ -721,6 +721,26 @@ fn integral_estimate_change_sigma(lhs: &IntegralEstimate, rhs: &IntegralEstimate
     }
 }
 
+fn squared_integral_estimate(estimate: &IntegralEstimate) -> IntegralEstimate {
+    let re = estimate.result.re.0;
+    let im = estimate.result.im.0;
+    let err_re = estimate.error.re.0;
+    let err_im = estimate.error.im.0;
+
+    IntegralEstimate {
+        neval: estimate.neval,
+        real_zero: estimate.real_zero,
+        im_zero: estimate.im_zero,
+        result: Complex::new(F(re * re - im * im), F(2.0 * re * im)),
+        error: Complex::new(
+            F((2.0 * re * err_re).hypot(2.0 * im * err_im)),
+            F((2.0 * im * err_re).hypot(2.0 * re * err_im)),
+        ),
+        real_chisq: estimate.real_chisq,
+        im_chisq: estimate.im_chisq,
+    }
+}
+
 fn integrated_uv_profile_passes(
     cli: &mut CLIState,
     process: &str,
@@ -1049,6 +1069,68 @@ fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
         "Integrated UV case failed: {}",
         result.graph
     );
+}
+
+#[test]
+fn scalar_spectacles_integrated_uv_factorizes_into_bubble_square() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("uv/scalar_spectacles_self_energy.toml".into()),
+        get_tests_workspace_path().join("scalar_spectacles_self_energy"),
+        None,
+        true,
+    )?;
+    cli.run_command("run generate")?;
+    set_fast_deterministic_integrator(&mut cli, DEFAULT_INTEGRATED_UV_INTEGRATOR)?;
+
+    let bubble = Integrate {
+        process: vec![ProcessRef::Unqualified("bubble".to_string())],
+        integrand_name: vec!["scalar_bubble".to_string()],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_spectacles_self_energy/integration_workspace_bubble"),
+        ),
+        n_cores: Some(1),
+        restart: true,
+        renderer: gammaloop_api::commands::integrate::RendererOption::Tabled,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?
+    .single_slot()
+    .ok_or_else(|| eyre::eyre!("single bubble slot should exist"))?
+    .integral
+    .clone();
+
+    let spectacles = Integrate {
+        process: vec![ProcessRef::Unqualified("spectacles".to_string())],
+        integrand_name: vec!["scalar_spectacles".to_string()],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_spectacles_self_energy/integration_workspace_spectacles"),
+        ),
+        n_cores: Some(1),
+        restart: true,
+        renderer: gammaloop_api::commands::integrate::RendererOption::Tabled,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?
+    .single_slot()
+    .ok_or_else(|| eyre::eyre!("single spectacles slot should exist"))?
+    .integral
+    .clone();
+    let expected = squared_integral_estimate(&bubble);
+
+    println!("bubble: {bubble:#}");
+    println!("spectacles: {spectacles:#}");
+    println!("bubble squared: {expected:#}");
+
+    assert!(
+        spectacles.is_compatible_with_result(&expected, 4),
+        "expected spectacles self-energy to factorize into the square of the single bubble; delta={}sigma",
+        integral_estimate_change_sigma(&spectacles, &expected)
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 #[test]
