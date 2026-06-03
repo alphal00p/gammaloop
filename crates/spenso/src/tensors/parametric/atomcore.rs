@@ -46,25 +46,13 @@ use crate::{
 
 use super::{EvalTensor, EvalTreeTensor, MixedTensor, ParamOrConcrete, ParamTensor};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct MatchSettings {
     non_greedy_wildcards: Vec<Symbol>,
     level_range: (usize, Option<usize>),
     level_is_tree_depth: bool,
     allow_new_wildcards_on_rhs: bool,
     rhs_cache_size: usize,
-}
-
-impl Default for MatchSettings {
-    fn default() -> Self {
-        Self {
-            non_greedy_wildcards: Vec::new(),
-            level_range: (0, None),
-            level_is_tree_depth: false,
-            allow_new_wildcards_on_rhs: false,
-            rhs_cache_size: 0,
-        }
-    }
 }
 
 pub trait PatternReplacement {

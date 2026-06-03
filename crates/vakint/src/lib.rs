@@ -4549,14 +4549,14 @@ Evaluated (n_loops=1, mu_r=1) :
                                         .add_arg(&dummy_wrapped)
                                         .finish()
                                         * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(&b.iter().collect::<Vec<_>>())
+                                            .add_args(b.iter().collect::<Vec<_>>())
                                             .add_arg(&dummy_wrapped)
                                             .finish()
                                         * rest
                                 }
                                 (AtomView::Fun(a), AtomView::Var(b)) => {
                                     FunctionBuilder::new(a.get_symbol())
-                                        .add_args(&a.iter().collect::<Vec<_>>())
+                                        .add_args(a.iter().collect::<Vec<_>>())
                                         .add_arg(&dummy_wrapped)
                                         .finish()
                                         * FunctionBuilder::new(b.get_symbol())
@@ -4566,11 +4566,11 @@ Evaluated (n_loops=1, mu_r=1) :
                                 }
                                 (AtomView::Fun(a), AtomView::Fun(b)) => {
                                     FunctionBuilder::new(a.get_symbol())
-                                        .add_args(&a.iter().collect::<Vec<_>>())
+                                        .add_args(a.iter().collect::<Vec<_>>())
                                         .add_arg(&dummy_wrapped)
                                         .finish()
                                         * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(&b.iter().collect::<Vec<_>>())
+                                            .add_args(b.iter().collect::<Vec<_>>())
                                             .add_arg(&dummy_wrapped)
                                             .finish()
                                         * rest

@@ -891,8 +891,10 @@ impl RankOneSymbolSummary {
     }
 }
 
+type ValidationFunction = Box<dyn Fn(&[Complex64]) -> Complex64 + Send + Sync>;
+
 struct ValidationFunctions {
-    functions: HashMap<Symbol, Box<dyn Fn(&[Complex64]) -> Complex64 + Send + Sync>>,
+    functions: HashMap<Symbol, ValidationFunction>,
     samples: Arc<Mutex<Vec<EvaluationSample>>>,
     rank_one_functions: usize,
 }

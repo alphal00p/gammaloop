@@ -706,6 +706,24 @@ fn val_test() {
     //     "spenso"
     // );
     //
+    let gamma_product = gamma!(
+        parse_lit!(mink(4, dummy(2, 2)), default_namespace = "spenso"),
+        parse_lit!(bis(4, l(2)), default_namespace = "spenso"),
+        parse_lit!(bis(4, r(2)), default_namespace = "spenso")
+    ) * gamma!(
+        parse_lit!(mink(4, l(5)), default_namespace = "spenso"),
+        parse_lit!(bis(4, l(6)), default_namespace = "spenso"),
+        parse_lit!(bis(4, l(5)), default_namespace = "spenso")
+    ) * gamma!(
+        parse_lit!(mink(4, dummy(3, 3)), default_namespace = "spenso"),
+        parse_lit!(bis(4, r(3)), default_namespace = "spenso"),
+        parse_lit!(bis(4, l(3)), default_namespace = "spenso")
+    ) * gamma!(
+        parse_lit!(mink(4, r(5)), default_namespace = "spenso"),
+        parse_lit!(bis(4, r(5)), default_namespace = "spenso"),
+        parse_lit!(bis(4, r(6)), default_namespace = "spenso")
+    );
+
     let expr = parse_lit!(
         ((-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
             + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
@@ -730,10 +748,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
@@ -756,10 +770,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
@@ -783,10 +793,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
@@ -809,10 +815,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
@@ -836,10 +838,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(7))) * g(mink(4, l(8)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
@@ -862,10 +860,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
@@ -889,10 +883,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(7))) * g(mink(4, r(8)), mink(4, r(9)))
@@ -915,10 +905,6 @@ fn val_test() {
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
                 * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                 + (-1 * g(mink(4, l(6)), mink(4, l(8))) * g(mink(4, l(7)), mink(4, l(9)))
                     + g(mink(4, l(6)), mink(4, l(9))) * g(mink(4, l(7)), mink(4, l(8))))
                     * (-1 * g(mink(4, r(6)), mink(4, r(8))) * g(mink(4, r(7)), mink(4, r(9)))
@@ -941,14 +927,10 @@ fn val_test() {
                 * g(mink(4, r(0)), mink(4, r(6)))
                 * g(mink(4, r(1)), mink(4, r(7)))
                 * g(mink(4, r(4)), mink(4, r(8)))
-                * g(mink(4, r(5)), mink(4, r(9)))
-                * gamma(bis(4, l(2)), bis(4, r(2)), mink(4, dummy(2, 2)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
-                * gamma(bis(4, r(3)), bis(4, l(3)), mink(4, dummy(3, 3)))
-                * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5))))
+                * g(mink(4, r(5)), mink(4, r(9))))
             * -18,
         default_namespace = "spenso"
-    );
+    ) * gamma_product;
 
     let res = parse_lit!(
         7776 * G ^ 6 * dot(P(2, mink(4)), P(3, mink(4))),

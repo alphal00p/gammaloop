@@ -2155,13 +2155,10 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         for (i, c) in self.couplings.values_mut().enumerate() {
             c.value = Some(new_values[i].map(|f| f.0));
         }
-        let mut i = self.couplings.len();
-
-        for name in dependent_parameter_names {
+        for (i, name) in (self.couplings.len()..).zip(dependent_parameter_names) {
             if let Some(c) = self.parameters.get_mut(&name) {
                 c.value = Some(new_values[i]);
             }
-            i += 1;
         }
 
         Ok(())

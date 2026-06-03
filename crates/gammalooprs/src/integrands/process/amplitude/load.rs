@@ -456,7 +456,7 @@ impl Default for StandaloneCliOptions {
 enum StandaloneRuntimeEvaluator<'a> {
     Eager(&'a mut ExpressionEvaluator<Complex<f64>>),
     Compiled(CompiledComplexEvaluator),
-    Symjit(JITCompiledEvaluator<Complex<f64>>),
+    Symjit(Box<JITCompiledEvaluator<Complex<f64>>>),
 }
 
 impl<'a> StandaloneRuntimeEvaluator<'a> {
@@ -493,11 +493,11 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .map_err(|err| eyre!(err))?;
                 Ok(Self::Compiled(compiled))
             }
-            StandaloneBackend::Symjit => Ok(Self::Symjit(
+            StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
                 evaluator
                     .jit_compile(JITCompilationSettings::default())
                     .map_err(|err| eyre!(err))?,
-            )),
+            ))),
         }
     }
 

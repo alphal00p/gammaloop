@@ -828,9 +828,9 @@ mod tests {
 
         let result = lhs.contract(&rhs).unwrap();
         println!("result data: {:?}", result.data);
-        println!("result[0, 1, 0]: {}", result.get_ref(&[0, 1, 0]).unwrap());
+        println!("result[0, 1, 0]: {}", result.get_ref([0, 1, 0]).unwrap());
 
-        assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
+        assert_eq!(*result.get_ref([0, 1, 0]).unwrap(), 10);
     }
 
     #[test]
@@ -875,10 +875,10 @@ mod tests {
         println!("mixed-orientation dense result data: {:?}", result.data);
         println!(
             "mixed-orientation dense result[0, 1, 0]: {}",
-            result.get_ref(&[0, 1, 0]).unwrap()
+            result.get_ref([0, 1, 0]).unwrap()
         );
 
-        assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
+        assert_eq!(*result.get_ref([0, 1, 0]).unwrap(), 10);
     }
 
     #[test]
@@ -923,9 +923,9 @@ mod tests {
         println!("mixed-orientation result elements: {:?}", result.elements);
         println!(
             "mixed-orientation result[0, 1, 0]: {}",
-            result.get_ref(&[0, 1, 0]).unwrap()
+            result.get_ref([0, 1, 0]).unwrap()
         );
 
-        assert_eq!(*result.get_ref(&[0, 1, 0]).unwrap(), 10);
+        assert_eq!(*result.get_ref([0, 1, 0]).unwrap(), 10);
     }
 }

@@ -287,9 +287,9 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
         if matches!(
             opt.custom_print_mode.get("typst"),
             Some(PrintUserData::Integer(1))
-        ) {
-                 if let AtomView::Fun(_)=a {
-                     let body = r#"(a,b) = {
+        ) && let AtomView::Fun(_) = a
+        {
+            let body = r#"(a,b) = {
 if a.at("lower",default:false) and b.at("lower",default:false){
 $eta_(#to-eq(a) #to-eq(b))$
 } else if a.at("lower",default:false) and b.at("upper",default:false){
@@ -302,12 +302,10 @@ $eta^(#to-eq(a)^#to-eq(b))$
 $g(#to-eq(a),#to-eq(b))$
 }
 }"#;
-                     return Some(body.into())
-                 }
+            return Some(body.into());
         }
 
-        match opt.custom_print_mode.get("spenso") {
-             Some(PrintUserData::Integer(i))=>{
+        if let Some(PrintUserData::Integer(i)) = opt.custom_print_mode.get("spenso") {
                  let SpensoPrintSettings{
                      parens,
                      commas,
@@ -483,8 +481,6 @@ $g(#to-eq(a),#to-eq(b))$
                         }
                     }
                 }
-            },
-            _=>{}
         }
         None
     },norm = |f,_|{

@@ -601,12 +601,14 @@ impl<
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    pub fn evaluate_direct<A: AtomCore + KeyLookup, D: EvaluationDomain + FixedPrecision>(
+    pub fn evaluate_direct<A: AtomCore + KeyLookup, D>(
         &self,
         const_map: &AHashMap<A, D>,
     ) -> Result<Network<Store::Store<DataTensor<D, S>, D>, K, FK, Aind>, EvaluationError>
     where
-        D: Clone
+        D: EvaluationDomain
+            + FixedPrecision
+            + Clone
             + symbolica::domains::float::Real
             + for<'c> std::convert::From<&'c symbolica::domains::rational::Rational>,
     {

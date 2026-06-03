@@ -7,7 +7,7 @@ use idenso::{
 use spenso::{
     network::{
         ExecutionResult, Sequential, SmallestDegree, TensorNetworkError,
-        library::{TensorLibraryData, symbolic::ExplicitKey},
+        library::symbolic::ExplicitKey,
         parsing::{ParseSettings, StrictTensorFilter},
     },
     structure::{

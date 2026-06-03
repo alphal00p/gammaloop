@@ -1113,7 +1113,7 @@ impl CrossSectionGraph {
 
         let mut product = left_prefactor * right_prefactor;
 
-        product = product.replace_multiple(&Self::fuse_left_right_replacement());
+        product = product.replace_multiple(Self::fuse_left_right_replacement());
         product
     }
 

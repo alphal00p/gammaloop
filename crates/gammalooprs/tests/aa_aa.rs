@@ -1,15 +1,10 @@
-use std::ops::Deref;
 use std::time::Instant;
 
 use gammalooprs::graph::parse::IntoGraph;
-use gammalooprs::integrands::process::ParamValuePairs;
-use gammalooprs::integrands::process::{
-    evaluators::EvaluatorStack, param_builder::ParamBuilderGraph,
-};
-use gammalooprs::numerator::symbolica_ext::AtomCoreExt;
+use gammalooprs::integrands::process::evaluators::EvaluatorStack;
 use gammalooprs::processes::{ContractionMode, EvaluatorSettings, ExecutionMode};
-use gammalooprs::utils::symbolica_ext::{CallSymbol, LogPrint};
-use gammalooprs::utils::{F, FUN_LIB, GS, TENSORLIB};
+use gammalooprs::utils::symbolica_ext::LogPrint;
+use gammalooprs::utils::{F, GS};
 use gammalooprs::{dot, graph::Graph, uv::UltravioletGraph};
 use idenso::dirac::GammaSimplifier;
 use idenso::shorthands::metric::MetricSimplifier;
@@ -18,14 +13,10 @@ use linnet::half_edge::subgraph::SubSetOps;
 use rand::Rng;
 use spenso::algebra::complex::Complex;
 use spenso::shadowing::TensorCollectExt;
+use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::Minkowski;
-use spenso::{
-    network::{MinResultRank, Sequential},
-    structure::concrete_index::ExpandedIndex,
-};
-use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::function;
-use symbolica::id::Replacement;
 use tabled::{
     builder::Builder,
     settings::{Alignment, Modify, Style, object::Columns},
@@ -59,7 +50,7 @@ fn aaa() {
             }
     ).unwrap();
 
-    let mut num = graph
+    let num = graph
         .numerator(&graph.full_filter(), &graph.empty_subgraph())
         .state
         .expr
@@ -209,7 +200,7 @@ fn aaa() {
             &evaluator_settings,
         )
         .unwrap();
-        let (additions, multiplications) = evaluator.single_parametric.f64_eager.count_operations();
+        let operation_count = evaluator.single_parametric.f64_eager.count_operations();
 
         let mut out = vec![Complex::new(F(0.0), F(0.0))];
 
@@ -218,13 +209,13 @@ fn aaa() {
             .single_parametric
             .f64_eager
             .export_instructions()
-            .0
+            .instructions
         {
             println!("{}", inst);
         }
 
         let time = std::time::Instant::now();
-        for i in 0..10000 {
+        for _ in 0..10000 {
             evaluator
                 .single_parametric
                 .f64_eager
@@ -238,8 +229,8 @@ fn aaa() {
                 .as_view()
                 .get_byte_size()
                 .to_string(),
-            multiplications.to_string(),
-            additions.to_string(),
+            operation_count.multiplications.to_string(),
+            operation_count.additions.to_string(),
             format!("{:?}", timings.spenso_time),
             format!("{:?}", timings.symbolica_time),
             format!("{:?}", elapsed / 10000),
