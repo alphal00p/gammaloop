@@ -26,6 +26,7 @@ use spenso::{
     network::{
         library::symbolic::{ETS, ExplicitKey},
         parsing::ShadowedStructure,
+        tags::SPENSO_TAG,
     },
     structure::{
         HasName, IndexLess, OrderedStructure, PermutedStructure, TensorStructure, ToSymbolic,
@@ -215,6 +216,7 @@ impl SpensoName {
         // && custom_print.is_none()
         {
             let id = SymbolBuilder::new(namespace.attach_namespace(&name))
+                .with_tags(std::slice::from_ref(&SPENSO_TAG.tensor))
                 .build()
                 .map_err(|e| exceptions::PyTypeError::new_err(e.to_string()))?;
 
@@ -254,7 +256,9 @@ impl SpensoName {
 
         let name = namespace.attach_namespace(&name);
 
-        let mut symbol = SymbolBuilder::new(name).with_attributes(opts);
+        let mut symbol = SymbolBuilder::new(name)
+            .with_attributes(opts)
+            .with_tags(std::slice::from_ref(&SPENSO_TAG.tensor));
 
         if let Some(f) = custom_normalization {
             symbol = symbol.with_normalization_function(Box::new(
