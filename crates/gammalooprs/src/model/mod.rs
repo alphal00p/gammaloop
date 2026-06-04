@@ -2,7 +2,7 @@ use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::symbolica_ext::{DOD, Replaces};
+use crate::utils::symbolica_ext::DOD;
 use crate::utils::{self, F, W_};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
@@ -16,8 +16,11 @@ use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
-use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
-use spenso::structure::{IndexLess, PermutedStructure};
+use spenso::{
+    shadowing::symbolica_utils::SpensoPrintSettings,
+    structure::{IndexLess, PermutedStructure},
+};
+use symbolica_utils::Replaces;
 use tabled::settings::Modify;
 use tabled::{
     builder::Builder,

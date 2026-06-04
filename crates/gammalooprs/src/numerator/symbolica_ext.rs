@@ -11,8 +11,6 @@ use spenso::{
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
-    coefficient::{Coefficient, CoefficientView},
-    domains::{float::Complex as SymComplex, rational::Rational},
     function,
 };
 
@@ -29,12 +27,10 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
     Symbol,
 >;
 
-pub trait AtomCoreExt {
+pub trait NumeratorAtomExt {
     fn to_param_color(&self) -> Atom;
     // fn wrap_color(&self, symbol: Symbol) -> Atom;
     fn kill_color(&self) -> Atom;
-
-    fn floatify(&self, prec: u32) -> Atom;
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
 
@@ -44,7 +40,7 @@ pub trait AtomCoreExt {
     fn parse_into_net(&self) -> Result<ParsingNet, ParsingNetError>;
 }
 
-impl AtomCoreExt for Atom {
+impl NumeratorAtomExt for Atom {
     fn to_param_color(&self) -> Atom {
         self.as_view().to_param_color()
     }
@@ -55,10 +51,6 @@ impl AtomCoreExt for Atom {
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.as_view().map_mink_dim(dim)
     }
-    fn floatify(&self, prec: u32) -> Atom {
-        self.as_view().floatify(prec)
-    }
-
     // fn wrap_color(&self, symbol: Symbol) -> Atom {
     //     self.as_view().wrap_color(symbol)
     // }
@@ -72,7 +64,7 @@ impl AtomCoreExt for Atom {
     }
 }
 
-impl AtomCoreExt for AtomView<'_> {
+impl NumeratorAtomExt for AtomView<'_> {
     fn kill_color(&self) -> Atom {
         self.wrap_color(GS.killing_func)
     }
@@ -85,29 +77,6 @@ impl AtomCoreExt for AtomView<'_> {
             .replace(fund.to_symbolic([W_.d_, W_.a_]))
             .with(fund.to_symbolic([CS.nc, W_.a_]))
     }
-    fn floatify(&self, prec: u32) -> Atom {
-        self.map_coefficient(|c| match c {
-            CoefficientView::Natural(r, d, ri, di) => {
-                if (ri == 0 || di == 1) && (r == 0 || d == 1) {
-                    Coefficient::Complex(SymComplex::new(
-                        Rational::new(r, d),
-                        Rational::new(ri, di),
-                    ))
-                } else {
-                    Coefficient::Float(SymComplex::new(
-                        Rational::from((r, d)).to_multi_prec_float(prec),
-                        Rational::from((ri, di)).to_multi_prec_float(prec),
-                    ))
-                }
-            }
-            CoefficientView::Large(r, ri) => Coefficient::Float(SymComplex::new(
-                r.to_rat().to_multi_prec_float(prec),
-                ri.to_rat().to_multi_prec_float(prec),
-            )),
-            _ => c.to_owned(),
-        })
-    }
-
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a___]))
             .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a___)]))
@@ -177,7 +146,7 @@ mod tests {
         uv::UltravioletGraph,
     };
 
-    use super::AtomCoreExt;
+    use super::NumeratorAtomExt;
 
     #[test]
     fn dummy_parsing() {

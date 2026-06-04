@@ -13,11 +13,11 @@ use super::{
 
 use delegate::delegate;
 
-#[cfg(feature = "shadowing")]
-use crate::shadowing::symbolica_utils::SerializableSymbol;
 use crate::structure::SlotIndex;
 #[cfg(feature = "shadowing")]
 use symbolica::atom::Atom;
+#[cfg(feature = "shadowing")]
+use symbolica_utils::SerializableSymbol;
 
 #[cfg(not(feature = "shadowing"))]
 use serde::{Deserialize, Serialize};

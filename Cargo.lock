@@ -1555,6 +1555,7 @@ dependencies = [
  "smartstring",
  "spenso",
  "symbolica",
+ "symbolica-utils",
  "sysinfo",
  "tabled",
  "tempfile",
@@ -1589,6 +1590,7 @@ dependencies = [
  "serial_test",
  "spenso",
  "symbolica",
+ "symbolica-utils",
  "tabled",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
@@ -1743,6 +1745,7 @@ dependencies = [
  "spenso-hep-lib",
  "statrs",
  "symbolica",
+ "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
@@ -2037,6 +2040,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-utils",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -2419,6 +2423,7 @@ dependencies = [
  "serde_repr",
  "similar-asserts",
  "symbolica",
+ "symbolica-utils",
  "thiserror 2.0.18",
 ]
 
@@ -4387,6 +4392,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
  "tracing",
@@ -4579,6 +4585,17 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.3.0",
+]
+
+[[package]]
+name = "symbolica-utils"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "itertools 0.14.0",
+ "serde",
+ "symbolica",
 ]
 
 [[package]]

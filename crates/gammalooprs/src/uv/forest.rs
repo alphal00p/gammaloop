@@ -1,7 +1,7 @@
 use crate::{
     GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,
         approx::{CutStructure, ForestNodeLike, OrientationProjection, local_3d::Localizer},
@@ -14,6 +14,7 @@ use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use spenso::shadowing::symbolica_utils::LogPrint;
 
 use symbolica::atom::{Atom, AtomCore};
 

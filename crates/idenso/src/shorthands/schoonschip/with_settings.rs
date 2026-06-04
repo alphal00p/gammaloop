@@ -3,15 +3,14 @@ use std::sync::LazyLock;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    shadowing,
-    tensors::parametric::atomcore::PatternReplacement,
-    trace, trace_sym,
+    shadowing, trace, trace_sym,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView},
     function,
     id::Replacement,
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::{W_, shorthands::metric::not_slot};
 

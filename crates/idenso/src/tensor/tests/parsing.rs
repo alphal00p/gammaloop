@@ -5,14 +5,17 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
     SingleSmallestDegree, SmallestDegree, Steps, tags::SPENSO_TAG,
 };
-use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    printer::PrintOptions,
+};
 
 use symbolica::symbol;
 
 use spenso::network::library::DummyLibrary;
 use spenso::network::library::panicing::ErroringLibrary;
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use symbolica_utils::AtomPrintExt;
 
 // use log::trace;
 
@@ -22,7 +25,6 @@ use core::panic;
 
 use spenso::{
     chain, chain_factor, mink,
-    shadowing::symbolica_utils::TypstSettings,
     structure::{
         HasName, ToSymbolic,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
@@ -349,10 +351,7 @@ fn parse_val() {
     }
     "#);
     assert_eq!(net.simple_execute::<()>(), expr);
-    let mut out = String::new();
-    expr.typst_fmt(&mut out, &TypstSettings::lowering())
-        .unwrap();
-    println!("{}", out)
+    println!("{}", expr.printer(PrintOptions::typst()))
 }
 
 #[test]

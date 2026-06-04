@@ -22,6 +22,7 @@ use tracing::debug;
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -35,7 +36,7 @@ use crate::{
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    utils::{F, Length, ose_atom_from_index},
     uv::uv_graph::UVE,
 };
 

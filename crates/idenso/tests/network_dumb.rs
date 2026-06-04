@@ -2,8 +2,9 @@ use idenso::{
     representations::initialize,
     shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
 };
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::{
-    shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings},
+    shadowing::TensorCollectExt,
     structure::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},

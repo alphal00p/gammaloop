@@ -6,7 +6,6 @@ use spenso::{
     rep_,
     shadowing::{self, IntoAtom},
     structure::representation::{LibraryRep, Minkowski, RepName},
-    tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
 use symbolica::{
@@ -14,6 +13,7 @@ use symbolica::{
     id::{Context, Replacement},
     utils::Settable,
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::{
     W_,

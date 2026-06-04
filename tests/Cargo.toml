@@ -27,7 +27,7 @@ rayon.workspace = true
 serde_json = { workspace = true }
 serial_test = "3.2.0"
 spenso = { workspace = true, features = ["shadowing"] }
-
+symbolica-utils = { workspace = true }
 tabled = { workspace = true, features = ["ansi"] }
 toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }

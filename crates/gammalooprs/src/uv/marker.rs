@@ -5,7 +5,7 @@ use symbolica::{
 };
 
 use crate::{
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
     uv::UVgenerationSettings,
 };
 
@@ -28,7 +28,7 @@ impl UvOperation {
     }
 
     fn apply(self, history: Atom) -> Atom {
-        self.symbol().f(history)
+        self.symbol().call(history)
     }
 }
 

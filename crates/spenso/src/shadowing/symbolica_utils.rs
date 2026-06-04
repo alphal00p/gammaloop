@@ -852,6 +852,18 @@ impl From<SerializableSymbol> for u32 {
     }
 }
 
+pub trait LogPrint {
+    fn log_print(&self, max_line_length: Option<usize>) -> String;
+}
+
+impl<A: AtomCore> LogPrint for A {
+    fn log_print(&self, max: Option<usize>) -> String {
+        let mut settings = SpensoPrintSettings::compact().nice_symbolica();
+        settings.max_line_length = max;
+        self.printer(settings).to_string()
+    }
+}
+
 pub fn atomic_expanded_label<I: IntoSymbol>(indices: &[ConcreteIndex], name: I) -> Atom {
     let id = name.ref_into_symbol();
     atomic_expanded_label_id(indices, id, &[])

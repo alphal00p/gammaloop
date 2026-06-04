@@ -17,7 +17,7 @@ use crate::{
     cff::{CutCFF, orientations::GraphOrientation},
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
     uv::{
         ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx, integrated::IntegratedCts},
@@ -368,7 +368,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
         |e, loops, externals| {
             Replacement::new(
                 GS.emr_vec
-                    .f([Atom::num(usize::from(e)), Atom::var(W_.x___)])
+                    .call_args([Atom::num(usize::from(e)), Atom::var(W_.x___)])
                     .to_pattern(),
                 (loops
                     .replace(function!(GS.emr_vec, W_.x_))

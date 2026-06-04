@@ -4,7 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::{Amplitude, AmplitudeGraph},
-    utils::{GS, load_generic_model, symbolica_ext::LogPrint},
+    utils::{GS, load_generic_model},
     uv::{
         ApproximationType, RenormalizationPart, RenormalizationPrescriptionSettings,
         UVOrchestrator, UVgenerationSettings,
@@ -16,11 +16,12 @@ use idenso::{
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     parse, parse_lit,
 };
+use symbolica_utils::AtomPrintExt;
 
 fn pole_part_uv_settings() -> UVgenerationSettings {
     let undoing_normalization = parse!(

@@ -2152,6 +2152,7 @@
             "spenso"
             "spenso-hep-lib"
             "spenso-macros"
+            "symbolica-utils"
           ];
         }
         {

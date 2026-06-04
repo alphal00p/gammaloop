@@ -4,13 +4,11 @@ use spenso::network::parsing::ParseSettings;
 use spenso::network::store::TensorScalarStore;
 use spenso::p;
 use spenso::q;
-use spenso::shadowing::{
-    TensorCollectExt,
-    symbolica_utils::{AtomCoreExt, TypstSettings},
-};
+use spenso::shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings};
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
+use symbolica_utils::AtomPrintExt;
 
 use crate::representations::Bispinor;
 use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
@@ -38,7 +36,11 @@ use spenso::structure::{
     permuted::Perm,
     representation::{LibraryRep, Minkowski},
 };
-use symbolica::parse_lit;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse_lit,
+    printer::PrintOptions,
+};
 
 use crate::test_support::test_initialize;
 use crate::{CookMode, CookSettings, Cookable};
@@ -87,10 +89,7 @@ fn chain_test() {
     );
 
     println!("Bef:{}", expr);
-    let mut out = String::new();
-    expr.typst_fmt(&mut out, &TypstSettings::lowering())
-        .unwrap();
-    println!("{}", out);
+    println!("{}", expr.printer(PrintOptions::typst()));
     println!(
         "Aft:{}",
         expr.simplify_gamma()

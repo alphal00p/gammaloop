@@ -12,10 +12,11 @@ use tabled::{builder::Builder, settings::Style};
 use crate::structure::SlotIndex;
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::symbolica_utils::IntoSymbol,
     structure::{ExpandedCoefficent, FlatIndex, ToSymbolic, slot::ParseableAind},
     tensors::{data::DenseTensor, parametric::TensorCoefficient},
 };
+#[cfg(feature = "shadowing")]
+use symbolica_utils::IntoSymbol;
 
 #[cfg(feature = "shadowing")]
 use eyre::Result;

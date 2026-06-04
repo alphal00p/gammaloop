@@ -42,7 +42,6 @@ use crate::{
     },
     contraction::{Contract, ContractableWith, ContractionError, Trace},
     iterators::{IteratableTensor, IteratorEnum},
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     shadowing::{ShadowMapping, Shadowable},
     structure::{
         CastStructure, HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure,
@@ -57,6 +56,7 @@ use crate::{
     },
 };
 use bincode::{Decode, Encode};
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},

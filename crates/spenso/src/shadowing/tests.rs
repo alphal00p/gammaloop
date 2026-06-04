@@ -4,10 +4,10 @@ use crate::{
     aind, antisym, bracket, chain, chain_factor, cyclic, dind, dot, euc, g, lor, mink,
     network::tags::SPENSO_TAG,
     p, pure_scalar, q,
-    shadowing::symbolica_utils::AtomCoreExt,
     shadowing::{ProjectorExpander, TensorCollectExt},
     sym, trace, trace_sym,
 };
+use ::symbolica_utils::AtomPrintExt;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     symbol,

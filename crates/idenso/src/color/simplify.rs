@@ -6,7 +6,6 @@ use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rep_, shadowing,
     structure::{abstract_index::AIND_SYMBOLS, representation::RepName},
-    tensors::parametric::atomcore::PatternReplacement,
     trace, trace_sym,
 };
 use symbolica::{
@@ -16,6 +15,7 @@ use symbolica::{
     id::{Context, Replacement},
     utils::Settable,
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::{
     W_, color_f, color_t,

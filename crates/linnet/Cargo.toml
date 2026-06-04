@@ -31,6 +31,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
+symbolica-utils = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
@@ -64,5 +65,5 @@ nodestore-forest-child-vec = []
 nodestore-forest-parent-child = []
 nodestore-vec = []
 serde = ["bitvec/serde", "dep:serde"]
-symbolica = ["dep:symbolica"]
+symbolica = ["dep:symbolica", "dep:symbolica-utils"]
 # layout = ["dep:argmin"]

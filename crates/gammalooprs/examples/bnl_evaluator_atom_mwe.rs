@@ -13,9 +13,9 @@ use color_eyre::{
 };
 use gammalooprs::{
     initialisation::test_initialise,
-    numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
+    numerator::{ParsingNet, aind::Aind, symbolica_ext::NumeratorAtomExt},
     processes::TensorNetworkContractionOrder,
-    utils::{FUN_LIB, TENSORLIB, symbolica_ext::LogPrint},
+    utils::{FUN_LIB, TENSORLIB},
 };
 use idenso::tensor::{SymbolicNet, SymbolicNetExt, SymbolicTensor};
 use spenso::network::{
@@ -29,7 +29,7 @@ use spenso::network::{
     },
     store::NetworkStore,
 };
-use spenso::shadowing::TensorCollectExt;
+use spenso::shadowing::{TensorCollectExt, symbolica_utils::LogPrint};
 use spenso::tensors::{data::HasTensorData, parametric::ParamOrConcrete};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
