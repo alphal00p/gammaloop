@@ -558,9 +558,18 @@
           '';
           checkPhaseCargoCommand = ''
             ${licensePreCheck}
+            export CARGO_TARGET_DIR="$PWD/target"
+            cat > nextest-nix.toml <<EOF
+            [store]
+            dir = "$PWD/target/nextest"
+
+            EOF
+            cat ${workspaceTestSrc}/.config/nextest.toml >> nextest-nix.toml
             cargo nextest archive \
               ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
-              --locked --workspace ${nextestArchiveExtraArgs} \
+              --target-dir "$CARGO_TARGET_DIR" \
+              --config-file "$PWD/nextest-nix.toml" \
+              --locked --manifest-path ${workspaceTestSrc}/Cargo.toml --workspace ${nextestArchiveExtraArgs} \
               --archive-format tar-zst \
               --archive-file ${nextestArchiveFileName}
           '';
