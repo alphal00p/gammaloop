@@ -5,8 +5,8 @@ use crate::{
     debug_tags,
     graph::Graph,
     momentum::Sign,
-    numerator::symbolica_ext::AtomCoreExt,
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    numerator::symbolica_ext::NumeratorAtomExt,
+    utils::{GS, W_},
     uv::{
         UltravioletGraph,
         approx::{ApproxOp, ForestNodeLike, ResidueProjection},
@@ -20,6 +20,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{SuBitGraph, SubSetOps},
 };
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{
     atom::{Atom, AtomCore},
     function, symbol,

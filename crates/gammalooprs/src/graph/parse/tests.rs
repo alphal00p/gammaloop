@@ -11,10 +11,10 @@ use spenso::{
         parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
         store::NetworkStore,
     },
-    shadowing::symbolica_utils::AtomCoreExt,
     structure::HasName,
 };
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
+use symbolica_utils::AtomPrintExt;
 use tracing::info;
 use typed_index_collections::ti_vec;
 

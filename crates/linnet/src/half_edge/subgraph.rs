@@ -477,6 +477,7 @@ pub trait SubSetLike<ID = Hedge>:
             printer::PrintState,
             symbol,
         };
+        use symbolica_utils::{PrintSettingsExt, TypstMode};
 
         let label = self.string_label();
         let name = format!("S_{label}");
@@ -486,11 +487,13 @@ pub trait SubSetLike<ID = Hedge>:
                 &name,
                 data = UserData::String(label.clone()),
                 print = move |a, opt, _state| {
-                    if !opt.mode.is_typst() {
-                        return None;
-                    }
+                    let mut out = match opt.typst_mode()? {
+                        TypstMode::Math | TypstMode::Markup => "#S".to_string(),
+                        TypstMode::Code => "S".to_string(),
+                    };
 
-                    let mut out = "S".to_string();
+                    let mut opt = opt.clone();
+                    opt.set_typst_mode(TypstMode::Code);
 
                     out.push('(');
                     out.push_str("g,");
@@ -500,7 +503,7 @@ pub trait SubSetLike<ID = Hedge>:
                     if let AtomView::Fun(f) = a {
                         for arg in f.iter() {
                             out.push(',');
-                            arg.format(&mut out, opt, PrintState::new()).ok()?;
+                            arg.format(&mut out, &opt, PrintState::new()).ok()?;
                         }
                     }
                     out.push(')');

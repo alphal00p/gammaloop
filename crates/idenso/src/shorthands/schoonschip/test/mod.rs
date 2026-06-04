@@ -2,9 +2,7 @@ use insta::assert_snapshot;
 use spenso::{
     chain, g, mink,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    p, q,
-    shadowing::symbolica_utils::AtomCoreExt,
-    slot,
+    p, q, slot,
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::{Minkowski, RepName, Representation},
@@ -16,6 +14,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     function, symbol,
 };
+use symbolica_utils::AtomPrintExt;
 
 use crate::{
     representations::{Bispinor, ColorFundamental},

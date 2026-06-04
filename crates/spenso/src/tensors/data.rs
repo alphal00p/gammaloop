@@ -22,13 +22,12 @@ use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::{
-        ShadowMapping, Shadowable,
-        symbolica_utils::{IntoArgs, IntoSymbol},
-    },
+    shadowing::{ShadowMapping, Shadowable},
     structure::slot::ParseableAind,
     tensors::parametric::TensorCoefficient,
 };
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use eyre::{Result, eyre};
 

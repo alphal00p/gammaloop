@@ -1,9 +1,9 @@
 use insta::assert_snapshot;
 use spenso::network::parsing::StructureFromAtom;
 use spenso::network::tags::SPENSO_TAG;
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
+use symbolica_utils::AtomPrintExt;
 
 static _CF: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> =
     LazyLock::new(|| {

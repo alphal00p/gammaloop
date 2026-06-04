@@ -21,7 +21,7 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::{TensorCollectExt, symbolica_utils::ReplaceBuilderExt},
+    shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
@@ -31,13 +31,14 @@ use symbolica::{
     parse, parse_lit,
     solve::SolveError,
 };
+use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
     numerator::aind::Aind,
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, ForestNodeLike, UVCtx},
@@ -374,32 +375,32 @@ impl Integrated<'_> {
 
         // apply metric
         res = res
-            .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
+            .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
             .when(W_.j_.filter(|r| r.is_integer()))
             .with(
-                vakint::symbols::S.p.f(&[
+                vakint::symbols::S.p.call_args([
                     Atom::var(W_.i_),
                     mink.to_symbolic([GS
                         .uvaind
-                        .f(&[Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
+                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
                 ]),
             )
             .replace(
                 vakint::symbols::S
                     .p
-                    .f(&[Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
+                    .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
             )
             .when(W_.j_.filter(|r| r.is_integer()))
             .with(
-                vakint::symbols::S.p.f(&[
+                vakint::symbols::S.p.call_args([
                     Atom::var(W_.i_),
                     mink.to_symbolic([GS
                         .uvaind
-                        .f(&[Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
+                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
                 ]),
             )
-            .replace(vakint::symbols::S.p.f(&[W_.x__]))
-            .with(GS.emr_mom.f(&[W_.x__]));
+            .replace(vakint::symbols::S.p.call_args([W_.x__]))
+            .with(GS.emr_mom.call_args([W_.x__]));
         res = res
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
             .with(function!(GS.emr_mom, W_.x___, W_.y_))
@@ -413,7 +414,7 @@ impl Integrated<'_> {
                 vk_metric,
                 mink.to_symbolic([GS
                     .uvaind
-                    .f(&[Atom::num(current.topo_order()), Atom::var(W_.x_)])]),
+                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.x_)])]),
                 W_.y_
             ))
             .replace(function!(
@@ -426,7 +427,7 @@ impl Integrated<'_> {
                 vk_metric,
                 mink.to_symbolic([GS
                     .uvaind
-                    .f(&[Atom::num(current.topo_order()), Atom::var(W_.y_)])]),
+                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.y_)])]),
                 W_.x_
             ))
             .replace(function!(vk_metric, W_.x_, W_.y_))

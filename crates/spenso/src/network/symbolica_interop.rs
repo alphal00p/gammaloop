@@ -38,10 +38,7 @@ use crate::{
         upgrading_arithmetic::TrySmallestUpgrade,
     },
     iterators::IteratableTensor,
-    shadowing::{
-        ShadowMapping, Shadowable,
-        symbolica_utils::{IntoArgs, IntoSymbol},
-    },
+    shadowing::{ShadowMapping, Shadowable},
     structure::{
         HasName, TensorStructure, ToSymbolic,
         slot::{AbsInd, IsAbstractSlot, ParseableAind},
@@ -52,10 +49,11 @@ use crate::{
         parametric::{
             AtomViewOrConcrete, CompiledEvalTensor, EvalTensor, EvalTreeTensor, MixedTensor,
             ParamTensor,
-            atomcore::{PatternReplacement, ReplaceBuilderGeneric, TensorAtomMaps, TensorAtomOps},
+            atomcore::{ReplaceBuilderGeneric, TensorAtomMaps, TensorAtomOps},
         },
     },
 };
+use symbolica_utils::{IntoArgs, IntoSymbol, PatternReplacement};
 
 use super::{
     ExecutionResult, Network, TensorNetworkError,

@@ -1,12 +1,12 @@
 use gammalooprs::{
     initialisation::test_initialise,
-    numerator::{ParsingNet, aind::Aind},
+    numerator::{aind::Aind, ParsingNet},
     utils::{F, FUN_LIB, GS, TENSORLIB},
 };
 use spenso::{
     network::{
-        ExecutionResult, MinResultRank,
         parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
+        ExecutionResult, MinResultRank,
     },
     structure::{HasStructure, TensorStructure},
     tensors::parametric::MixedTensor,

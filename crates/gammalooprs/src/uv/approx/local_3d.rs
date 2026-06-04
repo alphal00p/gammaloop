@@ -17,7 +17,7 @@ use crate::{
     cff::ResidueSelectedTerms,
     debug_tags,
     graph::{Graph, LMBext},
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, ResidueProjection, UVCtx},
@@ -165,7 +165,7 @@ impl Local3DApproximation {
             |e, loops, externals| {
                 Replacement::new(
                     GS.emr_vec
-                        .f([Atom::num(usize::from(e)), Atom::var(W_.x___)])
+                        .call_args([Atom::num(usize::from(e)), Atom::var(W_.x___)])
                         .to_pattern(),
                     (loops
                         .replace(function!(GS.emr_vec, W_.x_))

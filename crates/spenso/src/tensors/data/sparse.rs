@@ -21,10 +21,12 @@ use eyre::{Result, eyre};
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol, atomic_expanded_label_id},
+    shadowing::symbolica_utils::atomic_expanded_label_id,
     shadowing::{ShadowMapping, Shadowable},
     tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
 };
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use bincode::{Decode, Encode};
 use indexmap::IndexMap;

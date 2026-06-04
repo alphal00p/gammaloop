@@ -455,8 +455,8 @@ pub fn reference_cases() -> &'static [ReferenceCase] {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-    use spenso::shadowing::symbolica_utils::AtomCoreExt;
     use symbolica::atom::AtomCore;
+    use symbolica_utils::AtomPrintExt;
 
     use super::*;
 

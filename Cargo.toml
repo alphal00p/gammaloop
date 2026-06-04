@@ -54,6 +54,7 @@ smartstring = "1.0.1"
 spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
+symbolica-utils = { path = "crates/symbolica-utils/" }
 symbolica = { version = "2.0.0", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.20.0"

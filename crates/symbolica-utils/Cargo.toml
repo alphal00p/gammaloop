@@ -1,0 +1,15 @@
+[package]
+name = "symbolica-utils"
+version = "0.1.0"
+edition = "2024"
+description = "Shared Symbolica atom and pattern utility traits."
+
+[dependencies]
+bincode = { workspace = true, features = ["serde"] }
+bincode-trait-derive = { workspace = true }
+itertools = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+symbolica = { workspace = true, default-features = false, features = [
+  "bincode",
+  "serde",
+] }

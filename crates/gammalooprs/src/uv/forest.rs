@@ -3,7 +3,7 @@ use crate::{
     cff::{CutCFFIndex, ResidueSelectedTerms},
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    utils::{GS, W_},
     uv::approx::{CFFapprox, CutStructure, ForestNodeLike, OrientationProjection},
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -12,6 +12,7 @@ use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{
     atom::{Atom, AtomCore},
     function,

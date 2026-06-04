@@ -24,11 +24,12 @@ use crate::{
         ufo::UFO,
     },
     processes::DotExportSettings,
-    utils::symbolica_ext::{DOD, LogPrint},
+    utils::symbolica_ext::DOD,
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use ahash::{AHashMap, AHashSet};
 use idenso::{color::ColorSimplifier, tensor::SymbolicNetParse};
+use spenso::shadowing::symbolica_utils::LogPrint;
 
 use color_eyre::{Report, Result, Section};
 

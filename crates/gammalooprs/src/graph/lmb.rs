@@ -31,7 +31,7 @@ use crate::{
         sample::{ExternalIndex, LoopIndex},
         signature::{LoopExtSignature, SignatureLike},
     },
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
 };
 
 use super::Graph;
@@ -265,7 +265,11 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
+                    FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(usize::from(e))
+                        .add_args(rep_args)
+                        .finish()
+                        .to_pattern(),
                     (a.replace(function!(GS.emr_mom, W_.x_))
                         .allow_new_wildcards_on_rhs(true)
                         .with(
@@ -305,7 +309,11 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_vec.f(([usize::from(e)], rep_args)).to_pattern(),
+                    FunctionBuilder::new(GS.emr_vec)
+                        .add_arg(usize::from(e))
+                        .add_args(rep_args)
+                        .finish()
+                        .to_pattern(),
                     (a.replace(function!(GS.emr_vec, W_.x_))
                         .allow_new_wildcards_on_rhs(true)
                         .with(
@@ -348,7 +356,11 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
+                    FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(usize::from(e))
+                        .add_args(rep_args)
+                        .finish()
+                        .to_pattern(),
                     (a + b).to_pattern(),
                 )
             },
@@ -381,7 +393,11 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
+                    FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(usize::from(e))
+                        .add_args(rep_args)
+                        .finish()
+                        .to_pattern(),
                     (a + b).to_pattern(),
                 )
             },
@@ -622,7 +638,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             |_, e, _, _| {
                 EdgeData::new(
                     GS.emr_mom
-                        .f([usize::from(e)])
+                        .call_args([usize::from(e)])
                         .replace_multiple(&reps)
                         .printer(PrintOptions {
                             color_builtin_symbols: false,
@@ -1517,14 +1533,14 @@ impl LoopMomentumBasis {
             sys.push(
                 other.loop_atom::<Atom>(*e, othermom, &[], false)
                     + other.ext_atom::<Atom>(*e, othermom, &[], false)
-                    - selfmom.f(&[l.0]),
+                    - selfmom.call_args([l.0]),
             )
         }
 
         let mut vars = vec![];
 
         for (l, _) in other.loop_edges.iter_enumerated() {
-            vars.push(othermom.f(&[l.0]))
+            vars.push(othermom.call_args([l.0]))
         }
 
         Atom::solve_linear_system::<u8, _, _>(&sys, &vars).unwrap()

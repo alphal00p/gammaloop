@@ -25,7 +25,7 @@ use spenso::{
         PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY, Sequential,
         SequentialExtract, SequentialRef, SmallestDegree,
     },
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    shadowing::symbolica_utils::{LogPrint, SpensoPrintSettings},
 };
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -50,7 +50,7 @@ use crate::{
         },
     },
     momentum::{Helicity, sample::MomentumSample},
-    numerator::symbolica_ext::AtomCoreExt,
+    numerator::symbolica_ext::NumeratorAtomExt,
     processes::{
         ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode,
         TensorNetworkContractionOrder,
@@ -59,7 +59,6 @@ use crate::{
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
-        symbolica_ext::{CallSymbol, LogPrint},
     },
 };
 
@@ -462,11 +461,11 @@ impl EvaluatorStack {
                 })
                 .fold(Atom::Zero, |acc, n| acc + n)
                 .replace(
-                    Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
-                        + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+                    Symbol::IF.call_args([GS.override_if, W_.b_, W_.c_])
+                        + Symbol::IF.call_args([GS.override_if, W_.d_, W_.e_]),
                 )
                 .repeat()
-                .with(Symbol::IF.f([
+                .with(Symbol::IF.call_args([
                     Atom::var(GS.override_if),
                     Atom::var(W_.b_) + Atom::var(W_.d_),
                     Atom::var(W_.c_) + Atom::var(W_.e_),
@@ -510,11 +509,11 @@ impl EvaluatorStack {
                 })
                 .fold(Atom::Zero, |acc, n| acc + n)
                 .replace(
-                    Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
-                        + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+                    Symbol::IF.call_args([GS.override_if, W_.b_, W_.c_])
+                        + Symbol::IF.call_args([GS.override_if, W_.d_, W_.e_]),
                 )
                 .repeat()
-                .with(Symbol::IF.f([
+                .with(Symbol::IF.call_args([
                     Atom::var(GS.override_if),
                     Atom::var(W_.b_) + Atom::var(W_.d_),
                     Atom::var(W_.c_) + Atom::var(W_.e_),
@@ -1996,7 +1995,7 @@ mod tests {
     use idenso::color::CS;
     use symbolica::atom::Symbol;
 
-    use crate::utils::{W_, symbolica_ext::CallSymbol};
+    use crate::utils::W_;
 
     use super::*;
 
@@ -2024,11 +2023,11 @@ mod tests {
         })
         .fold(Atom::Zero, |acc, n| acc + n)
         .replace(
-            Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
-                + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+            Symbol::IF.call_args([GS.override_if, W_.b_, W_.c_])
+                + Symbol::IF.call_args([GS.override_if, W_.d_, W_.e_]),
         )
         .repeat()
-        .with(Symbol::IF.f([
+        .with(Symbol::IF.call_args([
             Atom::var(GS.override_if),
             Atom::var(W_.b_) + Atom::var(W_.d_),
             Atom::var(W_.c_) + Atom::var(W_.e_),

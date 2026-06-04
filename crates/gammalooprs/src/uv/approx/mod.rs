@@ -4,7 +4,7 @@ use crate::{
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     settings::global::OrientationPattern,
-    utils::{GS, symbolica_ext::LogPrint},
+    utils::GS,
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{
@@ -15,6 +15,7 @@ use crate::{
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
+use spenso::shadowing::symbolica_utils::LogPrint;
 use std::hash::Hash;
 use tracing::debug;
 

@@ -15,7 +15,6 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     shadowing::TensorCollectExt,
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, PermutedStructure, TensorStructure, ToSymbolic,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -33,6 +32,7 @@ use symbolica::{
     },
     symbol,
 };
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use eyre::Result;
 
@@ -496,12 +496,12 @@ where
 mod test {
 
     use crate::{Cookable, representations::Bispinor, test_support::test_initialize};
+    use symbolica_utils::AtomPrintExt;
 
     use super::*;
 
     use spenso::{
         network::parsing::{ShadowedStructure, StructureFromAtom},
-        shadowing::symbolica_utils::AtomCoreExt,
         structure::{
             IndexlessNamedStructure,
             abstract_index::AbstractIndex,

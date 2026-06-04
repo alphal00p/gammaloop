@@ -31,7 +31,7 @@ use crate::{
     cff::ResidueSelectedTerms,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     momentum::Sign,
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    utils::{GS, W_},
     uv::{
         RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
@@ -44,6 +44,7 @@ use crate::{
     },
 };
 use color_eyre::Result;
+use spenso::shadowing::symbolica_utils::LogPrint;
 
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
@@ -76,6 +77,26 @@ impl TraceUnfold<SuBitGraph> for Wood {
 
     fn key(&self, e: EdgeIndex) -> SuBitGraph {
         self.graph[e].clone()
+    }
+
+    fn join_branch_histories(
+        &self,
+        target: NodeIndex,
+        _branches: &[(NodeIndex, EdgeIndex)],
+        key: &TraceKey<SuBitGraph, EdgeIndex>,
+    ) -> bool {
+        let mut cover: Option<SuBitGraph> = None;
+        for level in key.iter_levels_top_down() {
+            for op in level.iter_leaf_ops() {
+                if let Some(acc) = &mut cover {
+                    acc.union_with(&op.order);
+                } else {
+                    cover = Some(op.order.clone());
+                }
+            }
+        }
+
+        cover.is_some_and(|cover| &cover == self.graph[target].filter())
     }
 }
 
@@ -532,7 +553,7 @@ impl OperationNode {
     pub fn to_atom(&self) -> Atom {
         let mut acc = Atom::one();
 
-        let approx = FunctionBuilder::new(symbol!("T"));
+        let approx = FunctionBuilder::new(GS.t_op);
         let mut levels = self.key.iter_levels_top_down();
         let Some(first_level) = levels.next() else {
             return acc;
@@ -825,7 +846,7 @@ impl Forests {
         frontier: NodeIndex,
         op: &HiddenData<SuBitGraph, EdgeIndex>,
     ) -> Atom {
-        let approx = FunctionBuilder::new(symbol!("T"));
+        let approx = FunctionBuilder::new(GS.t_op);
         let frontier_atom = self.node_label_atom(frontier);
 
         let current = function!(op.order.symbol(), usize::from(op.data));
@@ -899,7 +920,7 @@ impl Forests {
         op: &HiddenData<SuBitGraph, EdgeIndex>,
     ) -> Atom {
         function!(
-            symbol!("T"),
+            GS.t_op,
             function!(op.order.symbol(), usize::from(op.data)),
             self.graph[frontier]
                 .covers()
@@ -2146,7 +2167,7 @@ mod tests {
 
             insta::assert_snapshot!(
                 f.graph.n_nodes(),
-                @"32");
+                @"61");
 
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
@@ -2154,6 +2175,19 @@ mod tests {
                 &UVgenerationSettings::default(),
             )
             .unfold_uncached();
+
+            let foata_labels = f
+                .graph
+                .iter_nodes()
+                .map(|(_, _, key)| key.foata_level_labels())
+                .collect::<Vec<_>>();
+            assert!(
+                foata_labels
+                    .iter()
+                    .any(|label| label == "3,36;FU,F" || label == "36,3;FU,F"),
+                "expected 3;F and 36;FU branch histories to combine, got:\n{}",
+                foata_labels.join("\n")
+            );
 
             println!(
                 "{}",

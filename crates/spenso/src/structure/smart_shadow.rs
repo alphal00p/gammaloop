@@ -14,9 +14,9 @@ use super::{
 };
 use eyre::Result;
 
-#[cfg(feature = "shadowing")]
-use crate::shadowing::symbolica_utils::{IntoArgs, IntoSymbol};
 use crate::structure::SlotIndex;
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 #[cfg(not(feature = "shadowing"))]
 use serde::{Deserialize, Serialize};

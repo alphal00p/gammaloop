@@ -23,10 +23,7 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{
-        GS, W_,
-        symbolica_ext::{CallSymbol, DOD},
-    },
+    utils::{GS, W_, symbolica_ext::DOD},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
@@ -203,9 +200,9 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .with(Atom::var(W_.a_).sqrt())
             .replace_multiple(&ose_reps)
             .replace_multiple(&mom_reps)
-            .replace(GS.uv_local.f(&[W_.a_]))
+            .replace(function!(GS.uv_local, W_.a_))
             .with(Atom::one())
-            .replace(GS.uv_integrated.f(&[W_.a_]))
+            .replace(function!(GS.uv_integrated, W_.a_))
             .with(Atom::one());
         // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);

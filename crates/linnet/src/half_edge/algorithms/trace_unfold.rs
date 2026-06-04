@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -293,6 +293,20 @@ where
         vec![vec![op]]
     }
 
+    /// Returns whether a synthesized node joining several incoming branch histories is valid.
+    ///
+    /// Most trace-unfolded graphs only merge paths that canonicalize to the same key by normal
+    /// extension. Implement this hook for graphs where several distinct incoming branches into
+    /// the same source node can also represent independent pieces of one disjoint union.
+    fn join_branch_histories(
+        &self,
+        _target: NodeIndex,
+        _branches: &[(NodeIndex, EdgeIndex)],
+        _key: &TraceKey<Key, EdgeIndex>,
+    ) -> bool {
+        false
+    }
+
     #[allow(clippy::type_complexity)]
     fn trace_unfold_of<M: NodeStorageOps<NodeData = usize>, S: SubSetLike>(
         &self,
@@ -307,6 +321,9 @@ where
         let mut q = VecDeque::new();
         let mut traces: IndexSet<(NodeIndex, TraceKey<Key, EdgeIndex>)> = IndexSet::new();
         let mut builder: HedgeGraphBuilder<EdgeIndex, usize, NoData> = HedgeGraphBuilder::new();
+        let mut incoming_branches: BTreeMap<NodeIndex, Vec<(NodeIndex, EdgeIndex)>> =
+            BTreeMap::new();
+        let mut added_edges = BTreeSet::new();
         let (ind, _) = traces.insert_full(root);
         let nid = builder.add_node(ind);
         q.push_back((nid, start, TraceKey::empty()));
@@ -316,11 +333,67 @@ where
             for hedge in g.iter_crown_in(subgraph, nid) {
                 if g.flow(hedge) == Flow::Source {
                     if let Some(to_node) = g.involved_node_id(hedge) {
+                        let edge = g[&hedge];
                         let op = HiddenData {
-                            order: self.key(g[&hedge]),
-                            data: g[&hedge],
+                            order: self.key(edge),
+                            data: edge,
                         };
-                        for realization in self.realizations_for_op(op) {
+                        let realizations = self.realizations_for_op(op);
+                        if realizations.is_empty() {
+                            continue;
+                        }
+
+                        let branch = (bnid, edge);
+                        let branches = incoming_branches.entry(to_node).or_default();
+                        let is_new_branch = !branches.contains(&branch);
+                        if is_new_branch {
+                            branches.push(branch);
+                            let previous = &branches[..branches.len() - 1];
+                            let mut combinations = Vec::new();
+                            collect_branch_combinations_with(branch, previous, &mut combinations);
+
+                            for mut combination in combinations {
+                                combination.sort();
+                                let mut branch_edges = BTreeSet::new();
+                                if !combination
+                                    .iter()
+                                    .all(|(_, edge)| branch_edges.insert(*edge))
+                                {
+                                    continue;
+                                }
+
+                                let keys = combination
+                                    .iter()
+                                    .map(|(parent, _)| &traces.get_index(parent.0).unwrap().1);
+                                let Some(joined_key) = TraceKey::try_join_levelwise(keys, self)
+                                else {
+                                    continue;
+                                };
+                                if !self.join_branch_histories(to_node, &combination, &joined_key) {
+                                    continue;
+                                }
+
+                                let (join_ind, is_new) =
+                                    traces.insert_full((to_node, joined_key.clone()));
+                                if is_new {
+                                    let join_node = builder.add_node(join_ind);
+                                    debug_assert_eq!(join_node.0, join_ind);
+                                    q.push_back((join_node, to_node, joined_key));
+                                }
+
+                                for (parent, edge) in combination {
+                                    add_unfolded_edge(
+                                        &mut builder,
+                                        &mut added_edges,
+                                        parent,
+                                        NodeIndex(join_ind),
+                                        edge,
+                                    );
+                                }
+                            }
+                        }
+
+                        for realization in realizations {
                             let new_key = realization
                                 .into_iter()
                                 .fold(key.clone(), |acc, factor| acc.push(self, factor));
@@ -331,7 +404,13 @@ where
                                 q.push_back((bbnid, to_node, new_key.clone()))
                             }
 
-                            builder.add_edge(bnid, NodeIndex(ind), g[&hedge], true);
+                            add_unfolded_edge(
+                                &mut builder,
+                                &mut added_edges,
+                                bnid,
+                                NodeIndex(ind),
+                                edge,
+                            );
                         }
                     }
                 }
@@ -365,6 +444,41 @@ where
     ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
     {
         self.trace_unfold_of::<M, _>(&self.graph().full_filter(), start)
+    }
+}
+
+fn add_unfolded_edge(
+    builder: &mut HedgeGraphBuilder<EdgeIndex, usize, NoData>,
+    added_edges: &mut BTreeSet<(usize, usize, usize)>,
+    source: NodeIndex,
+    sink: NodeIndex,
+    edge: EdgeIndex,
+) {
+    if added_edges.insert((source.0, sink.0, edge.0)) {
+        builder.add_edge(source, sink, edge, true);
+    }
+}
+
+fn collect_branch_combinations_with(
+    branch: (NodeIndex, EdgeIndex),
+    previous: &[(NodeIndex, EdgeIndex)],
+    out: &mut Vec<Vec<(NodeIndex, EdgeIndex)>>,
+) {
+    let mut selected = vec![branch];
+    collect_branch_combinations_from(previous, 0, &mut selected, out);
+}
+
+fn collect_branch_combinations_from(
+    previous: &[(NodeIndex, EdgeIndex)],
+    start: usize,
+    selected: &mut Vec<(NodeIndex, EdgeIndex)>,
+    out: &mut Vec<Vec<(NodeIndex, EdgeIndex)>>,
+) {
+    for index in start..previous.len() {
+        selected.push(previous[index]);
+        out.push(selected.clone());
+        collect_branch_combinations_from(previous, index + 1, selected, out);
+        selected.pop();
     }
 }
 
@@ -1133,6 +1247,58 @@ impl<O, D> TraceKey<O, D> {
         Self { levels }
     }
 
+    fn try_join_levelwise<'a, I>(
+        keys: impl IntoIterator<Item = &'a Self>,
+        indep: &I,
+    ) -> Option<Self>
+    where
+        I: Independence<HiddenData<O, D>>,
+        O: Clone + Eq + Ord + 'a,
+        D: Clone + 'a,
+    {
+        let keys = keys.into_iter().collect::<Vec<_>>();
+        let max_levels = keys.iter().map(|key| key.levels.len()).max().unwrap_or(0);
+        let mut seen = Vec::new();
+        let mut ordered_ops = Vec::new();
+
+        for level_index in 0..max_levels {
+            let mut level_ops = Vec::new();
+
+            for key in &keys {
+                let Some(level) = key.levels.get(level_index) else {
+                    continue;
+                };
+
+                for op in level {
+                    if seen.iter().any(|seen_op| seen_op == op)
+                        || level_ops.iter().any(|level_op| level_op == op)
+                    {
+                        continue;
+                    }
+
+                    if !level_ops
+                        .iter()
+                        .all(|level_op| indep.independent(op, level_op))
+                    {
+                        return None;
+                    }
+
+                    level_ops.push(op.clone());
+                }
+            }
+
+            level_ops.sort();
+            seen.extend(level_ops.iter().cloned());
+            ordered_ops.extend(level_ops);
+        }
+
+        Some(
+            ordered_ops
+                .into_iter()
+                .fold(Self::empty(), |acc, op| acc.push(indep, op)),
+        )
+    }
+
     /// Writes the trace using explicit Foata levels and a custom label mapping.
     ///
     /// # Examples
@@ -1239,6 +1405,15 @@ mod tests {
 
         fn key(&self, e: EdgeIndex) -> &'static str {
             self.graph[e]
+        }
+
+        fn join_branch_histories(
+            &self,
+            target: NodeIndex,
+            _branches: &[(NodeIndex, EdgeIndex)],
+            _key: &TraceKey<&'static str, EdgeIndex>,
+        ) -> bool {
+            self.graph[target] == "target"
         }
     }
 
@@ -1532,6 +1707,55 @@ mod tests {
 
         assert_eq!(unfolded.parents(node).count(), 2);
         assert_eq!(unfolded.leaf_ops(node).count(), 1);
+    }
+
+    #[test]
+    fn synthesizes_union_from_branch_histories() {
+        let mut builder = HedgeGraphBuilder::<&'static str, &'static str>::new();
+        let empty = builder.add_node("empty");
+        let a = builder.add_node("A");
+        let b = builder.add_node("B");
+        let af = builder.add_node("AF");
+        let bu = builder.add_node("BU");
+        let target = builder.add_node("target");
+
+        builder.add_edge(empty, a, "A", true);
+        builder.add_edge(empty, b, "B", true);
+        builder.add_edge(a, af, "F", true);
+        builder.add_edge(b, bu, "U", true);
+        builder.add_edge(af, target, "U", true);
+        builder.add_edge(bu, target, "F", true);
+
+        let graph = FrontierGraph {
+            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            extra_independent_pairs: &[
+                ("A", "B"),
+                ("B", "A"),
+                ("A", "U"),
+                ("U", "A"),
+                ("B", "F"),
+                ("F", "B"),
+                ("F", "U"),
+                ("U", "F"),
+            ],
+        };
+        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        let node = unfolded
+            .iter_nodes()
+            .find_map(|(node, _, key)| (key.to_string() == "{A,B} · {F,U}").then_some(node))
+            .expect("expected joined branch-history node");
+        let parent_labels = unfolded
+            .parents(node)
+            .map(|(parent, _)| unfolded[parent].to_string())
+            .collect::<BTreeSet<_>>();
+
+        insta::assert_snapshot!(
+            format!("node={}\nparents={:?}", unfolded[node], parent_labels),
+            @r#"
+        node={A,B} · {F,U}
+        parents={"{A} · {F}", "{B} · {U}"}
+        "#
+        );
     }
 
     // #[test]
