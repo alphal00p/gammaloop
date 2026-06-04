@@ -24,16 +24,15 @@ use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::{
-        ShadowMapping, Shadowable,
-        symbolica_utils::{IntoArgs, IntoSymbol},
-    },
+    shadowing::{ShadowMapping, Shadowable},
     structure::{ToSymbolic, slot::ParseableAind},
     tensors::{
         data::{DataIterator, DenseTensor},
         parametric::TensorCoefficient,
     },
 };
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use crate::{
     algebra::algebraic_traits::{IsZero, RefZero},

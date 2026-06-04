@@ -257,7 +257,7 @@ impl IndexTooling for Atom {
 mod syntax_macro_tests {
     #[allow(unused_imports)]
     use crate::{bis, coad, coaf, cof, color_d, f, t};
-    use spenso::shadowing::symbolica_utils::AtomCoreExt;
+    use symbolica_utils::AtomPrintExt;
 
     #[test]
     fn representation_macros_build_surface_syntax() {
@@ -508,10 +508,9 @@ impl IndexTooling for AtomView<'_> {
 #[cfg(test)]
 pub mod test {
     use insta::assert_snapshot;
-    use spenso::{
-        p, shadowing::symbolica_utils::AtomCoreExt, slot, structure::abstract_index::AbstractIndex,
-    };
+    use spenso::{p, slot, structure::abstract_index::AbstractIndex};
     use symbolica::{atom::AtomCore, parse_lit, printer::CanonicalOrderingSettings};
+    use symbolica_utils::AtomPrintExt;
 
     use crate::{Cookable, IndexTooling, gamma, test_support::test_initialize, u};
 

@@ -7,10 +7,7 @@ use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
-use gammalooprs::{
-    utils::symbolica_ext::TypstFormat,
-    uv::{settings::FinalIntegrandDimension, ApproximationType},
-};
+use gammalooprs::uv::{settings::FinalIntegrandDimension, ApproximationType};
 use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
@@ -153,7 +150,7 @@ impl Renormalize {
                 let mut path = File::create(dir.join(file_name))?;
                 write!(path, "{}", part.printer(PrintOptions::file()))?;
                 let mut path = File::create(dir.join(typst_name))?;
-                write!(path, "{}", part.typst_string())?;
+                write!(path, "{}", part.printer(PrintOptions::typst()))?;
             }
             renormalization_part.push(part);
         }

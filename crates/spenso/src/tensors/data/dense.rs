@@ -22,10 +22,7 @@ use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::{
-        ShadowMapping, Shadowable,
-        symbolica_utils::{IntoArgs, IntoSymbol, atomic_expanded_label_id},
-    },
+    shadowing::{ShadowMapping, Shadowable, symbolica_utils::atomic_expanded_label_id},
     structure::slot::ParseableAind,
     tensors::{data::DataIterator, parametric::TensorCoefficient},
 };
@@ -33,6 +30,8 @@ use bincode::{Decode, Encode};
 use eyre::{Result, eyre};
 use indexmap::IndexMap;
 use num::Zero;
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use super::{CastData, GetTensorData, HasTensorData, SetTensorData, SparseTensor, StorageTensor};
 

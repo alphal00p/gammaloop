@@ -14,12 +14,17 @@ use spenso::{
     },
     utils::{to_subscript, to_superscript},
 };
-use symbolica::prelude::*;
-use symbolica::printer::{PrintState, PrintUserData};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    domains::rational::Rational,
+    function, get_symbol,
+    id::Replacement,
+    printer::{PrintState, PrintUserData},
+    symbol,
+};
+use symbolica_utils::{PrintSettingsExt, TypstMode};
 
 use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
-
-use super::symbolica_ext::CallSymbol;
 
 pub struct WildCards {
     pub edgeid_: Symbol,
@@ -199,6 +204,7 @@ pub struct GammaloopSymbols {
     pub t_op: Symbol,
 
     pub nc2_1: Symbol,
+    pub expr: Symbol,
     pub num: Symbol,
     ///denominator wrapper, den(<edge_id>,<momentum>,<mass>,<full_expr>) (no power and should not be multiplied in but divided!)
     pub den: Symbol,
@@ -220,26 +226,26 @@ impl GammaloopSymbols {
     ) -> Atom {
         arg.into()
             .replace(self.sign_theta(W_.a_))
-            .with(Symbol::IF.f(Atom::var(W_.a_) + 1))
-            .replace(Symbol::IF.f(W_.a_) * Symbol::IF.f(W_.b_))
+            .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
+            .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
             .repeat()
-            .with(Symbol::IF.f(W_.a_ * W_.b_))
-            .replace(Symbol::IF.f(W_.a_) * W_.b___)
-            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::var(W_.b___), Atom::Zero]))
-            .replace(Symbol::IF.f([Atom::var(W_.a_), Atom::Zero]))
-            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            .replace(Symbol::IF.f([Atom::var(W_.a_)]))
-            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            .replace(Symbol::IF.f([W_.a_, W_.b_, W_.c_]))
+            .with(Symbol::IF.call(W_.a_ * W_.b_))
+            .replace(Symbol::IF.call(W_.a_) * W_.b___)
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::var(W_.b___), Atom::Zero]))
+            .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            .replace(Symbol::IF.call_args([W_.a_, W_.b_, W_.c_]))
             .with({
                 if with_override {
-                    Symbol::IF.f([
+                    Symbol::IF.call_args([
                         Atom::var(self.override_if),
                         Atom::var(W_.b_),
-                        Symbol::IF.f([W_.a_, W_.b_, W_.c_]),
+                        Symbol::IF.call_args([W_.a_, W_.b_, W_.c_]),
                     ])
                 } else {
-                    Symbol::IF.f([W_.a_, W_.b_, W_.c_])
+                    Symbol::IF.call_args([W_.a_, W_.b_, W_.c_])
                 }
             })
     }
@@ -251,7 +257,7 @@ impl GammaloopSymbols {
         mass: impl Into<AtomOrView<'a>>,
         full_expr: impl Into<AtomOrView<'a>>,
     ) -> Atom {
-        self.den.f(&[
+        self.den.call_args([
             eid.into().as_view(),
             mom.into().as_view(),
             mass.into().as_view(),
@@ -749,11 +755,12 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     t_op: symbol!(
         "T",
         print = |a, opt, _state| {
-            if !opt.mode.is_typst() {
-                return None;
-            }
-
-            let mut out = "#T".to_string();
+            let mut out = match opt.typst_mode()? {
+                TypstMode::Math | TypstMode::Markup => "#T".to_string(),
+                TypstMode::Code => "T".to_string(),
+            };
+            let mut opt = opt.clone();
+            opt.set_typst_mode(TypstMode::Code);
             if let AtomView::Fun(f) = a {
                 out.push('(');
                 let mut first = true;
@@ -763,7 +770,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     } else {
                         out.push(',');
                     }
-                    arg.format(&mut out, opt, PrintState::new()).ok()?;
+                    arg.format(&mut out, &opt, PrintState::new()).ok()?;
                 }
                 out.push(')');
             }
@@ -802,9 +809,9 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 }
                 let expr = GS
                     ._linear
-                    .f(args.as_slice())
-                    .replace(GS._linear.f(&[W_.a___]))
-                    .with(arg.get_symbol().f(&[W_.a___]));
+                    .call_args(args.as_slice())
+                    .replace(GS._linear.call_args([W_.a___]))
+                    .with(arg.get_symbol().call_args([W_.a___]));
                 println!(":{}->{}", f, expr);
                 **out = expr;
             }
@@ -890,6 +897,15 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         }
     ),
     delta_vec: ETS.delta,
+    expr: symbol!(
+        "expr",
+        print = |_, opt, _state| {
+            Some(match opt.typst_mode()? {
+                TypstMode::Math | TypstMode::Markup => "#expr".to_string(),
+                TypstMode::Code => "expr".to_string(),
+            })
+        }
+    ),
     num: symbol!("num"),
     den: symbol!(
         "denom",
@@ -945,7 +961,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = get_symbol!("Q").unwrap().f(&[eid, cind.as_view()])
+                        **out = get_symbol!("Q").unwrap().call_args([eid, cind.as_view()])
                     }
                 }
             }
@@ -1019,7 +1035,7 @@ impl GammaloopSymbols {
     }
 
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
-        self.tree_denom_wrapper.f(&[arg.into().as_view()])
+        self.tree_denom_wrapper.call_args([arg.into().as_view()])
     }
 
     pub fn do_dot_product_in_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
@@ -1094,7 +1110,7 @@ impl GammaloopSymbols {
         //         if exp.denominator() == Integer::from(2) {
         //             **out = self
         //                 .broadcasting_sqrt
-        //                 .f(&[a])
+        //                 .call_args([a])
         //                 .pow(Atom::num(exp.numerator()));
         //         }
         //     }
@@ -1113,7 +1129,7 @@ impl GammaloopSymbols {
                 if exp.denominator() == 2 {
                     **out = self
                         .broadcasting_sqrt
-                        .f(&[a])
+                        .call_args([a])
                         .pow(Atom::num(exp.numerator()));
                 }
             }
@@ -1163,11 +1179,12 @@ impl GammaloopSymbols {
     }
 
     pub(crate) fn cind(&self, e: usize) -> Atom {
-        AIND_SYMBOLS.cind.f([e as i64])
+        AIND_SYMBOLS.cind.call_args([e as i64])
     }
 
     pub(crate) fn energy_delta<'a>(&self, index: impl Into<AtomOrView<'a>>) -> Atom {
-        self.delta_vec.f(&[self.cind(0), index.into().into_owned()])
+        self.delta_vec
+            .call_args([self.cind(0), index.into().into_owned()])
     }
 
     pub(crate) fn ose_full(
@@ -1226,7 +1243,7 @@ impl GammaloopSymbols {
 
     pub(crate) fn add_parametric_sign(&self, e: EdgeIndex) -> Replacement {
         Replacement::new(
-            self.emr_mom(e, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
+            self.emr_mom(e, AIND_SYMBOLS.cind.call_args([Atom::Zero]))
                 .to_pattern(),
             sign_atom(e) * self.ose(e),
         )
@@ -1246,8 +1263,7 @@ pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-
-    use crate::utils::symbolica_ext::LogPrint;
+    use spenso::shadowing::symbolica_utils::LogPrint;
 
     use super::*;
 

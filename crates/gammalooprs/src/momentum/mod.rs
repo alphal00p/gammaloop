@@ -21,7 +21,7 @@ use spenso::{
     algebra::{algebraic_traits::RefZero, complex::Complex, upgrading_arithmetic::FallibleAdd},
     contraction::Contract,
     iterators::IteratableTensor,
-    shadowing::{Shadowable, symbolica_utils::NoArgs},
+    shadowing::Shadowable,
     structure::{
         CastStructure, IndexLess, NamedStructure, OrderedStructure, PermutedStructure,
         TensorStructure, ToSymbolic,
@@ -48,6 +48,7 @@ use symbolica::{
     },
     prelude::*,
 };
+use symbolica_utils::NoArgs;
 use thiserror::Error;
 
 use crate::{

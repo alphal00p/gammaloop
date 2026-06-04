@@ -9,7 +9,7 @@ use thiserror::Error;
 use symbolica::atom::{Atom, Symbol};
 
 #[cfg(feature = "shadowing")]
-use crate::shadowing::symbolica_utils::SerializableSymbol;
+use symbolica_utils::SerializableSymbol;
 
 /// A Dimension
 #[derive(

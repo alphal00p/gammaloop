@@ -22,14 +22,13 @@ use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
     printer::PrintOptions,
-    symbol,
 };
 use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    utils::{GS, W_},
     uv::{
         ApproximationType, Integrands, RenormalizationPart, Spinney, UVgenerationSettings,
         UltravioletGraph,
@@ -46,6 +45,7 @@ use crate::{
     },
 };
 use color_eyre::Result;
+use spenso::shadowing::symbolica_utils::LogPrint;
 
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
@@ -78,6 +78,26 @@ impl TraceUnfold<SuBitGraph> for Wood {
 
     fn key(&self, e: EdgeIndex) -> SuBitGraph {
         self.graph[e].clone()
+    }
+
+    fn join_branch_histories(
+        &self,
+        target: NodeIndex,
+        _branches: &[(NodeIndex, EdgeIndex)],
+        key: &TraceKey<SuBitGraph, EdgeIndex>,
+    ) -> bool {
+        let mut cover: Option<SuBitGraph> = None;
+        for level in key.iter_levels_top_down() {
+            for op in level.iter_leaf_ops() {
+                if let Some(acc) = &mut cover {
+                    acc.union_with(&op.order);
+                } else {
+                    cover = Some(op.order.clone());
+                }
+            }
+        }
+
+        cover.is_some_and(|cover| &cover == self.graph[target].filter())
     }
 }
 
@@ -673,7 +693,7 @@ impl Forests {
     }
 
     fn dot_serialize_expr_atom() -> Atom {
-        Atom::var(symbol!("expr"))
+        Atom::var(GS.expr)
     }
 
     fn dot_serialize_node_atom_factor(
@@ -1792,6 +1812,66 @@ mod tests {
             insta::assert_snapshot!(
                 f.node_label(NodeIndex(11)),
                 @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+            );
+
+            Ok(())
+        }
+
+        #[test]
+        fn double_double_dumbell() -> Result<()> {
+            test_initialise().unwrap();
+            let dumbell: Graph = dot!(
+                digraph G{
+                    edge [particle="scalar_1"];
+                    v1 -> v2;
+                    v2 -> v2;v2 -> v2; //v2 -> v2;
+                    v1 -> v1;v1 -> v1;
+                },"scalars"
+            )?;
+
+            let _spinneys: Vec<_> = dumbell
+                .spinneys(&dumbell.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .collect();
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            );
+
+            println!("{}", f);
+
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"16",
+                // format!("Wood does not have correct number of spinneys: \n{}",f)
+            );
+
+            let f = f.unfold();
+
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"61");
+
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            )
+            .unfold_uncached();
+
+            let foata_labels = f
+                .graph
+                .iter_nodes()
+                .map(|(_, _, key)| key.foata_level_labels())
+                .collect::<Vec<_>>();
+            assert!(
+                foata_labels
+                    .iter()
+                    .any(|label| label == "3,36;FU,F" || label == "36,3;FU,F"),
+                "expected 3;F and 36;FU branch histories to combine, got:\n{}",
+                foata_labels.join("\n")
             );
 
             Ok(())

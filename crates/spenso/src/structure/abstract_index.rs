@@ -27,10 +27,10 @@ use symbolica::coefficient::CoefficientView;
 #[cfg(feature = "shadowing")]
 use crate::network::tags::SPENSO_TAG;
 #[cfg(feature = "shadowing")]
-use crate::shadowing::symbolica_utils::SerializableSymbol;
-#[cfg(feature = "shadowing")]
 use crate::structure::slot::ParseableAind;
 use crate::utils::{to_subscript, to_superscript};
+#[cfg(feature = "shadowing")]
+use symbolica_utils::SerializableSymbol;
 
 use thiserror::Error;
 

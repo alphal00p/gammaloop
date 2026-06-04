@@ -49,7 +49,7 @@ use crate::{
         GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
     },
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, GS, Length, W_, symbolica_ext::LogPrint},
+    utils::{F, GS, Length, W_},
     uv::{
         RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
@@ -66,6 +66,7 @@ use linnet::{
     num_traits::SignOrZero,
     parser::DotGraph,
 };
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{atom::Var, prelude::*};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
