@@ -124,7 +124,6 @@ impl PartialEq for Spinney {
     }
 }
 
-#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Spinney {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.subgraph == other.subgraph {
@@ -136,11 +135,5 @@ impl PartialOrd for Spinney {
         } else {
             None
         }
-    }
-}
-
-impl Ord for Spinney {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.filter().cmp(other.filter())
     }
 }
