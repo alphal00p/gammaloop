@@ -1,14 +1,14 @@
 pub struct SchoonschipSettings {
-    pub(super) depth_limit: Option<usize>,
-    pub(super) mode: SchoonschipMode,
-    pub(super) expand_contracted_sums: bool,
-    pub(super) simplify_chain_like_functions: bool,
-    pub(super) schoonschip_rank1_tensors: bool,
-    pub(super) contraction_order: SchoonschipContractionOrder,
+    pub depth_limit: Option<usize>,
+    pub mode: SchoonschipMode,
+    pub expand_contracted_sums: bool,
+    pub simplify_chain_like_functions: bool,
+    pub schoonschip_rank1_tensors: bool,
+    pub contraction_order: SchoonschipContractionOrder,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum SchoonschipMode {
+pub enum SchoonschipMode {
     SinglePass,
     Recursive(SchoonschipTraversal),
 }

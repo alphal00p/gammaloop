@@ -11,7 +11,7 @@ use spenso::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use crate::{
-    shorthands::metric::MetricSimplifier,
+    shorthands::{metric::MetricSimplifier, schoonschip::with_settings::SchoonschipWithSettings},
     tensor::{SymbolicNetParse, SymbolicTensor},
 };
 
@@ -292,7 +292,7 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
-        super::with_settings::schoonschip_with_settings(*self, settings)
+        SchoonschipWithSettings { settings }.run(*self)
     }
 
     fn to_dots(&self) -> Atom {

@@ -1572,6 +1572,8 @@ dependencies = [
  "pyo3",
  "serde",
  "serde_json",
+ "spenso",
+ "symbolica",
  "tabled",
  "thiserror 2.0.18",
  "tracing",

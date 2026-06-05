@@ -17,6 +17,7 @@ use symbolica::{
 
 use crate::{
     W_,
+    dirac::GammaSimplifier,
     epsilon::{EpsilonSimplifier, epsilon4},
     representations::Bispinor,
     shorthands::{
@@ -359,24 +360,14 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
-        let rep = Bispinor {}.into();
-        let mut expr = expr
-            .to_owned()
-            .collect_metrics()
-            .schoonschip()
-            .simplify_epsilon()
-            .chainify(rep)
-            .collect_chains(rep);
+        let mut expr = expr.to_owned().collect_gamma_chains();
 
         loop {
             let next = self
                 .settings
                 .rewrite_expression(expr.clone())
-                .collect_tensors()
-                .schoonschip()
                 .simplify_epsilon()
-                .schoonschip()
-                .simplify_epsilon();
+                .normalize_dots();
 
             if next == expr {
                 return next;

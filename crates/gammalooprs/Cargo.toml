@@ -22,7 +22,6 @@ base62 = "2.2.4"
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
 brotli = "7.0.0"
-
 clarabel = "0"
 color-eyre = { workspace = true }
 colored = { workspace = true }
@@ -33,13 +32,12 @@ dirs = { workspace = true }
 dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
-gammaloop-tracing-filter = { workspace = true }
+gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 itertools = { workspace = true }
 json5 = { workspace = true }
-
 # cgmath = "0.18.0"
 # argmin = "0.10.0"
 # by_address = "1.2.1"
@@ -69,7 +67,6 @@ smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { workspace = true }
 statrs = "0.16.1"
-
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
@@ -79,7 +76,6 @@ toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 tracing-appender = { workspace = true }
 tracing-indicatif = { workspace = true }
-
 vakint = { workspace = true }
 vectorize = "0.2.0"
 

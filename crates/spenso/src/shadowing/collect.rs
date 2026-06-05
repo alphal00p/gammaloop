@@ -11,7 +11,10 @@ use crate::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    function, symbol,
+    function,
+    id::Context,
+    symbol,
+    utils::Settable,
 };
 
 pub static COLLECT: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::collect"));
@@ -34,6 +37,8 @@ pub enum TensorCollectFilter<const N: usize> {
 pub trait Collectable {
     fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
     fn expand_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
+    fn collect_collects(self) -> Atom;
+    fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(self, map: F) -> Atom;
     fn wrap_in_collect(self) -> Atom;
     fn unwrap_collect(self) -> Atom;
 }
@@ -46,6 +51,14 @@ impl Collectable for Atom {
         self.as_view().expand_with_map(map)
     }
 
+    fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(self, map: F) -> Atom {
+        self.as_view().map_collects(map)
+    }
+
+    fn collect_collects(self) -> Atom {
+        self.as_view().collect_collects()
+    }
+
     fn unwrap_collect(self) -> Atom {
         self.as_view().unwrap_collect()
     }
@@ -55,6 +68,23 @@ impl Collectable for Atom {
     }
 }
 impl Collectable for AtomView<'_> {
+    fn collect_collects(self) -> Atom {
+        self.replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
+            .repeat()
+            .with(COLLECT.call(W_.a_ * W_.b_))
+    }
+
+    fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        self,
+        mut map: F,
+    ) -> Atom {
+        self.replace_map(|arg, context, out| {
+            let AtomView::Fun(a) = arg else { return };
+            if a.get_symbol() == *COLLECT {
+                map(arg, context, out)
+            }
+        })
+    }
     fn expand_with_map(self, mut matches: impl FnMut(AtomView<'_>) -> bool) -> Atom {
         let mut hit = false;
         let wrapped = self.replace_map(|arg, _context, out| {
@@ -82,8 +112,11 @@ impl Collectable for AtomView<'_> {
         if !hit {
             return self.to_owned();
         }
-        let collected = wrapped.collect_symbol::<i16>(*COLLECT);
-        collected.unwrap_collect()
+        wrapped
+            .collect_symbol::<i16>(*COLLECT)
+            .replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
+            .repeat()
+            .with(COLLECT.call(W_.a_ * W_.b_))
     }
 
     fn unwrap_collect(self) -> Atom {
@@ -110,11 +143,37 @@ impl Collectable for AtomView<'_> {
 
 impl<const N: usize> TensorCollectFilter<N> {
     fn collect(self, expression: AtomView<'_>) -> Atom {
-        expression.collect_with_map(|a| self.matches(a))
+        expression
+            .collect_with_map(|a| self.matches(a))
+            .unwrap_collect()
+    }
+
+    fn collect_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        self,
+        expression: AtomView<'_>,
+        map: F,
+    ) -> Atom {
+        expression
+            .collect_with_map(|a| self.matches(a))
+            .map_collects(map)
+            .unwrap_collect()
     }
 
     fn expand(self, expression: AtomView<'_>) -> Atom {
-        expression.expand_with_map(|a| self.matches(a))
+        expression
+            .expand_with_map(|a| self.matches(a))
+            .unwrap_collect()
+    }
+
+    fn expand_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        self,
+        expression: AtomView<'_>,
+        map: F,
+    ) -> Atom {
+        expression
+            .expand_with_map(|a| self.matches(a))
+            .map_collects(map)
+            .unwrap_collect()
     }
 
     fn matches(self, arg: AtomView<'_>) -> bool {
@@ -187,6 +246,13 @@ pub trait TensorCollectExt {
     /// Collect common tensor leaves that contain `rep` as one of their slot representations.
     fn collect_rep(&self, rep: LibraryRep) -> Atom;
 
+    /// Collect common tensor leaves that contain `rep` as one of their slot representations, using a custom map function.
+    fn collect_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        &self,
+        rep: LibraryRep,
+        map: F,
+    ) -> Atom;
+
     /// Collect common tensor leaves that contain any of the `reps` as one of their slot representations.
     fn collect_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom;
 
@@ -218,6 +284,14 @@ pub trait TensorCollectExt {
 impl TensorCollectExt for Atom {
     fn collect_tensors(&self) -> Atom {
         self.as_view().collect_tensors()
+    }
+
+    fn collect_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        &self,
+        rep: LibraryRep,
+        map: F,
+    ) -> Atom {
+        self.as_view().collect_rep_with_map(rep, map)
     }
 
     fn collect_tagged_tensors(&self) -> Atom {
@@ -279,6 +353,14 @@ impl TensorCollectExt for AtomView<'_> {
 
     fn collect_rep(&self, rep: LibraryRep) -> Atom {
         TensorCollectFilter::Reps([rep]).collect(*self)
+    }
+
+    fn collect_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        &self,
+        rep: LibraryRep,
+        map: F,
+    ) -> Atom {
+        TensorCollectFilter::Reps([rep]).collect_with_map(*self, map)
     }
 
     fn collect_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {

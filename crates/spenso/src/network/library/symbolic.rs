@@ -14,6 +14,7 @@ use symbolica::{
 
 use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
+use crate::tensor_symbol;
 use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
@@ -281,7 +282,7 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
 
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt, _state| {
+    metric: tensor_symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt, _state| {
 
 
         if matches!(

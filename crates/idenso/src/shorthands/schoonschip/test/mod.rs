@@ -227,6 +227,35 @@ fn chain_like_metric_simplification_keeps_compact_scalar_products() {
 }
 
 #[test]
+fn chain_like_rank1_schoonschip_is_settings_controlled() {
+    test_initialize();
+    let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
+    let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+    let p = T.rank_one_tensor_symbol("P");
+    let f = symbol!("F");
+    let i = slot!(bis, 1).to_atom();
+    let j = slot!(bis, 2).to_atom();
+    let mu = slot!(mink, 1).to_atom();
+    let expr = function!(p, 1, &mu) * chain!(&i, &j, function!(f, chain_in(), chain_out(), &mu));
+
+    let without_chain_like =
+        expr.schoonschip_with_settings(&SchoonschipSettings::single_pass(None));
+    assert_snapshot!(without_chain_like.to_bare_ordered_string(), @"P(1,mink(D,1))*chain(bis(D,1),bis(D,2),F(in,out,mink(D,1)))");
+
+    let without_rank1 = expr.schoonschip_with_settings(
+        &SchoonschipSettings::single_pass(None)
+            .with_chain_like_functions()
+            .without_rank1_tensors(),
+    );
+    assert_snapshot!(without_rank1.to_bare_ordered_string(), @"P(1,mink(D,1))*chain(bis(D,1),bis(D,2),F(in,out,mink(D,1)))");
+
+    let result = expr.schoonschip_with_settings(
+        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
+    );
+    assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,1),bis(D,2),F(in,out,P(1,mink(D))))");
+}
+
+#[test]
 fn chain_like_metric_simplification_handles_traces() {
     test_initialize();
     let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
@@ -266,6 +295,35 @@ fn chain_like_metric_simplification_handles_symmetric_traces() {
         &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
     );
     assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),sym(F(in,out,P(1,mink(D)))))");
+}
+
+#[test]
+fn chain_like_rank1_schoonschip_handles_dual_traces() {
+    test_initialize();
+    let cof: Representation<_> = ColorFundamental {}.new_rep(symbol!("N"));
+    let coaf = cof.dual();
+    let bis: Representation<_> = Bispinor {}.new_rep(symbol!("D"));
+    let p = T.rank_one_tensor_symbol("P");
+    let f = symbol!("F");
+    let i = slot!(cof, 1).to_atom();
+    let dual_i = slot!(coaf, 1).to_atom();
+    let settings = SchoonschipSettings::single_pass(None).with_chain_like_functions();
+
+    let expr = function!(p, 1, &i)
+        * trace!(
+            bis.to_symbolic([]),
+            function!(f, chain_in(), chain_out(), &dual_i)
+        );
+    let result = expr.schoonschip_with_settings(&settings);
+    assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),cyclic(F(in,out,P(1,cof(N)))))");
+
+    let expr = function!(p, 1, &i)
+        * trace_sym!(
+            bis.to_symbolic([]),
+            function!(f, chain_in(), chain_out(), &dual_i)
+        );
+    let result = expr.schoonschip_with_settings(&settings);
+    assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),sym(F(in,out,P(1,cof(N)))))");
 }
 
 #[test]

@@ -325,7 +325,7 @@ static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|
         ),
         // trace(rep1,...,a(...,d(i),...),...)*p(...,i)->trace(rep1,...,a(....,p(...,rep),...),...) for p a rank1 tagged function
         Replacement::new(
-            (trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
+            (trace_cyclic_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
                 * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
             .to_pattern(),
             trace_cyclic_(function!(
@@ -361,7 +361,7 @@ static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|
         ),
         // trace(rep1,sym(...,a(...,d(i),...),...))*p(...,i)->trace(rep1,sym(...,a(....,p(...,rep),...),...))
         Replacement::new(
-            (trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___))
+            (trace_sym_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
                 * T.rank1_::<0, _>([&Atom::var(W_.c___), &dualizable]))
             .to_pattern(),
             trace_sym_(function!(
@@ -374,12 +374,12 @@ static SCHOONSCHIP_VECTOR_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|
     ]
 });
 
-struct SchoonschipWithSettings<'a> {
-    settings: &'a SchoonschipSettings,
+pub(crate) struct SchoonschipWithSettings<'a> {
+    pub(crate) settings: &'a SchoonschipSettings,
 }
 
 impl SchoonschipWithSettings<'_> {
-    fn run(&self, view: AtomView<'_>) -> Atom {
+    pub(crate) fn run(&self, view: AtomView<'_>) -> Atom {
         let mut current = view.to_owned();
         loop {
             let next = self.apply_once(current.as_view());
@@ -420,14 +420,23 @@ impl SchoonschipWithSettings<'_> {
 
         let simplified = expression
             .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN)
-            .replace_multiple_repeat(metric_trace_rules)
-            .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
-            .replace_multiple_repeat(vector_trace_rules);
+            .replace_multiple_repeat(metric_trace_rules);
+
+        let simplified = if self.settings.schoonschip_rank1_tensors {
+            simplified
+                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
+                .replace_multiple_repeat(vector_trace_rules)
+        } else {
+            simplified
+        };
 
         if Self::contains_symmetric_projector(simplified.as_view()) {
-            simplified
-                .replace_multiple_repeat(metric_trace_sym_rules)
-                .replace_multiple_repeat(vector_trace_sym_rules)
+            let simplified = simplified.replace_multiple_repeat(metric_trace_sym_rules);
+            if self.settings.schoonschip_rank1_tensors {
+                simplified.replace_multiple_repeat(vector_trace_sym_rules)
+            } else {
+                simplified
+            }
         } else {
             simplified
         }
@@ -445,11 +454,4 @@ impl SchoonschipWithSettings<'_> {
             AtomView::Num(_) | AtomView::Var(_) => false,
         }
     }
-}
-
-pub(super) fn schoonschip_with_settings(
-    view: AtomView<'_>,
-    settings: &SchoonschipSettings,
-) -> Atom {
-    SchoonschipWithSettings { settings }.run(view)
 }

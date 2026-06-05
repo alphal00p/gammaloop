@@ -122,6 +122,7 @@ impl SpensoPrintSettings {
             custom_print_mode: self.into(),
             color_builtin_symbols: true,
             terms_on_new_line: true,
+            max_line_length: Some(120),
             color_namespace: false,
             multiplication_operator: '·',
             hide_all_namespaces: true,

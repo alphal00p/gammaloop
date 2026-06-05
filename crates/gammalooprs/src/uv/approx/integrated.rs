@@ -8,6 +8,8 @@ use idenso::{
         UndoShorthands, chain::Chain, metric::MetricSimplifier, schoonschip::Schoonschip,
     },
 };
+
+use gammaloop_tracing_filter::LogMessage;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
@@ -19,7 +21,7 @@ use spenso::{
     shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
-use symbolica::prelude::*;
+use symbolica::{atom::AtomCore, prelude::*};
 use tracing::instrument;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
@@ -120,6 +122,9 @@ impl Integrated<'_> {
         let reduced = current.reduced_subgraph(given);
         let graph = ctx.graph;
         let settings = ctx.settings;
+        let current_label = current.subgraph().string_label();
+        let given_label = given.subgraph().string_label();
+        let reduced_label = reduced.string_label();
         let mut t_arg = ctx
             .graph
             .numerator(&reduced, given.subgraph())
@@ -129,52 +134,52 @@ impl Integrated<'_> {
 
         debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
         let t_arg_before_gamma = t_arg.collect_metrics().simplify_metrics();
-        let before_gamma_simplification = t_arg_before_gamma.to_plain_string();
-        let before_gamma_simplification_log_print =
-            t_arg_before_gamma.log_print(Some(120)).to_string();
         let gamma_simplification_started = std::time::Instant::now();
         let t_arg_after_gamma = t_arg_before_gamma.simplify_gamma();
-        let after_gamma_simplification = t_arg_after_gamma.to_plain_string();
-        let after_gamma_simplification_log_print =
-            t_arg_after_gamma.log_print(Some(120)).to_string();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
-            stage = "integrated_uv_start_after_simplify_gamma",
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start;
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
+            current_topo_order = %current.topo_order(),
+            given_topo_order = %given.topo_order(),
+            current_dod = %current.dod(),
+            given_dod = %given.dod(),
             gamma_simplification_ms = %gamma_simplification_started.elapsed().as_millis(),
-            changed = before_gamma_simplification != after_gamma_simplification,
-            before_bytes = %before_gamma_simplification.len(),
-            after_bytes = %after_gamma_simplification.len(),
-            before_gamma_count = %before_gamma_simplification.matches("spenso::gamma").count(),
-            after_gamma_count = %after_gamma_simplification.matches("spenso::gamma").count(),
-            before_chain_count = %before_gamma_simplification.matches("spenso::chain").count(),
-            after_chain_count = %after_gamma_simplification.matches("spenso::chain").count(),
-            before_gamma = %before_gamma_simplification_log_print,
-            after_gamma = %after_gamma_simplification_log_print,
-            file.before_gamma_simplification = %before_gamma_simplification,
-            file.after_gamma_simplification = %after_gamma_simplification,
-            file.before_gamma_simplification_log_print = %before_gamma_simplification_log_print,
-            file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+            changed = t_arg_before_gamma != t_arg_after_gamma,
+            before_terms = %t_arg_before_gamma.nterms(),
+            before_atom_bytes = %t_arg_before_gamma.as_view().get_byte_size(),
+            after_terms = %t_arg_after_gamma.nterms(),
+            after_atom_bytes = %t_arg_after_gamma.as_view().get_byte_size(),
+            before = %t_arg_before_gamma.log_print(Some(5)),
+            after = %t_arg_after_gamma.log_print(Some(5)),
             "Gamma simplification before Vakint"
         );
         let t_arg_after_schoonschip_net = t_arg_after_gamma.schoonschip_net::<Aind>();
-        let after_schoonschip_net = t_arg_after_schoonschip_net.to_plain_string();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
-            stage = "integrated_uv_start_after_schoonschip_net",
-            dummy_count = %after_schoonschip_net.matches("dummy(").count(),
-            dummy_1000034_count = %after_schoonschip_net.matches("dummy(1000034)").count(),
-            bytes = %after_schoonschip_net.len(),
-            expr = %t_arg_after_schoonschip_net.log_print(Some(120)),
-            file.expr_plain = %after_schoonschip_net,
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
+            current_topo_order = %current.topo_order(),
+            given_topo_order = %given.topo_order(),
+            current_dod = %current.dod(),
+            given_dod = %given.dod(),
+            terms = %t_arg_after_schoonschip_net.nterms(),
+            atom_bytes = %t_arg_after_schoonschip_net.as_view().get_byte_size(),
+            expr = %t_arg_after_schoonschip_net.log_print(Some(5)),
             "Integrated UV start after Schoonschip net"
         );
         let t_arg_after_dots = t_arg_after_schoonschip_net.to_dots().normalize_dots();
-        let after_dots = t_arg_after_dots.to_plain_string();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
-            stage = "integrated_uv_start_after_dots",
-            dummy_count = %after_dots.matches("dummy(").count(),
-            dummy_1000034_count = %after_dots.matches("dummy(1000034)").count(),
-            bytes = %after_dots.len(),
-            expr = %t_arg_after_dots.log_print(Some(120)),
-            file.expr_plain = %after_dots,
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #integrated_uv_start_after_dots;
+            current = %current_label,
+            given = %given_label,
+            reduced = %reduced_label,
+            current_topo_order = %current.topo_order(),
+            given_topo_order = %given.topo_order(),
+            current_dod = %current.dod(),
+            given_dod = %given.dod(),
+            terms = %t_arg_after_dots.nterms(),
+            atom_bytes = %t_arg_after_dots.as_view().get_byte_size(),
+            expr = %t_arg_after_dots.log_print(Some(5)),
             "Integrated UV start after dots"
         );
         t_arg = t_arg_after_dots / graph.denominator(&reduced, |_| 1);
@@ -206,9 +211,20 @@ impl Integrated<'_> {
 
         let mut a = a.to_atom();
 
-        debug_tags!(#uv,#integrated;res = %a.log_print(None),file.res_plain = %a.to_plain_string(),"Series expanded");
+        debug_tags!(#uv,#integrated;
+            terms = %a.nterms(),
+            atom_bytes = %a.as_view().get_byte_size(),
+            res = %a.log_print(None),
+            file.res_plain = %a.to_plain_string(),
+            "Series expanded"
+        );
         a = a.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#integrated;res = %a.log_print(None),"Series expanded");
+        debug_tags!(#uv,#integrated;
+            terms = %a.nterms(),
+            atom_bytes = %a.as_view().get_byte_size(),
+            res = %a.log_print(None),
+            "Series expanded"
+        );
 
         Ok(a)
     }
@@ -226,8 +242,7 @@ impl Integrated<'_> {
         let current_label = current.subgraph().string_label();
         let given_label = given.subgraph().string_label();
         let reduced_label = reduced.string_label();
-        debug_tags!(#uv, #integrated, #vakint, #trace;
-            stage = "integrate_and_truncate_input",
+        debug_tags!(#uv, #integrated, #vakint, #trace, #integrate_and_truncate_input;
             current = %current_label,
             given = %given_label,
             reduced = %reduced_label,
@@ -235,8 +250,9 @@ impl Integrated<'_> {
             given_topo_order = %given.topo_order(),
             current_dod = %current.dod(),
             given_dod = %given.dod(),
-            integrand = %integrand.log_print(Some(120)),
-            file.integrand = %integrand.to_plain_string(),
+            terms = %integrand.nterms(),
+            atom_bytes = %integrand.as_view().get_byte_size(),
+            integrand = %integrand.log_print(Some(5)),
             "Vakint trace"
         );
         let mut integrand_vakint = to_vakint_integrand(
@@ -249,16 +265,17 @@ impl Integrated<'_> {
         );
 
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace;
-                stage = "integrate_and_truncate_to_vakint_output",
+            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_to_vakint_output;
                 term_index = %term_index,
                 current = %current_label,
                 given = %given_label,
                 reduced = %reduced_label,
-                integral = %t.integral.log_print(None),
-                numerator = %t.numerator.log_print(None),
-                file.integral = %t.integral.to_plain_string(),
-                file.numerator = %t.numerator.to_plain_string(),
+                integral_terms = %t.integral.nterms(),
+                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
+                numerator_terms = %t.numerator.nterms(),
+                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
+                integral = %t.integral.log_print(Some(5)),
+                numerator = %t.numerator.log_print(Some(5)),
                 "Vakint term as input"
             );
         }
@@ -271,59 +288,62 @@ impl Integrated<'_> {
 
         integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace;
-                stage = "integrate_and_truncate_after_canonicalize",
+            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_after_canonicalize;
                 term_index = %term_index,
                 current = %current_label,
                 given = %given_label,
                 reduced = %reduced_label,
-                integral = %t.integral.log_print(None),
-                numerator = %t.numerator.log_print(None),
-                file.integral = %t.integral.to_plain_string(),
-                file.numerator = %t.numerator.to_plain_string(),
+                integral_terms = %t.integral.nterms(),
+                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
+                numerator_terms = %t.numerator.nterms(),
+                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
+                integral = %t.integral.log_print(Some(5)),
+                numerator = %t.numerator.log_print(Some(5)),
                 "Vakint term after canonicalization"
             );
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace;
-                stage = "integrate_and_truncate_after_tensor_reduce",
+            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_after_tensor_reduce;
                 term_index = %term_index,
                 current = %current_label,
                 given = %given_label,
                 reduced = %reduced_label,
-                integral = %t.integral.log_print(None),
-                numerator = %t.numerator.log_print(None),
-                file.integral = %t.integral.to_plain_string(),
-                file.numerator = %t.numerator.to_plain_string(),
+                integral_terms = %t.integral.nterms(),
+                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
+                numerator_terms = %t.numerator.nterms(),
+                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
+                integral = %t.integral.log_print(Some(5)),
+                numerator = %t.numerator.log_print(Some(5)),
                 "Vakint term after tensor reduction"
             );
         }
         integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace;
-                stage = "integrate_and_truncate_after_evaluate_integral",
+            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_after_evaluate_integral;
                 term_index = %term_index,
                 current = %current_label,
                 given = %given_label,
                 reduced = %reduced_label,
-                integral = %t.integral.log_print(None),
-                numerator = %t.numerator.log_print(None),
-                file.integral = %t.integral.to_plain_string(),
-                file.numerator = %t.numerator.to_plain_string(),
+                integral_terms = %t.integral.nterms(),
+                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
+                numerator_terms = %t.numerator.nterms(),
+                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
+                integral = %t.integral.log_print(Some(5)),
+                numerator = %t.numerator.log_print(Some(5)),
                 "Vakint term after evaluation"
             );
         }
 
         let mut res: Atom = integrand_vakint.into();
 
-        debug_tags!(#uv,#integrated,#vakint,#trace;
-            stage = "integrate_and_truncate_raw_post_vakint",
+        debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_raw_post_vakint;
             current = %current_label,
             given = %given_label,
             reduced = %reduced_label,
-            res = %res.expand().log_print(None),
-            file.res = %res.to_plain_string(),
+            terms = %res.nterms(),
+            atom_bytes = %res.as_view().get_byte_size(),
+            res = %res.log_print(Some(5)),
             "Raw post vakint "
         );
 
@@ -403,13 +423,13 @@ impl Integrated<'_> {
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace;
-            stage = "integrate_and_truncate_replaced_post_vakint",
+        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #integrate_and_truncate_replaced_post_vakint;
             current = %current_label,
             given = %given_label,
             reduced = %reduced_label,
-            res = %res.expand().log_print(None),
-            file.res = %res.to_plain_string(),
+            terms = %res.nterms(),
+            atom_bytes = %res.as_view().get_byte_size(),
+            res = %res.log_print(Some(5)),
             "Replaced post vakint "
         );
 
@@ -417,9 +437,12 @@ impl Integrated<'_> {
         let series = res
             .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
             .unwrap();
+        let series_atom = series.to_atom();
 
-        debug_tags!(#uv, #integrated, #inspect;
-            series = %series.to_atom().log_print(None),
+        debug_tags!(#uv, #integrated, #inspect, #integrate_and_truncate_after_epsilon_series;
+            terms = %series_atom.nterms(),
+            atom_bytes = %series_atom.as_view().get_byte_size(),
+            series = %series_atom.log_print(Some(5)),
             "Series "
         );
 
@@ -440,38 +463,22 @@ impl Integrated<'_> {
         res = pole_stripped;
         // This strips as many dummies as possible after undoing chains and traces,
         // so that terms can merge later on.
-        let before_chain_cleanup = res.to_plain_string();
-        let before_chain_cleanup_log_print = res.log_print(Some(120)).to_string();
+        let before_chain_cleanup = res.clone();
         let bispinor_rep = Bispinor {}.into();
         let after_chainify = res.chainify(bispinor_rep);
         let after_collect_chains = after_chainify.collect_chains(bispinor_rep);
-        let after_collect_chains_plain = after_collect_chains.to_plain_string();
-        let after_collect_chains_log_print = after_collect_chains.log_print(Some(120)).to_string();
+        let changed_by_collect = before_chain_cleanup != after_collect_chains;
         res = after_collect_chains.undo_single_length();
-        let after_undo_single_length = res.to_plain_string();
-        let after_undo_single_length_log_print = res.log_print(Some(120)).to_string();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
-            stage = "integrate_and_truncate_after_collect_chains",
+        let changed_by_undo_single_length = after_collect_chains != res;
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #integrate_and_truncate_after_collect_chains;
             current = %current_label,
             given = %given_label,
             reduced = %reduced_label,
-            changed_by_collect = before_chain_cleanup != after_collect_chains_plain,
-            changed_by_undo_single_length = after_collect_chains_plain != after_undo_single_length,
-            before_bytes = %before_chain_cleanup.len(),
-            after_collect_bytes = %after_collect_chains_plain.len(),
-            after_undo_bytes = %after_undo_single_length.len(),
-            before_gamma_count = %before_chain_cleanup.matches("spenso::gamma").count(),
-            after_collect_gamma_count = %after_collect_chains_plain.matches("spenso::gamma").count(),
-            after_undo_gamma_count = %after_undo_single_length.matches("spenso::gamma").count(),
-            before_chain_count = %before_chain_cleanup.matches("spenso::chain").count(),
-            after_collect_chain_count = %after_collect_chains_plain.matches("spenso::chain").count(),
-            after_undo_chain_count = %after_undo_single_length.matches("spenso::chain").count(),
-            before_log_print = %before_chain_cleanup_log_print,
-            after_collect_log_print = %after_collect_chains_log_print,
-            after_undo_single_length_log_print = %after_undo_single_length_log_print,
-            file.before_plain = %before_chain_cleanup,
-            file.after_collect_plain = %after_collect_chains_plain,
-            file.after_undo_single_length_plain = %after_undo_single_length,
+            changed_by_collect = changed_by_collect,
+            changed_by_undo_single_length = changed_by_undo_single_length,
+            before = %before_chain_cleanup.log_display(),
+            after_collect = %after_collect_chains.log_display(),
+            after_undo = %res.log_display(),
             "Integrated UV chain cleanup after collect_chains"
         );
 
@@ -503,9 +510,10 @@ impl Integrated<'_> {
             }
         }
 
-        debug_tags!(#uv, #integrated;
+        debug_tags!(#uv, #integrated, #integrate_and_truncate_final;
             pole_part = %settings.pole_part,
-            res = %res.log_print(None),
+            res.display = %res.log_display(),
+            res.file = %&res.log_file(),
             "Final integrated 4d CT"
         );
 
@@ -545,17 +553,25 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
         integrand: &Atom,
     ) -> Result<Atom> {
         match current.renormalization_scheme() {
-            ApproximationType::MUV => self.integrate_and_truncate(
-                ctx,
-                current,
-                given,
-                &self.t(
-                    ctx,
-                    current,
-                    given,
-                    &self.start(ctx, current, given, integrand)?,
-                )?,
-            ),
+            ApproximationType::MUV => {
+                let start = self.start(ctx, current, given, integrand)?;
+                let integrated_t = self.t(ctx, current, given, &start)?;
+                let result = self.integrate_and_truncate(ctx, current, given, &integrated_t)?;
+                debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #integrated_uv_kernel_after_integrate_and_truncate;
+                    current = %current.subgraph().string_label(),
+                    given = %given.subgraph().string_label(),
+                    current_topo_order = %current.topo_order(),
+                    given_topo_order = %given.topo_order(),
+                    current_dod = %current.dod(),
+                    given_dod = %given.dod(),
+                    terms = %result.nterms(),
+                    atom_bytes = %result.as_view().get_byte_size(),
+                    preview = %result.log_print(Some(5)),
+                    file.integrated_uv_after_integrate_and_truncate = %result.to_plain_string(),
+                    "Integrated UV after integrate_and_truncate"
+                );
+                Ok(result)
+            }
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),

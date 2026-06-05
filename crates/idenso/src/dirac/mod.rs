@@ -6,7 +6,7 @@ use spenso::{
         library::symbolic::{ETS, ExplicitKey},
         tags::SPENSO_TAG,
     },
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings},
     structure::{
         dimension::Dimension,
         representation::{LibraryRep, Minkowski, RepName},
@@ -21,7 +21,10 @@ use symbolica::{
     symbol,
 };
 
-use crate::{IndexTooling, bis, dirac::simplify::DiracSimplifier, gamma, gamma0, rep_symbols::RS};
+use crate::{
+    IndexTooling, bis, dirac::simplify::DiracSimplifier, gamma, gamma0, rep_symbols::RS,
+    shorthands::chain::Chain,
+};
 use eyre::Result;
 
 use super::representations::Bispinor;
@@ -444,12 +447,19 @@ pub trait GammaSimplifier {
 
     fn simplify_gamma0(&self) -> Atom;
 
+    fn collect_gamma_chains(&self) -> Atom;
+
     fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom>;
 }
 
 impl GammaSimplifier for Atom {
     fn simplify_gamma(&self) -> Atom {
         self.as_view().simplify_gamma()
+    }
+
+    fn collect_gamma_chains(&self) -> Atom {
+        let rep: LibraryRep = Bispinor {}.into();
+        self.chainify(rep).collect_chains(rep)
     }
 
     fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
@@ -469,7 +479,10 @@ impl GammaSimplifier for AtomView<'_> {
     fn simplify_gamma(&self) -> Atom {
         self.simplify_gamma_with(GammaSimplifySettings::default())
     }
-
+    fn collect_gamma_chains(&self) -> Atom {
+        let rep: LibraryRep = Bispinor {}.into();
+        self.chainify(rep).collect_chains(rep)
+    }
     fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
         DiracSimplifier::new(&settings).simplify(*self)
     }

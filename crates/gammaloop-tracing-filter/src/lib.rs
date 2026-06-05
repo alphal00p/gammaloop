@@ -9,6 +9,8 @@ use tracing_subscriber::layer::{Context, Filter};
 use tracing_subscriber::registry::LookupSpan;
 
 mod display;
+mod log_message;
+pub use log_message::LogMessage;
 
 pub use display::{
     GammaDisplayFormat, LogFormat, LogSink, LogStyle, RoutedFieldsVisitor, route_field_name,
