@@ -1981,7 +1981,7 @@ fn print_tensor_entry_scalar_stats(stage: &str, net: &ParsingNet) -> TensorEntry
         ));
     }
 
-    top_tensors.sort_by(|left, right| right.3.cmp(&left.3));
+    top_tensors.sort_by_key(|tensor| std::cmp::Reverse(tensor.3));
 
     print_metric_table(
         stage,
@@ -2100,9 +2100,8 @@ fn select_term_range(atom: &Atom, start: usize, end: usize) -> Result<Atom> {
             Ok(add
                 .iter()
                 .enumerate()
-                .filter_map(|(index, term)| {
-                    (start <= index && index < end).then(|| term.to_owned())
-                })
+                .filter(|(index, _)| start <= *index && *index < end)
+                .map(|(_, term)| term.to_owned())
                 .fold(Atom::Zero, |sum, term| sum + term))
         }
         _ if start == 0 && end == 1 => Ok(atom.clone()),

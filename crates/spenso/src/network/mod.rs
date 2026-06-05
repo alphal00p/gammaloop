@@ -274,6 +274,7 @@ pub trait FastTensorSumContractible<Sc>: Sized {
         TensorContractionProfile::unit()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn contraction_pair_estimate(
         &self,
         _other: &Self,
@@ -482,6 +483,7 @@ where
 }
 
 #[cfg(feature = "shadowing")]
+#[allow(clippy::too_many_arguments)]
 fn sparse_atom_pair_estimate<S>(
     left: &ParamTensor<S>,
     right: &ParamTensor<S>,

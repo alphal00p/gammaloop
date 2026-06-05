@@ -1388,7 +1388,7 @@ fn execute_actual_net_parallel_aliased_summary<const SCORE_ORDER: u128>(
             panic!("{label} parallel {order_label} aliased execution failed: {error}")
         });
     let elapsed = start.elapsed();
-    report_actual_net_stats(&format!("{label} aliased_after_execute"), &net);
+    report_actual_net_stats(&format!("{label} aliased_after_execute"), net);
     spenso::network::profile::report(&format!("{label} after_aliased_execute"));
 
     let result_start = Instant::now();
@@ -1433,7 +1433,7 @@ fn execute_actual_net_parallel_horner_aliased_summary<
             panic!("{label} parallel {order_label} aliased execution failed: {error}")
         });
     let elapsed = start.elapsed();
-    report_actual_net_stats(&format!("{label} aliased_after_execute"), &net);
+    report_actual_net_stats(&format!("{label} aliased_after_execute"), net);
     spenso::network::profile::report(&format!("{label} after_aliased_execute"));
 
     let result_start = Instant::now();

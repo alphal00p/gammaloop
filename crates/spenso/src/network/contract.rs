@@ -1985,7 +1985,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(true)
     }
 
-    #[allow(clippy::result_large_err)]
+    #[allow(clippy::result_large_err, clippy::too_many_arguments)]
     fn contract_result_rank_pair<LT, T, L, Sc, CStrat, COpt, FK, Store>(
         &mut self,
         left: usize,
