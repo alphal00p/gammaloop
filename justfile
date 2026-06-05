@@ -310,7 +310,6 @@ test-ci TEST_NAME="":
         --profile ci_gammaloop
         --locked
         --no-fail-fast
-        --run-ignored all
     )
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")

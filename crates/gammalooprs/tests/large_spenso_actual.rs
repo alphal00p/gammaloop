@@ -7,7 +7,7 @@ use std::{
 use gammalooprs::{
     initialisation::test_initialise,
     numerator::{ParsingNet, aind::Aind},
-    utils::{F, FUN_LIB, TENSORLIB, symbolica_ext::LogPrint},
+    utils::{F, FUN_LIB, GS, TENSORLIB, symbolica_ext::LogPrint},
 };
 use idenso::shorthands::{
     metric::MetricSimplifier,
@@ -37,6 +37,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
+    function,
     parser::ParseSettings as SymbolicaParseSettings,
     wrap_input,
 };
@@ -2111,10 +2112,9 @@ fn component_horner_small_examples() {
 fn min_result_rank_disconnected_tensor_product_mwe() {
     test_initialise().expect("GammaLoop initialization should succeed");
 
-    let expr = parse_inline_expression(
-        "Q(1,spenso::mink(4,mu))
-        *Q(2,spenso::mink(4,rho))",
-    );
+    let mu = parse_inline_expression("spenso::mink(4,mu)");
+    let rho = parse_inline_expression("spenso::mink(4,rho)");
+    let expr = function!(GS.emr_mom, 1i64, mu) * function!(GS.emr_mom, 2i64, rho);
     let tensor = execute_actual_net_min_result_rank_parallel_tensor(
         "min_result_rank_disconnected_tensor_product_mwe",
         parse_actual_net("min_result_rank_disconnected_tensor_product_mwe", &expr),
