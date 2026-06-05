@@ -58,10 +58,7 @@ spenso-macros = { workspace = true }
 # serde_toml = "0.0.1"
 # slotmap = { version = "1.0.7", features = ["serde"] }
 # smartstring = { version = "1.0.1", features = ["serde"] }
-symbolica = { workspace = true, default-features = false, features = [
-  "bincode",
-  "serde",
-], optional = true }
+
 tabled = "0.20.0"
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -73,6 +70,12 @@ colored = { workspace = true }
 itertools = "0.14.0"
 nu-ansi-term = { workspace = true }
 pyo3-stub-gen = { workspace = true, optional = true }
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
+optional = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

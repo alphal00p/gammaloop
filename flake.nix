@@ -261,7 +261,7 @@
         DYLD_LIBRARY_PATH = runtimeLibPath;
       };
 
-      ciCargoProfile = "dev-optim";
+      ciCargoProfile = "ci-optim";
 
       ciArgs =
         commonArgs

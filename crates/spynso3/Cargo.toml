@@ -10,9 +10,7 @@ idenso = { workspace = true }
 spenso = { workspace = true, features = ["python", "shadowing"] }
 spenso-hep-lib = { workspace = true }
 spenso-macros = { workspace = true }
-symbolica = { workspace = true, default-features = false, features = [
-  "python_export",
-] }
+
 xpct = "0.5.1"
 
 eyre = { workspace = true }
@@ -22,6 +20,11 @@ itertools = "0.14.0"
 pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 thiserror = { workspace = true }
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
 
 [features]
 python_stubgen = [

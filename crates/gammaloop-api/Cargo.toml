@@ -42,11 +42,7 @@ include_dir = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
-linnet = { workspace = true, features = [
-  "bincode",
-  "serde",
-  "symbolica",
-] }
+
 ndarray = { workspace = true }
 nu-ansi-term = { workspace = true }
 numpy = { workspace = true, optional = true }
@@ -64,29 +60,20 @@ shlex = "1.3.0"
 smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["shadowing"] }
 # symbolica = { version = "0.18.0", default-features = false }
-symbolica = { workspace = true, features = [
-  "bincode",
-  "serde",
-] }
+
 sysinfo = { workspace = true }
 tabled = { workspace = true, features = ["ansi"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-indicatif = { workspace = true }
-tracing-subscriber = { workspace = true, features = [
-  "env-filter",
-  "fmt",
-  "json",
-  "time",
-] }
-typed-index-collections = { workspace = true, features = [
-  "bincode",
-  "serde",
-  "serde-alloc",
-] }
+
 unicode-width = "0.2.2"
 walkdir = { workspace = true }
+
+[dependencies.linnet]
+workspace = true
+features = ["bincode", "serde", "symbolica"]
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
@@ -94,6 +81,19 @@ workspace = true
 # Stable ABI features are now feature-gated via python_abi feature
 features = ["auto-initialize", "eyre"]
 optional = true
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
+
+[dependencies.tracing-subscriber]
+workspace = true
+features = ["env-filter", "fmt", "json", "time"]
+
+[dependencies.typed-index-collections]
+workspace = true
+features = ["bincode", "serde", "serde-alloc"]
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -114,9 +114,9 @@ pyo3-extension-module = [
 ]
 python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
 python_api = [
-  "gammaloop-tracing-filter/python_api",
   "dep:numpy",
   "dep:pyo3-build-config",
+  "gammaloop-tracing-filter/python_api",
   "gammalooprs/python_api",
   "ufo_support",
 ]

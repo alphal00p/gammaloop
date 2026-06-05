@@ -100,6 +100,21 @@ opt-level = 2
 [profile.dev-optim.package.gammalooprs]
 opt-level = 2
 
+# Keep CI archives small enough for cache upload while preserving dev-optim
+# debuginfo for local diagnostics.
+[profile.ci-optim]
+inherits = "dev-optim"
+debug = false
+
+[profile.ci-optim.package."*"]
+opt-level = 3
+
+[profile.ci-optim.package.gammaloop-api]
+opt-level = 2
+
+[profile.ci-optim.package.gammalooprs]
+opt-level = 2
+
 [profile.profiling]
 inherits = "release"
 opt-level = 3

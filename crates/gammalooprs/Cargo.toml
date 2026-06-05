@@ -22,12 +22,7 @@ base62 = "2.2.4"
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
 brotli = "7.0.0"
-clap = { workspace = true, features = [
-  "derive",
-  "env",
-  "unicode",
-  "wrap_help",
-] }
+
 clarabel = "0"
 color-eyre = { workspace = true }
 colored = { workspace = true }
@@ -44,12 +39,7 @@ include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 itertools = { workspace = true }
 json5 = { workspace = true }
-linnet = { workspace = true, features = [
-  "bincode",
-  # "drawing",
-  "serde",
-  "symbolica",
-] }
+
 # cgmath = "0.18.0"
 # argmin = "0.10.0"
 # by_address = "1.2.1"
@@ -62,8 +52,8 @@ nu-ansi-term = { workspace = true }
 paste = "1.0.15"
 pathfinding = "4.15.0"
 rand = { workspace = true, features = ["small_rng"] }
-rayon = { workspace = true }
 ratatui = { workspace = true, features = ["crossterm_0_28"] }
+rayon = { workspace = true }
 # constcat = "0.5.0"
 ref-ops = "0.2.5"
 ringbuffer = "0.16.0"
@@ -79,10 +69,7 @@ smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { workspace = true }
 statrs = "0.16.1"
-symbolica = { workspace = true, features = [
-  "bincode",
-  "serde",
-] }
+
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
@@ -92,24 +79,36 @@ toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 tracing-appender = { workspace = true }
 tracing-indicatif = { workspace = true }
-tracing-subscriber = { workspace = true, features = [
-  "env-filter",
-  "fmt",
-  "json",
-  "time",
-] }
-typed-index-collections = { workspace = true, features = [
-  "bincode",
-  "serde",
-  "serde-alloc",
-] }
+
 vakint = { workspace = true }
 vectorize = "0.2.0"
+
+[dependencies.clap]
+workspace = true
+features = ["derive", "env", "unicode", "wrap_help"]
+
+[dependencies.linnet]
+workspace = true
+# "drawing"
+features = ["bincode", "serde", "symbolica"]
 
 [dependencies.pyo3]
 workspace = true
 features = ["auto-initialize", "eyre"]
 optional = true
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
+
+[dependencies.tracing-subscriber]
+workspace = true
+features = ["env-filter", "fmt", "json", "time"]
+
+[dependencies.typed-index-collections]
+workspace = true
+features = ["bincode", "serde", "serde-alloc"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
