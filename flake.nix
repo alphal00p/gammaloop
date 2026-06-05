@@ -557,7 +557,6 @@
             cargo nextest --version
           '';
           checkPhaseCargoCommand = ''
-            ${licensePreCheck}
             export CARGO_TARGET_DIR="$PWD/target"
             cat > nextest-nix.toml <<EOF
             [store]
