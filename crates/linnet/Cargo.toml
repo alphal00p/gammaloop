@@ -12,11 +12,6 @@ name = "linnet"
 path = "src/lib.rs"
 
 [dependencies]
-ahash = {
-  version = "0.8.11",
-  default-features = false,
-  features = ["compile-time-rng", "std"]
-}
 bincode = { workspace = true, features = ["serde"], optional = true }
 bincode-trait-derive = { workspace = true }
 bitvec = { version = "1.0.1" }
@@ -37,6 +32,11 @@ serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
 symbolica-utils = { workspace = true, optional = true }
 thiserror = { workspace = true }
+
+[dependencies.ahash]
+version = "0.8.11"
+default-features = false
+features = ["compile-time-rng", "std"]
 
 [dev-dependencies]
 criterion = "0.5"

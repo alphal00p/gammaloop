@@ -163,9 +163,29 @@
       in
         crateMemberDirs ++ ["tests"];
 
+      cargoPackageName = manifestPath: let
+        nameRegex = ''[[:space:]]*name[[:space:]]*=[[:space:]]*"([^"]+)".*'';
+        parse = inPackage: lines:
+          if lines == []
+          then throw "Cargo manifest missing package name: ${toString manifestPath}"
+          else let
+            line = lib.trim (builtins.head lines);
+            rest = builtins.tail lines;
+            nameMatch = builtins.match nameRegex line;
+          in
+            if line == "[package]"
+            then parse true rest
+            else if inPackage && lib.hasPrefix "[" line
+            then throw "Cargo manifest missing package name before ${line}: ${toString manifestPath}"
+            else if inPackage && nameMatch != null
+            then builtins.head nameMatch
+            else parse inPackage rest;
+      in
+        parse false (lib.splitString "\n" (builtins.readFile manifestPath));
+
       workspaceMemberPackageDirs =
         lib.listToAttrs (map (member: {
-            name = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name;
+            name = cargoPackageName (workspaceRoot + "/${member}/Cargo.toml");
             value = member;
           })
           workspaceMemberDirs);
@@ -713,6 +733,7 @@
             "spenso-hep-lib"
             "spenso-macros"
             "spynso3"
+            "symbolica-utils"
           ];
         }
         {

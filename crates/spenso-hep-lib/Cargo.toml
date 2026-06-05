@@ -10,7 +10,7 @@ spenso = { workspace = true, features = ["shadowing"] }
 spenso-macros = { workspace = true }
 symbolica = { workspace = true }
 
-ahash = { version = "0.8.11", features = ["serde"] }
+ahash = { workspace = true, features = ["serde"] }
 xpct = "0.5.1"
 
 [dev-dependencies]
