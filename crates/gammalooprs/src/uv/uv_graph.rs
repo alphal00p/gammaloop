@@ -1,6 +1,6 @@
-use std::{collections::BTreeSet, ops::Deref};
+use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
@@ -281,17 +281,23 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
             .unwrap();
 
+        let dod_cache = RefCell::new(AHashMap::new());
+
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,
             &|a, b| a.union(b),
             &|union| {
                 // println!("{}", self.as_ref().dot(&union));
-                if self.local_dod(&union) >= 0 {
-                    Some(union)
-                } else {
-                    // println!("Negative dod:{}", self.dod(&union));
-                    None
-                }
+                let cached_dod = dod_cache.borrow().get(&union).copied();
+                let keep = match cached_dod {
+                    Some(keep) => keep,
+                    None => {
+                        let keep = self.local_dod(&union) >= 0;
+                        dod_cache.borrow_mut().insert(union.clone(), keep);
+                        keep
+                    }
+                };
+                if keep { Some(union) } else { None }
             },
         );
 

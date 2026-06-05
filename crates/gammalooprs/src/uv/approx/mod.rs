@@ -8,7 +8,9 @@ use crate::{
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{
-            final_integrand::FinalIntegrand, integrated::Integrated, local_3d::Local3DApproximation,
+            final_integrand::{FinalIntegrand, IntegratedCtTerms},
+            integrated::Integrated,
+            local_3d::Local3DApproximation,
         },
     },
 };
@@ -355,7 +357,7 @@ impl Approximation {
                         self,
                         &local_terms,
                         local_sign,
-                        &self.integrated_4d,
+                        IntegratedCtTerms::from(&self.integrated_4d),
                     )?,
                 );
             }
@@ -489,8 +491,10 @@ impl Approximation {
         let final_integrand = FinalIntegrand::new(projection, None, false);
 
         let localize_started = std::time::Instant::now();
+        let integrated_ct = IntegratedCtTerms::from(&dependent.integrated_4d);
+        let finite_integrated_ct = FinalIntegrand::finite_integrated_ct(integrated_ct)?;
         let integrated_t =
-            final_integrand.localized_integrated_ct(graph, dependent, &dependent.integrated_4d)?;
+            final_integrand.localize_integrated_ct(graph, dependent, &finite_integrated_ct)?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_local_3d_localize_integrated_done",
             localized_count = integrated_t.active.len(),
@@ -612,7 +616,7 @@ impl Approximation {
                 self,
                 final_local_terms,
                 local_sign,
-                &self.integrated_4d,
+                IntegratedCtTerms::from(&self.integrated_4d),
             )?
         });
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -641,7 +645,7 @@ impl Approximation {
             self,
             &local_terms,
             local_sign,
-            &self.integrated_4d,
+            IntegratedCtTerms::from(&self.integrated_4d),
         )
     }
 

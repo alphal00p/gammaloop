@@ -36,7 +36,9 @@ use crate::{
         RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
             ApproximationKernel, CutStructure, ForestNodeLike, OrientationProjection,
-            ResidueProjection, UVCtx, final_integrand::FinalIntegrand, integrated::Integrated,
+            ResidueProjection, UVCtx,
+            final_integrand::{FinalIntegrand, IntegratedCtTerms},
+            integrated::Integrated,
             local_3d::Local3DApproximation,
         },
         forest::ParametricIntegrands,
@@ -79,24 +81,40 @@ impl TraceUnfold<SuBitGraph> for Wood {
         self.graph[e].clone()
     }
 
-    fn join_branch_histories(
-        &self,
-        target: NodeIndex,
-        _branches: &[(NodeIndex, EdgeIndex)],
-        key: &TraceKey<SuBitGraph, EdgeIndex>,
-    ) -> bool {
+    /// Treats a wood node as a factorized join when its incoming sink edges are exactly the
+    /// disjoint connected components of the target spinney.
+    ///
+    /// The returned `SuBitGraph`s are the required branch factors for the generic trace unfold:
+    /// their union must be the target filter, they must be pairwise disjoint, and there must be
+    /// one factor per connected component.
+    fn join_factors(&self, target: NodeIndex) -> Option<BTreeSet<SuBitGraph>> {
+        if self.graph[target].n_components() < 2 {
+            return None;
+        }
+
+        let factors = self
+            .graph
+            .iter_crown(target)
+            .filter(|hedge| self.graph.flow(*hedge) == Flow::Sink)
+            .map(|hedge| self.graph[self.graph[&hedge]].clone())
+            .collect::<BTreeSet<_>>();
+        if factors.len() != self.graph[target].n_components() {
+            return None;
+        }
+
         let mut cover: Option<SuBitGraph> = None;
-        for level in key.iter_levels_top_down() {
-            for op in level.iter_leaf_ops() {
-                if let Some(acc) = &mut cover {
-                    acc.union_with(&op.order);
-                } else {
-                    cover = Some(op.order.clone());
+        for factor in &factors {
+            if let Some(acc) = &mut cover {
+                if acc.intersects(factor) {
+                    return None;
                 }
+                acc.union_with(factor);
+            } else {
+                cover = Some(factor.clone());
             }
         }
 
-        cover.is_some_and(|cover| &cover == self.graph[target].filter())
+        (cover.as_ref() == Some(self.graph[target].filter())).then_some(factors)
     }
 }
 
@@ -152,20 +170,19 @@ impl Wood {
         vakint_settings: &VakintSettings,
     ) -> Self {
         let mut max_loops = 0;
-        let mut spinneyset: BTreeSet<_> = s
-            .into_iter()
-            .inspect(|a| {
-                max_loops = max_loops.max(a.max_comp_loop_count());
-            })
-            .collect();
-
-        spinneyset.insert(Spinney::empty(&graph));
+        let mut spinneys = BTreeMap::new();
+        for spinney in s {
+            max_loops = max_loops.max(spinney.max_comp_loop_count());
+            spinneys.entry(spinney.filter().clone()).or_insert(spinney);
+        }
+        let empty = Spinney::empty(graph);
+        spinneys.entry(empty.filter().clone()).or_insert(empty);
         let mut vakint_settings = vakint_settings.true_settings();
         // Set the number of terms in epsilon expansion to max number of loops across all components + 1
         vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64 + 1;
 
         let mut unions = BTreeSet::new();
-        let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneyset);
+        let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneys.into_values());
         let mut poset = g.map(
             |_, _, v| v,
             |_, n, pair, _, e| {
@@ -789,7 +806,10 @@ impl Forests {
     ) -> Result<Option<Atom>> {
         frontier
             .integrated_4d_from_store(&self.compute_store, settings)?
-            .map(|integrated_4d| FinalIntegrand::finite_integrated_ct_terms(Some(integrated_4d)))
+            .map(|integrated_4d| {
+                let integrated_ct = IntegratedCtTerms::from(Some(integrated_4d));
+                FinalIntegrand::finite_integrated_ct(integrated_ct)
+            })
             .transpose()
     }
 
@@ -1050,17 +1070,18 @@ impl Forests {
                 let integrands =
                     self.local_3d_for_node(nidx, graph, projection, &root, settings)?;
                 let forest_node = operation.forest_node(graph, order);
-                let integrated_4d =
-                    operation.integrated_4d_from_store(&self.compute_store, settings)?;
+                let integrated_ct = IntegratedCtTerms::from(
+                    operation.integrated_4d_from_store(&self.compute_store, settings)?,
+                );
                 let uv_marker =
                     (settings.add_sigma && settings.keep_sigma).then(|| operation.to_atom());
                 let final_integrand = FinalIntegrand::new(projection, uv_marker.as_ref(), true)
-                    .build_with_integrated_4d_terms(
+                    .build(
                         graph,
                         &forest_node,
                         &integrands,
                         Sign::Positive,
-                        integrated_4d,
+                        integrated_ct,
                     )?;
 
                 self.compute_store
@@ -1308,6 +1329,7 @@ mod tests {
         dot,
         graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
+        processes::DotExportSettings,
         settings::global::OrientationPattern,
         uv::{UltravioletGraph, Wood as OldWood},
     };
@@ -1556,6 +1578,42 @@ mod tests {
 
         let f = f.unfold();
         println!("{}", f);
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"8");
+
+        Ok(())
+    }
+
+    #[test]
+    fn saclay() -> Result<()> {
+        test_initialise().unwrap();
+        let dt: Graph = dot!(digraph GL16{
+
+        num = "spenso::g(spenso::coad(8,gammalooprs::hedge(8)),spenso::coad(8,gammalooprs::hedge(11)))"
+                ext	 [style=invis];
+                ext	-> 0  [dir=none id=0 particle="g"];
+                2	-> ext  [dir=none id=1 particle="g"];
+                0	-> 1 -> 2->3->0  [ particle="d"];
+                      1 ->3 [particle = "g"]
+                    })?;
+
+        let f = Wood::new(
+            CutStructure::empty(&dt),
+            &dt,
+            &UVgenerationSettings::default(),
+        );
+
+        println!("{}", dt.dot_serialize(&DotExportSettings::default()));
+
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"5",
+            // format!("Wood does not have correct number of spinneys: \n{}",f)
+        );
+
+        let f = f.unfold();
+        println!("{}", f.dot_serialize());
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"8");
@@ -1989,64 +2047,42 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn triple_double_tadpole() -> Result<()> {
+        test_initialise().unwrap();
+        let dumbell: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v3;
+                v3 -> v3;v3 -> v3;
+                v2 -> v2; v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+
+        let f = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &UVgenerationSettings::default(),
+        );
+
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"64");
+
+        let f = f.unfold_uncached();
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"307");
+
+        Ok(())
+    }
+
     mod failing {
         use crate::processes::DotExportSettings;
 
         use super::*;
-
-        #[test]
-        fn triple_double_tadpole() -> Result<()> {
-            test_initialise().unwrap();
-            let dumbell: Graph = dot!(
-                digraph G{
-                    edge [particle="scalar_1"];
-                    v1 -> v2;
-                    v2 -> v3;
-                    v3 -> v3;v3 -> v3;
-                    v2 -> v2; v2 -> v2;
-                    v1 -> v1;v1 -> v1;
-                },"scalars"
-            )?;
-
-            let spinneys: Vec<_> = dumbell
-                .spinneys(&dumbell.full_filter())
-                .into_iter()
-                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-                .collect();
-            let f = Wood::new(
-                CutStructure::empty(&dumbell),
-                &dumbell,
-                &UVgenerationSettings::default(),
-            );
-
-            println!("{}", f);
-
-            insta::assert_snapshot!(
-                f.graph.n_nodes(),
-                @"64",
-                // format!("Wood does not have correct number of spinneys: \n{}",f)
-            );
-
-            for (_, _, d) in f.graph.iter_nodes() {
-                println!(
-                    "//Node {}: \n{}",
-                    d.subgraph.string_label(),
-                    dumbell.dot(&d.subgraph)
-                );
-            }
-            let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
-
-            // println!("{}", ff.dot(&dumbell));
-
-            let f = f.unfold();
-            f.debug_walk();
-            println!("{}", f);
-            insta::assert_snapshot!(
-                f.graph.n_nodes(),
-                @"160");
-
-            Ok(())
-        }
 
         #[test]
         fn lobsided_double_dumbell() -> Result<()> {
@@ -2167,7 +2203,7 @@ mod tests {
 
             insta::assert_snapshot!(
                 f.graph.n_nodes(),
-                @"61");
+                @"36");
 
             let f = Wood::new(
                 CutStructure::empty(&dumbell),

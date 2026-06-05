@@ -459,12 +459,24 @@
       crate2nixCiFeatureSets = {
         "gammaloop-tracing-filter" = ["clap" "symbolica"];
         idenso = ["bincode" "reference-cases"];
-        linnet = ["default" "bincode" "drawing" "symbolica"];
+        linnet = ["default" "bincode" "symbolica"];
         spenso = ["shadowing"];
         "spenso-macros" = ["shadowing"];
       };
       crate2nixCiFeaturesFor = package: crate2nixCiFeatureSets.${package} or ["default"];
       crate2nixBuild = package: crate2nixBuildWithFeatures package (crate2nixCiFeaturesFor package);
+      crate2nixCiPrebuildPackages = [
+        "gammaloop-api"
+        "gammaloop-tracing-filter"
+        "gammalooprs"
+        "idenso"
+        "linnet"
+        "spenso"
+        "spenso-hep-lib"
+        "spenso-macros"
+        "spynso3"
+        "vakint"
+      ];
 
       gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
       gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
@@ -501,7 +513,7 @@
           name = "crate-${package}";
           path = crate2nixBuild package;
         })
-        workspaceMemberPackages);
+        crate2nixCiPrebuildPackages);
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";

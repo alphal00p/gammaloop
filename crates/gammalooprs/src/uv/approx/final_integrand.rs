@@ -44,6 +44,36 @@ pub(crate) struct LocalizedIntegratedCt {
     pub frozen_integrands: ResidueSelectedTerms,
 }
 
+impl TryFrom<LocalizedIntegratedCt> for ResidueSelectedTerms {
+    type Error = eyre::Report;
+
+    fn try_from(value: LocalizedIntegratedCt) -> Result<Self, Self::Error> {
+        value
+            .active
+            .try_zip_with(&value.frozen_integrands, |_, active, frozen| {
+                Ok(active * frozen)
+            })
+            .wrap_err("while combining localized integrated CT active/frozen factors")
+    }
+}
+
+pub(crate) struct IntegratedCtTerms(Option<(ResidueSelectedTerms, Sign)>);
+
+impl From<&ApproxOp> for IntegratedCtTerms {
+    fn from(op: &ApproxOp) -> Self {
+        Self(match op {
+            ApproxOp::Root => None,
+            _ => op.expr(),
+        })
+    }
+}
+
+impl From<Option<(ResidueSelectedTerms, Sign)>> for IntegratedCtTerms {
+    fn from(terms: Option<(ResidueSelectedTerms, Sign)>) -> Self {
+        Self(terms)
+    }
+}
+
 impl<'a> FinalIntegrand<'a> {
     pub(crate) fn new(
         projection: ResidueProjection<'a>,
@@ -236,11 +266,10 @@ impl<'a> FinalIntegrand<'a> {
         edge_ids
     }
 
-    pub(crate) fn finite_integrated_ct_terms(
-        integrated_4d: Option<(ResidueSelectedTerms, Sign)>,
-    ) -> Result<Atom> {
-        let (t4, t4_sign) =
-            integrated_4d.unwrap_or((ResidueSelectedTerms::all_none(Atom::Zero), Sign::Positive));
+    pub(crate) fn finite_integrated_ct(integrated_4d: IntegratedCtTerms) -> Result<Atom> {
+        let (t4, t4_sign) = integrated_4d
+            .0
+            .unwrap_or((ResidueSelectedTerms::all_none(Atom::Zero), Sign::Positive));
         let t4_debug = t4
             .iter()
             .map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80))))
@@ -266,15 +295,11 @@ impl<'a> FinalIntegrand<'a> {
         Ok(finite)
     }
 
-    fn finite_integrated_ct(&self, integrated_4d: &ApproxOp) -> Result<Atom> {
-        let integrated_4d = match integrated_4d {
-            ApproxOp::Root => None,
-            _ => integrated_4d.expr(),
-        };
-        Self::finite_integrated_ct_terms(integrated_4d)
-    }
-
-    fn localize_integrated_ct<S: ForestNodeLike>(
+    #[debug_instrument(
+        graph = %graph.log_display(),
+        current = %integrated_node.log_display(),
+    )]
+    pub(crate) fn localize_integrated_ct<S: ForestNodeLike>(
         &self,
         graph: &mut Graph,
         integrated_node: &S,
@@ -368,17 +393,17 @@ impl<'a> FinalIntegrand<'a> {
         })
     }
 
-    #[debug_instrument(
-        graph = %graph.log_display(),
-        current = %integrated_node.log_display(),
-    )]
-    pub(crate) fn localized_integrated_ct<S: ForestNodeLike>(
+    pub(crate) fn localized_finite_integrated_ct<S: ForestNodeLike>(
         &self,
         graph: &mut Graph,
         integrated_node: &S,
-        integrated_4d: &ApproxOp,
+        finite: &Atom,
     ) -> Result<LocalizedIntegratedCt> {
-        let finite = self.finite_integrated_ct(integrated_4d)?;
+        debug_tags!(
+            #uv;
+            log.finite = finite,
+            "Computing localized integrated UV CT",
+        );
 
         // let n_loops = graph.n_loops(integrated_node.subgraph());
 
@@ -400,35 +425,6 @@ impl<'a> FinalIntegrand<'a> {
         //     }
         // }
 
-        self.localized_finite_integrated_ct(graph, integrated_node, &finite)
-    }
-
-    #[debug_instrument(
-        graph = %graph.log_display(),
-        current = %integrated_node.log_display(),
-    )]
-    pub(crate) fn localized_integrated_ct_from_terms<S: ForestNodeLike>(
-        &self,
-        graph: &mut Graph,
-        integrated_node: &S,
-        integrated_4d: Option<(ResidueSelectedTerms, Sign)>,
-    ) -> Result<LocalizedIntegratedCt> {
-        let finite = Self::finite_integrated_ct_terms(integrated_4d)?;
-        self.localized_finite_integrated_ct(graph, integrated_node, &finite)
-    }
-
-    pub(crate) fn localized_finite_integrated_ct<S: ForestNodeLike>(
-        &self,
-        graph: &mut Graph,
-        integrated_node: &S,
-        finite: &Atom,
-    ) -> Result<LocalizedIntegratedCt> {
-        debug_tags!(
-            #uv;
-            log.finite = finite,
-            "Computing localized integrated UV CT",
-        );
-
         self.localize_integrated_ct(graph, integrated_node, finite)
     }
 
@@ -437,13 +433,13 @@ impl<'a> FinalIntegrand<'a> {
         current = %current.log_display(),
         term_count = local_terms.len(),
     )]
-    pub(crate) fn build_with_integrated_4d_terms<S: ForestNodeLike>(
+    pub(crate) fn build<S: ForestNodeLike>(
         &self,
         graph: &mut Graph,
         current: &S,
         local_terms: &ResidueSelectedTerms,
         local_sign: Sign,
-        integrated_4d: Option<(ResidueSelectedTerms, Sign)>,
+        integrated_4d: IntegratedCtTerms,
     ) -> Result<ResidueSelectedTerms> {
         let global_num = graph.global_atom();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -451,14 +447,9 @@ impl<'a> FinalIntegrand<'a> {
             "Computed global numerator"
         );
 
-        let integrated_t =
-            self.localized_integrated_ct_from_terms(graph, current, integrated_4d)?;
-        let integrated_terms = integrated_t
-            .active
-            .try_zip_with(&integrated_t.frozen_integrands, |_, active, frozen| {
-                Ok(active * frozen)
-            })
-            .wrap_err("while combining localized integrated CT active/frozen factors")?;
+        let finite = Self::finite_integrated_ct(integrated_4d)?;
+        let integrated_t = self.localized_finite_integrated_ct(graph, current, &finite)?;
+        let integrated_terms: ResidueSelectedTerms = integrated_t.try_into()?;
 
         let reduced = graph
             .full_filter()
@@ -591,21 +582,6 @@ impl<'a> FinalIntegrand<'a> {
                 Ok(resnum.replace(GS.m_uv_expansion).with(GS.m_uv_vacuum))
             })
             .wrap_err("while combining final integrand local/integrated approximations")
-    }
-
-    pub(crate) fn build<S: ForestNodeLike>(
-        &self,
-        graph: &mut Graph,
-        current: &S,
-        local_terms: &ResidueSelectedTerms,
-        local_sign: Sign,
-        integrated_4d: &ApproxOp,
-    ) -> Result<ResidueSelectedTerms> {
-        let integrated_4d = match integrated_4d {
-            ApproxOp::Root => None,
-            _ => integrated_4d.expr(),
-        };
-        self.build_with_integrated_4d_terms(graph, current, local_terms, local_sign, integrated_4d)
     }
 }
 
