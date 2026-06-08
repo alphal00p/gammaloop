@@ -5,6 +5,7 @@ use std::{
 
 use ahash::AHashMap;
 use eyre::eyre;
+use gammaloop_tracing_filter::LogMessage;
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
 use linnet::half_edge::{
@@ -344,6 +345,17 @@ impl OperationNode {
 impl AsRef<TraceKey<SuBitGraph, EdgeIndex>> for OperationNode {
     fn as_ref(&self) -> &TraceKey<SuBitGraph, EdgeIndex> {
         &self.key
+    }
+}
+
+impl LogMessage for ForestNode<'_> {
+    fn log_display(&self) -> String {
+        format!(
+            "subgraph={}, topo_order={}, dod={}",
+            self.spinney.filter().string_label(),
+            self.topo_order,
+            self.spinney.dod
+        )
     }
 }
 

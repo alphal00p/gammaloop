@@ -81,12 +81,21 @@ vectorize = "0.2.0"
 
 [dependencies.clap]
 workspace = true
-features = ["derive", "env", "unicode", "wrap_help"]
+features = [
+  "derive",
+  "env",
+  "unicode",
+  "wrap_help",
+]
 
 [dependencies.linnet]
 workspace = true
-# "drawing"
-features = ["bincode", "serde", "symbolica"]
+features = [
+  "bincode",
+  # "drawing",
+  "serde",
+  "symbolica",
+]
 
 [dependencies.pyo3]
 workspace = true
@@ -96,15 +105,27 @@ optional = true
 [dependencies.symbolica]
 workspace = true
 default-features = false
-features = ["bincode", "serde"]
+features = [
+  "bincode",
+  "serde",
+]
 
 [dependencies.tracing-subscriber]
 workspace = true
-features = ["env-filter", "fmt", "json", "time"]
+features = [
+  "env-filter",
+  "fmt",
+  "json",
+  "time",
+]
 
 [dependencies.typed-index-collections]
 workspace = true
-features = ["bincode", "serde", "serde-alloc"]
+features = [
+  "bincode",
+  "serde",
+  "serde-alloc",
+]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -9,7 +9,6 @@ use idenso::{
     },
 };
 
-use gammaloop_tracing_filter::LogMessage;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
@@ -31,7 +30,7 @@ use crate::{
     numerator::aind::Aind,
     utils::{
         GS, W_,
-        symbolica_ext::{CallSymbol, LogPrint},
+        symbolica_ext::CallSymbol,
     },
     uv::{
         ApproximationType, UltravioletGraph,
@@ -68,7 +67,7 @@ impl Graph {
         let tsquare = Atom::var(GS.rescale).pow(2);
 
         debug_tags!(#uv, #integrated, #inspect;
-            res = %atomarg.log_print(None),
+            log.res = atomarg,
             "Rescaled momenta expanded"
         );
         atomarg = atomarg
@@ -122,8 +121,6 @@ impl Integrated<'_> {
         let reduced = current.reduced_subgraph(given);
         let graph = ctx.graph;
         let settings = ctx.settings;
-        let current_label = current.subgraph().string_label();
-        let given_label = given.subgraph().string_label();
         let reduced_label = reduced.string_label();
         let mut t_arg = ctx
             .graph
@@ -132,58 +129,33 @@ impl Integrated<'_> {
             .get_single_atom()
             .unwrap();
 
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg without denoms");
-        let t_arg_before_gamma = t_arg.collect_metrics().simplify_metrics();
-        let gamma_simplification_started = std::time::Instant::now();
-        let t_arg_after_gamma = t_arg_before_gamma.simplify_gamma();
+        debug_tags!(#uv, #integrated, #algebra; log.t_arg = t_arg, pole_part = %settings.pole_part, "T arg without denoms");
+        let t_arg_after_gamma = t_arg.collect_metrics().simplify_metrics().simplify_gamma();
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start;
-            current = %current_label,
-            given = %given_label,
+            current = %current.log_display(),
+            given = %given.log_display(),
             reduced = %reduced_label,
-            current_topo_order = %current.topo_order(),
-            given_topo_order = %given.topo_order(),
-            current_dod = %current.dod(),
-            given_dod = %given.dod(),
-            gamma_simplification_ms = %gamma_simplification_started.elapsed().as_millis(),
-            changed = t_arg_before_gamma != t_arg_after_gamma,
-            before_terms = %t_arg_before_gamma.nterms(),
-            before_atom_bytes = %t_arg_before_gamma.as_view().get_byte_size(),
-            after_terms = %t_arg_after_gamma.nterms(),
-            after_atom_bytes = %t_arg_after_gamma.as_view().get_byte_size(),
-            before = %t_arg_before_gamma.log_print(Some(5)),
-            after = %t_arg_after_gamma.log_print(Some(5)),
-            "Gamma simplification before Vakint"
+            log.expr = t_arg_after_gamma,
+            "Integrated UV start after gamma simplification"
         );
         let t_arg_after_schoonschip_net = t_arg_after_gamma.schoonschip_net::<Aind>();
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-            current = %current_label,
-            given = %given_label,
+            current = %current.log_display(),
+            given = %given.log_display(),
             reduced = %reduced_label,
-            current_topo_order = %current.topo_order(),
-            given_topo_order = %given.topo_order(),
-            current_dod = %current.dod(),
-            given_dod = %given.dod(),
-            terms = %t_arg_after_schoonschip_net.nterms(),
-            atom_bytes = %t_arg_after_schoonschip_net.as_view().get_byte_size(),
-            expr = %t_arg_after_schoonschip_net.log_print(Some(5)),
+            log.expr = t_arg_after_schoonschip_net,
             "Integrated UV start after Schoonschip net"
         );
         let t_arg_after_dots = t_arg_after_schoonschip_net.to_dots().normalize_dots();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #integrated_uv_start_after_dots;
-            current = %current_label,
-            given = %given_label,
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
+            current = %current.log_display(),
+            given = %given.log_display(),
             reduced = %reduced_label,
-            current_topo_order = %current.topo_order(),
-            given_topo_order = %given.topo_order(),
-            current_dod = %current.dod(),
-            given_dod = %given.dod(),
-            terms = %t_arg_after_dots.nterms(),
-            atom_bytes = %t_arg_after_dots.as_view().get_byte_size(),
-            expr = %t_arg_after_dots.log_print(Some(5)),
+            log.expr = t_arg_after_dots,
             "Integrated UV start after dots"
         );
         t_arg = t_arg_after_dots / graph.denominator(&reduced, |_| 1);
-        debug_tags!(#uv,#integrated,#algebra;t_arg = %t_arg.log_print(Some(120)),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
+        debug_tags!(#uv, #integrated, #algebra; log.t_arg = t_arg, pole_part = %settings.pole_part, "T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg
             .replace(GS.dim)
@@ -206,29 +178,33 @@ impl Integrated<'_> {
 
         let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
 
-        debug_tags!(#uv,#integrated;res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
+        debug_tags!(#uv,#integrated;log.res = atomarg, n_loops=%n_loops,"Rescaled expanded");
         let a = atomarg.series(GS.rescale, Atom::Zero, 1).unwrap();
 
         let mut a = a.to_atom();
 
         debug_tags!(#uv,#integrated;
-            terms = %a.nterms(),
-            atom_bytes = %a.as_view().get_byte_size(),
-            res = %a.log_print(None),
-            file.res_plain = %a.to_plain_string(),
+            log.res = a,
             "Series expanded"
         );
         a = a.replace(GS.rescale).with(Atom::num(1));
         debug_tags!(#uv,#integrated;
-            terms = %a.nterms(),
-            atom_bytes = %a.as_view().get_byte_size(),
-            res = %a.log_print(None),
+            log.res = a,
             "Series expanded"
         );
 
         Ok(a)
     }
 
+    #[instrument(
+        skip_all,
+        level = "debug",
+        fields(
+            current = %current.log_display(),
+            given = %given.log_display(),
+            reduced,
+        )
+    )]
     pub(crate) fn integrate_and_truncate<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -239,20 +215,10 @@ impl Integrated<'_> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let settings = ctx.settings;
-        let current_label = current.subgraph().string_label();
-        let given_label = given.subgraph().string_label();
         let reduced_label = reduced.string_label();
-        debug_tags!(#uv, #integrated, #vakint, #trace, #integrate_and_truncate_input;
-            current = %current_label,
-            given = %given_label,
-            reduced = %reduced_label,
-            current_topo_order = %current.topo_order(),
-            given_topo_order = %given.topo_order(),
-            current_dod = %current.dod(),
-            given_dod = %given.dod(),
-            terms = %integrand.nterms(),
-            atom_bytes = %integrand.as_view().get_byte_size(),
-            integrand = %integrand.log_print(Some(5)),
+        tracing::Span::current().record("reduced", reduced_label.as_str());
+        debug_tags!(#uv, #integrated, #vakint, #trace, #input;
+            log.integrand = integrand,
             "Vakint trace"
         );
         let mut integrand_vakint = to_vakint_integrand(
@@ -265,17 +231,10 @@ impl Integrated<'_> {
         );
 
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_to_vakint_output;
+            debug_tags!(#uv,#integrated,#vakint,#trace,#to_vakint;
                 term_index = %term_index,
-                current = %current_label,
-                given = %given_label,
-                reduced = %reduced_label,
-                integral_terms = %t.integral.nterms(),
-                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
-                numerator_terms = %t.numerator.nterms(),
-                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
-                integral = %t.integral.log_print(Some(5)),
-                numerator = %t.numerator.log_print(Some(5)),
+                log.integral = t.integral,
+                log.numerator = t.numerator,
                 "Vakint term as input"
             );
         }
@@ -288,62 +247,36 @@ impl Integrated<'_> {
 
         integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_after_canonicalize;
+            debug_tags!(#uv,#integrated,#vakint,#trace,#canonicalize;
                 term_index = %term_index,
-                current = %current_label,
-                given = %given_label,
-                reduced = %reduced_label,
-                integral_terms = %t.integral.nterms(),
-                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
-                numerator_terms = %t.numerator.nterms(),
-                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
-                integral = %t.integral.log_print(Some(5)),
-                numerator = %t.numerator.log_print(Some(5)),
+                log.integral = t.integral,
+                log.numerator = t.numerator,
                 "Vakint term after canonicalization"
             );
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_after_tensor_reduce;
+            debug_tags!(#uv,#integrated,#vakint,#trace,#tensor_reduce;
                 term_index = %term_index,
-                current = %current_label,
-                given = %given_label,
-                reduced = %reduced_label,
-                integral_terms = %t.integral.nterms(),
-                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
-                numerator_terms = %t.numerator.nterms(),
-                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
-                integral = %t.integral.log_print(Some(5)),
-                numerator = %t.numerator.log_print(Some(5)),
+                log.integral = t.integral,
+                log.numerator = t.numerator,
                 "Vakint term after tensor reduction"
             );
         }
         integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_after_evaluate_integral;
+            debug_tags!(#uv,#integrated,#vakint,#trace,#evaluate;
                 term_index = %term_index,
-                current = %current_label,
-                given = %given_label,
-                reduced = %reduced_label,
-                integral_terms = %t.integral.nterms(),
-                integral_atom_bytes = %t.integral.as_view().get_byte_size(),
-                numerator_terms = %t.numerator.nterms(),
-                numerator_atom_bytes = %t.numerator.as_view().get_byte_size(),
-                integral = %t.integral.log_print(Some(5)),
-                numerator = %t.numerator.log_print(Some(5)),
+                log.integral = t.integral,
+                log.numerator = t.numerator,
                 "Vakint term after evaluation"
             );
         }
 
         let mut res: Atom = integrand_vakint.into();
 
-        debug_tags!(#uv,#integrated,#vakint,#trace,#integrate_and_truncate_raw_post_vakint;
-            current = %current_label,
-            given = %given_label,
-            reduced = %reduced_label,
-            terms = %res.nterms(),
-            atom_bytes = %res.as_view().get_byte_size(),
-            res = %res.log_print(Some(5)),
+        debug_tags!(#uv,#integrated,#vakint,#trace,#raw;
+            log.res = res,
             "Raw post vakint "
         );
 
@@ -423,13 +356,8 @@ impl Integrated<'_> {
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #integrate_and_truncate_replaced_post_vakint;
-            current = %current_label,
-            given = %given_label,
-            reduced = %reduced_label,
-            terms = %res.nterms(),
-            atom_bytes = %res.as_view().get_byte_size(),
-            res = %res.log_print(Some(5)),
+        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #replace;
+            log.res = res,
             "Replaced post vakint "
         );
 
@@ -439,10 +367,8 @@ impl Integrated<'_> {
             .unwrap();
         let series_atom = series.to_atom();
 
-        debug_tags!(#uv, #integrated, #inspect, #integrate_and_truncate_after_epsilon_series;
-            terms = %series_atom.nterms(),
-            atom_bytes = %series_atom.as_view().get_byte_size(),
-            series = %series_atom.log_print(Some(5)),
+        debug_tags!(#uv, #integrated, #inspect, #series;
+            log.series = series_atom,
             "Series "
         );
 
@@ -463,23 +389,23 @@ impl Integrated<'_> {
         res = pole_stripped;
         // This strips as many dummies as possible after undoing chains and traces,
         // so that terms can merge later on.
-        let before_chain_cleanup = res.clone();
         let bispinor_rep = Bispinor {}.into();
         let after_chainify = res.chainify(bispinor_rep);
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #chainify;
+            log.expr = after_chainify,
+            "Integrated UV chain cleanup after chainify"
+        );
+
         let after_collect_chains = after_chainify.collect_chains(bispinor_rep);
-        let changed_by_collect = before_chain_cleanup != after_collect_chains;
-        res = after_collect_chains.undo_single_length();
-        let changed_by_undo_single_length = after_collect_chains != res;
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #integrate_and_truncate_after_collect_chains;
-            current = %current_label,
-            given = %given_label,
-            reduced = %reduced_label,
-            changed_by_collect = changed_by_collect,
-            changed_by_undo_single_length = changed_by_undo_single_length,
-            before = %before_chain_cleanup.log_display(),
-            after_collect = %after_collect_chains.log_display(),
-            after_undo = %res.log_display(),
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
+            log.expr = after_collect_chains,
             "Integrated UV chain cleanup after collect_chains"
+        );
+
+        res = after_collect_chains.undo_single_length();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #undo_single_length;
+            log.expr = res,
+            "Integrated UV chain cleanup after undo_single_length"
         );
 
         if !settings.pole_part {
@@ -510,10 +436,9 @@ impl Integrated<'_> {
             }
         }
 
-        debug_tags!(#uv, #integrated, #integrate_and_truncate_final;
+        debug_tags!(#uv, #integrated, #final;
             pole_part = %settings.pole_part,
-            res.display = %res.log_display(),
-            res.file = %&res.log_file(),
+            log.res = res,
             "Final integrated 4d CT"
         );
 
@@ -557,17 +482,10 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 let start = self.start(ctx, current, given, integrand)?;
                 let integrated_t = self.t(ctx, current, given, &start)?;
                 let result = self.integrate_and_truncate(ctx, current, given, &integrated_t)?;
-                debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #integrated_uv_kernel_after_integrate_and_truncate;
-                    current = %current.subgraph().string_label(),
-                    given = %given.subgraph().string_label(),
-                    current_topo_order = %current.topo_order(),
-                    given_topo_order = %given.topo_order(),
-                    current_dod = %current.dod(),
-                    given_dod = %given.dod(),
-                    terms = %result.nterms(),
-                    atom_bytes = %result.as_view().get_byte_size(),
-                    preview = %result.log_print(Some(5)),
-                    file.integrated_uv_after_integrate_and_truncate = %result.to_plain_string(),
+                debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #result;
+                    current = %current.log_display(),
+                    given = %given.log_display(),
+                    log.result = result,
                     "Integrated UV after integrate_and_truncate"
                 );
                 Ok(result)
@@ -599,32 +517,17 @@ pub(crate) fn to_vakint_integrand<
 ) -> VakintExpression {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_input",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        substitute_masses_to_m_uv = substitute_masses_to_m_uv,
-        integrand = %integrand.log_print(Some(120)),
-        file.integrand = %integrand.to_plain_string(),
-        "Vakint trace"
-    );
     let mut integrand_vakint = integrand
         .undo_schoonschip::<Aind>()
         .undo_chain::<Aind>()
         .undo_trace::<Aind>();
-
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_undo_shorthands",
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
-        integrand = %integrand_vakint.log_print(Some(120)),
-        file.integrand = %integrand_vakint.to_plain_string(),
-        "Vakint trace"
-    );
-
-    debug_tags!(#uv, #integrated, #vakint, #inspect;
-        integrand = %integrand.log_print(None),
-        "Integrand vakint init"
+        substitute_masses_to_m_uv = substitute_masses_to_m_uv,
+        log.integrand = integrand_vakint,
+        "Vakint trace after undo shorthands"
     );
     //Atom::Zero
 
@@ -636,24 +539,27 @@ pub(crate) fn to_vakint_integrand<
             function!(GS.emr_mom, W_.prop_, W_.mom_),
             W_.x__
         ))
-        .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
-
-    // println!("Expanded: {:>}", integrand_vakint.expand());
-
-    integrand_vakint = integrand_vakint.expand();
+        .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
+        .expand();
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_den_strip_expand",
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
-        integrand = %integrand_vakint.log_print(Some(120)),
-        file.integrand = %integrand_vakint.to_plain_string(),
-        "Vakint trace"
+        log.integrand = integrand_vakint,
+        "Vakint trace after denominator strip and expand"
     );
 
     // Nested counterterms can expose a boundary metric next to the propagator
     // metric of the reduced graph. Contract those metric-only structures before
     // the expression is split into Vakint terms.
     integrand_vakint = integrand_vakint.simplify_metrics();
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_integrand_after_simplify_metrics",
+        reduced = %reduced_label,
+        dependent_subgraph = %dependent_subgraph_label,
+        log.integrand = integrand_vakint,
+        "Vakint trace after metric simplification"
+    );
 
     let mut propagator_id = 1;
 
@@ -717,9 +623,8 @@ pub(crate) fn to_vakint_integrand<
         stage = "to_vakint_integrand_after_den_to_prop",
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
-        integrand = %integrand_vakint.log_print(Some(120)),
-        file.integrand = %integrand_vakint.to_plain_string(),
-        "Vakint trace"
+        log.integrand = integrand_vakint,
+        "Vakint trace after denominator-to-propagator conversion"
     );
 
     let mut first: Option<NodeIndex> = None;
@@ -769,9 +674,8 @@ pub(crate) fn to_vakint_integrand<
         stage = "to_vakint_integrand_after_shrink_subgraph",
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
-        integrand = %integrand_vakint.log_print(Some(120)),
-        file.integrand = %integrand_vakint.to_plain_string(),
-        "Vakint trace"
+        log.integrand = integrand_vakint,
+        "Vakint trace after shrinking subgraph"
     );
 
     // flip edges to positive momentum
@@ -822,9 +726,8 @@ pub(crate) fn to_vakint_integrand<
         stage = "to_vakint_integrand_after_flip_fuse",
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
-        integrand = %integrand_vakint.log_print(Some(120)),
-        file.integrand = %integrand_vakint.to_plain_string(),
-        "Vakint trace"
+        log.integrand = integrand_vakint,
+        "Vakint trace after edge flip and fuse"
     );
 
     // println!(
@@ -850,9 +753,8 @@ pub(crate) fn to_vakint_integrand<
         stage = "to_vakint_integrand_before_split_terms",
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
-        integrand = %vakint_input_atom.log_print(Some(120)),
-        file.integrand = %vakint_input_atom.to_plain_string(),
-        "Vakint trace"
+        log.integrand = vakint_input_atom,
+        "Vakint trace before split terms"
     );
 
     let mut a = VakintExpression::try_from(vakint_input_atom).unwrap();
@@ -863,10 +765,8 @@ pub(crate) fn to_vakint_integrand<
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
-            integral = %t.integral,
-            numerator = %t.numerator.log_print(Some(120)),
-            file.integral = %t.integral.to_plain_string(),
-            file.numerator = %t.numerator.to_plain_string(),
+            log.integral = t.integral,
+            log.numerator = t.numerator,
             "Starting integral"
         );
 
@@ -984,10 +884,8 @@ pub(crate) fn to_vakint_integrand<
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
-            integral = %t.integral.log_print(None),
-            numerator = %t.numerator.log_print(Some(120)),
-            file.integral = %t.integral.to_plain_string(),
-            file.numerator = %t.numerator.to_plain_string(),
+            log.integral = t.integral,
+            log.numerator = t.numerator,
             "Vakint trace"
         );
 
@@ -1081,10 +979,8 @@ pub(crate) fn to_vakint_integrand<
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
-            integral = %t.integral.log_print(None),
-            numerator = %t.numerator.log_print(Some(120)),
-            file.integral = %t.integral.to_plain_string(),
-            file.numerator = %t.numerator.to_plain_string(),
+            log.integral = t.integral,
+            log.numerator = t.numerator,
             "Vakint trace"
         );
 
@@ -1104,10 +1000,8 @@ pub(crate) fn to_vakint_integrand<
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
-            integral = %t.integral.log_print(None),
-            numerator = %t.numerator.log_print(Some(120)),
-            file.integral = %t.integral.to_plain_string(),
-            file.numerator = %t.numerator.to_plain_string(),
+            log.integral = t.integral,
+            log.numerator = t.numerator,
             "Vakint trace"
         );
         t.integral = t
@@ -1143,10 +1037,8 @@ pub(crate) fn to_vakint_integrand<
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
-            integral = %t.integral.log_print(None),
-            numerator = %t.numerator.log_print(Some(120)),
-            file.integral = %t.integral.to_plain_string(),
-            file.numerator = %t.numerator.to_plain_string(),
+            log.integral = t.integral,
+            log.numerator = t.numerator,
             "Vakint trace"
         );
     }

@@ -39,7 +39,7 @@ use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
 
-use crate::utils::symbolica_ext::LogPrint;
+
 use tracing::{error, event_enabled, info, instrument};
 
 use ahash::AHashMap;
@@ -5056,14 +5056,9 @@ impl ProcessedNumeratorForComparison {
                 {
                     debug!(numerator = %numerators[0].to_ordered_simple(),"Gamma Simplifying");
                     let gamma_simplified_numerator = numerators[0].simplify_gamma();
-                    let after_gamma_simplification = gamma_simplified_numerator.to_plain_string();
-                    let after_gamma_simplification_log_print =
-                        gamma_simplified_numerator.log_print(Some(120)).to_string();
                     crate::debug_tags!(#generation, #profile, #graph, #inspect, #dump;
                         stage = "feyngen_closure_check_after_simplify_gamma",
-                        after_gamma = %after_gamma_simplification_log_print,
-                        file.after_gamma_simplification = %after_gamma_simplification,
-                        file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+                        log.after_gamma = gamma_simplified_numerator,
                         "Feyngen closure check after gamma simplification"
                     );
                     numerators.push(gamma_simplified_numerator);

@@ -25,6 +25,7 @@ pub mod tests;
 // pub mod tests_from_pytest;
 pub mod utils;
 pub mod uv;
+pub use gammaloop_tracing_filter::LogMessage;
 use idenso::representations::initialize;
 use integrands::*;
 use model::Model;

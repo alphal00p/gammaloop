@@ -20,7 +20,7 @@ use crate::{
     settings::global::OrientationPattern,
     utils::{
         GS, W_,
-        symbolica_ext::{CallSymbol, LogPrint},
+        symbolica_ext::CallSymbol,
     },
     uv::{
         ApproximationType, UltravioletGraph,
@@ -299,7 +299,7 @@ impl Local3DApproximation {
             .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
             .with(function!(GS.ose, W_.a___));
         a = a.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#local; expr=%a.log_print(Some(80)), "Local 3D approximation");
+        debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
         Ok(a)
     }
 

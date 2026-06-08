@@ -925,31 +925,19 @@ impl AmplitudeGraph {
             num.state.expr *= &self.graph.global_prefactor.num;
         }
 
-        let four_dimensional_numerator = num.to_d_dim(GS.dim).get_single_atom().unwrap();
-        let before_gamma_simplification = four_dimensional_numerator.to_plain_string();
-        let before_gamma_simplification_log_print =
-            four_dimensional_numerator.log_print(Some(120)).to_string();
-        let gamma_simplification_started = std::time::Instant::now();
-        let four_dimensional_numerator = four_dimensional_numerator.simplify_gamma();
-        let after_gamma_simplification = four_dimensional_numerator.to_plain_string();
-        let after_gamma_simplification_log_print =
-            four_dimensional_numerator.log_print(Some(120)).to_string();
+        let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
+        let before_gamma_plain = before_gamma.to_plain_string();
+        let four_dimensional_numerator = before_gamma.simplify_gamma();
+        let after_gamma_plain = four_dimensional_numerator.to_plain_string();
         crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
             stage = "amplitude_to_vakint_after_simplify_gamma",
-            gamma_simplification_ms = %gamma_simplification_started.elapsed().as_millis(),
-            changed = before_gamma_simplification != after_gamma_simplification,
-            before_bytes = %before_gamma_simplification.len(),
-            after_bytes = %after_gamma_simplification.len(),
-            before_gamma_count = %before_gamma_simplification.matches("spenso::gamma").count(),
-            after_gamma_count = %after_gamma_simplification.matches("spenso::gamma").count(),
-            before_chain_count = %before_gamma_simplification.matches("spenso::chain").count(),
-            after_chain_count = %after_gamma_simplification.matches("spenso::chain").count(),
-            before_gamma = %before_gamma_simplification_log_print,
-            after_gamma = %after_gamma_simplification_log_print,
-            file.before_gamma_simplification = %before_gamma_simplification,
-            file.after_gamma_simplification = %after_gamma_simplification,
-            file.before_gamma_simplification_log_print = %before_gamma_simplification_log_print,
-            file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+            changed = before_gamma_plain != after_gamma_plain,
+            before_gamma_count = %before_gamma_plain.matches("spenso::gamma").count(),
+            after_gamma_count = %after_gamma_plain.matches("spenso::gamma").count(),
+            before_chain_count = %before_gamma_plain.matches("spenso::chain").count(),
+            after_chain_count = %after_gamma_plain.matches("spenso::chain").count(),
+            log.before_gamma = before_gamma,
+            log.after_gamma = four_dimensional_numerator,
             "Gamma simplification before Vakint"
         );
 

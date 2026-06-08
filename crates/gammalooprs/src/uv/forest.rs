@@ -444,14 +444,17 @@ impl Forest {
             // );
             //
 
+            let forest_term = n
+                .data
+                .simple_approx
+                .as_ref()
+                .unwrap()
+                .expr(&graph.full_filter());
+            let expanded_atom = atom.expand_num();
             debug_tags!(#generation, #uv, #graph, #term;
-                forest_term=%
-                n.data
-                    .simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),
-               expr = % atom.expand_num().log_print(None),"Term before simplification"
+                log.forest_term = forest_term,
+                log.expr = expanded_atom,
+                "Term before simplification"
             );
 
             let atom = atom
@@ -459,7 +462,7 @@ impl Forest {
                 * &graph.global_prefactor.num
                 * &graph.overall_factor;
             debug_tags!(#generation, #uv, #inspect, #dump;
-                expression = %atom.log_print(Some(120)),
+                log.expression = atom,
                 dod = n.data.spinney.dod,
                 "Dumped pole part color simplification input"
             );

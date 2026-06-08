@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tabled::{builder::Builder, settings::Style};
 use tracing::{Event, Subscriber, field::Visit};
 use tracing_subscriber::{
-    fmt::{FmtContext, FormatEvent, FormatFields, format::Writer},
+    fmt::{FmtContext, FormatEvent, FormatFields, FormattedFields, format::Writer},
     registry::LookupSpan,
 };
 
@@ -94,7 +94,7 @@ where
 {
     fn format_event(
         &self,
-        _ctx: &FmtContext<'_, S, N>,
+        ctx: &FmtContext<'_, S, N>,
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> std::fmt::Result {
@@ -106,6 +106,17 @@ where
         event.record(&mut visitor);
         let msg = visitor.message.as_deref().unwrap_or("");
         let mut display_fields = visitor.fields;
+        if let Some(span) = ctx.lookup_current()
+            && let Some(fields) = span.extensions().get::<FormattedFields<N>>()
+        {
+            let formatted = fields.to_string();
+            if !formatted.is_empty() {
+                display_fields.insert(
+                    "span".to_string(),
+                    serde_json::Value::String(format!("{}{{{formatted}}}", span.name())),
+                );
+            }
+        }
         let display_tags = extract_display_tags(&mut display_fields);
         let rendered_field_table = render_display_field_table(&style, &display_fields);
 

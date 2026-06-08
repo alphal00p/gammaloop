@@ -582,15 +582,10 @@ impl EvaluatorStack {
                 let network_input = if settings.do_algebra {
                     let color_simplified = a.as_atom_view().simplify_color();
                     let gamma_simplified = color_simplified.simplify_gamma();
-                    let after_gamma_simplification = gamma_simplified.to_plain_string();
-                    let after_gamma_simplification_log_print =
-                        gamma_simplified.log_print(Some(120)).to_string();
                     crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
                         stage = "evaluator_stack_parse_atom_after_simplify_gamma",
                         atom_index,
-                        after_gamma = %after_gamma_simplification_log_print,
-                        file.after_gamma_simplification = %after_gamma_simplification,
-                        file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+                        log.after_gamma = gamma_simplified,
                         "Evaluator atom after gamma simplification"
                     );
                     let simplified = gamma_simplified.simplify_metrics().to_dots();
@@ -613,10 +608,7 @@ impl EvaluatorStack {
                 crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
                     stage = "evaluator_stack_parse_atom_before_network_parse",
                     atom_index,
-                    terms = network_input.nterms(),
-                    bytes = network_input.as_view().get_byte_size(),
-                    preview = %network_input.log_print(Some(120)),
-                    file.atom = %network_input.to_plain_string(),
+                    log.atom = network_input,
                     "Evaluator atom before network parsing"
                 );
                 if let Some(path) =

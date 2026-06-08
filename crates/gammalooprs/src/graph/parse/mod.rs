@@ -689,6 +689,18 @@ impl Graph {
         g.write_fmt(writer)
     }
 
+    pub(crate) fn from_parsed_with_validation(graph: ParseGraph, model: &Model) -> Result<Self> {
+        let res = Self::from_parsed(graph, model)?;
+        res.validate_full_numerator_tensor_network()
+            .with_context(|| {
+                format!(
+                    "Failed to validate full numerator tensor network for graph {}",
+                    res.name
+                )
+            })?;
+        Ok(res)
+    }
+
     #[instrument(skip_all, fields(graph= %graph.debug_dot(),name = %graph.global_data.name.as_str()))]
     pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let (initial_data, mut graph) = Self::extract_initial_data(&graph, model)?;
@@ -786,14 +798,6 @@ impl Graph {
         );
 
         g.param_builder = updated_param_builder_with_lmb;
-
-        g.validate_full_numerator_tensor_network()
-            .with_context(|| {
-                format!(
-                    "Failed to validate full numerator tensor network for graph {}",
-                    g.name
-                )
-            })?;
 
         debug!("{}", g.debug_dot());
 

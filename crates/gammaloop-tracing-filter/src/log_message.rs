@@ -5,6 +5,16 @@ pub trait LogMessage {
     }
 }
 
+impl<T: LogMessage + ?Sized> LogMessage for &T {
+    fn log_display(&self) -> String {
+        (**self).log_display()
+    }
+
+    fn log_file(&self) -> String {
+        (**self).log_file()
+    }
+}
+
 #[cfg(feature = "symbolica")]
 mod symbolica_impl {
     use super::*;

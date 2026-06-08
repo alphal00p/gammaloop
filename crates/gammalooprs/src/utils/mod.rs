@@ -178,14 +178,48 @@ macro_rules! disable {
 /// - `debug_tags!(#integration, #summary; inspect = false, "iteration summary");`
 #[macro_export]
 macro_rules! debug_tags {
-    (@collect [$($acc:tt)*] # $tag:ident, $($tail:tt)*) => {
-        $crate::debug_tags!(@collect [$($acc)* $tag = true,] $($tail)*)
+    (@collect_tags [$($acc:tt)*] # $tag:ident, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_tags [$($acc)* $tag = true,] $($tail)*)
     };
-    (@collect [$($acc:tt)*] # $tag:ident; $($rest:tt)*) => {
-        tracing::debug!($($acc)* $tag = true, $($rest)*)
+    (@collect_tags [$($acc:tt)*] # $tag:ident; $($rest:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($acc)* $tag = true,] [] $($rest)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] log.$name:ident = $value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields
+            [$($tags)*]
+            [$($fields)*
+                display.$name = %$crate::LogMessage::log_display(&$value),
+                file.$name = %$crate::LogMessage::log_file(&$value),
+            ]
+            $($tail)*
+        )
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $prefix:ident.$name:ident = %$value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $prefix.$name = %$value,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $prefix:ident.$name:ident = ?$value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $prefix.$name = ?$value,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $prefix:ident.$name:ident = $value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $prefix.$name = $value,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident = %$value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $name = %$value,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident = ?$value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $name = ?$value,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident = $value:expr, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $name = $value,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident, $($tail:tt)*) => {
+        $crate::debug_tags!(@collect_fields [$($tags)*] [$($fields)* $name,] $($tail)*)
+    };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $($rest:tt)+) => {
+        tracing::debug!($($tags)* $($fields)* $($rest)+)
     };
     ($($input:tt)*) => {
-        $crate::debug_tags!(@collect [] $($input)*)
+        $crate::debug_tags!(@collect_tags [] $($input)*)
     };
 }
 

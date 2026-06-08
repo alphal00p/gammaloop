@@ -13,6 +13,7 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::eyre;
+use gammaloop_tracing_filter::LogMessage;
 use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
@@ -36,7 +37,7 @@ pub mod orientation_localization;
 
 use orientation_localization::localize_reduced_orientation_term;
 
-pub trait ForestNodeLike {
+pub trait ForestNodeLike: LogMessage {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
     fn dod(&self) -> i32;
@@ -142,6 +143,17 @@ pub struct Approximation {
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
     pub generate_only_integrated_uv_chain_matches: bool,
+}
+
+impl LogMessage for Approximation {
+    fn log_display(&self) -> String {
+        format!(
+            "subgraph={}, topo_order={}, dod={}",
+            self.spinney.filter().string_label(),
+            self.topo_order,
+            self.spinney.dod
+        )
+    }
 }
 
 impl ForestNodeLike for Approximation {
@@ -265,7 +277,7 @@ fn localized_integrated_reduced_factor(
     valid_orientations: &[EdgeVec<Orientation>],
     orientation_pattern: &OrientationPattern,
 ) -> Result<IntegrandExpr> {
-    debug_tags!(#uv;graph.name=%graph.name , expr=%expr.log_print(Some(80)),"Localizing integrated UV CT");
+    debug_tags!(#uv; graph.name = %graph.name, log.expr = expr, "Localizing integrated UV CT");
     let cff = graph.cff(
         &to_contract
             .union(&graph.tree_edges)
@@ -551,7 +563,7 @@ impl Approximation {
         );
         debug_tags!(
             #uv;
-            finite = %finite.log_print(Some(80)),
+            log.finite = finite,
             t4 = %t4.iter().map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
             "Computing UV subtraction",
         );
@@ -743,7 +755,7 @@ impl Approximation {
 
         debug_tags!(
             #uv,#final;
-            finite = %finite.log_print(Some(80)),
+            log.finite = finite,
             t4 = %t4.iter().map(|(index, t4)| format!("t4_{} = {}", index, t4.log_print(Some(80)))).collect::<Vec<_>>().join("\n"),
             "Computing Final integrand after uv subtraction",
         );
@@ -843,7 +855,7 @@ impl Approximation {
             let color_simplify_input = resnum.replace(GS.dim).with(4);
 
             debug_tags!(#generation, #uv, #inspect, #dump;
-                expression = %color_simplify_input.log_print(Some(120)),
+                log.expression = color_simplify_input,
                 dod = self.spinney.dod,
                 term_index = term_index,
                 "Dumped final-integrand color simplification input"
