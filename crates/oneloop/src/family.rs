@@ -29,6 +29,7 @@ pub struct IntegralFamily {
     pub isps: Vec<Isp>,
     pub kinematics: Kinematics,
     pub targets: Vec<Integral>,
+    pub numerator: Atom,
 }
 
 #[cfg(test)]
@@ -55,6 +56,7 @@ mod tests {
                 propagator_exponents: vec![1, 1],
                 isp_exponents: vec![],
             }],
+            numerator: Atom::num(1),
         };
         assert_eq!(family.propagators.len(), 2);
         assert_eq!(family.targets.len(), 1);

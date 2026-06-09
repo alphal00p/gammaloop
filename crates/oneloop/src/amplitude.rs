@@ -43,6 +43,7 @@ mod tests {
                 propagator_exponents: vec![1, 1],
                 isp_exponents: vec![],
             }],
+            numerator: Atom::num(1),
         }
     }
 

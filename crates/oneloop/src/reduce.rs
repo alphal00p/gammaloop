@@ -1,4 +1,5 @@
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::{function, symbol};
 
 use crate::family::IntegralFamily;
 use crate::masters::MasterIntegral;
@@ -20,6 +21,10 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
     let mass = |i: usize| family.propagators[i].mass_sq.clone();
     let exponents = &family.targets[0].propagator_exponents;
 
+    if family.numerator != Atom::num(1) && family.propagators.len() != 2 {
+        todo!("numerator reduction for bubble only so far");
+    }
+
     let terms = match family.propagators.len() {
         1 => {
             let m_sq = mass(0);
@@ -32,8 +37,18 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             let p_sq = inv(0);
             let m1_sq = mass(0);
             let m2_sq = mass(1);
-            let (c_b0, c_a1, c_a2) =
-                reduce_bubble(exponents[0], exponents[1], &p_sq, &m1_sq, &m2_sq);
+            let (c_b0, c_a1, c_a2) = if family.numerator == Atom::num(1) {
+                reduce_bubble(exponents[0], exponents[1], &p_sq, &m1_sq, &m2_sq)
+            } else {
+                bubble_numerator(
+                    &family.numerator,
+                    exponents[0],
+                    exponents[1],
+                    &p_sq,
+                    &m1_sq,
+                    &m2_sq,
+                )
+            };
             let mut terms = Vec::new();
             push_nonzero(
                 &mut terms,
@@ -95,7 +110,7 @@ fn push_nonzero(terms: &mut Vec<(Atom, MasterIntegral)>, coeff: Atom, master: Ma
     }
 }
 
-// Reduce a bubble B(a1,a2) to (coeff of B0, coeff of A0(m1^2), coeff of A0(m2^2)) 
+// Reduce a bubble B(a1,a2) to (coeff of B0, coeff of A0(m1^2), coeff of A0(m2^2))
 fn reduce_bubble(a1: i32, a2: i32, p_sq: &Atom, m1_sq: &Atom, m2_sq: &Atom) -> (Atom, Atom, Atom) {
     if a1 == 1 && a2 == 1 {
         return (Atom::num(1), Atom::Zero, Atom::Zero);
@@ -162,6 +177,50 @@ fn kallen(p_sq: &Atom, m1_sq: &Atom, m2_sq: &Atom) -> Atom {
         - Atom::num(2) * m1_sq * m2_sq
 }
 
+// Reduce a bubble with a numerator
+fn bubble_numerator(
+    numerator: &Atom,
+    a1: i32,
+    a2: i32,
+    p_sq: &Atom,
+    m1_sq: &Atom,
+    m2_sq: &Atom,
+) -> (Atom, Atom, Atom) {
+    let k = Atom::var(S.k);
+    let p = Atom::var(S.p);
+    let den1 = symbol!("oneloop::den1");
+    let den2 = symbol!("oneloop::den2");
+    let d1 = Atom::var(den1);
+    let d2 = Atom::var(den2);
+
+    //   l^2 = D1 + m1^2 ;   l.p = (D2 - D1 - m1^2 - p^2 + m2^2)/2 ;   p^2 = p_sq
+    let n = numerator
+        .replace(function!(S.dot, &k, &k).to_pattern())
+        .with(&d1 + m1_sq)
+        .replace(function!(S.dot, &k, &p).to_pattern())
+        .with((&d2 - &d1 - m1_sq - p_sq + m2_sq) / Atom::num(2))
+        .replace(function!(S.dot, &p, &p).to_pattern())
+        .with(p_sq.clone());
+
+    // n is linear in D1, D2:  n = c_const + c_den1*D1 + c_den2*D2
+    let c_den1 = n.derivative(den1);
+    let c_den2 = n.derivative(den2);
+    let c_const = n
+        .replace(d1.to_pattern())
+        .with(Atom::Zero)
+        .replace(d2.to_pattern())
+        .with(Atom::Zero);
+
+    combine(
+        &c_const,
+        reduce_bubble(a1, a2, p_sq, m1_sq, m2_sq),
+        &c_den1,
+        reduce_bubble(a1 - 1, a2, p_sq, m1_sq, m2_sq),
+        &c_den2,
+        reduce_bubble(a1, a2 - 1, p_sq, m1_sq, m2_sq),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::reduce;
@@ -169,6 +228,7 @@ mod tests {
     use crate::masters::MasterIntegral;
     use crate::symbols::S;
     use symbolica::atom::Atom;
+    use symbolica::function;
     use symbolica::symbol;
 
     fn family(masses: Vec<Atom>, invariants: Vec<Atom>, exponents: Vec<i32>) -> IntegralFamily {
@@ -189,6 +249,7 @@ mod tests {
                 propagator_exponents: exponents,
                 isp_exponents: vec![],
             }],
+            numerator: Atom::num(1),
         }
     }
 
@@ -237,6 +298,51 @@ mod tests {
         assert!(matches!(r.terms[0].1, MasterIntegral::Bubble { .. }));
         assert!(matches!(r.terms[1].1, MasterIntegral::Tadpole { .. }));
         assert!(matches!(r.terms[2].1, MasterIntegral::Tadpole { .. }));
+    }
+
+    #[test]
+    fn bubble_with_linear_numerator_reduces_to_masters() {
+        crate::ensure_symbolica_license();
+        let psq = Atom::var(S.psq);
+        let m1 = Atom::var(symbol!("oneloop::m1sq"));
+        let m2 = Atom::var(symbol!("oneloop::m2sq"));
+        // numerator = l . p
+        let fam = IntegralFamily {
+            propagators: vec![
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m1,
+                },
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m2,
+                },
+            ],
+            isps: vec![],
+            kinematics: Kinematics {
+                invariants: vec![psq],
+                masses_sq: vec![],
+            },
+            targets: vec![Integral {
+                propagator_exponents: vec![1, 1],
+                isp_exponents: vec![],
+            }],
+            numerator: function!(S.dot, Atom::var(S.k), Atom::var(S.p)),
+        };
+        let r = reduce(&fam);
+        assert_eq!(r.terms.len(), 3);
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, MasterIntegral::Bubble { .. }))
+        );
+        assert_eq!(
+            r.terms
+                .iter()
+                .filter(|(_, m)| matches!(m, MasterIntegral::Tadpole { .. }))
+                .count(),
+            2
+        );
     }
 
     #[test]
