@@ -14,14 +14,8 @@ use spenso::{
     },
     utils::{to_subscript, to_superscript},
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    domains::rational::Rational,
-    function, get_symbol,
-    id::Replacement,
-    printer::{PrintState, PrintUserData},
-    symbol,
-};
+use symbolica::prelude::*;
+use symbolica::printer::{PrintState, PrintUserData};
 
 use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
 
@@ -177,6 +171,8 @@ pub struct GammaloopSymbols {
     pub external_mom: Symbol,
     pub dim: Symbol,
     pub coeff: Symbol,
+
+    pub localizing_integrand: Symbol,
 
     pub if_sigma: Symbol,
 
@@ -474,6 +470,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             **out = Atom::Zero;
         }
     ),
+
+    localizing_integrand: symbol!("int_loc"),
     uvaind: symbol!(
         "uvind",
         print = |a, opt, _state| {
@@ -1000,6 +998,52 @@ impl GammaloopSymbols {
     pub(crate) fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
+    }
+
+    pub(crate) fn localizing_integrand(&self, eids: impl IntoIterator<Item = EdgeIndex>) -> Atom {
+        let mut fn_builder = FunctionBuilder::new(self.localizing_integrand);
+        let mut has_args = false;
+        let mut args = String::new();
+        for e in eids {
+            args.push_str(&format!("{},", e.0));
+            has_args = true;
+            fn_builder = fn_builder.add_arg(e.0);
+        }
+        debug_tags!(#localize; eids=%args,"Localizing integrand");
+        if !has_args {
+            return Atom::one();
+        }
+
+        fn_builder.finish()
+    }
+
+    pub(crate) fn localizing_integrand_fn(&self, args: &[Symbol]) -> Atom {
+        // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV
+        let pi_atom = (Symbol::PI).to_atom();
+        let mut normalization_term_integral = (pi_atom.pow(2)) / GS.m_uv_int;
+        // However, gammaloop adds a factro 1/(2*pi)^3 per loop, and this integrated CT will be subject to it, so we must undo it.
+        normalization_term_integral /= (Atom::from(2) * pi_atom).pow(3);
+
+        // We need to correct the Wick rotation `i` per loop
+        // TODO: Understand this better: this is *not* part of the normalization really, but probably related to the fact that our
+        // UV CT is using minkowski denominators and not euclidean ones.
+        normalization_term_integral /= Atom::i();
+
+        let mut res = Atom::one();
+
+        for l in args {
+            //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
+            res /= normalization_term_integral.as_view();
+
+            let spatial_norm_sq = function!(self.emr_mom, l, GS.cind(1)).pow(2)
+                + function!(self.emr_mom, l, GS.cind(2)).pow(2)
+                + function!(self.emr_mom, l, GS.cind(3)).pow(2);
+
+            // Per-orientation CFF localizer of the normalized cubic tadpole.
+            let denominator = spatial_norm_sq + GS.m_uv_int * GS.m_uv_int;
+            res /= denominator.as_view() * denominator.as_view();
+        }
+        res
     }
 
     pub(crate) fn emr_vec(&self, e: EdgeIndex) -> Atom {

@@ -4,7 +4,7 @@ name = "aa_aa_2L"
 folder = "./examples/cli/aa_aa/2L/gammaloop_state"
 
 [cli_settings.global]
-display_directive = "info,gammalooprs[{#span_context}]=debug,gammalooprs[{#uv,#integrated,#rescaled}]=debug,gammalooprs[{#uv,#integrated,#series}]=debug,gammalooprs[{#uv,#integrated,#collect}]=debug"
+display_directive = "info,gammalooprs[{#span_context}]=debug,gammalooprs[{#uv,#integrated,#rescaled}]=debug,gammalooprs[{#uv,#integrated,#series}]=debug,gammalooprs[{#uv,#integrated,#collect}]=debug,gammalooprs[{#localize}]=debug"
 logfile_directive = "gammalooprs[{#uv,#integrated}]=debug"
 
 [cli_settings.global.log_style]
@@ -35,7 +35,7 @@ custom = []
 
 [cli_settings.global.generation.tropical_subgraph_table]
 panic_on_fail = true
-disable_tropical_generation = false
+disable_tropical_generation = true
 
 [cli_settings.global.n_cores]
 feyngen = 10

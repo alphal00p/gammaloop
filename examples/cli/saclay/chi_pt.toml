@@ -1,0 +1,193 @@
+[cli_settings]
+[cli_settings.state]
+name = "chi_pt"
+folder = "./examples/cli/chi_pt/chi_pt_state"
+
+[[command_blocks]]
+name = "import_diagrams"
+commands = [
+    "import model scalars.json",
+
+    "import graphs ./banana.dot -p chi_pt -i one_graph",
+
+    "save dot",
+    "save state -o"
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+    "generate existing -p chi_pt -i one_graph",
+    "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_uv_subtracted_integrands"
+commands = [
+    """set global string '
+[global.generation.uv]
+softct = false
+inner_products = true
+generate_integrated = true
+subtract_uv = true
+	'""",
+    "generate existing -p chi_pt -i one_graph",
+    "save state -o",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [ 1.0, 0.0, 0.0, 0.0 ],
+    "dependent"
+]
+helicities = [+1,]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[cli_settings.global.generation.uv]
+softct = false
+inner_products = true
+generate_integrated = false
+subtract_uv = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = false
+summed = false
+summed_function_map = false
+horner_iterations = 5
+cpe_iterations = 5
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[cli_settings.global.generation.compile]
+compilation_mode="assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = true
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run set_model_parameters",
+
+    "duplicate integrand -p chi_pt -i one_graph --output_process_name chi_pt --output_integrand_name 2L_m_uv_UP",
+    "set process -p chi_pt -i one_graph_m_uv_UP kv general.m_uv=364.752",
+    "duplicate integrand -p chi_pt -i one_graph --output_process_name chi_pt --output_integrand_name 2L_m_uv_DOWN",
+    "set process -p chi_pt -i one_graph_m_uv_DOWN kv general.m_uv=22.797",
+    "duplicate integrand -p chi_pt -i one_graph --output_process_name chi_pt --output_integrand_name 2L_mu_r_UP",
+    "set process -p chi_pt -i one_graph_mu_r_UP kv general.mu_r=364.752",
+    "duplicate integrand -p chi_pt -i one_graph --output_process_name chi_pt --output_integrand_name 2L_mu_r_DOWN",
+    "set process -p chi_pt -i one_graph_mu_r_DOWN kv general.mu_r=22.797",
+
+    "run set_kinematics_a",
+    "set process -p chi_pt kv kinematics.externals.data.helicities=[+1]",
+
+    """set process -p chi_pt -i one_graph kv
+        integrator.n_increase=0
+        integrator.n_start=100000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+    """set process -p chi_pt string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "monte_carlo"
+        lmb_multichanneling = false
+        lmb_channels = "summed"
+        coordinate_system = "spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	# 				 --target -1.1497174416783368e-6 0.0
+	# integrate -p chi_pt -i one_graph -p chi_pt -i one_graph_m_uv_UP -p chi_pt -i one_graph_m_uv_DOWN -p chi_pt -i one_graph_mu_r_UP -p chi_pt -i one_graph_mu_r_DOWN
+	"""integrate -p chi_pt -i one_graph
+	             --n-cores 10
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+    "set model mass_scalar_1=1.0",
+	"set model mass_scalar_2=1.0",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 1.0, 0.0, 0.0, 0.0 ],
+      "dependent"
+    ]
+    '""",
+]

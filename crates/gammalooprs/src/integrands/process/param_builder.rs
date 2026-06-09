@@ -1141,7 +1141,6 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub fn add_function<A: Into<Indeterminate> + Clone>(
         &mut self,
         name: Symbol,
-        _rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1237,13 +1236,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         };
 
         let arg = symbol!("argument");
-        new.add_function(
-            GS.tree_denom_wrapper,
-            "tree_denom".into(),
-            vec![arg],
-            Atom::var(arg),
-        )
-        .unwrap();
+        new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
+            .unwrap();
 
         for e in graph.iter_edge_ids() {
             if lmb.edge_signatures[e]
@@ -1260,6 +1254,15 @@ impl<T: FloatLike> ParamBuilder<T> {
                 )
                 .unwrap();
             }
+        }
+
+        for i in 1..lmb.loop_edges.len() {
+            let args = (1..i)
+                .map(|j| symbol!(format!("e{}", j)))
+                .collect::<Vec<_>>();
+            let body = GS.localizing_integrand_fn(&args);
+            new.add_function(GS.localizing_integrand, args, body)
+                .unwrap()
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
@@ -1297,7 +1300,6 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         new.add_function(
             GS.broadcasting_sqrt,
-            "sqrt".to_string(),
             vec![symbol!("x")],
             parse_lit!(sqrt(x)),
         )

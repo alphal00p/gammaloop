@@ -446,31 +446,17 @@ impl Integrated<'_> {
         );
 
         if !settings.pole_part {
-            // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV
-            let pi_atom = (Symbol::PI).to_atom();
-            let mut normalization_term_integral = (pi_atom.pow(2)) / GS.m_uv_int;
-            // However, gammaloop adds a factro 1/(2*pi)^3 per loop, and this integrated CT will be subject to it, so we must undo it.
-            normalization_term_integral /= (Atom::from(2) * pi_atom).pow(3);
+            debug_tags!(#uv,#localize; log.current = current, reduced = %reduced.string_label(), "localizing integrated ct");
+            let loop_edges = current
+                .lmb()
+                .loop_edges
+                .iter()
+                .filter(|l| !given..includes(&graph[*l].1))
+                .cloned();
 
-            // We need to correct the Wick rotation `i` per loop
-            // TODO: Understand this better: this is *not* part of the normalization really, but probably related to the fact that our
-            // UV CT is using minkowski denominators and not euclidean ones.
-            normalization_term_integral /= Atom::i();
-
-            for l in &current.lmb().loop_edges {
-                if !reduced.includes(&graph[l].1) {
-                    continue;
-                }
-
-                //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
-                res /= normalization_term_integral.as_view();
-
-                let spatial_norm_sq = integrated_triangle_spatial_norm_sq(*l);
-
-                // Per-orientation CFF localizer of the normalized cubic tadpole.
-                let denominator = spatial_norm_sq + GS.m_uv_int * GS.m_uv_int;
-                res /= denominator.as_view() * denominator.as_view();
-            }
+            // graph.contract_subgraph(subgraph, node_data_merge);
+            graph.lmb_of(subgraph)
+            res *= GS.localizing_integrand(loop_edges)
         }
 
         debug_tags!(#uv, #integrated, #final;

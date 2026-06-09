@@ -40,6 +40,7 @@ use orientation_localization::localize_reduced_orientation_term;
 pub trait ForestNodeLike: LogMessage {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
+    // fn lmb_given(&self, subgraph: &SuBitGraph) -> &LoopMomentumBasis;
     fn dod(&self) -> i32;
     fn renormalization_scheme(&self) -> ApproximationType;
     fn topo_order(&self) -> usize;
@@ -168,6 +169,11 @@ impl ForestNodeLike for Approximation {
     fn lmb(&self) -> &LoopMomentumBasis {
         &self.spinney.lmb
     }
+
+    // fn lmb_given(&self, subgraph: &SuBitGraph) -> &LoopMomentumBasis {
+
+    //     self.
+    // }
 
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
         self.spinney
