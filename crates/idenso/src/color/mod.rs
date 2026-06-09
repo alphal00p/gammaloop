@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::sync::LazyLock;
 
 use spenso::{
@@ -194,7 +195,8 @@ impl ColorSymbols {
     }
 }
 
-pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| {
+spenso::symbolica_init_lazy_static! {
+pub static CS, CS_INNER: ColorSymbols = || {
     fn representation_symbol(rep: Atom) -> Symbol {
         let AtomView::Fun(f) = rep.as_view() else {
             unreachable!("Color representations are symbolic functions")
@@ -345,7 +347,8 @@ pub static CS: LazyLock<ColorSymbols> = LazyLock::new(|| {
         tr: symbol!("spenso::TR";Real),
         nc: symbol!("spenso::Nc";Real),
     }
-});
+};
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorSimplifySettings {

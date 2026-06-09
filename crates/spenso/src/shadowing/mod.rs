@@ -1,12 +1,15 @@
 use std::env;
 
 use crate::{
+    network::{library::function_lib::INBUILTS, tags::SPENSO_TAG},
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, HasStructure, TensorShell, TensorStructure, ToSymbolic,
+        abstract_index::AIND_SYMBOLS,
         concrete_index::FlatIndex,
         slot::{IsAbstractSlot, ParseableAind},
     },
+    symbolica_init::in_symbolica_initializer,
     tensors::{
         data::{DataTensor, DenseTensor},
         parametric::{MixedTensor, ParamTensor, TensorCoefficient},
@@ -15,7 +18,7 @@ use crate::{
 };
 use eyre::Result;
 use linnet::permutation::Permutation;
-use symbolica::{atom::Atom, evaluate::FunctionMap};
+use symbolica::{atom::Atom, evaluate::FunctionMap, initialize};
 
 mod atom_conversion;
 mod collect;
@@ -30,6 +33,18 @@ pub use atom_conversion::IntoAtom;
 pub use collect::{COLLECT, Collectable, TensorCollectExt, TensorCollectFilter};
 pub use projectors::{ANTISYM, CYCLIC, ProjectorExpander, SYM, antisym, cyclic, sym};
 pub use trace::{trace, trace_factor_views, trace_parts, trace_sym};
+
+initialize!(|| {
+    in_symbolica_initializer(|| {
+        let _ = INBUILTS.force_in_initializer().conj;
+        let _ = *ANTISYM.force_in_initializer();
+        let _ = *CYCLIC.force_in_initializer();
+        let _ = *SYM.force_in_initializer();
+        let _ = *COLLECT.force_in_initializer();
+        let _ = SPENSO_TAG.force_in_initializer().bracket;
+        let _ = AIND_SYMBOLS.force_in_initializer().cind;
+    });
+});
 
 #[cfg(test)]
 mod tests;

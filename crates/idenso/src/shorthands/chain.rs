@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use spenso::{
     chain, dualizable_, dualizable_dual_,
-    network::tags::SPENSO_TAG as T,
+    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     self_dual_,
     structure::representation::{LibraryRep, RepName},
     tensors::parametric::atomcore::PatternReplacement,
@@ -159,7 +159,7 @@ impl<'a> Chain for AtomView<'a> {
         ))
         .when(W_.a_.filter_match(|a| {
             if let Match::FunctionName(a) = a
-                && *a != T.chain
+                && (*a != T.chain && *a != ETS.metric)
             {
                 true
             } else {
@@ -188,12 +188,13 @@ impl<'a> Chain for AtomView<'a> {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
+    use spenso::g;
     use spenso::{chain, shadowing::symbolica_utils::AtomCoreExt, slot};
-    use symbolica::parse_lit;
+    use symbolica::{parse, parse_lit};
 
-    use crate::gamma;
     use crate::representations::Bispinor;
     use crate::test_support::{TestReps, test_initialize};
+    use crate::{bis, gamma};
 
     use super::*;
 
@@ -297,5 +298,21 @@ mod tests {
         let rep = Bispinor {}.into();
 
         assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*chain(bis(4,c),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
+    }
+
+    #[test]
+    fn chainify_does_not_hit_metrics() {
+        let a = g!(bis!(4, 1), bis!(4, 2));
+
+        assert_eq!(a.chainify(Bispinor {}.into()), a);
+    }
+
+    #[test]
+    fn normalize_works_on_gammaloop_input() {
+        let expr = parse!(
+            "spenso::chain(spenso::bis(4,gammalooprs::hedge(17)),spenso::bis(4,gammalooprs::hedge(17)),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(2))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(1))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(7))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(4,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(7))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(0))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(3))))"
+        );
+
+        println!("{}", expr.normalize_chains())
     }
 }

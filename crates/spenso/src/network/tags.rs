@@ -39,7 +39,9 @@ pub struct SpensoTags {
     pub dualizable_: Symbol,
 }
 
-pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::new(SpensoTags::new);
+crate::symbolica_init_lazy_static! {
+    pub static SPENSO_TAG, SPENSO_TAG_INNER: SpensoTags = SpensoTags::new;
+}
 
 pub fn scalar_store_alias(index: usize) -> Atom {
     FunctionBuilder::new(SPENSO_TAG.scalar)

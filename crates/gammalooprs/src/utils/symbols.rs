@@ -381,34 +381,34 @@ macro_rules! spenso_print_scripted_indexed {
                     out = nu_ansi_term::Color::Magenta.paint(out).to_string();
                 }
 
-                let mut first = true;
-                let mut has_args = false;
+                let mut printed_args = false;
                 for arg in argiter {
-                    if first {
+                    let hidden_representation = matches!(
+                        arg,
+                        AtomView::Fun(a)
+                            if a.get_symbol().has_tag(&SPENSO_TAG.representation)
+                                && a.get_nargs() == 1
+                                && !with_dim
+                    );
+                    if hidden_representation {
+                        continue;
+                    }
+
+                    if printed_args {
+                        out.push(if commas { ',' } else { ' ' });
+                    } else {
                         if symbol_scripts {
                             out.push('^');
                         }
-                        first = false;
-                    } else if commas {
-                        out.push(',');
-                    } else {
-                        out.push(' ');
-                    }
-                    if let AtomView::Fun(a) = arg
-                        && a.get_symbol().has_tag(&SPENSO_TAG.representation)
-                        && a.get_nargs() == 1
-                        && !with_dim
-                    {
-                    } else {
-                        if first && parens {
+                        if parens {
                             out.push('(');
                         }
-                        has_args = true;
-
-                        arg.format(&mut out, $opt, PrintState::new()).unwrap();
+                        printed_args = true;
                     }
+
+                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
                 }
-                if has_args && !first && parens {
+                if printed_args && parens {
                     out.push(')');
                 }
                 Some(out)
@@ -455,7 +455,8 @@ macro_rules! spenso_print_simple_indexed {
     }};
 }
 
-pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+spenso::symbolica_init_lazy_static! {
+pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     integrand: symbol!("integrand"),
     tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
@@ -873,7 +874,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     radius_star_right: symbol!("r⃰_right"),
     uv_damp_plus_right: symbol!("damp_plus_right"),
     uv_damp_minus_right: symbol!("damp_minus_right"),
-});
+};
+}
 
 impl GammaloopSymbols {
     pub fn integrand<O: GraphOrientation>(&self, i: usize, orientation: &O) -> Atom {
@@ -1086,4 +1088,20 @@ pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {
     FunctionBuilder::new(symbol!("σ"))
         .add_arg(usize::from(eid) as i64)
         .finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use insta::assert_snapshot;
+
+    use crate::utils::symbolica_ext::LogPrint;
+
+    use super::*;
+
+    #[test]
+    fn test_print() {
+        let p = GS.emr_mom(EdgeIndex(1), Atom::Zero);
+
+        assert_snapshot!(p.log_print(None),@"[35mq₁[0m(0)")
+    }
 }

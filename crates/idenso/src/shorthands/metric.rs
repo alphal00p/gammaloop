@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::LazyLock};
+use std::collections::HashSet;
 
 use crate::{
     shorthands::schoonschip::DotNormalizer,
@@ -43,10 +43,12 @@ pub struct MetricSymbols {
     pub dummy: Symbol,
 }
 
-pub static MS: LazyLock<MetricSymbols> = LazyLock::new(|| MetricSymbols {
-    dim: symbol!("spenso::dim"),
-    dummy: symbol!("spenso::dummy"),
-});
+spenso::symbolica_init_lazy_static! {
+    pub static MS, MS_INNER: MetricSymbols = || MetricSymbols {
+        dim: symbol!("spenso::dim"),
+        dummy: symbol!("spenso::dummy"),
+    };
+}
 
 pub fn canonize_impl(view: AtomView) -> Atom {
     let lib = DummyLibrary::<SymbolicTensor>::new();

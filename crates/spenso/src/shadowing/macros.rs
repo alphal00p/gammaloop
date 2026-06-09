@@ -527,6 +527,66 @@ macro_rules! trace_sym {
 
 #[macro_export]
 macro_rules!  symbol_set {
+        // Identifier symbols with an explicit namespace, using an initialization-safe public handle.
+        ($struct_name:ident, $static_name:ident, inner = $inner_name:ident, namespace = $namespace:literal; $($char:ident)*) => {
+            #[allow(dead_code, non_snake_case)]
+            pub struct $struct_name {
+                $(pub $char: ::symbolica::atom::Symbol,)*
+            }
+
+            static $inner_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($char: ::symbolica::symbol!(concat!($namespace, "::", stringify!($char))),)*
+            });
+
+            pub static $static_name: $crate::symbolica_init::SymbolicaInitLazy<$struct_name> =
+                $crate::symbolica_init::SymbolicaInitLazy::new(&$inner_name);
+        };
+
+        // Identifier symbols with explicit struct and static names, using an initialization-safe public handle.
+        ($struct_name:ident, $static_name:ident, inner = $inner_name:ident; $($char:ident)*) => {
+            #[allow(dead_code, non_snake_case)]
+            pub struct $struct_name {
+                $(pub $char: ::symbolica::atom::Symbol,)*
+            }
+
+            static $inner_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($char: ::symbolica::symbol!(stringify!($char)),)*
+            });
+
+            pub static $static_name: $crate::symbolica_init::SymbolicaInitLazy<$struct_name> =
+                $crate::symbolica_init::SymbolicaInitLazy::new(&$inner_name);
+        };
+
+        // String literals grouped in a struct with an explicit namespace, using an initialization-safe public handle.
+        ($struct_name:ident, $static_name:ident, inner = $inner_name:ident, namespace = $namespace:literal; $($field:ident : $string:literal),* $(,)?) => {
+            #[allow(dead_code, non_snake_case)]
+            pub struct $struct_name {
+                $(pub $field: ::symbolica::atom::Symbol,)*
+            }
+
+            static $inner_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($field: ::symbolica::symbol!(concat!($namespace, "::", $string)),)*
+            });
+
+            pub static $static_name: $crate::symbolica_init::SymbolicaInitLazy<$struct_name> =
+                $crate::symbolica_init::SymbolicaInitLazy::new(&$inner_name);
+        };
+
+        // String literals grouped in a struct, using an initialization-safe public handle.
+        ($struct_name:ident, $static_name:ident, inner = $inner_name:ident; $($field:ident : $string:literal),* $(,)?) => {
+            #[allow(dead_code, non_snake_case)]
+            pub struct $struct_name {
+                $(pub $field: ::symbolica::atom::Symbol,)*
+            }
+
+            static $inner_name: ::std::sync::LazyLock<$struct_name> = ::std::sync::LazyLock::new(|| $struct_name {
+                $($field: ::symbolica::symbol!($string),)*
+            });
+
+            pub static $static_name: $crate::symbolica_init::SymbolicaInitLazy<$struct_name> =
+                $crate::symbolica_init::SymbolicaInitLazy::new(&$inner_name);
+        };
+
         // Identifier symbols with an explicit namespace.
         ($struct_name:ident, $static_name:ident, namespace = $namespace:literal; $($char:ident)*) => {
             #[allow(dead_code, non_snake_case)]

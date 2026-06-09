@@ -4,7 +4,7 @@ use spenso::{
     chain, g,
     network::tags::SPENSO_TAG as T,
     rep_,
-    shadowing::{self, IntoAtom, TensorCollectExt},
+    shadowing::{self, IntoAtom},
     structure::representation::{LibraryRep, Minkowski, RepName},
     tensors::parametric::atomcore::PatternReplacement,
     trace,
@@ -20,10 +20,7 @@ use crate::{
     dirac::GammaSimplifier,
     epsilon::{EpsilonSimplifier, epsilon4},
     representations::Bispinor,
-    shorthands::{
-        chain::Chain,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
 };
 
 use super::{AGS, id_atom};
@@ -367,7 +364,8 @@ impl<'settings> DiracSimplifier<'settings> {
                 .settings
                 .rewrite_expression(expr.clone())
                 .simplify_epsilon()
-                .normalize_dots();
+                .normalize_dots()
+                .schoonschip();
 
             if next == expr {
                 return next;

@@ -1,6 +1,4 @@
-use std::sync::LazyLock;
-
-use spenso::g;
+use spenso::{g, tensor_symbol};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
@@ -8,10 +6,12 @@ use symbolica::{
 
 use crate::shorthands::schoonschip::Schoonschip;
 
-/// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
-/// Symbolica canonicalize argument order and annihilate repeated arguments.
-pub static EPSILON_SYMBOL: LazyLock<Symbol> =
-    LazyLock::new(|| spenso::tensor_symbol!("spenso::epsilon"; Antisymmetric));
+spenso::symbolica_init_lazy_static! {
+    /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
+    /// Symbolica canonicalize argument order and annihilate repeated arguments.
+    pub static EPSILON_SYMBOL, EPSILON_SYMBOL_INNER: Symbol =
+        || tensor_symbol!("spenso::epsilon"; Antisymmetric);
+}
 
 /// Builds an antisymmetric epsilon tensor with arbitrary rank.
 pub fn epsilon<'a, F>(factors: impl IntoIterator<Item = F>) -> Atom

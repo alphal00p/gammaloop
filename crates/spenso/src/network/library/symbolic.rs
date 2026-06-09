@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use super::*;
 use ahash::AHashMap;
 use eyre::eyre;
@@ -20,7 +18,7 @@ use crate::{
     structure::{
         HasName, IndexlessNamedStructure,
         abstract_index::AIND_SYMBOLS,
-        named::{IdentityName, METRIC_NAME},
+        named::IdentityName,
         permuted::{Perm, PermuteTensor},
         representation::{LibraryRep, RepName, initialize},
         slot::AbsInd,
@@ -236,7 +234,8 @@ impl ExplicitTensorSymbols {
     }
 }
 
-pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
+crate::symbolica_init_lazy_static! {
+pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
     flat: symbol!("♭";Symmetric;print = |a, opt, _state| {
 
         match opt.custom_print_mode.get("spenso") {
@@ -282,7 +281,7 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
 
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: tensor_symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt, _state| {
+    metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, _state| {
 
 
         if matches!(
@@ -498,7 +497,8 @@ $g(#to-eq(a),#to-eq(b))$
         }
 
     }),
-});
+};
+}
 
 impl IdentityName for Symbol {
     fn id() -> Self {

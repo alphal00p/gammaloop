@@ -7,7 +7,6 @@ use super::{
 use ahash::AHashMap;
 use append_only_vec::AppendOnlyVec;
 use linnet::half_edge::involution::Orientation;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use spenso_macros::SimpleRepresentation;
 use std::ops::Index;
@@ -25,7 +24,7 @@ use bincode::{Decode, Encode};
 use crate::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     self_dual_symbol,
-    structure::{abstract_index::AIND_SYMBOLS, slot::SlotError},
+    structure::slot::SlotError,
 };
 
 #[cfg(feature = "shadowing")]
@@ -172,6 +171,7 @@ pub trait RepName:
         args: impl IntoIterator<Item = It>,
     ) -> Atom {
         let librep: LibraryRep = (*self).into();
+
         librep.to_symbolic(args)
     }
 
@@ -679,8 +679,14 @@ impl PartialOrd for LibraryRep {
 
 pub type LibrarySlot<Aind> = Slot<LibraryRep, Aind>;
 
-pub(crate) static REPS: Lazy<RwLock<ExtendibleReps>> =
-    Lazy::new(|| RwLock::new(ExtendibleReps::new()));
+#[cfg(feature = "shadowing")]
+crate::symbolica_init_lazy_static! {
+    pub(crate) static REPS, REPS_INNER: RwLock<ExtendibleReps> =
+        || RwLock::new(ExtendibleReps::new());
+}
+#[cfg(not(feature = "shadowing"))]
+pub(crate) static REPS: LazyLock<RwLock<ExtendibleReps>> =
+    LazyLock::new(|| RwLock::new(ExtendibleReps::new()));
 pub(crate) static SELF_DUAL: AppendOnlyVec<(LibraryRep, RepData)> = AppendOnlyVec::new();
 pub(crate) static INLINE_METRIC: AppendOnlyVec<(LibraryRep, MetricRepData)> = AppendOnlyVec::new();
 pub(crate) static DUALIZABLE: AppendOnlyVec<(LibraryRep, RepData)> = AppendOnlyVec::new();
@@ -979,6 +985,7 @@ impl ExtendibleReps {
         }
 
         let rep = LibraryRep::SelfDual(SELF_DUAL.len() as u16);
+
         self.name_map.insert(name.into(), rep);
         #[cfg(feature = "shadowing")]
         let symbol = rep.new_symbol(name);
@@ -1067,15 +1074,13 @@ impl ExtendibleReps {
             symbol_map: AHashMap::new(),
         };
 
-        #[cfg(feature = "shadowing")]
-        let _ = ETS.metric;
-
-        #[cfg(feature = "shadowing")]
-        let _ = AIND_SYMBOLS.aind;
+        // #[cfg(feature = "shadowing")]
+        // let _ = AIND_SYMBOLS.aind;
         new.new_self_dual(Euclidean::NAME).unwrap();
         fn mink_is_neg(id: ConcreteIndex) -> bool {
             Minkowski {}.is_neg(id)
         }
+
         new.new_inline_metric(Minkowski::NAME, mink_is_neg).unwrap();
         new.new_dual_impl(Lorentz::NAME).unwrap();
 

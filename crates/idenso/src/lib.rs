@@ -15,27 +15,50 @@ use spenso::{
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         HasName, OrderedStructure, TensorStructure, ToSymbolic,
-        representation::RepName,
+        representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
-    symbol_set, tensor_symbol,
+    symbol_set,
+    symbolica_init::in_symbolica_initializer,
+    tensor_symbol,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
     id::{AliasedAtom, Replacement},
+    initialize,
     printer::AtomPrinter,
     symbol,
 };
 use thiserror::Error;
 
 use crate::{
+    color::CS,
     dirac::{AGS, GammaSimplifier},
+    epsilon::EPSILON_SYMBOL,
     rep_symbols::RS,
-    representations::Bispinor,
-    shorthands::metric::MetricSimplifier,
+    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
+    shorthands::metric::{MS, MetricSimplifier},
     tensor::{SymbolicNetExt, SymbolicNetParse},
 };
+
+initialize!(|| {
+    in_symbolica_initializer(|| {
+        let _ = Minkowski {}.to_symbolic([Atom::Zero]);
+        let _ = Euclidean {}.to_symbolic([Atom::Zero]);
+        let _ = Lorentz {}.to_symbolic([Atom::Zero]);
+        let _ = SpinFundamental {}.to_symbolic([Atom::Zero]);
+        let _ = Bispinor {}.to_symbolic([Atom::Zero]);
+        let _ = ColorAdjoint {}.to_symbolic([Atom::Zero]);
+        let _ = ColorFundamental {}.to_symbolic([Atom::Zero]);
+        let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
+        let _ = RS.force_in_initializer().a_;
+        let _ = MS.force_in_initializer().dummy;
+        let _ = AGS.force_in_initializer().gamma;
+        let _ = *EPSILON_SYMBOL.force_in_initializer();
+        let _ = CS.force_in_initializer().cf;
+    });
+});
 
 pub mod tensor;
 

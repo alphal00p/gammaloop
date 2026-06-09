@@ -1,11 +1,17 @@
 use color_eyre::{Result, config::HookBuilder};
-use spenso::network::library::function_lib::INBUILTS;
-use spenso::network::tags::SPENSO_TAG;
-use symbolica::activate_oem_license;
+use spenso::symbolica_init::in_symbolica_initializer;
+use symbolica::{activate_oem_license, initialize};
 
-use crate::utils::init_vakint;
-use crate::{model::UFOSymbol, numerator::ufo::UFO, utils::GS};
+use crate::numerator::ufo::UFO;
+use crate::utils::{GS, init_vakint};
 static INITIALISED: std::sync::Once = std::sync::Once::new();
+
+initialize!(|| {
+    in_symbolica_initializer(|| {
+        let _ = GS.force_in_initializer();
+        let _ = UFO.force_in_initializer();
+    });
+});
 
 pub fn initialise() -> Result<()> {
     INITIALISED.call_once(|| {
@@ -21,19 +27,9 @@ pub fn initialise() -> Result<()> {
         // Tests and embedded entry points may have already installed an eyre hook.
         let _ = eyre.install();
 
-        // println!("Initializing symbols");
-        let _ = GS.delta_vec;
-        let _ = INBUILTS.conj;
-        let _ = SPENSO_TAG.broadcast;
-        let _ = UFO.complexconjugate;
-
-        // let _ = Symbol::id();
-        let _ = UFOSymbol::zero();
-
         // println!("Setting up interrupt handler");
         crate::set_interrupt_handler();
         // println!("Initialize_reps");
-        crate::initialize_reps();
     });
     // println!("Initializing Vakint");
     init_vakint()?;

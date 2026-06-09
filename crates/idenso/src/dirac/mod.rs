@@ -6,7 +6,7 @@ use spenso::{
         library::symbolic::{ETS, ExplicitKey},
         tags::SPENSO_TAG,
     },
-    shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings},
+    shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         dimension::Dimension,
         representation::{LibraryRep, Minkowski, RepName},
@@ -40,7 +40,8 @@ pub struct GammaLibrary {
     pub sigma: Symbol,
 }
 
-pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
+spenso::symbolica_init_lazy_static! {
+pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
     gamma: spenso::tensor_symbol!(
         "spenso::gamma"; Linear;
         print = |a, opt, _state| {
@@ -330,7 +331,8 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
         }
     }),
     gammaconj: spenso::tensor_symbol!("spenso::gammaconj"),
-});
+};
+}
 
 impl GammaLibrary {
     #[cfg(test)]

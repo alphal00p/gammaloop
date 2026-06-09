@@ -31,45 +31,47 @@ impl Inbuilts {
         function!(self.conj, a.as_view())
     }
 }
-pub static INBUILTS: std::sync::LazyLock<Inbuilts> = std::sync::LazyLock::new(|| Inbuilts {
-    conj: symbol!(
-        "spenso::conj",
-        tag = SPENSO_TAG.broadcast,
-        norm = |view, out| {
-            if let AtomView::Fun(dind1) = view
-                && dind1.get_nargs() == 1
-            {
-                let arg = dind1.iter().next().unwrap();
-                if let AtomView::Fun(arg) = arg
-                    && arg.get_nargs() == 1
-                    && arg.get_symbol() == symbol!("spenso::conj")
+crate::symbolica_init_lazy_static! {
+    pub static INBUILTS, INBUILTS_INNER: Inbuilts = || Inbuilts {
+        conj: symbol!(
+            "spenso::conj",
+            tag = SPENSO_TAG.broadcast,
+            norm = |view, out| {
+                if let AtomView::Fun(dind1) = view
+                    && dind1.get_nargs() == 1
                 {
-                    **out = arg.iter().next().unwrap().to_owned();
-                }
-            }
-        },
-        print = |a, opt, _state| {
-            if opt.color_builtin_symbols {
-                let mut fmt = "conj".blue().to_string();
-                if let AtomView::Fun(f) = a {
-                    fmt.push('(');
-                    let n_args = f.get_nargs();
-                    for (i, a) in f.iter().enumerate() {
-                        a.format(&mut fmt, opt, PrintState::new()).unwrap();
-                        if i < n_args - 1 {
-                            fmt.push(',');
-                        }
+                    let arg = dind1.iter().next().unwrap();
+                    if let AtomView::Fun(arg) = arg
+                        && arg.get_nargs() == 1
+                        && arg.get_symbol() == symbol!("spenso::conj")
+                    {
+                        **out = arg.iter().next().unwrap().to_owned();
                     }
-                    fmt.push(')');
                 }
+            },
+            print = |a, opt, _state| {
+                if opt.color_builtin_symbols {
+                    let mut fmt = "conj".blue().to_string();
+                    if let AtomView::Fun(f) = a {
+                        fmt.push('(');
+                        let n_args = f.get_nargs();
+                        for (i, a) in f.iter().enumerate() {
+                            a.format(&mut fmt, opt, PrintState::new()).unwrap();
+                            if i < n_args - 1 {
+                                fmt.push(',');
+                            }
+                        }
+                        fmt.push(')');
+                    }
 
-                Some(fmt)
-            } else {
-                None
+                    Some(fmt)
+                } else {
+                    None
+                }
             }
-        }
-    ),
-});
+        ),
+    };
+}
 
 pub struct SymbolLib<T, Missing> {
     pub functions: HashMap<Symbol, Box<dyn Fn(T) -> T + Send + Sync>>,

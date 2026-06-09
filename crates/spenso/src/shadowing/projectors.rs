@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use crate::network::tags::SPENSO_TAG;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
@@ -12,29 +10,35 @@ use super::{
     trace::{chain_like_with_factors, trace, trace_factor_views},
 };
 
-/// Normalized symmetrizer over an ordered list of chain/trace factors.
-///
-/// This is an inert projector head. Its arguments are canonicalized by
-/// Symbolica's `Symmetric` attribute, but it is only expanded by explicit
-/// calls to [`ProjectorExpander::expand_projectors`].
-pub static SYM: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::sym"; Symmetric));
+crate::symbolica_init_lazy_static! {
+    /// Normalized symmetrizer over an ordered list of chain/trace factors.
+    ///
+    /// This is an inert projector head. Its arguments are canonicalized by
+    /// Symbolica's `Symmetric` attribute, but it is only expanded by explicit
+    /// calls to [`ProjectorExpander::expand_projectors`].
+    pub static SYM, SYM_INNER: Symbol = || symbol!("spenso::sym"; Symmetric);
+}
 
-/// Normalized antisymmetrizer over an ordered list of chain/trace factors.
-///
-/// This is an inert projector head. Its arguments are canonicalized by
-/// Symbolica's `Antisymmetric` attribute, but it is only expanded by explicit
-/// calls to [`ProjectorExpander::expand_projectors`].
-pub static ANTISYM: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::antisym"; Antisymmetric));
+crate::symbolica_init_lazy_static! {
+    /// Normalized antisymmetrizer over an ordered list of chain/trace factors.
+    ///
+    /// This is an inert projector head. Its arguments are canonicalized by
+    /// Symbolica's `Antisymmetric` attribute, but it is only expanded by explicit
+    /// calls to [`ProjectorExpander::expand_projectors`].
+    pub static ANTISYM, ANTISYM_INNER: Symbol = || symbol!("spenso::antisym"; Antisymmetric);
+}
 
-/// Normalized cyclic symmetrizer over an ordered list of chain/trace factors.
-///
-/// This is an inert projector head. Its arguments are canonicalized by
-/// Symbolica's `Cyclesymmetric` attribute, but it is only expanded by explicit
-/// calls to [`ProjectorExpander::expand_projectors`]. In traces it is also the
-/// compact representation of cyclic trace equivalence:
-/// `trace(rep, cyclic(a,b,c))`.
-pub static CYCLIC: LazyLock<Symbol> =
-    LazyLock::new(|| symbol!("spenso::cyclic"; Cyclesymmetric; norm = normalize_cyclic_projector));
+crate::symbolica_init_lazy_static! {
+    /// Normalized cyclic symmetrizer over an ordered list of chain/trace factors.
+    ///
+    /// This is an inert projector head. Its arguments are canonicalized by
+    /// Symbolica's `Cyclesymmetric` attribute, but it is only expanded by explicit
+    /// calls to [`ProjectorExpander::expand_projectors`]. In traces it is also the
+    /// compact representation of cyclic trace equivalence:
+    /// `trace(rep, cyclic(a,b,c))`.
+    pub static CYCLIC, CYCLIC_INNER: Symbol =
+        || symbol!("spenso::cyclic"; Cyclesymmetric; norm = normalize_cyclic_projector);
+}
 
 /// Builds an inert normalized symmetrizer over chain/trace factors.
 pub fn sym<F>(factors: impl IntoIterator<Item = F>) -> Atom

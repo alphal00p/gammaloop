@@ -35,5 +35,7 @@ pub mod tensors;
 
 #[cfg(feature = "shadowing")]
 pub mod shadowing;
+#[cfg(feature = "shadowing")]
+pub mod symbolica_init;
 
 pub mod utils;

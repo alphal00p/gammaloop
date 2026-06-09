@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use crate::{
     network::{
         library::symbolic::ETS,
@@ -17,7 +15,9 @@ use symbolica::{
     utils::Settable,
 };
 
-pub static COLLECT: LazyLock<Symbol> = LazyLock::new(|| symbol!("spenso::collect"));
+crate::symbolica_init_lazy_static! {
+    pub static COLLECT, COLLECT_INNER: Symbol = || symbol!("spenso::collect");
+}
 
 /// Selects which tensorial subexpressions are protected during collection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

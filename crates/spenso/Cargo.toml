@@ -13,6 +13,11 @@ all-features = true
 [lib]
 path = "src/spenso.rs"
 
+[[example]]
+name = "symbolica_lazy_deadlock_mwe"
+path = "examples/symbolica_lazy_deadlock_mwe.rs"
+required-features = ["shadowing"]
+
 # [[test]]
 # name = "three_loop"
 # path = "tests/three_loop.rs"

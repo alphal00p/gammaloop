@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
 use idenso::color::CS;
 use idenso::dirac::AGS;
@@ -52,7 +50,8 @@ pub struct UFOSymbols {
     pub complex: Symbol,
 }
 
-pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
+spenso::symbolica_init_lazy_static! {
+pub static UFO, UFO_INNER: UFOSymbols = || UFOSymbols {
     identity: symbol!("UFO::Identity"),
     identityl: symbol!("UFO::IdentityL"),
     gamma: symbol!("UFO::Gamma"),
@@ -119,7 +118,8 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
             }
         }
     ),
-});
+};
+}
 
 impl UFOSymbols {
     pub fn idx(&self, id: usize, shift: usize) -> Atom {

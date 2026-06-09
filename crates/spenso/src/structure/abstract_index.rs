@@ -119,8 +119,8 @@ impl AindSymbols {
     }
 }
 #[cfg(feature = "shadowing")]
-pub static AIND_SYMBOLS: std::sync::LazyLock<AindSymbols> =
-    std::sync::LazyLock::new(|| AindSymbols {
+crate::symbolica_init_lazy_static! {
+pub static AIND_SYMBOLS, AIND_SYMBOLS_INNER: AindSymbols = || AindSymbols {
         cind: symbol!(
             super::concrete_index::CONCRETEIND,
             print = |a, opt, _state| {
@@ -277,7 +277,8 @@ let args = arg.pos().map(to-eq).join("")
                 }
             }
         ),
-    });
+};
+}
 
 static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
 /// A type that represents the name of an index in a tensor.

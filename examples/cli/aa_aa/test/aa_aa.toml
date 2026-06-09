@@ -4,7 +4,7 @@ name = "aa_aa_2L"
 folder = "./examples/cli/aa_aa/2L/gammaloop_state"
 
 [cli_settings.global]
-display_directive = "info,gammalooprs[{#uv,#integrated}]=debug"
+display_directive = "info,gammalooprs[{#uv, #integrated, #vakint, #profile, #trace,#collect}]=debug"
 logfile_directive = "gammalooprs[{#uv,#integrated}]=debug"
 
 [cli_settings.global.log_style]

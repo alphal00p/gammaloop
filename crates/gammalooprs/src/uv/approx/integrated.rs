@@ -1,11 +1,16 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
+use gammaloop_tracing_filter::LogMessage;
 use idenso::{
+    color::ColorSimplifier,
     dirac::GammaSimplifier,
     representations::Bispinor,
     shorthands::{
-        UndoShorthands, chain::Chain, metric::MetricSimplifier, schoonschip::Schoonschip,
+        UndoShorthands,
+        chain::Chain,
+        metric::MetricSimplifier,
+        schoonschip::{Schoonschip, SchoonschipSettings},
     },
 };
 
@@ -28,10 +33,7 @@ use crate::{
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
     numerator::aind::Aind,
-    utils::{
-        GS, W_,
-        symbolica_ext::CallSymbol,
-    },
+    utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, ForestNodeLike, UVCtx},
@@ -76,7 +78,7 @@ impl Graph {
                 GS.den(
                     W_.a_,
                     W_.mom_,
-                    Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
+                    &tsquare * Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
                     Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
                         - (Atom::var(GS.m_uv)).pow(2),
                 ) / &tsquare,
@@ -111,6 +113,18 @@ impl Integrated<'_> {
         }
     }
 
+    /// Add the numerator of the reduced subgraph, (without given), to the integrand.
+    /// Then, 4d -> d-dim on minkowski indices
+    #[instrument(
+        skip_all,
+        level = "debug",
+        fields(
+            span_context = true,
+            current = %current.log_display(),
+            given = %given.log_display(),
+            integrand = %integrand.log_display(),
+        )
+    )]
     pub(crate) fn start<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -120,8 +134,7 @@ impl Integrated<'_> {
     ) -> Result<Atom> {
         let reduced = current.reduced_subgraph(given);
         let graph = ctx.graph;
-        let settings = ctx.settings;
-        let reduced_label = reduced.string_label();
+
         let mut t_arg = ctx
             .graph
             .numerator(&reduced, given.subgraph())
@@ -129,42 +142,27 @@ impl Integrated<'_> {
             .get_single_atom()
             .unwrap();
 
-        debug_tags!(#uv, #integrated, #algebra; log.t_arg = t_arg, pole_part = %settings.pole_part, "T arg without denoms");
-        let t_arg_after_gamma = t_arg.collect_metrics().simplify_metrics().simplify_gamma();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start;
-            current = %current.log_display(),
-            given = %given.log_display(),
-            reduced = %reduced_label,
-            log.expr = t_arg_after_gamma,
-            "Integrated UV start after gamma simplification"
-        );
-        let t_arg_after_schoonschip_net = t_arg_after_gamma.schoonschip_net::<Aind>();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-            current = %current.log_display(),
-            given = %given.log_display(),
-            reduced = %reduced_label,
-            log.expr = t_arg_after_schoonschip_net,
-            "Integrated UV start after Schoonschip net"
-        );
-        let t_arg_after_dots = t_arg_after_schoonschip_net.to_dots().normalize_dots();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
-            current = %current.log_display(),
-            given = %given.log_display(),
-            reduced = %reduced_label,
-            log.expr = t_arg_after_dots,
-            "Integrated UV start after dots"
-        );
-        t_arg = t_arg_after_dots / graph.denominator(&reduced, |_| 1);
-        debug_tags!(#uv, #integrated, #algebra; log.t_arg = t_arg, pole_part = %settings.pole_part, "T arg gamma simplified for integrated 4d CT");
+        t_arg /= graph.denominator(&reduced, |_| 1);
 
         t_arg = t_arg
             .replace(GS.dim)
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        Ok(t_arg * integrand)
+        debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %reduced.string_label(), "Start");
+
+        Ok((t_arg * integrand).simplify_metrics())
     }
 
+    #[instrument(
+        skip_all,
+        level = "debug",
+        fields(
+            span_context = true,
+            current = %current.log_display(),
+            given = %given.log_display(),
+        )
+    )]
     pub(crate) fn t<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -176,24 +174,63 @@ impl Integrated<'_> {
         let reduced = current.reduced_subgraph(given);
         let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
 
-        let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
+        let rescaled = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
+        debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled, n_loops=%n_loops,"Rescaled expanded");
 
-        debug_tags!(#uv,#integrated;log.res = atomarg, n_loops=%n_loops,"Rescaled expanded");
-        let a = atomarg.series(GS.rescale, Atom::Zero, 1).unwrap();
+        let series = rescaled
+            .series(GS.rescale, Atom::Zero, 1)
+            .unwrap()
+            .to_atom();
+        debug_tags!(#uv,#integrated, #series;log.res = series, "Series expanded");
 
-        let mut a = a.to_atom();
+        let evalutated = series.replace(GS.rescale).with(Atom::num(1));
+        debug_tags!(#uv,#integrated,#series;log.res = evalutated, "Evaluated at t = 1");
 
-        debug_tags!(#uv,#integrated;
-            log.res = a,
-            "Series expanded"
+        let collected = evalutated
+            .simplify_metrics()
+            .collect_rep((Bispinor {}).into())
+            .collect_gamma_chains();
+        debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
+
+        let schoonschip = collected
+            .schoonschip_with_settings(&SchoonschipSettings {
+                simplify_chain_like_functions: true,
+                schoonschip_rank1_tensors: true,
+                ..Default::default()
+            })
+            .normalize_chains();
+        debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
+            log.expr = schoonschip,
+            "After gamma schoonschip"
         );
-        a = a.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#integrated;
-            log.res = a,
-            "Series expanded"
+        let collected = schoonschip
+            .collect_chains_and_traces()
+            .simplify_metrics()
+            .collect_gamma_chains()
+            .collect_color()
+            .collect_factors();
+        debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
+            log.expr = collected,
+            "After gamma collection"
         );
 
-        Ok(a)
+        let simplified = collected.simplify_gamma();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
+            log.expr = simplified,
+            "After gamma simplification"
+        );
+        let schoonschipped = simplified.schoonschip_net::<Aind>();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
+            log.expr = schoonschipped,
+            "After Schoonschip net"
+        );
+        let dotted = schoonschipped.to_dots().normalize_dots();
+        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
+            log.expr = dotted,
+            "After dots"
+        );
+
+        Ok(dotted)
     }
 
     #[instrument(
@@ -369,7 +406,7 @@ impl Integrated<'_> {
 
         debug_tags!(#uv, #integrated, #inspect, #series;
             log.series = series_atom,
-            "Series "
+            "dim epsilon Series "
         );
 
         let mut pole_stripped = Atom::Zero;
@@ -469,7 +506,15 @@ fn integrated_triangle_spatial_norm_sq(
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
-    #[instrument(skip_all)]
+    #[instrument(
+        skip_all,
+        level = "debug",
+        fields(
+            current = %current.log_display(),
+            given = %given.log_display(),
+            integrand = %integrand.log_display(),
+        )
+    )]
     fn kernel<S: ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -483,8 +528,6 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 let integrated_t = self.t(ctx, current, given, &start)?;
                 let result = self.integrate_and_truncate(ctx, current, given, &integrated_t)?;
                 debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #result;
-                    current = %current.log_display(),
-                    given = %given.log_display(),
                     log.result = result,
                     "Integrated UV after integrate_and_truncate"
                 );
