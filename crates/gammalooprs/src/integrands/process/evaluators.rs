@@ -1414,7 +1414,7 @@ impl GenericEvaluator {
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for n in exprs.iter() {
-            let eval = n
+            let eval: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = n
                 .evaluator(params)
                 .function_map(fn_map.clone())
                 .optimization_settings(optimization_settings.clone())
@@ -1863,6 +1863,7 @@ impl GenericEvaluatorFloat for ArbPrec {
 
 #[cfg(test)]
 mod tests {
+    use idenso::color::CS;
     use symbolica::atom::Symbol;
 
     use crate::utils::{W_, symbolica_ext::CallSymbol};
@@ -1922,5 +1923,15 @@ mod tests {
         let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[1]);
 
         assert_eq!(summed, vec![20, 50]);
+    }
+
+    #[test]
+    fn pi_eval() {
+        let params = vec![parse!("x"), parse!("y")];
+        let mut evaluator = (parse!("x + y") + Symbol::PI / CS.cf)
+            .evaluator(&params)
+            .build()
+            .unwrap();
+        // assert_eq!(evaluator.evaluate_single(&[1.0, 2.0]), 3.0);
     }
 }

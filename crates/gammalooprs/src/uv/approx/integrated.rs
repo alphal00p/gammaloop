@@ -18,7 +18,7 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
     involution::HedgePair,
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
+    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
@@ -445,20 +445,6 @@ impl Integrated<'_> {
             "Integrated UV chain cleanup after undo_single_length"
         );
 
-        if !settings.pole_part {
-            debug_tags!(#uv,#localize; log.current = current, reduced = %reduced.string_label(), "localizing integrated ct");
-            let loop_edges = current
-                .lmb()
-                .loop_edges
-                .iter()
-                .filter(|l| !given..includes(&graph[*l].1))
-                .cloned();
-
-            // graph.contract_subgraph(subgraph, node_data_merge);
-            graph.lmb_of(subgraph)
-            res *= GS.localizing_integrand(loop_edges)
-        }
-
         debug_tags!(#uv, #integrated, #final;
             pole_part = %settings.pole_part,
             log.res = res,
@@ -481,14 +467,6 @@ impl Integrated<'_> {
         // println!("\nIntegrated CT:\n{}\n", res);
         Ok(res)
     }
-}
-
-fn integrated_triangle_spatial_norm_sq(
-    loop_edge: linnet::half_edge::involution::EdgeIndex,
-) -> Atom {
-    GS.emr_mom(loop_edge, GS.cind(1)).pow(2)
-        + GS.emr_mom(loop_edge, GS.cind(2)).pow(2)
-        + GS.emr_mom(loop_edge, GS.cind(3)).pow(2)
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
@@ -1078,28 +1056,27 @@ pub(crate) fn to_vakint_integrand<
 #[cfg(test)]
 mod tests {
     use crate::initialisation::test_initialise;
-    use linnet::half_edge::involution::EdgeIndex;
 
     use super::*;
 
-    #[test]
-    fn integrated_triangle_norm_is_euclidean() {
-        test_initialise().unwrap();
+    // #[test]
+    // fn integrated_triangle_norm_is_euclidean() {
+    //     test_initialise().unwrap();
 
-        let edge = EdgeIndex(7);
-        let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
-        let minkowski_norm = Minkowski {}
-            .new_rep(4)
-            .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
+    //     let edge = EdgeIndex(7);
+    //     let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
+    //     let minkowski_norm = Minkowski {}
+    //         .new_rep(4)
+    //         .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
 
-        assert_eq!(
-            euclidean_norm,
-            GS.emr_mom(edge, GS.cind(1)).pow(2)
-                + GS.emr_mom(edge, GS.cind(2)).pow(2)
-                + GS.emr_mom(edge, GS.cind(3)).pow(2)
-        );
-        assert_ne!(euclidean_norm, minkowski_norm);
-    }
+    //     assert_eq!(
+    //         euclidean_norm,
+    //         GS.emr_mom(edge, GS.cind(1)).pow(2)
+    //             + GS.emr_mom(edge, GS.cind(2)).pow(2)
+    //             + GS.emr_mom(edge, GS.cind(3)).pow(2)
+    //     );
+    //     assert_ne!(euclidean_norm, minkowski_norm);
+    // }
 
     #[test]
     fn vakint_dot_conversion_keeps_loop_momentum_tagged_until_to_dots() {

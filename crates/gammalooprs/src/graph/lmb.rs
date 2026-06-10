@@ -7,8 +7,8 @@ use linnet::half_edge::{
     HedgeGraph, HedgeGraphError, NoData,
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
     subgraph::{
-        Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
-        cycle::SignedCycle,
+        Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps,
+        SubSetLike, SubSetOps, cycle::SignedCycle,
     },
     tree::SimpleTraversalTree,
 };
@@ -94,6 +94,25 @@ pub enum LmbError {
     SplitEdgeOnFullGraph,
     #[error("failed to build edge-signature vector")]
     EdgeSignatureVector(#[source] HedgeGraphError),
+    #[error(
+        "shrunken subgraph is not contained in outer graph\nouter:\n{outer_dot}\nshrunken:\n{shrunken_dot}"
+    )]
+    ShrunkenOutsideOuter {
+        outer_dot: String,
+        shrunken_dot: String,
+    },
+    #[error("invalid shrunken internal subgraph:\n{shrunken_dot}")]
+    InvalidShrunkenSubgraph { shrunken_dot: String },
+    #[error(
+        "failed to build loop momentum basis after shrinking subgraph\nouter:\n{outer_dot}\nshrunken:\n{shrunken_dot}\nremainder:\n{remainder_dot}"
+    )]
+    NoShrunkenLmb {
+        outer_dot: String,
+        shrunken_dot: String,
+        remainder_dot: String,
+        #[source]
+        source: Box<LmbError>,
+    },
 }
 
 impl Display for LoopMomentumBasis {
@@ -408,6 +427,20 @@ pub trait LMBext {
     /// Construct the canonical loop-momentum basis for the full graph.
     fn lmb(&self) -> LoopMomentumBasis;
 
+    /// Build the LMB for `outer - shrunken` while each connected component of
+    /// `shrunken` acts as a contracted passage node.
+    fn shrunken_sub_lmb(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+        externals: SuBitGraph,
+    ) -> LmbResult<LoopMomentumBasis>;
+
+    /// Construct the canonical shrunken-subgraph LMB using the full crown of
+    /// `outer` as external-flow carriers.
+    fn shrunken_lmb_of(&self, outer: &SuBitGraph, shrunken: &InternalSubGraph)
+    -> LoopMomentumBasis;
+
     /// Construct a basis for `subgraph` that reuses loop edges from `lmb`
     /// whenever the induced cut still spans the same connected components.
     ///
@@ -469,6 +502,91 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     }
     fn lmb(&self) -> LoopMomentumBasis {
         self.lmb_of(&self.full_filter())
+    }
+
+    fn shrunken_sub_lmb(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+        externals: SuBitGraph,
+    ) -> LmbResult<LoopMomentumBasis> {
+        let graph_size = self.n_hedges();
+        let outer_dot = || {
+            if outer.size() == graph_size {
+                self.dot(outer)
+            } else {
+                format!(
+                    "invalid outer size {}, expected {}; label {}",
+                    outer.size(),
+                    graph_size,
+                    outer.string_label()
+                )
+            }
+        };
+        let shrunken_dot = || {
+            if shrunken.size() == graph_size {
+                self.dot(shrunken)
+            } else {
+                format!(
+                    "invalid shrunken size {}, expected {}; label {}",
+                    shrunken.size(),
+                    graph_size,
+                    shrunken.string_label()
+                )
+            }
+        };
+
+        if shrunken.size() != graph_size || !shrunken.valid(self) {
+            return Err(LmbError::InvalidShrunkenSubgraph {
+                shrunken_dot: shrunken_dot(),
+            });
+        }
+
+        if outer.size() != graph_size || !outer.includes(&shrunken.filter) {
+            return Err(LmbError::ShrunkenOutsideOuter {
+                outer_dot: outer_dot(),
+                shrunken_dot: shrunken_dot(),
+            });
+        }
+
+        if shrunken.is_empty() {
+            return self.lmb_impl(outer, outer, externals);
+        }
+
+        let remainder = outer.subtract(&shrunken.filter);
+        let contracted_externals = externals.subtract(&shrunken.filter);
+        let mut contracted = self.to_ref();
+
+        for component in self.connected_components(shrunken) {
+            let Some(root) = component.included_iter().next() else {
+                continue;
+            };
+            let node_data = &self[self.node_id(root)];
+            contracted.identify_nodes_of_subgraph_without_self_edges::<_, SuBitGraph>(
+                &component, node_data,
+            );
+        }
+
+        contracted
+            .lmb_impl(&remainder, &remainder, contracted_externals)
+            .map_err(|source| LmbError::NoShrunkenLmb {
+                outer_dot: outer_dot(),
+                shrunken_dot: shrunken_dot(),
+                remainder_dot: self.dot(&remainder),
+                source: Box::new(source),
+            })
+    }
+
+    fn shrunken_lmb_of(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+    ) -> LoopMomentumBasis {
+        let externals = self.full_crown(outer);
+        self.shrunken_sub_lmb(outer, shrunken, externals)
+            .unwrap_or_else(|err| {
+                panic!("Failed to build shrunken-subgraph loop momentum basis:\n{err}")
+            })
     }
 
     fn dot_lmb_of<S: SubGraphLike>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
@@ -1096,6 +1214,23 @@ impl LMBext for Graph {
         self.lmb_of(&self.underlying.full_filter())
     }
 
+    fn shrunken_sub_lmb(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+        externals: SuBitGraph,
+    ) -> LmbResult<LoopMomentumBasis> {
+        self.underlying.shrunken_sub_lmb(outer, shrunken, externals)
+    }
+
+    fn shrunken_lmb_of(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+    ) -> LoopMomentumBasis {
+        self.underlying.shrunken_lmb_of(outer, shrunken)
+    }
+
     fn empty_lmb(&self) -> LoopMomentumBasis {
         self.underlying.empty_lmb()
     }
@@ -1181,6 +1316,23 @@ impl LMBext for &Graph {
 
     fn lmb(&self) -> LoopMomentumBasis {
         self.lmb_of(&self.underlying.full_filter())
+    }
+
+    fn shrunken_sub_lmb(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+        externals: SuBitGraph,
+    ) -> LmbResult<LoopMomentumBasis> {
+        self.underlying.shrunken_sub_lmb(outer, shrunken, externals)
+    }
+
+    fn shrunken_lmb_of(
+        &self,
+        outer: &SuBitGraph,
+        shrunken: &InternalSubGraph,
+    ) -> LoopMomentumBasis {
+        self.underlying.shrunken_lmb_of(outer, shrunken)
     }
 
     fn empty_lmb(&self) -> LoopMomentumBasis {
@@ -1385,17 +1537,20 @@ pub mod test {
     use insta::assert_snapshot;
     use linnet::{
         half_edge::{
-            involution::Hedge,
-            subgraph::{ModifySubSet, SuBitGraph, SubSetOps},
+            involution::{EdgeIndex, Hedge},
+            subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps},
         },
         parser::DotGraph,
     };
 
     use crate::{
         dot,
-        graph::{Graph, LMBext, parse::IntoGraph},
+        graph::{Graph, LMBext, LmbError, parse::IntoGraph},
         initialisation::test_initialise,
     };
+
+    static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
+    static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn lmb_for_dummy() {
@@ -1605,5 +1760,102 @@ pub mod test {
         let lmb = g.lmb_of(&non_dummy);
         let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb);
         assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
+    }
+
+    #[test]
+    fn shrunken_connected_subgraph() {
+        let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
+        SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let g: Graph = dot!(digraph{
+            edge[num=1 mass=1]
+            node[num=1]
+
+            a:0->b:1[id=0]
+            b:2->c:3[id=1]
+            c:4->a:5[id=2]
+        })
+        .unwrap();
+
+        let outer = g.full_filter();
+        let mut shrunken_filter: SuBitGraph = g.empty_subgraph();
+        let shrunken_edge = EdgeIndex::from(0);
+        shrunken_filter.add(g[&shrunken_edge].1);
+        let shrunken =
+            InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
+        let remainder = outer.subtract(&shrunken.filter);
+
+        let lmb = g.shrunken_lmb_of(&outer, &shrunken);
+
+        assert!(
+            !lmb.loop_edges
+                .iter()
+                .any(|edge| shrunken.filter.includes(&g[edge].1))
+        );
+        assert_snapshot!(g.dot_lmb_of(&remainder, &lmb));
+    }
+
+    #[test]
+    fn shrunken_disconnected_subgraph() {
+        let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
+        SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let g: Graph = dot!(digraph{
+            edge[num=1 mass=1]
+            node[num=1]
+
+            a:0->b:1[id=0]
+            b:2->c:3[id=1]
+            c:4->a:5[id=2]
+
+            d:6->e:7[id=3]
+            e:8->f:9[id=4]
+            f:10->d:11[id=5]
+
+            c:12->d:13[id=6]
+        })
+        .unwrap();
+
+        let outer = g.full_filter();
+        let mut shrunken_filter: SuBitGraph = g.empty_subgraph();
+        for edge in [EdgeIndex::from(0), EdgeIndex::from(3)] {
+            shrunken_filter.add(g[&edge].1);
+        }
+        let shrunken =
+            InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
+        let remainder = outer.subtract(&shrunken.filter);
+
+        let lmb = g.shrunken_lmb_of(&outer, &shrunken);
+
+        assert!(
+            !lmb.loop_edges
+                .iter()
+                .any(|edge| shrunken.filter.includes(&g[edge].1))
+        );
+        assert_snapshot!(g.dot_lmb_of(&remainder, &lmb));
+    }
+
+    #[test]
+    fn shrunken_edge_outside_outer_errors() {
+        let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
+        SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let g: Graph = dot!(digraph{
+            edge[num=1 mass=1]
+            node[num=1]
+
+            a:0->b:1[id=0]
+            b:2->c:3[id=1]
+            c:4->a:5[id=2]
+        })
+        .unwrap();
+
+        let mut shrunken_filter: SuBitGraph = g.empty_subgraph();
+        let shrunken_edge = EdgeIndex::from(0);
+        shrunken_filter.add(g[&shrunken_edge].1);
+        let shrunken =
+            InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
+        let outer = g.full_filter().subtract(&shrunken.filter);
+
+        let result = g.shrunken_sub_lmb(&outer, &shrunken, g.full_crown(&outer));
+
+        assert!(matches!(result, Err(LmbError::ShrunkenOutsideOuter { .. })));
     }
 }

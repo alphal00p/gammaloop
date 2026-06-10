@@ -5,9 +5,9 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
-use idenso::color::CS;
 
 use color_eyre::Result;
+use idenso::color::CS;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
@@ -114,7 +114,7 @@ pub trait ParamBuilderGraph {
 #[derive(Default)]
 pub struct GammaLoopPairs {
     m_uv: ParamValuePairs,
-    idenso_vars: ParamValuePairs,
+    // idenso_vars: ParamValuePairs,
     mu_r_sq: ParamValuePairs,
     orientations: ParamValuePairs,
     override_if: ParamValuePairs,
@@ -143,13 +143,12 @@ pub struct GammaLoopPairs {
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 25>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             self.m_uv,
             self.mu_r_sq,
-            self.idenso_vars,
             self.model_parameters,
             self.external_energies,
             self.external_spatial,
@@ -180,13 +179,12 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 25>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &self.m_uv,
             &self.mu_r_sq,
-            &self.idenso_vars,
             &self.model_parameters,
             &self.external_energies,
             &self.external_spatial,
@@ -217,13 +215,12 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
+    type IntoIter = std::array::IntoIter<Self::Item, 25>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &mut self.m_uv,
             &mut self.mu_r_sq,
-            &mut self.idenso_vars,
             &mut self.model_parameters,
             &mut self.external_energies,
             &mut self.external_spatial,
@@ -336,8 +333,6 @@ impl GammaLoopPairs {
             ..Default::default()
         };
 
-        pairs.idenso_vars();
-
         pairs.update_model(model);
         pairs.external_energies(graph);
         pairs.orientations(graph);
@@ -347,11 +342,6 @@ impl GammaLoopPairs {
 
         let len = pairs.update_ranges();
         (pairs, len)
-    }
-
-    pub(crate) fn idenso_vars(&mut self) {
-        self.idenso_vars = [CS.tr, CS.nc].into_iter().collect();
-        self.update_ranges();
     }
 
     pub(crate) fn update_model(&mut self, model: &Model) {
@@ -1256,7 +1246,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
         }
 
-        for i in 1..lmb.loop_edges.len() {
+        for i in 1..=lmb.loop_edges.len() {
             let args = (1..i)
                 .map(|j| symbol!(format!("e{}", j)))
                 .collect::<Vec<_>>();
@@ -1308,11 +1298,13 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(GS.pi.into(), pi_rational.into());
+        new.add_constant(CS.cf.into(), Rational::new(3, 4).into());
+        new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
+        new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
+        new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
+
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
         new.update_model_values(model);
-        new.update_idenso_values();
-
-        // println!("self: {}", new);
         //panic!();
         new
     }
@@ -1333,20 +1325,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
-        }
-    }
-
-    pub(crate) fn update_idenso_values(&mut self) {
-        let tr_value = Complex::new_re(F(T::from_f64(0.5)));
-        let nc_value = Complex::new_re(F(T::from_f64(3.)));
-        debug_assert!(self.pairs.idenso_vars.value_range.len() == 2);
-
-        for (index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = index + 1;
-            values[self.pairs.idenso_vars.value_range.start * multiplicative_offset] =
-                tr_value.clone();
-            values[self.pairs.idenso_vars.value_range.start * multiplicative_offset
-                + multiplicative_offset] = nc_value.clone();
         }
     }
 

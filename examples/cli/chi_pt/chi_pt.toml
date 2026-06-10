@@ -8,7 +8,7 @@ name = "import_diagrams"
 commands = [
     "import model scalars.json",
 
-    "import graphs ./banana.dot -p chi_pt -i one_graph",
+    "import graphs ./examples/cli/chi_pt/banana.dot -p chi_pt -i one_graph",
 
     "save dot",
     "save state -o"

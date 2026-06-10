@@ -14,7 +14,8 @@ use spenso::{
     tensor_symbol,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol},
+    domains::rational::Rational,
     function,
     printer::{PrintState, PrintUserData},
     symbol,
@@ -332,8 +333,8 @@ pub static CS, CS_INNER: ColorSymbols = || {
                 _=>None}
 
         }),
-        ca: symbol!("spenso::CA";Real),
-        cf: symbol!("spenso::CF";Real),
+        ca: symbol!("spenso::CA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        cf: symbol!("spenso::CF";Real; eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
         d: tensor_symbol!("spenso::d"),
         d33: tensor_symbol!("spenso::d33"),
         trace_dummy: symbol!("x"),
@@ -343,9 +344,9 @@ pub static CS, CS_INNER: ColorSymbols = || {
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        na: symbol!("NA";Real),
-        tr: symbol!("spenso::TR";Real),
-        nc: symbol!("spenso::Nc";Real),
+        na: symbol!("NA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        tr: symbol!("spenso::TR";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
+        nc: symbol!("spenso::Nc";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }
 };
 }

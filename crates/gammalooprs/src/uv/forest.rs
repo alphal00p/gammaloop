@@ -564,7 +564,10 @@ impl Forest {
                         )
                 } else {
                     integrand.clone()
-                };
+                }.collect_color();
+
+
+                
                 if first {
                     sum.insert(*cut_index, a);
                 } else {

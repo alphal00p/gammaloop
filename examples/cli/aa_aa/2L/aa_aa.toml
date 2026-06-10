@@ -4,19 +4,24 @@ name = "aa_aa_2L"
 folder = "./examples/cli/aa_aa/2L/gammaloop_state"
 
 [cli_settings.global]
-display_directive = "info,gammalooprs[{#span_context}]=debug,gammalooprs[{#uv,#integrated,#rescaled}]=debug,gammalooprs[{#uv,#integrated,#series}]=debug,gammalooprs[{#uv,#integrated,#collect}]=debug,gammalooprs[{#localize}]=debug"
+display_directive = "info"
 logfile_directive = "gammalooprs[{#uv,#integrated}]=debug"
 
 [cli_settings.global.log_style]
-include_fields = true
-full_line_source = true
+include_fields = false
+full_line_source = false
+log_format = "None"
+short_timestamp = true
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
 store_atom = false
-compile = true
+compile = false
 summed = false
-summed_function_map = false
+summed_function_map = true
 horner_iterations = 5
 cpe_iterations = 5
 
@@ -54,7 +59,7 @@ commands = [
   # --loop-momentum-bases GL16=9,10
   "remove processes -p aa_aa",
   """generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}]
-        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        --numerator-grouping no_grouping
         --symmetrize-initial-states=true --symmetrize-final-states=true
         --select-graphs GL16
         -p aa_aa -i 2L --only-diagrams""",
@@ -83,6 +88,10 @@ name = "integrate"
 commands = [
   "run set_model_parameters",
 
+  "remove processes -p aa_aa -i 2L_m_uv_UP",
+  "remove processes -p aa_aa -i 2L_m_uv_DOWN",
+  "remove processes -p aa_aa -i 2L_mu_r_UP",
+  "remove processes -p aa_aa -i 2L_mu_r_DOWN",
   "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_m_uv_UP",
   "set process -p aa_aa -i 2L_m_uv_UP kv general.m_uv=364.752",
   "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_m_uv_DOWN",
@@ -115,8 +124,8 @@ commands = [
   """set process -p aa_aa string '
         [sampling]
         graphs = "monte_carlo"
-        orientations = "monte_carlo"
-        lmb_multichanneling = false
+        orientations = "summed"
+        lmb_multichanneling = true
         lmb_channels = "summed"
         coordinate_system = "spherical"
         mapping = "linear"
@@ -412,14 +421,14 @@ momenta = [
 helicities = [+1, +1, -1, -1]
 
 [default_runtime_settings.general]
-evaluator_method = "SingleParametric"
+evaluator_method = "SummedFunctionMap"
 enable_cache = false
 debug_cache = false
 generate_events = false
 store_additional_weights_in_event = false
 integral_unit = "none"
 mu_r = 91.188
-m_uv = 91.188
+m_uv = 9.188
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false

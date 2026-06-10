@@ -1,0 +1,23 @@
+---
+source: crates/gammalooprs/src/graph/lmb.rs
+expression: "g.dot_lmb_of(&remainder, &lmb)"
+---
+digraph {
+  node	 [shape=circle,height=0.1,label=""];
+  overlap = "scale";
+  layout = "neato";
+  start=2;
+  1	 [label=""];
+  2	 [label=""];
+  0	 [label=""];
+  4	 [label=""];
+  5	 [label=""];
+  3	 [label=""];
+  0:0	-> 1:1	 [id=0  color="gray" label="Q(0)"];
+  1:2:s	-> 2:3:s	 [id=1  color="red:blue;0.5" label="Q(1)"];
+  2:4:s	-> 0:5:s	 [id=2  color="red:blue;0.5" label="Q(1)"];
+  3:6	-> 4:7	 [id=3  color="gray" label="Q(3)"];
+  4:8:s	-> 5:9:s	 [id=4  color="red:blue;0.5" label="0"];
+  5:10:s	-> 3:11:s	 [id=5  color="red:blue;0.5" label="0"];
+  2:12:s	-> 3:13:s	 [id=6  color="red:blue;0.5" label="0"];
+}

@@ -304,6 +304,7 @@ fn localized_integrated_reduced_factor(
         .map(|(index, term)| {
             let mut localized = Atom::Zero;
             for (expr, orientation) in term.expression.into_iter().zip(term.orientations) {
+                //TODO GS.localizing_integrand
                 localized += localize_reduced_orientation_term(
                     &(expr * &fourddenoms),
                     &orientation,
