@@ -39,7 +39,6 @@ use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
 
-
 use tracing::{error, event_enabled, info, instrument};
 
 use ahash::AHashMap;

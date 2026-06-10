@@ -12,6 +12,7 @@ use crate::{
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
@@ -21,8 +22,6 @@ use symbolica::{
 };
 
 use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
-use tracing::instrument;
-
 use vakint::Vakint;
 
 use super::{
@@ -69,6 +68,7 @@ impl ParametricIntegrands {
 }
 
 impl CutForests {
+    #[debug_instrument(graph = %graph.log_display())]
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
@@ -77,28 +77,15 @@ impl CutForests {
         settings: &UVgenerationSettings,
         orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
-        let all_started = std::time::Instant::now();
-        debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "cut_forests_compute_start",
-            graph = %graph.name,
-            forest_count = self.forests.len(),
-            cut_count = self.cuts.cuts.len(),
-            "UV timing milestone"
-        );
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
             .iter_mut()
             .zip(self.cuts.cuts.iter())
             .zip(self.settings.iter())
         {
-            let forest_started = std::time::Instant::now();
-            let forest_terms = forest.n_terms();
-            debug_tags!(#generation, #profile, #uv, #graph, #cut, #summary;
-                stage = "cut_forest_compute_start",
-                graph = %graph.name,
-                forest_terms,
-                "UV timing milestone"
-            );
+            debug_tags!(#forest,#uv;
+                n_terms = %forest.n_terms(),
+                "Computing cut forest");
             forest.compute(
                 graph,
                 (vakint, vakint_settings),
@@ -107,25 +94,10 @@ impl CutForests {
                 settings,
                 orientation_pattern,
             )?;
-            debug_tags!(#generation, #profile, #uv, #graph, #cut, #summary;
-                stage = "cut_forest_compute_done",
-                graph = %graph.name,
-                forest_terms,
-                elapsed_ms = forest_started.elapsed().as_secs_f64() * 1000.0,
-                total_elapsed_ms = all_started.elapsed().as_secs_f64() * 1000.0,
-                "UV timing milestone"
-            );
         }
-        debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "cut_forests_compute_done",
-            graph = %graph.name,
-            forest_count = self.forests.len(),
-            elapsed_ms = all_started.elapsed().as_secs_f64() * 1000.0,
-            "UV timing milestone"
-        );
         Ok(())
     }
-    #[instrument(skip_all)]
+    #[debug_instrument(graph = %graph.log_display())]
     pub(crate) fn orientation_parametric_exprs(
         self,
         graph: &Graph,
@@ -137,12 +109,10 @@ impl CutForests {
             forests,
             settings: _vakint_settings,
         } = self;
-        let forest_count = forests.len();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "orientation_parametric_exprs_start",
-            graph = %graph.name,
-            forest_count,
-            "UV timing milestone"
+            forest_count = forests.len(),
+            "Building orientation parametric integrands"
         );
         let mut exprs = vec![];
 
@@ -150,26 +120,23 @@ impl CutForests {
             let forest_started = std::time::Instant::now();
             debug_tags!(#generation, #profile, #uv, #graph, #cut, #summary;
                 stage = "orientation_parametric_expr_start",
-                graph = %graph.name,
                 forest_index = i,
                 forest_terms = forest.n_terms(),
-                "UV timing milestone"
+                "Building orientation parametric forest"
             );
             let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
             debug_tags!(#generation, #profile, #uv, #graph, #cut, #summary;
                 stage = "orientation_parametric_expr_sum_done",
-                graph = %graph.name,
                 forest_index = i,
                 forest_terms = forest.n_terms(),
                 integrand_count = integrands.len(),
                 elapsed_ms = forest_started.elapsed().as_secs_f64() * 1000.0,
-                "UV timing milestone"
+                "Built orientation parametric forest sum"
             );
 
             debug_tags!(#generation, #uv, #graph, #dump;
                 n_terms =%forest.n_terms(),
-                graph = %graph.dot(&cuts.union),
-                name = %graph.name,
+                log.graph = %graph.dot(&cuts.union),
                 integrands=%integrands.iter().enumerate().map(|(i, s)| format!("{}: {}", i, s.1.log_print(Some(100)))).join("\n"),
                 file.integrands = %integrands.iter().map(|s| s.1.to_canonical_string()).join(";"),
                 "Orientation Parametric integrand {i}",
@@ -183,40 +150,22 @@ impl CutForests {
             }
             debug_tags!(#generation, #profile, #uv, #graph, #cut, #summary;
                 stage = "orientation_parametric_expr_done",
-                graph = %graph.name,
                 forest_index = i,
                 forest_terms = forest.n_terms(),
                 integrand_count = integrands.len(),
                 elapsed_ms = forest_started.elapsed().as_secs_f64() * 1000.0,
                 total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                "UV timing milestone"
+                "Built orientation parametric forest"
             );
             exprs.push(ParametricIntegrands { integrands, cuts });
         }
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "orientation_parametric_exprs_done",
-            graph = %graph.name,
             result_count = exprs.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "UV timing milestone"
+            "Built orientation parametric integrands"
         );
-        let drop_started = std::time::Instant::now();
-        debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "orientation_parametric_exprs_drop_forests_start",
-            graph = %graph.name,
-            forest_count,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "UV timing milestone"
-        );
-        drop(forests);
-        debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "orientation_parametric_exprs_drop_forests_done",
-            graph = %graph.name,
-            forest_count,
-            elapsed_ms = drop_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "UV timing milestone"
-        );
+
         Ok(exprs)
     }
 }
@@ -231,7 +180,7 @@ impl Forest {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip_all)]
+    #[debug_instrument(graph = %graph.log_display(), forest_terms = self.n_terms())]
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
@@ -244,11 +193,9 @@ impl Forest {
         let started = std::time::Instant::now();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "forest_compute_start",
-            graph = %graph.name,
-            forest_terms = self.n_terms(),
             generate_integrated = settings.generate_integrated,
             only_integrated = settings.only_integrated,
-            "UV timing milestone"
+            "Computing UV forest"
         );
         let order = self.dag.compute_topological_order();
 
@@ -258,12 +205,11 @@ impl Forest {
             let dod = self.dag.nodes[n].data.spinney.dod;
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "forest_node_start",
-                graph = %graph.name,
                 node = ?n,
                 topo_index = i,
                 parent_count,
                 dod,
-                "UV timing milestone"
+                "Computing UV forest node"
             );
             match self.dag.nodes[n].parents.len() {
                 0 => {
@@ -278,13 +224,12 @@ impl Forest {
                     )?;
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "forest_node_root_done",
-                        graph = %graph.name,
                         node = ?n,
                         topo_index = i,
                         dod,
                         elapsed_ms = root_started.elapsed().as_secs_f64() * 1000.0,
                         total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                        "UV timing milestone"
+                        "Computed root UV forest node"
                     );
                 }
                 1 => {
@@ -309,20 +254,18 @@ impl Forest {
                         let integrated_started = std::time::Instant::now();
                         debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                             stage = "forest_node_compute_integrated_start",
-                            graph = %graph.name,
                             node = ?n,
                             parent = ?parent_id,
                             topo_index = i,
                             current = %current.data.spinney.dod,
                             given = %parent.data.spinney.dod,
-                            "UV timing milestone"
+                            "Computing integrated UV forest node"
                         );
                         current
                             .data
                             .compute_integrated(graph, vakint, &parent.data, settings)?;
                         debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                             stage = "forest_node_compute_integrated_done",
-                            graph = %graph.name,
                             node = ?n,
                             parent = ?parent_id,
                             topo_index = i,
@@ -330,13 +273,12 @@ impl Forest {
                             given = %parent.data.spinney.dod,
                             elapsed_ms = integrated_started.elapsed().as_secs_f64() * 1000.0,
                             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                            "UV timing milestone"
+                            "Computed integrated UV forest node"
                         );
                     }
                     if settings.only_integrated {
                         debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                             stage = "forest_node_only_integrated_skip_local",
-                            graph = %graph.name,
                             node = ?n,
                             parent = ?parent_id,
                             topo_index = i,
@@ -344,7 +286,7 @@ impl Forest {
                             given = %parent.data.spinney.dod,
                             elapsed_ms = node_started.elapsed().as_secs_f64() * 1000.0,
                             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                            "UV timing milestone"
+                            "Skipped local UV forest node"
                         );
                         continue;
                     }
@@ -352,13 +294,12 @@ impl Forest {
                     let local_started = std::time::Instant::now();
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "forest_node_compute_local_3d_start",
-                        graph = %graph.name,
                         node = ?n,
                         parent = ?parent_id,
                         topo_index = i,
                         current = %current.data.spinney.dod,
                         given = %parent.data.spinney.dod,
-                        "UV timing milestone"
+                        "Computing local 3D UV forest node"
                     );
                     current.data.compute(
                         graph,
@@ -370,7 +311,6 @@ impl Forest {
                     )?;
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "forest_node_compute_local_3d_done",
-                        graph = %graph.name,
                         node = ?n,
                         parent = ?parent_id,
                         topo_index = i,
@@ -378,7 +318,7 @@ impl Forest {
                         given = %parent.data.spinney.dod,
                         elapsed_ms = local_started.elapsed().as_secs_f64() * 1000.0,
                         total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                        "UV timing milestone"
+                        "Computed local 3D UV forest node"
                     );
                 }
                 _ => {
@@ -387,22 +327,19 @@ impl Forest {
             }
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "forest_node_done",
-                graph = %graph.name,
                 node = ?n,
                 topo_index = i,
                 parent_count,
                 dod,
                 elapsed_ms = node_started.elapsed().as_secs_f64() * 1000.0,
                 total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                "UV timing milestone"
+                "Computed UV forest node"
             );
         }
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "forest_compute_done",
-            graph = %graph.name,
-            forest_terms = self.n_terms(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "UV timing milestone"
+            "Computed UV forest"
         );
         Ok(())
     }
@@ -506,7 +443,7 @@ impl Forest {
         ))
     }
 
-    #[instrument(skip_all)]
+    #[debug_instrument(graph = %graph.log_display(), add_sigma)]
     pub(crate) fn orientation_parametric_expr(
         &self,
         graph: &Graph,
@@ -518,8 +455,7 @@ impl Forest {
             debug_tags!(#generation, #uv, #graph, #term;
 
                 dod = %n.data.dod(),
-                graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
-                graph.name = %graph.name,
+                log.graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
                 simple = %
                 n.data
                     .simple_approx
@@ -564,10 +500,9 @@ impl Forest {
                         )
                 } else {
                     integrand.clone()
-                }.collect_color();
+                }
+                .collect_color();
 
-
-                
                 if first {
                     sum.insert(*cut_index, a);
                 } else {

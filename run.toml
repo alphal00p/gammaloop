@@ -1,0 +1,19 @@
+commands = [
+  "import model sm",
+  "import graphs tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot ",
+  "generate",
+  "profile  ultra-violet ",
+]
+
+[cli_settings.global]
+display_directive = "info,gammalooprs[{#uv}]=debug,gammalooprs[{#span_context}]=debug"
+logfile_directive = "gammalooprs[{#uv}]=debug"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+
+[cli_settings.global.log_style]
+include_fields = true
+full_line_source = true
+log_format = "Full"
+short_timestamp = true

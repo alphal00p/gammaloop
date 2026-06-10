@@ -860,6 +860,10 @@ impl AmplitudeGraph {
                     param_builder.update_model_values(config.model);
                 }
                 param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
+                param_builder.renormalization_localization_scale_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .renormalization_localization_scale)));
                 param_builder.mu_r_sq_value(Complex::new_re(F(config
                     .run_time_settings
                     .general

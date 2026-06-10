@@ -630,6 +630,8 @@ impl EvaluatorStack {
                     elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
                     "Evaluator timing milestone"
                 );
+
+                // println!("Net: {}", net.dot_pretty());
                 let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
                     scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
                 });

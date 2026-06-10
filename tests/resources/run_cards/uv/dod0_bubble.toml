@@ -3,10 +3,11 @@ commands = []
 [cli_settings]
 [cli_settings.global]
 logfile_directive = "off"
-display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest=debug"
+display_directive = "gammalooprs=info,gammalooprs::uv[{#vakint}]=debug"
 
 [cli_settings.global.log_style]
 include_fields = true
+full_line_source = true
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false

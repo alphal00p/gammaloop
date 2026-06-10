@@ -109,144 +109,77 @@ pub trait ParamBuilderGraph {
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-#[derive(Default)]
-pub struct GammaLoopPairs {
-    m_uv: ParamValuePairs,
-    // idenso_vars: ParamValuePairs,
-    mu_r_sq: ParamValuePairs,
-    orientations: ParamValuePairs,
-    override_if: ParamValuePairs,
-    pub model_parameters: ParamValuePairs,
-    pub external_energies: ParamValuePairs,
-    external_spatial: ParamValuePairs,
-    pub polarizations: ParamValuePairs,
-    loop_moms_spatial: ParamValuePairs,
-    tstar: ParamValuePairs,
-    h_function_lu_cut: ParamValuePairs,
-    h_function_left_th: ParamValuePairs,
-    h_function_right_th: ParamValuePairs,
-    esurface_derivative_lu_cut: ParamValuePairs,
-    esurface_derivative_left_th: ParamValuePairs,
-    esurface_derivative_right_th: ParamValuePairs,
-    uv_damp_plus_left: ParamValuePairs,
-    uv_damp_minus_left: ParamValuePairs,
-    radius_left: ParamValuePairs,
-    radius_star_left: ParamValuePairs,
-    uv_damp_plus_right: ParamValuePairs,
-    uv_damp_minus_right: ParamValuePairs,
-    radius_right: ParamValuePairs,
-    radius_star_right: ParamValuePairs,
-    pub additional_params: ParamValuePairs,
+macro_rules! define_gamma_loop_pairs {
+    ($($vis:vis $field:ident),+ $(,)?) => {
+        #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+        #[trait_decode(trait = GammaLoopContext)]
+        #[derive(Default)]
+        pub struct GammaLoopPairs {
+            $($vis $field: ParamValuePairs,)+
+        }
+
+        const GAMMA_LOOP_PAIR_COUNT: usize =
+            <[()]>::len(&[$(define_gamma_loop_pairs!(@unit $field)),+]);
+
+        impl IntoIterator for GammaLoopPairs {
+            type Item = ParamValuePairs;
+            type IntoIter = std::array::IntoIter<Self::Item, GAMMA_LOOP_PAIR_COUNT>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                [$(self.$field),+].into_iter()
+            }
+        }
+
+        impl<'a> IntoIterator for &'a GammaLoopPairs {
+            type Item = &'a ParamValuePairs;
+            type IntoIter = std::array::IntoIter<Self::Item, GAMMA_LOOP_PAIR_COUNT>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                [$(&self.$field),+].into_iter()
+            }
+        }
+
+        impl<'a> IntoIterator for &'a mut GammaLoopPairs {
+            type Item = &'a mut ParamValuePairs;
+            type IntoIter = std::array::IntoIter<Self::Item, GAMMA_LOOP_PAIR_COUNT>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                [$(&mut self.$field),+].into_iter()
+            }
+        }
+    };
+    (@unit $field:ident) => {
+        ()
+    };
 }
 
-impl IntoIterator for GammaLoopPairs {
-    type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 25>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            self.m_uv,
-            self.mu_r_sq,
-            self.model_parameters,
-            self.external_energies,
-            self.external_spatial,
-            self.polarizations,
-            self.loop_moms_spatial,
-            self.tstar,
-            self.h_function_lu_cut,
-            self.h_function_left_th,
-            self.h_function_right_th,
-            self.esurface_derivative_lu_cut,
-            self.esurface_derivative_left_th,
-            self.esurface_derivative_right_th,
-            self.uv_damp_plus_left,
-            self.uv_damp_minus_left,
-            self.radius_left,
-            self.radius_star_left,
-            self.uv_damp_plus_right,
-            self.uv_damp_minus_right,
-            self.radius_right,
-            self.radius_star_right,
-            self.orientations,
-            self.override_if,
-            self.additional_params,
-        ]
-        .into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a GammaLoopPairs {
-    type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 25>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            &self.m_uv,
-            &self.mu_r_sq,
-            &self.model_parameters,
-            &self.external_energies,
-            &self.external_spatial,
-            &self.polarizations,
-            &self.loop_moms_spatial,
-            &self.tstar,
-            &self.h_function_lu_cut,
-            &self.h_function_left_th,
-            &self.h_function_right_th,
-            &self.esurface_derivative_lu_cut,
-            &self.esurface_derivative_left_th,
-            &self.esurface_derivative_right_th,
-            &self.uv_damp_plus_left,
-            &self.uv_damp_minus_left,
-            &self.radius_left,
-            &self.radius_star_left,
-            &self.uv_damp_plus_right,
-            &self.uv_damp_minus_right,
-            &self.radius_right,
-            &self.radius_star_right,
-            &self.orientations,
-            &self.override_if,
-            &self.additional_params,
-        ]
-        .into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a mut GammaLoopPairs {
-    type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 25>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            &mut self.m_uv,
-            &mut self.mu_r_sq,
-            &mut self.model_parameters,
-            &mut self.external_energies,
-            &mut self.external_spatial,
-            &mut self.polarizations,
-            &mut self.loop_moms_spatial,
-            &mut self.tstar,
-            &mut self.h_function_lu_cut,
-            &mut self.h_function_left_th,
-            &mut self.h_function_right_th,
-            &mut self.esurface_derivative_lu_cut,
-            &mut self.esurface_derivative_left_th,
-            &mut self.esurface_derivative_right_th,
-            &mut self.uv_damp_plus_left,
-            &mut self.uv_damp_minus_left,
-            &mut self.radius_left,
-            &mut self.radius_star_left,
-            &mut self.uv_damp_plus_right,
-            &mut self.uv_damp_minus_right,
-            &mut self.radius_right,
-            &mut self.radius_star_right,
-            &mut self.orientations,
-            &mut self.override_if,
-            &mut self.additional_params,
-        ]
-        .into_iter()
-    }
+define_gamma_loop_pairs! {
+    m_uv,
+    renormalization_localization_scale,
+    mu_r_sq,
+    orientations,
+    override_if,
+    pub model_parameters,
+    pub external_energies,
+    external_spatial,
+    pub polarizations,
+    loop_moms_spatial,
+    tstar,
+    h_function_lu_cut,
+    h_function_left_th,
+    h_function_right_th,
+    esurface_derivative_lu_cut,
+    esurface_derivative_left_th,
+    esurface_derivative_right_th,
+    uv_damp_plus_left,
+    uv_damp_minus_left,
+    radius_left,
+    radius_star_left,
+    uv_damp_plus_right,
+    uv_damp_minus_right,
+    radius_right,
+    radius_star_right,
+    pub additional_params,
 }
 
 impl GammaLoopPairs {
@@ -313,6 +246,9 @@ impl GammaLoopPairs {
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
             m_uv: ParamValuePairs::default_from_symbol(GS.m_uv),
+            renormalization_localization_scale: ParamValuePairs::default_from_symbol(
+                GS.renormalization_localization_scale,
+            ),
             mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
@@ -1246,15 +1182,6 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
         }
 
-        for i in 1..=lmb.loop_edges.len() {
-            let args = (1..i)
-                .map(|j| symbol!(format!("e{}", j)))
-                .collect::<Vec<_>>();
-            let body = GS.localizing_integrand_fn(&args);
-            new.add_function(GS.localizing_integrand, args, body)
-                .unwrap()
-        }
-
         for (edge_id, signature) in lmb.edge_signatures.iter() {
             // if !lmb.loop_edges.contains(&edge_id) {
             let start = if signature.internal.iter().any(|sign| sign.is_sign()) {
@@ -1294,6 +1221,12 @@ impl<T: FloatLike> ParamBuilder<T> {
             parse_lit!(sqrt(x)),
         )
         .unwrap();
+        new.add_function(
+            GS.localizing_integrand,
+            vec![symbol!("x")],
+            symbol!("x").to_atom(),
+        )
+        .unwrap();
         let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         // new.fn_map.add_conditional(GS.orientation_if);
@@ -1316,6 +1249,26 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.m_uv.value_range.start * multiplicative_offset] = m_uv.clone();
+        }
+    }
+    #[inline]
+    pub(crate) fn renormalization_localization_scale_value(&mut self, l: Complex<F<T>>) {
+        debug_assert!(
+            self.pairs
+                .renormalization_localization_scale
+                .value_range
+                .len()
+                == 1
+        );
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self
+                .pairs
+                .renormalization_localization_scale
+                .value_range
+                .start
+                * multiplicative_offset] = l.clone();
         }
     }
 

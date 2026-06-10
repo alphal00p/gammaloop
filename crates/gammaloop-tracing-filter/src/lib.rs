@@ -10,6 +10,7 @@ use tracing_subscriber::registry::LookupSpan;
 
 mod display;
 mod log_message;
+pub use gammaloop_tracing_filter_macros::debug_instrument;
 pub use log_message::LogMessage;
 
 pub use display::{

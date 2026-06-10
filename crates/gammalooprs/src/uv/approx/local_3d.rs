@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, sync::LazyLock};
 
 use eyre::eyre;
+use gammaloop_tracing_filter::debug_instrument;
 use linnet::half_edge::{
     involution::HedgePair,
     subgraph::{SuBitGraph, SubSetOps},
@@ -18,10 +19,7 @@ use crate::{
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
     settings::global::OrientationPattern,
-    utils::{
-        GS, W_,
-        symbolica_ext::CallSymbol,
-    },
+    utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
@@ -77,6 +75,7 @@ impl Local3DApproximation {
         cuts: &CutSet,
         orientation_pattern: &OrientationPattern,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        // debug_tags!(;"Computing root");
         Self::dependent(
             graph,
             &graph.empty_subgraph::<SuBitGraph>(),
@@ -85,6 +84,11 @@ impl Local3DApproximation {
         )
     }
 
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        reduced,
+    )]
     pub(crate) fn t_tilde<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -203,6 +207,11 @@ impl Local3DApproximation {
         Ok(a)
     }
 
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        reduced,
+    )]
     pub(crate) fn t<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,

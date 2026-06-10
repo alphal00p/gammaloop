@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use gammalooprs::LogMessage;
 use gammalooprs::graph::parse::IntoGraph;
 use gammalooprs::integrands::process::evaluators::EvaluatorStack;
 use gammalooprs::processes::{ContractionMode, EvaluatorSettings, ExecutionMode};
@@ -65,6 +66,8 @@ fn aaa() {
     // num = num.replace_multiple(&reps);
     // num.collect_symbol()
     let timn = Instant::now();
+
+    println!("{}", num.log_display());
     let num = num.simplify_metrics();
     let elapsed = timn.elapsed();
     println!(

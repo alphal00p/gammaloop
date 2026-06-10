@@ -1,10 +1,11 @@
 use crate::{
+    debug_tags,
     graph::{Graph, LoopMomentumBasis},
     uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
+use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
-use tracing::instrument;
 
 use linnet::half_edge::{
     HedgeGraph,
@@ -26,7 +27,7 @@ pub struct CutWoods {
 }
 
 impl CutWoods {
-    #[instrument(skip_all)]
+    #[debug_instrument(graph = %graph.log_display())]
     pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
@@ -37,6 +38,15 @@ impl CutWoods {
 
             let spinneys =
                 graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);
+
+            for spinney in spinneys.iter() {
+                debug_tags!(#uv, #graph, #spinney,#generation;
+                    log.cutset = cut,
+                    local_dod = %graph.local_dod(&spinney.subgraph),
+                    log.spinney = spinney,
+                    "spinneys",
+                );
+            }
 
             let wood = Wood::from_spinneys(spinneys, graph);
 

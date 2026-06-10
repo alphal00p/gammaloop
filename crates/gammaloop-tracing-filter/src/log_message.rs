@@ -24,9 +24,9 @@ mod symbolica_impl {
     impl LogMessage for Atom {
         fn log_display(&self) -> String {
             let mut settings = SpensoPrintSettings::compact().nice_symbolica();
-            settings.max_line_length = Some(120);
+            settings.max_line_length = Some(220);
             format!(
-                "n-terms: {}, byte size: {},expr:{}",
+                "n-terms: {}, byte size: {},expr:\n{}",
                 self.as_view().nterms(),
                 self.as_view().get_byte_size(),
                 self.printer(settings)

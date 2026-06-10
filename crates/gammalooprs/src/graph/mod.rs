@@ -2,6 +2,7 @@ use std::ops::Index;
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
+use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
@@ -62,6 +63,12 @@ pub struct Graph {
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
     pub polarizations: Vec<(PolDef, Atom)>,
+}
+
+impl LogMessage for Graph {
+    fn log_display(&self) -> String {
+        format!("{}", self.name)
+    }
 }
 
 // impl Deref for Graph {

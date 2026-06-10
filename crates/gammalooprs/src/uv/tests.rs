@@ -275,8 +275,8 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
         .into_iter()
         .next()
         .expect("expected at least one UV spinney");
-    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis);
-    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis);
+    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis).unwrap();
+    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis).unwrap();
 
     assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
 }

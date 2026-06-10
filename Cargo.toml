@@ -22,6 +22,7 @@ dot-parser = "0.5"
 eyre = "0.6.12"
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
+gammaloop-tracing-filter-macros = { path = "crates/gammaloop-tracing-filter-macros/" }
 gammalooprs = { path = "crates/gammalooprs/" }
 idenso = { path = "crates/idenso/" }
 include_dir = "0.7"

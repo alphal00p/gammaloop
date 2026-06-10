@@ -900,7 +900,7 @@ mod tests {
         let spinneys: Vec<_> = dumbell
             .spinneys(&dumbell.full_filter())
             .into_iter()
-            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
             .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
@@ -951,7 +951,7 @@ mod tests {
         let spinneys: Vec<_> = dumbell
             .spinneys(&dumbell.full_filter())
             .into_iter()
-            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
             .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
@@ -1009,7 +1009,7 @@ mod tests {
                 let spinneys: Vec<_> = g
                     .spinneys(&g.full_filter())
                     .into_iter()
-                    .map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
+                    .filter_map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
                     .collect();
                 let f = Wood::new(
                     CutStructure::empty(&g),
@@ -1377,7 +1377,7 @@ mod tests {
             let spinneys: Vec<_> = dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
                 .collect();
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
@@ -1429,7 +1429,7 @@ mod tests {
             let spinneys: Vec<_> = dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
                 .collect();
             let f = Wood::new(
                 CutStructure::empty(&dumbell),

@@ -1,7 +1,7 @@
 use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
-use gammaloop_tracing_filter::LogMessage;
+use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
     color::ColorSimplifier,
     dirac::GammaSimplifier,
@@ -26,7 +26,6 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{atom::AtomCore, prelude::*};
-use tracing::instrument;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
@@ -115,15 +114,10 @@ impl Integrated<'_> {
 
     /// Add the numerator of the reduced subgraph, (without given), to the integrand.
     /// Then, 4d -> d-dim on minkowski indices
-    #[instrument(
-        skip_all,
-        level = "debug",
-        fields(
-            span_context = true,
-            current = %current.log_display(),
-            given = %given.log_display(),
-            integrand = %integrand.log_display(),
-        )
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        integrand = %integrand.log_display(),
     )]
     pub(crate) fn start<S: super::ForestNodeLike>(
         &self,
@@ -154,14 +148,9 @@ impl Integrated<'_> {
         Ok((t_arg * integrand).simplify_metrics())
     }
 
-    #[instrument(
-        skip_all,
-        level = "debug",
-        fields(
-            span_context = true,
-            current = %current.log_display(),
-            given = %given.log_display(),
-        )
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
     )]
     pub(crate) fn t<S: super::ForestNodeLike>(
         &self,
@@ -233,14 +222,10 @@ impl Integrated<'_> {
         Ok(dotted)
     }
 
-    #[instrument(
-        skip_all,
-        level = "debug",
-        fields(
-            current = %current.log_display(),
-            given = %given.log_display(),
-            reduced,
-        )
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        reduced,
     )]
     pub(crate) fn integrate_and_truncate<S: super::ForestNodeLike>(
         &self,
@@ -470,14 +455,10 @@ impl Integrated<'_> {
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
-    #[instrument(
-        skip_all,
-        level = "debug",
-        fields(
-            current = %current.log_display(),
-            given = %given.log_display(),
-            integrand = %integrand.log_display(),
-        )
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        integrand = %integrand.log_display(),
     )]
     fn kernel<S: ForestNodeLike>(
         &self,
@@ -507,7 +488,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
     }
 }
 
-#[instrument(skip_all)]
+#[debug_instrument]
 pub(crate) fn to_vakint_integrand<
     E: UVE,
     V,
@@ -861,7 +842,7 @@ pub(crate) fn to_vakint_integrand<
 
         graph.forget_identification_history();
         debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
-            graph = %graph.base_dot(),
+            log.graph = %graph.base_dot(),
             "Graph"
         );
 

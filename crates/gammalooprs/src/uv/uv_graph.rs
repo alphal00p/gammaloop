@@ -132,8 +132,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     {
         let renormalization_scheme = self.approximation_scheme(&spinney.filter, settings);
 
-        (renormalization_scheme != ApproximationType::Unsubtracted)
-            .then(|| Spinney::with_scheme(spinney, self, lmb, renormalization_scheme))
+        if renormalization_scheme != ApproximationType::Unsubtracted {
+            Spinney::with_scheme(spinney, self, lmb, renormalization_scheme)
+        } else {
+            None
+        }
     }
 
     fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -252,7 +255,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Wood::from_spinneys(self.classified_spinneys(subgraph, settings, lmb), self)
     }
 
-    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
+    fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
     fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -284,7 +287,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             &|a, b| a.union(b),
             &|union| {
                 // println!("{}", self.as_ref().dot(&union));
-                if self.dod(&union) >= 0 {
+                if self.local_dod(&union) >= 0 {
                     Some(union)
                 } else {
                     // println!("Negative dod:{}", self.dod(&union));
@@ -382,7 +385,7 @@ impl UltravioletGraph for Graph {
         num.fill_in_reduced(self, subgraph, without)
     }
 
-    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32 {
+    fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32 {
         let lmb = self.lmb_of(subgraph);
         let empty = self.underlying.empty_subgraph();
         let integrand = self

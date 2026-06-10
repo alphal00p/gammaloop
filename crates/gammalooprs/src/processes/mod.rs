@@ -72,6 +72,8 @@ pub struct EvaluatorSettings {
     pub store_atom: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
+    #[serde(default, skip_serializing_if = "is_true")]
+    pub direct_translation: bool,
     #[serde(
         default = "evaluator_default_horner_iterations",
         skip_serializing_if = "is_usize::<10>"
@@ -156,6 +158,7 @@ impl Default for EvaluatorSettings {
             summed: false,
             do_algebra: false,
             summed_function_map: false,
+            direct_translation: true,
             compile: false,
             do_fn_map_replacements: false,
             store_atom: false,
@@ -187,7 +190,7 @@ impl EvaluatorSettings {
             .max_common_pair_cache_entries(self.max_common_pair_cache_entries)
             .max_common_pair_distance(self.max_common_pair_distance)
             .verbose(self.verbose)
-            .direct_translation(false)
+            .direct_translation(self.direct_translation)
     }
 }
 

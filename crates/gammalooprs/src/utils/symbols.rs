@@ -17,7 +17,7 @@ use spenso::{
 use symbolica::prelude::*;
 use symbolica::printer::{PrintState, PrintUserData};
 
-use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
+use crate::{cff::expression::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
 
 use super::symbolica_ext::CallSymbol;
 
@@ -151,7 +151,13 @@ pub struct GammaloopSymbols {
     pub rescale_mass: Symbol,
     pub rescale_star: Symbol,
     pub pi: Symbol,
+
+    //Parameters for UV renormalization and localization
+    /// UV renormalization scale factor
     pub m_uv: Symbol,
+    /// UV localization scale factor
+    pub renormalization_localization_scale: Symbol,
+    /// UV renormalization integral scale factor
     pub m_uv_int: Symbol,
     pub mu_r_sq: Symbol,
     pub sign: Symbol,
@@ -453,6 +459,7 @@ macro_rules! spenso_print_simple_indexed {
 
 spenso::symbolica_init_lazy_static! {
 pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
+    renormalization_localization_scale: symbol!("rls"),
     integrand: symbol!("integrand"),
     tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
@@ -1000,27 +1007,11 @@ impl GammaloopSymbols {
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
     }
 
-    pub(crate) fn localizing_integrand(&self, eids: impl IntoIterator<Item = EdgeIndex>) -> Atom {
-        let mut fn_builder = FunctionBuilder::new(self.localizing_integrand);
-        let mut has_args = false;
-        let mut args = String::new();
-        for e in eids {
-            args.push_str(&format!("{},", e.0));
-            has_args = true;
-            fn_builder = fn_builder.add_arg(e.0);
-        }
-        debug_tags!(#localize; eids=%args,"Localizing integrand");
-        if !has_args {
-            return Atom::one();
-        }
-
-        fn_builder.finish()
-    }
-
-    pub(crate) fn localizing_integrand_fn(&self, args: &[Symbol]) -> Atom {
+    pub(crate) fn localizing_integrand(&self, lmb: &LoopMomentumBasis) -> Atom {
         // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV
         let pi_atom = (Symbol::PI).to_atom();
-        let mut normalization_term_integral = (pi_atom.pow(2)) / GS.m_uv_int;
+        let mut normalization_term_integral =
+            (pi_atom.pow(2)) / GS.renormalization_localization_scale;
         // However, gammaloop adds a factro 1/(2*pi)^3 per loop, and this integrated CT will be subject to it, so we must undo it.
         normalization_term_integral /= (Atom::from(2) * pi_atom).pow(3);
 
@@ -1031,19 +1022,25 @@ impl GammaloopSymbols {
 
         let mut res = Atom::one();
 
-        for l in args {
+        for l in lmb.loop_edges.iter() {
             //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
             res /= normalization_term_integral.as_view();
 
-            let spatial_norm_sq = function!(self.emr_mom, l, GS.cind(1)).pow(2)
-                + function!(self.emr_mom, l, GS.cind(2)).pow(2)
-                + function!(self.emr_mom, l, GS.cind(3)).pow(2);
+            let spatial_norm_sq = function!(self.emr_mom, l.0, GS.cind(1)).pow(2)
+                + function!(self.emr_mom, l.0, GS.cind(2)).pow(2)
+                + function!(self.emr_mom, l.0, GS.cind(3)).pow(2);
 
             // Per-orientation CFF localizer of the normalized cubic tadpole.
-            let denominator = spatial_norm_sq + GS.m_uv_int * GS.m_uv_int;
+            let denominator = spatial_norm_sq
+                + GS.renormalization_localization_scale * GS.renormalization_localization_scale;
             res /= denominator.as_view() * denominator.as_view();
         }
-        res
+
+        if res.is_one() {
+            res
+        } else {
+            function!(self.localizing_integrand, res)
+        }
     }
 
     pub(crate) fn emr_vec(&self, e: EdgeIndex) -> Atom {

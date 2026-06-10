@@ -674,6 +674,10 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph
             .param_builder
             .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
+
+        self.graph
+            .param_builder
+            .renormalization_localization_scale_value(Complex::new_re(F(settings.general.m_uv)));
         self.graph
             .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));

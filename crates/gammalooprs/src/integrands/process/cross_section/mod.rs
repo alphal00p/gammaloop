@@ -1223,6 +1223,9 @@ impl GraphTerm for CrossSectionGraphTerm {
             .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
         self.graph
             .param_builder
+            .renormalization_localization_scale_value(Complex::new_re(F(settings.general.m_uv)));
+        self.graph
+            .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
         self.graph.param_builder.update_model_values(model);
 
