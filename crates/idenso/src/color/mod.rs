@@ -54,7 +54,7 @@ pub struct ColorSymbols {
     pub na: Symbol,
     /// The adjoint Casimir symbol, i.e. CA = Nc
     pub ca: Symbol,
-    /// The fundamental Casimir symbol.
+    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = TR (na/nc)
     pub cf: Symbol,
     /// The generator symbol
     pub t: Symbol,
@@ -453,7 +453,10 @@ pub trait ColorSimplifier {
 }
 impl ColorSimplifier for Atom {
     fn simplify_color(&self) -> Atom {
-        self.simplify_color_with(ColorSimplifySettings::default())
+        println!("Colorsimplifying {}", self);
+        let a = self.simplify_color_with(ColorSimplifySettings::default());
+        println!("Got {}", a);
+        a
     }
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
@@ -491,7 +494,10 @@ impl ColorSimplifier for Atom {
 
 impl ColorSimplifier for AtomView<'_> {
     fn simplify_color(&self) -> Atom {
-        self.simplify_color_with(ColorSimplifySettings::default())
+        println!("Colorsimplifying {}", self);
+        let a = self.simplify_color_with(ColorSimplifySettings::default());
+        println!("Got {}", a);
+        a
     }
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {

@@ -815,8 +815,8 @@ impl StabilityLevelSetting {
     pub fn default_double() -> Self {
         Self {
             precision: Precision::Double,
-            required_precision_for_re: 1e-10,
-            required_precision_for_im: 1e-10,
+            required_precision_for_re: 1e-5,
+            required_precision_for_im: 1e-5,
             escalate_for_large_weight_threshold: 0.9,
         }
     }

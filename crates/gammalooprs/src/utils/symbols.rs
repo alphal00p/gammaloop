@@ -837,12 +837,17 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 }
             }
         },
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") },
+        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q⃗") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     ose: symbol!(
         "OSE"; Scalar;
-        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
+        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") },
+            der = |_, arg, out| {
+                if arg == 1 {
+                    **out = Atom::num(1);
+                }
+            }
     ),
     energy: symbol!(
         "E",
@@ -1062,11 +1067,11 @@ impl GammaloopSymbols {
     pub(crate) fn ose_full(
         &self,
         e: EdgeIndex,
+        lmb_id: EdgeIndex,
         e_mass: Atom,
         index: Option<Atom>,
         inner_product: bool,
     ) -> Atom {
-        let eidc = usize::from(e) as i64;
         let m2 = &e_mass * &e_mass;
 
         let mink: Representation<Minkowski> = Minkowski {}.new_rep(4); //.slot(Aind::new_dummy());
@@ -1078,7 +1083,7 @@ impl GammaloopSymbols {
             self.emr_vec_index(e, mink.as_view()) * self.emr_vec_index(e, mink.as_view())
         };
 
-        let ose = function!(self.ose, eidc, GS.emr_vec(e), m2, (m2 - q3q3)).pow((1, 2));
+        let ose = function!(self.ose, lmb_id.0, (m2 - q3q3)).pow((1, 2));
 
         if let Some(index) = index {
             ose * self.energy_delta(index)
@@ -1090,6 +1095,7 @@ impl GammaloopSymbols {
     pub(crate) fn split_mom_pattern(
         &self,
         e: EdgeIndex,
+        lmb_id: EdgeIndex,
         e_mass: Atom,
         inner_product: bool,
     ) -> Replacement {
@@ -1097,7 +1103,7 @@ impl GammaloopSymbols {
         Replacement::new(
             self.emr_mom(e, &id).to_pattern(),
             self.emr_vec_index(e, &id)
-                + self.ose_full(e, e_mass, Some(id), inner_product) * sign_atom(e),
+                + self.ose_full(e, lmb_id, e_mass, Some(id), inner_product) * sign_atom(e),
         )
     }
 

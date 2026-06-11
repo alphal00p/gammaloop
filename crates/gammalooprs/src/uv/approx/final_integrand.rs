@@ -334,7 +334,9 @@ impl<'a> FinalIntegrand<'a> {
                 }
             }
 
-            cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
+            cff = cff
+                .replace(function!(GS.ose, W_.mass_, W_.prop_))
+                .with(W_.prop_);
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "final_integrand_cff_done",
                 cut_index = ?local_index,
@@ -378,7 +380,10 @@ impl<'a> FinalIntegrand<'a> {
             );
 
             term_started += term_started.elapsed();
-            resnum = color_simplify_input.simplify_color();
+            resnum = color_simplify_input
+                .collect_factors()
+                .simplify_metrics()
+                .simplify_color();
             debug_tags!(#generation, #algebra,#color, #uv, #graph, #term, #summary;
                 stage = "final_integrand_color_simplify_done",
                 cut_index = ?local_index,

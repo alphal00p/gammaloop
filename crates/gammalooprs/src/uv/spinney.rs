@@ -5,7 +5,7 @@ use linnet::half_edge::{
     HedgeGraph,
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
-use tracing::{debug, error};
+use tracing::debug;
 
 use crate::{
     graph::{LMBext, LoopMomentumBasis, cuts::CutSet},

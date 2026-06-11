@@ -50,7 +50,7 @@ m_uv = 20.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[1.0, 0.0, 0.0, 0.0], "dependent"]
+momenta = [[3.0, 0.0, 2.0, 2.0], "dependent"]
 helicities = [0, 0]
 
 [default_runtime_settings.subtraction]

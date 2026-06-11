@@ -145,11 +145,12 @@
       in
         crateMemberDirs ++ ["tests"];
 
-      workspaceMemberPackages = map (
-        member:
-          (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name
-      )
-      workspaceMemberDirs;
+      workspaceMemberPackages =
+        map (
+          member:
+            (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name
+        )
+        workspaceMemberDirs;
 
       autoCargoTargetDirs =
         lib.concatMap (
@@ -489,6 +490,7 @@
           packages = [
             "gammaloop-api"
             "gammaloop-tracing-filter"
+            "gammaloop-tracing-filter-macros"
             "gammalooprs"
           ];
         }
@@ -528,18 +530,15 @@
       missingNextestPackages = lib.subtractLists nextestSplitPackages workspacePackages;
       extraNextestPackages = lib.subtractLists workspacePackages nextestSplitPackages;
 
-      checkedNextestPackageGroups =
-        assert lib.asserts.assertMsg (
-          missingNextestPackages == [] && extraNextestPackages == []
-        ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]";
-          nextestPackageGroups;
+      checkedNextestPackageGroups = assert lib.asserts.assertMsg (
+        missingNextestPackages == [] && extraNextestPackages == []
+      ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]"; nextestPackageGroups;
 
       nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
       nextestArchiveExtraArgs = "--profile ${nextestProfile}";
       nextestArchiveFileName = "archive.tar.zst";
 
-      nextestPackageFilter = packages:
-        "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
+      nextestPackageFilter = packages: "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
 
       # NixCI dependency shape:
       # Build the nextest archive once, then make each split package-group check
@@ -641,25 +640,26 @@
         mkdir -p "$out"
       '';
 
-      impureCheckRunnerTargets = [
-        {
-          runnerAttr = "nix-ci-check-gammaloop-doctest";
-          checkAttr = "gammaloop-doctest";
-        }
-        {
-          runnerAttr = "nix-ci-check-gammaloop-nextest";
-          checkAttr = "gammaloop-nextest";
-        }
-        {
-          runnerAttr = "nix-ci-check-gammaloop-nextest-archive";
-          checkAttr = "gammaloop-nextest-archive";
-        }
-      ]
-      ++ map (target: {
-        runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
-        checkAttr = "gammaloop-nextest-${target.name}";
-      })
-      checkedNextestPackageGroups;
+      impureCheckRunnerTargets =
+        [
+          {
+            runnerAttr = "nix-ci-check-gammaloop-doctest";
+            checkAttr = "gammaloop-doctest";
+          }
+          {
+            runnerAttr = "nix-ci-check-gammaloop-nextest";
+            checkAttr = "gammaloop-nextest";
+          }
+          {
+            runnerAttr = "nix-ci-check-gammaloop-nextest-archive";
+            checkAttr = "gammaloop-nextest-archive";
+          }
+        ]
+        ++ map (target: {
+          runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
+          checkAttr = "gammaloop-nextest-${target.name}";
+        })
+        checkedNextestPackageGroups;
 
       impureCheckRunnerPackages = lib.listToAttrs (map (target: {
           name = target.runnerAttr;
@@ -730,16 +730,17 @@
             inherit (apiMeta) version;
           };
 
-          linnest-wasm = pkgs.runCommand "linnest-wasm-check" {
-            nativeBuildInputs = [pkgs.wasm-tools];
-          } ''
-            test -s ${linnest-wasm}/linnest.wasm
-            test -s ${linnest-wasm}/templates/linnest.wasm
-            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
-            wasm-tools validate ${linnest-wasm}/linnest.wasm
-            test -s ${linnest-wasm}/templates/layout.typ
-            mkdir -p "$out"
-          '';
+          linnest-wasm =
+            pkgs.runCommand "linnest-wasm-check" {
+              nativeBuildInputs = [pkgs.wasm-tools];
+            } ''
+              test -s ${linnest-wasm}/linnest.wasm
+              test -s ${linnest-wasm}/templates/linnest.wasm
+              cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
+              wasm-tools validate ${linnest-wasm}/linnest.wasm
+              test -s ${linnest-wasm}/templates/layout.typ
+              mkdir -p "$out"
+            '';
         }
         // nextestChecks
         // {
@@ -775,89 +776,91 @@
       };
 
       devShells.default = craneLib.devShell ({
-        # checks = self.checks.${system};
+          # checks = self.checks.${system};
 
-        RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-        GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
 
-        CC = nixCc;
-        CXX = nixCxx;
-        "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
+          CC = nixCc;
+          CXX = nixCxx;
+          "${cargoLinkerVar}" = nixCc;
+          RUSTFLAGS = "-C linker=${nixCc}";
 
-        LD_LIBRARY_PATH = runtimeLibPath;
-        DYLD_LIBRARY_PATH = runtimeLibPath;
+          LD_LIBRARY_PATH = runtimeLibPath;
+          DYLD_LIBRARY_PATH = runtimeLibPath;
 
-        # shellHook = ''
-        #   export CC="${nixCc}"
-        #   export CXX="${nixCxx}"
-        #   export ${cargoLinkerVar}="${nixCc}"
-        # '';
+          # shellHook = ''
+          #   export CC="${nixCc}"
+          #   export CXX="${nixCxx}"
+          #   export ${cargoLinkerVar}="${nixCc}"
+          # '';
 
-        packages = with pkgs; [
-          tdf
-          cargo-flamegraph
-          yaml-language-server
-          just
-          dot-language-server
-          cargo-insta
-          cargo-udeps
-          cargo-machete
-          openssl
-          pyright
-          gmp
-          mpfr
-          libmpc
-          form
-          gnum4
-          nickel
-          nls
-          typst
-          cargo-nextest
-          pkg-config
-          cargo-deny
-          cargo-edit
-          cargo-watch
-          bacon
-          gfortran
-          gcc
-          rust-script
-          uv
-          graphviz
-          mupdf
-          tinymist
-          typstyle
-          poppler-utils
-          rust-analyzer
-          maturin
-          virtualenv
-        ]
-        ++ lib.optionals (!pkgs.stdenv.isDarwin) [
-          gungraunRunner
-          valgrind
-        ]
-        ++ [
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "clinnet";
-            version = "0.1.8";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-            };
-            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-          })
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "rscls";
-            version = "0.2.3";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
-            };
-            cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
-          })
-        ];
-      } // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-        GUNGRAUN_RUNNER = "${gungraunRunner}/bin/gungraun-runner";
-      });
+          packages = with pkgs;
+            [
+              tdf
+              cargo-flamegraph
+              yaml-language-server
+              just
+              dot-language-server
+              cargo-insta
+              cargo-udeps
+              cargo-machete
+              openssl
+              pyright
+              gmp
+              mpfr
+              libmpc
+              form
+              gnum4
+              nickel
+              nls
+              typst
+              cargo-nextest
+              pkg-config
+              cargo-deny
+              cargo-edit
+              cargo-watch
+              bacon
+              gfortran
+              gcc
+              rust-script
+              uv
+              graphviz
+              mupdf
+              tinymist
+              typstyle
+              poppler-utils
+              rust-analyzer
+              maturin
+              virtualenv
+            ]
+            ++ lib.optionals (!pkgs.stdenv.isDarwin) [
+              gungraunRunner
+              valgrind
+            ]
+            ++ [
+              (pkgs.rustPlatform.buildRustPackage rec {
+                pname = "clinnet";
+                version = "0.1.8";
+                src = pkgs.fetchCrate {
+                  inherit pname version;
+                  sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
+                };
+                cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
+              })
+              (pkgs.rustPlatform.buildRustPackage rec {
+                pname = "rscls";
+                version = "0.2.3";
+                src = pkgs.fetchCrate {
+                  inherit pname version;
+                  sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+                };
+                cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+              })
+            ];
+        }
+        // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
+          GUNGRAUN_RUNNER = "${gungraunRunner}/bin/gungraun-runner";
+        });
     });
 }

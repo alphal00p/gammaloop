@@ -2,12 +2,12 @@ commands = []
 
 [cli_settings]
 [cli_settings.global]
-logfile_directive = "off"
+logfile_directive = "gammalooprs[{#uv,#before_series}]=debug"
 display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug,gammalooprs::uv::approx=debug"
 
 [cli_settings.global.log_style]
 include_fields = true
-
+full_line_source = true
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
 store_atom = true
@@ -50,7 +50,7 @@ m_uv = 20.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[1.0, 0.0, 0.0, 0.0], "dependent"]
+momenta = [[3.0, 0.0, 1.0, 0.0], "dependent"]
 helicities = [0, 0]
 
 [default_runtime_settings.subtraction]

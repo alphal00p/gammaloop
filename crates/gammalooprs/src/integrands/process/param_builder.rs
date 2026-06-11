@@ -1231,7 +1231,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(GS.pi.into(), pi_rational.into());
-        new.add_constant(CS.cf.into(), Rational::new(3, 4).into());
+        new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
         new.add_constant(CS.tr.into(), Rational::new(1, 2).into());

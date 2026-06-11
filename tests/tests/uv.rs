@@ -606,7 +606,7 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         outcome.error = Some(format!("{err:#}"));
     }
 
-    clean_test(&cli.cli_settings.state.folder);
+    // clean_test(&cli.cli_settings.state.folder);
     outcome
 }
 

@@ -23,7 +23,7 @@ use symbolica::{
     function, symbol,
 };
 
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
 use vakint::Vakint;
@@ -37,6 +37,9 @@ pub mod local_3d;
 pub trait ForestNodeLike: LogMessage {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
+    fn lmb_id(&self) -> EdgeIndex {
+        *self.lmb().loop_edges.first().unwrap()
+    }
     // fn lmb_given(&self, subgraph: &SuBitGraph) -> &LoopMomentumBasis;
     fn dod(&self) -> i32;
     fn renormalization_scheme(&self) -> ApproximationType;

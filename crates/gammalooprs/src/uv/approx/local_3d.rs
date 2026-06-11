@@ -10,6 +10,7 @@ use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
     id::Replacement,
+    printer::PrintOptions,
     symbol,
 };
 use tracing::instrument;
@@ -34,7 +35,7 @@ static OSE_FOR_LOCAL_3D_SERIES: LazyLock<Symbol> = LazyLock::new(|| {
     symbol!(
         "gammalooprs::OSE_for_local_3d_series",
         der = |_, arg, out| {
-            if arg == 3 {
+            if arg == 2 {
                 **out = Atom::num(1);
             } else {
                 **out = Atom::Zero;
@@ -105,7 +106,12 @@ impl Local3DApproximation {
         for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+                reps.push(GS.split_mom_pattern(
+                    eid,
+                    current.lmb_id(),
+                    e_mass,
+                    settings.inner_products,
+                ));
             }
         }
 
@@ -124,7 +130,6 @@ impl Local3DApproximation {
         }
 
         let mut atomarg = cff * numerator;
-        // println!("CFF: {}", cff);
 
         // add data for OSE computation and add an explicit sqrt
         for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
@@ -136,6 +141,7 @@ impl Local3DApproximation {
                 let e_mass = e.data.mass_atom();
                 atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                     ei,
+                    current.lmb_id(),
                     e_mass,
                     None,
                     settings.inner_products,
@@ -186,8 +192,6 @@ impl Local3DApproximation {
             .replace(function!(
                 Symbol::DERIVATIVE,
                 0,
-                0,
-                0,
                 1,
                 *OSE_FOR_LOCAL_3D_SERIES,
                 W_.y___
@@ -224,6 +228,9 @@ impl Local3DApproximation {
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        for m in &mom_reps {
+            debug_tags!(#uv,#trace;mom_rep=%m,"Mom rep");
+        }
 
         let mut atomarg = integrand.replace_multiple(&mom_reps);
 
@@ -236,78 +243,33 @@ impl Local3DApproximation {
         }
 
         // (re-)expand OSEs from the subgraph only
-        for (_, eid, _) in graph.iter_edges_of(current.subgraph()) {
-            let eid = usize::from(eid) as i64;
+        for eid in current.lmb().loop_edges.iter() {
+            let eid = eid.0 as i64;
             // rescale the whole OSE so that the function itself has no poles during the expansion
-            atomarg = atomarg
-                .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_))
-                .with(
-                    function!(
-                        GS.ose,
-                        eid,
-                        W_.mom_,
-                        GS.m_uv * GS.m_uv,
-                        (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
-                            - GS.m_uv * GS.m_uv)
-                            / GS.rescale
-                            / GS.rescale
-                    ) * GS.rescale
-                        * GS.rescale,
-                )
-                .replace(function!(GS.ose, eid, W_.mom_, W_.a___)) //rescale the momenta for the same reason
-                .with_map(move |m| {
-                    let mut f = FunctionBuilder::new(GS.ose);
-                    f = f.add_arg(eid);
-                    f = f.add_arg(
-                        (m.get(W_.mom_)
-                            .unwrap()
-                            .to_atom()
-                            .replace(GS.rescale)
-                            .with(Atom::num(1) / GS.rescale)
-                            * GS.rescale)
-                            .expand()
-                            .replace(GS.rescale)
-                            .with(Atom::Zero),
-                    );
-                    f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-
-                    f.finish()
-                });
+            atomarg = atomarg.replace(function!(GS.ose, eid, W_.prop_)).with(
+                function!(
+                    GS.ose,
+                    eid,
+                    (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_ - GS.m_uv * GS.m_uv)
+                        / GS.rescale
+                        / GS.rescale
+                ) * GS.rescale
+                    * GS.rescale,
+            )
         }
 
         atomarg = (atomarg
             * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
-        atomarg = atomarg
-            .replace(function!(GS.ose, W_.a___))
-            .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
 
-        let a = atomarg.series(GS.rescale, Atom::Zero, 0).unwrap();
+        debug_tags!(#uv, #local, #before_series; log.expr = atomarg, "Before series in t");
 
-        let mut a = a
-            .to_atom()
-            .replace(function!(
-                Symbol::DERIVATIVE,
-                0,
-                0,
-                0,
-                1,
-                *OSE_FOR_LOCAL_3D_SERIES,
-                W_.y___
-            ))
-            .with(Atom::num(1))
-            .replace(function!(
-                Symbol::DERIVATIVE,
-                W_.x___,
-                *OSE_FOR_LOCAL_3D_SERIES,
-                W_.y___
-            ))
-            .with(Atom::num(0));
-        a = a
-            .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
-            .with(function!(GS.ose, W_.a___));
-        a = a.replace(GS.rescale).with(Atom::num(1));
+        let series = atomarg.series(GS.rescale, Atom::Zero, 0).unwrap();
+
+        debug_tags!(#uv, #local; expr = %series, "After series in t");
+        let a = series.to_atom().replace(GS.rescale).with(Atom::num(1));
+
         debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
         Ok(a)
     }
@@ -339,6 +301,7 @@ impl Local3DApproximation {
                 let e_mass = e.data.mass_atom();
                 atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                     ei,
+                    current.lmb_id(),
                     e_mass,
                     None,
                     settings.inner_products,
@@ -351,7 +314,12 @@ impl Local3DApproximation {
         for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+                reps.push(GS.split_mom_pattern(
+                    eid,
+                    current.lmb_id(),
+                    e_mass,
+                    settings.inner_products,
+                ));
             }
         }
         Ok(atomarg.replace_multiple(&reps))
