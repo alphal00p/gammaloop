@@ -229,7 +229,7 @@ impl Local3DApproximation {
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
         for m in &mom_reps {
-            debug_tags!(#uv,#trace;mom_rep=%m,"Mom rep");
+            debug_tags!(#uv,#momentum,#trace;mom_rep=%m,"Mom rep");
         }
 
         let mut atomarg = integrand.replace_multiple(&mom_reps);

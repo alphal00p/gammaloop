@@ -1,7 +1,7 @@
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
-    printer::{PrintState, PrintUserData},
+    printer::{PrintOptions, PrintState, PrintUserData},
     symbol, tag,
 };
 
@@ -339,6 +339,62 @@ macro_rules! broadcast_symbol {
 }
 
 impl SpensoTags {
+    fn print_dot(a: AtomView<'_>, opt: &PrintOptions, _state: &PrintState) -> Option<String> {
+        match opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i)) => {
+                let SpensoPrintSettings {
+                    parens, with_dim, ..
+                } = SpensoPrintSettings::from(*i as usize);
+
+                let AtomView::Fun(f) = a else {
+                    return None;
+                };
+
+                if f.get_nargs() != 2 {
+                    return None;
+                }
+                let mut argitem = f.iter();
+                let a = argitem.next().unwrap();
+                let b = argitem.next().unwrap();
+
+                let AtomView::Fun(f_a) = a else {
+                    return None;
+                };
+                let AtomView::Fun(f_b) = b else {
+                    return None;
+                };
+
+                let a_sym = f_a.get_symbol();
+                let b_sym = f_b.get_symbol();
+
+                if a_sym.has_tag(&SPENSO_TAG.rank1) && b_sym.has_tag(&SPENSO_TAG.rank1) {
+                    let mut out = String::new();
+                    if parens {
+                        out.push('(');
+                    }
+                    f_a.as_view()
+                        .format(&mut out, opt, PrintState::new())
+                        .unwrap();
+                    out.push('.');
+                    if with_dim {
+                        a.format(&mut out, opt, PrintState::new()).unwrap();
+                        out.push('.');
+                    }
+                    f_b.as_view()
+                        .format(&mut out, opt, PrintState::new())
+                        .unwrap();
+                    if parens {
+                        out.push(')');
+                    }
+                    Some(out)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     fn new() -> Self {
         let broadcast = tag!("broadcast");
         let upper = tag!("upper");
@@ -433,66 +489,7 @@ impl SpensoTags {
             bracket: symbol!("bracket"),
             pure_scalar: symbol!("pure_scalar"),
             scalar: symbol!("scalar"),
-            dot: symbol!("dot";Symmetric,Linear; print = |a, opt, _state|{
-                    match opt.custom_print_mode.get("spenso") {
-                        Some(PrintUserData::Integer(i))=>{
-                            let SpensoPrintSettings{
-                                parens,
-                                with_dim,..
-                            } = SpensoPrintSettings::from(*i as usize);
-
-
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    if f.get_nargs() != 3 {
-                        return None;
-                    }
-                    let mut args = f.iter();
-
-                    let a = args.next().unwrap();
-                    let b = args.next().unwrap();
-                    let c = args.next().unwrap();
-
-                    fn is_rep(view:AtomView<'_>)->bool{
-                        match view {
-                            AtomView::Fun(f) if f.get_symbol().has_tag(&SPENSO_TAG.upper) => true,
-                            AtomView::Var(s) if s.get_symbol().has_tag(&SPENSO_TAG.upper) => true,
-                            _=>false
-                        }
-                    }
-
-                    let (a,b,c) = if is_rep(a) && !is_rep(b) && !is_rep(c) {
-                        (a,b,c)
-                    } else if is_rep(b) && !is_rep(a) && !is_rep(c) {
-                        (b,c,a)
-                    } else if is_rep(c) && !is_rep(a) && !is_rep(b) {
-                        (c,a,b)
-                    } else { return None};
-
-                    let mut s = String::new();
-                    if parens {
-                        s.push('(');
-                    }
-                    b.format(&mut s, opt,PrintState::new()).unwrap();
-                    s.push('.');
-                    if with_dim {a.format(&mut s, opt, PrintState::new()).unwrap();
-                        s.push('.');
-                    }
-                    c.format(&mut s, opt,PrintState::new()).unwrap();
-                    if parens {
-                        s.push(')');
-                    }
-                    Some(s)
-
-                },
-                _=>None
-            }
-
-
-
-            }),
+            dot: symbol!("dot";Symmetric,Linear; print = Self::print_dot),
             tensor_: symbol!("tensor_", tag = tensor),
             i_: symbol!("i_", tag = &index),
             rep_: symbol!("rep_", tag = &representation),

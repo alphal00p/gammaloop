@@ -4,7 +4,7 @@ name = "aa_aa_2L"
 folder = "./examples/cli/aa_aa/2L/gammaloop_state"
 
 [cli_settings.global]
-display_directive = "info,gammalooprs[{#uv, #graph, #spinney,#generation}]=debug"
+display_directive = "info,gammalooprs[{#generation, #profile, #uv, #graph, #term, #summary}]=debug"
 logfile_directive = "gammalooprs[{#uv}]=debug"
 
 [cli_settings.global.log_style]
@@ -14,7 +14,8 @@ log_format = "Full"
 short_timestamp = true
 
 [cli_settings.global.generation.uv]
-generate_integrated = false
+generate_integrated = true
+add_integrated_uv_with_n_loops=1
 # add_sigma = true
 
 [cli_settings.global.generation.evaluator]
@@ -28,7 +29,7 @@ cpe_iterations = 5
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = true
+enable_thresholds = false
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = false
 
@@ -433,7 +434,7 @@ m_uv = 9.188
 # additional_param_values = [1.0, 1.0]
 
 [default_runtime_settings.subtraction]
-disable_threshold_subtraction = false
+disable_threshold_subtraction = true
 
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"

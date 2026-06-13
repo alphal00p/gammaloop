@@ -453,10 +453,7 @@ pub trait ColorSimplifier {
 }
 impl ColorSimplifier for Atom {
     fn simplify_color(&self) -> Atom {
-        println!("Colorsimplifying {}", self);
-        let a = self.simplify_color_with(ColorSimplifySettings::default());
-        println!("Got {}", a);
-        a
+        self.simplify_color_with(ColorSimplifySettings::default())
     }
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
@@ -494,10 +491,7 @@ impl ColorSimplifier for Atom {
 
 impl ColorSimplifier for AtomView<'_> {
     fn simplify_color(&self) -> Atom {
-        println!("Colorsimplifying {}", self);
-        let a = self.simplify_color_with(ColorSimplifySettings::default());
-        println!("Got {}", a);
-        a
+        self.simplify_color_with(ColorSimplifySettings::default())
     }
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {

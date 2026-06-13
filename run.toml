@@ -10,7 +10,7 @@ display_directive = "info,gammalooprs[{#uv}]=debug,gammalooprs[{#span_context}]=
 logfile_directive = "gammalooprs[{#uv}]=debug"
 
 [cli_settings.global.generation.uv]
-generate_integrated = false
+generate_integrated = true
 add_sigma = true
 
 [cli_settings.global.generation.threshold_subtraction]

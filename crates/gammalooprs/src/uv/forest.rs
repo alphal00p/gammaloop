@@ -224,11 +224,7 @@ impl Forest {
                     )?;
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "forest_node_root_done",
-                        node = ?n,
-                        topo_index = i,
-                        dod,
                         elapsed_ms = root_started.elapsed().as_secs_f64() * 1000.0,
-                        total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
                         "Computed root UV forest node"
                     );
                 }
@@ -243,50 +239,33 @@ impl Forest {
                     };
                     current.data.simple_approx =
                         Some(a.dependent(current.data.spinney.subgraph.clone()));
-                    current.data.update_filtered_integrated_uv_chain_state(
-                        graph,
-                        &parent.data,
-                        settings,
+                    current.data.set_filter_state(graph, &parent.data, settings);
+
+                    debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                        stage = "computing forest node",
+                        simple = %current.data.simple_approx.as_ref().map(|a| a.expr(&graph.full_filter()).to_string()).unwrap(),
+                        log.current = current.data.spinney,
+                        log.given = parent.data.spinney,
+                        "Computing UV forest node single"
                     );
 
                     current.data.topo_order = i;
                     if settings.generate_integrated {
                         let integrated_started = std::time::Instant::now();
                         debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                            stage = "forest_node_compute_integrated_start",
-                            node = ?n,
-                            parent = ?parent_id,
-                            topo_index = i,
-                            current = %current.data.spinney.dod,
-                            given = %parent.data.spinney.dod,
                             "Computing integrated UV forest node"
                         );
                         current
                             .data
                             .compute_integrated(graph, vakint, &parent.data, settings)?;
                         debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                            stage = "forest_node_compute_integrated_done",
-                            node = ?n,
-                            parent = ?parent_id,
-                            topo_index = i,
-                            current = %current.data.spinney.dod,
-                            given = %parent.data.spinney.dod,
                             elapsed_ms = integrated_started.elapsed().as_secs_f64() * 1000.0,
-                            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
                             "Computed integrated UV forest node"
                         );
                     }
                     if settings.only_integrated {
                         debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                            stage = "forest_node_only_integrated_skip_local",
-                            node = ?n,
-                            parent = ?parent_id,
-                            topo_index = i,
-                            current = %current.data.spinney.dod,
-                            given = %parent.data.spinney.dod,
-                            elapsed_ms = node_started.elapsed().as_secs_f64() * 1000.0,
-                            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                            "Skipped local UV forest node"
+                            "Skipping local UV forest node"
                         );
                         continue;
                     }
@@ -294,11 +273,6 @@ impl Forest {
                     let local_started = std::time::Instant::now();
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "forest_node_compute_local_3d_start",
-                        node = ?n,
-                        parent = ?parent_id,
-                        topo_index = i,
-                        current = %current.data.spinney.dod,
-                        given = %parent.data.spinney.dod,
                         "Computing local 3D UV forest node"
                     );
                     current.data.compute(
@@ -310,14 +284,7 @@ impl Forest {
                         orientation_pattern,
                     )?;
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
-                        stage = "forest_node_compute_local_3d_done",
-                        node = ?n,
-                        parent = ?parent_id,
-                        topo_index = i,
-                        current = %current.data.spinney.dod,
-                        given = %parent.data.spinney.dod,
                         elapsed_ms = local_started.elapsed().as_secs_f64() * 1000.0,
-                        total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
                         "Computed local 3D UV forest node"
                     );
                 }
@@ -327,12 +294,7 @@ impl Forest {
             }
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "forest_node_done",
-                node = ?n,
-                topo_index = i,
-                parent_count,
-                dod,
                 elapsed_ms = node_started.elapsed().as_secs_f64() * 1000.0,
-                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
                 "Computed UV forest node"
             );
         }
