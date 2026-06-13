@@ -14,9 +14,18 @@ log_format = "Full"
 short_timestamp = true
 
 [cli_settings.global.generation.uv]
+softct = false
 generate_integrated = true
-add_integrated_uv_with_n_loops=1
-# add_sigma = true
+add_integrated_uv_with_n_loops = 1
+subtract_uv = true
+only_integrated = false
+pole_part = false
+add_sigma = false
+keep_sigma = true
+inner_products = true
+use_legacy = true
+cached = true
+renormalization_schemes = []
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
@@ -48,7 +57,7 @@ disable_tropical_generation = true
 feyngen = 10
 generate = 10
 compile = 10
-integrate = 10
+integrate = 20
 
 [[command_blocks]]
 name = "generate_diagrams"
@@ -57,11 +66,12 @@ commands = [
   "set global kv global.n_cores.feyngen=10",
   # "set global kv global.generation.uv.use_legacy=true",
 
+  # --select-graphs GL00 GL06 GL08 GL16
   # --select-graphs GL16
   # --loop-momentum-bases GL16=9,10
   "remove processes -p aa_aa",
   """generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}]
-        --numerator-grouping no_grouping
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
         --symmetrize-initial-states=true --symmetrize-final-states=true
         --select-graphs GL00
         -p aa_aa -i 2L --only-diagrams""",
@@ -83,6 +93,47 @@ name = "generate_integrands"
 commands = [
   "generate existing -p aa_aa -i 2L",
   "save state -o",
+]
+
+[[command_blocks]]
+name = "integrate_diagrams"
+commands = [
+  "remove processes -p aa_aa -i 2L_muv_22p797",
+  "remove processes -p aa_aa -i 2L_muv_91p188",
+  "remove processes -p aa_aa -i 2L_muv_364p752",
+  "run set_model_parameters",
+  "run set_kinematics_a",
+  "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+  "set process -p aa_aa kv general.mu_r=91.188",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=1000000000 integrator.seed=1337 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-3",
+  "set process -p aa_aa -i 2L kv general.m_uv=9.188",
+  "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_muv_22p797",
+  "set process -p aa_aa -i 2L_muv_22p797 kv general.m_uv=22.797",
+  "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_muv_91p188",
+  "set process -p aa_aa -i 2L_muv_91p188 kv general.m_uv=91.188",
+  "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_muv_364p752",
+  "set process -p aa_aa -i 2L_muv_364p752 kv general.m_uv=364.752",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        coordinate_system = "spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L -p aa_aa -i 2L_muv_22p797 -p aa_aa -i 2L_muv_91p188 -p aa_aa -i 2L_muv_364p752
+             --n-cores 20
+             --renderer ratatui
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
 ]
 
 [[command_blocks]]
@@ -415,12 +466,12 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
-  [500.0, 0.0, 0.0, 500.0],
-  [500.0, 0.0, 0.0, -500.0],
-  [500.0, 500.0, 0.0, 0.0],
+  [86.5, 0.0, 0.0, 86.5],
+  [86.5, 0.0, 0.0, -86.5],
+  [86.5, 0.0, -79.27855952273603, -34.6],
   "dependent"
 ]
-helicities = [+1, +1, -1, -1]
+helicities = [+1, -1, +1, -1]
 
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
@@ -439,7 +490,7 @@ disable_threshold_subtraction = true
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = false
+lmb_multichanneling = true
 lmb_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"
