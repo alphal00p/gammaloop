@@ -38,6 +38,11 @@ pub(crate) struct FinalIntegrand<'a> {
     orientation_pattern: &'a OrientationPattern,
 }
 
+pub(crate) struct LocalizedIntegratedCt {
+    pub active: IntegrandExpr,
+    pub frozen_integrands: BTreeMap<CutCFFIndex, Atom>,
+}
+
 impl<'a> FinalIntegrand<'a> {
     pub(crate) fn new(
         valid_orientations: &'a [EdgeVec<Orientation>],
@@ -210,15 +215,17 @@ impl<'a> FinalIntegrand<'a> {
         integrated_node: &S,
         finite_ct: &Atom,
         cuts: &CutSet,
-    ) -> Result<IntegrandExpr> {
+    ) -> Result<LocalizedIntegratedCt> {
         debug_tags!(#uv; log.expr = finite_ct, "Localizing integrated UV CT");
         if finite_ct.is_zero() {
-            return Ok(IntegrandExpr {
-                integrands: cuts
-                    .residue_selector
-                    .generate_allowed_keys()
+            let indices = cuts.residue_selector.generate_allowed_keys();
+            return Ok(LocalizedIntegratedCt {
+                active: IntegrandExpr {
+                    integrands: indices.iter().map(|index| (*index, Atom::Zero)).collect(),
+                },
+                frozen_integrands: indices
                     .into_iter()
-                    .map(|index| (index, Atom::Zero))
+                    .map(|index| (index, Atom::one()))
                     .collect(),
             });
         }
@@ -238,25 +245,67 @@ impl<'a> FinalIntegrand<'a> {
 
         let internal_edges = Self::internal_paired_edges_of_subgraph(graph, to_contract);
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
+        debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
+            stage = "localize_integrated_ct_factors",
+            finite_ct_byte_size = finite_ct.as_view().get_byte_size(),
+            fourddenoms_byte_size = fourddenoms.as_view().get_byte_size(),
+            localizing_integrand_byte_size = localizing_integrand.as_view().get_byte_size(),
+            internal_edges = ?internal_edges,
+            "Integrated UV CT localization size checkpoint"
+        );
 
-        let integrands = cff
-            .terms
-            .into_iter()
-            .map(|(index, term)| {
-                let mut localized = Atom::Zero;
-                for (cff_term, orientation) in term.expression.into_iter().zip(term.orientations) {
-                    localized += Self::localized_orientation_term(
-                        &(cff_term * &fourddenoms),
-                        &orientation,
-                        self.valid_orientations,
-                        &internal_edges,
-                    )?;
-                }
-                Ok((index, localized * &localizing_integrand * finite_ct))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()?;
+        let mut active_integrands = BTreeMap::new();
+        let mut frozen_integrands = BTreeMap::new();
+        for (index, term) in cff.terms {
+            let mut localized = Atom::Zero;
+            for (cff_term, orientation) in term.expression.into_iter().zip(term.orientations) {
+                localized += Self::localized_orientation_term(
+                    &(cff_term * &fourddenoms),
+                    &orientation,
+                    self.valid_orientations,
+                    &internal_edges,
+                )?;
+            }
 
-        Ok(IntegrandExpr { integrands })
+            let localized_cff_byte_size = localized.as_view().get_byte_size();
+            let active_ct = localized * finite_ct;
+            let localized_ct = &active_ct * &localizing_integrand;
+            debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
+                stage = "localize_integrated_ct_term",
+                cut_index = ?index,
+                localized_cff_byte_size,
+                active_ct_byte_size = active_ct.as_view().get_byte_size(),
+                localized_ct_byte_size = localized_ct.as_view().get_byte_size(),
+                "Integrated UV CT localization size checkpoint"
+            );
+
+            active_integrands.insert(index, active_ct);
+            frozen_integrands.insert(index, localizing_integrand.clone());
+        }
+
+        Ok(LocalizedIntegratedCt {
+            active: IntegrandExpr {
+                integrands: active_integrands,
+            },
+            frozen_integrands,
+        })
+    }
+
+    pub(crate) fn localized_integrated_ct_for_local_3d<S: ForestNodeLike>(
+        &self,
+        graph: &mut Graph,
+        integrated_node: &S,
+        integrated_4d: &ApproxOp,
+        cuts: &CutSet,
+    ) -> Result<LocalizedIntegratedCt> {
+        let finite = self.finite_integrated_ct(integrated_4d);
+        debug_tags!(
+            #uv;
+            log.finite = finite,
+            "Computing localized integrated UV CT",
+        );
+
+        self.localize_integrated_ct(graph, integrated_node, &finite, cuts)
     }
 
     #[debug_instrument(
@@ -270,14 +319,26 @@ impl<'a> FinalIntegrand<'a> {
         integrated_4d: &ApproxOp,
         cuts: &CutSet,
     ) -> Result<IntegrandExpr> {
-        let finite = self.finite_integrated_ct(integrated_4d);
-        debug_tags!(
-            #uv;
-            log.finite = finite,
-            "Computing localized integrated UV CT",
-        );
+        let localized =
+            self.localized_integrated_ct_for_local_3d(graph, integrated_node, integrated_4d, cuts)?;
+        let integrands = localized
+            .active
+            .integrands
+            .into_iter()
+            .zip(localized.frozen_integrands)
+            .map(|((active_index, active), (frozen_index, frozen))| {
+                if active_index != frozen_index {
+                    return Err(eyre!(
+                        "Mismatched indices for localized integrated CT active and frozen factors: {:?} vs {:?}",
+                        active_index,
+                        frozen_index
+                    ));
+                }
+                Ok((active_index, active * frozen))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
 
-        self.localize_integrated_ct(graph, integrated_node, &finite, cuts)
+        Ok(IntegrandExpr { integrands })
     }
 
     #[debug_instrument(

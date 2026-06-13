@@ -8,7 +8,9 @@ use crate::{
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{
-            final_integrand::FinalIntegrand, integrated::Integrated, local_3d::Local3DApproximation,
+            final_integrand::FinalIntegrand,
+            integrated::Integrated,
+            local_3d::{Local3DApproximation, Local3DLoopRescaling},
         },
     },
 };
@@ -273,16 +275,12 @@ impl Approximation {
         settings: &UVgenerationSettings,
     ) {
         self.excluded_by_filters =
-            !settings
+            settings
                 .add_integrated_uv_with_n_loops
                 .is_some_and(|target_loop_count| {
-                    !dependent.excluded_by_filters
-                        && graph.n_loops(self.spinney.filter()) == target_loop_count
+                    dependent.excluded_by_filters
+                        || graph.n_loops(self.spinney.filter()) != target_loop_count
                 });
-    }
-
-    fn zero_terms(allowed_keys: &[CutCFFIndex]) -> BTreeMap<CutCFFIndex, Atom> {
-        allowed_keys.iter().map(|&key| (key, Atom::Zero)).collect()
     }
 
     pub(crate) fn root(
@@ -300,30 +298,20 @@ impl Approximation {
         } else {
             self.integrated_4d = ApproxOp::Root;
             self.local_3d = CFFapprox::root(graph, cuts, settings, orientation_pattern)?;
-            if settings.generate_integrated {
-                let (_, _) = self
-                    .local_3d
-                    .expr()
-                    .expect("root local CFF should have been computed");
-                self.final_integrand = Some(Self::zero_terms(
-                    &cuts.residue_selector.generate_allowed_keys(),
-                ));
-            } else {
-                let (local_terms, local_sign) = self
-                    .local_3d
-                    .expr()
-                    .expect("root local CFF should have been computed");
-                self.final_integrand = Some(
-                    FinalIntegrand::new(valid_orientations, orientation_pattern).build(
-                        graph,
-                        self,
-                        &local_terms,
-                        local_sign,
-                        &self.integrated_4d,
-                        cuts,
-                    )?,
-                );
-            }
+            let (local_terms, local_sign) = self
+                .local_3d
+                .expr()
+                .expect("root local CFF should have been computed");
+            self.final_integrand = Some(
+                FinalIntegrand::new(valid_orientations, orientation_pattern).build(
+                    graph,
+                    self,
+                    &local_terms,
+                    local_sign,
+                    &self.integrated_4d,
+                    cuts,
+                )?,
+            );
         }
 
         Ok(())
@@ -357,7 +345,7 @@ impl Approximation {
         if self.excluded_by_filters {
             debug_tags!(#generation, #profile, #uv, #graph, #summary;
                 stage = "compute_integrated_filtered_zero",
-                
+
                 "Skipped integrated UV computation for filtered mode"
             );
             self.integrated_4d = ApproxOp::Dependent {
@@ -456,7 +444,7 @@ impl Approximation {
         let final_integrand = FinalIntegrand::new(valid_orientations, orientation_pattern);
 
         let localize_started = std::time::Instant::now();
-        let integrated_t = final_integrand.localized_integrated_ct(
+        let integrated_t = final_integrand.localized_integrated_ct_for_local_3d(
             graph,
             dependent,
             &dependent.integrated_4d,
@@ -464,7 +452,7 @@ impl Approximation {
         )?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_local_3d_localize_integrated_done",
-            localized_count = integrated_t.integrands.len(),
+            localized_count = integrated_t.active.integrands.len(),
             elapsed_ms = localize_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Localized integrated UV CT for local 3D subtraction"
@@ -473,8 +461,10 @@ impl Approximation {
         let ctx = UVCtx { graph, settings };
 
         let mut integrands = BTreeMap::new();
-        for ((index_local, local), (index_integ, integ)) in
-            cff.into_iter().zip(integrated_t.integrands)
+        for (((index_local, local), (index_integ, integ)), (index_frozen, frozen)) in cff
+            .into_iter()
+            .zip(integrated_t.active.integrands)
+            .zip(integrated_t.frozen_integrands)
         {
             let term_started = std::time::Instant::now();
             if index_local != index_integ {
@@ -482,6 +472,13 @@ impl Approximation {
                     "Mismatched indices for local and integrated approximations: {:?} vs {:?}",
                     index_local,
                     index_integ
+                ));
+            }
+            if index_local != index_frozen {
+                return Err(eyre!(
+                    "Mismatched indices for local integrated active and frozen factors: {:?} vs {:?}",
+                    index_local,
+                    index_frozen
                 ));
             }
             let mut sum_3d = Atom::Zero;
@@ -493,7 +490,13 @@ impl Approximation {
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 "subtracting localT(integrated(expr))"
             );
-            sum_3d -= Local3DApproximation {}.kernel(&ctx, &*self, dependent, &integ)?;
+            sum_3d -= Local3DApproximation {}.kernel_with_loop_rescaling(
+                &ctx,
+                &*self,
+                dependent,
+                &integ,
+                Local3DLoopRescaling::ReducedSubgraph,
+            )? * frozen;
             integrands.insert(index_local, sum_3d);
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "compute_local_3d_term_done",

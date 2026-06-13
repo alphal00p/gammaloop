@@ -998,7 +998,7 @@ impl EvaluatorStack {
     {
         let Some(summed_function_map) = &mut self.summed_function_map else {
             return Err(eyre!(
-                "Summed function map evaluator not available. Regenerate with summed_function_map set to true."
+                "Runtime requested evaluator_method=SummedFunctionMap, but this integrand was generated without a summed function-map evaluator. Regenerate with global.generation.evaluator.summed_function_map=true, or set process runtime general.evaluator_method=SingleParametric."
             ));
         };
 
