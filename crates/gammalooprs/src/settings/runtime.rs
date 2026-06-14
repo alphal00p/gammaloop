@@ -997,6 +997,8 @@ pub struct SamplingSettingsParser {
     pub lmb_multichanneling: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub lmb_channels: SumMode,
+    #[serde(skip_serializing_if = "is_float::<3>")]
+    pub alpha: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub coordinate_system: CoordinateSystem,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -1012,6 +1014,7 @@ impl Default for SamplingSettingsParser {
             orientations: SumMode::Summed,
             lmb_multichanneling: false,
             lmb_channels: SumMode::Summed,
+            alpha: 3.0,
             coordinate_system: CoordinateSystem::Spherical,
             mapping: ParameterizationMapping::Linear,
             b: 1.0,
@@ -1067,6 +1070,7 @@ impl SamplingSettings {
                 orientations: SumMode::Summed,
                 lmb_multichanneling: false,
                 lmb_channels: SumMode::Summed,
+                alpha: 3.0,
                 coordinate_system: CoordinateSystem::from_mode(settings.mode.clone()),
                 mapping: settings.mapping.clone(),
                 b: settings.b,
@@ -1076,6 +1080,7 @@ impl SamplingSettings {
                 orientations: SumMode::Summed,
                 lmb_multichanneling: true,
                 lmb_channels: SumMode::Summed,
+                alpha: settings.alpha,
                 coordinate_system: CoordinateSystem::from_mode(
                     settings.parameterization_settings.mode.clone(),
                 ),
@@ -1096,6 +1101,7 @@ impl SamplingSettings {
                             orientations,
                             lmb_multichanneling: false,
                             lmb_channels: SumMode::Summed,
+                            alpha: 3.0,
                             coordinate_system: CoordinateSystem::from_mode(
                                 parameterization_settings.mode.clone(),
                             ),
@@ -1109,6 +1115,7 @@ impl SamplingSettings {
                             orientations,
                             lmb_multichanneling: true,
                             lmb_channels: SumMode::Summed,
+                            alpha: multichanneling_settings.alpha,
                             coordinate_system: CoordinateSystem::from_mode(
                                 multichanneling_settings
                                     .parameterization_settings
@@ -1129,6 +1136,7 @@ impl SamplingSettings {
                         orientations,
                         lmb_multichanneling: true,
                         lmb_channels: SumMode::MonteCarlo,
+                        alpha: multichanneling_settings.alpha,
                         coordinate_system: CoordinateSystem::from_mode(
                             multichanneling_settings
                                 .parameterization_settings
@@ -1146,6 +1154,7 @@ impl SamplingSettings {
                         orientations,
                         lmb_multichanneling: false,
                         lmb_channels: SumMode::Summed,
+                        alpha: 3.0,
                         coordinate_system: CoordinateSystem::MomTrop,
                         mapping: ParameterizationMapping::default(),
                         b: 1.0,
@@ -1161,6 +1170,7 @@ impl SamplingSettings {
             orientations,
             lmb_multichanneling,
             lmb_channels,
+            alpha,
             coordinate_system,
             mapping,
             b,
@@ -1223,8 +1233,8 @@ impl SamplingSettings {
 
                 if lmb_multichanneling {
                     Ok(SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                        alpha,
                         parameterization_settings,
-                        ..MultiChannelingSettings::default()
                     }))
                 } else {
                     Ok(SamplingSettings::Default(parameterization_settings))
@@ -1233,8 +1243,8 @@ impl SamplingSettings {
             SumMode::MonteCarlo => {
                 let sampling_type = if lmb_multichanneling {
                     let settings = MultiChannelingSettings {
+                        alpha,
                         parameterization_settings,
-                        ..MultiChannelingSettings::default()
                     };
 
                     match lmb_channels {

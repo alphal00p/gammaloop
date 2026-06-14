@@ -1,0 +1,581 @@
+{
+  "scales": [
+    1000.0,
+    1274.2749857031336,
+    1623.776739188721,
+    2069.13808111479,
+    2636.650898730358,
+    3359.818286283781,
+    4281.332398719395,
+    5455.59478116852,
+    6951.927961775606,
+    8858.667904100823,
+    11288.378916846883,
+    14384.498882876629,
+    18329.807108324374,
+    23357.21469090121,
+    29763.51441631319,
+    37926.901907322535,
+    48329.30238571752,
+    61584.82110660255,
+    78475.99703514607,
+    100000.0
+  ],
+  "graphs": [
+    {
+      "graph_index": 0,
+      "lmbs": [
+        {
+          "lmb_index": 0,
+          "lmb_label": "loop_edges=[e5,e10]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                5
+              ],
+              "free": [
+                10
+              ],
+              "initial_dod": -2,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                10
+              ],
+              "free": [
+                5
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                5,
+                10
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 1,
+          "lmb_label": "loop_edges=[e4,e10]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                4
+              ],
+              "free": [
+                10
+              ],
+              "initial_dod": -3,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                10
+              ],
+              "free": [
+                4
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                4,
+                10
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 2,
+          "lmb_label": "loop_edges=[e5,e9]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                5
+              ],
+              "free": [
+                9
+              ],
+              "initial_dod": -2,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                9
+              ],
+              "free": [
+                5
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                5,
+                9
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 3,
+          "lmb_label": "loop_edges=[e4,e9]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                4
+              ],
+              "free": [
+                9
+              ],
+              "initial_dod": -3,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                9
+              ],
+              "free": [
+                4
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                4,
+                9
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 4,
+          "lmb_label": "loop_edges=[e5,e8]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                5
+              ],
+              "free": [
+                8
+              ],
+              "initial_dod": -2,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                8
+              ],
+              "free": [
+                5
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                5,
+                8
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 5,
+          "lmb_label": "loop_edges=[e4,e8]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                4
+              ],
+              "free": [
+                8
+              ],
+              "initial_dod": -3,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                8
+              ],
+              "free": [
+                4
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                4,
+                8
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 6,
+          "lmb_label": "loop_edges=[e5,e7]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                5
+              ],
+              "free": [
+                7
+              ],
+              "initial_dod": -2,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                7
+              ],
+              "free": [
+                5
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                5,
+                7
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 7,
+          "lmb_label": "loop_edges=[e4,e7]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                4
+              ],
+              "free": [
+                7
+              ],
+              "initial_dod": -3,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                7
+              ],
+              "free": [
+                4
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                4,
+                7
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 8,
+          "lmb_label": "loop_edges=[e5,e6]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                5
+              ],
+              "free": [
+                6
+              ],
+              "initial_dod": -2,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                6
+              ],
+              "free": [
+                5
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                5,
+                6
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 9,
+          "lmb_label": "loop_edges=[e4,e6]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                4
+              ],
+              "free": [
+                6
+              ],
+              "initial_dod": -3,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                6
+              ],
+              "free": [
+                4
+              ],
+              "initial_dod": 1,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                4,
+                6
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        },
+        {
+          "lmb_index": 10,
+          "lmb_label": "loop_edges=[e4,e5]",
+          "subsets": [
+            {
+              "subset_index": 0,
+              "fixed": [
+                4
+              ],
+              "free": [
+                5
+              ],
+              "initial_dod": -3,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 1,
+              "fixed": [
+                5
+              ],
+              "free": [
+                4
+              ],
+              "initial_dod": -2,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            },
+            {
+              "subset_index": 2,
+              "fixed": [],
+              "free": [
+                4,
+                5
+              ],
+              "initial_dod": 0,
+              "analysis": {
+                "inspect_level": null
+              },
+              "per_orientation_inspect_entries": null,
+              "analytic_entries": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

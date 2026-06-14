@@ -581,6 +581,7 @@ mod tests {
         assert!(toml.contains("orientations = \"monte_carlo\""));
         assert!(toml.contains("lmb_multichanneling = true"));
         assert!(toml.contains("lmb_channels = \"monte_carlo\""));
+        assert!(toml.contains("alpha = 3.0"));
         assert!(toml.contains("coordinate_system = \"spherical\""));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
@@ -611,6 +612,7 @@ graphs = "monte_carlo"
 orientations = "summed"
 lmb_multichanneling = true
 lmb_channels = "summed"
+alpha = 1.5
 coordinate_system = "momentum_space"
 mapping = "log"
 b = 5.0
@@ -623,7 +625,7 @@ b = 5.0
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
-                        alpha: 3.0,
+                        alpha: 1.5,
                         parameterization_settings:
                             crate::settings::runtime::ParameterizationSettings {
                                 mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,

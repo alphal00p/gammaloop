@@ -63,6 +63,7 @@ pub struct ProfileSettings {
     pub use_f128: bool,
     pub analyse_analytically: bool,
     pub orientation_mode: OrientationProfileMode,
+    pub fixed_uv_ray: Option<UVProfileFixedRay>,
 }
 
 impl Default for ProfileSettings {
@@ -75,7 +76,120 @@ impl Default for ProfileSettings {
             analyse_analytically: false,
             use_f128: false,
             orientation_mode: OrientationProfileMode::Summed,
+            fixed_uv_ray: None,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UVProfileFixedRay {
+    directions: Vec<[f64; 3]>,
+    norms: Vec<f64>,
+}
+
+impl UVProfileFixedRay {
+    pub fn from_flat_components(directions: &[f64], norms: &[f64]) -> Result<Self> {
+        if directions.is_empty() {
+            return Err(eyre!(
+                "Fixed UV ray directions cannot be empty when the option is used."
+            ));
+        }
+        if !directions.len().is_multiple_of(3) {
+            return Err(eyre!(
+                "Fixed UV ray directions must contain a multiple of 3 components, got {}.",
+                directions.len()
+            ));
+        }
+        if norms.is_empty() {
+            return Err(eyre!(
+                "Fixed UV ray norms cannot be empty when directions are supplied."
+            ));
+        }
+
+        let directions = directions
+            .chunks_exact(3)
+            .map(|direction| {
+                let norm = (direction[0] * direction[0]
+                    + direction[1] * direction[1]
+                    + direction[2] * direction[2])
+                    .sqrt();
+                if norm == 0.0 {
+                    return Err(eyre!(
+                        "Fixed UV ray directions cannot contain a zero vector."
+                    ));
+                }
+                Ok([
+                    direction[0] / norm,
+                    direction[1] / norm,
+                    direction[2] / norm,
+                ])
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        if norms.iter().any(|norm| !norm.is_finite() || *norm <= 0.0) {
+            return Err(eyre!(
+                "Fixed UV ray norms must be finite and strictly positive."
+            ));
+        }
+
+        Ok(Self {
+            directions,
+            norms: norms.to_vec(),
+        })
+    }
+
+    fn sample(&self, loop_count: usize) -> Result<LoopMomentumSample> {
+        if self.directions.len() != 1 && self.directions.len() != loop_count {
+            return Err(eyre!(
+                "Fixed UV ray directions contain {} ray(s), but this LMB has {} loop variable(s). Use either one direction or one direction per loop variable.",
+                self.directions.len(),
+                loop_count
+            ));
+        }
+        if self.norms.len() != 1 && self.norms.len() != loop_count {
+            return Err(eyre!(
+                "Fixed UV ray norms contain {} value(s), but this LMB has {} loop variable(s). Use either one norm or one norm per loop variable.",
+                self.norms.len(),
+                loop_count
+            ));
+        }
+
+        (0..loop_count)
+            .map(|i| {
+                let direction = self.directions[if self.directions.len() == 1 { 0 } else { i }];
+                let norm = self.norms[if self.norms.len() == 1 { 0 } else { i }];
+                Ok(ThreeMomentum {
+                    px: F(norm * direction[0]),
+                    py: F(norm * direction[1]),
+                    pz: F(norm * direction[2]),
+                })
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UVProfileFixedRay;
+
+    #[test]
+    fn fixed_uv_ray_repeats_single_direction_and_norm() {
+        let ray = UVProfileFixedRay::from_flat_components(&[0.0, 0.0, 2.0], &[3.0]).unwrap();
+        let sample = ray.sample(2).unwrap();
+
+        assert_eq!(sample.len(), 2);
+        for momentum in &sample {
+            assert_eq!(momentum.px.0, 0.0);
+            assert_eq!(momentum.py.0, 0.0);
+            assert_eq!(momentum.pz.0, 3.0);
+        }
+    }
+
+    #[test]
+    fn fixed_uv_ray_rejects_invalid_input_shapes() {
+        assert!(UVProfileFixedRay::from_flat_components(&[1.0, 0.0], &[1.0]).is_err());
+        assert!(UVProfileFixedRay::from_flat_components(&[0.0, 0.0, 0.0], &[1.0]).is_err());
+        assert!(UVProfileFixedRay::from_flat_components(&[1.0, 0.0, 0.0], &[0.0]).is_err());
     }
 }
 
@@ -915,22 +1029,26 @@ impl<'a> UVProfileRunner<'a> {
         lmb: &LoopMomentumBasis,
         orientation_labels: Option<&[String]>,
     ) -> Result<LMBResult> {
-        let mut rng = MonteCarloRng::new(lmb_seed(self.base_seed, graph_id, lmb_index), 0);
-        let sample: LoopMomentumSample = lmb
-            .loop_edges
-            .iter()
-            .map(|_| ThreeMomentum {
-                px: F(
-                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
-                ),
-                py: F(
-                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
-                ),
-                pz: F(
-                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
-                ),
-            })
-            .collect();
+        let sample: LoopMomentumSample =
+            if let Some(fixed_uv_ray) = &self.profile_settings.fixed_uv_ray {
+                fixed_uv_ray.sample(lmb.loop_edges.len())?
+            } else {
+                let mut rng = MonteCarloRng::new(lmb_seed(self.base_seed, graph_id, lmb_index), 0);
+                lmb.loop_edges
+                    .iter()
+                    .map(|_| ThreeMomentum {
+                        px: F(rng.random_range(
+                            -self.settings.kinematics.e_cm..self.settings.kinematics.e_cm,
+                        )),
+                        py: F(rng.random_range(
+                            -self.settings.kinematics.e_cm..self.settings.kinematics.e_cm,
+                        )),
+                        pz: F(rng.random_range(
+                            -self.settings.kinematics.e_cm..self.settings.kinematics.e_cm,
+                        )),
+                    })
+                    .collect()
+            };
 
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
         loops.next();

@@ -14,7 +14,7 @@ use gammalooprs::{
     },
     processes::ProcessCollection,
     uv::{
-        profile::{ProfileSettings, UVProfileable},
+        profile::{ProfileSettings, UVProfileFixedRay, UVProfileable},
         UVProfileAnalysis,
     },
 };
@@ -79,6 +79,25 @@ pub struct UltraVioletProfile {
     /// Random seed for momentum sampling
     #[arg(long = "seed")]
     pub seed: Option<u64>,
+
+    /// Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied
+    #[arg(
+        long = "uv-ray-directions",
+        num_args = 3..,
+        value_delimiter = ',',
+        allow_negative_numbers = true
+    )]
+    pub uv_ray_directions: Vec<f64>,
+
+    /// Fixed UV ray starting norms, repeated for all rays if one norm is supplied
+    #[arg(
+        long = "uv-ray-norms",
+        num_args = 1..,
+        value_delimiter = ',',
+        allow_negative_numbers = true,
+        requires = "uv_ray_directions"
+    )]
+    pub uv_ray_norms: Vec<f64>,
 
     /// Output file for results (optional)
     #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
@@ -166,6 +185,8 @@ impl Default for UltraVioletProfile {
             analyse_analytically: false,
             per_orientation: false,
             seed: None,
+            uv_ray_directions: Vec::new(),
+            uv_ray_norms: Vec::new(),
             output_file: None,
         }
     }
@@ -209,6 +230,8 @@ impl Profile {
                 max_scale_exponent,
                 use_f128,
                 seed,
+                uv_ray_directions,
+                uv_ray_norms,
                 analyse_analytically,
                 per_orientation,
                 output_file,
@@ -221,14 +244,26 @@ impl Profile {
                     .process_list
                     .get_amplitude_mut_ref(Some(&process_ref), Some(&integrand_name))?;
 
-                amplitude
-                    .integrand
-                    .as_mut()
-                    .ok_or(eyre!(
-                        "Integrand {} has not yet been generated, but exists",
-                        amplitude.name
-                    ))?
-                    .warm_up(&model)?;
+                let integrand = amplitude.integrand.as_mut().ok_or(eyre!(
+                    "Integrand {} has not yet been generated, but exists",
+                    amplitude.name
+                ))?;
+                integrand.warm_up(&model)?;
+                let default_uv_ray_norm = integrand.get_settings().kinematics.e_cm;
+
+                let fixed_uv_ray = if uv_ray_directions.is_empty() {
+                    None
+                } else {
+                    let uv_ray_norms = if uv_ray_norms.is_empty() {
+                        vec![default_uv_ray_norm]
+                    } else {
+                        uv_ray_norms.clone()
+                    };
+                    Some(UVProfileFixedRay::from_flat_components(
+                        uv_ray_directions,
+                        &uv_ray_norms,
+                    )?)
+                };
 
                 let profile_settings = ProfileSettings {
                     n_points: *n_points,
@@ -242,6 +277,7 @@ impl Profile {
                     } else {
                         OrientationProfileMode::Summed
                     },
+                    fixed_uv_ray,
                     ..Default::default()
                 };
                 let profile_res = amplitude.profile(&model, &profile_settings)?.analyse();

@@ -4,7 +4,7 @@ use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     graph::Graph,
-    integrands::process::ActiveF64Backend,
+    integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup},
     processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection, RaisedCutId},
     settings::global::FrozenCompilationMode,
 };
@@ -223,52 +223,15 @@ fn cut_raising_powers(
 }
 
 fn lmb_channel_ids(
-    graph: &Graph,
     lmbs: &typed_index_collections::TiVec<
         gammalooprs::graph::LmbIndex,
         gammalooprs::graph::LoopMomentumBasis,
     >,
+    multi_channeling_setup: &LmbMultiChannelingSetup,
 ) -> Vec<Option<usize>> {
-    let mut channels = Vec::new();
-
-    for (lmb_index, lmb) in lmbs.iter_enumerated() {
-        let massless_edges = lmb
-            .loop_edges
-            .iter()
-            .filter(|&&edge_id| graph.underlying[edge_id].particle.mass_atom().is_zero())
-            .collect::<Vec<_>>();
-
-        if massless_edges.is_empty() {
-            continue;
-        }
-
-        if channels
-            .iter()
-            .any(|included_channel: &gammalooprs::graph::LmbIndex| {
-                let basis = &lmbs[*included_channel].loop_edges;
-                massless_edges.iter().all(|edge_id| basis.contains(edge_id))
-            })
-        {
-            continue;
-        }
-
-        channels.push(lmb_index);
-    }
-
-    channels.sort_by_key(|lmb_index| usize::from(*lmb_index));
-    if channels.is_empty() {
-        if let Some(current_lmb_index) = lmbs
-            .iter_enumerated()
-            .find(|(_lmb_index, lmb)| lmb.loop_edges == graph.loop_momentum_basis.loop_edges)
-            .map(|(lmb_index, _)| lmb_index)
-        {
-            channels.push(current_lmb_index);
-        }
-    }
-
     let mut channel_ids = vec![None; lmbs.len()];
-    for (channel_id, lmb_index) in channels.into_iter().enumerate() {
-        channel_ids[usize::from(lmb_index)] = Some(channel_id);
+    for (channel_id, lmb_index) in multi_channeling_setup.channels.iter_enumerated() {
+        channel_ids[usize::from(*lmb_index)] = Some(usize::from(channel_id));
     }
     channel_ids
 }
@@ -287,7 +250,8 @@ fn amplitude_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
-            let channel_ids = lmb_channel_ids(&master_graph.graph, &master_graph.lmbs);
+            let channel_ids =
+                lmb_channel_ids(&master_graph.lmbs, &master_graph.multi_channeling_setup);
             let threshold_esurface_ids = master_graph
                 .threshold_counterterm
                 .generated_mask
@@ -359,7 +323,8 @@ fn cross_section_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
-            let channel_ids = lmb_channel_ids(&master_graph.graph, &master_graph.lmbs);
+            let channel_ids =
+                lmb_channel_ids(&master_graph.lmbs, &master_graph.multi_channeling_setup);
             let cut_raising_powers = cut_raising_powers(master_graph);
             let mut cut_to_raised_cut = vec![None; master_graph.cuts.len()];
             for (raised_cut_id, raised_cut_group) in
