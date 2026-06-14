@@ -582,7 +582,7 @@ mod tests {
         assert!(toml.contains("lmb_multichanneling = true"));
         assert!(toml.contains("lmb_channels = \"monte_carlo\""));
         assert!(toml.contains("alpha = 3.0"));
-        assert!(toml.contains("lmb_channel_weight = \"ose\""));
+        assert!(toml.contains("lmb_channel_weight = \"inverse_jacobian\""));
         assert!(toml.contains("coordinate_system = \"spherical\""));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));

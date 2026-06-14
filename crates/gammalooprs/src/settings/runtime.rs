@@ -1034,9 +1034,9 @@ impl Default for SamplingSettingsParser {
 )]
 pub enum LmbChannelWeight {
     #[serde(rename = "ose")]
-    #[default]
     Ose,
     #[serde(rename = "inverse_jacobian")]
+    #[default]
     InverseJacobian,
 }
 

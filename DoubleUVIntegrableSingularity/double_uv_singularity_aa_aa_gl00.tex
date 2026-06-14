@@ -729,10 +729,10 @@ multichannel denominator would use
   J_c(y)=\left|\det\frac{\partial\phi_c}{\partial x_c}\right|_{x_c=\phi_c^{-1}(y)} ,
   \label{eq:inverse-jacobian-channel-density}
 \end{equation}
-up to the discrete prior $\pi_c$.  The current code instead computes the
+up to the discrete prior $\pi_c$.  The original OSE mode instead computes the
 partition in Eq.~\eqref{eq:lmb-channel-weight}: it reinterprets the sampled
 momenta in the selected LMB, keeps the sampled conformal-map Jacobian, and
-multiplies by the normalized OSE product.  Thus the current denominator knows
+multiplies by the normalized OSE product.  Thus the OSE denominator knows
 which LMB energies are small, but it does not know the actual conformal-map
 density induced by each competing LMB parameterization.
 
@@ -769,7 +769,7 @@ fixed $R=10^6$, varying $|q|$ & $-1.16$ & $-0.16$ & $+1.84$ & $+2.84$ & $+0.85$\
 Here ``slope'' means the fitted slope of the bad direct-channel contribution
 after multiplying by the corresponding partition factor.  On the strict
 locked-ray path with fixed small $q$, the raw bad-channel weight grows like
-$R$.  The default OSE factor with $\alpha=3$ already changes that contribution
+$R$.  The old OSE factor with $\alpha=3$ already changes that contribution
 to $R^{-2}$.  An inverse-Jacobian denominator for the linear map gives
 $R^{-3}$, numerically close to OSE $\alpha=4$.  At $R=10^7$ and $|q|=0.2$, the
 bad direct-channel probabilities are
@@ -926,18 +926,18 @@ $q^2$ near $q=0$, so its inverse density is enhanced like $1/q^2$ even for a
 massive edge.  The OSE factor $E_4^{-\alpha}$ has no corresponding enhancement
 because $E_4=\sqrt{|q|^2+m_t^2}$.
 
-This answers the inverse-Jacobian question as follows.  Yes, replacing the
-OSE-product denominator by the actual inverse-Jacobian channel density would be
-more principled and should help in exactly the regimes where the conformal map
-itself controls the rare-event density, especially for logarithmic mapping and
-large common radius.  It would also make the channel balance automatically
-adapt to $E_{\rm cm}$ and $b$.  It is also the right diagnostic for the
-massive-edge issue above, because it is sensitive to the small spatial
-relative variable even when the corresponding OSE is pinned by the mass.
-The OSE factor is therefore not useless; it suppresses the deep-UV bad chart
-by many orders of magnitude.  But it is not the same as the balance density of
-the actual channel maps, and for the massive relative edge it misses the most
-important local variable, $|e_7-e_5|$.
+This answers the inverse-Jacobian question as follows.  Replacing the
+OSE-product denominator by the actual inverse-Jacobian channel density is more
+principled and helps in exactly the regimes where the conformal map itself
+controls the rare-event density, especially for logarithmic mapping and large
+common radius.  It also makes the channel balance automatically adapt to
+$E_{\rm cm}$ and $b$.  It is the right diagnostic for the massive-edge issue
+above, because it is sensitive to the small spatial relative variable even when
+the corresponding OSE is pinned by the mass.  The OSE factor is therefore not
+useless; it suppresses the deep-UV bad chart by many orders of magnitude.  But
+it is not the same as the balance density of the actual channel maps, and for
+the massive relative edge it misses the most important local variable,
+$|e_7-e_5|$.
 
 This explains why the longer all-LMB Monte-Carlo run assigned large
 probability to channel $(5,7)$, about 42.2\%, and sizable probabilities to
@@ -955,6 +955,85 @@ approximation to them, instead of relying only on the OSE product.  An
 $\alpha$ scan remains useful now that the setting is exposed in
 \texttt{[sampling]}, but tuning $\alpha$ alone cannot create the missing
 relative variable.
+
+\subsection{Implemented inverse-Jacobian LMB weights}
+
+The code now supports
+\texttt{lmb\_channel\_weight = "inverse\_jacobian"} in the flat
+\texttt{[sampling]} settings.  For a selected LMB channel $s$ and a physical
+loop-momentum point $y$, the new prefactor is
+\begin{equation}
+  \frac{J_s(y)^{-1}}{\sum_c J_c(y)^{-1}},
+\end{equation}
+where each $J_c^{-1}$ is obtained by applying the inverse parameterization of
+channel $c$ to the same physical point.  The old OSE mode remains available as
+\texttt{lmb\_channel\_weight = "ose"}, but the inverse-Jacobian mode is now the
+default because it matches the balance-density interpretation of the competing
+LMB maps.
+
+For \texttt{GL00}, with kinematics A, helicity $+ - + -$,
+$m_{\rm UV}=9.188$, $\mu_R=91.188$, spherical linear mapping, summed
+orientations, and all LMB channels enabled, the direct comparison is:
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrr}
+\toprule
+LMB treatment & samples & Re & Im & Im rel. error & max weight &
+avg time [$\mu$s]\\
+\midrule
+summed, OSE & $1\,\mathrm{M}$ &
+$-0.850\pm0.783$ & $-0.232\pm1.024$ & 441.6\% & 0.467 & 1368.9\\
+summed, inverse $J$ & $1\,\mathrm{M}$ &
+$-0.218\pm0.180$ & $-0.610\pm0.182$ & 29.9\% & 0.00903 & 1396.5\\
+MC, OSE & $10\,\mathrm{M}$ &
+$-0.529\pm0.772$ & $-0.354\pm1.122$ & 317.3\% & 7.719 & 130.0\\
+MC, inverse $J$ & $10\,\mathrm{M}$ &
+$0.031\pm0.125$ & $-0.757\pm0.125$ & 16.5\% & 0.0625 & 130.0\\
+MC, inverse $J$ & $50\,\mathrm{M}$ &
+$-0.034\pm0.056$ & $-0.690\pm0.056$ & 8.12\% & 0.104 & 131.0\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The values in the table are in units of $10^{-6}$ except for the last two
+columns.  The real part remains compatible with zero, so its relative error is
+not a useful convergence criterion here.  The imaginary part reaches the
+requested sub-10\% precision at $50\,\mathrm{M}$ samples with LMB Monte Carlo.
+The largest sampled weights are reduced by roughly two orders of magnitude
+relative to the OSE Monte-Carlo run, and by more than two orders relative to the
+old worst events.  The remaining largest points no longer sit on the original
+equal-radius collinear double-UV ray; the most severe residual weights are
+moderate finite-radius or unequal-radius configurations.
+
+I also checked the one-loop \(\gamma\gamma\to\gamma\gamma\) amplitude with the
+same inverse-Jacobian LMB mode.  The reference quoted in
+\texttt{examples/cli/aa\_aa/1L/aa\_aa.toml} for kinematics A and helicity
+$+ - + -$ is
+\(-6.9028625224992605\times10^{-7}\).  Integrated-UV generation requires the
+development shell because \texttt{form}/\texttt{tform} are not on the bare
+shell \texttt{PATH}.  With the compiled 1L state generated in that environment,
+both inverse-Jacobian checks are statistically compatible with the reference:
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrrr}
+\toprule
+setup & samples & Re & Im & target pull\\
+\midrule
+graph MC, LMB summed & $5\,\mathrm{M}$ &
+$-0.283\pm0.820$ & $0.186\pm0.814$ & $0.50\sigma$\\
+graph summed, LMB summed & $5\,\mathrm{M}$ &
+$-0.088\pm0.781$ & $0.636\pm0.781$ & $0.77\sigma$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The Re and Im columns in this one-loop table are also in units of $10^{-6}$.
+The 1L validation is therefore a compatibility check rather than a precision
+measurement: the sampled errors are still larger than the reference value, but
+there is no visible bias from the inverse-Jacobian channel prefactor.  The raw
+artifacts for these checks are stored as
+\texttt{gl00\_inverse\_jacobian\_lmbmc\_50M\_result.json} and
+\texttt{aa\_aa\_1l\_pmpm\_inverse\_jacobian\_5M\_*result.json} in the report
+data directory.
 
 \section{Other \texorpdfstring{$\gamma\gamma\to\gamma\gamma$}{aa to aa} two-loop graphs}
 
