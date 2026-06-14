@@ -1,0 +1,94 @@
+{
+  "slots": [
+    {
+      "key": "aa_aa@2L",
+      "process": "aa_aa",
+      "integrand": "2L",
+      "target": null,
+      "integral": {
+        "neval": 45300000,
+        "real_zero": 0,
+        "im_zero": 0,
+        "result": {
+          "re": -4.569856415711236e-8,
+          "im": 4.154896512557343e-6
+        },
+        "error": {
+          "re": 4.007172555134539e-8,
+          "im": 4.368710555132315e-8
+        },
+        "real_chisq": 455.62790471157706,
+        "im_chisq": 492.05884081526165
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": -4.569856415711236e-8,
+          "error": 4.007172555134539e-8,
+          "relative_error_percent": 87.68705601685468,
+          "chi_sq_per_dof": 1.0058011141535916,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.185100258333571
+        },
+        {
+          "component": "im",
+          "value": 4.154896512557343e-6,
+          "error": 4.368710555132315e-8,
+          "relative_error_percent": 1.0514607384152075,
+          "chi_sq_per_dof": 1.0862226066562066,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0043147963187318795
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 45300000,
+        "average_total_time_seconds": 0.000143897,
+        "average_parameterization_time_seconds": 1.544e-6,
+        "average_integrand_time_seconds": 0.000065419,
+        "average_evaluator_time_seconds": 0.000047332,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 1.057e-6,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.19152923439832095,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n8.7690087448349496e-02 2.3126124029436823e-01 3.8214908509215972e-01\n3.4649949403518976e-01 7.7720676431195823e-01 3.7509473327012266e-02 ]"
+        },
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.3831843662022509,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n3.3774797503292708e-02 6.6703892258202735e-01 7.8637087020684515e-01\n3.1760293816322593e-01 7.3016644041217138e-01 5.9653694776042210e-02 ]"
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 0.812117207622374,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n7.8266374771901903e-01 2.4480692954851943e-01 2.7790820476241918e-01\n7.8136801911852116e-01 2.4745211110063187e-01 2.2344449571454417e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "-",
+          "max_eval": -0.20178964559341667,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n3.3774797503292708e-02 6.6703892258202735e-01 7.8637087020684515e-01\n3.1760293816322593e-01 7.3016644041217138e-01 5.9653694776042210e-02 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    }
+  ]
+}

@@ -2590,11 +2590,29 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             GammaLoopSample::Graph { graph_id, sample } => {
                 evaluate_graph_term(integrand, *graph_id, sample, &mut context, None)?
             }
-            GammaLoopSample::MultiChanneling { .. } => {
-                unimplemented!(
-                    "deprecated due to annyoing borrow issues, just set each graph to the same group"
-                );
-            }
+            GammaLoopSample::MultiChanneling { alpha, sample } => (0..integrand.graph_count())
+                .try_fold(
+                    GraphEvaluationResult::zero(zero.clone()),
+                    |mut sum, graph_id| {
+                        let num_channels = integrand.get_graph(graph_id).get_num_channels();
+                        let graph_result = (0..num_channels).map(ChannelIndex::from).try_fold(
+                            GraphEvaluationResult::zero(zero.clone()),
+                            |mut channel_sum, channel_index| {
+                                let channel_result = evaluate_graph_term(
+                                    integrand,
+                                    graph_id,
+                                    sample,
+                                    &mut context,
+                                    Some((channel_index, alpha.clone())),
+                                )?;
+                                channel_sum.merge_in_place(channel_result);
+                                Ok::<GraphEvaluationResult<T>, eyre::Report>(channel_sum)
+                            },
+                        )?;
+                        sum.merge_in_place(graph_result);
+                        Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                    },
+                )?,
             GammaLoopSample::DiscreteGraph { group_id, sample } => {
                 evaluate_graph_group(integrand, *group_id, sample, &mut context, &zero)?
             }

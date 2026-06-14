@@ -1,0 +1,92 @@
+[
+  {
+    "path": "fixed q/R",
+    "observable": "raw_abs_weight",
+    "fit_variable": "radius",
+    "tail_slope": -0.9991394785552082
+  },
+  {
+    "path": "fixed q/R",
+    "observable": "bad_channel_weighted_abs_ose_alpha1",
+    "fit_variable": "radius",
+    "tail_slope": -0.99913947854982
+  },
+  {
+    "path": "fixed q/R",
+    "observable": "bad_channel_weighted_abs_ose_alpha3",
+    "fit_variable": "radius",
+    "tail_slope": -0.9991394785390295
+  },
+  {
+    "path": "fixed q/R",
+    "observable": "bad_channel_weighted_abs_ose_alpha4",
+    "fit_variable": "radius",
+    "tail_slope": -0.9991394785336323
+  },
+  {
+    "path": "fixed q/R",
+    "observable": "bad_channel_weighted_abs_jacobian_linear",
+    "fit_variable": "radius",
+    "tail_slope": -1.2297479080428328
+  },
+  {
+    "path": "fixed relative q",
+    "observable": "raw_abs_weight",
+    "fit_variable": "radius",
+    "tail_slope": 0.9999999999959878
+  },
+  {
+    "path": "fixed relative q",
+    "observable": "bad_channel_weighted_abs_ose_alpha1",
+    "fit_variable": "radius",
+    "tail_slope": 3.229279259227939e-07
+  },
+  {
+    "path": "fixed relative q",
+    "observable": "bad_channel_weighted_abs_ose_alpha3",
+    "fit_variable": "radius",
+    "tail_slope": -2.0000000000642952
+  },
+  {
+    "path": "fixed relative q",
+    "observable": "bad_channel_weighted_abs_ose_alpha4",
+    "fit_variable": "radius",
+    "tail_slope": -3.0000000000843903
+  },
+  {
+    "path": "fixed relative q",
+    "observable": "bad_channel_weighted_abs_jacobian_linear",
+    "fit_variable": "radius",
+    "tail_slope": -2.999705596017651
+  },
+  {
+    "path": "shrinking relative q",
+    "observable": "raw_abs_weight",
+    "fit_variable": "relative_radius",
+    "tail_slope": -1.1630020447880094
+  },
+  {
+    "path": "shrinking relative q",
+    "observable": "bad_channel_weighted_abs_ose_alpha1",
+    "fit_variable": "relative_radius",
+    "tail_slope": -0.16300345686509424
+  },
+  {
+    "path": "shrinking relative q",
+    "observable": "bad_channel_weighted_abs_ose_alpha3",
+    "fit_variable": "relative_radius",
+    "tail_slope": 1.8369948825827067
+  },
+  {
+    "path": "shrinking relative q",
+    "observable": "bad_channel_weighted_abs_ose_alpha4",
+    "fit_variable": "relative_radius",
+    "tail_slope": 2.8369938583729457
+  },
+  {
+    "path": "shrinking relative q",
+    "observable": "bad_channel_weighted_abs_jacobian_linear",
+    "fit_variable": "relative_radius",
+    "tail_slope": 0.8452494097314595
+  }
+]

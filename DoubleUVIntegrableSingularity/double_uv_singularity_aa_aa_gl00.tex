@@ -168,6 +168,199 @@ rather than the common momentum and the relative momentum $q$.
   \label{fig:toy-ridge}
 \end{figure}
 
+\section{Standalone proxy integrand experiment}
+
+I also built a standalone Python mock-up that is closer to the actual
+subtracted-integrand mechanism than the purely phenomenological toy model above:
+\path{DoubleUVIntegrableSingularity/mock_gl00_integrand_proxy.py}.  It defines
+an original relative-edge factor and the corresponding local double-UV
+counterterm obtained from the 3D expansion that drops the fixed external shift
+in the relative edge:
+\begin{align}
+  W_{\rm orig}^{(K)}(u,v)
+    &=
+  N_K(u,v)\,
+  \frac{\left[(E_u+E_v)/2\right]^3}{E_u E_v}\,
+  \frac{1}{E(v-u+Q,m_{\rm phys})},
+  \\
+  W_{\rm UV}^{(K)}(u,v)
+    &=
+  N_K(u,v)\,
+  \frac{\left[(E_u+E_v)/2\right]^3}{E_u E_v}\,
+  \frac{1}{E(v-u,m_{\rm UV})},
+  \\
+  W_{\rm sub}^{(K)}(u,v)
+    &= W_{\rm orig}^{(K)}(u,v)-W_{\rm UV}^{(K)}(u,v).
+\end{align}
+Here $u$ and $v$ are the two hard sampled LMB momenta and $Q$ is the fixed
+external shift in the physical relative edge.  The optional integrated-CT
+switch only changes the smooth numerator coefficient $N_K$: with the switch off
+it contains the original numerator proxy, while with the switch on it adds a
+smooth integrated-self-energy proxy.  It does not introduce a new denominator.
+
+The same script also contains a second mode that mimics doing the local UV
+Taylor expansion in four dimensions first and only then taking the CFF
+expression of the resulting massive vacuum topology.  The relative factor in
+that mode is
+\[
+  F_{\rm vac}(q;R,m)
+  =
+  \frac{1}{E(q,m)\,[2R+E(q,m)]},
+\]
+with the UV counterterm using a finite vacuum mass $m_{\rm UV}=9.188$.  This
+is not intended to be a full CFF formula, but it keeps the two features relevant
+to the present question: the relative propagator is a vacuum object before CFF,
+and after CFF it is represented by a massive on-shell energy.
+
+The fitted large-radius slopes of $|W_{\rm sub}^{(K)}|$ are:
+\begin{center}
+\scriptsize
+\begin{tabular}{llrr}
+\toprule
+mode & ray choice & without integrated CT & with integrated CT\\
+\midrule
+3D expansion & locked equal-norm collinear rays & $+1.000$ & $+1.000$\\
+3D expansion & parallel rays with 4\% radius mismatch & $-1.000$ & $-1.000$\\
+3D expansion & equal radius with $1^\circ$ opening angle & $-1.000$ & $-1.000$\\
+3D expansion & generic directions & $-1.000$ & $-1.000$\\
+4D first, then CFF & locked equal-norm collinear rays & $+1.000$ & $+1.000$\\
+4D first, then CFF & parallel rays with 4\% radius mismatch & $-1.002$ & $-1.002$\\
+4D first, then CFF & equal radius with $1^\circ$ opening angle & $-0.997$ & $-0.997$\\
+4D first, then CFF & generic directions & $-1.000$ & $-1.000$\\
+\bottomrule
+\end{tabular}
+\end{center}
+This reproduces the qualitative GL00 behavior: the subtracted proxy is UV safe
+for generic double-UV rays and for fixed nonzero angular/radial mismatch, but
+it grows when the two hard rays are locked so that $v-u$ remains small while
+the common radius grows.  The same behavior is present with the integrated-CT
+proxy disabled, so the mechanism is not created by the integrated counterterm;
+the integrated counterterm only changes the smooth coefficient multiplying the
+same relative-edge structure.  Importantly, the locked-ray growth is still
+present in the 4D-first proxy.  This means the non-uniform double-UV region is
+not purely an artifact of differentiating the already-3D on-shell energy
+$E(v-u+Q)$.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/mock_gl00_proxy_radial.png}
+  \caption{Standalone proxy radial scan.  In both the direct 3D-expansion mode
+  and the 4D-first vacuum-CFF mode, only exactly locked equal-norm rays grow
+  with the common UV radius.  A fixed opening angle or a fixed radius mismatch
+  restores the expected decreasing asymptotic behavior.}
+  \label{fig:mock-proxy-radial}
+\end{figure}
+
+At fixed hard common radius, the direct 3D proxy gives
+\[
+  |W_{\rm sub}^{(K)}| \sim \frac{1}{|v-u|}
+\]
+over the relative-momentum range above the small UV regulator.  Multiplication
+by the three-dimensional relative measure gives
+$|v-u|^2 |W_{\rm sub}^{(K)}| \sim |v-u|$, so the ridge is locally integrable
+even though it is large enough to create Monte-Carlo variance.  The 4D-first
+proxy differs here: because the vacuum relative propagator carries a finite UV
+mass before CFF, the fixed-radius relative scan is flat as $v-u\to0$ rather
+than $1/|v-u|$.  Thus doing the derivation in 4D first can remove the literal
+small-relative-momentum pole introduced by a direct 3D on-shell-energy
+expansion.  It does not, however, remove the radial non-uniformity of the
+double-UV Taylor expansion on the subspace where the relative four-momentum is
+not hard.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/mock_gl00_proxy_relative_ridge.png}
+  \caption{Standalone proxy relative-momentum scan at fixed common hard
+  radius.  The direct 3D expansion has a $1/|v-u|$ ridge.  The 4D-first
+  vacuum-CFF proxy is regularized by the massive vacuum propagator, but the
+  three-dimensional relative measure still makes both cases locally
+  integrable.}
+  \label{fig:mock-proxy-ridge}
+\end{figure}
+
+\subsection{Removing the ridge by parameterization}
+
+The same proxy script now performs an explicit Monte-Carlo integration over a
+finite local domain,
+\[
+  I = \int \dd\log R \int_{|q|<q_{\max}} \dd^3 q\,
+      W_{\rm sub}^{(K)}(P=R\hat n,q),
+  \qquad q=v-u,
+\]
+with $q_{\max}=0.2$ and $2.5\times10^5$ samples per channel.  The naive channel
+samples $q$ uniformly in the three-dimensional ball.  The singularity-adapted
+relative channel samples the radial variable with
+\[
+  p_r(r)=\frac{2r}{q_{\max}^2},
+  \qquad
+  p_{\rm ridge}(q)=\frac{1}{2\pi q_{\max}^2 |q|}.
+\]
+Because the direct 3D proxy has $W_{\rm sub}\sim 1/|q|$, the estimator
+$W_{\rm sub}/p_{\rm ridge}$ is finite as $q\to0$.  I also tested a conservative
+balance-heuristic multichannel density,
+\[
+  p_{\rm multi}(q)=0.25\,p_{\rm uniform}(q)+0.75\,p_{\rm ridge}(q),
+\]
+which keeps a regular uniform component for the non-singular part of the
+domain.
+
+This finite-domain experiment should be interpreted carefully.  A
+$1/|q|$ ridge in three relative dimensions is locally integrable, and its
+local second moment under a flat finite ball is also finite because
+$\int q^2\dd q\, |1/q|^2$ is finite at $q=0$.  The real integration problem is
+not just that local endpoint.  It is the combination of this thin relative
+ridge with the hard common radius, the conformal-map Jacobian, and finite
+statistics.  In the unbounded problem the second moment can still be
+effectively or genuinely divergent if the radial tail is not sampled with a
+compatible density.  The variance reductions below therefore demonstrate that
+the relative-momentum channel removes the local rare-event ridge; they are not
+a proof that the full UV-tail variance is finite.
+
+\begin{center}
+\scriptsize
+\begin{tabular}{llrrrr}
+\toprule
+integrated CT & channel & estimate & relative error & variance reduction &
+max $|w|$\\
+\midrule
+off & uniform & $-2.4975\times10^5$ & 0.355\% & $1.0$ & $2.07\times10^8$\\
+off & ridge & $-2.4836\times10^5$ & 0.012\% & $883.9$ & $2.89\times10^5$\\
+off & multichannel & $-2.4840\times10^5$ & 0.030\% & $137.7$ & $3.84\times10^5$\\
+on & uniform & $-3.3226\times10^5$ & 0.136\% & $1.0$ & $2.39\times10^7$\\
+on & ridge & $-3.3177\times10^5$ & 0.012\% & $129.8$ & $3.86\times10^5$\\
+on & multichannel & $-3.3175\times10^5$ & 0.030\% & $20.3$ & $5.15\times10^5$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This is the desired behavior: the relative-momentum channel removes the
+integrable singularity from the estimator and collapses the rare-event tail.
+For example, without the integrated-CT proxy, the maximum absolute sampled
+weight drops from $2.07\times10^8$ to $2.89\times10^5$, and the variance drops
+by a factor $884$.  The conservative multichannel mixture still reduces the
+variance by a factor $138$.  The same conclusion holds with the integrated-CT
+proxy enabled, although the smooth numerator changes the relative coefficient
+and therefore the exact reduction factor.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/mock_gl00_proxy_mc_variance.png}
+  \caption{Monte-Carlo variance reduction in the standalone proxy.  The
+  fixed-hard-radius panel isolates the relative-momentum singularity and shows
+  the large gain from a ridge-adapted channel.  The log-hard-radius panel keeps
+  the common-radius growth; the relative channel still helps, but the remaining
+  variance is then dominated by the radial UV tail and would require a
+  complementary hard-radius importance map.}
+  \label{fig:mock-proxy-mc-variance}
+\end{figure}
+
+When the same experiment is run in the 4D-first vacuum-CFF proxy, the
+ridge-adapted channel does not help at fixed hard radius: the relative scan is
+already flat as $q\to0$, so oversampling small $q$ only wastes samples.  This is
+a useful cross-check.  The relative channel should be attached to the direct
+3D-CFF local counterterm structure where the $1/|k-l|$ ridge is actually
+present, and combined with ordinary channels through a balance heuristic.
+
 \section{GL00 approach data}
 
 The GL00 radial scan starts from the high-weight point
@@ -526,126 +719,436 @@ selection smoother.  Therefore the previous statement that LMB MC merely
 samples an LMB, or that it cannot be sufficient by construction, would be too
 strong.
 
-What remains true is that this prefactor is a discrete LMB reweighting, not a
-continuous change of variables to
+However, the OSE prefactor is not the same object as the balance-heuristic
+density of the actual channel maps.  For channel maps
+$y=\phi_c(x_c)$ from unit-cube variables to physical loop momenta, a standard
+multichannel denominator would use
+\begin{equation}
+  p_c(y) \propto \frac{\pi_c}{J_c(y)},
+  \qquad
+  J_c(y)=\left|\det\frac{\partial\phi_c}{\partial x_c}\right|_{x_c=\phi_c^{-1}(y)} ,
+  \label{eq:inverse-jacobian-channel-density}
+\end{equation}
+up to the discrete prior $\pi_c$.  The current code instead computes the
+partition in Eq.~\eqref{eq:lmb-channel-weight}: it reinterprets the sampled
+momenta in the selected LMB, keeps the sampled conformal-map Jacobian, and
+multiplies by the normalized OSE product.  Thus the current denominator knows
+which LMB energies are small, but it does not know the actual conformal-map
+density induced by each competing LMB parameterization.
+
+I added a two-channel test to the standalone proxy to isolate this distinction.
+The two channels are the bad direct interpretation $(u,v)$ and an explicit
+relative interpretation
 \[
   P_{\rm common}\simeq \frac{u+v}{2},
   \qquad
   q = v-u+Q.
 \]
-The problematic region is thin in the original hard-momentum variables and
-natural in $(P_{\rm common},q)$ variables.  Once the mismatch is fixed and all
-relevant OSEs scale linearly with the common hard radius, changing $\alpha$
-changes the coefficient and channel allocation but not the asymptotic radial
-power along that ray.  Near the exact edge-small limit it can be decisive,
-because $E_4/R$ becomes tiny and the normalized weight overwhelmingly selects
-edge-4 channels.
+For a spherical linear conformal map the one-vector Jacobian used in
+\texttt{parameterize3d} is
+\[
+  J_3(r)=4\pi r^2\,\frac{(E_{\rm cm}b+r)^2}{E_{\rm cm}b}.
+\]
+The inverse-Jacobian balance denominator was compared to OSE partitions with
+$\alpha=1,3,4$.
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+path & raw slope & OSE $\alpha=1$ & OSE $\alpha=3$ & OSE $\alpha=4$ &
+inverse $J$, linear\\
+\midrule
+fixed $|q|=0.2$, varying $R$ & $+1.00$ & $+0.00$ & $-2.00$ & $-3.00$ & $-3.00$\\
+fixed $|q|/R=10^{-3}$ & $-1.00$ & $-1.00$ & $-1.00$ & $-1.00$ & $-1.23$\\
+fixed $R=10^6$, varying $|q|$ & $-1.16$ & $-0.16$ & $+1.84$ & $+2.84$ & $+0.85$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Here ``slope'' means the fitted slope of the bad direct-channel contribution
+after multiplying by the corresponding partition factor.  On the strict
+locked-ray path with fixed small $q$, the raw bad-channel weight grows like
+$R$.  The default OSE factor with $\alpha=3$ already changes that contribution
+to $R^{-2}$.  An inverse-Jacobian denominator for the linear map gives
+$R^{-3}$, numerically close to OSE $\alpha=4$.  At $R=10^7$ and $|q|=0.2$, the
+bad direct-channel probabilities are
+\[
+  p_{\rm bad}^{\rm OSE,\alpha=3}=8.0\times10^{-24},\quad
+  p_{\rm bad}^{\rm OSE,\alpha=4}=1.6\times10^{-31},\quad
+  p_{\rm bad}^{1/J,{\rm linear}}=3.3\times10^{-26}.
+\]
+For the logarithmic radial map, the inverse-Jacobian probability is even
+smaller in the deep UV because $J_3(r)$ grows exponentially with $r/E_{\rm cm}$
+in that map; it underflows below double precision already in the large-$R$
+part of this scan.  The OSE denominator has no way to know about that
+map-dependent density.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/mock_gl00_proxy_channel_partitions.png}
+  \caption{Standalone proxy comparison of the current OSE partition and an
+  inverse-Jacobian balance partition.  The OSE $\alpha=3$ factor already
+  suppresses the strict small-relative-momentum direct channel strongly.  The
+  inverse-Jacobian denominator is more map-faithful and gives one additional
+  power of $R$ for the linear map on the fixed-$q$ locked ray, while the
+  logarithmic map would suppress the bad direct channel even more strongly in
+  the far UV.}
+  \label{fig:mock-channel-partitions}
+\end{figure}
+
+\subsection{Pointwise inspect check of LMB multichanneling}
+
+I also checked the problematic GL00 region directly with
+\texttt{inspect}, using kinematics A and helicity $+-+-$.  The current
+\texttt{examples/cli/aa\_aa/2L} state is not an all-LMB state:
+\texttt{display integrand} shows only one active LMB channel, channel 0 with
+basis $(5,10)$.  Therefore, in that state, switching
+\texttt{lmb\_multichanneling=true} and
+\texttt{lmb\_channels="monte\_carlo"} does not actually average over all LMBs;
+it evaluates the same single selected LMB channel.
+
+For the all-LMB regenerated state, \texttt{display integrand} shows eleven
+active channels:
+\[
+ (5,10),\ (4,10),\ (5,9),\ (4,9),\ (5,8),\ (4,8),\
+ (5,7),\ (4,7),\ (5,6),\ (4,6),\ (4,5).
+\]
+The table below compares the displayed inspect weight, i.e. the integrand
+times the continuous parameterization Jacobian.  These are the weights seen
+before the additional discrete-channel normalization present in the
+Monte-Carlo-over-LMB estimator.
+
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrr}
+\toprule
+setup & point & Re weight & Im weight & $|\mathrm{weight}|$\\
+\midrule
+LMB off & point A &
+$-2.63307595\times10^{-1}$ & $+2.16943924\times10^{0}$ &
+$2.18535982\times10^{0}$\\
+single active LMB channel 0, $(5,10)$ & point A &
+$-4.20480647\times10^{1}$ & $+8.23757741\times10^{1}$ &
+$9.24867985\times10^{1}$\\
+all LMBs, explicit summed channels & point A &
+$-1.84215087\times10^{-3}$ & $+3.52144262\times10^{-3}$ &
+$3.97417639\times10^{-3}$\\
+LMB off & channel-6 max-weight point &
+$+7.74559448\times10^{-4}$ & $-8.69620692\times10^{-4}$ &
+$1.16455248\times10^{-3}$\\
+LMB channel 6, $(5,7)$ & channel-6 max-weight point &
+$-3.05497125\times10^{0}$ & $-1.40357390\times10^{0}$ &
+$3.36197398\times10^{0}$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+This does not mean that the multichannel denominator only acts when an
+edge-4 channel is selected.  The intended balance mechanism is global at the
+sampled physical point: even if the sampled chart is $(5,10)$ or $(5,7)$, the
+denominator
+\[
+  \sum_c \prod_{e\in c} E_e^{-\alpha}
+\]
+contains the competing edge-4 charts.  The question is therefore why this
+global denominator is not sufficient.
+
+For point A, interpreted in the bad $(5,10)$ chart, the local normalized
+prefactor for the selected channel is already small,
+\[
+  p_{(5,10)}^{\rm OSE,\alpha=3}=8.46\times10^{-6}.
+\]
+The relevant edge scales are
+\[
+  |e_4|=1.78\times10^3,\quad E_4=1.79\times10^3,\qquad
+  |e_5|=4.82\times10^4,\quad E_{10}=4.93\times10^4.
+\]
+So the OSE denominator is doing the expected qualitative thing in the deep
+UV approach: the edge-4 charts dominate the denominator and suppress the bad
+chart.  The remaining problem is quantitative and structural: the raw
+bad-chart density is large enough that this OSE-product suppression does not
+flatten the estimator, and the OSE product is not the true density of the
+competing maps.
+
+I then ran a controlled comparison in the same all-LMB regenerated state,
+with the same seed and $10\,\mathrm{M}$ samples:
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrrr}
+\toprule
+setup & Re & Im & largest $|w|$ & top channel\\
+\midrule
+LMB off &
+$-5.55(8.03)\times10^{-8}$ &
+$-7.19(0.85)\times10^{-7}$ &
+$2.69\times10^{-1}$ & none\\
+all LMBs, MC over LMBs &
+$-4.94(7.22)\times10^{-7}$ &
+$-3.31(10.49)\times10^{-7}$ &
+$7.22$ & $(5,7)$\\
+\bottomrule
+\end{tabular}
+\end{center}
+In this controlled run, and also in the $90\,\mathrm{M}$ all-LMB run, the
+largest weights are in channel $(5,7)$.  This channel is precisely a chart in
+which the edge-4 momentum is a difference of two sampled basis momenta:
+\[
+  e_5=-K_0+K_1+P_0,\qquad e_7=K_1+P_0,\qquad e_4=K_0=e_7-e_5.
+\]
+The necessary edge-4 LMBs are present, for example $(4,7)$ and $(4,5)$.  What
+fails is not channel enumeration; it is the feature used in the balance
+denominator.
+
+At the largest $(5,7)$ points the edge-4 \emph{three-momentum} is small, but
+edge 4 is a massive top edge, so its OSE does not become small:
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrrr}
+\toprule
+point & $|e_4|$ & $E_4$ & selected-channel prefactor &
+largest sampled channel\\
+\midrule
+$10\,\mathrm{M}$ all-LMB MC max & $8.71$ & $173.22$ & $8.78\times10^{-2}$ &
+$(5,7)$\\
+$90\,\mathrm{M}$ all-LMB MC max & $7.47$ & $173.16$ & $1.17\times10^{-1}$ &
+$(5,7)$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Thus the OSE partition barely sees the small relative three-momentum in this
+moderate-radius ridge: $E_4\simeq m_t$ is just a mass scale.  This is exactly
+where an inverse-Jacobian or relative-momentum density would differ from the
+current OSE proxy.  For a spherical linear map, a chart that samples the
+relative vector $q=e_4$ directly has a Jacobian factor proportional to
+$q^2$ near $q=0$, so its inverse density is enhanced like $1/q^2$ even for a
+massive edge.  The OSE factor $E_4^{-\alpha}$ has no corresponding enhancement
+because $E_4=\sqrt{|q|^2+m_t^2}$.
+
+This answers the inverse-Jacobian question as follows.  Yes, replacing the
+OSE-product denominator by the actual inverse-Jacobian channel density would be
+more principled and should help in exactly the regimes where the conformal map
+itself controls the rare-event density, especially for logarithmic mapping and
+large common radius.  It would also make the channel balance automatically
+adapt to $E_{\rm cm}$ and $b$.  It is also the right diagnostic for the
+massive-edge issue above, because it is sensitive to the small spatial
+relative variable even when the corresponding OSE is pinned by the mass.
+The OSE factor is therefore not useless; it suppresses the deep-UV bad chart
+by many orders of magnitude.  But it is not the same as the balance density of
+the actual channel maps, and for the massive relative edge it misses the most
+important local variable, $|e_7-e_5|$.
 
 This explains why the longer all-LMB Monte-Carlo run assigned large
 probability to channel $(5,7)$, about 42.2\%, and sizable probabilities to
 channels such as $(5,10)$, about 15.8\%, while individual edge-4 channels were
 only about 1.4\% each.  The adaptive procedure sees the contribution and
 variance of the existing channels, but it does not infer a new
-relative-momentum map.  The current data are therefore compatible with two
-possibilities: default $\alpha=3$ may simply need more statistics or tuning, or
-the variance may require an explicit relative-momentum channel in addition to
-the OSE-prefactor LMB selection.  An $\alpha$ scan should be part of the next
-integration campaign now that the setting is exposed in \texttt{[sampling]}.
+relative-momentum map.  The practical recommendation is therefore:
+disable the LMB-selection heuristic when studying these graphs so that all LMB
+channels are actually available; keep explicit LMB summation as a diagnostic
+baseline; and add a continuous relative-momentum channel for hard-hard
+configurations where an internal momentum such as $k-l+Q$ becomes small while
+both loop momenta are UV.  The multichannel denominator should then use the
+actual densities of the competing maps, or at least an inverse-Jacobian
+approximation to them, instead of relying only on the OSE product.  An
+$\alpha$ scan remains useful now that the setting is exposed in
+\texttt{[sampling]}, but tuning $\alpha$ alone cannot create the missing
+relative variable.
 
 \section{Other \texorpdfstring{$\gamma\gamma\to\gamma\gamma$}{aa to aa} two-loop graphs}
 
-I also ran the same integrated-UV generation and profiling campaign on the
-other \texttt{aa\_aa} two-loop graph labels selected by the feyngen card:
-\texttt{GL01}, \texttt{GL03}, \texttt{GL05}, \texttt{GL06}, \texttt{GL08},
-\texttt{GL12}, \texttt{GL14}, \texttt{GL16}, \texttt{GL17}, and
-\texttt{GL18}.  The command line was protected with a 100 GiB virtual-memory
-limit.  For every profiling and integration attempt I used kinematics A,
-helicity $+-+-$, disabled thresholds, $\mu_R=91.188$, and $m_{\rm UV}=9.188$.
-For the graphs that generated successfully, the integration run used 20 cores,
-$90\,\mathrm{M}$ samples, summed orientations, generated LMB multichanneling
-with summed LMB channels, and the exposed default $\alpha=3$ OSE prefactor.
+I reran the full selected two-loop graph set
+\texttt{GL00}, \texttt{GL01}, \texttt{GL03}, \texttt{GL05}, \texttt{GL06},
+\texttt{GL08}, \texttt{GL12}, \texttt{GL14}, \texttt{GL16}, \texttt{GL17},
+and \texttt{GL18}.  Each graph was generated in a fresh state with integrated
+UV enabled and a 100 GiB virtual-memory cap.  All eleven labels now complete
+generation and the standard random-ray UV profile.  The profiling and
+integration runs used kinematics A, helicity $+-+-$, disabled thresholds,
+$\mu_R=91.188$, and $m_{\rm UV}=9.188$.
 
-Seven of the ten non-GL00 labels failed before a UV profile could be produced.
-The feyngen step did select and write a single diagram, but the following
-\texttt{generate existing} step failed during integrated-UV processing at
-\texttt{crates/gammalooprs/src/uv/approx/integrated.rs:279}, inside the vakint
-tensor-reduction path, with \texttt{No such file or directory (os error 2)}.
-These were fast failures, not memory blow-ups under the 100 GiB cap.
+The integration campaign used 20 cores, one graph at a time, summed
+orientations, generated LMB multichanneling, and Monte-Carlo sampling over LMB
+channels rather than explicit summation over LMB channels.  Each graph was run
+for a 10-minute wall-time window with
+\texttt{integrator.n\_start=100000}, \texttt{n\_increase=0}, and
+\texttt{n\_max=1000000000}.  The timeout exit code is therefore expected; the
+table below uses the final completed iteration written before termination.
 
 \begin{center}
 \scriptsize
-\begin{tabular}{p{0.06\linewidth}p{0.25\linewidth}p{0.22\linewidth}p{0.29\linewidth}}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrr}
 \toprule
-graph & generation & UV profile & integration and convergence\\
+graph & feyngen [s] & generation [s] & peak RAM [GiB] & UV entries &
+worst UV slope & slopes $>-0.9$\\
 \midrule
-\texttt{GL01} &
-feyngen 16 s; generation/profile wall 18.0 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
-\texttt{GL03} &
-feyngen 8 s; generation/profile wall 10.2 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
-\texttt{GL05} &
-feyngen 24 s; generation/profile wall 27.4 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
-\texttt{GL06} &
-feyngen 7 s; generation/profile wall 10.5 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
-\texttt{GL08} &
-feyngen 29 s; integrand generation row: expr 2.97 s, spenso 0.136 s, Symbolica eval 7.62 s; generation+profile wall 44.2 s; peak RAM 2.26 GiB &
-45 entries; worst slope $-0.99796$; no slopes above $-0.9$; no arb retries &
-avg total/integrand runtime 60.6/28.4 $\mu$s per sample per core; real
-$6.3157(2.4546)\times10^{-7}$, 38.9\%; imag
-$-9.5480(1.8487)\times10^{-7}$, 19.4\%; not converged\\
-\texttt{GL12} &
-feyngen 11 s; integrand generation row: expr 2.99 s, spenso 0.176 s, Symbolica eval 6.83 s; generation+profile wall 25.0 s; peak RAM 1.90 GiB &
-45 entries; worst slope $-0.99545$; no slopes above $-0.9$; no arb retries &
-avg total/integrand runtime 61.1/28.7 $\mu$s per sample per core; real
-$8.8850(19.2521)\times10^{-8}$, 216.7\%; imag
-$6.1223(1.5717)\times10^{-7}$, 25.7\%; not converged\\
-\texttt{GL14} &
-feyngen 2 s; generation/profile wall 5.9 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
-\texttt{GL16} &
-feyngen 27 s; integrand generation row: expr 2.91 s, spenso 0.137 s, Symbolica eval 7.83 s; generation+profile wall 42.1 s; peak RAM 2.16 GiB &
-45 entries; worst slope $-0.99940$; no slopes above $-0.9$; no arb retries &
-avg total/integrand runtime 61.4/28.7 $\mu$s per sample per core; real
-$1.4087(2.1772)\times10^{-7}$, 154.6\%; imag
-$-3.6861(0.3847)\times10^{-6}$, 10.4\%; imaginary part nearly converged,
-but the graph is not converged overall\\
-\texttt{GL17} &
-feyngen 10 s; generation/profile wall 12.4 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
-\texttt{GL18} &
-feyngen 6 s; generation/profile wall 9.9 s; integrated-UV tensor reduction failed &
-not available &
-not run\\
+\texttt{GL00} & 8 & 64 & 13.01 & 33 & $-0.99727$ & 0\\
+\texttt{GL01} & 16 & 86 & 16.32 & 33 & $-0.99544$ & 0\\
+\texttt{GL03} & 8 & 74 & 14.46 & 33 & $-0.99575$ & 0\\
+\texttt{GL05} & 24 & 86 & 13.80 & 33 & $-0.99837$ & 0\\
+\texttt{GL06} & 7 & 24 & 2.83 & 42 & $-0.99572$ & 0\\
+\texttt{GL08} & 30 & 42 & 2.19 & 45 & $-0.99796$ & 0\\
+\texttt{GL12} & 11 & 22 & 1.87 & 45 & $-0.99545$ & 0\\
+\texttt{GL14} & 2 & 17 & 2.77 & 42 & $-0.99908$ & 0\\
+\texttt{GL16} & 27 & 39 & 2.27 & 45 & $-0.99940$ & 0\\
+\texttt{GL17} & 10 & 26 & 2.83 & 42 & $-0.99848$ & 0\\
+\texttt{GL18} & 6 & 21 & 2.32 & 42 & $-0.99765$ & 0\\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{center}
 
-The three graphs that passed integrated-UV generation, \texttt{GL08},
-\texttt{GL12}, and \texttt{GL16}, all have clean random-ray UV profiles:
-their worst fitted slopes stay below $-0.995$, all fitted DODs are negative,
-and none required arbitrary-precision rescue.  At $90\,\mathrm{M}$ samples the
-per-sample timing is also stable, about $60$--$61\,\mu$s total and
-$28$--$29\,\mu$s in the integrand itself per core.  Nevertheless none of these
-three reached sub-10\% Monte-Carlo error in both the real and imaginary parts.
-\texttt{GL16} is closest, with a 10.4\% imaginary-part relative error, but its
-real part is still compatible with zero at the present statistics.  The
-successful graphs therefore do not show the GL00 catastrophic double-UV ridge
-in the same way, but they are not yet precision-converged diagram-level
-integrals in this setup.
+All random-ray UV profiles are therefore clean in this diagnostic sense: every
+fitted slope is negative with comfortable margin, no fitted slope is above
+$-0.9$, and no arbitrary-precision retry was needed.  This remains consistent
+with the GL00-specific observation above: the UV profiler probes generic rays
+well, while the integrator can still see rare high-weight relative-momentum
+ridges.
 
-The compact campaign summary, per-graph generation logs, successful UV-profile
-JSON files, and successful \(90\,\mathrm{M}\)-sample integration logs/results
-are archived in the report data directory under
-\texttt{aa\_aa\_2l\_graph\_campaign}.
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrlll}
+\toprule
+graph & evals [$10^6$] & avg time [total/int/eval $\mu$s] &
+Re $[10^{-6}]$ & Im $[10^{-6}]$ & 10-minute status\\
+\midrule
+\texttt{GL00} & 43.5 & 158.5/73.5/58.7 &
+$-0.991\pm 1.048$ (105.8\%) & $-0.745\pm 1.656$ (222.2\%) &
+not converged\\
+\texttt{GL01} & 44.4 & 159.9/73.7/57.0 &
+$-2.656\pm 2.092$ (78.7\%) & $1.159\pm 3.721$ (321.0\%) &
+not converged\\
+\texttt{GL03} & 47.2 & 145.6/68.1/57.1 &
+$0.249\pm 0.703$ (282.2\%) & $1.383\pm 0.932$ (67.3\%) &
+not converged\\
+\texttt{GL05} & 45.5 & 150.8/70.3/57.5 &
+$0.579\pm 1.673$ (289.1\%) & $2.193\pm 2.122$ (96.8\%) &
+not converged\\
+\texttt{GL06} & 47.6 & 129.0/59.5/46.8 &
+$-0.008\pm 0.035$ (456.6\%) & $-1.135\pm 0.038$ (3.3\%) &
+imaginary part only\\
+\texttt{GL08} & 53.8 & 126.5/54.1/26.3 &
+$-0.857\pm 0.846$ (98.8\%) & $-3.435\pm 2.302$ (67.0\%) &
+not converged\\
+\texttt{GL12} & 58.0 & 114.0/49.1/26.1 &
+$1.476\pm 1.580$ (107.0\%) & $0.505\pm 0.143$ (28.2\%) &
+not converged\\
+\texttt{GL14} & 43.9 & 143.7/65.3/47.4 &
+$0.009\pm 0.038$ (404.3\%) & $4.234\pm 0.043$ (1.0\%) &
+imaginary part only\\
+\texttt{GL16} & 49.3 & 145.8/61.5/26.6 &
+$0.325\pm 0.252$ (77.4\%) & $-3.965\pm 0.234$ (5.9\%) &
+imaginary part only\\
+\texttt{GL17} & 45.3 & 143.9/65.4/47.3 &
+$-0.046\pm 0.040$ (87.7\%) & $4.155\pm 0.044$ (1.1\%) &
+imaginary part only\\
+\texttt{GL18} & 45.6 & 141.6/64.4/46.9 &
+$-0.033\pm 0.047$ (144.6\%) & $-1.158\pm 0.053$ (4.6\%) &
+imaginary part only\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+No complete graph reached sub-10\% Monte-Carlo uncertainty in both real and
+imaginary parts in the 10-minute, 20-core, LMB-channel-MC setup.  The behavior
+separates into two groups.  \texttt{GL00}, \texttt{GL01}, \texttt{GL03},
+\texttt{GL05}, \texttt{GL08}, and \texttt{GL12} remain high-variance in both
+components.  \texttt{GL06}, \texttt{GL14}, \texttt{GL16}, \texttt{GL17}, and
+\texttt{GL18} have a stable imaginary component at the percent level, but a
+real part compatible with zero and therefore a large relative error.  Thus the
+graph-level convergence problem is not only a GL00 issue, although the
+catastrophic double-UV ridge documented in the earlier sections is the clearest
+mechanistic example.
+
+The compact campaign summary and per-graph final UV-profile and integration
+JSON files are archived in the report data directory under
+\texttt{aa\_aa\_2l\_all\_graphs\_10min\_lmbmc}.
+
+\subsection{Max-weight geometry and fixed-ray UV profiles}
+
+For each graph, I then took the largest absolute entry in the stored
+\texttt{max\_weight\_info}.  The spherical unit-cube coordinates were decoded
+to the two sampled LMB ray directions and radii.  I ran two additional UV
+profiles from those data:
+\begin{enumerate}
+  \item an exactly locked profile, where the two UV rays are made exactly
+        parallel, or anti-parallel when the recorded LMB directions have
+        opposite sign, and are assigned the same starting norm;
+  \item an actual-angular profile, where the two recorded angular directions
+        are used as-is, again with equal starting norms.
+\end{enumerate}
+The first profile tests the strict equal-norm relative-momentum ray.  The
+second profile checks whether the finite max-weight point itself already sits
+on the asymptotic ray.  In all cases the usual random-ray UV profile is clean,
+so the table below reports only the largest fitted slope from each follow-up.
+
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrl}
+\toprule
+graph & max eval & angle [deg] & $r_1/r_0$ & exact locked slope &
+actual-angular slope & exact nonnegative fits & interpretation\\
+\midrule
+\texttt{GL00} & $-42.9$ & 0.954 & 1.156 & $1.000$ & $-1.000$ & 11 &
+confirmed GL00-type ray\\
+\texttt{GL01} & $161.5$ & 1.412 & 0.947 & $-1.000$ & $-1.000$ & 0 &
+finite near-collinear peak\\
+\texttt{GL03} & $-16.3$ & 9.270 & 1.082 & $1.000$ & $-1.000$ & 11 &
+confirmed GL00-type ray\\
+\texttt{GL05} & $85.0$ & 10.901 & 0.967 & $-1.000$ & $-1.000$ & 0 &
+finite near-collinear peak\\
+\texttt{GL06} & $-0.536$ & 2.477 & 0.960 & $1.000$ & $-0.999$ & 14 &
+confirmed, small residue\\
+\texttt{GL08} & $-123.3$ & 0.771 & 1.016 & $-0.964$ & $-0.965$ & 0 &
+borderline finite peak\\
+\texttt{GL12} & $91.2$ & 179.458 & 1.040 & $2.000$ & $-0.962$ & 15 &
+confirmed anti-parallel ray\\
+\texttt{GL14} & $0.582$ & 0.434 & 1.004 & $1.000$ & $-1.000$ & 14 &
+confirmed, small residue\\
+\texttt{GL16} & $7.13$ & 178.023 & 1.044 & $2.000$ & $-0.974$ & 15 &
+confirmed anti-parallel ray\\
+\texttt{GL17} & $0.812$ & 7.256 & 0.992 & $1.000$ & $-1.000$ & 14 &
+confirmed, small residue\\
+\texttt{GL18} & $-1.47$ & 179.676 & 0.985 & $1.000$ & $-1.000$ & 14 &
+confirmed anti-parallel ray\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+This confirms that the GL00 diagnostic is not isolated.  The same strict
+equal-norm double-UV ray is exposed by the UV profiler for
+\texttt{GL00}, \texttt{GL03}, \texttt{GL06}, \texttt{GL12},
+\texttt{GL14}, \texttt{GL16}, \texttt{GL17}, and \texttt{GL18}.  For
+\texttt{GL12}, \texttt{GL16}, and \texttt{GL18}, the same condition appears as
+anti-parallel rays in the sampled LMB basis; this is the same
+relative-momentum mechanism with a different sign convention in the chosen
+basis.  The positive slopes always occur in the full double-UV subset where
+both LMB edges are free, for example the \texttt{subset=2} entries
+\texttt{free=(5,10)}, \texttt{free=(4,10)}, and analogous pairs in the
+generated LMB list.
+
+The actual-angular fixed profiles are negative even when the recorded
+max-weight point is less than one degree from collinearity.  This is important:
+the profiler only sees the positive slope when the two UV rays are locked
+exactly onto the relative-momentum ray.  A small opening angle or radius
+mismatch restores a negative asymptotic slope, while the finite coefficient can
+still be large enough to dominate a Monte-Carlo iteration.
+
+\texttt{GL01}, \texttt{GL05}, and \texttt{GL08} are therefore different from
+the confirmed group in this diagnostic.  Their largest weights are still
+near-collinear and near equal-radius, but the fixed-ray UV profile does not
+show a nonnegative asymptotic slope.  I pushed \texttt{GL01} and \texttt{GL05}
+to \texttt{max-scaling=15}; both stayed at slope $-1$.  \texttt{GL08} is the
+borderline case: it gives a mildly degraded double-UV slope near $-0.964$ at
+\texttt{max-scaling=9} and $-0.937$ at \texttt{max-scaling=15}, but a deeper
+\texttt{f128} run to \texttt{max-scaling=21} returns to $-1.000$.  I therefore
+classify these three as large finite near-collinear peaks rather than confirmed
+GL00-type positive-DOD rays.
+
+The detailed fixed-ray summary is archived as
+\path{aa_aa_2l_all_graphs_10min_lmbmc/max_weight_uv_diagnostic_summary.json}.
 
 \section{Implications}
 

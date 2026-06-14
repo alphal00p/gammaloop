@@ -83,7 +83,7 @@ pub struct UltraVioletProfile {
     /// Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied
     #[arg(
         long = "uv-ray-directions",
-        num_args = 3..,
+        num_args = 1..,
         value_delimiter = ',',
         allow_negative_numbers = true
     )]
