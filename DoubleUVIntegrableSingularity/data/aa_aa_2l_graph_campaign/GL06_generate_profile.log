@@ -1,0 +1,80 @@
+в”Њввввввввввввввввввввввввввввввввввввввввввввввввввввввввввввв”ђ
+в”‚    WARNING: Running gammaloop compiled with 'dev-optim'    в”‚
+в””ввввввввввввввввввввввввввввввввввввввввввввввввввввввввввввв”
+[13:01:54.254] @gammaloop_api::session INFO    : Running command run -c 'import model sm-default.json; set global kv global.display_directive=info global.logfile_directive=off global.n_cores.feyngen=10 global.n_cores.generate=10 global.n_cores.integrate=20; remove processes -p aa_aa; generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-initial-states=true --symmetrize-final-states=true --select-graphs GL06 -p aa_aa -i 2L --only-diagrams; save dot; save state -o; generate existing -p aa_aa -i 2L; save state -o; run set_model_parameters; run set_kinematics_a; set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188; set process -p aa_aa -i 2L kv general.m_uv=9.188; profile ultra-violet -p aa_aa -i 2L --n-points 20 --min-scaling 3 --max-scaling 5 -o /tmp/aa_aa_2l_graph_campaign_all/GL06/uv_profile.json'
+    at crates/gammaloop-api/src/session.rs:631
+[13:01:54.254] @gammaloop_api::session INFO    : Starting commands supplied with --commands/-c
+    at crates/gammaloop-api/src/session.rs:646
+[13:01:54.254] @gammaloop_api::session INFO    : Running command import model sm-default.json
+    at crates/gammaloop-api/src/session.rs:577
+[13:01:54.254] @gammaloop_api::commands::import::model INFO    : Loading built-in JSON model sm-default
+    at crates/gammaloop-api/src/commands/import/model.rs:202
+[13:01:54.289] @gammalooprs::model INFO    : The following [32m11[39m external parameters were forced to zero by the restriction card:
+[34mlamWS, AWS, rhoWS, etaWS, ymc, yme, ymm, MC, Me, MM, WTau[39m
+    at crates/gammalooprs/src/model/mod.rs:1916
+[13:01:54.289] @gammalooprs::model INFO    : The following [32m34[39m vertex rules were removed by the restriction card:
+[34mV_82 -> (c~, d, G+) | V_83 -> (t~, d, G+) | V_84 -> (c~, s, G+) | V_85 -> (t~, s, G+) | V_86 -> (u~, b, G+) | V_87 -> (c~, b, G+) | V_90 -> (c~, d, W+) | V_91 -> (t~, d, W+) | V_92 -> (u~, s, W+) | V_94 -> (t~, s, W+) | V_95 -> (u~, b, W+) | V_96 -> (c~, b, W+) | V_101 -> (e+, e-, G0) | V_102 -> (mu+, mu-, G0) | V_104 -> (e+, e-, H) | V_105 -> (mu+, mu-, H) | V_110 -> (ve~, e-, G+) | V_111 -> (vm~, mu-, G+) | V_116 -> (b~, u, G-) | V_117 -> (d~, c, G-) | V_118 -> (s~, c, G-) | V_119 -> (b~, c, G-) | V_120 -> (d~, t, G-) | V_121 -> (s~, t, G-) | V_124 -> (s~, u, W-) | V_125 -> (b~, u, W-) | V_126 -> (d~, c, W-) | V_128 -> (b~, c, W-) | V_129 -> (d~, t, W-) | V_130 -> (s~, t, W-) | V_138 -> (c~, c, G0) | V_140 -> (c~, c, H) | V_145 -> (e+, ve, G-) | V_146 -> (mu+, vm, G-)[39m
+    at crates/gammalooprs/src/model/mod.rs:1975
+[13:01:54.290] @gammalooprs::model INFO    : The following [32m36[39m couplings were removed by the restriction card:
+[34mGC_13, GC_14, GC_16, GC_17, GC_18, GC_19, GC_20, GC_22, GC_23, GC_24, GC_25, GC_26, GC_28, GC_29, GC_42, GC_43, GC_44, GC_46, GC_47, GC_48, GC_84, GC_85, GC_86, GC_87, GC_88, GC_89, GC_90, GC_91, GC_92, GC_93, GC_101, GC_102, GC_103, GC_105, GC_106, GC_107[39m
+    at crates/gammalooprs/src/model/mod.rs:2008
+[13:01:54.290] @gammaloop_api::session INFO    : Running command set global kv global.display_directive=info global.logfile_directive=off global.n_cores.feyngen=10 global.n_cores.generate=10 global.n_cores.integrate=20
+    at crates/gammaloop-api/src/session.rs:577
+[13:01:54.291] @gammaloop_api::session INFO    : Running command remove processes -p aa_aa
+    at crates/gammaloop-api/src/session.rs:577
+[13:01:54.291] @gammaloop_api::session INFO    : Running command generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-initial-states=true --symmetrize-final-states=true --select-graphs GL06 -p aa_aa -i 2L --only-diagrams
+    at crates/gammaloop-api/src/session.rs:577
+[13:01:54.294] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Starting Feynman graph generation with Symbolica...
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3043
+[13:01:54.297] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs resulting from Symbolica generation:                                          192
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3188
+[13:01:54.298] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs retained after removal of vetoed topologies:                                  144
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3356
+[13:01:54.301] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs after vertex info assignment:                                                 144
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3426
+[13:01:54.301] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs after all complete graphs filters are applied:                                72
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3440
+[13:01:54.302] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs after closed fermion chains analysis:                                         72
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3489
+[13:01:54.303] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs after symmetrization of external states:                                      20
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3768
+[13:01:54.304] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | О”=0s     | Number of graphs after canonization of vertices, edges and flows (graph labels assigned here): 20
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3968
+[13:02:01.520] @gammalooprs::feyngen::diagram_generator INFO    : 7s     | О”=7s     | Number of graphs after numerator-aware grouping with strategy 'up to a scalar rescaling':      1 (1 isomorphically unique graph, 0 color zero, 0 lorentz zero, 0 grouped and 0 cancellation)
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:4347
+[13:02:01.520] @gammalooprs::feyngen::diagram_generator INFO    : ( Sum of the symmetry factors from each graph generated = -4 )
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:4487
+[13:02:01.522] @gammaloop_api::commands::generate INFO    : Generated amplitude 1 graphs.
+    at crates/gammaloop-api/src/commands/generate.rs:628
+[13:02:01.522] @gammaloop_api::commands::generate INFO    : Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '[32mgenerate existing <options>[39m' command.
+    at crates/gammaloop-api/src/commands/generate.rs:719
+[13:02:01.528] @gammaloop_api::session INFO    : Running command save dot
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:01.528] @gammaloop_api::commands::save INFO    : Saving dot files to /tmp/aa_aa_2l_graph_campaign_all/GL06/state
+    at crates/gammaloop-api/src/commands/save.rs:95
+[13:02:01.541] @gammalooprs::model INFO    : Generated dynamic edge styles for 43 particles
+    at crates/gammalooprs/src/model/mod.rs:1878
+[13:02:01.545] @gammaloop_api::session INFO    : Running command save state -o
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:02.012] @gammaloop_api::session INFO    : Running command generate existing -p aa_aa -i 2L
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:04.548] @gammalooprs::processes::amplitude ERROR   :
+     field   value
+     error   No such file or directory (os error 2)
+     span    build_integrands{indicatif.pb_show=true indicatif.pb_msg="Building Parametric Integrand"}
+    at crates/gammalooprs/src/processes/amplitude.rs:1026
+[13:02:04.548] @gammalooprs::processes::amplitude ERROR   :
+     field   value
+     error   No such file or directory (os error 2)
+     span    preprocess{indicatif.pb_show=true indicatif.pb_msg="preprocessing"}
+    at crates/gammalooprs/src/processes/amplitude.rs:689
+
+   0: [91mNo such file or directory (os error 2)[0m
+
+Location:
+   [35mcrates/gammalooprs/src/uv/approx/integrated.rs[0m:[35m279[0m
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
+Warning: SpanTrace capture is Unsupported.
+Ensure that you've setup a tracing-error ErrorLayer and the semver versions are compatible

@@ -398,8 +398,8 @@ positive forced-ray DOD identifies an integrable relative singularity and a
 variance problem rather than a generic UV divergence of the full integral.
 
 The profiler JSON and logs for the default, plot-ray, simplified split-ray,
-exactly collinear, and per-orientation tests are saved under
-\texttt{DoubleUVIntegrableSingularity/data/uv\_profile\_*}.
+exactly collinear, and per-orientation tests are saved in the report data
+directory under the \texttt{uv\_profile\_*} filenames.
 
 \section{Current long-run integration checks}
 
@@ -551,6 +551,101 @@ possibilities: default $\alpha=3$ may simply need more statistics or tuning, or
 the variance may require an explicit relative-momentum channel in addition to
 the OSE-prefactor LMB selection.  An $\alpha$ scan should be part of the next
 integration campaign now that the setting is exposed in \texttt{[sampling]}.
+
+\section{Other \texorpdfstring{$\gamma\gamma\to\gamma\gamma$}{aa to aa} two-loop graphs}
+
+I also ran the same integrated-UV generation and profiling campaign on the
+other \texttt{aa\_aa} two-loop graph labels selected by the feyngen card:
+\texttt{GL01}, \texttt{GL03}, \texttt{GL05}, \texttt{GL06}, \texttt{GL08},
+\texttt{GL12}, \texttt{GL14}, \texttt{GL16}, \texttt{GL17}, and
+\texttt{GL18}.  The command line was protected with a 100 GiB virtual-memory
+limit.  For every profiling and integration attempt I used kinematics A,
+helicity $+-+-$, disabled thresholds, $\mu_R=91.188$, and $m_{\rm UV}=9.188$.
+For the graphs that generated successfully, the integration run used 20 cores,
+$90\,\mathrm{M}$ samples, summed orientations, generated LMB multichanneling
+with summed LMB channels, and the exposed default $\alpha=3$ OSE prefactor.
+
+Seven of the ten non-GL00 labels failed before a UV profile could be produced.
+The feyngen step did select and write a single diagram, but the following
+\texttt{generate existing} step failed during integrated-UV processing at
+\texttt{crates/gammalooprs/src/uv/approx/integrated.rs:279}, inside the vakint
+tensor-reduction path, with \texttt{No such file or directory (os error 2)}.
+These were fast failures, not memory blow-ups under the 100 GiB cap.
+
+\begin{center}
+\scriptsize
+\begin{tabular}{p{0.06\linewidth}p{0.25\linewidth}p{0.22\linewidth}p{0.29\linewidth}}
+\toprule
+graph & generation & UV profile & integration and convergence\\
+\midrule
+\texttt{GL01} &
+feyngen 16 s; generation/profile wall 18.0 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\texttt{GL03} &
+feyngen 8 s; generation/profile wall 10.2 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\texttt{GL05} &
+feyngen 24 s; generation/profile wall 27.4 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\texttt{GL06} &
+feyngen 7 s; generation/profile wall 10.5 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\texttt{GL08} &
+feyngen 29 s; integrand generation row: expr 2.97 s, spenso 0.136 s, Symbolica eval 7.62 s; generation+profile wall 44.2 s; peak RAM 2.26 GiB &
+45 entries; worst slope $-0.99796$; no slopes above $-0.9$; no arb retries &
+avg total/integrand runtime 60.6/28.4 $\mu$s per sample per core; real
+$6.3157(2.4546)\times10^{-7}$, 38.9\%; imag
+$-9.5480(1.8487)\times10^{-7}$, 19.4\%; not converged\\
+\texttt{GL12} &
+feyngen 11 s; integrand generation row: expr 2.99 s, spenso 0.176 s, Symbolica eval 6.83 s; generation+profile wall 25.0 s; peak RAM 1.90 GiB &
+45 entries; worst slope $-0.99545$; no slopes above $-0.9$; no arb retries &
+avg total/integrand runtime 61.1/28.7 $\mu$s per sample per core; real
+$8.8850(19.2521)\times10^{-8}$, 216.7\%; imag
+$6.1223(1.5717)\times10^{-7}$, 25.7\%; not converged\\
+\texttt{GL14} &
+feyngen 2 s; generation/profile wall 5.9 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\texttt{GL16} &
+feyngen 27 s; integrand generation row: expr 2.91 s, spenso 0.137 s, Symbolica eval 7.83 s; generation+profile wall 42.1 s; peak RAM 2.16 GiB &
+45 entries; worst slope $-0.99940$; no slopes above $-0.9$; no arb retries &
+avg total/integrand runtime 61.4/28.7 $\mu$s per sample per core; real
+$1.4087(2.1772)\times10^{-7}$, 154.6\%; imag
+$-3.6861(0.3847)\times10^{-6}$, 10.4\%; imaginary part nearly converged,
+but the graph is not converged overall\\
+\texttt{GL17} &
+feyngen 10 s; generation/profile wall 12.4 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\texttt{GL18} &
+feyngen 6 s; generation/profile wall 9.9 s; integrated-UV tensor reduction failed &
+not available &
+not run\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The three graphs that passed integrated-UV generation, \texttt{GL08},
+\texttt{GL12}, and \texttt{GL16}, all have clean random-ray UV profiles:
+their worst fitted slopes stay below $-0.995$, all fitted DODs are negative,
+and none required arbitrary-precision rescue.  At $90\,\mathrm{M}$ samples the
+per-sample timing is also stable, about $60$--$61\,\mu$s total and
+$28$--$29\,\mu$s in the integrand itself per core.  Nevertheless none of these
+three reached sub-10\% Monte-Carlo error in both the real and imaginary parts.
+\texttt{GL16} is closest, with a 10.4\% imaginary-part relative error, but its
+real part is still compatible with zero at the present statistics.  The
+successful graphs therefore do not show the GL00 catastrophic double-UV ridge
+in the same way, but they are not yet precision-converged diagram-level
+integrals in this setup.
+
+The compact campaign summary, per-graph generation logs, successful UV-profile
+JSON files, and successful \(90\,\mathrm{M}\)-sample integration logs/results
+are archived in the report data directory under
+\texttt{aa\_aa\_2l\_graph\_campaign}.
 
 \section{Implications}
 

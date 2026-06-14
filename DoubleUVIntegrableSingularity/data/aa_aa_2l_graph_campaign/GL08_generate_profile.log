@@ -1,0 +1,161 @@
+┌������������������������������������������������������������┐
+│    WARNING: Running gammaloop compiled with 'dev-optim'    │
+└������������������������������������������������������������┘
+[13:02:04.763] @gammaloop_api::session INFO    : Running command run -c 'import model sm-default.json; set global kv global.display_directive=info global.logfile_directive=off global.n_cores.feyngen=10 global.n_cores.generate=10 global.n_cores.integrate=20; remove processes -p aa_aa; generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-initial-states=true --symmetrize-final-states=true --select-graphs GL08 -p aa_aa -i 2L --only-diagrams; save dot; save state -o; generate existing -p aa_aa -i 2L; save state -o; run set_model_parameters; run set_kinematics_a; set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188; set process -p aa_aa -i 2L kv general.m_uv=9.188; profile ultra-violet -p aa_aa -i 2L --n-points 20 --min-scaling 3 --max-scaling 5 -o /tmp/aa_aa_2l_graph_campaign_all/GL08/uv_profile.json'
+    at crates/gammaloop-api/src/session.rs:631
+[13:02:04.763] @gammaloop_api::session INFO    : Starting commands supplied with --commands/-c
+    at crates/gammaloop-api/src/session.rs:646
+[13:02:04.763] @gammaloop_api::session INFO    : Running command import model sm-default.json
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:04.763] @gammaloop_api::commands::import::model INFO    : Loading built-in JSON model sm-default
+    at crates/gammaloop-api/src/commands/import/model.rs:202
+[13:02:04.798] @gammalooprs::model INFO    : The following [32m11[39m external parameters were forced to zero by the restriction card:
+[34mlamWS, AWS, rhoWS, etaWS, ymc, yme, ymm, MC, Me, MM, WTau[39m
+    at crates/gammalooprs/src/model/mod.rs:1916
+[13:02:04.798] @gammalooprs::model INFO    : The following [32m34[39m vertex rules were removed by the restriction card:
+[34mV_82 -> (c~, d, G+) | V_83 -> (t~, d, G+) | V_84 -> (c~, s, G+) | V_85 -> (t~, s, G+) | V_86 -> (u~, b, G+) | V_87 -> (c~, b, G+) | V_90 -> (c~, d, W+) | V_91 -> (t~, d, W+) | V_92 -> (u~, s, W+) | V_94 -> (t~, s, W+) | V_95 -> (u~, b, W+) | V_96 -> (c~, b, W+) | V_101 -> (e+, e-, G0) | V_102 -> (mu+, mu-, G0) | V_104 -> (e+, e-, H) | V_105 -> (mu+, mu-, H) | V_110 -> (ve~, e-, G+) | V_111 -> (vm~, mu-, G+) | V_116 -> (b~, u, G-) | V_117 -> (d~, c, G-) | V_118 -> (s~, c, G-) | V_119 -> (b~, c, G-) | V_120 -> (d~, t, G-) | V_121 -> (s~, t, G-) | V_124 -> (s~, u, W-) | V_125 -> (b~, u, W-) | V_126 -> (d~, c, W-) | V_128 -> (b~, c, W-) | V_129 -> (d~, t, W-) | V_130 -> (s~, t, W-) | V_138 -> (c~, c, G0) | V_140 -> (c~, c, H) | V_145 -> (e+, ve, G-) | V_146 -> (mu+, vm, G-)[39m
+    at crates/gammalooprs/src/model/mod.rs:1975
+[13:02:04.798] @gammalooprs::model INFO    : The following [32m36[39m couplings were removed by the restriction card:
+[34mGC_13, GC_14, GC_16, GC_17, GC_18, GC_19, GC_20, GC_22, GC_23, GC_24, GC_25, GC_26, GC_28, GC_29, GC_42, GC_43, GC_44, GC_46, GC_47, GC_48, GC_84, GC_85, GC_86, GC_87, GC_88, GC_89, GC_90, GC_91, GC_92, GC_93, GC_101, GC_102, GC_103, GC_105, GC_106, GC_107[39m
+    at crates/gammalooprs/src/model/mod.rs:2008
+[13:02:04.798] @gammaloop_api::session INFO    : Running command set global kv global.display_directive=info global.logfile_directive=off global.n_cores.feyngen=10 global.n_cores.generate=10 global.n_cores.integrate=20
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:04.799] @gammaloop_api::session INFO    : Running command remove processes -p aa_aa
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:04.799] @gammaloop_api::session INFO    : Running command generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-initial-states=true --symmetrize-final-states=true --select-graphs GL08 -p aa_aa -i 2L --only-diagrams
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:04.802] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Starting Feynman graph generation with Symbolica...
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3043
+[13:02:04.805] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs resulting from Symbolica generation:                                          192
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3188
+[13:02:04.806] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs retained after removal of vetoed topologies:                                  144
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3356
+[13:02:04.809] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs after vertex info assignment:                                                 144
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3426
+[13:02:04.810] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs after all complete graphs filters are applied:                                72
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3440
+[13:02:04.810] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs after closed fermion chains analysis:                                         72
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3489
+[13:02:04.811] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs after symmetrization of external states:                                      20
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3768
+[13:02:04.813] @gammalooprs::feyngen::diagram_generator INFO    : 0s     | Δ=0s     | Number of graphs after canonization of vertices, edges and flows (graph labels assigned here): 20
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:3968
+[13:02:34.801] @gammalooprs::feyngen::diagram_generator INFO    : 29s    | Δ=29s    | Number of graphs after numerator-aware grouping with strategy 'up to a scalar rescaling':      1 (1 isomorphically unique graph, 0 color zero, 0 lorentz zero, 0 grouped and 0 cancellation)
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:4347
+[13:02:34.801] @gammalooprs::feyngen::diagram_generator INFO    : ( Sum of the symmetry factors from each graph generated = -4 )
+    at crates/gammalooprs/src/feyngen/diagram_generator.rs:4487
+[13:02:34.815] @gammaloop_api::commands::generate INFO    : Generated amplitude 1 graphs.
+    at crates/gammaloop-api/src/commands/generate.rs:628
+[13:02:34.815] @gammaloop_api::commands::generate INFO    : Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '[32mgenerate existing <options>[39m' command.
+    at crates/gammaloop-api/src/commands/generate.rs:719
+[13:02:34.848] @gammaloop_api::session INFO    : Running command save dot
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:34.848] @gammaloop_api::commands::save INFO    : Saving dot files to /tmp/aa_aa_2l_graph_campaign_all/GL08/state
+    at crates/gammaloop-api/src/commands/save.rs:95
+[13:02:34.853] @gammalooprs::model INFO    : Generated dynamic edge styles for 43 particles
+    at crates/gammalooprs/src/model/mod.rs:1878
+[13:02:34.857] @gammaloop_api::session INFO    : Running command save state -o
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:35.327] @gammaloop_api::session INFO    : Running command generate existing -p aa_aa -i 2L
+    at crates/gammaloop-api/src/session.rs:577
+Parsed: 122.658242ms
+Executing: 5.920686ms
+[13:02:46.228] @gammaloop_api::commands::generate INFO    :
+[34m[1mIntegrand generation summary[0m[39m
+[34m[1mpeak RAM[0m[39m [33m2.26 GiB[39m | [34m[1mcores[0m[39m [33m10[39m
+╭───────────┬───────┬─────────┬─────────────┬──────────────┬────────────────┬─────────────╮
+│ [34m[1mintegrand[0m[39m │ [34m[1mgraph[0m[39m │ [34m[1m# evals[0m[39m │ [34m[1mexpr build[0m[39m  │ [34m[1mspenso[0m[39m       │ [34m[1msymbolica eval[0m[39m │ [34m[1mcompile[0m[39m     │
+├───────────┼───────┼─────────┼─────────────┼──────────────┼────────────────┼─────────────┤
+│ [33m2L[39m        │ [33mGL08[39m  │ [33m2[39m       │ [35m2.97s[39m ([36m28%[39m) │ [35m136ms[39m ([36m1.3%[39m) │ [35m7.62s[39m ([36m71%[39m)    │ [35m0ms[39m ([36m0.00%[39m) │
+╰───────────┴───────┴─────────┴─────────────┴──────────────┴────────────────┴─────────────╯
+    at crates/gammaloop-api/src/commands/generate.rs:489
+[13:02:46.228] @gammaloop_api::session INFO    : Running command save state -o
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.716] @gammaloop_api::session INFO    : Running command run set_model_parameters
+    at crates/gammaloop-api/src/session.rs:631
+[13:02:46.717] @gammaloop_api::session INFO    : Starting command block set_model_parameters
+    at crates/gammaloop-api/src/session.rs:634
+[13:02:46.717] @gammaloop_api::session INFO    : Running command set model MT=173.0
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.723] @gammaloop_api::session INFO    : Running command set model WT=0.0
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.730] @gammaloop_api::session INFO    : Running command set model ymt=173.0
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.736] @gammaloop_api::session INFO    : Running command set model aS=0.118
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.742] @gammaloop_api::session INFO    : Running command set model aEWM1=137.036
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.748] @gammaloop_api::session INFO    : Running command set model Gf=1.166390e-05
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.754] @gammaloop_api::session INFO    : Running command set model MZ=91.188
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.761] @gammaloop_api::session INFO    : Running command run set_kinematics_a
+    at crates/gammaloop-api/src/session.rs:631
+[13:02:46.761] @gammaloop_api::session INFO    : Starting command block set_kinematics_a
+    at crates/gammaloop-api/src/session.rs:634
+[13:02:46.761] @gammaloop_api::session INFO    : Running command set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+[...]
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.762] @gammaloop_api::session INFO    : Running command set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.762] @gammaloop_api::session INFO    : Running command set process -p aa_aa -i 2L kv general.m_uv=9.188
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:46.762] @gammaloop_api::session INFO    : Running command profile ultra-violet -p aa_aa -i 2L --n-points 20 --min-scaling 3 --max-scaling 5 -o /tmp/aa_aa_2l_graph_campaign_all/GL08/uv_profile.json
+    at crates/gammaloop-api/src/session.rs:577
+[13:02:48.932] @gammaloop_api::commands::profile INFO    :
+╭───────┬──────────┬───────────┬───────┬─────┬──────────┬─────────╮
+│ fixed │ → ∞      │ slope     │ r2    │ DOD │ bare DOD │ inspect │
+├───────┼──────────┼───────────┼───────┼─────┼──────────┼─────────┤
+│ {e9}  │ {e10}    │ -2.043292 │ 1.000 │ -2  │ -1       │         │
+│ {e10} │ {e9}     │ -0.997957 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e9,e10} │ -0.999806 │ 1.000 │ -1  │ 0        │         │
+│ {e8}  │ {e9}     │ -1.945875 │ 1.000 │ -2  │ -1       │         │
+│ {e9}  │ {e8}     │ -0.999298 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e8,e9}  │ -0.999947 │ 1.000 │ -1  │ 0        │         │
+│ {e7}  │ {e10}    │ -1.636110 │ 0.968 │ -2  │ -1       │         │
+│ {e10} │ {e7}     │ -0.999895 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e7,e10} │ -1.002343 │ 1.000 │ -1  │ 0        │         │
+│ {e7}  │ {e8}     │ -1.846127 │ 0.939 │ -2  │ -1       │         │
+│ {e8}  │ {e7}     │ -0.999911 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e7,e8}  │ -1.001262 │ 1.000 │ -1  │ 0        │         │
+│ {e5}  │ {e10}    │ -1.982120 │ 1.000 │ -2  │ -1       │         │
+│ {e10} │ {e5}     │ -0.999504 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e5,e10} │ -0.999474 │ 1.000 │ -1  │ 0        │         │
+│ {e5}  │ {e8}     │ -2.196118 │ 0.998 │ -2  │ -1       │         │
+│ {e8}  │ {e5}     │ -1.000162 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e5,e8}  │ -1.002038 │ 1.000 │ -1  │ 0        │         │
+│ {e6}  │ {e9}     │ -1.982508 │ 1.000 │ -2  │ -1       │         │
+│ {e9}  │ {e6}     │ -0.999885 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e6,e9}  │ -1.002131 │ 1.000 │ -1  │ 0        │         │
+│ {e6}  │ {e7}     │ -2.024354 │ 1.000 │ -2  │ -1       │         │
+│ {e7}  │ {e6}     │ -0.999981 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e6,e7}  │ -1.000588 │ 1.000 │ -1  │ 0        │         │
+│ {e5}  │ {e6}     │ -2.093218 │ 0.999 │ -2  │ -1       │         │
+│ {e6}  │ {e5}     │ -0.999961 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e5,e6}  │ -1.003140 │ 1.000 │ -1  │ 0        │         │
+│ {e4}  │ {e10}    │ -1.951907 │ 1.000 │ -2  │ -2       │         │
+│ {e10} │ {e4}     │ -1.000155 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e4,e10} │ -1.000488 │ 1.000 │ -1  │ 0        │         │
+│ {e4}  │ {e9}     │ -2.120062 │ 0.999 │ -2  │ -2       │         │
+│ {e9}  │ {e4}     │ -1.003622 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e4,e9}  │ -0.998528 │ 1.000 │ -1  │ 0        │         │
+│ {e4}  │ {e7}     │ -1.624253 │ 0.963 │ -2  │ -2       │         │
+│ {e7}  │ {e4}     │ -0.999756 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e4,e7}  │ -1.000727 │ 1.000 │ -1  │ 0        │         │
+│ {e4}  │ {e8}     │ -2.082003 │ 1.000 │ -2  │ -2       │         │
+│ {e8}  │ {e4}     │ -0.998789 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e4,e8}  │ -0.999842 │ 1.000 │ -1  │ 0        │         │
+│ {e4}  │ {e6}     │ -2.069826 │ 1.000 │ -2  │ -2       │         │
+│ {e6}  │ {e4}     │ -0.999454 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e4,e6}  │ -0.999434 │ 1.000 │ -1  │ 0        │         │
+│ {e4}  │ {e5}     │ -1.989888 │ 1.000 │ -2  │ -2       │         │
+│ {e5}  │ {e4}     │ -0.999091 │ 1.000 │ -1  │ -1       │         │
+│ {}    │ {e4,e5}  │ -0.999910 │ 1.000 │ -1  │ 0        │         │
+╰───────┴──────────┴───────────┴───────┴─────┴──────────┴─────────╯
+    at crates/gammaloop-api/src/commands/profile.rs:286
+Gammaloop export root [32m/tmp/aa_aa_2l_graph_campaign_all/GL08/state[39m already exists. Specify '[1m[31mo[39m[0m' for overwriting, '[1m[34mn[39m[0m' for not saving, or '[1m[32m<NEW_PATH>[39m[0m' to specify where to save current state to:
+ >
