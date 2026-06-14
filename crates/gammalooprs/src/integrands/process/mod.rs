@@ -19,6 +19,7 @@ use crate::observables::{
 use crate::processes::StandaloneExportSettings;
 use crate::utils::{
     ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
+    global_inv_parameterize,
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
@@ -49,7 +50,8 @@ pub mod ir;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::IntegratorSettings, settings::runtime::Precision,
+    settings::runtime::IntegratorSettings, settings::runtime::LmbChannelWeight,
+    settings::runtime::ParameterizationSettings, settings::runtime::Precision,
     settings::runtime::SamplingSettings, settings::runtime::StabilityLevelSetting,
     settings::runtime::StabilitySettings,
 };
@@ -1700,6 +1702,22 @@ pub struct LmbMultiChannelingSetup {
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
+pub(crate) struct LmbChannelWeightingSettings<'a, T: FloatLike> {
+    pub(crate) model: &'a Model,
+    pub(crate) alpha: &'a F<T>,
+    pub(crate) channel_weight: LmbChannelWeight,
+    pub(crate) parameterization_settings: &'a ParameterizationSettings,
+    pub(crate) e_cm: f64,
+}
+
+impl<'a, T: FloatLike> Copy for LmbChannelWeightingSettings<'a, T> {}
+
+impl<'a, T: FloatLike> Clone for LmbChannelWeightingSettings<'a, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 impl LmbMultiChannelingSetup {
     pub(crate) fn channel_edge_ids(&self, channel_index: ChannelIndex) -> SmallVec<[usize; 4]> {
         self.all_bases[self.channels[channel_index]]
@@ -1752,8 +1770,7 @@ impl LmbMultiChannelingSetup {
     pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
-        model: &Model,
-        alpha: &F<T>,
+        weighting_settings: LmbChannelWeightingSettings<'_, T>,
         cache: bool,
     ) -> TiVec<ChannelIndex, (MomentumSample<T>, F<T>)> {
         let mut loop_mom_cache_id = momentum_sample.sample.loop_mom_cache_id;
@@ -1767,8 +1784,7 @@ impl LmbMultiChannelingSetup {
                     channel_index,
                     momentum_sample,
                     loop_mom_cache_id,
-                    model,
-                    alpha,
+                    weighting_settings,
                 )
             })
             .collect()
@@ -1784,8 +1800,7 @@ impl LmbMultiChannelingSetup {
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
         loop_mom_cache_id: usize,
-        model: &Model,
-        alpha: &F<T>,
+        weighting_settings: LmbChannelWeightingSettings<'_, T>,
     ) -> (MomentumSample<T>, F<T>) {
         let sample = MomentumSample {
             sample: self.reinterpret_loop_momenta_impl(
@@ -1795,13 +1810,35 @@ impl LmbMultiChannelingSetup {
             ), // uuid: momentum_sample.uuid,
         };
 
-        let prefactor = self.compute_prefactor_impl(channel_index, &sample, model, alpha);
+        let prefactor = self.compute_prefactor_impl(channel_index, &sample, weighting_settings);
 
         (sample, prefactor)
     }
 
     /// Computes the prefactor for the given channel index and momentum sample.
     fn compute_prefactor_impl<T: FloatLike>(
+        &self,
+        channel_index: ChannelIndex,
+        momentum_sample: &MomentumSample<T>,
+        weighting_settings: LmbChannelWeightingSettings<'_, T>,
+    ) -> F<T> {
+        match weighting_settings.channel_weight {
+            LmbChannelWeight::Ose => self.compute_ose_prefactor_impl(
+                channel_index,
+                momentum_sample,
+                weighting_settings.model,
+                weighting_settings.alpha,
+            ),
+            LmbChannelWeight::InverseJacobian => self.compute_inverse_jacobian_prefactor_impl(
+                channel_index,
+                momentum_sample,
+                weighting_settings.parameterization_settings,
+                weighting_settings.e_cm,
+            ),
+        }
+    }
+
+    fn compute_ose_prefactor_impl<T: FloatLike>(
         &self,
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
@@ -1837,6 +1874,65 @@ impl LmbMultiChannelingSetup {
             .fold(momentum_sample.zero(), |sum, summand| sum + summand);
 
         numerator / denominators
+    }
+
+    fn compute_inverse_jacobian_prefactor_impl<T: FloatLike>(
+        &self,
+        channel_index: ChannelIndex,
+        momentum_sample: &MomentumSample<T>,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+    ) -> F<T> {
+        let selected_lmb = self.channels[channel_index];
+        let mut numerator = momentum_sample.zero();
+        let e_cm = F::<T>::from_f64(e_cm);
+
+        let denominator = self
+            .channels
+            .iter()
+            .map(|&lmb_index| {
+                let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
+                let (_, inverse_jacobian) = global_inv_parameterize(
+                    &basis_momenta,
+                    e_cm.clone(),
+                    parameterization_settings,
+                );
+
+                if selected_lmb == lmb_index {
+                    numerator = inverse_jacobian.clone();
+                }
+
+                inverse_jacobian
+            })
+            .fold(momentum_sample.zero(), |sum, summand| sum + summand);
+
+        if denominator.is_zero() {
+            momentum_sample.zero()
+        } else {
+            numerator / denominator
+        }
+    }
+
+    fn basis_momenta_for_lmb<T: FloatLike>(
+        &self,
+        lmb_index: LmbIndex,
+        momentum_sample: &MomentumSample<T>,
+    ) -> Vec<ThreeMomentum<F<T>>> {
+        self.all_bases[lmb_index]
+            .loop_edges
+            .iter()
+            .map(|&edge_index| {
+                let edge_signature = &self.graph.loop_momentum_basis.edge_signatures[edge_index];
+
+                edge_signature
+                    .internal
+                    .apply_typed(&momentum_sample.sample.loop_moms)
+                    + edge_signature
+                        .external
+                        .apply(&momentum_sample.sample.external_moms.raw)
+                        .spatial
+            })
+            .collect()
     }
 }
 
@@ -2090,7 +2186,7 @@ pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub rotation: &'a Rotation,
     pub evaluation_metadata: &'m mut EvaluationMetaData,
     pub record_primary_timing: bool,
-    pub channel_id: Option<(ChannelIndex, F<T>)>,
+    pub channel_id: Option<(ChannelIndex, F<T>, LmbChannelWeight)>,
 }
 
 fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -2098,7 +2194,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     graph_id: usize,
     sample: &MomentumSample<T>,
     context: &mut EvaluationContext<'_, '_>,
-    channel_id: Option<(ChannelIndex, F<T>)>,
+    channel_id: Option<(ChannelIndex, F<T>, LmbChannelWeight)>,
 ) -> Result<GraphEvaluationResult<T>> {
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
     let result = {
@@ -2146,6 +2242,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
             }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
+                channel_weight,
                 channel_id,
                 sample,
             } => evaluate_graph_term(
@@ -2153,9 +2250,13 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 graph_id,
                 sample,
                 context,
-                Some((*channel_id, alpha.clone())),
+                Some((*channel_id, alpha.clone(), *channel_weight)),
             ),
-            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+            DiscreteGraphSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => {
                 let num_channels = integrand.get_master_graph(group_id).get_num_channels();
                 (0..num_channels)
                     .map(ChannelIndex::from)
@@ -2165,7 +2266,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             graph_id,
                             sample,
                             context,
-                            Some((channel_index, alpha.clone())),
+                            Some((channel_index, alpha.clone(), *channel_weight)),
                         )
                     })
                     .try_fold(
@@ -2590,29 +2691,32 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             GammaLoopSample::Graph { graph_id, sample } => {
                 evaluate_graph_term(integrand, *graph_id, sample, &mut context, None)?
             }
-            GammaLoopSample::MultiChanneling { alpha, sample } => (0..integrand.graph_count())
-                .try_fold(
-                    GraphEvaluationResult::zero(zero.clone()),
-                    |mut sum, graph_id| {
-                        let num_channels = integrand.get_graph(graph_id).get_num_channels();
-                        let graph_result = (0..num_channels).map(ChannelIndex::from).try_fold(
-                            GraphEvaluationResult::zero(zero.clone()),
-                            |mut channel_sum, channel_index| {
-                                let channel_result = evaluate_graph_term(
-                                    integrand,
-                                    graph_id,
-                                    sample,
-                                    &mut context,
-                                    Some((channel_index, alpha.clone())),
-                                )?;
-                                channel_sum.merge_in_place(channel_result);
-                                Ok::<GraphEvaluationResult<T>, eyre::Report>(channel_sum)
-                            },
-                        )?;
-                        sum.merge_in_place(graph_result);
-                        Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
-                    },
-                )?,
+            GammaLoopSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => (0..integrand.graph_count()).try_fold(
+                GraphEvaluationResult::zero(zero.clone()),
+                |mut sum, graph_id| {
+                    let num_channels = integrand.get_graph(graph_id).get_num_channels();
+                    let graph_result = (0..num_channels).map(ChannelIndex::from).try_fold(
+                        GraphEvaluationResult::zero(zero.clone()),
+                        |mut channel_sum, channel_index| {
+                            let channel_result = evaluate_graph_term(
+                                integrand,
+                                graph_id,
+                                sample,
+                                &mut context,
+                                Some((channel_index, alpha.clone(), *channel_weight)),
+                            )?;
+                            channel_sum.merge_in_place(channel_result);
+                            Ok::<GraphEvaluationResult<T>, eyre::Report>(channel_sum)
+                        },
+                    )?;
+                    sum.merge_in_place(graph_result);
+                    Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                },
+            )?,
             GammaLoopSample::DiscreteGraph { group_id, sample } => {
                 evaluate_graph_group(integrand, *group_id, sample, &mut context, &zero)?
             }
@@ -2921,6 +3025,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     }
                     DiscreteGraphSample::MultiChanneling {
                         alpha: F::from_f64(multichanneling_settings.alpha),
+                        channel_weight: multichanneling_settings.channel_weight,
                         sample,
                     }
                 }
@@ -2940,6 +3045,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     })?;
                     DiscreteGraphSample::DiscreteMultiChanneling {
                         alpha: F::from_f64(multichanneling_settings.alpha),
+                        channel_weight: multichanneling_settings.channel_weight,
                         channel_id,
                         sample,
                     }

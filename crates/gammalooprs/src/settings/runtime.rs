@@ -1000,6 +1000,8 @@ pub struct SamplingSettingsParser {
     #[serde(skip_serializing_if = "is_float::<3>")]
     pub alpha: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub lmb_channel_weight: LmbChannelWeight,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub coordinate_system: CoordinateSystem,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
@@ -1015,11 +1017,27 @@ impl Default for SamplingSettingsParser {
             lmb_multichanneling: false,
             lmb_channels: SumMode::Summed,
             alpha: 3.0,
+            lmb_channel_weight: LmbChannelWeight::default(),
             coordinate_system: CoordinateSystem::Spherical,
             mapping: ParameterizationMapping::Linear,
             b: 1.0,
         }
     }
+}
+
+#[derive(
+    Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+pub enum LmbChannelWeight {
+    #[serde(rename = "ose")]
+    #[default]
+    Ose,
+    #[serde(rename = "inverse_jacobian")]
+    InverseJacobian,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
@@ -1071,6 +1089,7 @@ impl SamplingSettings {
                 lmb_multichanneling: false,
                 lmb_channels: SumMode::Summed,
                 alpha: 3.0,
+                lmb_channel_weight: LmbChannelWeight::default(),
                 coordinate_system: CoordinateSystem::from_mode(settings.mode.clone()),
                 mapping: settings.mapping.clone(),
                 b: settings.b,
@@ -1081,6 +1100,7 @@ impl SamplingSettings {
                 lmb_multichanneling: true,
                 lmb_channels: SumMode::Summed,
                 alpha: settings.alpha,
+                lmb_channel_weight: settings.channel_weight,
                 coordinate_system: CoordinateSystem::from_mode(
                     settings.parameterization_settings.mode.clone(),
                 ),
@@ -1102,6 +1122,7 @@ impl SamplingSettings {
                             lmb_multichanneling: false,
                             lmb_channels: SumMode::Summed,
                             alpha: 3.0,
+                            lmb_channel_weight: LmbChannelWeight::default(),
                             coordinate_system: CoordinateSystem::from_mode(
                                 parameterization_settings.mode.clone(),
                             ),
@@ -1116,6 +1137,7 @@ impl SamplingSettings {
                             lmb_multichanneling: true,
                             lmb_channels: SumMode::Summed,
                             alpha: multichanneling_settings.alpha,
+                            lmb_channel_weight: multichanneling_settings.channel_weight,
                             coordinate_system: CoordinateSystem::from_mode(
                                 multichanneling_settings
                                     .parameterization_settings
@@ -1137,6 +1159,7 @@ impl SamplingSettings {
                         lmb_multichanneling: true,
                         lmb_channels: SumMode::MonteCarlo,
                         alpha: multichanneling_settings.alpha,
+                        lmb_channel_weight: multichanneling_settings.channel_weight,
                         coordinate_system: CoordinateSystem::from_mode(
                             multichanneling_settings
                                 .parameterization_settings
@@ -1155,6 +1178,7 @@ impl SamplingSettings {
                         lmb_multichanneling: false,
                         lmb_channels: SumMode::Summed,
                         alpha: 3.0,
+                        lmb_channel_weight: LmbChannelWeight::default(),
                         coordinate_system: CoordinateSystem::MomTrop,
                         mapping: ParameterizationMapping::default(),
                         b: 1.0,
@@ -1171,6 +1195,7 @@ impl SamplingSettings {
             lmb_multichanneling,
             lmb_channels,
             alpha,
+            lmb_channel_weight,
             coordinate_system,
             mapping,
             b,
@@ -1213,6 +1238,14 @@ impl SamplingSettings {
         }
 
         let mode = coordinate_system.into_mode();
+        if lmb_channel_weight == LmbChannelWeight::InverseJacobian
+            && matches!(mode, ParameterizationMode::HyperSphericalFlat)
+        {
+            return Err(
+                "Invalid sampling settings: lmb_channel_weight = 'inverse_jacobian' is incompatible with coordinate_system = 'hyperspherical_flat' because the inverse map is not available."
+                    .to_string(),
+            );
+        }
         let parameterization_settings = ParameterizationSettings { mode, mapping, b };
 
         match graphs {
@@ -1234,6 +1267,7 @@ impl SamplingSettings {
                 if lmb_multichanneling {
                     Ok(SamplingSettings::MultiChanneling(MultiChannelingSettings {
                         alpha,
+                        channel_weight: lmb_channel_weight,
                         parameterization_settings,
                     }))
                 } else {
@@ -1244,6 +1278,7 @@ impl SamplingSettings {
                 let sampling_type = if lmb_multichanneling {
                     let settings = MultiChannelingSettings {
                         alpha,
+                        channel_weight: lmb_channel_weight,
                         parameterization_settings,
                     };
 
@@ -1425,6 +1460,8 @@ pub struct MultiChannelingSettings {
     #[serde(skip_serializing_if = "is_float::<3>")]
     pub alpha: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub channel_weight: LmbChannelWeight,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
 
@@ -1432,6 +1469,7 @@ impl Default for MultiChannelingSettings {
     fn default() -> Self {
         Self {
             alpha: 3.0,
+            channel_weight: LmbChannelWeight::default(),
             parameterization_settings: ParameterizationSettings::default(),
         }
     }

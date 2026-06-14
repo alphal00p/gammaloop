@@ -44,7 +44,7 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            ChannelIndex, ParamBuilder,
+            ChannelIndex, LmbChannelWeightingSettings, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack},
         },
     },
@@ -490,18 +490,31 @@ impl AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         context: &mut GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<(Complex<F<T>>, AmplitudeCountertermEvaluation<T>)> {
-        let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = &context.channel_id {
-            self.multi_channeling_setup
-                .reinterpret_loop_momenta_and_compute_prefactor(
-                    *channel_id,
-                    momentum_sample,
-                    0,
-                    context.model,
+        let (momentum_sample, prefactor) =
+            if let Some((channel_id, alpha, channel_weight)) = &context.channel_id {
+                let parameterization_settings = context
+                    .settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .expect("LMB multichanneling requires a parameterization.");
+                let weighting_settings = LmbChannelWeightingSettings {
+                    model: context.model,
                     alpha,
-                )
-        } else {
-            (momentum_sample.clone(), momentum_sample.one())
-        };
+                    channel_weight: *channel_weight,
+                    parameterization_settings: &parameterization_settings,
+                    e_cm: context.settings.kinematics.e_cm,
+                };
+
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_and_compute_prefactor(
+                        *channel_id,
+                        momentum_sample,
+                        0,
+                        weighting_settings,
+                    )
+            } else {
+                (momentum_sample.clone(), momentum_sample.one())
+            };
 
         let hel = context.settings.kinematics.externals.get_helicities();
         let orientations =
@@ -729,7 +742,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         let event_channel_id = context
             .channel_id
             .as_ref()
-            .map(|(channel_id, _)| *channel_id);
+            .map(|(channel_id, _, _)| *channel_id);
         let prepared_event = prepare_buffered_event(
             context.settings,
             context.rotation,

@@ -582,6 +582,7 @@ mod tests {
         assert!(toml.contains("lmb_multichanneling = true"));
         assert!(toml.contains("lmb_channels = \"monte_carlo\""));
         assert!(toml.contains("alpha = 3.0"));
+        assert!(toml.contains("lmb_channel_weight = \"ose\""));
         assert!(toml.contains("coordinate_system = \"spherical\""));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
@@ -613,6 +614,7 @@ orientations = "summed"
 lmb_multichanneling = true
 lmb_channels = "summed"
 alpha = 1.5
+lmb_channel_weight = "inverse_jacobian"
 coordinate_system = "momentum_space"
 mapping = "log"
 b = 5.0
@@ -626,6 +628,7 @@ b = 5.0
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
                         alpha: 1.5,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
                         parameterization_settings:
                             crate::settings::runtime::ParameterizationSettings {
                                 mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
@@ -636,6 +639,24 @@ b = 5.0
                 ),
             })
         );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_inverse_jacobian_for_flat_hyperspherical() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+alpha = 1.5
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "hyperspherical_flat"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("inverse map is not available"));
     }
 
     #[test]

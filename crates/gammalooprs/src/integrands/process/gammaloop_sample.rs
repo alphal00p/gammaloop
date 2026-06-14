@@ -6,8 +6,8 @@ use crate::momentum::{Rotation, ThreeMomentum};
 use crate::utils::{self, F, FloatLike, global_parameterize};
 use crate::{
     DependentMomentaConstructor, settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::ParameterizationSettings, settings::runtime::SamplingSettings,
-    settings::runtime::kinematic::KinematicsSettings,
+    settings::runtime::LmbChannelWeight, settings::runtime::ParameterizationSettings,
+    settings::runtime::SamplingSettings, settings::runtime::kinematic::KinematicsSettings,
 };
 use color_eyre::Result;
 use eyre::eyre;
@@ -56,6 +56,7 @@ pub enum GammaLoopSample<T: FloatLike> {
     },
     MultiChanneling {
         alpha: F<T>,
+        channel_weight: LmbChannelWeight,
         sample: MomentumSample<T>,
     },
     DiscreteGraph {
@@ -85,13 +86,15 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 graph_id: *graph_id,
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
-            GammaLoopSample::MultiChanneling { alpha, sample } => {
-                GammaLoopSample::MultiChanneling {
-                    alpha: alpha.clone(),
-
-                    sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
-                }
-            }
+            GammaLoopSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => GammaLoopSample::MultiChanneling {
+                alpha: alpha.clone(),
+                channel_weight: *channel_weight,
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+            },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
                 group_id: *group_id,
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
@@ -132,12 +135,15 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 graph_id: *graph_id,
                 sample: sample.cast_sample(),
             },
-            GammaLoopSample::MultiChanneling { alpha, sample } => {
-                GammaLoopSample::MultiChanneling {
-                    alpha: alpha.clone().into(),
-                    sample: sample.cast_sample(),
-                }
-            }
+            GammaLoopSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => GammaLoopSample::MultiChanneling {
+                alpha: alpha.clone().into(),
+                channel_weight: *channel_weight,
+                sample: sample.cast_sample(),
+            },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
                 group_id: *group_id,
                 sample: sample.cast_sample(),
@@ -157,12 +163,15 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 graph_id: *graph_id,
                 sample: sample.higher_precision(),
             },
-            GammaLoopSample::MultiChanneling { alpha, sample } => {
-                GammaLoopSample::MultiChanneling {
-                    alpha: alpha.higher(),
-                    sample: sample.higher_precision(),
-                }
-            }
+            GammaLoopSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => GammaLoopSample::MultiChanneling {
+                alpha: alpha.higher(),
+                channel_weight: *channel_weight,
+                sample: sample.higher_precision(),
+            },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
                 group_id: *group_id,
                 sample: sample.higher_precision(),
@@ -182,12 +191,15 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 graph_id: *graph_id,
                 sample: sample.lower_precision(),
             },
-            GammaLoopSample::MultiChanneling { alpha, sample } => {
-                GammaLoopSample::MultiChanneling {
-                    alpha: alpha.lower(),
-                    sample: sample.lower_precision(),
-                }
-            }
+            GammaLoopSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => GammaLoopSample::MultiChanneling {
+                alpha: alpha.lower(),
+                channel_weight: *channel_weight,
+                sample: sample.lower_precision(),
+            },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
                 group_id: *group_id,
                 sample: sample.lower_precision(),
@@ -213,12 +225,14 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     Default(MomentumSample<T>),
     MultiChanneling {
         alpha: F<T>,
+        channel_weight: LmbChannelWeight,
         sample: MomentumSample<T>,
     },
     /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
     Tropical(MomentumSample<T>),
     DiscreteMultiChanneling {
         alpha: F<T>,
+        channel_weight: LmbChannelWeight,
         channel_id: ChannelIndex,
         sample: MomentumSample<T>,
     },
@@ -258,12 +272,15 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 loop_mom_cache_id,
                 external_mom_cache_id,
             )),
-            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                DiscreteGraphSample::MultiChanneling {
-                    alpha: alpha.clone(),
-                    sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
-                }
-            }
+            DiscreteGraphSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => DiscreteGraphSample::MultiChanneling {
+                alpha: alpha.clone(),
+                channel_weight: *channel_weight,
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+            },
             DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(sample.rotate(
                 rotation,
                 loop_mom_cache_id,
@@ -271,10 +288,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             )),
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
+                channel_weight,
                 channel_id,
                 sample,
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: alpha.clone(),
+                channel_weight: *channel_weight,
                 channel_id: *channel_id,
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
@@ -291,21 +310,26 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Default(sample) => {
                 DiscreteGraphSample::Default(sample.cast_sample())
             }
-            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                DiscreteGraphSample::MultiChanneling {
-                    alpha: Into::<F<T2>>::into(alpha.clone()),
-                    sample: sample.cast_sample(),
-                }
-            }
+            DiscreteGraphSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => DiscreteGraphSample::MultiChanneling {
+                alpha: Into::<F<T2>>::into(alpha.clone()),
+                channel_weight: *channel_weight,
+                sample: sample.cast_sample(),
+            },
             DiscreteGraphSample::Tropical(sample) => {
                 DiscreteGraphSample::Tropical(sample.cast_sample())
             }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
+                channel_weight,
                 channel_id,
                 sample,
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: F::<T2>::from(alpha.clone()),
+                channel_weight: *channel_weight,
                 channel_id: *channel_id,
                 sample: sample.cast_sample(),
             },
@@ -321,21 +345,26 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Default(sample) => {
                 DiscreteGraphSample::Default(sample.higher_precision())
             }
-            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                DiscreteGraphSample::MultiChanneling {
-                    alpha: alpha.higher(),
-                    sample: sample.higher_precision(),
-                }
-            }
+            DiscreteGraphSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => DiscreteGraphSample::MultiChanneling {
+                alpha: alpha.higher(),
+                channel_weight: *channel_weight,
+                sample: sample.higher_precision(),
+            },
             DiscreteGraphSample::Tropical(sample) => {
                 DiscreteGraphSample::Tropical(sample.higher_precision())
             }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
+                channel_weight,
                 channel_id,
                 sample,
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: alpha.higher(),
+                channel_weight: *channel_weight,
                 channel_id: *channel_id,
                 sample: sample.higher_precision(),
             },
@@ -351,21 +380,26 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Default(sample) => {
                 DiscreteGraphSample::Default(sample.lower_precision())
             }
-            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                DiscreteGraphSample::MultiChanneling {
-                    alpha: alpha.lower(),
-                    sample: sample.lower_precision(),
-                }
-            }
+            DiscreteGraphSample::MultiChanneling {
+                alpha,
+                channel_weight,
+                sample,
+            } => DiscreteGraphSample::MultiChanneling {
+                alpha: alpha.lower(),
+                channel_weight: *channel_weight,
+                sample: sample.lower_precision(),
+            },
             DiscreteGraphSample::Tropical(sample) => {
                 DiscreteGraphSample::Tropical(sample.lower_precision())
             }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
+                channel_weight,
                 channel_id,
                 sample,
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: alpha.lower(),
+                channel_weight: *channel_weight,
                 channel_id: *channel_id,
                 sample: sample.lower_precision(),
             },
@@ -417,6 +451,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         SamplingSettings::MultiChanneling(multichanneling_settings) => {
             Ok(GammaLoopSample::MultiChanneling {
                 alpha: F::from_f64(multichanneling_settings.alpha),
+                channel_weight: multichanneling_settings.channel_weight,
                 sample: default_parametrize(
                     &xs,
                     dependent_momenta_constructor,
@@ -453,6 +488,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         group_id,
                         sample: DiscreteGraphSample::MultiChanneling {
                             alpha: F::from_f64(multichanneling_settings.alpha),
+                            channel_weight: multichanneling_settings.channel_weight,
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,
@@ -538,6 +574,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         group_id,
                         sample: DiscreteGraphSample::DiscreteMultiChanneling {
                             alpha: F::from_f64(multichanneling_settings.alpha),
+                            channel_weight: multichanneling_settings.channel_weight,
                             channel_id,
                             sample: default_parametrize(
                                 &xs,

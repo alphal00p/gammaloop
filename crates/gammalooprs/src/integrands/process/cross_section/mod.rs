@@ -13,7 +13,7 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            ChannelIndex, GraphTermEvaluationContext, ParamBuilder,
+            ChannelIndex, GraphTermEvaluationContext, LmbChannelWeightingSettings, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
             prepare_buffered_event,
@@ -1259,17 +1259,18 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
-        let momentum_sample = if let Some((channel_id, _alpha)) = &context.channel_id {
-            MomentumSample {
-                sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
-                    *channel_id,
-                    &momentum_sample.sample,
-                    momentum_sample.sample.loop_mom_cache_id,
-                ),
-            }
-        } else {
-            momentum_sample.clone()
-        };
+        let momentum_sample =
+            if let Some((channel_id, _alpha, _channel_weight)) = &context.channel_id {
+                MomentumSample {
+                    sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
+                        *channel_id,
+                        &momentum_sample.sample,
+                        momentum_sample.sample.loop_mom_cache_id,
+                    ),
+                }
+            } else {
+                momentum_sample.clone()
+            };
 
         crate::debug_tags!(#integration, #sample, #inspect;
             "loop moms: {}",
@@ -1346,7 +1347,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         context
                             .channel_id
                             .as_ref()
-                            .map(|(channel_id, _)| *channel_id),
+                            .map(|(channel_id, _, _)| *channel_id),
                     )?;
                     generated.inverse_rotate(context.rotation);
                     Ok(generated)
@@ -1470,16 +1471,27 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
 
                 let prefactor = Complex::new_re(
-                    if let Some((_channel_index, _alpha)) = &context.channel_id {
+                    if let Some((_channel_index, _alpha, _channel_weight)) = &context.channel_id {
                         if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
                             panic!("multi channeling with duals not supported yet");
                         }
+                        let parameterization_settings = context
+                            .settings
+                            .sampling
+                            .get_parameterization_settings()
+                            .expect("LMB multichanneling requires a parameterization.");
+                        let weighting_settings = LmbChannelWeightingSettings {
+                            model: context.model,
+                            alpha: _alpha,
+                            channel_weight: *_channel_weight,
+                            parameterization_settings: &parameterization_settings,
+                            e_cm: context.settings.kinematics.e_cm,
+                        };
 
                         self.multi_channeling_setup.compute_prefactor_impl(
                             *_channel_index,
                             &rescaled_momenta,
-                            context.model,
-                            _alpha,
+                            weighting_settings,
                         )
                     } else {
                         F::from_f64(1.0)
