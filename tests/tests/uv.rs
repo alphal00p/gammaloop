@@ -1,17 +1,22 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use color_eyre::Result;
 use gammaloop_api::commands::{
     Profile,
+    evaluate_samples::{EvaluateSamples, evaluate_sample},
     integrate::Integrate,
     profile::{InfraRedProfile, UltraVioletProfile},
 };
 use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{
-    CLIState, clean_test, get_example_cli, get_test_cli, get_tests_workspace_path,
+    CLIState, clean_test, get_example_cli, get_test_cli, get_tests_workspace_path, workspace_root,
 };
+use gammalooprs::integrands::HasIntegrand;
+use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::F;
+use ndarray::Array2;
+use serde_json::{Map, Value, json};
 use spenso::algebra::complex::Complex;
 use tabled::{Table, Tabled};
 
@@ -804,8 +809,381 @@ fn epem_a_bbx_amp_uv() {
     });
 }
 
+const AA_AA_2L_GRAPHS: &[&str] = &[
+    "GL00", "GL01", "GL03", "GL05", "GL06", "GL08", "GL12", "GL14", "GL16", "GL17", "GL18",
+];
+
+const AA_AA_2L_UV_RICH_INSPECT: GraphUvRichInspectCase = GraphUvRichInspectCase {
+    name: "aa_aa 2L",
+    test_prefix: "aa_aa_2l",
+    process_prefix: "aa_aa_2l_",
+    integrand_name: "2L",
+    run_card: "uv/aa_aa_2l_rich_inspect.toml",
+    graph_block_prefix: "generate_",
+    target_file: "aa_aa_2l_uv_inspect_event_targets.json",
+    graphs: AA_AA_2L_GRAPHS,
+};
+
+#[derive(Clone, Copy)]
+struct UvRichInspectMode {
+    name: &'static str,
+    process_suffix: &'static str,
+}
+
+const INTEGRATED_UV_RICH_INSPECT_MODE: UvRichInspectMode = UvRichInspectMode {
+    name: "integrated",
+    process_suffix: "",
+};
+
+const NO_INTEGRATED_UV_RICH_INSPECT_MODE: UvRichInspectMode = UvRichInspectMode {
+    name: "no_integrated",
+    process_suffix: "_no_integrated_UV",
+};
+
+const UV_RICH_INSPECT_MODES: &[UvRichInspectMode] = &[
+    INTEGRATED_UV_RICH_INSPECT_MODE,
+    NO_INTEGRATED_UV_RICH_INSPECT_MODE,
+];
+
+struct GraphUvRichInspectCase {
+    name: &'static str,
+    test_prefix: &'static str,
+    process_prefix: &'static str,
+    integrand_name: &'static str,
+    run_card: &'static str,
+    graph_block_prefix: &'static str,
+    target_file: &'static str,
+    graphs: &'static [&'static str],
+}
+
+impl GraphUvRichInspectCase {
+    fn target_path(&self) -> PathBuf {
+        workspace_root()
+            .join("tests/resources/benchmarks")
+            .join(self.target_file)
+    }
+
+    fn graph_test_name(&self, graph: &str) -> String {
+        format!(
+            "{}_{}_uv_profile_and_rich_inspect",
+            self.test_prefix,
+            graph.to_ascii_lowercase()
+        )
+    }
+
+    fn process_name(&self, graph: &str, mode: UvRichInspectMode) -> String {
+        format!(
+            "{}{}{}",
+            self.process_prefix,
+            graph.to_ascii_lowercase(),
+            mode.process_suffix
+        )
+    }
+
+    fn graph_block_name(&self, graph: &str) -> String {
+        format!("{}{}", self.graph_block_prefix, graph.to_ascii_lowercase())
+    }
+
+    fn setup_graph_cli(&self, graph: &str, test_name: &str) -> Result<CLIState> {
+        let mut cli = get_test_cli(
+            Some(self.run_card.into()),
+            get_tests_workspace_path().join(test_name),
+            Some(test_name.to_string()),
+            true,
+        )?;
+        cli.run_command(&format!("run {}", self.graph_block_name(graph)))?;
+
+        Ok(cli)
+    }
+
+    fn momentum_point(&self, cli: &CLIState, process: &str) -> Result<Vec<f64>> {
+        let process_id = cli
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+        let integrand = cli
+            .state
+            .process_list
+            .get_integrand(process_id, self.integrand_name)?
+            .require_generated()?;
+        let seed = [0.11, -0.07, 0.19, -0.13, 0.05, 0.29];
+        Ok((0..integrand.get_n_dim())
+            .map(|index| seed[index % seed.len()])
+            .collect())
+    }
+
+    fn graph_name(&self, cli: &CLIState, process: &str) -> Result<String> {
+        let process_id = cli
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+        Ok(cli
+            .state
+            .process_list
+            .get_integrand(process_id, self.integrand_name)?
+            .require_generated()?
+            .graph_name_by_id(0)
+            .ok_or_else(|| eyre::eyre!("Generated {} graph should have graph id 0", self.name))?
+            .to_string())
+    }
+
+    fn rich_inspect_record(
+        &self,
+        cli: &mut CLIState,
+        graph: &str,
+        mode: UvRichInspectMode,
+        point: &[f64],
+    ) -> Result<Value> {
+        let process = self.process_name(graph, mode);
+        let process_id = cli
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(process.clone())))?;
+        let graph_name = self.graph_name(cli, &process)?;
+        let points = Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+        let result = evaluate_sample(
+            &mut cli.state,
+            &EvaluateSamples {
+                process_id: Some(process_id),
+                integrand_name: Some(self.integrand_name.to_string()),
+                use_arb_prec: false,
+                minimal_output: false,
+                return_generated_events: Some(true),
+                momentum_space: true,
+                points: points.view(),
+                integrator_weights: None,
+                discrete_dims: None,
+                graph_names: Some(vec![Some(graph_name)]),
+                orientations: None,
+            },
+        )?;
+
+        let evaluation = result.sample.evaluation;
+        let metadata = evaluation
+            .evaluation_metadata
+            .as_ref()
+            .expect("rich inspect evaluation should include metadata");
+        let mut event_weight_sum = Complex::new(F(0.0), F(0.0));
+        let mut additional_weights = BTreeMap::<String, Complex<F<f64>>>::new();
+        let event_group_sizes = evaluation
+            .event_groups
+            .iter()
+            .map(|group| {
+                for event in group.iter() {
+                    event_weight_sum += event.weight;
+                    for (key, value) in &event.additional_weights.weights {
+                        *additional_weights
+                            .entry(additional_weight_key_label(*key))
+                            .or_insert_with(|| Complex::new(F(0.0), F(0.0))) += *value;
+                    }
+                }
+                group.len()
+            })
+            .collect::<Vec<_>>();
+
+        let mut additional_weight_map = Map::new();
+        for (key, value) in additional_weights {
+            additional_weight_map.insert(key, complex_json(value));
+        }
+
+        Ok(json!({
+            "graph": graph,
+            "mode": mode.name,
+            "result": complex_json(evaluation.integrand_result),
+            "metadata": {
+                "generated_event_count": metadata.generated_event_count,
+                "accepted_event_count": metadata.accepted_event_count,
+                "is_nan": metadata.is_nan,
+            },
+            "event_group_sizes": event_group_sizes,
+            "event_weight_sum": complex_json(event_weight_sum),
+            "additional_weights": Value::Object(additional_weight_map),
+        }))
+    }
+
+    fn target_key(&self, record: &Value) -> Result<(String, String)> {
+        let graph = record.get("graph").and_then(Value::as_str).ok_or_else(|| {
+            eyre::eyre!(
+                "{} target record is missing string field 'graph'",
+                self.name
+            )
+        })?;
+        let mode = record.get("mode").and_then(Value::as_str).ok_or_else(|| {
+            eyre::eyre!("{} target record is missing string field 'mode'", self.name)
+        })?;
+        Ok((graph.to_string(), mode.to_string()))
+    }
+
+    fn load_targets(&self) -> Result<BTreeMap<(String, String), Value>> {
+        let target_path = self.target_path();
+        let contents = fs::read_to_string(&target_path)?;
+        let records: Vec<Value> = serde_json::from_str(&contents)?;
+        let mut targets = BTreeMap::new();
+        for record in records {
+            let key = self.target_key(&record)?;
+            if targets.insert(key.clone(), record).is_some() {
+                return Err(eyre::eyre!(
+                    "Duplicate {} target record for graph={} mode={}",
+                    self.name,
+                    key.0,
+                    key.1
+                ));
+            }
+        }
+        Ok(targets)
+    }
+
+    fn assert_target_matches(&self, record: &Value, targets: &BTreeMap<(String, String), Value>) {
+        let key = self
+            .target_key(record)
+            .expect("actual target record should be keyed");
+        let target = targets
+            .get(&key)
+            .unwrap_or_else(|| panic!("Missing {} inspect target for {key:?}", self.name));
+        assert_json_approx_eq(record, target, &format!("{} {}", key.0, key.1));
+    }
+
+    fn run_graph_uv_profile_and_rich_inspect(&self, graph: &str) -> Result<()> {
+        let test_name = self.graph_test_name(graph);
+        let mut cli = self.setup_graph_cli(graph, &test_name)?;
+        let targets = self.load_targets()?;
+        let point_process = self.process_name(graph, INTEGRATED_UV_RICH_INSPECT_MODE);
+        let point = self.momentum_point(&cli, &point_process)?;
+
+        for mode in UV_RICH_INSPECT_MODES.iter().copied() {
+            let process = self.process_name(graph, mode);
+            assert!(
+                integrated_uv_profile_passes(&mut cli, &process, self.integrand_name)?,
+                "UV profile failed for case={} graph={graph} mode={}",
+                self.name,
+                mode.name
+            );
+            let record = self.rich_inspect_record(&mut cli, graph, mode, &point)?;
+            self.assert_target_matches(&record, &targets);
+        }
+
+        clean_test(&cli.cli_settings.state.folder);
+        Ok(())
+    }
+
+    fn collect_rich_inspect_records(&self) -> Result<Vec<Value>> {
+        let mut records = Vec::new();
+        for graph in self.graphs {
+            let test_name = format!("{}_target_writer", self.graph_test_name(graph));
+            let mut cli = self.setup_graph_cli(graph, &test_name)?;
+            let point_process = self.process_name(graph, INTEGRATED_UV_RICH_INSPECT_MODE);
+            let point = self.momentum_point(&cli, &point_process)?;
+            for mode in UV_RICH_INSPECT_MODES.iter().copied() {
+                records.push(self.rich_inspect_record(&mut cli, graph, mode, &point)?);
+            }
+            clean_test(&cli.cli_settings.state.folder);
+        }
+        Ok(records)
+    }
+}
+
+fn complex_json(value: Complex<F<f64>>) -> Value {
+    json!({
+        "re": value.re.0,
+        "im": value.im.0,
+    })
+}
+
+fn additional_weight_key_label(key: AdditionalWeightKey) -> String {
+    match key {
+        AdditionalWeightKey::FullMultiplicativeFactor => "full_multiplicative_factor".to_string(),
+        AdditionalWeightKey::Original => "original".to_string(),
+        AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
+            format!("threshold_counterterm_{subset_index}")
+        }
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("ct_{esurface_id}_{overlap_group}"),
+    }
+}
+
+fn assert_json_approx_eq(actual: &Value, expected: &Value, path: &str) {
+    match (actual, expected) {
+        (Value::Number(actual), Value::Number(expected)) => {
+            let actual = actual
+                .as_f64()
+                .unwrap_or_else(|| panic!("{path}: actual number is not representable as f64"));
+            let expected = expected
+                .as_f64()
+                .unwrap_or_else(|| panic!("{path}: expected number is not representable as f64"));
+            let scale = actual.abs().max(expected.abs()).max(1.0);
+            let tolerance = 1.0e-10 * scale;
+            assert!(
+                (actual - expected).abs() <= tolerance,
+                "{path}: actual={actual:.17e}, expected={expected:.17e}, tolerance={tolerance:.17e}"
+            );
+        }
+        (Value::Array(actual), Value::Array(expected)) => {
+            assert_eq!(
+                actual.len(),
+                expected.len(),
+                "{path}: array length mismatch; actual={actual:?}, expected={expected:?}"
+            );
+            for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+                assert_json_approx_eq(actual, expected, &format!("{path}[{index}]"));
+            }
+        }
+        (Value::Object(actual), Value::Object(expected)) => {
+            let actual_keys = actual.keys().collect::<Vec<_>>();
+            let expected_keys = expected.keys().collect::<Vec<_>>();
+            assert_eq!(
+                actual_keys, expected_keys,
+                "{path}: object keys mismatch; actual={actual_keys:?}, expected={expected_keys:?}"
+            );
+            for (key, expected_value) in expected {
+                let actual_value = actual
+                    .get(key)
+                    .unwrap_or_else(|| panic!("{path}.{key}: missing actual value"));
+                assert_json_approx_eq(actual_value, expected_value, &format!("{path}.{key}"));
+            }
+        }
+        _ => assert_eq!(actual, expected, "{path}: JSON value mismatch"),
+    }
+}
+
 mod slow {
     use super::*;
+
+    macro_rules! aa_aa_2l_uv_rich_inspect_tests {
+        ($($name:ident => $graph:literal),+ $(,)?) => {
+            $(
+                #[test]
+                #[serial_test::serial]
+                fn $name() -> Result<()> {
+                    AA_AA_2L_UV_RICH_INSPECT.run_graph_uv_profile_and_rich_inspect($graph)
+                }
+            )+
+        };
+    }
+
+    aa_aa_2l_uv_rich_inspect_tests! {
+        aa_aa_2l_gl00_uv_profile_and_rich_inspect => "GL00",
+        aa_aa_2l_gl01_uv_profile_and_rich_inspect => "GL01",
+        aa_aa_2l_gl03_uv_profile_and_rich_inspect => "GL03",
+        aa_aa_2l_gl05_uv_profile_and_rich_inspect => "GL05",
+        aa_aa_2l_gl06_uv_profile_and_rich_inspect => "GL06",
+        aa_aa_2l_gl08_uv_profile_and_rich_inspect => "GL08",
+        aa_aa_2l_gl12_uv_profile_and_rich_inspect => "GL12",
+        aa_aa_2l_gl14_uv_profile_and_rich_inspect => "GL14",
+        aa_aa_2l_gl16_uv_profile_and_rich_inspect => "GL16",
+        aa_aa_2l_gl17_uv_profile_and_rich_inspect => "GL17",
+        aa_aa_2l_gl18_uv_profile_and_rich_inspect => "GL18",
+    }
+
+    #[test]
+    #[ignore = "target writer"]
+    #[serial_test::serial]
+    fn write_aa_aa_2l_uv_inspect_event_targets() -> Result<()> {
+        let records = AA_AA_2L_UV_RICH_INSPECT.collect_rich_inspect_records()?;
+        fs::write(
+            AA_AA_2L_UV_RICH_INSPECT.target_path(),
+            format!("{}\n", serde_json::to_string_pretty(&records)?),
+        )?;
+        Ok(())
+    }
 
     #[test]
     fn aa_aa_gl00_uv() {
